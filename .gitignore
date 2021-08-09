@@ -1,0 +1,13 @@
+*__*.*
+*.o
+*.mod
+fields_*.*
+*.txt
+*.out
+*.sh.*
+*.png
+*.so
+.f2py_f2cmap
+make/Makefile
+test/scft/Makefile
+__pycache__

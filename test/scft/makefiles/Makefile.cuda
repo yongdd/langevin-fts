@@ -1,0 +1,44 @@
+USE_SINGLE_PRECISION=0 ## 1: SINGLE or 0: DOUBLE
+
+FC=ifort
+NVCC=nvcc
+
+FFLAGS=-O3 -heap-arrays # -pg -fno-inline # -warn -stand f03 -CB -traceback -debug all
+CUDAFLAGS=-O3 -L/opt/cuda/lib64 -lcufft -lcudart #-g
+
+PPFLAGS += -DUSE_SINGLE_PRECISION=$(USE_SINGLE_PRECISION)
+FFLAGS += $(PPFLAGS)
+CUDAFLAGS += $(PPFLAGS)
+
+OBJS=constants.o param_parser.o simulation_box.o \
+     polymer_chain.o pseudo.o pseudo_cuda.o \
+     anderson_mixing.o anderson_mixing_cuda.o scft.o
+TARGET=scft_cuda.out
+SRCDIR=../../src
+
+$(TARGET): $(SRCDIR)/scft_main.F90 $(OBJS)
+	$(FC) $(FFLAGS) -o $@ $^ $(CUDAFLAGS) -lstdc++
+constants.o: $(SRCDIR)/constants.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+param_parser.o: $(SRCDIR)/param_parser.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+simulation_box.o: $(SRCDIR)/simulation_box.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+polymer_chain.o: $(SRCDIR)/polymer_chain.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+pseudo.o: $(SRCDIR)/cuda/pseudo_wrapper.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+pseudo_cuda.o: $(SRCDIR)/cuda/pseudo.cu 
+	$(NVCC) $(CUDAFLAGS) -o $@ -c $^
+anderson_mixing.o: $(SRCDIR)/cuda/anderson_mixing_wrapper.F90
+	$(FC) $(FFLAGS) -o $@ -c $^
+anderson_mixing_cuda.o: $(SRCDIR)/cuda/anderson_mixing.cu
+	$(NVCC) $(CUDAFLAGS) -o $@ -c $^
+scft.o: $(SRCDIR)/scft.F90
+	$(FC) $(FFLAGS) -o $@ -c $^ $(CUDAFLAGS) -lstdc++
+clean:
+	rm -f *__*.*
+	rm -f *.o
+	rm -f *.mod
+	rm -f fields_* *.txt
+	rm -f *.out

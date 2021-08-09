@@ -1,0 +1,56 @@
+langevin_end_iter     = 30      # when to finish Langevin iteration
+start_record_ensemble = 20      # when to start to record ensemble average.
+
+# SIMULATION BOX
+geometry.grids          =  50   50   50    # the number of simulation grids.
+geometry.box_size       =  7.5  7.5  7.5  # simulation box as bN^(1/2) unit.
+                                          # if box_size is not specified, box_size become [grids] * [kuhn length].
+# POLYMER CHAIN
+chain.chiN                  = 20.9   # Flory Huggins parameters. 
+                                     # This will ignored if parallel tempering is activated or tim_type = 2
+chain.a_fraction            = 0.5    # f
+chain.contour_step          = 20     # N
+chain.surface_interaction   = 0.0    # etaas
+
+# LANGEVIN PARAMETER
+langevin.delta_tau = 0.1    # langevin time step
+langevin.rho_a3    = 14.14213562     # rho a^3
+
+# PARALLEL TEMPERING
+pt.chiN_range     = 20.9  22.23  # chiN range for parallel tempering.
+                                # This will be activated if the number of MPI process > 1
+pt.period         = 1000        # how often parallel tempering is attempted.
+
+# ITERATION PARAMETER
+iter.saddle_step_max = 100 # max number of W+ saddle point approximation iteration.
+iter.tolerance = 1.0d-4   # exit loop if error level < tolerance.
+
+am.mix_init = 0.1        # init mixing parameter of simple mixing.
+am.mix_min = 0.01        # minimum mixing parameter of simple mixing.
+am.start_error = 2       # anderson mixing begin if error_level < start_error.
+am.step_max = 5          # max number of previous steps to calculate
+                         # new field when using Anderson mixing.
+
+# INPUT FILE
+input.continue   = 0    # 0: no input. start new simulation.
+                        # 1: continue simulation from the "input_cont_iter"th iteration.
+                        # 2: read data from "input.file_name".
+input.cont_iter = 3
+input.file_name  = "fields.input_5"
+input.select_init_fields = 3   # if input.continue = 0, setup fields manually
+                               # 1 : disordered
+                               # 2 : random
+                               # 3 : test input
+
+# OUTPUT FILE
+output.verbose_level = 1  # 1 : (default) print at each langevin iteration.
+                          # 2 : print at each saddle point iteration.
+output.verbose_name  = "print"  # root name of verbose file.
+output.data_name   = "fields" # root name of data file.
+output.period_before_ensemble = 1000
+output.period_after_ensemble = 1000
+
+# GPU CONFIGURATION
+gpu.num_block     = 256      # the number blocks 
+gpu.threads_per_block = 128  # the number of threads per block.
+                             # typically 128 or 256 is optimal.
