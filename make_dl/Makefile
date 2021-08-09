@@ -1,0 +1,7 @@
+clean:
+	rm -f *__*.*
+	rm -f *.o
+	rm -f *.mod
+	rm -f fields_* *.txt
+	rm -f $(TARGET)
+	rm -f *.so
