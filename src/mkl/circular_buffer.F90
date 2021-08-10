@@ -5,14 +5,13 @@
 !------------------------------------------------------------------
 module circular_buffer_module
 
-  use constants, only : rp
   implicit none
 
   ! This is a pointer to an real array.
   ! It is the only way to make array of pointer.
   ! Ponter is introduced to avoid array copy.
   type real_array_pt
-    real(kind=rp), pointer, dimension(:) :: p
+    real(kind=8), pointer, dimension(:) :: p
   end type real_array_pt
 
   type circular_buffer
@@ -56,7 +55,7 @@ contains
 
   subroutine cbInsert(this, elem)
     type(circular_buffer), intent(inout) :: this
-    real(kind=rp), intent(in) :: elem(0:this%width-1)
+    real(kind=8), intent(in) :: elem(0:this%width-1)
     this%elems(mod(this%start + this%n_items, this%length))%p = elem
     if (this%n_items == this%length) then
       this%start = mod(this%start+1, this%length)
@@ -67,7 +66,7 @@ contains
   function cbGetArray(this, n)
     type(circular_buffer), intent(in) :: this
     integer, intent(in) :: n
-    real(kind=rp), dimension(0:this%width-1) :: cbGetArray
+    real(kind=8), dimension(0:this%width-1) :: cbGetArray
     cbGetArray = this%elems(mod(this%start+n,this%length))%p
   end function
 
@@ -78,13 +77,13 @@ contains
     cbGetArrayPt = this%elems(mod(this%start+n,this%length))
   end function
 
-  real(kind=rp) function cbGet(this, n, m)
+  real(kind=8) function cbGet(this, n, m)
     type(circular_buffer), intent(in) :: this
     integer, intent(in) :: n, m
     cbGet = this%elems(mod(this%start+n,this%length))%p(m)
   end function
 
-  real(kind=rp) function cbGetSym(this, n, m)
+  real(kind=8) function cbGetSym(this, n, m)
     type(circular_buffer), intent(in) :: this
     integer, intent(in) :: n, m
     cbGetSym = this%elems(mod(this%start+max(n,m),this%length))%p(abs(n-m))

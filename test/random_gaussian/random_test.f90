@@ -3,19 +3,18 @@
 program langevin_fts_block_copolymer_3d
 
   use, intrinsic :: ieee_arithmetic, only : ieee_is_normal
-  use constants, only : rp
   use random_gaussian
   !use omp_lib
 
   implicit none
-
-  real(kind=rp) :: mean, sigma
-  real(kind=rp) :: mean_out, sigma_out
-  real(kind=rp), allocatable :: normal_noise(:), noise_one(:)
-  integer,       allocatable :: histo_count(:)
-  real(kind=rp), allocatable :: histo(:), dist(:)
+  real(kind=8), parameter :: PI = 3.14159265358979323846d0
+  real(kind=8) :: mean, sigma
+  real(kind=8) :: mean_out, sigma_out
+  real(kind=8), allocatable :: normal_noise(:), noise_one(:)
+  integer,      allocatable :: histo_count(:)
+  real(kind=8), allocatable :: histo(:), dist(:)
   integer :: i, k, totalMM, histMM
-  real(kind=rp) :: x, bin_width, error
+  real(kind=8) :: x, bin_width, error
 
 !--------------- Test 1 : single grid-----------------
 
@@ -32,7 +31,7 @@ program langevin_fts_block_copolymer_3d
   allocate(histo_count(-histMM:histMM))
   allocate(histo(-histMM:histMM))
   allocate(dist(-histMM:histMM))
-  
+
   call rng_initialize()
 
 ! run
@@ -49,8 +48,8 @@ program langevin_fts_block_copolymer_3d
   end do
 
 ! check
-  mean_out = sum(normal_noise)/real(totalMM,rp)
-  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,rp))
+  mean_out = sum(normal_noise)/real(totalMM,8)
+  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,8))
 
   histo_count = 0
   do i = 1, totalMM
@@ -60,11 +59,10 @@ program langevin_fts_block_copolymer_3d
     end if
   end do
 
-  histo(:) = real(histo_count(:),rp)/real(totalMM,rp)/bin_width
+  histo(:) = real(histo_count(:),8)/real(totalMM,8)/bin_width
   do i = -histMM, histMM
     x= i*bin_width
     dist(i) = exp(-(x-mean)**2/(2*sigma**2))/sigma/sqrt(2*PI)
-
   end do
   error = sqrt(sum((histo-dist)**2) * bin_width)
 
@@ -113,8 +111,8 @@ program langevin_fts_block_copolymer_3d
   end do
 
 ! check
-  mean_out = sum(normal_noise)/real(totalMM,rp)
-  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,rp))
+  mean_out = sum(normal_noise)/real(totalMM,8)
+  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,8))
 
   histo_count = 0
   do i = 1, totalMM
@@ -124,11 +122,10 @@ program langevin_fts_block_copolymer_3d
     end if
   end do
 
-  histo(:) = real(histo_count(:),rp)/real(totalMM,rp)/bin_width
+  histo(:) = real(histo_count(:),8)/real(totalMM,8)/bin_width
   do i = -histMM, histMM
     x= i*bin_width
     dist(i) = exp(-(x-mean)**2/(2*sigma**2))/sigma/sqrt(2*PI)
-
   end do
   error = sqrt(sum((histo-dist)**2) * bin_width)
 
@@ -177,8 +174,8 @@ program langevin_fts_block_copolymer_3d
   end do
 
 ! check
-  mean_out = sum(normal_noise)/real(totalMM,rp)
-  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,rp))
+  mean_out = sum(normal_noise)/real(totalMM,8)
+  sigma_out = sqrt(sum((normal_noise-mean_out)**2)/real(totalMM,8))
 
   histo_count = 0
   do i = 1, totalMM
@@ -188,7 +185,7 @@ program langevin_fts_block_copolymer_3d
     end if
   end do
 
-  histo(:) = real(histo_count(:),rp)/real(totalMM,rp)/bin_width
+  histo(:) = real(histo_count(:),8)/real(totalMM,8)/bin_width
   do i = -histMM, histMM
     x= i*bin_width
     dist(i) = exp(-(x-mean)**2/(2*sigma**2))/sigma/sqrt(2*PI)

@@ -24,7 +24,6 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
   
 #### 4. Open Multi-Processing(OpenMP)
   Two partial partition functions are calculated simultaneously using OpenMP in FFTW and MKL implemenation.  
-
 #### 5. f2py
 
 #### 6. PyTorch

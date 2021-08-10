@@ -2,7 +2,6 @@
 ! this is a wrapper module for cuda version of Anderson mixing module
 module anderson_mixing
 !
-  use constants, only : rp
   use param_parser
   use simulation_box
   implicit none
@@ -18,7 +17,7 @@ contains
     integer :: n, process_idx
     integer :: max_anderson
     integer :: num_block, threads_per_block
-    real(kind=rp) :: start_anderson_error, mix_min, mix_init
+    real(kind=8) :: start_anderson_error, mix_min, mix_init
 
     if( PRESENT(new_process_idx)) then
         process_idx = new_process_idx
@@ -55,9 +54,9 @@ contains
   end subroutine
 !---------------- am_caculate_new_fields ---------------
   subroutine am_caculate_new_fields(w, w_out, old_error_level, error_level)
-    real(kind=rp), intent(inout) :: w(1:total_grids)
-    real(kind=rp), intent(in)    :: w_out(1:total_grids)
-    real(kind=dp), intent(in)    :: old_error_level, error_level
+    real(kind=8), intent(inout) :: w(1:total_grids)
+    real(kind=8), intent(in)    :: w_out(1:total_grids)
+    real(kind=8), intent(in)    :: old_error_level, error_level
 
     call am_cuda_caculate_new_fields(w, w_out, w_out-w, old_error_level, error_level)
 

@@ -4,7 +4,6 @@
 module langevin_equation
 !
   use, intrinsic :: ieee_arithmetic, only : ieee_is_normal
-  use constants, only : rp
   use param_parser
   use simulation_box
   use polymer_chain, only : NN
@@ -17,14 +16,14 @@ module langevin_equation
 ! rho_a3 = segment density*a^3
 ! normal_sigma = sigma value of normal noise
 ! invarint_Nbar = invariant polymerization index
-  real(kind=rp), protected :: delta_tau, rho_a3, normal_sigma, invarint_Nbar
+  real(kind=8), protected :: delta_tau, rho_a3, normal_sigma, invarint_Nbar
 
 ! input and output fields
-  real(kind=rp), private, allocatable :: wminus_out(:,:,:), wminus_star(:,:,:)
+  real(kind=8), private, allocatable :: wminus_out(:,:,:), wminus_star(:,:,:)
 
 ! Lambda and random noise function
-  real(kind=rp), private, allocatable :: lambda(:,:,:), lambda_star(:,:,:)
-  real(kind=rp), private, allocatable :: normal_noise(:,:,:)
+  real(kind=8), private, allocatable :: lambda(:,:,:), lambda_star(:,:,:)
+  real(kind=8), private, allocatable :: normal_noise(:,:,:)
 
 contains
 !-------------- le_initialize ---------------
@@ -38,33 +37,33 @@ contains
     if(.not. pp_get("langevin.rho_a3",    rho_a3))    rho_a3 = 8.0d0
     invarint_Nbar = rho_a3**2 * NN
 !   standard deviation of normal noise
-    normal_sigma = sqrt(2*delta_tau/(dx*dy*dz*rho_a3*real(NN,rp)**1.5d0))
+    normal_sigma = sqrt(2*delta_tau/(dx*dy*dz*rho_a3*real(NN,8)**1.5d0))
 
 !------------------ allocate arrays  -------------------------------
-    allocate(wminus_out  (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(wminus_star (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(lambda      (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(lambda_star (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(normal_noise(x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(wminus_out  (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(wminus_star (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(lambda      (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(lambda_star (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(normal_noise(x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
   end subroutine
 
 !---------------- le_update -----------------
   subroutine le_update(phia, phib, q1_init,q2_init, wplus, wminus, ext_w)
 
-    real(kind=rp), intent(inout) :: phia  (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(inout) :: phib  (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(in) :: q1_init  (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(in) :: q2_init  (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(inout) :: wplus (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(inout) :: wminus(x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(in) ::  ext_w   (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
+    real(kind=8), intent(inout) :: phia  (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(inout) :: phib  (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(in) :: q1_init  (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(in) :: q2_init  (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(inout) :: wplus (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(inout) :: wminus(x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(in) ::  ext_w   (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
 
-    real(kind=rp) :: QQ
+    real(kind=8) :: QQ
 
 !   call random number generator
     do
-      call rng_gaussian(totalMM, 0.0_rp, normal_sigma, normal_noise)
+      call rng_gaussian(totalMM, 0.0d0, normal_sigma, normal_noise)
       if (ieee_is_normal(sum(normal_noise))) then
         exit
       else

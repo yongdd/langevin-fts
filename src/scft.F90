@@ -2,34 +2,33 @@
 ! The main program begins here
 module scft
 
-  use constants
   use param_parser
   use simulation_box
   use polymer_chain
   use pseudo
   use anderson_mixing
 
-  implicit none
+  implicit none  
 ! iter = number of iteration steps, maxiter = maximum number of iteration steps
   integer :: iter, maxiter
 ! QQ = total partition function
-  real(kind=rp), private :: QQ, energy_chain, energy_field, energy_tot, energy_old
+  real(kind=8), private :: QQ, energy_chain, energy_field, energy_tot, energy_old
 ! error_level = variable to check convergence of the iteration
-  real(kind=dp), private :: error_level, old_error_level, tolerance
+  real(kind=8), private :: error_level, old_error_level, tolerance
 ! chiW is the surface interaction strength
 ! the external field
 ! ext_w_plus = (x_wa + x_wb)/2
 ! ext_w_minus = (x_wa - x_wb)/2
-  real(kind=rp), private :: chiW
-  real(kind=rp), private, allocatable :: ext_w_plus(:,:,:)
-  real(kind=rp), private, allocatable :: ext_w_minus(:,:,:)
+  real(kind=8), private :: chiW
+  real(kind=8), private, allocatable :: ext_w_plus(:,:,:)
+  real(kind=8), private, allocatable :: ext_w_minus(:,:,:)
 ! input and output fields, xi is temporary storage for pressures
-  real(kind=rp), allocatable :: w(:,:,:,:), wout(:,:,:,:), xi(:,:,:)
-  real(kind=rp), allocatable :: w_plus(:,:,:), w_minus(:,:,:)
+  real(kind=8), allocatable :: w(:,:,:,:), wout(:,:,:,:), xi(:,:,:)
+  real(kind=8), allocatable :: w_plus(:,:,:), w_minus(:,:,:)
 ! initial value of q, q_dagger
-  real(kind=rp), allocatable :: q1_init(:,:,:), q2_init(:,:,:)
+  real(kind=8), allocatable :: q1_init(:,:,:), q2_init(:,:,:)
 ! segment concentration
-  real(kind=rp), allocatable :: phia(:,:,:), phib(:,:,:), phitot(:,:,:)
+  real(kind=8), allocatable :: phia(:,:,:), phib(:,:,:), phitot(:,:,:)
 ! fields mixing method
   integer :: mixing_method
 ! strings to name input and output files
@@ -67,12 +66,12 @@ contains
 !-------------- print simulation parameters ------------
     open(10, file=print_filename, status = 'unknown', position='append')
     write(10,*) "Box Dimension: ", BOX_DIM
-    write(10,*) "Precision: ", rp
+    write(10,*) "Precision: 8 "
 
     write(10,*) "chiN, f, NN"
     write(10,*)  chiN, f, NN
-    write(10,*) "x%lo, x%hi, y%lo, y%hi, z%lo, z%hi"
-    write(10,*)  x%lo, x%hi, y%lo, y%hi, z%lo, z%hi
+    write(10,*) "x_lo, x_hi, y_lo, y_hi, z_lo, z_hi"
+    write(10,*)  x_lo, x_hi, y_lo, y_hi, z_lo, z_hi
     write(10,*) "Lx, Ly, Lz, dx, dy, dz"
     write(10,*)  Lx, Ly, Lz, dx, dy, dz
     write(10,*) "chiW: ", chiW
@@ -82,21 +81,21 @@ contains
 !-------------- allocate array ------------
 
 !   define arrays for field and density
-    allocate(w          (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi,1:2))
-    allocate(wout       (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi,1:2))
+    allocate(w          (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi,1:2))
+    allocate(wout       (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi,1:2))
 
-    allocate(ext_w_plus (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(ext_w_minus(x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(ext_w_plus (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(ext_w_minus(x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
-    allocate(xi         (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phia       (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phib       (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phitot     (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(w_plus     (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(w_minus    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(xi         (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phia       (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phib       (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phitot     (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(w_plus     (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(w_minus    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
-    allocate(q1_init    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(q2_init    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(q1_init    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(q2_init    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
 !-------------- setup fields ------------
     ! assign surface interaction
@@ -104,17 +103,17 @@ contains
     ext_w_plus(:,:,:) = 0.0d0
     ext_w_minus(:,:,:) = 0.0d0
 
-    ext_w_plus (x%lo,:,:) = chiW/2
-    ext_w_plus (x%hi,:,:) = chiW/2
+    ext_w_plus (x_lo,:,:) = chiW/2
+    ext_w_plus (x_hi,:,:) = chiW/2
 
-    ext_w_minus(x%lo,:,:) =-chiW/2
-    ext_w_minus(x%hi,:,:) = chiW/2
+    ext_w_minus(x_lo,:,:) =-chiW/2
+    ext_w_minus(x_hi,:,:) = chiW/2
 
     call random_number(phia)
-!   phia = reshape( phia, (/ x%hi-x%lo+1,y%hi-y%lo+1,z%hi-z%lo+1 /), order = (/ 3, 2, 1 /))
-!   call random_number(phia(:,:,z%lo))
-!   do k=z%lo,z%hi
-!     phia(:,:,k) = phia(:,:,z%lo)
+!   phia = reshape( phia, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
+!   call random_number(phia(:,:,z_lo))
+!   do k=z_lo,z_hi
+!     phia(:,:,k) = phia(:,:,z_lo)
 !   end do
 
     phib = 1.0d0 - phia
@@ -204,17 +203,17 @@ contains
     write(30,'(A,F8.3)') "chain.surface_interaction : ", chiW
     write(30,'(A,I8)')   "chain.contour_step : ",  NN
     write(30,'(A,I8)')   "chain.contour_step_A : ", NNf
-    write(30,'(A,3I8)')   "geometry.grids_lower_bound : ", x%lo, y%lo, z%lo
-    write(30,'(A,3I8)')   "geometry.grids_upper_bound : ", x%hi, y%hi, z%hi
+    write(30,'(A,3I8)')   "geometry.grids_lower_bound : ", x_lo, y_lo, z_lo
+    write(30,'(A,3I8)')   "geometry.grids_upper_bound : ", x_hi, y_hi, z_hi
     write(30,'(A,3F8.3)') "geometry.box_size : ", Lx, Ly, Lz
     write(30,'(A,F13.9)') "energy_tot : ", energy_tot
     write(30,'(A,F13.9)') "error_level : ", error_level
 
     write(30,*) " "
     write(30,*) "DATA      # w_a, phi_a, w_b, phi_b"
-    do i=x%lo,x%hi
-      do j=y%lo,y%hi
-        do k=z%lo,z%hi
+    do i=x_lo,x_hi
+      do j=y_lo,y_hi
+        do k=z_lo,z_hi
           write(30,'(5F12.6)') w(i,j,k,1), phia(i,j,k), w(i,j,k,2), phib(i,j,k), phia(i,j,k)+phib(i,j,k)
         end do
       end do

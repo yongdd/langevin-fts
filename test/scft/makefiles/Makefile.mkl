@@ -2,10 +2,9 @@ USE_SINGLE_PRECISION=0 ## 1: SINGLE or 0: DOUBLE
 
 FC=ifort
 FFLAGS=-O3 -heap-arrays # -pg -fno-inline  -warn -stand f03 -CB -traceback -g -debug all
-FFLAGS += -DUSE_SINGLE_PRECISION=$(USE_SINGLE_PRECISION)
 FCINCLUDE=/opt/intel/mkl/latest/include
 
-OBJS=constants.o param_parser.o simulation_box.o \
+OBJS=param_parser.o simulation_box.o \
      fft_mkl.o mkl_dfti.o mkl_trig_transforms.o \
      polymer_chain.o pseudo.o \
      circular_buffer.o anderson_mixing.o scft.o
@@ -14,8 +13,6 @@ SRCDIR=../../src
 
 $(TARGET): $(SRCDIR)/scft_main.F90 $(OBJS)
 	$(FC) $(FFLAGS) -o $@ -mkl -qopenmp $^
-constants.o: $(SRCDIR)/constants.F90
-	$(FC) $(FFLAGS) -o $@ -c $^
 param_parser.o: $(SRCDIR)/param_parser.F90
 	$(FC) $(FFLAGS) -o $@ -c $^
 simulation_box.o: $(SRCDIR)/simulation_box.F90

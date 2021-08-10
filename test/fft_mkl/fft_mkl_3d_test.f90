@@ -11,10 +11,10 @@ program block_copolymer_3d
 
   integer, parameter :: BOX_DIM = 3
 
-  real(kind=rp) :: data_init(1:II,1:JJ,1:KK)
-  real(kind=rp) :: data_r(1:II,1:JJ,1:KK)
-  complex(kind=rp) :: data_k(1:II/2+1,1:JJ,1:KK)
-  complex(kind=rp) :: data_k_answer(1:II/2+1,1:JJ,1:KK)
+  real(kind=8) :: data_init(1:II,1:JJ,1:KK)
+  real(kind=8) :: data_r(1:II,1:JJ,1:KK)
+  complex(kind=8) :: data_k(1:II/2+1,1:JJ,1:KK)
+  complex(kind=8) :: data_k_answer(1:II/2+1,1:JJ,1:KK)
 !-------------- initialize ------------
   write(*,*) "Initializing."
 

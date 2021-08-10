@@ -1,9 +1,14 @@
+#define TRUE 1
+#define FALSE 0
+
 #define NRANK 3
 #define BATCH 2
 
 #include <stdio.h>
 #include <cufft.h>
-#include "common.h"
+
+typedef cufftDoubleReal    ftsReal;
+typedef cufftDoubleComplex ftsComplex;
 
 __global__ void multiReal(ftsReal* dst,
                           ftsReal* src1,
@@ -192,13 +197,8 @@ extern "C" void pseudo_cuda_initialize_(
     cudaMemcpy(seg_d,   seg,                 sizeof(ftsReal)*MM,cudaMemcpyHostToDevice);
 
     /* Create a 3D FFT plan. */
-#if USE_SINGLE_PRECISION == 1
-    cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_R2C, BATCH);
-    cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_C2R, BATCH);
-#else
     cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
     cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
-#endif
 
 }
 
@@ -340,20 +340,14 @@ static void pseudo_onestep_kernel_overlap(ftsReal *qin1_d, ftsReal *qout1_d,
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[MM], qin2_d, expdw2_d, 1.0, MM);
 
     /* Execute a Forward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecR2C(plan_for, qstep1_d, kqin_d);
-#else
     cufftExecD2Z(plan_for, qstep1_d, kqin_d);
-#endif
+
     /* Multiply e^(-k^2 ds/6) in fourier space */
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_d, MM_COMPLEX);
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_d, MM_COMPLEX);
     /* Execute a backward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecC2R(plan_bak, kqin_d, qstep1_d);
-#else
     cufftExecZ2D(plan_bak, kqin_d, qstep1_d);
-#endif
+
     /* Evaluate e^(-w*ds/2) in real space. */
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[0],  &qstep1_d[0],   expdw1_d, 1.0/((ftsReal)MM), MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[MM], &qstep1_d[MM],  expdw2_d, 1.0/((ftsReal)MM), MM);
@@ -364,38 +358,28 @@ static void pseudo_onestep_kernel_overlap(ftsReal *qin1_d, ftsReal *qout1_d,
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[MM], qin2_d, expdw2_half_d, 1.0, MM);
 
     /* Execute a Forward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecR2C(plan_for, qstep2_d, kqin_d);
-#else
     cufftExecD2Z(plan_for, qstep2_d, kqin_d);
-#endif
+
     /* Multiply e^(-k^2 ds/12) in fourier space */
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_half_d, MM_COMPLEX);
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_half_d, MM_COMPLEX);
+    
     /* Execute a backward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecC2R(plan_bak, kqin_d, qstep2_d);
-#else
     cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
-#endif
+
     /* Evaluate e^(-w*ds/2) in real space. */
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0],  &qstep2_d[0],  expdw1_d, 1.0/((ftsReal)MM), MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[MM], &qstep2_d[MM], expdw2_d, 1.0/((ftsReal)MM), MM);
     /* Execute a Forward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecR2C(plan_for, qstep2_d, kqin_d);
-#else
     cufftExecD2Z(plan_for, qstep2_d, kqin_d);
-#endif
+
     /* Multiply e^(-k^2 ds/12) in fourier space */
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_half_d, MM_COMPLEX);
     multiFactor<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_half_d, MM_COMPLEX);
+    
     /* Execute a backward 3D FFT . */
-#if USE_SINGLE_PRECISION == 1
-    cufftExecC2R(plan_bak, kqin_d, qstep2_d);
-#else
     cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
-#endif
+    
     /* Evaluate e^(-w*ds/4) in real space. */
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0],  &qstep2_d[0],  expdw1_half_d, 1.0/((ftsReal)MM), MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[MM], &qstep2_d[MM], expdw2_half_d, 1.0/((ftsReal)MM), MM);

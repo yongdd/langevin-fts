@@ -1,8 +1,7 @@
  !--------------------------------------------------------------------
  ! Anderson mixing module
 module anderson_mixing
-  !
-  use constants, only : rp
+
   use param_parser
   use circular_buffer_module
   use simulation_box
@@ -12,14 +11,14 @@ module anderson_mixing
   type(circular_buffer), private :: cb_wout_hist, cb_wdiff_hist
   ! arrays to calculate anderson mixing
   type(circular_buffer), private :: cb_wdiffdots
-  real(kind=rp), private, allocatable :: u_nm(:,:), v_n(:), a_n(:), wdiffdots(:)
+  real(kind=8), private, allocatable :: u_nm(:,:), v_n(:), a_n(:), wdiffdots(:)
 
   ! anderson mixing related parameters
   integer, private :: n_anderson, max_anderson
   integer, private :: num_components
   integer, private :: total_grids
-  real(kind=rp), private :: start_anderson_error
-  real(kind=rp), private :: mix, mix_min, mix_init
+  real(kind=8), private :: start_anderson_error
+  real(kind=8), private :: mix, mix_min, mix_init
 
   private :: find_an
 
@@ -71,10 +70,10 @@ contains
   end subroutine
   !---------------- am_caculate_new_fields ---------------
   subroutine am_caculate_new_fields(w, w_out, old_error_level, error_level)
-    real(kind=rp), intent(inout) :: w(1:total_grids)
-    real(kind=rp), target :: w_diff(1:total_grids)
-    real(kind=rp), intent(in) :: w_out(1:total_grids)
-    real(kind=dp), intent(in) :: old_error_level, error_level
+    real(kind=8), intent(inout) :: w(1:total_grids)
+    real(kind=8), target :: w_diff(1:total_grids)
+    real(kind=8), intent(in) :: w_out(1:total_grids)
+    real(kind=8), intent(in) :: old_error_level, error_level
     type(real_array_pt) :: arr_pt1, arr_pt2
     integer :: nit, nit2
     
@@ -104,7 +103,7 @@ contains
     if( n_anderson <= 0 ) then
       ! dynamically change mixing parameter
       if(old_error_level < error_level) then
-        mix = max(mix*0.7_rp,mix_min)
+        mix = max(mix*0.7d0,mix_min)
       else
         mix = mix*1.01d0
       end if
@@ -161,11 +160,11 @@ contains
   ! U * A = V, Gauss elimination method is used in its simplest level
   subroutine find_an(u,v,a,n)
     integer, intent(in) :: n
-    real(kind=rp), intent(inout) :: u(1:n,1:n), v(1:n)
-    real(kind=rp), intent(out) :: a(1:n)
+    real(kind=8), intent(inout) :: u(1:n,1:n), v(1:n)
+    real(kind=8), intent(out) :: a(1:n)
     !
     integer :: i,j,k
-    real(kind=rp) :: factor, tempsum
+    real(kind=8) :: factor, tempsum
     !   elimination process
     do i=1,n
       do j=i+1,n
@@ -176,7 +175,7 @@ contains
         end do
       end do
     end do
-    !
+
     !   find the solution
     a(n) = v(n)/u(n,n)
     do i=n-1,1,-1

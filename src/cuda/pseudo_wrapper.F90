@@ -2,7 +2,6 @@
 ! this is a wrapper module for cuda version of the Pseudo-spectral method.
 module pseudo
 
-  use constants
   use simulation_box
   use polymer_chain
   implicit none
@@ -11,7 +10,7 @@ module pseudo
 !  integer, protected :: fft_II
 ! expfactor = exponential factor in the Fourier space
 ! expfactor_half = half exponential factor for the 4th order (in s direction) pseudospectral.
-  real(kind=rp), private, allocatable :: expfactor(:,:,:), expfactor_half(:,:,:)
+  real(kind=8), private, allocatable :: expfactor(:,:,:), expfactor_half(:,:,:)
 ! the number of grid in the each direction
   integer, private :: II, JJ, KK
 ! the number of additional grid to make neutral boundary
@@ -31,9 +30,9 @@ contains
         process_idx = 0
     end if
 
-    II = x%hi-x%lo+1
-    JJ = y%hi-y%lo+1
-    KK = z%hi-z%lo+1
+    II = x_hi-x_lo+1
+    JJ = y_hi-y_lo+1
+    KK = z_hi-z_lo+1
 
 !   define matrix size
     allocate(expfactor     (0:II/2, 0:JJ-1,0:KK-1))
@@ -54,18 +53,18 @@ contains
   subroutine pseudo_run(phia, phib, QQ, &
     q1_init,q2_init,wa, wb)
 
-    real(kind=rp), intent(out) :: phia   (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out) :: phib   (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: wa     (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: wb     (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: q1_init(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: q2_init(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out) :: QQ
+    real(kind=8), intent(out) :: phia   (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: phib   (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: wa     (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: wb     (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: q1_init(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: q2_init(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: QQ
 
-    real(kind=rp) :: expdwa      (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwa_half (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwb      (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwb_half (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwa      (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwa_half (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwb      (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwb_half (0:II-1,0:JJ-1,0:KK-1)
 
     expdwa     (:,:,:) = exp(-wa(:,:,:)*ds*0.5d0)
     expdwb     (:,:,:) = exp(-wb(:,:,:)*ds*0.5d0)

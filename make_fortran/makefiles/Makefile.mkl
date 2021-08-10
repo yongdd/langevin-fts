@@ -3,7 +3,6 @@ USE_SINGLE_PRECISION=0 ## 1: SINGLE or 0: DOUBLE
 FC=ifort
 MPIFC=mpiifort
 FFLAGS=-O3 -heap-arrays # -pg -fno-inline # -warn -stand f03 -CB -traceback -debug all
-FFLAGS += -DUSE_SINGLE_PRECISION=$(USE_SINGLE_PRECISION)
 FCINCLUDE=/opt/intel/mkl/latest/include
 
 OBJS=constants.o param_parser.o simulation_box.o \

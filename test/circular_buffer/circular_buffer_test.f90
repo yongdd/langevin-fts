@@ -2,7 +2,6 @@
 ! The main program begins here
 program circular_buffer_test
 
-  use constants, only : rp
   use circular_buffer_module
   implicit none
 
@@ -16,31 +15,31 @@ program circular_buffer_test
 
   call cbInit(cb_buffer,  buffer_size, total_grids)
 
-  call cbInsert(cb_buffer, real( (/1,2,3,5,4/),rp))
+  call cbInsert(cb_buffer, real( (/1,2,3,5,4/),8))
   write(*,'(A)') "cbGetArray"
   do i=0,buffer_size-1
     write(*,'(I5,5F8.3)') i, cbGetArray(cb_buffer, i)
   end do
 
-  call cbInsert(cb_buffer, real( (/4,2,1,1,2/),rp))
+  call cbInsert(cb_buffer, real( (/4,2,1,1,2/),8))
   write(*,'(A)') "cbGetArray"
   do i=0,buffer_size-1
     write(*,'(I5,5F8.3)') i, cbGetArray(cb_buffer, i)
   end do
 
-  call cbInsert(cb_buffer, real( (/3,2,1,5,4/),rp))
+  call cbInsert(cb_buffer, real( (/3,2,1,5,4/),8))
   write(*,'(A)') "cbGetArray"
   do i=0,buffer_size-1
     write(*,'(I5,5F8.3)') i, cbGetArray(cb_buffer, i)
   end do
 
-  call cbInsert(cb_buffer, real( (/5,4,3,1,2/),rp))
+  call cbInsert(cb_buffer, real( (/5,4,3,1,2/),8))
   write(*,'(A)') "cbGetArray"
   do i=0,buffer_size-1
     write(*,'(I5,5F8.3)') i, cbGetArray(cb_buffer, i)
   end do
 
-  call cbInsert(cb_buffer, real( (/2,5,1,4,3/),rp))
+  call cbInsert(cb_buffer, real( (/2,5,1,4,3/),8))
   write(*,'(A)') "cbGetArray"
   do i=0,buffer_size-1
     write(*,'(I5,5F8.3)') i, cbGetArray(cb_buffer, i)

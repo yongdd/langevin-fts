@@ -12,12 +12,12 @@ chain.contour_step          = 48         # N
 chain.surface_interaction   = 0.0      # etaas
 
 # ITERATION PARAMETER
-iter.step_saddle = 20  # max number of W+ saddle point approximation iteration.
+iter.step_saddle = 40  # max number of W+ saddle point approximation iteration.
 iter.tolerance = 1.0d-9   # exit loop if error level < tolerance.
 
 am.mix_init = 0.1        # init mixing parameter of simple mixing.
 am.mix_min = 0.1        # minimum mixing parameter of simple mixing.
-am.start_error = 1.0d-9  # anderson mixing begin if error_level < start_error.
+am.start_error = 1.0d-1  # anderson mixing begin if error_level < start_error.
 am.step_max = 5          # max number of previous steps to calculate
                          # new field when using Anderson mixing.
 # Initial Fields
