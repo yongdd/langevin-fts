@@ -34,6 +34,12 @@ module scft
 ! strings to name input and output files
   character(len=256), private :: filename, print_filename
 
+! input parameters
+  integer :: nx, ny, nz
+  real(kind=8) :: new_Lx, new_Ly, new_Lz
+  real(kind=8) :: new_f, new_chiN
+  integer :: new_NN
+
 contains
 !-------------- initialize ------------
   subroutine initialize(input_param_file)
@@ -42,10 +48,52 @@ contains
 
 !   initialize param parser parameters
     call pp_initialize(input_param_file)
+
+
+    if(.not. pp_get("geometry.grids", nx, 1) ) then
+      write(*,*) "geometry.grids[1] is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("geometry.grids", ny, 2) ) then
+      write(*,*) "geometry.grids[2] is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("geometry.grids", nz, 3) ) then
+      write(*,*) "geometry.grids[3] is not specified."
+      stop (1)
+    end if
+
+    if(.not. pp_get("geometry.box_size", new_Lx, 1) ) then
+      write(*,*) "geometry.box_size[1] is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("geometry.box_size", new_Ly, 2) ) then
+      write(*,*) "geometry.box_size[2] is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("geometry.box_size", new_Lz, 3) ) then
+      write(*,*) "geometry.box_size[3] is not specified."
+      stop (1)
+    end if
+    
 !   initialize simulation box parameters
-    call box_initialize()
+    call box_initialize(nx, ny, nz, new_Lx, new_Ly, new_Lz)
+
+    if(.not. pp_get("chain.a_fraction", new_f)) then
+      write(*,*) "chain.a_fraction is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("chain.contour_step", new_NN)) then
+      write(*,*) "chain.contour_step is not specified."
+      stop (1)
+    end if
+    if(.not. pp_get("chain.chiN", new_chiN)) then
+      write(*,*) "chain.chiN is not specified."
+      stop (1)
+    end if
+
 !   initialize chain parameters
-    call chain_initialize()
+    call chain_initialize(new_f, new_NN, new_chiN)
 !   initialize pseudo spectral parameters
     call pseudo_initialize()
 !   initialize Anderson mixing
@@ -65,9 +113,8 @@ contains
 
 !-------------- print simulation parameters ------------
     open(10, file=print_filename, status = 'unknown', position='append')
-    write(10,*) "Box Dimension: ", BOX_DIM
-    write(10,*) "Precision: 8 "
-
+    write(10,*) "Box Dimension: 3"
+    write(10,*) "Precision: 8"
     write(10,*) "chiN, f, NN"
     write(10,*)  chiN, f, NN
     write(10,*) "x_lo, x_hi, y_lo, y_hi, z_lo, z_hi"
