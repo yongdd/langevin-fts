@@ -3,7 +3,6 @@
 ! subroutines that initialize bond interaction parameters
 module polymer_chain
 
-  use constants
   use param_parser
   use simulation_box
   implicit none
@@ -13,9 +12,11 @@ module polymer_chain
   integer, protected :: NN, NNf
 ! f = A fraction (1-f is the B fraction)
 ! ds = discrete step sizes
-  real(kind=rp), protected :: f, ds
+  real(kind=8), protected :: f, ds
 ! chiN = interaction parameter between A and B Monomers
-  real(kind=rp), protected :: chiN
+  real(kind=8), protected :: chiN
+  
+  real(kind=8), parameter, private :: PI = 3.14159265358979323846d0
 
 contains
 !----------------- chain_initialize -----------------------------
@@ -47,17 +48,17 @@ contains
 
 !----------------- set_chiN ------------------------------
   subroutine chain_set_chiN(new_chiN)
-    real(kind=rp), intent(in) :: new_chiN
+    real(kind=8), intent(in) :: new_chiN
     chiN = new_chiN
   end subroutine
 !----------------- init_gaussian_factor ------------------------------
 ! Gaussian chain
   subroutine init_gaussian_factor(II,JJ,KK,expfactor,expfactor_half)
     integer, intent(in) :: II, JJ, KK
-    real(kind=rp), intent(out) :: expfactor     (0:II/2,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out) :: expfactor_half(0:II/2,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: expfactor     (0:II/2,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: expfactor_half(0:II/2,0:JJ-1,0:KK-1)
     integer :: i, j, k, itemp, jtemp, ktemp
-    real(kind=rp) :: xfactor, yfactor, zfactor
+    real(kind=8) :: xfactor, yfactor, zfactor
 
 !   calculate the exponential factor
     xfactor = -(2*PI/(II*dx))**2*ds/6.0d0

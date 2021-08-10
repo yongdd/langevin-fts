@@ -15,15 +15,13 @@ all : test3
 
 #------------ FFT MKL 3D  ----------------
 
-OBJS3=constants.o fft_mkl.o mkl_dfti.o mkl_trig_transforms.o
+OBJS3= fft_mkl.o mkl_dfti.o mkl_trig_transforms.o
 TAR3=fft_mkl_3d_test.out
 test3: ./fft_mkl_3d_test.f90 $(OBJS3)
 	$(FC) $(FFLAGS) -o $(TAR3)  $^ -mkl -qopenmp
 
 #------------ Dependence ------------------
 
-constants.o: $(SRCDIR)/constants.F90
-	$(FC) $(FFLAGS) -o $@ -c $^
 fft_mkl.o: $(SRCDIR)/mkl/fft_mkl.F90 mkl_dfti.o mkl_trig_transforms.o
 	$(FC) $(FFLAGS) -o $@ -c -mkl -qopenmp $(SRCDIR)/mkl/fft_mkl.F90
 mkl_dfti.o: /opt/intel/mkl/latest/include/mkl_dfti.f90

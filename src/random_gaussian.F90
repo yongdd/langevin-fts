@@ -1,7 +1,6 @@
 !--------------------------------------------------------------------
 !this module provides Gaussian random generators
 module random_gaussian
-  use constants
   implicit none
   
   ! function overloading
@@ -9,6 +8,8 @@ module random_gaussian
     module procedure rng_initialize_with_input
     module procedure rng_initialize_without_input
   end interface
+  
+  real(kind=8), parameter, private :: PI = 3.14159265358979323846d0
   
   public :: rng_set_seed, rng_gaussian
   public :: rng_can_get_seed, rng_get_seed, rng_finalize
@@ -40,11 +41,11 @@ contains
 
     ! The Box-Muller transform is implemented.
     integer, intent(in) :: totalMM
-    real(kind=rp), intent(in) :: mean, std
-    real(kind=rp), dimension(totalMM) :: normal_noise
+    real(kind=8), intent(in) :: mean, std
+    real(kind=8), dimension(totalMM) :: normal_noise
     ! uniform random array
-    real(kind=dp), allocatable :: u1(:) ! this array is declared as double precision to reduce singularity.
-    real(kind=rp), allocatable :: u2(:)
+    real(kind=8), allocatable :: u1(:) ! this array is declared as double precision to reduce singularity.
+    real(kind=8), allocatable :: u2(:)
     integer :: uniformMM
     uniformMM = (totalMM + 1)/2
     

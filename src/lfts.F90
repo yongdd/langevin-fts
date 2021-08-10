@@ -2,7 +2,6 @@
 ! The main program begins here
 module lfts
 
-  use constants, only : rp
   use param_parser
   use simulation_box
   use polymer_chain
@@ -13,6 +12,8 @@ module lfts
   use random_gaussian
   implicit none
 
+! constants
+  real(kind=8), parameter :: PI = 3.14159265358979323846d0
 ! iter = number of iteration steps, maxiter = maximum number of iteration steps
   integer :: i, j, k, iter, maxiter
 ! variables for langevin iteration
@@ -22,22 +23,22 @@ module lfts
 ! when to start to record ensemble average
   integer :: start_record_ensemble
 ! QQ = total partition function
-  real(kind=rp) :: QQ
-  real(kind=dp) :: energy_tot, energy_old
+  real(kind=8) :: QQ
+  real(kind=8) :: energy_tot, energy_old
 ! error_level = variable to check convergence of the iteration
-  real(kind=dp) :: error_level, old_error_level
-  real(kind=dp) :: tolerance
+  real(kind=8) :: error_level, old_error_level
+  real(kind=8) :: tolerance
 ! input and output fields
-  real(kind=rp), allocatable :: wplus (:,:,:), wplus_out (:,:,:)
-  real(kind=rp), allocatable :: wminus(:,:,:)
+  real(kind=8), allocatable :: wplus (:,:,:), wplus_out (:,:,:)
+  real(kind=8), allocatable :: wminus(:,:,:)
 ! etaas is the surface interaction strength
 ! ext_w is the external field
-  real(kind=rp) :: etaas
-  real(kind=rp), allocatable :: ext_w(:,:,:)
+  real(kind=8) :: etaas
+  real(kind=8), allocatable :: ext_w(:,:,:)
 ! segment concentration
-  real(kind=rp), allocatable :: phia(:,:,:), phib(:,:,:), phiplus(:,:,:), phiminus(:,:,:)
+  real(kind=8), allocatable :: phia(:,:,:), phib(:,:,:), phiplus(:,:,:), phiminus(:,:,:)
 ! initial value of q, q_dagger
-  real(kind=rp), allocatable :: q1_init(:,:,:), q2_init(:,:,:)
+  real(kind=8), allocatable :: q1_init(:,:,:), q2_init(:,:,:)
 ! Parallel tempering variables
   integer :: tempering_period
 ! strings to name input and output files
@@ -68,7 +69,7 @@ contains
     call lfts_initialize()
 
 !-------------- print simulation parameters ------------
-    write(unit_print,*) "Precision: ", rp
+    write(unit_print,*) "Precision: 8"
 
     write(unit_print,*) "langevin_start_iter, langevin_end_iter"
     write(unit_print,*)  langevin_start_iter, langevin_end_iter
@@ -78,21 +79,21 @@ contains
     write(unit_print,*)  invarint_Nbar
     write(unit_print,*) "chiN, f, NN"
     write(unit_print,*)  chiN, f, NN
-    write(unit_print,*) "x%lo, x%hi, y%lo, y%hi, z%lo, z%hi"
-    write(unit_print,*)  x%lo, x%hi, y%lo, y%hi, z%lo, z%hi
+    write(unit_print,*) "x_lo, x_hi, y_lo, y_hi, z_lo, z_hi"
+    write(unit_print,*)  x_lo, x_hi, y_lo, y_hi, z_lo, z_hi
     write(unit_print,*) "Lx,Ly,Lz,dx,dy,dz"
     write(unit_print,*)  Lx,Ly,Lz,dx,dy,dz
-    write(unit_print,*) "seg(:,y%lo,z%lo)"
-    write(unit_print,*)  seg(:,y%lo,z%lo)
+    write(unit_print,*) "seg(:,y_lo,z_lo)"
+    write(unit_print,*)  seg(:,y_lo,z_lo)
     write(unit_print,*) "etaas: ", etaas
     write(unit_print,*) "volume, sum(seg)"
     write(unit_print,*)  volume, sum(seg)
-    write(unit_print,*) "wminus(:,y%lo,z%lo)"
-    write(unit_print,*)  wminus(:,y%lo,z%lo)
-    write(unit_print,*) "wplus(:,y%lo,z%lo)"
-    write(unit_print,*)  wplus(:,y%lo,z%lo)
-    write(unit_print,*) "ext_w(:,y%lo,z%lo)"
-    write(unit_print,*)  ext_w(:,y%lo,z%lo)
+    write(unit_print,*) "wminus(:,y_lo,z_lo)"
+    write(unit_print,*)  wminus(:,y_lo,z_lo)
+    write(unit_print,*) "wplus(:,y_lo,z_lo)"
+    write(unit_print,*)  wplus(:,y_lo,z_lo)
+    write(unit_print,*) "ext_w(:,y_lo,z_lo)"
+    write(unit_print,*)  ext_w(:,y_lo,z_lo)
 
 !   q1 is q and q2 is qdagger in the note
 !   free end initial condition (q1 starts from A end)
@@ -256,16 +257,16 @@ contains
 
 !---------------- allocate array ---------------------------
 !   define arrays for field and density
-    allocate(wplus       (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(wplus_out   (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(wminus      (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(ext_w       (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phia        (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phib        (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phiplus     (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(phiminus    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(q1_init    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
-    allocate(q2_init    (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(wplus       (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(wplus_out   (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(wminus      (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(ext_w       (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phia        (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phib        (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phiplus     (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(phiminus    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(q1_init    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
+    allocate(q2_init    (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
 !-------------- Setup initial fields ----------------------
     if(.not. pp_get("input.continue", type_continue)) type_continue = 0
@@ -304,21 +305,17 @@ contains
       if(.not. pp_get("input.select_init_fields", type_fields)) type_fields = 1
       select case(type_fields)
        case(1)
-        write(*,*) "wminus and wplus are initialized to zero."
-        wminus = 0.0d0
-        wplus = 0.0d0
-       case(2)
         write(*,*) "Randomly initialize wminus and wplus."
         call random_number(wminus(:,:,:))
         call random_number(wplus(:,:,:))
-       case(3)
+       case(2)
         write(*,*) "wminus and wplus are initialized to test_input"
-        do i=x%lo,x%hi
-          do j=y%lo,y%hi
-            do k=z%lo,z%hi
-              wminus(i,j,k)= cos( 2.0d0*PI*(i-x%lo)/4.68d0 ) &
-                * cos( 2.0d0*PI*(j-y%lo)/3.48d0 ) &
-                * cos( 2.0d0*PI*(k-z%lo)/2.74d0 ) * 0.1d0
+        do i=x_lo,x_hi
+          do j=y_lo,y_hi
+            do k=z_lo,z_hi
+              wminus(i,j,k)= cos( 2.0d0*PI*(i-x_lo)/4.68d0 ) &
+                * cos( 2.0d0*PI*(j-y_lo)/3.48d0 ) &
+                * cos( 2.0d0*PI*(k-z_lo)/2.74d0 ) * 0.1d0
             end do
           end do
         end do
@@ -342,10 +339,10 @@ contains
         end if
         i = i +1
       end do
-!   read fields and concentrations from the file
-      do i=x%lo,x%hi
-        do j=y%lo,y%hi
-          do k=z%lo,z%hi
+!     read fields and concentrations from the file
+      do i=x_lo,x_hi
+        do j=y_lo,y_hi
+          do k=z_lo,z_hi
             read(unit_input,*) wminus(i,j,k), phiminus(i,j,k), wplus(i,j,k), phiplus(i,j,k)
           end do
         end do
@@ -379,8 +376,8 @@ contains
     write(unit_output,'(A,F8.3)') "langevin.delta_tau : ", delta_tau
     write(unit_output,'(A,F8.3)') "langevin.rho_a3 : ", rho_a3
 
-    write(unit_output,'(A,3I8)')   "geometry.grids_lower_bound : ", x%lo, y%lo, z%lo
-    write(unit_output,'(A,3I8)')   "geometry.grids_upper_bound : ", x%hi, y%hi, z%hi
+    write(unit_output,'(A,3I8)')   "geometry.grids_lower_bound : ", x_lo, y_lo, z_lo
+    write(unit_output,'(A,3I8)')   "geometry.grids_upper_bound : ", x_hi, y_hi, z_hi
     write(unit_output,'(A,3F8.3)') "geometry.box_size : ", Lx, Ly, Lz
 
     write(unit_output,'(A,F13.9)') "energy_tot : ", energy_tot
@@ -392,9 +389,9 @@ contains
 
     write(unit_output,*) " "
     write(unit_output,*) "DATA      # w-, phi-, w+, phi+"
-    do i=x%lo,x%hi
-      do j=y%lo,y%hi
-        do k=z%lo,z%hi
+    do i=x_lo,x_hi
+      do j=y_lo,y_hi
+        do k=z_lo,z_hi
           write(unit_output,'(4F12.6)') wminus(i,j,k), phiminus(i,j,k), wplus(i,j,k), phiplus(i,j,k)
         end do
       end do
@@ -452,14 +449,14 @@ contains
     end if
   end function
 
-  function get_param_float(param_name, param_value)
+  function get_param_real(param_name, param_value)
     character(len=256), intent(in) :: param_name
     real(kind=8), intent(out) :: param_value
-    logical :: get_param_float
+    logical :: get_param_real
     if(.not. pp_get(param_name, param_value)) then
-      get_param_float = .false.
+      get_param_real = .false.
     else
-      get_param_float = .true.
+      get_param_real = .true.
     end if
   end function
 

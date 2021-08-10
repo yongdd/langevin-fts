@@ -2,7 +2,6 @@
 ! this module defines parameters and subroutines related to pseudo-spectral method.
 module pseudo
 
-  use constants, only : rp
   use simulation_box
   use polymer_chain
   use fft
@@ -10,7 +9,7 @@ module pseudo
 
 ! expfactor = exponential factor in the Fourier space
 ! expfactor_half = half exponential factor for the 4th order (in s direction) pseudospectral.
-  real(kind=rp), protected, allocatable :: expfactor(:,:,:), expfactor_half(:,:,:)
+  real(kind=8), protected, allocatable :: expfactor(:,:,:), expfactor_half(:,:,:)
 
 ! the number of grid in the each direction
   integer, private :: II, JJ, KK
@@ -25,9 +24,9 @@ contains
 !   dummy variable for consistent with CUDA pseudo
     integer, optional, intent(in)  :: new_process_idx
 
-    II = x%hi-x%lo+1
-    JJ = y%hi-y%lo+1
-    KK = z%hi-z%lo+1
+    II = x_hi-x_lo+1
+    JJ = y_hi-y_lo+1
+    KK = z_hi-z_lo+1
 
 !   initialize fft module
     call fft_initialize(BOX_DIM, &
@@ -46,20 +45,20 @@ contains
   subroutine pseudo_run(phia, phib, QQ, &
     q1_init,q2_init,wa, wb)
 
-    real(kind=rp), intent(out) :: phia   (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out) :: phib   (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: wa     (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: wb     (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: q1_init(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in)  :: q2_init(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out) :: QQ
+    real(kind=8), intent(out) :: phia   (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: phib   (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: wa     (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: wb     (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: q1_init(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in)  :: q2_init(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out) :: QQ
 
-    real(kind=rp) :: expdwa      (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwa_half (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwb      (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: expdwb_half (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: q1          (0:II-1,0:JJ-1,0:KK-1,0:NN)
-    real(kind=rp) :: q2          (0:II-1,0:JJ-1,0:KK-1,0:NN)
+    real(kind=8) :: expdwa      (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwa_half (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwb      (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: expdwb_half (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: q1          (0:II-1,0:JJ-1,0:KK-1,0:NN)
+    real(kind=8) :: q2          (0:II-1,0:JJ-1,0:KK-1,0:NN)
     integer :: n,i,j,k
 
     expdwa     (:,:,:) = exp(-wa(:,:,:)*ds*0.5d0)
@@ -123,16 +122,16 @@ contains
 ! one time-step, ds, forward where expdw = exp(-w*ds/2), expdw_half =
 ! exp(-w*ds/4) and w is the field.
   subroutine pseudo_onestep(qin,qout,expdw,expdw_half)
-    real(kind=rp), intent(in) ::          qin(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(out)::         qout(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in) ::        expdw(0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp), intent(in) ::   expdw_half(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in) ::          qin(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(out)::         qout(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in) ::        expdw(0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8), intent(in) ::   expdw_half(0:II-1,0:JJ-1,0:KK-1)
 
-    real(kind=rp) :: qout1 (0:II-1,0:JJ-1,0:KK-1)
-    real(kind=rp) :: qout2 (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: qout1 (0:II-1,0:JJ-1,0:KK-1)
+    real(kind=8) :: qout2 (0:II-1,0:JJ-1,0:KK-1)
 
-    complex(kind=rp) :: k_qin1 (0:II/2,0:JJ-1,0:KK-1)
-    complex(kind=rp) :: k_qin2 (0:II/2,0:JJ-1,0:KK-1)
+    complex(kind=8) :: k_qin1 (0:II/2,0:JJ-1,0:KK-1)
+    complex(kind=8) :: k_qin2 (0:II/2,0:JJ-1,0:KK-1)
 
     !$OMP PARALLEL SECTIONS num_threads(2)
     !$OMP SECTION

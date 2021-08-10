@@ -7,11 +7,7 @@ NVCC=nvcc
 FFLAGS=-O3 -heap-arrays # -pg -fno-inline -warn -stand f03 -CB -traceback -debug all
 CUDAFLAGS=-O3 -L/opt/cuda/lib64 -lcufft -lcudart #-g
 
-PPFLAGS += -DUSE_SINGLE_PRECISION=$(USE_SINGLE_PRECISION)
-FFLAGS += $(PPFLAGS)
-CUDAFLAGS += $(PPFLAGS)
-
-OBJS=constants.o param_parser.o simulation_box.o \
+OBJS=param_parser.o simulation_box.o \
      polymer_chain.o parallel_tempering.o \
      pseudo.o pseudo_cuda.o \
      anderson_mixing.o anderson_mixing_cuda.o \
@@ -22,8 +18,6 @@ SRCDIR=../src
 
 $(TARGET): $(SRCDIR)/lfts_main.F90 $(OBJS)
 	$(MPIFC) $(FFLAGS) -o $@ $^ $(CUDAFLAGS) -lstdc++
-constants.o: $(SRCDIR)/constants.F90
-	$(FC) $(FFLAGS) -o $@ -c $^
 param_parser.o: $(SRCDIR)/param_parser.F90
 	$(FC) $(FFLAGS) -o $@ -c $^
 simulation_box.o: $(SRCDIR)/simulation_box.F90

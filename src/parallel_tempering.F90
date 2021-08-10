@@ -4,7 +4,6 @@
 ! tempering.
 module parallel_tempering
 
-  use constants
   use simulation_box
   use polymer_chain
   use MPI
@@ -14,13 +13,13 @@ module parallel_tempering
   integer, protected :: pt_myid, pt_numprocs, PT_MPI_REAL
 
 ! Parallel tempering variables
-  real(kind=rp), private, allocatable :: wswap(:,:,:)
+  real(kind=8), private, allocatable :: wswap(:,:,:)
   logical, private :: even_turn
 
 contains
 !-------------- pt_initialize ---------------
   subroutine pt_initialize()
-    real(kind=rp) :: chiN_from, chiN_to
+    real(kind=8) :: chiN_from, chiN_to
     integer :: ierr, istatus(MPI_STATUS_SIZE)
 
     pt_myid = 0
@@ -33,7 +32,7 @@ contains
     call MPI_COMM_SIZE( MPI_COMM_WORLD, pt_numprocs, ierr )
     if( ierr /= MPI_SUCCESS) write(*,*) pt_myid, ": MPI_COMM_RANK , error code=", ierr
 
-    allocate(wswap(x%lo:x%hi,y%lo:y%hi,z%lo:z%hi))
+    allocate(wswap(x_lo:x_hi,y_lo:y_hi,z_lo:z_hi))
 
     if (pt_numprocs > 1) then
       if(.not. pp_get("pt.chiN_range", chiN_from, 1) .or. &
@@ -62,10 +61,10 @@ contains
 !-------------- pt_attempt ---------------
   subroutine pt_attempt(chiN, rho_a3, wminus, wplus)
 
-    real(kind=rp), intent(in) :: chiN, rho_a3
-    real(kind=rp), intent(inout) :: wminus(x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp), intent(inout) :: wplus (x%lo:x%hi,y%lo:y%hi,z%lo:z%hi)
-    real(kind=rp) :: chiN_swap, p_swap, p_random
+    real(kind=8), intent(in) :: chiN, rho_a3
+    real(kind=8), intent(inout) :: wminus(x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8), intent(inout) :: wplus (x_lo:x_hi,y_lo:y_hi,z_lo:z_hi)
+    real(kind=8) :: chiN_swap, p_swap, p_random
     logical :: is_receiver, is_sender, is_swap
     integer :: ierr, istatus(MPI_STATUS_SIZE)
     integer :: sender_rank, receiver_rank
@@ -146,7 +145,7 @@ contains
       if( ierr /= MPI_SUCCESS) write(*,*) pt_myid, ": RECV wminus , error code=", ierr
       write(*,'(I5,A,I10,4I5)')  pt_myid, ": RECV wminus, [count,cancelled,source,tag,error]=", istatus 
 
-      p_swap = exp(rho_a3 * sqrt(real(NN,rp)) * (1/chiN - 1/chiN_swap) * sum((wminus**2 - wswap**2)*seg))
+      p_swap = exp(rho_a3 * sqrt(real(NN,8)) * (1/chiN - 1/chiN_swap) * sum((wminus**2 - wswap**2)*seg))
       call random_number(p_random)
       write(*,'(I5,A,2F8.3)') pt_myid, ": p_swap, p_random,", p_swap, p_random
 

@@ -2,14 +2,13 @@
 ! The main program begins here
 program langevin_fts_block_copolymer_3d
 
-  use constants, only : rp
   use param_parser
   use simulation_box
   use lfts
   implicit none
 
 ! cpu timer
-  real(kind=rp) :: total_time
+  real(kind=8) :: total_time
   integer(kind=8) :: count0, count1, count_max
   integer :: count_rate, nthreads
 
@@ -36,7 +35,7 @@ program langevin_fts_block_copolymer_3d
 
 ! print total simulation time
   call system_clock(count1, count_rate, count_max)
-  total_time = real(count1 - count0,rp) /count_rate
+  total_time = real(count1 - count0,8) /count_rate
   write(*,*) "total time,", "time per step"
   write(*,*)  total_time, total_time/(iter-1)
 

@@ -52,7 +52,6 @@
 !-----------------------------------------------------------------------
 module param_parser
   use iso_fortran_env, only : iostat_end
-  use constants, only : rp, sp, dp
   implicit none
 
   integer, private, parameter :: MAX_STRING_LENGTH  = 256
@@ -93,13 +92,12 @@ module param_parser
   ! an interface for function overloading.
   interface pp_get
     module procedure param_get_int
-    module procedure param_get_real_single
-    module procedure param_get_real_double
+    module procedure param_get_real
     module procedure param_get_str
   end interface
 
   private :: line_has_parsed, insert_param, search_param_idx
-  private :: param_get_int, param_get_real_single, param_get_real_double, param_get_str
+  private :: param_get_int, param_get_real, param_get_str
 
 contains
 !----------------- pp_initialize -----------------------------
@@ -366,9 +364,9 @@ contains
     end if
   end function
 !---------------------------------------------------------------
-  logical function param_get_real_single(str_name, var, idx_in)
+  logical function param_get_real(str_name, var, idx_in)
     character(len=*), intent(in) :: str_name
-    real(kind=sp), intent(inout) :: var
+    real(kind=8), intent(inout) :: var
     integer, optional :: idx_in
     integer :: idx, loc
     if(present(idx_in)) then
@@ -380,29 +378,9 @@ contains
     loc = search_param_idx(str_name, idx)
     if( loc > 0) then
       read (input_param_list(loc)%values(idx), *) var
-      param_get_real_single = .True.
+      param_get_real = .True.
     else
-      param_get_real_single = .False.
-    end if
-  end function
-!---------------------------------------------------------------
-  logical function param_get_real_double(str_name, var, idx_in)
-    character(len=*), intent(in) :: str_name
-    real(kind=dp), intent(inout) :: var
-    integer, optional :: idx_in
-    integer :: idx, loc
-    if(present(idx_in)) then
-      idx = idx_in
-    else
-      idx = 1
-    end if
-
-    loc = search_param_idx(str_name, idx)
-    if( loc > 0) then
-      read (input_param_list(loc)%values(idx), *) var
-      param_get_real_double = .True.
-    else
-      param_get_real_double = .False.
+      param_get_real = .False.
     end if
   end function
 !--------------------------------------------------------------

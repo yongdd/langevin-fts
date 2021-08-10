@@ -7,15 +7,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
-#include "common.h"
 
 using namespace std;
 
-#if USE_SINGLE_PRECISION == 1
-typedef float ftsReal;
-#else
 typedef double ftsReal;
-#endif
 
 template <unsigned int blockSize>
 __device__ static void warpReduce(volatile ftsReal* sdata, int tid)
@@ -391,10 +386,10 @@ extern "C" void am_cuda_caculate_new_fields_(
         cb_wout_hist->insert(w_out);
         cb_wdiff_hist->insert(w_diff);
         /* evaluate wdiff dot products for calculating Unm and Vn in Thompson's paper */
-        for(int nit=0; nit<= n_anderson; nit++)
+        for(int i=0; i<= n_anderson; i++)
         {
-            wdiffdots[nit] = multi_dot_cuda(num_components,
-                                            w_diff_d, cb_wdiff_hist->getArray(n_anderson-nit));
+            wdiffdots[i] = multi_dot_cuda(num_components,
+                                            w_diff_d, cb_wdiff_hist->getArray(n_anderson-i));
         }
         cb_wdiffdots->insert(wdiffdots);
     }
@@ -413,16 +408,16 @@ extern "C" void am_cuda_caculate_new_fields_(
     else
     {
         /* calculate Unm and Vn */
-        for(int nit=1; nit<=n_anderson; nit++)
+        for(int i=0; i<n_anderson; i++)
         {
-            v_n[nit-1] = cb_wdiffdots->getSym(n_anderson, n_anderson)
-                         - cb_wdiffdots->getSym(n_anderson, n_anderson - nit);
-            for(int nit2=1; nit2<=n_anderson; nit2++)
+            v_n[i] = cb_wdiffdots->getSym(n_anderson, n_anderson)
+                         - cb_wdiffdots->getSym(n_anderson, n_anderson-i-1);
+            for(int j=0; j<n_anderson; j++)
             {
-                u_nm[nit-1][nit2-1] = cb_wdiffdots->getSym(n_anderson, n_anderson)
-                                      - cb_wdiffdots->getSym(n_anderson, n_anderson-nit)
-                                      - cb_wdiffdots->getSym(n_anderson-nit2, n_anderson)
-                                      + cb_wdiffdots->getSym(n_anderson-nit, n_anderson-nit2);
+                u_nm[i][j] = cb_wdiffdots->getSym(n_anderson, n_anderson)
+                                      - cb_wdiffdots->getSym(n_anderson, n_anderson-i-1)
+                                      - cb_wdiffdots->getSym(n_anderson-j-1, n_anderson)
+                                      + cb_wdiffdots->getSym(n_anderson-i-1, n_anderson-j-1);
             }
         }
 
@@ -431,10 +426,10 @@ extern "C" void am_cuda_caculate_new_fields_(
         /* calculate the new field */
         wout_hist1_d = cb_wout_hist->getArray(n_anderson);
         cudaMemcpy(w_d, wout_hist1_d, sizeof(ftsReal)*total_grids,cudaMemcpyDeviceToDevice);
-        for(int nit=1; nit<=n_anderson; nit++)
+        for(int i=0; i<n_anderson; i++)
         {
-            wout_hist2_d = cb_wout_hist->getArray(n_anderson-nit);
-            addLinComb<<<N_BLOCKS, N_THREADS>>>(w_d, a_n[nit-1], wout_hist2_d, -a_n[nit-1], wout_hist1_d, total_grids);
+            wout_hist2_d = cb_wout_hist->getArray(n_anderson-i-1);
+            addLinComb<<<N_BLOCKS, N_THREADS>>>(w_d, a_n[i], wout_hist2_d, -a_n[i], wout_hist1_d, total_grids);
         }
         cudaMemcpy(w, w_d, sizeof(ftsReal)*total_grids,cudaMemcpyDeviceToHost);
     }

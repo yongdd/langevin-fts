@@ -2,13 +2,12 @@
 ! this module defines parameters and subroutines to conduct fast
 ! Fourier transform (FFT) using math kernel library(MKL).
 module fft
-  use constants, only : rp
   use MKL_DFTI
   use MKL_TRIG_TRANSFORMS
   implicit none
 
 ! fft_normal_factor = nomalization factor FFT
-  real(kind=rp), private :: fft_normal_factor
+  real(kind=8), private :: fft_normal_factor
 
 ! the number of grid in the each direction
   integer, private :: II, JJ, KK
@@ -51,13 +50,8 @@ contains
     cstrides= [0, 1, II/2+1, (int(II/2.0d0)+1)*JJ]
     rstrides= [0, 1, II,     II*JJ]
 
-#if USE_SINGLE_PRECISION == 1
-    status = DftiCreateDescriptor(hand_forward, DFTI_SINGLE, DFTI_REAL, 3, [II,JJ,KK])
-    status = DftiCreateDescriptor(hand_backward, DFTI_SINGLE, DFTI_REAL, 3, [II,JJ,KK])
-#else
     status = DftiCreateDescriptor(hand_forward, DFTI_DOUBLE, DFTI_REAL, 3, [II,JJ,KK])
     status = DftiCreateDescriptor(hand_backward, DFTI_DOUBLE, DFTI_REAL, 3, [II,JJ,KK])
-#endif
 
     status = DftiSetValue(hand_forward, DFTI_PLACEMENT, DFTI_NOT_INPLACE)
     status = DftiSetValue(hand_forward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX)
@@ -84,8 +78,8 @@ contains
 !-------------- fft_r2c_3d ---------------
   subroutine fft_forward(rdata, cdata)
     ! compute 3D forward fourier transform
-    real(kind=rp), intent(inout)    :: rdata(:,:,:)
-    complex(kind=rp), intent(inout) :: cdata(:,:,:)
+    real(kind=8), intent(inout)    :: rdata(:,:,:)
+    complex(kind=8), intent(inout) :: cdata(:,:,:)
     integer :: status
 
     status = DftiComputeForward(hand_forward, rdata(:,1,1), cdata(:,1,1))
@@ -94,8 +88,8 @@ contains
 !-------------- fft_c2r_3d ---------------
   subroutine fft_backward(cdata, rdata)
     ! compute 3D backward fourier transform
-    real(kind=rp), intent(inout)    :: rdata(:,:,:)
-    complex(kind=rp), intent(inout) :: cdata(:,:,:)
+    real(kind=8), intent(inout)    :: rdata(:,:,:)
+    complex(kind=8), intent(inout) :: cdata(:,:,:)
     integer :: status
 
     status = DftiComputeBackward(hand_backward, cdata(:,1,1), rdata(:,1,1))

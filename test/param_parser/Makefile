@@ -10,24 +10,21 @@ FC=ifort
 #FFLAGS=-O3 -heap-arrays -pg -fno-inline
 FFLAGS=-O3 -heap-arrays -pg -fno-inline -warn -stand f03 -CB -traceback -g -debug all
 
-
-PPFLAGS = -DUSE_SINGLE_PRECISION=$(USE_SINGLE_PRECISION)
-FFLAGS += $(PPFLAGS)
-
 SRCDIR=../../src
+##TESTDIR=../../src/test
 
-all : test1 
+all : test
 
-#------------ Random Number ----------------
+#------------ Circular Buffer -----------
 
-OBJS1=random_gaussian.o
-TAR1=random_test.out
-test1: ./random_test.f90 $(OBJS1)
-	$(FC) $(FFLAGS) -o $(TAR1)  $^
+OBJS=param_parser.o
+TAR=param_parser_test.out
+test: ./param_parser_test.f90 $(OBJS)
+	$(FC) $(FFLAGS) -o $(TAR)  $^
 
 #------------ Dependence ------------------
 
-random_gaussian.o: $(SRCDIR)/random_gaussian.F90
+param_parser.o: $(SRCDIR)/param_parser.F90
 	$(FC) $(FFLAGS) -o $@ -c $^
 clean:
 	rm -f *__*.*
