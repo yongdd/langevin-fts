@@ -24,7 +24,11 @@ private:
 public:
 
     MklPseudo(std::array<int,3> nx, std::array<double,3> dx,
-               double *dv, double volume, double ds, int nn, int nf);
+               double *dv, double volume, double ds, int NN, int NNf);
+    MklPseudo(int *nx, int *dx,
+               double *dv, double volume, double ds, int NN, int NNf)
+               :  MklPseudo({nx[0],nx[1],nx[2]}, {dx[0],dx[1],dx[2]},
+               dv, volume, ds, NN, NNf) {};
     ~MklPseudo();
 
     void find_phi(double *phia,  double *phib,

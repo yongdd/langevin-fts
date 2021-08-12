@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../src/platforms/cuda/include/CudaCommon.h
+cufft.h
+-
+
+../src/platforms/cuda/include/CudaPseudo.h
+iostream
+-
+array
+-
+stdio.h
+-
+cufft.h
+-
+CudaCommon.h
+../src/platforms/cuda/include/CudaCommon.h
+
+/home/yong/polymer/git_L_FTS_Public/src/platforms/cuda/CudaCommon.cu
+CudaCommon.h
+/home/yong/polymer/git_L_FTS_Public/src/platforms/cuda/CudaCommon.h
+
+/home/yong/polymer/git_L_FTS_Public/src/platforms/cuda/CudaPseudo.cu
+complex
+-
+CudaPseudo.h
+/home/yong/polymer/git_L_FTS_Public/src/platforms/cuda/CudaPseudo.h
+

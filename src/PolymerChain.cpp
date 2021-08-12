@@ -5,7 +5,7 @@
 #include "PolymerChain.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(double f, int NN, int chi_n)
+PolymerChain::PolymerChain(double f, int NN, double chi_n)
 {
     this->f = f;
     this->NN = NN;
@@ -20,10 +20,6 @@ PolymerChain::PolymerChain(double f, int NN, int chi_n)
     }
     // grid sizes contour direction
     this->ds = 1.0/NN;
-}
-//----------------- Destructor ---------------------------
-PolymerChain::~PolymerChain()
-{
 }
 //----------------- set_chi_n ----------------------------
 void PolymerChain::set_chin(double chi_n)

@@ -1,0 +1,31 @@
+# SIMULATION BOX
+
+#geometry.grids       =  1 2 3   # the number of simulation grids
+geometry.grids        = 63 63 63   # the number of simulation grids
+geometry.box_size     =  4.0 3.0 2.0   # simulation box as bN^(1/2) unit
+                                       # if box_size is not specified, box_size become [grids] * [kuhn length]
+# POLYMER CHAIN
+chain.chiN                  = 20.0        # Flory Huggins parameters. 
+                                          # This will ignored if parallel tempering is activated.
+chain.a_fraction            = 0.5         # f
+chain.contour_step          = 48         # N
+chain.surface_interaction   = 0.0      # etaas
+
+# ITERATION PARAMETER
+iter.step_saddle = 80  # max number of W+ saddle point approximation iteration.
+iter.tolerance = 1.0e-9   # exit loop if error level < tolerance.
+
+am.mix_init = 0.1        # init mixing parameter of simple mixing.
+am.mix_min = 0.1        # minimum mixing parameter of simple mixing.
+am.start_error = 1.0e-9  # anderson mixing begin if error_level < start_error.
+am.step_max = 5          # max number of previous steps to calculate
+                         # new field when using Anderson mixing.
+# Initial Fields
+input.select_init_fields = 2  # 0: fields.input
+                               # 1: Random
+                               # 2: Test input
+
+# GPU CONFIGURATION
+gpu.num_block     = 256      # the number blocks 
+gpu.threads_per_block = 128  # the number of threads per block.
+                             # typically 128 or 256 is optimal.

@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../src/include/ParamParser.h
+iostream
+-
+string
+-
+array
+-
+vector
+-
+fstream
+-
+sstream
+-
+
+../src/include/PolymerChain.h
+iostream
+-
+cmath
+-
+
+../src/include/SimulationBox.h
+iostream
+-
+array
+-
+
+/home/yong/polymer/git_L_FTS_Public/src/ParamParser.cpp
+ParamParser.h
+/home/yong/polymer/git_L_FTS_Public/src/ParamParser.h
+
+/home/yong/polymer/git_L_FTS_Public/src/PolymerChain.cpp
+PolymerChain.h
+/home/yong/polymer/git_L_FTS_Public/src/PolymerChain.h
+
+/home/yong/polymer/git_L_FTS_Public/src/SimulationBox.cpp
+SimulationBox.h
+/home/yong/polymer/git_L_FTS_Public/src/SimulationBox.h
+

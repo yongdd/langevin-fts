@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../src/platforms/common/include/CircularBuffer.h
+
+/home/yong/polymer/git_L_FTS_Public/src/platforms/common/CircularBuffer.cpp
+algorithm
+-
+CircularBuffer.h
+/home/yong/polymer/git_L_FTS_Public/src/platforms/common/CircularBuffer.h
+

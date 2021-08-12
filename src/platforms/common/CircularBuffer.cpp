@@ -1,7 +1,6 @@
 /*-----------------------------------------------------------------
 ! A circular buffer is a data structure that uses a single,
 ! fixed-size buffer as if it were connected end-to-end.
-! Each elements are 1-dmensional real array.
 !-----------------------------------------------------------------*/
 
 #include <algorithm>
@@ -47,6 +46,6 @@ double CircularBuffer::get(int n, int m)
 }
 double CircularBuffer::get_sym(int n, int m)
 {
-    int i = (start+n)%length;
+    int i = (start+std::max(n,m))%length ;
     return elems[i*width + abs(n-m)];
 }
