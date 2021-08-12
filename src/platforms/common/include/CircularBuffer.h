@@ -3,6 +3,11 @@
 ! fixed-size buffer as if it were connected end-to-end.
 ! Each elements are 1-dmensional real array.
 !-----------------------------------------------------------------*/
+
+#ifndef CIRCULAR_BUFFER_H_
+#define CIRCULAR_BUFFER_H_
+
+
 class CircularBuffer
 {
 private:
@@ -21,3 +26,4 @@ public:
     double get(int n, int m);
     double get_sym(int n, int m);
 };
+#endif

@@ -21,6 +21,7 @@ public:
     double volume; // volume of the system.
 
     SimulationBox(std::array<int,3> nx, std::array<double,3> lx);
+    SimulationBox(int *nx, double *lx) : SimulationBox({nx[0],nx[1],nx[2]}, {lx[0],lx[1],lx[2]}) {};
     ~SimulationBox();
 
     double dot(double *g, double *h);

@@ -18,8 +18,8 @@ public:
     double ds;  // discrete step sizes
     double chi_n; // chi N, interaction parameter between A and B Monomers
 
-    PolymerChain(double f, int NN, int chi_n);
-    ~PolymerChain();
+    PolymerChain(double f, int NN, double chi_n);
+    ~PolymerChain() {};
 
     void set_chin(double chi_n);
 };

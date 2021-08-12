@@ -37,7 +37,7 @@ ParamParser::ParamParser(std::string param_file_name)
     }
     param_file.close();
 
-    std::cout<< "--- Input Parameters ---" << std::endl;
+    std::cout<< "----- Input Parameters -----" << std::endl;
     for(unsigned i=0; i<input_param_list.size(); i++ )
     {
         std::cout<< input_param_list[i].var_name << " :";
@@ -45,13 +45,13 @@ ParamParser::ParamParser(std::string param_file_name)
             std::cout<< " " << input_param_list[i].values[j];
         std::cout<< std::endl;
     }
-    std::cout<< "-----------------------" << std::endl;
+    //std::cout<< "-----------------------" << std::endl;
 }
 //---------------------- Destructor -------------------------------
 ParamParser::~ParamParser()
 {
     // show parameters that are never used.
-    std::cout<< "------ Parameters that are never used ------" << std::endl;
+    std::cout<< "----- Parameters that are never used -----" << std::endl;
     for(unsigned int i=0; i<input_param_list.size(); i++)
     {
         if(param_use_count[i] == 0)
@@ -200,6 +200,22 @@ bool ParamParser::get(std::string param_name, int& param_value, int idx)
     else
         return false;
 }
+bool ParamParser::get(std::string param_name, int *param_value, int length)
+{
+    int loc;
+    loc = search_param_idx(param_name, length-1);
+    if( loc >= 0)
+    {
+        for(int i=0; i<length; i++)
+        {
+            std::stringstream ss(input_param_list[loc].values[i]);
+            ss >> param_value[i];
+        }
+        return true;
+    }
+    else
+        return false;
+}
 //---------------------- get_double -------------------------------
 bool ParamParser::get(std::string param_name, double& param_value, int idx)
 {
@@ -209,6 +225,22 @@ bool ParamParser::get(std::string param_name, double& param_value, int idx)
     {
         std::stringstream ss(input_param_list[loc].values[idx]);
         ss >> param_value;
+        return true;
+    }
+    else
+        return false;
+}
+bool ParamParser::get(std::string param_name, double *param_value, int length)
+{
+    int loc;
+    loc = search_param_idx(param_name, length-1);
+    if( loc >= 0)
+    {
+        for(int i=0; i<length; i++)
+        {
+            std::stringstream ss(input_param_list[loc].values[i]);
+            ss >> param_value[i];
+        }
         return true;
     }
     else

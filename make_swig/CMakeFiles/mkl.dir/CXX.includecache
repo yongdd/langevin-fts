@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../src/platforms/common/include/CircularBuffer.h
+
+../src/platforms/mkl/include/MklAndersonMixing.h
+CircularBuffer.h
+../src/platforms/mkl/include/CircularBuffer.h
+
+/home/yong/polymer/git_L_FTS_Public/src/platforms/common/CircularBuffer.cpp
+algorithm
+-
+CircularBuffer.h
+/home/yong/polymer/git_L_FTS_Public/src/platforms/common/CircularBuffer.h
+
+/home/yong/polymer/git_L_FTS_Public/src/platforms/mkl/MklAndersonMixing.cpp
+iostream
+-
+algorithm
+-
+MklAndersonMixing.h
+/home/yong/polymer/git_L_FTS_Public/src/platforms/mkl/MklAndersonMixing.h
+

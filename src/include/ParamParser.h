@@ -128,7 +128,9 @@ public:
     ~ParamParser();
 
     bool get(std::string param_name, int &param_value, int idx=0);
+    bool get(std::string param_name, int *param_value, int length);
     bool get(std::string param_name, double &param_value, int idx=0);
+    bool get(std::string param_name, double *param_value, int length);
     bool get(std::string param_name, std::string &param_value, int idx=0);
 
 };

@@ -3,45 +3,14 @@
 -------------------------------------------------------------*/
 
 #include <iostream>
-#include <cstdio>
-#include <cstdlib>
 #include <algorithm>
-#include "CircularBuffer.h"
+#include "MklAndersonMixing.h"
 
-class AnderosnMixing
-{
-private:
-    /* a few previous field values are stored for anderson mixing */
-    CircularBuffer *cb_wout_hist, *cb_wdiff_hist;
-    /* arrays to calculate anderson mixing */
-    CircularBuffer *cb_wdiffdots;
-    double **u_nm, *v_n, *a_n, *wdiffdots;
-
-    int num_components, MM, TOTAL_MM;
-    double start_anderson_error, mix_min, mix, init_mix;
-    int max_anderson, n_anderson;
-    double *dv, *temp, *sum;
-
-    double multi_dot(int n_comp, double *a, double *b);
-    void find_an(double **u_nm, double *v_n, double *a_n, int n);
-    
-public:
-
-    AnderosnMixing(int num_components, int MM, double dv,
-                   int max_anderson, double start_anderson_error,
-                   double mix_min, double init_mix);
-    ~AnderosnMixing();
-
-    void reset_count_();
-    void caculate_new_fields(double *w, double *w_out, double *w_diff,
-        double old_error_level, double error_level);
-
-};
 AnderosnMixing::AnderosnMixing(
     int num_components, int MM,
-    double dv,
-    int max_anderson,   double start_anderson_error,
-    double mix_min,     double init_mix)
+    double *dv,
+    int max_anderson, double start_anderson_error,
+    double mix_min,   double init_mix)
 {
     this->num_components = num_components;
     this->MM = MM;
@@ -67,7 +36,7 @@ AnderosnMixing::AnderosnMixing(
 
     /* define arrays for anderson mixing */
     this->u_nm = new double*[max_anderson];
-    for (int i=0; i<max_anderson; i++)
+    for(int i=0; i<max_anderson; i++)
         this->u_nm[i] = new double[max_anderson];
     this->v_n = new double[max_anderson];
     this->a_n = new double[max_anderson];
@@ -87,7 +56,7 @@ AnderosnMixing::AnderosnMixing(
     reset_count();
 
 }
-void AnderosnMixing::~AnderosnMixing()
+AnderosnMixing::~AnderosnMixing()
 {
     delete cb_wout_hist;
     delete cb_wdiff_hist;
@@ -100,7 +69,7 @@ void AnderosnMixing::~AnderosnMixing()
     delete[] a_n;
     delete[] wdiffdots;
 
-    delete[] seg;
+    delete[] dv;
     delete[] temp;
     delete[] sum;
 }
@@ -122,6 +91,8 @@ void AnderosnMixing::caculate_new_fields(
     double old_error_level,
     double error_level)
 {
+    double* wout_hist1;
+    double* wout_hist2;
 
     //printf("mix: %f\n", mix);
     /* condition to start anderson mixing */
@@ -130,16 +101,17 @@ void AnderosnMixing::caculate_new_fields(
     if( n_anderson >= 0 )
     {
         /* number of histories to use for anderson mixing */
-        n_anderson = min(max_anderson, n_anderson);
+        n_anderson = std::min(max_anderson, n_anderson);
         /* store the input and output field (the memory is used in a periodic way) */
         cb_wout_hist->insert(w_out);
         cb_wdiff_hist->insert(w_diff);
         /* evaluate wdiff dot products for calculating Unm and Vn in Thompson's paper */
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiffdots[i] = multi_dot(num_components,
-                                     w_diff_d, cb_wdiff_hist->getArray(n_anderson-i));
+            wdiffdots[i] = multi_dot(num_components, w_diff, cb_wdiff_hist->get_array(n_anderson-i));
+            //std::cout << wdiffdots[i] << " ";
         }
+        //std::cout << std::endl;
         cb_wdiffdots->insert(wdiffdots);
     }
     /* conditions to apply the simple mixing method */
@@ -147,7 +119,7 @@ void AnderosnMixing::caculate_new_fields(
     {
         /* dynamically change mixing parameter */
         if (old_error_level < error_level)
-            mix = max(mix*0.7, mix_min);
+            mix = std::max(mix*0.7, mix_min);
         else
             mix = mix*1.01;
         /* make a simple mixing of input and output fields for the next iteration */
@@ -159,6 +131,7 @@ void AnderosnMixing::caculate_new_fields(
         /* calculate Unm and Vn */
         for(int i=0; i<n_anderson; i++)
         {
+            //std::cout << cb_wdiffdots->get_sym(n_anderson, n_anderson) << ", " << cb_wdiffdots->get_sym(n_anderson, n_anderson-i-1) << std::endl;
             v_n[i] = cb_wdiffdots->get_sym(n_anderson, n_anderson)
                      - cb_wdiffdots->get_sym(n_anderson, n_anderson-i-1);
             for(int j=0; j<n_anderson; j++)
@@ -169,9 +142,14 @@ void AnderosnMixing::caculate_new_fields(
                              + cb_wdiffdots->get_sym(n_anderson-i-1, n_anderson-j-1);
             }
         }
-
+        
+        //print_array(max_anderson, v_n);
+        //print_array(max_anderson, a_n);
+        //exit(-1);
+        
         find_an(u_nm, v_n, a_n, n_anderson);
-        /* calculate the new field */
+        
+        // calculate the new field
         wout_hist1 = cb_wout_hist->get_array(n_anderson);
         for(int i=0; i<TOTAL_MM; i++)
             w[i] = wout_hist1[i];
@@ -179,7 +157,7 @@ void AnderosnMixing::caculate_new_fields(
         {
             wout_hist2 = cb_wout_hist->get_array(n_anderson-i-1);
             for(int j=0; j<TOTAL_MM; j++)
-                w[j] += a_n[i](wout_hist2[j] - wout_hist1[j]);
+                w[j] += a_n[i]*(wout_hist2[j] - wout_hist1[j]);
         }
     }
 }
@@ -189,7 +167,7 @@ double AnderosnMixing::multi_dot(int n_comp, double *a, double *b)
     for(int n=0; n<n_comp; n++)
     {
         for(int i=0; i<MM; i++)
-            total = total + seg[i]*a[i+n*MM]*b[i+n*MM];
+            total = total + dv[i]*a[i+n*MM]*b[i+n*MM];
     }
     return total;
 }
@@ -222,4 +200,13 @@ void AnderosnMixing::find_an(double **u, double *v, double *a, int n)
         }
         a[i] = (v[i] - tempsum)/u[i][i];
     }
+}
+
+void AnderosnMixing::print_array(int n, double *a)
+{
+    for(int i=0; i<n-1; i++)
+    {
+        std::cout << a[i] << ", ";
+    }
+    std::cout << a[n-1] << std::endl;
 }

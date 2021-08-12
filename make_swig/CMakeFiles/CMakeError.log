@@ -1,0 +1,58 @@
+Performing C++ SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
+Change Dir: /home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/make cmTC_374bf/fast && /usr/bin/make  -f CMakeFiles/cmTC_374bf.dir/build.make CMakeFiles/cmTC_374bf.dir/build
+make[1]: Entering directory '/home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_374bf.dir/src.cxx.o
+/opt/intel/compiler/2021.3.0/linux/bin/intel64/icpc    -DCMAKE_HAVE_LIBC_PTHREAD   -o CMakeFiles/cmTC_374bf.dir/src.cxx.o -c /home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp/src.cxx
+Linking CXX executable cmTC_374bf
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_374bf.dir/link.txt --verbose=1
+/opt/intel/compiler/2021.3.0/linux/bin/intel64/icpc   -DCMAKE_HAVE_LIBC_PTHREAD    -rdynamic CMakeFiles/cmTC_374bf.dir/src.cxx.o  -o cmTC_374bf 
+ld: CMakeFiles/cmTC_374bf.dir/src.cxx.o: in function `main':
+src.cxx:(.text+0x39): undefined reference to `pthread_create'
+ld: src.cxx:(.text+0x42): undefined reference to `pthread_detach'
+ld: src.cxx:(.text+0x4b): undefined reference to `pthread_cancel'
+ld: src.cxx:(.text+0x56): undefined reference to `pthread_join'
+make[1]: *** [CMakeFiles/cmTC_374bf.dir/build.make:107: cmTC_374bf] Error 1
+make[1]: Leaving directory '/home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp'
+make: *** [Makefile:141: cmTC_374bf/fast] Error 2
+
+
+Source file was:
+#include <pthread.h>
+
+void* test_func(void* data)
+{
+  return data;
+}
+
+int main(void)
+{
+  pthread_t thread;
+  pthread_create(&thread, NULL, test_func, NULL);
+  pthread_detach(thread);
+  pthread_cancel(thread);
+  pthread_join(thread, NULL);
+  pthread_atfork(NULL, NULL, NULL);
+  pthread_exit(NULL);
+
+  return 0;
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/make cmTC_422ea/fast && /usr/bin/make  -f CMakeFiles/cmTC_422ea.dir/build.make CMakeFiles/cmTC_422ea.dir/build
+make[1]: Entering directory '/home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_422ea.dir/CheckFunctionExists.cxx.o
+/opt/intel/compiler/2021.3.0/linux/bin/intel64/icpc    -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_422ea.dir/CheckFunctionExists.cxx.o -c /home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CheckLibraryExists/CheckFunctionExists.cxx
+Linking CXX executable cmTC_422ea
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_422ea.dir/link.txt --verbose=1
+/opt/intel/compiler/2021.3.0/linux/bin/intel64/icpc   -DCHECK_FUNCTION_EXISTS=pthread_create    -rdynamic CMakeFiles/cmTC_422ea.dir/CheckFunctionExists.cxx.o  -o cmTC_422ea  -lpthreads 
+ld: cannot find -lpthreads
+make[1]: *** [CMakeFiles/cmTC_422ea.dir/build.make:107: cmTC_422ea] Error 1
+make[1]: Leaving directory '/home/yong/polymer/git_L_FTS_Public/make_swig/CMakeFiles/CMakeTmp'
+make: *** [Makefile:141: cmTC_422ea/fast] Error 2
+
+
+

@@ -38,8 +38,13 @@ private:
 public:
 
     CudaPseudo(std::array<int,3> nx,  std::array<double,3> dx,
-               double *dv, double volume, double ds, int MM, int MMf,
+               double *dv, double volume, double ds, int NN, int NNf,
                int n_blocks=256, int n_threads=256,  int process_idx=0);
+    CudaPseudo(int *nx, double *dx, double *dv, double volume,
+                double ds, int NN, int NNf,
+                int n_blocks=256, int n_threads=256,  int process_idx=0)
+               :  CudaPseudo({nx[0],nx[1],nx[2]}, {dx[0],dx[1],dx[2]},
+               dv, volume, ds, NN, NNf, n_blocks, n_threads, process_idx) {};
     ~CudaPseudo();
 
     void find_phi(double *phia,  double *phib,
