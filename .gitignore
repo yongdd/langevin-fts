@@ -2,7 +2,6 @@
 *.o
 *.mod
 fields_*.*
-*.txt
 *.out
 *.sh.*
 *.png
