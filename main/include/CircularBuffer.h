@@ -7,7 +7,7 @@
 #ifndef CPU_CIRCULAR_BUFFER_H_
 #define CPU_CIRCULAR_BUFFER_H_
 
-class CpuCircularBuffer
+class CircularBuffer
 {
 private:
     int length; // maximum number of elements
@@ -17,8 +17,8 @@ private:
     double* elems;
 
 public:
-    CpuCircularBuffer(int length, int width);
-    ~CpuCircularBuffer();
+    CircularBuffer(int length, int width);
+    ~CircularBuffer();
     void reset();
     void insert(double* new_arr);
     double* get_array(int n);

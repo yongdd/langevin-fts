@@ -5,7 +5,7 @@
 #ifndef CUDA_ANDERSON_MIXING_H_
 #define CUDA_ANDERSON_MIXING_H_
 
-#include "CpuCircularBuffer.h"
+#include "CircularBuffer.h"
 #include "SimulationBox.h"
 #include "AndersonMixing.h"
 #include "CudaCommon.h"
@@ -41,7 +41,7 @@ private:
     // a few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
     // arrays to calculate anderson mixing
-    CpuCircularBuffer *cb_wdiffdots;
+    CircularBuffer *cb_wdiffdots;
     double **u_nm, *v_n, *a_n, *wdiffdots;
     double *w_d, *w_diff_d;
 

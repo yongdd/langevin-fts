@@ -1,5 +1,5 @@
 #include "AndersonMixing.h"
-/*
+
 void AndersonMixing::find_an(double **u, double *v, double *a, int n)
 {
     int i,j,k;
@@ -28,4 +28,4 @@ void AndersonMixing::find_an(double **u, double *v, double *a, int n)
         }
         a[i] = (v[i] - tempsum)/u[i][i];
     }
-}*/
+}

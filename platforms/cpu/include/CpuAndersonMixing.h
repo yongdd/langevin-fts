@@ -6,7 +6,7 @@
 #define CPU_ANDERSON_MIXING_H_
 
 #include "SimulationBox.h"
-#include "CpuCircularBuffer.h"
+#include "CircularBuffer.h"
 #include "AndersonMixing.h"
 
 class CpuAndersonMixing : public AndersonMixing
@@ -14,9 +14,9 @@ class CpuAndersonMixing : public AndersonMixing
 private:
     SimulationBox *sb;
     /* a few previous field values are stored for anderson mixing */
-    CpuCircularBuffer *cb_wout_hist, *cb_wdiff_hist;
+    CircularBuffer *cb_wout_hist, *cb_wdiff_hist;
     /* arrays to calculate anderson mixing */
-    CpuCircularBuffer *cb_wdiffdots;
+    CircularBuffer *cb_wdiffdots;
     double **u_nm, *v_n, *a_n, *wdiffdots;
 
     int num_components, MM, TOTAL_MM;
