@@ -1,21 +1,14 @@
 
 #include <iostream>
-#include "ParamParser.h"
 #include "CudaCommon.h"
 
-
-CudaCommon::CudaCommon(int process_idx)
+CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
 {
     int device;
     int devices_count;  
     struct cudaDeviceProp prop;
     cudaError_t err;
 
-    // read CUDA parameters
-    ParamParser& pp = ParamParser::get_instance();
-    if(!pp.get("gpu.num_blocks", N_BLOCKS)) N_BLOCKS = 256;
-    if(!pp.get("gpu.threads_per_block", N_THREADS)) N_THREADS = 256;
-    
     this->N_BLOCKS = N_BLOCKS;
     this->N_THREADS = N_THREADS;
 
@@ -98,11 +91,10 @@ CudaCommon::CudaCommon(int process_idx)
         exit (1);
     }
 }
-void CudaCommon::initialize(int process_idx)
+void CudaCommon::initialize(int N_BLOCKS, int N_THREADS, int process_idx)
 {
-    CudaCommon::get_instance(process_idx);
+    CudaCommon::get_instance(N_BLOCKS, N_THREADS, process_idx);
 }
-
 __global__ void multiReal(double* dst,
                           double* src1,
                           double* src2,

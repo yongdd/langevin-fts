@@ -1,8 +1,7 @@
 #include <cmath>
-#include "CpuPseudo.h"
-#include "MklFFT.h"
+#include "Pseudo.h"
 
-CpuPseudo::CpuPseudo(
+Pseudo::Pseudo(
     SimulationBox *sb, double ds,
     int NN, int NNf)
 {
@@ -18,18 +17,16 @@ CpuPseudo::CpuPseudo(
 
     this->q1 = new double[MM*(NN+1)];
     this->q2 = new double[MM*(NN+1)];
-    this->fft = new MklFFT(sb->nx);
 }
-CpuPseudo::~CpuPseudo()
+Pseudo::~Pseudo()
 {
     delete[] expf;
     delete[] expf_half;
     delete[] q1;
     delete[] q2;
-    delete fft;
 }
 //----------------- init_gaussian_factor -------------------
-void CpuPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
+void Pseudo::init_gaussian_factor(int *nx, double *dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;
     double xfactor[3];
@@ -63,9 +60,9 @@ void CpuPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
         }
     }
 }
-void CpuPseudo::find_phi(double *phia,  double *phib,
-                         double *q1_init, double *q2_init,
-                         double *wa, double *wb, double ds, double &QQ)
+void Pseudo::find_phi(double *phia,  double *phib,
+                      double *q1_init, double *q2_init,
+                      double *wa, double *wb, double ds, double &QQ)
 {
     double expdwa[MM];
     double expdwb[MM];
@@ -141,8 +138,8 @@ void CpuPseudo::find_phi(double *phia,  double *phib,
     }
 }
 
-void CpuPseudo::onestep(double *qin, double *qout,
-                        double *expdw, double *expdw_half)
+void Pseudo::onestep(double *qin, double *qout,
+                     double *expdw, double *expdw_half)
 {
     double qout1[MM], qout2[MM];
     std::complex<double> k_qin1[MM_COMPLEX], k_qin2[MM_COMPLEX];
@@ -201,7 +198,7 @@ void CpuPseudo::onestep(double *qin, double *qout,
 * This is made for debugging and testing.
 * Do NOT this at main progarams.
 * */
-void CpuPseudo::get_partition(double *q1_out,  double *q2_out, int n)
+void Pseudo::get_partition(double *q1_out,  double *q2_out, int n)
 {
     for(int i=0; i<MM; i++)
     {

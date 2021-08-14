@@ -1,6 +1,6 @@
 
 #include <string>
-#include <ctime>
+#include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <fstream>
@@ -8,7 +8,8 @@
 #include "PolymerChain.h"
 
 #include "CpuSimulationBox.h"
-#include "CpuPseudo.h"
+#include "MklPseudo.h"
+#include "FftwPseudo.h"
 #include "CpuAndersonMixing.h"
 
 #include "CudaSimulationBox.h"
@@ -19,9 +20,9 @@ int main(int argc, char **argv)
 {
     // math constatns
     const double PI = 3.14159265358979323846;
-    // timer
-    clock_t time_start, time_finish;
-    double time_duration;
+    // chrono timer
+    std::chrono::system_clock::time_point chrono_start, chrono_end;
+    std::chrono::duration<double> time_duration;
     // iter = number of iteration steps, maxiter = maximum number of iteration steps
     int iter, maxiter;
     // QQ = total partition function
@@ -106,10 +107,11 @@ int main(int argc, char **argv)
     
     // Create instances
     //CpuSimulationBox sb_(nx, lx);
-    //CpuPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
+    //MklPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
+    //FftwPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
     //CpuAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
   
-    //CudaCommon::initialize(1); //process ID
+    //CudaCommon::initialize(256, 256, 0); //process ID
     CudaSimulationBox sb_(nx, lx);
     CudaPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
     CudaAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
@@ -192,7 +194,7 @@ int main(int argc, char **argv)
     //------------------ run ----------------------
     std::cout<< "---------- Run ----------" << std::endl;
     std::cout<< "iteration, mass error, total_partition, energy_tot, error_level" << std::endl;
-    time_start = clock();
+    chrono_start = std::chrono::system_clock::now();
     // iteration begins here
     for(int iter=0; iter<maxiter; iter++)
     {
@@ -250,10 +252,10 @@ int main(int argc, char **argv)
         // calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
     }
-    time_finish = clock();
-    time_duration = (double)(time_finish - time_start) / CLOCKS_PER_SEC;
+    chrono_end = std::chrono::system_clock::now();
+    time_duration = chrono_end - chrono_start;
     std::cout<< "total time, time per step: ";
-    std::cout<< time_duration << " " << time_duration/maxiter << std::endl;
+    std::cout<< time_duration.count() << " " << time_duration.count()/maxiter << std::endl;
     //------------- write the final output -------------
     //write (filename, '( "fields_", I0.6, "_", I0.4, "_", I0.7, ".dat")' ) &
     //nint(chiW), nint(chiN*100), nint(Lx*1000)

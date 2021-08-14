@@ -15,6 +15,9 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 
 + **MKL**   
   MKL is bundled with Intel Compilers.  
+
++ **FFTW**
+  Fastest Fourier transform in the West
   
 + **CUDA**  
   https://developer.nvidia.com/cuda-toolkit  
@@ -34,6 +37,16 @@ I tested this program under following environments.
 
 # Compile
   
+  mkdir build
+  cd build
+  cmake ../
+  make
+
++ To use FFTW
+  -DCMAKE_INCLUDE_PATH=<FFTW_PATH>/include -DCMAKE_FRAMEWORK_PATH=<FFWT_PATH>/lib
++ To change compilers
+  -DCMAKE_CXX_COMPILER=<CPP Compiler> -DCMAKE_C_COMPILER=<C Compiler>
+
 # User Guide
 
 # Developer Guide
