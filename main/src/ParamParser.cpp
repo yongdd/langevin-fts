@@ -4,9 +4,7 @@
 ! parameters from an input file. Each parameter pair is stored in
 ! vector, and retrieve it when 'get' is invoked.
 !--------------------------------------------------------------------*/
-
 #include "ParamParser.h"
-
 
 //----------------- Constructor -----------------------------
 ParamParser::ParamParser()

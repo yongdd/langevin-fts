@@ -74,27 +74,14 @@ __global__ static void multi_dot_kernel(
 //----------------- Constructor -----------------------------
 CudaSimulationBox::CudaSimulationBox(
     std::array<int,3> nx, std::array<double,3> lx)
+    : SimulationBox(nx, lx)
 {
-    for(int i=0; i<3; i++)
-    {
-        this->nx[i] = nx[i];
-        this->lx[i] = lx[i];
-        this->dx[i] = lx[i]/nx[i];
-    }
-    // the number of total grids
-    MM = nx[0]*nx[1]*nx[2];
-    // weight factor for integral
-    dv = new double[MM];
-    for(int i=0; i<MM; i++)
-        dv[i] = dx[0]*dx[1]*dx[2];
     cudaMalloc((void**)&dv_d, sizeof(double)*MM);
     cudaMemcpy(dv_d, dv,      sizeof(double)*MM,cudaMemcpyHostToDevice);
 
     // temporal storage
     sum = new double[MM];
     cudaMalloc((void**)&sum_d, sizeof(double)*MM);
-    // system polymer
-    volume = lx[0]*lx[1]*lx[2];
 
     N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
     N_THREADS = CudaCommon::get_instance().N_THREADS;
@@ -109,30 +96,11 @@ CudaSimulationBox::CudaSimulationBox(
 //----------------- Destructor -----------------------------
 CudaSimulationBox::~CudaSimulationBox()
 {
-    delete[] dv;
     delete[] sum;
     cudaFree(dv_d);
     cudaFree(sum_d);
 }
 //-----------------------------------------------------------
-// This method calculates integral g*h
-double CudaSimulationBox::dot(double *g, double *h)
-{
-    double sum{0.0};
-    for(int i=0; i<MM; i++)
-        sum += dv[i] * g[i] * h[i];
-    return sum;
-}
-double CudaSimulationBox::multi_dot(int n_comp, double *g, double *h)
-{
-    double sum{0.0};
-    for(int n=0; n<n_comp; n++)
-    {
-        for(int i=0; i<MM; i++)
-            sum += dv[i] * g[i+n*MM] * h[i+n*MM];
-    }
-    return sum;
-}
 double CudaSimulationBox::multi_dot_gpu(int n_comp, double *g_d, double *h_d)
 {
     double total{0.0};
@@ -179,14 +147,4 @@ double CudaSimulationBox::multi_dot_gpu(int n_comp, double *g_d, double *h_d)
         total += sum[i];
     }
     return total;
-}
-//-----------------------------------------------------------
-// This method makes the input a zero-meaned matrix
-void CudaSimulationBox::zero_mean(double *w)
-{
-    double sum{0.0};
-    for(int i=0; i<MM; i++)
-        sum += dv[i]*w[i];
-    for(int i=0; i<MM; i++)
-        w[i] -= sum/volume;
 }

@@ -1,12 +1,13 @@
 /*-------------------------------------------------------------
-!  Anderson mixing module
--------------------------------------------------------------*/
+* This is a derived CudaAndersonMixing class
+*------------------------------------------------------------*/
 
 #ifndef CUDA_ANDERSON_MIXING_H_
 #define CUDA_ANDERSON_MIXING_H_
 
 #include "CpuCircularBuffer.h"
-#include "CudaSimulationBox.h"
+#include "SimulationBox.h"
+#include "AndersonMixing.h"
 #include "CudaCommon.h"
 
 /*-----------------------------------------------------------------
@@ -29,15 +30,14 @@ public:
     double* get_array(int n);
 };
 
-
-class CudaAnderosnMixing
+class CudaAndersonMixing : public AndersonMixing
 {
 private:
 
     int N_BLOCKS;
     int N_THREADS;
 
-    CudaSimulationBox *sb;
+    SimulationBox *sb;
     // a few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
     // arrays to calculate anderson mixing
@@ -50,20 +50,19 @@ private:
     int max_anderson, n_anderson;
 
     void print_array(int n, double *a);
-    double multi_dot(int n_comp, double *a, double *b);
-    void find_an(double **u_nm, double *v_n, double *a_n, int n);
-
 public:
 
-    CudaAnderosnMixing(CudaSimulationBox *sb, int num_components,
-                       int max_anderson, double start_anderson_error,
-                       double mix_min, double mix_init,
-                       int process_idx=0);
-    ~CudaAnderosnMixing();
+    CudaAndersonMixing(
+        SimulationBox *sb, int num_components,
+        int max_anderson, double start_anderson_error,
+        double mix_min, double mix_init,
+        int process_idx=0);
+    ~CudaAndersonMixing();
 
-    void reset_count();
-    void caculate_new_fields(double *w, double *w_out, double *w_diff,
-                             double old_error_level, double error_level);
+    void reset_count() override;
+    void caculate_new_fields(
+        double *w, double *w_out, double *w_diff,
+        double old_error_level, double error_level) override;
 
 };
 #endif

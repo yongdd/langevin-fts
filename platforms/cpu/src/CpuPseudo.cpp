@@ -1,10 +1,9 @@
-
 #include <cmath>
-#include "MklPseudo.h"
+#include "CpuPseudo.h"
 #include "MklFFT.h"
 
-MklPseudo::MklPseudo(
-    CpuSimulationBox *sb, double ds,
+CpuPseudo::CpuPseudo(
+    SimulationBox *sb, double ds,
     int NN, int NNf)
 {
     this->sb = sb;
@@ -21,7 +20,7 @@ MklPseudo::MklPseudo(
     this->q2 = new double[MM*(NN+1)];
     this->fft = new MklFFT(sb->nx);
 }
-MklPseudo::~MklPseudo()
+CpuPseudo::~CpuPseudo()
 {
     delete[] expf;
     delete[] expf_half;
@@ -30,7 +29,7 @@ MklPseudo::~MklPseudo()
     delete fft;
 }
 //----------------- init_gaussian_factor -------------------
-void MklPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
+void CpuPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;
     double xfactor[3];
@@ -64,7 +63,7 @@ void MklPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
         }
     }
 }
-void MklPseudo::find_phi(double *phia,  double *phib,
+void CpuPseudo::find_phi(double *phia,  double *phib,
                          double *q1_init, double *q2_init,
                          double *wa, double *wb, double ds, double &QQ)
 {
@@ -142,7 +141,7 @@ void MklPseudo::find_phi(double *phia,  double *phib,
     }
 }
 
-void MklPseudo::onestep(double *qin, double *qout,
+void CpuPseudo::onestep(double *qin, double *qout,
                         double *expdw, double *expdw_half)
 {
     double qout1[MM], qout2[MM];
@@ -202,7 +201,7 @@ void MklPseudo::onestep(double *qin, double *qout,
 * This is made for debugging and testing.
 * Do NOT this at main progarams.
 * */
-void MklPseudo::get_partition(double *q1_out,  double *q2_out, int n)
+void CpuPseudo::get_partition(double *q1_out,  double *q2_out, int n)
 {
     for(int i=0; i<MM; i++)
     {

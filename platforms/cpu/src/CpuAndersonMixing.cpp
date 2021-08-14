@@ -1,13 +1,9 @@
-/*-------------------------------------------------------------
-!  Anderson mixing module
--------------------------------------------------------------*/
-
 #include <iostream>
 #include <algorithm>
 #include "CpuAndersonMixing.h"
 
 CpuAndersonMixing::CpuAndersonMixing(
-    CpuSimulationBox *sb, int num_components,
+    SimulationBox *sb, int num_components,
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init)
 {
@@ -130,12 +126,10 @@ void CpuAndersonMixing::caculate_new_fields(
                              + cb_wdiffdots->get_sym(n_anderson-i-1, n_anderson-j-1);
             }
         }
-        
+        find_an(u_nm, v_n, a_n, n_anderson);
         //print_array(max_anderson, v_n);
         //exit(-1);
-        
-        find_an(u_nm, v_n, a_n, n_anderson);
-        
+
         // calculate the new field
         wout_hist1 = cb_wout_hist->get_array(n_anderson);
         for(int i=0; i<TOTAL_MM; i++)
@@ -148,37 +142,6 @@ void CpuAndersonMixing::caculate_new_fields(
         }
     }
 }
-void CpuAndersonMixing::find_an(double **u, double *v, double *a, int n)
-{
-
-    int i,j,k;
-    double factor, tempsum;
-    /* elimination process */
-    for(i=0; i<n; i++)
-    {
-        for(j=i+1; j<n; j++)
-        {
-            factor = u[j][i]/u[i][i];
-            v[j] = v[j] - v[i]*factor;
-            for(k=i+1; k<n; k++)
-            {
-                u[j][k] = u[j][k] - u[i][k]*factor;
-            }
-        }
-    }
-    /* find the solution */
-    a[n-1] = v[n-1]/u[n-1][n-1];
-    for(i=n-2; i>=0; i--)
-    {
-        tempsum = 0.0;
-        for(j=i+1; j<n; j++)
-        {
-            tempsum = tempsum + u[i][j]*a[j];
-        }
-        a[i] = (v[i] - tempsum)/u[i][i];
-    }
-}
-
 void CpuAndersonMixing::print_array(int n, double *a)
 {
     for(int i=0; i<n-1; i++)

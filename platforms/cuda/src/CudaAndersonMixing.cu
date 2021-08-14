@@ -1,9 +1,6 @@
-/*-------------------------------------------------------------
-!  Anderson mixing module
--------------------------------------------------------------*/
-
 #include <iostream>
 #include <algorithm>
+#include "CudaSimulationBox.h"
 #include "CudaAndersonMixing.h"
 #include "CudaCommon.h"
 
@@ -42,8 +39,8 @@ double* CudaCircularBuffer::get_array(int n)
     return elems_d[(start+n)%length];
 }
 
-CudaAnderosnMixing::CudaAnderosnMixing(
-    CudaSimulationBox *sb, int num_components,
+CudaAndersonMixing::CudaAndersonMixing(
+    SimulationBox *sb, int num_components,
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init, int process_idx)
 {
@@ -88,7 +85,7 @@ CudaAnderosnMixing::CudaAnderosnMixing(
     // reset_count
     reset_count();
 }
-CudaAnderosnMixing::~CudaAnderosnMixing()
+CudaAndersonMixing::~CudaAndersonMixing()
 {
     delete cb_wout_hist_d;
     delete cb_wdiff_hist_d;
@@ -103,7 +100,7 @@ CudaAnderosnMixing::~CudaAnderosnMixing()
     cudaFree(w_diff_d);
     cudaFree(w_d);
 }
-void CudaAnderosnMixing::reset_count()
+void CudaAndersonMixing::reset_count()
 {
     /* initialize mixing parameter */
     mix = mix_init;
@@ -115,7 +112,7 @@ void CudaAnderosnMixing::reset_count()
     cb_wdiffdots->reset();
 }
 
-void CudaAnderosnMixing::caculate_new_fields(
+void CudaAndersonMixing::caculate_new_fields(
     double *w,
     double *w_out,
     double *w_diff,
@@ -143,7 +140,7 @@ void CudaAnderosnMixing::caculate_new_fields(
         // evaluate wdiff dot products for calculating Unm and Vn in Thompson's paper
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiffdots[i] = sb->multi_dot_gpu(num_components, w_diff_d,
+            wdiffdots[i] = ((CudaSimulationBox *)sb)->multi_dot_gpu(num_components, w_diff_d,
                                              cb_wdiff_hist_d->get_array(n_anderson-i));
         }
         //print_array(max_anderson+1, wdiffdots);
@@ -193,38 +190,7 @@ void CudaAnderosnMixing::caculate_new_fields(
         cudaMemcpy(w, w_d, sizeof(double)*TOTAL_MM,cudaMemcpyDeviceToHost);
     }
 }
-void CudaAnderosnMixing::find_an(double **u, double *v, double *a, int n)
-{
-
-    int i,j,k;
-    double factor, tempsum;
-    /* elimination process */
-    for(i=0; i<n; i++)
-    {
-        for(j=i+1; j<n; j++)
-        {
-            factor = u[j][i]/u[i][i];
-            v[j] = v[j] - v[i]*factor;
-            for(k=i+1; k<n; k++)
-            {
-                u[j][k] = u[j][k] - u[i][k]*factor;
-            }
-        }
-    }
-    /* find the solution */
-    a[n-1] = v[n-1]/u[n-1][n-1];
-    for(i=n-2; i>=0; i--)
-    {
-        tempsum = 0.0;
-        for(j=i+1; j<n; j++)
-        {
-            tempsum = tempsum + u[i][j]*a[j];
-        }
-        a[i] = (v[i] - tempsum)/u[i][i];
-    }
-}
-
-void CudaAnderosnMixing::print_array(int n, double *a)
+void CudaAndersonMixing::print_array(int n, double *a)
 {
     for(int i=0; i<n-1; i++)
     {

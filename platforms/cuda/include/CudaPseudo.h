@@ -1,17 +1,21 @@
+/*-------------------------------------------------------------
+* This is a derived CpuPseudo class
+*------------------------------------------------------------*/
+
 #ifndef CUDA_PSEUDO_H_
 #define CUDA_PSEUDO_H_
 
-#include <iostream>
 #include <array>
 #include <cufft.h>
-#include "CudaSimulationBox.h"
+#include "SimulationBox.h"
+#include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudo
+class CudaPseudo : public Pseudo
 {
 private:
 
-    CudaSimulationBox *sb;
+    SimulationBox *sb;
 
     int MM, MM_COMPLEX;
     int NN, NNf;
@@ -41,14 +45,14 @@ private:
 
 public:
 
-    CudaPseudo(CudaSimulationBox *sb, double ds, int NN, int NNf,
+    CudaPseudo(SimulationBox *sb, double ds, int NN, int NNf,
                int process_idx=0);
     ~CudaPseudo();
 
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,
                   double *wa, double *wb, 
-                  double ds, double &QQ);
+                  double ds, double &QQ) override;
 
     void get_partition(double *q1_out,  double *q2_out, int n);
 };

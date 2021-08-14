@@ -1,16 +1,19 @@
-#ifndef MKL_PSEUDO_H_
-#define MKL_PSEUDO_H_
+/*-------------------------------------------------------------
+* This is a derived CpuPseudo class
+*------------------------------------------------------------*/
 
-#include <iostream>
-#include <array>
-#include "CpuSimulationBox.h"
+#ifndef CPU_PSEUDO_H_
+#define CPU_PSEUDO_H_
+
+#include "SimulationBox.h"
+#include "Pseudo.h"
 #include "MklFFT.h"
 
-class MklPseudo
+class CpuPseudo : public Pseudo
 {
 private:
 
-    CpuSimulationBox *sb;
+    SimulationBox *sb;
     MklFFT *fft;
     
     int MM, MM_COMPLEX;
@@ -24,13 +27,13 @@ private:
 
 public:
 
-    MklPseudo(CpuSimulationBox *sb, double ds, int NN, int NNf);
-    ~MklPseudo();
+    CpuPseudo(SimulationBox *sb, double ds, int NN, int NNf);
+    ~CpuPseudo();
 
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,
                   double *wa, double *wb,
-                  double ds, double &QQ);
+                  double ds, double &QQ) override;
 
     void get_partition(double *q1_out,  double *q2_out, int n);
 };
