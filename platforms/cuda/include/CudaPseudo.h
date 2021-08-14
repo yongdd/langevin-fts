@@ -15,11 +15,6 @@ class CudaPseudo : public Pseudo
 {
 private:
 
-    SimulationBox *sb;
-
-    int MM, MM_COMPLEX;
-    int NN, NNf;
-    
     int N_BLOCKS;
     int N_THREADS;
 
@@ -35,9 +30,7 @@ private:
     double *phia_d, *phib_d;
 
     double *expf_d, *expf_half_d;
-    double *expf,   *expf_half;
-    
-    void init_gaussian_factor(int *nx, double *dx, double ds);
+
     void onestep(double *qin1_d, double *qout1_d,
                  double *qin2_d, double *qout2_d,
                  double *expdw1_d, double *expdw1_half_d,

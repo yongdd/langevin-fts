@@ -1,4 +1,5 @@
 
+#include <iostream>
 #include <algorithm>
 #include <limits>
 
@@ -35,6 +36,7 @@ int main()
     Ly = 3.0;
     Lz = 2.0;
 
+    CudaCommon::initialize(8,8,0);
     CudaSimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});
 
     // initialize pseudo spectral parameters
@@ -76,8 +78,7 @@ int main()
     //wa[i] = 0.0;
     //wb[i] = 0.0;
     //}
-
-    CudaPseudo pseudo(&sb, ds, NN, NNf, 256, 256, 0);
+    CudaPseudo pseudo(&sb, ds, NN, NNf);
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)

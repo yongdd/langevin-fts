@@ -6,10 +6,12 @@
 
 typedef cufftDoubleComplex ftsComplex;
 
+// Design Pattern : Singleton (Scott Meyer)
+
 class CudaCommon
 {
 private:
-    CudaCommon(int process_idx);
+    CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx);
     ~CudaCommon();
     // Disable copy constructor
     CudaCommon(const CudaCommon &) = delete;
@@ -18,13 +20,12 @@ public:
     int N_BLOCKS;
     int N_THREADS;
 
-    // Constructor of Scott Meyer's Singleton Pattern
-    static CudaCommon& get_instance(int process_idx=0)
+    static CudaCommon& get_instance(int N_BLOCKS=256, int N_THREADS=256, int process_idx=0)
     {
-        static CudaCommon* instance = new CudaCommon(process_idx);
+        static CudaCommon* instance = new CudaCommon(N_BLOCKS, N_THREADS, process_idx);
         return *instance;
     };
-    static void initialize(int process_idx);
+    static void initialize(int N_BLOCKS, int N_THREADS, int process_idx);
 };
 
 __global__ void multiReal(double* dst,

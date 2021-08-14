@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include "CpuSimulationBox.h"
-#include "MklPseudo.h"
+#include "FftwPseudo.h"
 
 int main()
 {
@@ -77,7 +77,7 @@ int main()
     //wb[i] = 0.0;
     //}
 
-    MklPseudo pseudo(&sb, ds, NN, NNf);
+    FftwPseudo pseudo(&sb, ds, NN, NNf);
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)

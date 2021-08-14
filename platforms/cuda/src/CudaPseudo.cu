@@ -6,15 +6,10 @@ CudaPseudo::CudaPseudo(
     SimulationBox *sb, double ds,
     int NN, int NNf,
     int process_idx)
+    : Pseudo(sb, ds, NN, NNf)
 {
     const int NRANK{3};
     const int BATCH{2};
-
-    this->sb = sb;
-    this->MM = sb->MM;
-    this->MM_COMPLEX = sb->nx[0]*sb->nx[1]*(sb->nx[2]/2+1);
-    this->NN = NN;
-    this->NNf= NNf;
 
     this->N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
     this->N_THREADS = CudaCommon::get_instance().N_THREADS;
@@ -42,11 +37,7 @@ CudaPseudo::CudaPseudo(
     cudaMalloc((void**)&expf_half_d, sizeof(double)*MM_COMPLEX);
 
     this->temp_arr = new double[MM];
-    this->expf = new double[MM_COMPLEX];
-    this->expf_half = new double[MM_COMPLEX];
-    
-    init_gaussian_factor(sb->nx, sb->dx, ds);
-    
+
     cudaMemcpy(expf_d,   expf,          sizeof(double)*MM_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(expf_half_d,  expf_half, sizeof(double)*MM_COMPLEX,cudaMemcpyHostToDevice);
 
@@ -78,43 +69,6 @@ CudaPseudo::~CudaPseudo()
     cudaFree(expf_half_d);
     
     delete[] temp_arr;
-    delete[] expf;
-    delete[] expf_half;
-}
-//----------------- init_gaussian_factor -------------------
-void CudaPseudo::init_gaussian_factor(int *nx, double *dx, double ds)
-{
-    int itemp, jtemp, ktemp, idx;
-    double xfactor[3];
-    const double PI{3.14159265358979323846};
-
-    // calculate the exponential factor
-    for(int d=0; d<3; d++)
-    {
-        xfactor[d] = -pow(2*PI/(nx[d]*dx[d]),2)*ds/6.0;
-    }
-
-    for(int i=0; i<nx[0]; i++)
-    {
-        if( i > nx[0]/2)
-            itemp = nx[0]-i;
-        else
-            itemp = i;
-        for(int j=0; j<nx[1]; j++)
-        {
-            if( j > nx[1]/2)
-                jtemp = nx[1]-j;
-            else
-                jtemp = j;
-            for(int k=0; k<nx[2]/2+1; k++)
-            {
-                ktemp = k;
-                idx = i* nx[1]*(nx[2]/2+1) + j*(nx[2]/2+1) + k;
-                expf[idx] = exp(pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2]);
-                expf_half[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2])/2);
-            }
-        }
-    }
 }
 void CudaPseudo::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,

@@ -9,17 +9,25 @@ NFLGAS=-O3 --debug --std c++11 -Werror -L/usr/local/cuda/lib64 -lcufft -lcudart
 SRC_DIR=../../platforms/cuda/src
 INC_DIR = ../../platforms/cuda/include
 
-CFLAGS+= -I$(INC_DIR)
-NFLAGS+= -I$(INC_DIR)
+MAIN_SRC_DIR=../../main/src
+MAIN_INC_DIR = ../../main/include
+
+CFLAGS+= -I$(INC_DIR) -I$(MAIN_INC_DIR)
+NFLAGS+= -I$(INC_DIR) -I$(MAIN_INC_DIR)
 
 all : Test
 
-OBJS= CudaSimulationBox.o CudaCommon.o CudaPseudo.o 
+OBJS= SimulationBox.o CudaSimulationBox.o \
+      CudaCommon.o Pseudo.o CudaPseudo.o 
 TARGET=TestCudaPseudo.out
 
 Test: ./TestCudaPseudo.cpp $(OBJS)
 	$(CPP) $(CFLAGS) -o $(TARGET) $^ $(NFLGAS) -lstdc++
-CudaSimulationBox.o: $(SRC_DIR)/CudaSimulationBox.cpp
+SimulationBox.o: $(MAIN_SRC_DIR)/SimulationBox.cpp
+	$(CPP) $(CFLAGS) -o $@ -c $^
+Pseudo.o: $(MAIN_SRC_DIR)/Pseudo.cpp
+	$(CPP) $(CFLAGS) -o $@ -c $^
+CudaSimulationBox.o: $(SRC_DIR)/CudaSimulationBox.cu
 	$(NVCC) $(NFLAGS) -o $@ -c $^
 CudaCommon.o: $(SRC_DIR)/CudaCommon.cu
 	$(NVCC) $(NFLAGS)  -o $@ -c $^

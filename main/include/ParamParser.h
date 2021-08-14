@@ -50,6 +50,8 @@
 ! Blank cells in above table are all Syntax Error
 !--------------------------------------------------------------------*/
 
+
+
 #ifndef PARAM_PARSER_H_
 #define PARAM_PARSER_H_
 
@@ -60,6 +62,8 @@
 #include <fstream>
 #include <sstream>
 #include <mutex>
+
+// Design Pattern : Singleton (Scott Meyer)
 
 class ParamParser
 {
@@ -134,7 +138,6 @@ private :
 
 public:
 
-    // Constructor of Scott Meyer's Singleton Pattern 
     static ParamParser& get_instance() {
         static ParamParser* instance = new ParamParser();
 	return *instance;

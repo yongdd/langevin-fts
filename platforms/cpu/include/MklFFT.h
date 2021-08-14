@@ -6,16 +6,16 @@
 
 #include <array>
 #include <complex>
+#include "FFT.h"
 #include "mkl_service.h"
 #include "mkl_dfti.h"
 
-class MklFFT
+class MklFFT : public FFT
 {
 private:
 
     double fft_normal_factor; //nomalization factor FFT
     int MM; // the number of total grids
-    
     // pointers for forward and backward transform
     DFTI_DESCRIPTOR_HANDLE hand_forward = NULL;
     DFTI_DESCRIPTOR_HANDLE hand_backward = NULL;
@@ -25,7 +25,7 @@ public:
     MklFFT(int *nx) : MklFFT({nx[0],nx[1],nx[2]}){};
     ~MklFFT();
 
-    void forward (double *rdata, std::complex<double> *cdata);
-    void backward(std::complex<double> *cdata, double *rdata);
+    void forward (double *rdata, std::complex<double> *cdata) override;
+    void backward(std::complex<double> *cdata, double *rdata) override;
 };
 #endif
