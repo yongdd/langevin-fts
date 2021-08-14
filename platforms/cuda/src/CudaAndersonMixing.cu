@@ -68,7 +68,7 @@ CudaAndersonMixing::CudaAndersonMixing(
     // record hisotry of wout-w in GPU device memory
     cb_wdiff_hist_d = new CudaCircularBuffer(max_anderson+1, TOTAL_MM);
     // record hisotry of dot product of wout-w in CPU host memory
-    cb_wdiffdots = new CpuCircularBuffer(max_anderson+1, max_anderson+1);
+    cb_wdiffdots = new CircularBuffer(max_anderson+1, max_anderson+1);
 
     // define arrays for anderson mixing
     this->u_nm = new double*[max_anderson];

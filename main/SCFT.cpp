@@ -102,17 +102,19 @@ int main(int argc, char **argv)
     if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
     if(!pp.get("iter.step_saddle", maxiter)) maxiter   = 10;
 
-    //CudaCommon::initialize(1); //process ID
     PolymerChain pc(f, NN, chi_n);
     
+    // Create instances
     //CpuSimulationBox sb_(nx, lx);
     //CpuPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
     //CpuAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
   
+    //CudaCommon::initialize(1); //process ID
     CudaSimulationBox sb_(nx, lx);
     CudaPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
     CudaAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
     
+    // Reference to instances to dynamic binding
     SimulationBox& sb = sb_;
     Pseudo& pseudo = pseudo_;
     AndersonMixing& am = am_;

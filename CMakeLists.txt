@@ -46,14 +46,14 @@ ADD_LIBRARY(main
 	main/src/ParamParser.cpp
 	main/src/PolymerChain.cpp
 	main/src/SimulationBox.cpp
-	#main/src/AndersonMixing.cpp
+	main/src/CircularBuffer.cpp
+	main/src/AndersonMixing.cpp
 	)
 
 ADD_LIBRARY(cpu
         platforms/cpu/src/CpuSimulationBox.cpp
 	platforms/cpu/src/MklFFT.cpp
 	platforms/cpu/src/CpuPseudo.cpp
-	platforms/cpu/src/CpuCircularBuffer.cpp
 	platforms/cpu/src/CpuAndersonMixing.cpp
 	)
 
@@ -61,13 +61,12 @@ ADD_LIBRARY(cuda
 	platforms/cuda/src/CudaCommon.cu
         platforms/cuda/src/CudaSimulationBox.cu
 	platforms/cuda/src/CudaPseudo.cu
-	platforms/cpu/src/CpuCircularBuffer.cpp
         platforms/cuda/src/CudaAndersonMixing.cu
 	)
 
 #LINK_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/)
 
 ADD_EXECUTABLE(scft.out main/SCFT.cpp)
-TARGET_LINK_LIBRARIES(scft.out PUBLIC main cpu cuda -mkl -lcufft -lcudart)
+TARGET_LINK_LIBRARIES(scft.out PUBLIC cuda cpu main -mkl -lcufft -lcudart)
 
 
