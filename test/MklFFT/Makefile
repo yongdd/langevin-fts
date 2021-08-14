@@ -4,14 +4,11 @@ CPP=icpc
 #CFLAGS=-O3 -Wall -Wextra -pedantic -g -std=c++11
 CFLAGS=-O3 -heap-arrays -pg -std=c++11 -fno-inline -Wall -traceback -g -debug all
 
-SRC_DIR=../../src
-INC_DIR = ../../src/include
+SRC_DIR=../../platforms/cpu/src
+INC_DIR = ../../platforms/cpu/include
 
-MKL_SRC_DIR=../../src/platforms/mkl
-MKL_INC_DIR = ../../src/platforms/mkl/include
-
-CFLAGS+= -I$(INC_DIR) -I$(MKL_INC_DIR)
-NFLAGS+= -I$(INC_DIR) -I$(MKL_INC_DIR)
+CFLAGS+= -I$(INC_DIR)
+NFLAGS+= -I$(INC_DIR)
 
 all : Test
 
@@ -20,7 +17,7 @@ TARGET=TestMklFFT.out
 
 Test: ./TestMklFFT.cpp $(OBJS)
 	$(CPP) $(CFLAGS) -o $(TARGET) $^ -mkl -qopenmp
-MklFFT.o: $(MKL_SRC_DIR)/MklFFT.cpp
+MklFFT.o: $(SRC_DIR)/MklFFT.cpp
 	$(CPP) $(CFLAGS) -o $@ -c -mkl -qopenmp $^
 clean:
 	rm -f *__*.*

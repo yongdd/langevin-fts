@@ -9,7 +9,7 @@ int main()
     std::cout<< "dx: " << sb.dx[0] <<" "<< sb.dx[1] <<" "<< sb.dx[2] << std::endl;
 
     double sum{0.0};
-    for(int i=0; i<sb.total_grids; i++)
+    for(int i=0; i<sb.MM; i++)
     {
         sum += sb.dv[i];
     }
@@ -19,9 +19,9 @@ int main()
     double h[] {3.1, -1.4, -2.5};
     std::cout<< "dot : "<< sb.dot(g,h) << std::endl;
 
-    sb.zeromean(g);
-    std::cout<< "zeromean g: ";
-    for(int i=0; i<sb.total_grids; i++)
+    sb.zero_mean(g);
+    std::cout<< "zero_mean g: ";
+    for(int i=0; i<sb.MM; i++)
     {
         std::cout<< g[i] << " ";
     }

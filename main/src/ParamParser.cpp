@@ -7,12 +7,36 @@
 
 #include "ParamParser.h"
 
+
 //----------------- Constructor -----------------------------
-ParamParser::ParamParser(std::string param_file_name)
+ParamParser::ParamParser()
+{
+    bool finished = false;  // parsing is finished
+}
+//----------------- Destructor ------------------------------
+ParamParser::~ParamParser()
+{
+    mtx.lock(); //lock threads
+    // show parameters that are never used.
+    std::cout<< "---------- Parameters that are never used ----------" << std::endl;
+    for(unsigned int i=0; i<input_param_list.size(); i++)
+    {
+        if(param_use_count[i] == 0)
+            std::cout<< input_param_list[i].var_name << std::endl;
+    }
+    mtx.unlock(); //unlock threads
+}
+//----------------- read_param_file -------------------------
+void ParamParser::read_param_file(std::string param_file_name)
 {
     std::string buf;
     int n_line;
     ParamPair input_param;
+
+    mtx.lock(); //lock threads
+
+    if(finished)
+        return;
 
     input_param_list.clear();
     param_use_count.clear();
@@ -36,8 +60,9 @@ ParamParser::ParamParser(std::string param_file_name)
         n_line++; // line number
     }
     param_file.close();
+    
 
-    std::cout<< "----- Input Parameters -----" << std::endl;
+    std::cout<< "---------- Input Parameters ----------" << std::endl;
     for(unsigned i=0; i<input_param_list.size(); i++ )
     {
         std::cout<< input_param_list[i].var_name << " :";
@@ -45,18 +70,8 @@ ParamParser::ParamParser(std::string param_file_name)
             std::cout<< " " << input_param_list[i].values[j];
         std::cout<< std::endl;
     }
-    //std::cout<< "-----------------------" << std::endl;
-}
-//---------------------- Destructor -------------------------------
-ParamParser::~ParamParser()
-{
-    // show parameters that are never used.
-    std::cout<< "----- Parameters that are never used -----" << std::endl;
-    for(unsigned int i=0; i<input_param_list.size(); i++)
-    {
-        if(param_use_count[i] == 0)
-            std::cout<< input_param_list[i].var_name << std::endl;
-    }
+    finished = true;
+    mtx.unlock(); //unlock threads
 }
 //---------------- line_has_parsed ------------------------
 bool ParamParser::line_has_parsed(std::string buf, ParamPair &input_param, int n_line)
@@ -167,6 +182,11 @@ void ParamParser::insert_param(ParamPair new_param)
 //----------------- search_param_idx ----------------------------
 int ParamParser::search_param_idx(std::string str_name, unsigned int idx)
 {
+    if(!finished){
+        std::cout << "Call ParamParser::read_param_file first." << std::endl;
+	exit(-1);
+    }
+
     for(unsigned int i = 0; i<input_param_list.size(); i++)
     {
         if( str_name == input_param_list[i].var_name)

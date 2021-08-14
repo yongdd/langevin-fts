@@ -10,4 +10,5 @@ fields_*.*
 .f2py_f2cmap
 make/Makefile
 test/scft/Makefile
+build
 __pycache__

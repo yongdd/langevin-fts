@@ -1,6 +1,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include "SimulationBox.h"
 #include "MklPseudo.h"
 
 int main()
@@ -17,14 +18,11 @@ int main()
     double phia[MM], phib[MM];
     double q1_init[MM] {0.0}, q2_init[MM] {0.0};
     double q1_last[MM], q2_last[MM];
-    double expdwa[MM], expdwb[MM];
-    double expdwa_half[MM], expdwb_half[MM];
 
-    double dv[MM];
     std::array<double,MM> diff_sq;
 
-    double QQ, volume, sum;
-    double Lx, Ly, Lz, dx, dy, dz, ds;
+    double QQ, sum;
+    double Lx, Ly, Lz, ds;
     double xfactor, yfactor, zfactor, temp;
     int itemp, jtemp, ktemp, idx;
 
@@ -36,13 +34,7 @@ int main()
     Ly = 3.0;
     Lz = 2.0;
 
-    dx = Lx/II;
-    dy = Ly/JJ;
-    dz = Lz/KK;
-
-    for(int i=0; i<MM; i++)
-        dv[i]= dx*dy*dz;
-    volume = Lx*Ly*Lz;
+    SimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});    
 
     // initialize pseudo spectral parameters
     double wa[MM] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
@@ -84,8 +76,7 @@ int main()
     //wb[i] = 0.0;
     //}
 
-    MklPseudo pseudo({II,JJ,KK}, {dx,dy,dz},
-                     dv, volume, ds, NN, NNf);
+    MklPseudo pseudo(&sb, ds, NN, NNf);
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)

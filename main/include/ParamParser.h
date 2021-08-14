@@ -59,6 +59,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <mutex>
 
 class ParamParser
 {
@@ -115,17 +116,31 @@ private :
     // for debuging, this records counts how many time each parameter are called.
     std::vector<int> param_use_count;
 
-    bool finished = false;  // parsing is finished
+    bool finished;  // parsing is finished
+    std::mutex mtx; // mutex for thread safe.
+                    // this is neccesary only if you call
+		    // ream_param_file using multi threads
 
     bool line_has_parsed(std::string buf, ParamPair &input_param, int n_line);
     void insert_param(ParamPair input_param);
     int search_param_idx(std::string param_name, unsigned int idx);
     int get_char_type(char ch);
 
+    ParamParser();
+    ~ParamParser();
+    // Disable copy constructor
+    ParamParser(const ParamParser &) = delete;
+    ParamParser& operator= (const ParamParser &) = delete;
+
 public:
 
-    ParamParser(std::string param_file_name);
-    ~ParamParser();
+    // Constructor of Scott Meyer's Singleton Pattern 
+    static ParamParser& get_instance() {
+        static ParamParser* instance = new ParamParser();
+	return *instance;
+    };
+
+    void read_param_file(std::string param_file_name); 
 
     bool get(std::string param_name, int &param_value, int idx=0);
     bool get(std::string param_name, int *param_value, int length);
