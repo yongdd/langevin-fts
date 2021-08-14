@@ -4,8 +4,8 @@ CPP=icpc
 #CFLAGS=-O3 -Wall -Wextra -pedantic -g -std=c++11
 CFLAGS=-O3 -heap-arrays -pg -fno-inline -Wall -traceback -g -debug all
 
-SRC_DIR=../../src/platforms/common
-INC_DIR = ../../src/platforms/common/include
+SRC_DIR=../../platforms/cpu/src
+INC_DIR = ../../platforms/cpu/include
 CFLAGS+= -I$(INC_DIR)
 
 all : Test

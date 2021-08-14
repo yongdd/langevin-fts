@@ -22,6 +22,7 @@ private:
 public:
 
     MklFFT(std::array<int,3> nx);
+    MklFFT(int *nx) : MklFFT({nx[0],nx[1],nx[2]}){};
     ~MklFFT();
 
     void forward (double *rdata, std::complex<double> *cdata);

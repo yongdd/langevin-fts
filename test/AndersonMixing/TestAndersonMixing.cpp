@@ -1,9 +1,11 @@
 
-#include "MklAndersonMixing.h"
+#include "SimulationBox.h"
+#include "AndersonMixing.h"
 
 int main()
 {
     const int MM{10};
     double dv[MM]{0.0};
-    AnderosnMixing am(2, MM, dv, 10, 0.01, 0.01, 0.1);
+    SimulationBox sb({1,2,3},{4,3,2});
+    AnderosnMixing am(&sb, 2, 10, 0.01, 0.01, 0.1);
 }

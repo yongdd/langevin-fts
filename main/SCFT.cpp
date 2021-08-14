@@ -5,11 +5,15 @@
 #include <sstream>
 #include <fstream>
 #include "ParamParser.h"
-#include "SimulationBox.h"
 #include "PolymerChain.h"
-#include "CudaPseudo.h"
-#include "CircularBuffer.h"
-#include "MklAndersonMixing.h"
+
+#include "CpuSimulationBox.h"
+#include "MklPseudo.h"
+#include "CpuAndersonMixing.h"
+
+//#include "CudaSimulationBox.h"
+//#include "CudaPseudo.h"
+//#include "CudaAndersonMixing.h"
 
 int main(int argc, char **argv)
 {
@@ -46,31 +50,29 @@ int main(int argc, char **argv)
     int idx;
     double sum;
 
+    // -------------- initialize ------------
+    // read file name
     if(argc < 2)
     {
         std::cout<< "Input parameter file is required, e.g, 'scft.out input' " << std::endl;
         exit(-1);
     }
-
-    //-------------- initialize ------------
     // initialize ParamParser
-    ParamParser pp(argv[1]);
+    ParamParser& pp = ParamParser::get_instance();
+    pp.read_param_file(argv[1]);
 
-    // initialize simulation box parameters
+    // read simulation box parameters
     if(!pp.get("geometry.grids", nx, 3))
     {
         std::cout<< "geometry.grids is not specified." << std::endl;
         exit(-1);
     }
-
     if(!pp.get("geometry.box_size", lx, 3))
     {
         std::cout<< "geometry.box_size is not specified." << std::endl;
         exit(-1);
     }
-    SimulationBox sb(nx, lx);
-
-    // initialize chain parameters
+    // read chain parameters
     if(!pp.get("chain.a_fraction", f))
     {
         std::cout<< "chain.a_fraction is not specified." << std::endl;
@@ -81,33 +83,33 @@ int main(int argc, char **argv)
         std::cout<< "chain.contour_step is not specified." << std::endl;
         exit(-1);
     }
-    if(!pp.get("chain.chiN", chi_n))
+    if(!pp.get("chain.chi_n", chi_n))
     {
-        std::cout<< "chain.chiN is not specified." << std::endl;
+        std::cout<< "chain.chi_n is not specified." << std::endl;
         exit(-1);
     }
-    PolymerChain pc(f, NN, chi_n);
-
-    // initialize pseudo spectral parameters
-    CudaPseudo pseudo(sb.nx, sb.dx, sb.dv, sb.volume, pc.ds, pc.NN, pc.NNf, 256, 256, 0);
-
-    // initialize Anderson mixing
+    // read Anderson mixing parameters
     // anderson mixing begin if error level becomes less then start_anderson_error
     if(!pp.get("am.start_error", start_anderson_error)) start_anderson_error = 0.01;
-    // max number of previous steps to calculate new field when using Anderson mixing
+    // max number of previous steps to calculate new field
     if(!pp.get("am.step_max", max_anderson)) max_anderson = 10;
     // minimum mixing parameter
     if(!pp.get("am.mix_min", mix_min)) mix_min = 0.01;
-    // initialize mixing parameter
+    // initial mixing parameter
     if(!pp.get("am.mix_init", mix_init)) mix_init  = 0.1;
     
-    // 2 == number of components of w, w_out array
-    AnderosnMixing am(2, sb.total_grids, sb.dv,
-                max_anderson, start_anderson_error,
-                mix_min, mix_init);
-                
+    // read iteration parameters
     if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
     if(!pp.get("iter.step_saddle", maxiter)) maxiter   = 10;
+
+    //CudaCommon::initialize(1); //process ID
+    CpuSimulationBox sb(nx, lx);
+    PolymerChain pc(f, NN, chi_n);
+    MklPseudo pseudo(&sb, pc.ds, pc.NN, pc.NNf);
+    //CudaPseudo pseudo(&sb, pc.ds, pc.NN, pc.NNf);
+    // 2 == number of components of w array
+    CpuAndersonMixing am(&sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
+    //CudaAnderosnMixing am(&sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
 
     // assign large initial value for the energy and error
     energy_tot = 1.0e20;
@@ -125,23 +127,22 @@ int main(int argc, char **argv)
     print_stream << "Lx: " << sb.lx[0] << " " << sb.lx[1] << " " << sb.lx[2] << std::endl;
     print_stream << "dx: " << sb.dx[0] << " " << sb.dx[1] << " " << sb.dx[2] << std::endl;
     sum=0.0;
-    for(int i=0; i<sb.total_grids; i++)
+    for(int i=0; i<sb.MM; i++)
         sum += sb.dv[i];
     print_stream << "volume, sum(dv):  " << sb.volume << " " << sum << std::endl;
-    print_stream.close();
 
     //-------------- allocate array ------------
-    w       = new double[sb.total_grids*2];
-    w_out   = new double[sb.total_grids*2];
-    w_diff  = new double[sb.total_grids*2];
-    xi      = new double[sb.total_grids];
-    phia    = new double[sb.total_grids];
-    phib    = new double[sb.total_grids];
-    phitot  = new double[sb.total_grids];
-    w_plus  = new double[sb.total_grids];
-    w_minus = new double[sb.total_grids];
-    q1_init = new double[sb.total_grids];
-    q2_init = new double[sb.total_grids];
+    w       = new double[sb.MM*2];
+    w_out   = new double[sb.MM*2];
+    w_diff  = new double[sb.MM*2];
+    xi      = new double[sb.MM];
+    phia    = new double[sb.MM];
+    phib    = new double[sb.MM];
+    phitot  = new double[sb.MM];
+    w_plus  = new double[sb.MM];
+    w_minus = new double[sb.MM];
+    q1_init = new double[sb.MM];
+    q2_init = new double[sb.MM];
 
     //-------------- setup fields ------------
     //call random_number(phia)
@@ -151,7 +152,7 @@ int main(int argc, char **argv)
     //     phia(:,:,k) = phia(:,:,z_lo)
     //   end do
 
-    std::cout<< "wminus and wplus are initialized to a given test fields." << std::endl;
+    print_stream<< "wminus and wplus are initialized to a given test fields." << std::endl;
     for(int i=0; i<sb.nx[0]; i++)
         for(int j=0; j<sb.nx[1]; j++)
             for(int k=0; k<sb.nx[2]; k++)
@@ -160,44 +161,46 @@ int main(int argc, char **argv)
                 phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
             }
 
-    for(int i=0; i<sb.total_grids; i++)
+    for(int i=0; i<sb.MM; i++)
     {
         phib[i] = 1.0 - phia[i];
-        w[i]                = chi_n*phib[i];
-        w[i+sb.total_grids] = chi_n*phia[i];
+        w[i]       = chi_n*phib[i];
+        w[i+sb.MM] = chi_n*phia[i];
     }
 
     // keep the level of field value
-    sb.zeromean(&w[0]);
-    sb.zeromean(&w[sb.total_grids]);
+    sb.zero_mean(&w[0]);
+    sb.zero_mean(&w[sb.MM]);
 
     // free end initial condition. q1 is q and q2 is qdagger.
     // q1 starts from A end and q2 starts from B end.
-    for(int i=0; i<sb.total_grids; i++)
+    for(int i=0; i<sb.MM; i++)
     {
         q1_init[i] = 1.0;
         q2_init[i] = 1.0;
     }
+    print_stream.close();
 
     //------------------ run ----------------------
+    std::cout<< "---------- Run ----------" << std::endl;
     std::cout<< "iteration, mass error, total_partition, energy_tot, error_level" << std::endl;
     time_start = clock();
     // iteration begins here
     for(int iter=0; iter<maxiter; iter++)
     {
         // for the given fields find the polymer statistics
-        pseudo.find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb.total_grids],pc.ds,QQ);
+        pseudo.find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb.MM],pc.ds,QQ);
 
         // calculate the total energy
         energy_old = energy_tot;
-        for(int i=0; i<sb.total_grids; i++)
+        for(int i=0; i<sb.MM; i++)
         {
-            w_minus[i] = (w[i]-w[i+sb.total_grids])/2;
-            w_plus[i]  = (w[i]+w[i+sb.total_grids])/2;
+            w_minus[i] = (w[i]-w[i+sb.MM])/2;
+            w_plus[i]  = (w[i]+w[i+sb.MM])/2;
         }
         energy_tot = -log(QQ/sb.volume);
 
-        for(int i=0; i<sb.total_grids; i++)
+        for(int i=0; i<sb.MM; i++)
         {
             energy_tot += sb.dv[i]*pow(w_minus[i],2)/chi_n/sb.volume;
             energy_tot -= sb.dv[i]*w_plus[i]/sb.volume;
@@ -207,38 +210,37 @@ int main(int argc, char **argv)
         // error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level;
 
-        for(int i=0; i<sb.total_grids; i++)
+        for(int i=0; i<sb.MM; i++)
         {
             // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-            xi[i] = 0.5*(w[i]+w[i+sb.total_grids]-chi_n);
+            xi[i] = 0.5*(w[i]+w[i+sb.MM]-chi_n);
             // calculate output fields
-            w_out[i]                = chi_n*phib[i] + xi[i];
-            w_out[i+sb.total_grids] = chi_n*phia[i] + xi[i];
+            w_out[i]       = chi_n*phib[i] + xi[i];
+            w_out[i+sb.MM] = chi_n*phia[i] + xi[i];
         }
-        sb.zeromean(&w[0]);
-        sb.zeromean(&w[sb.total_grids]);
+        sb.zero_mean(&w_out[0]);
+        sb.zero_mean(&w_out[sb.MM]);
 
-        for(int i=0; i<2*sb.total_grids; i++)
+        for(int i=0; i<2*sb.MM; i++)
             w_diff[i] = w_out[i]- w[i];
-        error_level = sqrt(sb.multidot(2,w_diff,w_diff)/(sb.multidot(2,w,w)+1.0));
+        error_level = sqrt(sb.multi_dot(2,w_diff,w_diff)/(sb.multi_dot(2,w,w)+1.0));
         
         // print iteration # and error levels and check the mass conservation
         sum=0.0;
-        for(int i=0; i<sb.total_grids; i++)
+        for(int i=0; i<sb.MM; i++)
             sum += sb.dv[i]*(phia[i]+phib[i]);
         sum = sum/sb.volume - 1.0;
 
-	std::cout<< std::setw(8) << iter;
+        std::cout<< std::setw(8) << iter;
         std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum;
         std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
         std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_tot;
         std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
-        
+
         // conditions to end the iteration
         if(error_level < tolerance) break;
         // calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
-        // the main loop ends here
     }
     time_finish = clock();
     time_duration = (double)(time_finish - time_start) / CLOCKS_PER_SEC;

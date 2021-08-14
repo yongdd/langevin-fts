@@ -4,9 +4,9 @@
 !-----------------------------------------------------------------*/
 
 #include <algorithm>
-#include "CircularBuffer.h"
+#include "CpuCircularBuffer.h"
 
-CircularBuffer::CircularBuffer(int length, int width)
+CpuCircularBuffer::CpuCircularBuffer(int length, int width)
 {
     this->length = length;
     this->width = width;
@@ -15,16 +15,16 @@ CircularBuffer::CircularBuffer(int length, int width)
 
     elems = new double[length*width];
 }
-CircularBuffer::~CircularBuffer()
+CpuCircularBuffer::~CpuCircularBuffer()
 {
     delete[] elems;
 }
-void CircularBuffer::reset()
+void CpuCircularBuffer::reset()
 {
     start = 0;
     n_items = 0;
 }
-void CircularBuffer::insert(double* new_arr)
+void CpuCircularBuffer::insert(double* new_arr)
 {
     int i = (start+n_items)%length;
     for(int m=0; m<width; m++){
@@ -34,17 +34,17 @@ void CircularBuffer::insert(double* new_arr)
         start = (start+1)%length;
     n_items = std::min(n_items+1, length);
 }
-double* CircularBuffer::get_array(int n)
+double* CpuCircularBuffer::get_array(int n)
 {
     int i = (start+n)%length;
     return &elems[i*width];
 }
-double CircularBuffer::get(int n, int m)
+double CpuCircularBuffer::get(int n, int m)
 {
     int i = (start+n)%length;
     return elems[i*width + m];
 }
-double CircularBuffer::get_sym(int n, int m)
+double CpuCircularBuffer::get_sym(int n, int m)
 {
     int i = (start+std::max(n,m))%length ;
     return elems[i*width + abs(n-m)];

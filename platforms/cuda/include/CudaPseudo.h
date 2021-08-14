@@ -3,17 +3,21 @@
 
 #include <iostream>
 #include <array>
-#include <stdio.h>
 #include <cufft.h>
+#include "CudaSimulationBox.h"
 #include "CudaCommon.h"
 
 class CudaPseudo
 {
 private:
-    int MM, MM_COMPLEX, NN, NNf;
+
+    CudaSimulationBox *sb;
+
+    int MM, MM_COMPLEX;
+    int NN, NNf;
+    
     int N_BLOCKS;
     int N_THREADS;
-    double volume;
 
     cufftHandle plan_for, plan_bak;
 
@@ -26,10 +30,10 @@ private:
     double *expdwb_d, *expdwb_half_d;
     double *phia_d, *phib_d;
 
-    double *expf_d, *expf_half_d, *dv_d;
+    double *expf_d, *expf_half_d;
     double *expf,   *expf_half;
     
-    void init_gaussian_factor(std::array<int,3> nx, std::array<double,3> dx, double ds);
+    void init_gaussian_factor(int *nx, double *dx, double ds);
     void onestep(double *qin1_d, double *qout1_d,
                  double *qin2_d, double *qout2_d,
                  double *expdw1_d, double *expdw1_half_d,
@@ -37,14 +41,8 @@ private:
 
 public:
 
-    CudaPseudo(std::array<int,3> nx,  std::array<double,3> dx,
-               double *dv, double volume, double ds, int NN, int NNf,
-               int n_blocks=256, int n_threads=256,  int process_idx=0);
-    CudaPseudo(int *nx, double *dx, double *dv, double volume,
-                double ds, int NN, int NNf,
-                int n_blocks=256, int n_threads=256,  int process_idx=0)
-               :  CudaPseudo({nx[0],nx[1],nx[2]}, {dx[0],dx[1],dx[2]},
-               dv, volume, ds, NN, NNf, n_blocks, n_threads, process_idx) {};
+    CudaPseudo(CudaSimulationBox *sb, double ds, int NN, int NNf,
+               int process_idx=0);
     ~CudaPseudo();
 
     void find_phi(double *phia,  double *phib,

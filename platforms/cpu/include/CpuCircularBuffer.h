@@ -4,11 +4,11 @@
 ! Each elements are 1-dmensional real array.
 !-----------------------------------------------------------------*/
 
-#ifndef CIRCULAR_BUFFER_H_
-#define CIRCULAR_BUFFER_H_
+#ifndef CPU_CIRCULAR_BUFFER_H_
+#define CPU_CIRCULAR_BUFFER_H_
 
 
-class CircularBuffer
+class CpuCircularBuffer
 {
 private:
     int length; // maximum number of elements
@@ -18,8 +18,8 @@ private:
     double* elems;
 
 public:
-    CircularBuffer(int length, int width);
-    ~CircularBuffer();
+    CpuCircularBuffer(int length, int width);
+    ~CpuCircularBuffer();
     void reset();
     void insert(double* new_arr);
     double* get_array(int n);

@@ -2,24 +2,25 @@
 !  Anderson mixing module
 -------------------------------------------------------------*/
 
-#ifndef MKL_ANDERSON_MIXING_H_
-#define MKL_ANDERSON_MIXING_H_
+#ifndef CPU_ANDERSON_MIXING_H_
+#define CPU_ANDERSON_MIXING_H_
 
-#include "CircularBuffer.h"
+#include "CpuCircularBuffer.h"
+#include "CpuSimulationBox.h"
 
-class AnderosnMixing
+class CpuAndersonMixing
 {
 private:
+    CpuSimulationBox *sb;
     /* a few previous field values are stored for anderson mixing */
-    CircularBuffer *cb_wout_hist, *cb_wdiff_hist;
+    CpuCircularBuffer *cb_wout_hist, *cb_wdiff_hist;
     /* arrays to calculate anderson mixing */
-    CircularBuffer *cb_wdiffdots;
+    CpuCircularBuffer *cb_wdiffdots;
     double **u_nm, *v_n, *a_n, *wdiffdots;
 
     int num_components, MM, TOTAL_MM;
-    double start_anderson_error, mix_min, mix, init_mix;
+    double start_anderson_error, mix_min, mix, mix_init;
     int max_anderson, n_anderson;
-    double *dv, *temp, *sum;
 
     void print_array(int n, double *a);
     double multi_dot(int n_comp, double *a, double *b);
@@ -27,10 +28,10 @@ private:
     
 public:
 
-    AnderosnMixing(int num_components, int MM, double *dv,
+    CpuAndersonMixing(CpuSimulationBox *sb, int num_components,
                    int max_anderson, double start_anderson_error,
-                   double mix_min, double init_mix);
-    ~AnderosnMixing();
+                   double mix_min, double mix_init);
+    ~CpuAndersonMixing();
 
     void reset_count();
     void caculate_new_fields(double *w, double *w_out, double *w_diff,
