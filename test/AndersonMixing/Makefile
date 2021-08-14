@@ -7,20 +7,28 @@ CFLAGS=-O3 -heap-arrays -pg -fno-inline -Wall -traceback -g -debug all
 SRC_DIR=../../platforms/cpu/src
 INC_DIR=../../platforms/cpu/include
 
-CFLAGS+= -I$(INC_DIR)
+MAIN_SRC_DIR=../../main/src
+MAIN_INC_DIR=../../main/include
+
+CFLAGS+= -I$(INC_DIR) -I$(MAIN_INC_DIR)
 
 all : Test
 
-OBJS=SimulationBox.o CircularBuffer.o AndersonMixing.o
+OBJS=SimulationBox.o AndersonMixing.o \
+     CpuSimulationBox.o CpuCircularBuffer.o CpuAndersonMixing.o
 TARGET=TestAndersonMixing.out
 
 Test: ./TestAndersonMixing.cpp $(OBJS)
 	$(CPP) $(CFLAGS) -o $(TARGET) $^
-SimulationBox.o: $(SRC_DIR)/SimulationBox.cpp
+SimulationBox.o: $(MAIN_SRC_DIR)/SimulationBox.cpp
 	$(CPP) $(CFLAGS) -o $@ -c $^
-CircularBuffer.o: $(SRC_DIR)/CircularBuffer.cpp
+AndersonMixing.o: $(MAIN_SRC_DIR)/AndersonMixing.cpp
 	$(CPP) $(CFLAGS) -o $@ -c $^
-AndersonMixing.o: $(SRC_DIR)/AndersonMixing.cpp
+CpuSimulationBox.o: $(SRC_DIR)/CpuSimulationBox.cpp
+	$(CPP) $(CFLAGS) -o $@ -c $^
+CpuCircularBuffer.o: $(SRC_DIR)/CpuCircularBuffer.cpp
+	$(CPP) $(CFLAGS) -o $@ -c $^
+CpuAndersonMixing.o: $(SRC_DIR)/CpuAndersonMixing.cpp
 	$(CPP) $(CFLAGS) -o $@ -c $^
 clean:
 	rm -f *__*.*

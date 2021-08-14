@@ -1,8 +1,3 @@
-/*-----------------------------------------------------------------
-! A circular buffer is a data structure that uses a single,
-! fixed-size buffer as if it were connected end-to-end.
-!-----------------------------------------------------------------*/
-
 #include <algorithm>
 #include "CpuCircularBuffer.h"
 

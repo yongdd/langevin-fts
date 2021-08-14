@@ -1,8 +1,9 @@
 #include <complex>
 #include "CudaPseudo.h"
+#include "CudaSimulationBox.h"
 
 CudaPseudo::CudaPseudo(
-    CudaSimulationBox *sb, double ds,
+    SimulationBox *sb, double ds,
     int NN, int NNf,
     int process_idx)
 {
@@ -197,7 +198,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
 
     //printf("%d, %5.3f\n", NNf, 1.0/3.0);
     //calculates the total partition function
-    multiReal<<<N_BLOCKS, N_THREADS>>>(temp_d, phia_d, sb->dv_d, 2.0, MM);
+    multiReal<<<N_BLOCKS, N_THREADS>>>(temp_d, phia_d, ((CudaSimulationBox *)sb)->dv_d, 2.0, MM);
     cudaMemcpy(temp_arr, temp_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
     QQ = 0.0;
     for(int i=0; i<MM; i++)

@@ -8,12 +8,12 @@
 #include "PolymerChain.h"
 
 #include "CpuSimulationBox.h"
-#include "MklPseudo.h"
+#include "CpuPseudo.h"
 #include "CpuAndersonMixing.h"
 
-//#include "CudaSimulationBox.h"
-//#include "CudaPseudo.h"
-//#include "CudaAndersonMixing.h"
+#include "CudaSimulationBox.h"
+#include "CudaPseudo.h"
+#include "CudaAndersonMixing.h"
 
 int main(int argc, char **argv)
 {
@@ -97,19 +97,25 @@ int main(int argc, char **argv)
     if(!pp.get("am.mix_min", mix_min)) mix_min = 0.01;
     // initial mixing parameter
     if(!pp.get("am.mix_init", mix_init)) mix_init  = 0.1;
-    
+
     // read iteration parameters
     if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
     if(!pp.get("iter.step_saddle", maxiter)) maxiter   = 10;
 
     //CudaCommon::initialize(1); //process ID
-    CpuSimulationBox sb(nx, lx);
     PolymerChain pc(f, NN, chi_n);
-    MklPseudo pseudo(&sb, pc.ds, pc.NN, pc.NNf);
-    //CudaPseudo pseudo(&sb, pc.ds, pc.NN, pc.NNf);
-    // 2 == number of components of w array
-    CpuAndersonMixing am(&sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
-    //CudaAnderosnMixing am(&sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
+    
+    //CpuSimulationBox sb_(nx, lx);
+    //CpuPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
+    //CpuAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
+  
+    CudaSimulationBox sb_(nx, lx);
+    CudaPseudo pseudo_(&sb_, pc.ds, pc.NN, pc.NNf);
+    CudaAndersonMixing am_(&sb_, 2, max_anderson, start_anderson_error, mix_min, mix_init);
+    
+    SimulationBox& sb = sb_;
+    Pseudo& pseudo = pseudo_;
+    AndersonMixing& am = am_;
 
     // assign large initial value for the energy and error
     energy_tot = 1.0e20;
@@ -224,7 +230,7 @@ int main(int argc, char **argv)
         for(int i=0; i<2*sb.MM; i++)
             w_diff[i] = w_out[i]- w[i];
         error_level = sqrt(sb.multi_dot(2,w_diff,w_diff)/(sb.multi_dot(2,w,w)+1.0));
-        
+
         // print iteration # and error levels and check the mass conservation
         sum=0.0;
         for(int i=0; i<sb.MM; i++)

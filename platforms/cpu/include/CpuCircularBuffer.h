@@ -7,7 +7,6 @@
 #ifndef CPU_CIRCULAR_BUFFER_H_
 #define CPU_CIRCULAR_BUFFER_H_
 
-
 class CpuCircularBuffer
 {
 private:
