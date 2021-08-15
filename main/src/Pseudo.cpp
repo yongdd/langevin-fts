@@ -2,18 +2,19 @@
 #include "Pseudo.h"
 
 Pseudo::Pseudo(
-    SimulationBox *sb, double ds,
-    int NN, int NNf)
+    SimulationBox *sb, 
+    PolymerChain *pc)
 {
     this->sb = sb;
     this->MM         = sb->MM;
     this->MM_COMPLEX = sb->nx[0]*sb->nx[1]*(sb->nx[2]/2+1);
-    this->NN = NN;
-    this->NNf= NNf;
+    this->NN = pc->NN;
+    this->NNf= pc->NNf;
+    this->ds = pc->ds;
 
     this->expf = new double[MM_COMPLEX];
     this->expf_half = new double[MM_COMPLEX];
-    init_gaussian_factor(sb->nx, sb->dx, ds);
+    init_gaussian_factor(sb->nx, sb->dx, pc->ds);
 
     this->q1 = new double[MM*(NN+1)];
     this->q2 = new double[MM*(NN+1)];
@@ -62,7 +63,7 @@ void Pseudo::init_gaussian_factor(int *nx, double *dx, double ds)
 }
 void Pseudo::find_phi(double *phia,  double *phib,
                       double *q1_init, double *q2_init,
-                      double *wa, double *wb, double ds, double &QQ)
+                      double *wa, double *wb, double &QQ)
 {
     double expdwa[MM];
     double expdwb[MM];

@@ -3,10 +3,9 @@
 #include "CudaSimulationBox.h"
 
 CudaPseudo::CudaPseudo(
-    SimulationBox *sb, double ds,
-    int NN, int NNf,
-    int process_idx)
-    : Pseudo(sb, ds, NN, NNf)
+    SimulationBox *sb,
+    PolymerChain *pc)
+    : Pseudo(sb, pc)
 {
     const int NRANK{3};
     const int BATCH{2};
@@ -72,7 +71,7 @@ CudaPseudo::~CudaPseudo()
 }
 void CudaPseudo::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,
-                          double *wa, double *wb, double ds, double &QQ)
+                          double *wa, double *wb, double &QQ)
 {
 
     double expdwa[MM];

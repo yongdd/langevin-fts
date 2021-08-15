@@ -3,9 +3,9 @@
 #include "MklFFT.h"
 
 MklPseudo::MklPseudo(
-    SimulationBox *sb, double ds,
-    int NN, int NNf)
-    : Pseudo(sb, ds, NN, NNf)
+    SimulationBox *sb, 
+    PolymerChain *pc)
+    : Pseudo(sb, pc)
 {
     this->fft = new MklFFT(sb->nx);
 }
@@ -15,9 +15,9 @@ MklPseudo::~MklPseudo()
 }
 void MklPseudo::find_phi(double *phia,  double *phib,
                          double *q1_init, double *q2_init,
-                         double *wa, double *wb, double ds, double &QQ)
+                         double *wa, double *wb, double &QQ)
 {
-    Pseudo::find_phi(phia, phib, q1_init, q2_init, wa, wb, ds, QQ);
+    Pseudo::find_phi(phia, phib, q1_init, q2_init, wa, wb, QQ);
 }
 
 

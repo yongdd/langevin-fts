@@ -4,6 +4,8 @@
 ! parameters from an input file. Each parameter pair is stored in
 ! vector, and retrieve it when 'get' is invoked.
 !--------------------------------------------------------------------*/
+
+#include <algorithm>
 #include "ParamParser.h"
 
 //----------------- Constructor -----------------------------
@@ -14,7 +16,6 @@ ParamParser::ParamParser()
 //----------------- Destructor ------------------------------
 ParamParser::~ParamParser()
 {
-    mtx.lock(); //lock threads
     // show parameters that are never used.
     std::cout<< "---------- Parameters that are never used ----------" << std::endl;
     for(unsigned int i=0; i<input_param_list.size(); i++)
@@ -22,7 +23,6 @@ ParamParser::~ParamParser()
         if(param_use_count[i] == 0)
             std::cout<< input_param_list[i].var_name << std::endl;
     }
-    mtx.unlock(); //unlock threads
 }
 //----------------- read_param_file -------------------------
 void ParamParser::read_param_file(std::string param_file_name)
@@ -30,8 +30,6 @@ void ParamParser::read_param_file(std::string param_file_name)
     std::string buf;
     int n_line;
     ParamPair input_param;
-
-    mtx.lock(); //lock threads
 
     if(finished)
         return;
@@ -69,7 +67,6 @@ void ParamParser::read_param_file(std::string param_file_name)
         std::cout<< std::endl;
     }
     finished = true;
-    mtx.unlock(); //unlock threads
 }
 //---------------- line_has_parsed ------------------------
 bool ParamParser::line_has_parsed(std::string buf, ParamPair &input_param, int n_line)
@@ -151,7 +148,7 @@ int ParamParser::get_char_type(char ch)
         return TYPE_WORD;
     else if (('0' <= ch && ch <= '9') || ch == '-' ) // digit
         return TYPE_DIGIT;
-    else if (ch == '.' ) // dot
+    else if (ch == '.' ) // inner_product
         return TYPE_DOT;
     else if ( ch == '"') // double quote
         return TYPE_QUOTE;
@@ -241,7 +238,10 @@ bool ParamParser::get(std::string param_name, double& param_value, int idx)
     loc = search_param_idx(param_name, idx);
     if( loc >= 0)
     {
-        std::stringstream ss(input_param_list[loc].values[idx]);
+        std::string str_value = input_param_list[loc].values[idx];
+        std::replace(str_value.begin(), str_value.end(), 'D', 'E');
+        std::replace(str_value.begin(), str_value.end(), 'd', 'e');
+        std::stringstream ss(str_value);
         ss >> param_value;
         return true;
     }
@@ -271,7 +271,10 @@ bool ParamParser::get(std::string param_name, std::string& param_value, int idx)
     loc = search_param_idx(param_name, idx);
     if( loc >= 0)
     {
-        std::stringstream ss(input_param_list[loc].values[idx]);
+        std::string str_param = input_param_list[loc].values[idx];
+        //remove double quote
+        str_param = str_param.substr(1, str_param.length()-2); 
+        std::stringstream ss(str_param);
         ss >> param_value;
         return true;
     }

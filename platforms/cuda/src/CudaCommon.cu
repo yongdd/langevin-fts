@@ -59,14 +59,14 @@ CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
     std::cout<< "Max size of a grid size    (x,y,z) : \t(";
     std::cout<< prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", " << prop.maxGridSize[2] << ")\n";
 
-    if(prop.deviceOverlap)
-    {
-        std::cout<< "Device overlap : \t\t\t Yes" << std::endl;
-    }
-    else
-    {
-        std::cout<< "Device overlap : \t\t\t No" << std::endl;
-    }
+    //if(prop.deviceOverlap)
+    //{
+        //std::cout<< "Device overlap : \t\t\t Yes" << std::endl;
+    //}
+    //else
+    //{
+        //std::cout<< "Device overlap : \t\t\t No" << std::endl;
+    //}
 
     if (N_THREADS > prop.maxThreadsPerBlock)
     {
@@ -81,13 +81,13 @@ CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
     }
     if (prop.warpSize < 32)
     {
-        std::cout<< "'Warp size' cannot be less than 32 due to synchronization in 'multi_dot_kernel'." << std::endl;
+        std::cout<< "'Warp size' cannot be less than 32 due to synchronization in 'multi_inner_product_kernel'." << std::endl;
         exit (1);
     }
 
     if (N_THREADS > 1024)
     {
-        std::cout<<"'threads_per_block' cannot be greater than 1024 because of 'multi_dot_kernel'." << std::endl;
+        std::cout<<"'threads_per_block' cannot be greater than 1024 because of 'multi_inner_product_kernel'." << std::endl;
         exit (1);
     }
 }

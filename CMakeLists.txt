@@ -1,5 +1,4 @@
 # CMake
-
 CMAKE_MINIMUM_REQUIRED(VERSION 3.16)
 
 PROJECT(FTS_DEEP_LEARNING CXX CUDA)
@@ -13,12 +12,14 @@ SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 SET ( CMAKE_BUILD_TYPE Release )
 
 #---------- FTS_LIBRARIES -----------
-#FIND_PACKAGE(OpenMP QUIET)
-if (OPENMP_FOUND)
-	SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-	SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-	SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-endif()
+IF(USE_OPENMP)
+	FIND_PACKAGE(OpenMP QUIET)
+	IF (OPENMP_FOUND)
+		SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+		SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+		SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+	ENDIF()
+ENDIF()
 
 #FIND_PACKAGE(SWIG REQUIRED)
 #FIND_PACKAGE(PythonInterp 3.5 REQUIRED)
@@ -46,6 +47,7 @@ ELSE()
 	SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
 IF(BUILD_CPU_MKL_LIB)
+	ADD_DEFINITIONS(-DUSE_CPU_MKL)
 	ADD_LIBRARY(cpu-mkl
         platforms/cpu/src/CpuSimulationBox.cpp
         platforms/cpu/src/MklFFT.cpp
@@ -55,8 +57,8 @@ IF(BUILD_CPU_MKL_LIB)
 ENDIF()
 
 #  FFTW 
-FIND_PATH (FFTW_INCLUDE fftw3.h /opt/fftw/3.3.8/double/include)
-FIND_LIBRARY (FFTW_LIBRARY NAMES fftw3 /opt/fftw/3.3.8/double/lib)
+FIND_PATH (FFTW_INCLUDE NAMES fftw3.h PATHS /opt/fftw/3.3.8/double/include)
+FIND_LIBRARY (FFTW_LIBRARY NAMES fftw3 PATHS /opt/fftw/3.3.8/double/lib)
 MESSAGE (${FFTW_INCLUDE})
 MESSAGE (${FFTW_LIBRARY})
 IF(FFTW_INCLUDE AND FFTW_LIBRARY)
@@ -65,6 +67,7 @@ ELSE()
 	SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
 IF(BUILD_CPU_FFTW_LIB)
+	ADD_DEFINITIONS(-DUSE_CPU_FFTW)
         ADD_LIBRARY(cpu-fftw
         platforms/cpu/src/CpuSimulationBox.cpp
 	platforms/cpu/src/FftwFFT.cpp
@@ -76,6 +79,7 @@ ENDIF()
 # NVIDIA CUDA
 FIND_PACKAGE(CUDAToolkit REQUIRED)
 IF(CUDAToolkit_FOUND)
+	ADD_DEFINITIONS(-DUSE_CUDA)
 	ADD_LIBRARY(cuda
         platforms/cuda/src/CudaCommon.cu
         platforms/cuda/src/CudaSimulationBox.cu
@@ -84,9 +88,15 @@ IF(CUDAToolkit_FOUND)
 	)
 ENDIF()
 
-IF( (NOT MKL_FOUND) AND (NOT CUDAToolkit_FOUND) )
-	MESSAGE( FATAL_ERROR "Cannot find any libraries, CMake will exit." )
+IF( (NOT BUILD_CPU_MKL_LIB) AND
+    (NOT BUILD_CPU_FFTW_LIB) AND
+    (NOT CUDAToolkit_FOUND) )
+    MESSAGE( FATAL_ERROR "Could not find any FFT library, CMake will exit." )
 ENDIF()
+
+ADD_LIBRARY(factory
+	main/src/KernelFactory.cpp
+        )
 
 #---------- EXECUTABLE -----------
 
@@ -94,6 +104,7 @@ ENDIF()
 ADD_EXECUTABLE(scft.out main/SCFT.cpp)
 
 TARGET_LINK_LIBRARIES(scft.out
+	factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>

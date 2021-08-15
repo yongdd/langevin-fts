@@ -17,7 +17,7 @@ __device__ static void warp_reduce(volatile double* sdata, int tid)
     if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
 }
 template <unsigned int blockSize>
-__global__ static void multi_dot_kernel(
+__global__ static void multi_inner_product_kernel(
     int n_comp, double *dv_d, double *g_d, double *h_d, double *sum_d, unsigned int MM)
 {
     extern __shared__ double sdata[];
@@ -101,44 +101,44 @@ CudaSimulationBox::~CudaSimulationBox()
     cudaFree(sum_d);
 }
 //-----------------------------------------------------------
-double CudaSimulationBox::multi_dot_gpu(int n_comp, double *g_d, double *h_d)
+double CudaSimulationBox::multi_inner_product_gpu(int n_comp, double *g_d, double *h_d)
 {
     double total{0.0};
 
     switch(N_THREADS)
     {
     case 1024:
-        multi_dot_kernel<1024><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<1024><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 512:
-        multi_dot_kernel<512><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<512><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 256:
-        multi_dot_kernel<256><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<256><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 128:
-        multi_dot_kernel<128><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<128><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 64:
-        multi_dot_kernel<64><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<64><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 32:
-        multi_dot_kernel<32><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<32><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 16:
-        multi_dot_kernel<16><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<16><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 8:
-        multi_dot_kernel<8><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<8><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 4:
-        multi_dot_kernel<4><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<4><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 2:
-        multi_dot_kernel<2><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<2><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     case 1:
-        multi_dot_kernel<1><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
+        multi_inner_product_kernel<1><<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>(n_comp, dv_d, g_d, h_d, sum_d, MM);
         break;
     }
     cudaMemcpy(sum, sum_d, sizeof(double)*N_BLOCKS,cudaMemcpyDeviceToHost);
