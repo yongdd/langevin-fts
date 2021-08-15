@@ -27,8 +27,8 @@ CpuAndersonMixing::CpuAndersonMixing(
     cb_wout_hist = new CircularBuffer(max_anderson+1, TOTAL_MM);
     /* record hisotry of wout-w in memory */
     cb_wdiff_hist = new CircularBuffer(max_anderson+1, TOTAL_MM);
-    /* record hisotry of dot product of wout-w in memory */
-    cb_wdiffdots = new CircularBuffer(max_anderson+1, max_anderson+1);
+    /* record hisotry of inner_product product of wout-w in memory */
+    cb_wdiffinner_products = new CircularBuffer(max_anderson+1, max_anderson+1);
 
     /* define arrays for anderson mixing */
     this->u_nm = new double*[max_anderson];
@@ -36,7 +36,7 @@ CpuAndersonMixing::CpuAndersonMixing(
         this->u_nm[i] = new double[max_anderson];
     this->v_n = new double[max_anderson];
     this->a_n = new double[max_anderson];
-    this->wdiffdots = new double[max_anderson+1];
+    this->wdiffinner_products = new double[max_anderson+1];
 
     /* reset_count */
     reset_count();
@@ -46,14 +46,14 @@ CpuAndersonMixing::~CpuAndersonMixing()
 {
     delete cb_wout_hist;
     delete cb_wdiff_hist;
-    delete cb_wdiffdots;
+    delete cb_wdiffinner_products;
 
     for (int i=0; i<max_anderson; i++)
         delete[] u_nm[i];
     delete[] u_nm;
     delete[] v_n;
     delete[] a_n;
-    delete[] wdiffdots;
+    delete[] wdiffinner_products;
 }
 void CpuAndersonMixing::reset_count()
 {
@@ -64,7 +64,7 @@ void CpuAndersonMixing::reset_count()
 
     cb_wout_hist->reset();
     cb_wdiff_hist->reset();
-    cb_wdiffdots->reset();
+    cb_wdiffinner_products->reset();
 }
 void CpuAndersonMixing::caculate_new_fields(
     double *w,
@@ -89,12 +89,12 @@ void CpuAndersonMixing::caculate_new_fields(
         cb_wout_hist->insert(w_out);
         cb_wdiff_hist->insert(w_diff);
 
-        /* evaluate wdiff dot products for calculating Unm and Vn in Thompson's paper */
+        /* evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper */
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiffdots[i] = sb->multi_dot(num_components, w_diff, cb_wdiff_hist->get_array(n_anderson-i));
+            wdiffinner_products[i] = sb->multi_inner_product(num_components, w_diff, cb_wdiff_hist->get_array(n_anderson-i));
         }
-        cb_wdiffdots->insert(wdiffdots);
+        cb_wdiffinner_products->insert(wdiffinner_products);
     }
     // conditions to apply the simple mixing method
     if( n_anderson <= 0 )
@@ -115,15 +115,15 @@ void CpuAndersonMixing::caculate_new_fields(
         // calculate Unm and Vn
         for(int i=0; i<n_anderson; i++)
         {
-            v_n[i] = cb_wdiffdots->get_sym(n_anderson, n_anderson)
-                     - cb_wdiffdots->get_sym(n_anderson, n_anderson-i-1);
+            v_n[i] = cb_wdiffinner_products->get_sym(n_anderson, n_anderson)
+                     - cb_wdiffinner_products->get_sym(n_anderson, n_anderson-i-1);
             
             for(int j=0; j<n_anderson; j++)
             {
-                u_nm[i][j] = cb_wdiffdots->get_sym(n_anderson, n_anderson)
-                             - cb_wdiffdots->get_sym(n_anderson, n_anderson-i-1)
-                             - cb_wdiffdots->get_sym(n_anderson-j-1, n_anderson)
-                             + cb_wdiffdots->get_sym(n_anderson-i-1, n_anderson-j-1);
+                u_nm[i][j] = cb_wdiffinner_products->get_sym(n_anderson, n_anderson)
+                             - cb_wdiffinner_products->get_sym(n_anderson, n_anderson-i-1)
+                             - cb_wdiffinner_products->get_sym(n_anderson-j-1, n_anderson)
+                             + cb_wdiffinner_products->get_sym(n_anderson-i-1, n_anderson-j-1);
             }
         }
         find_an(u_nm, v_n, a_n, n_anderson);

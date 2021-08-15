@@ -1,3 +1,6 @@
+
+#include <iostream>
+#include <cmath>
 #include "PolymerChain.h"
 
 //----------------- Constructor ----------------------------

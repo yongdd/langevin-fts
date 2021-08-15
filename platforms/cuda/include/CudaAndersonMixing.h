@@ -41,8 +41,8 @@ private:
     // a few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
     // arrays to calculate anderson mixing
-    CircularBuffer *cb_wdiffdots;
-    double **u_nm, *v_n, *a_n, *wdiffdots;
+    CircularBuffer *cb_wdiffinner_products;
+    double **u_nm, *v_n, *a_n, *wdiffinner_products;
     double *w_d, *w_diff_d;
 
     int num_components, MM, TOTAL_MM;
@@ -55,8 +55,7 @@ public:
     CudaAndersonMixing(
         SimulationBox *sb, int num_components,
         int max_anderson, double start_anderson_error,
-        double mix_min, double mix_init,
-        int process_idx=0);
+        double mix_min, double mix_init);
     ~CudaAndersonMixing();
 
     void reset_count() override;

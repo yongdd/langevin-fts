@@ -16,8 +16,8 @@ private:
     /* a few previous field values are stored for anderson mixing */
     CircularBuffer *cb_wout_hist, *cb_wdiff_hist;
     /* arrays to calculate anderson mixing */
-    CircularBuffer *cb_wdiffdots;
-    double **u_nm, *v_n, *a_n, *wdiffdots;
+    CircularBuffer *cb_wdiffinner_products;
+    double **u_nm, *v_n, *a_n, *wdiffinner_products;
 
     int num_components, MM, TOTAL_MM;
     double start_anderson_error, mix_min, mix, mix_init;

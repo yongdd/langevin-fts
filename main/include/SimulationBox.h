@@ -26,8 +26,9 @@ public:
      : SimulationBox({nx[0],nx[1],nx[2]},{lx[0],lx[1],lx[2]}) {};
     virtual ~SimulationBox();
 
-    double dot(double *g, double *h);
-    double multi_dot(int n_comp, double *g, double *h);
-    void zero_mean(double *w);
+    double integral(double *g);
+    double inner_product(double *g, double *h);
+    double multi_inner_product(int n_comp, double *g, double *h);
+    void zero_mean(double *g);
 };
 #endif

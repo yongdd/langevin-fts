@@ -24,8 +24,16 @@ SimulationBox::~SimulationBox()
     delete[] dv;
 }
 //-----------------------------------------------------------
-// This method calculates integral g*h
-double SimulationBox::dot(double *g, double *h)
+// This method calculates inner product g and h
+double SimulationBox::integral(double *g)
+{
+    double sum{0.0};
+    for(int i=0; i<MM; i++)
+        sum += dv[i]*g[i];
+    return sum;
+}
+// This method calculates inner product g and h
+double SimulationBox::inner_product(double *g, double *h)
 {
     double sum{0.0};
     for(int i=0; i<MM; i++)
@@ -33,7 +41,7 @@ double SimulationBox::dot(double *g, double *h)
     return sum;
 }
 //-----------------------------------------------------------
-double SimulationBox::multi_dot(int n_comp, double *g, double *h)
+double SimulationBox::multi_inner_product(int n_comp, double *g, double *h)
 {
     double sum{0.0};
     for(int n=0; n<n_comp; n++)
@@ -45,11 +53,11 @@ double SimulationBox::multi_dot(int n_comp, double *g, double *h)
 }
 //-----------------------------------------------------------
 // This method makes the input a zero-meaned matrix
-void SimulationBox::zero_mean(double *w)
+void SimulationBox::zero_mean(double *g)
 {
     double sum{0.0};
     for(int i=0; i<MM; i++)
-        sum += dv[i]*w[i];
+        sum += dv[i]*g[i];
     for(int i=0; i<MM; i++)
-        w[i] -= sum/volume;
+        g[i] -= sum/volume;
 }

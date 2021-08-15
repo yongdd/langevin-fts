@@ -38,14 +38,13 @@ private:
 
 public:
 
-    CudaPseudo(SimulationBox *sb, double ds, int NN, int NNf,
-               int process_idx=0);
+    CudaPseudo(SimulationBox *sb,
+               PolymerChain *pc);
     ~CudaPseudo();
 
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,
-                  double *wa, double *wb, 
-                  double ds, double &QQ) override;
+                  double *wa, double *wb, double &QQ) override;
 
     void get_partition(double *q1_out,  double *q2_out, int n);
 };

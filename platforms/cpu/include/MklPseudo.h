@@ -12,12 +12,11 @@ class MklPseudo : public Pseudo
 
 public:
 
-    MklPseudo(SimulationBox *sb, double ds, int NN, int NNf);
+    MklPseudo(SimulationBox *sb, PolymerChain *pc);
     ~MklPseudo();
     
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,
-                  double *wa, double *wb,
-                  double ds, double &QQ) override;
+                  double *wa, double *wb, double &QQ) override;
 };
 #endif

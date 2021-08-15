@@ -6,6 +6,7 @@
 #define PSEUDO_H_
 
 #include "SimulationBox.h"
+#include "PolymerChain.h"
 #include "FFT.h"
 
 class Pseudo
@@ -17,6 +18,7 @@ protected:
 
     int MM, MM_COMPLEX;
     int NN, NNf;
+    double ds;
     double *expf, *expf_half;
     double *q1, *q2;
 
@@ -24,14 +26,13 @@ protected:
     void onestep(double *qin, double *qout,
                  double *expdw, double *expdw_half);
 public:
-    Pseudo(SimulationBox *sb, double ds, int NN, int NNf);
+    Pseudo(SimulationBox *sb, PolymerChain *pc);
     virtual ~Pseudo();
 
     virtual void find_phi(
         double *phia,  double *phib,
         double *q1_init, double *q2_init,
-        double *wa, double *wb,
-        double ds, double &QQ);
+        double *wa, double *wb, double &QQ);
 
     void get_partition(double *q1_out,  double *q2_out, int n);
 };

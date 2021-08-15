@@ -10,7 +10,7 @@
 ! word,   w = [a-zA-Z_]
 ! digit,  i = [0-9]
 ! assign, g = [=:]
-! dot,        .
+! inner_product,        .
 ! quote,      "
 ! exponent, x = (d|D|e|E)
 ! sign, p = (+|-)
@@ -61,7 +61,6 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
-#include <mutex>
 
 // Design Pattern : Singleton (Scott Meyer)
 
@@ -121,9 +120,6 @@ private :
     std::vector<int> param_use_count;
 
     bool finished;  // parsing is finished
-    std::mutex mtx; // mutex for thread safe.
-                    // this is neccesary only if you call
-		    // ream_param_file using multi threads
 
     bool line_has_parsed(std::string buf, ParamPair &input_param, int n_line);
     void insert_param(ParamPair input_param);

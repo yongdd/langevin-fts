@@ -11,13 +11,12 @@ class FftwPseudo : public Pseudo
 {
 
 public:
-    FftwPseudo(SimulationBox *sb, double ds, int NN, int NNf);
+    FftwPseudo(SimulationBox *sb, PolymerChain *pc);
     ~FftwPseudo();
 
     void find_phi(
         double *phia,  double *phib,
         double *q1_init, double *q2_init,
-        double *wa, double *wb,
-        double ds, double &QQ) override;
+        double *wa, double *wb, double &QQ) override;
 };
 #endif
