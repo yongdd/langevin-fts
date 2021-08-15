@@ -18,7 +18,6 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
   MKL is bundled with Intel Compilers.  
 
 + **FFTW**   
-  Fastest Fourier transform in the West  
   https://www.fftw.org/
   
 + **CUDA**  
@@ -33,26 +32,25 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 
 * * *
 I tested this program under following environments.  
-+ C/C++ Compilers
++ C++ Compilers
   + Intel oneAPI Base & Toolkit 2021.3.0   
   + The GNU Compiler Collection 7.5 
 + CUDA Toolkit 11.2
-+ MPI/OpenMP bundled with Intel Compilers 2021.3.0
++ OpenMP bundled with Intel Compilers 2021.3.0
 
 # Compile
   
-  git clone https://github.com/yongdd/Langevin_FTS_Public.git  
+  git clone `https://github.com/yongdd/Langevin_FTS_Public.git`  
   mkdir build  
   cd build  
-  cmake <Options> ../  
+  cmake \[Options\] ../  
   make  
 
-+  Available Options
-
-  + To change compilers
-    -DCMAKE_CXX_COMPILER=<Your CXX Compiler, e.g. "icpc", "g++">
++  Available Options   
+  + To change compilers   
+    -DCMAKE_CXX_COMPILER=\[Your CXX Compiler, e.g. "icpc", "g++"\]   
   + To use FFTW  
-    -DCMAKE_INCLUDE_PATH=<Your FFTW_PATH>/include -DCMAKE_FRAMEWORK_PATH=<Your FFTW_PATH>/lib
+    -DCMAKE_INCLUDE_PATH=\[FFTW_PATH\]/include -DCMAKE_FRAMEWORK_PATH=\[FFTW_PATH]/lib
   + To use OpenMP  
     -DUSE_OPENMP  
 

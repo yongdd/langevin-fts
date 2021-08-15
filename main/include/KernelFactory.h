@@ -18,6 +18,7 @@ class KernelFactory
 private:
     std::string str_platform;
 public:
+    KernelFactory();
     KernelFactory(std::string str_platform);
     PolymerChain* create_polymer_chain(double f, int NN, double chi_n);
     SimulationBox* create_simulation_box(

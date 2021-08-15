@@ -1,4 +1,5 @@
-platform = "CPU_MKL"           # CUDA, CPU_MKL, CPU_FFTW
+#platform = "CPU_MKL"           # CUDA, CPU_MKL, CPU_FFTW
+
 # SIMULATION BOX
 geometry.grids        = 31  49  63   # the number of simulation grids
 geometry.box_size     = 4.0 3.0 2.0  # simulation box as bN^(1/2) unit

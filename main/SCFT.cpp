@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     // choose platform
     KernelFactory *factory;
     if(!pp.get("platform", str_platform))
-        factory = new KernelFactory("CUDA");
+        factory = new KernelFactory();
     else
         factory = new KernelFactory(str_platform);
 

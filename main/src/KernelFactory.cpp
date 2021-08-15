@@ -15,9 +15,8 @@
 
 #include "KernelFactory.h"
 
-KernelFactory::KernelFactory(std::string str_platform)
+KernelFactory::KernelFactory()
 {
-    this->str_platform = str_platform;
     std::vector<std::string> valid_strings;
 
 #ifdef USE_CPU_MKL
@@ -29,6 +28,24 @@ KernelFactory::KernelFactory(std::string str_platform)
 #ifdef USE_CUDA
     valid_strings.push_back("CUDA");
 #endif
+    this->str_platform = valid_strings.back();
+}
+
+KernelFactory::KernelFactory(std::string str_platform)
+{
+    std::vector<std::string> valid_strings;
+
+#ifdef USE_CUDA
+    valid_strings.push_back("CUDA");
+#endif
+#ifdef USE_CPU_MKL
+    valid_strings.push_back("CPU_MKL");
+#endif
+#ifdef USE_CPU_FFTW
+    valid_strings.push_back("CPU_FFTW");
+#endif
+
+    this->str_platform = str_platform;
     
     bool valid = false;
     for(int i=0; i<valid_strings.size(); i++){
