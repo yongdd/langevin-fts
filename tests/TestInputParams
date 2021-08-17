@@ -1,0 +1,22 @@
+# SIMULATION BOX
+geometry.grids        = 24 36 48   # the number of simulation grids
+                                        # if box_size is not specified, box_size become [grids] * [kuhn length]
+# POLYMER CHAIN
+chain.chi_n                  = 20.0        # Flory Huggins parameters. 
+                                          # This will ignored if parallel tempering is activated.
+chain.contour_step          = 48         # N
+
+# ITERATION PARAMETER
+iter.step_saddle = 40  # max number of W+ saddle point approximation iteration.
+iter.tolerance = 1.0e-9   # exit loop if error level < tolerance.
+
+# ETC
+filename = "asdf"
+
+# EXAMPLES OF SYNTAX ERROR
+#ex1 = 40..0
+#ex2 = 40.0-d9
+#ex3 = "asdf
+#ex4 = 123a
+#ex5 = asdf
+#ex6 = 12 20.0 "abc"

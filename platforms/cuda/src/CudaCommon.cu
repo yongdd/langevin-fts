@@ -2,15 +2,19 @@
 #include <iostream>
 #include "CudaCommon.h"
 
-CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
+CudaCommon::CudaCommon()
 {
-    int device;
+    this->N_BLOCKS = 256;
+    this->N_THREADS = 256; 
+}
+void CudaCommon::set(int N_BLOCKS, int N_THREADS, int process_idx)
+{
     int devices_count;  
-    struct cudaDeviceProp prop;
     cudaError_t err;
-
-    this->N_BLOCKS = N_BLOCKS;
-    this->N_THREADS = N_THREADS;
+    
+    CudaCommon &pp = CudaCommon::get_instance();
+    pp.N_BLOCKS = N_BLOCKS;
+    pp.N_THREADS = N_THREADS;
 
     // change GPU setting
     err = cudaGetDeviceCount(&devices_count);
@@ -25,7 +29,25 @@ CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
         std::cout<< cudaGetErrorString(err) << std::endl;
         exit (1);
     }
+}
+void CudaCommon::display_info()
+{
+    int device;
+    int devices_count;  
+    struct cudaDeviceProp prop;
+    cudaError_t err;
+    
+    CudaCommon &pp = CudaCommon::get_instance();
+    const int N_BLOCKS = pp.N_BLOCKS;
+    const int N_THREADS = pp.N_THREADS;
+     
      // get GPU info
+    err = cudaGetDeviceCount(&devices_count);
+    if (err != cudaSuccess)
+    {
+        std::cout<< cudaGetErrorString(err) << std::endl;
+        exit (1);
+    }
     err = cudaGetDevice(&device);
     if (err != cudaSuccess)
     {
@@ -90,10 +112,6 @@ CudaCommon::CudaCommon(int N_BLOCKS, int N_THREADS, int process_idx)
         std::cout<<"'threads_per_block' cannot be greater than 1024 because of 'multi_inner_product_kernel'." << std::endl;
         exit (1);
     }
-}
-void CudaCommon::initialize(int N_BLOCKS, int N_THREADS, int process_idx)
-{
-    CudaCommon::get_instance(N_BLOCKS, N_THREADS, process_idx);
 }
 __global__ void multiReal(double* dst,
                           double* src1,

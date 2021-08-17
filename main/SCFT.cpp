@@ -58,7 +58,7 @@ int main(int argc, char **argv)
     }
     // initialize ParamParser
     ParamParser& pp = ParamParser::get_instance();
-    pp.read_param_file(argv[1]);
+    pp.read_param_file(argv[1], true);
 
     // choose platform
     KernelFactory *factory;
@@ -115,7 +115,6 @@ int main(int argc, char **argv)
     Pseudo *pseudo = factory->create_pseudo(sb, pc);
     AndersonMixing *am = factory->create_anderson_mixing(
                              sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
-
     // assign large initial value for the energy and error
     energy_total = 1.0e20;
     error_level = 1.0e20;
@@ -128,7 +127,7 @@ int main(int argc, char **argv)
 
     std::cout << "Box Dimension: 3" << std::endl;
     std::cout << "Precision: 8" << std::endl;
-    std::cout << "chi_n, f, NN: " << pc->chi_n << " " << pc->f << " " << NN << std::endl;
+    std::cout << "chi_n, f, NN: " << pc->chi_n << " " << pc->f << " " << pc->NN << std::endl;
     std::cout << "Nx: " << sb->nx[0] << " " << sb->nx[1] << " " << sb->nx[2] << std::endl;
     std::cout << "Lx: " << sb->lx[0] << " " << sb->lx[1] << " " << sb->lx[2] << std::endl;
     std::cout << "dx: " << sb->dx[0] << " " << sb->dx[1] << " " << sb->dx[2] << std::endl;
@@ -267,6 +266,8 @@ int main(int argc, char **argv)
     delete pseudo;
     delete am;
     delete factory;
+
+    pp.display_usage_info();
 
     /*
     !------------- write the final output -------------
