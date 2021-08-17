@@ -12,7 +12,7 @@
 ! assign, g = [=:]
 ! inner_product,        .
 ! quote,      "
-! exponent, x = (d|D|e|E)
+! exponent, x = (e|E)
 ! sign, p = (+|-)
 !
 ! blank,  b = (s|t)
@@ -84,7 +84,7 @@ private :
         TYPE_SIGN,
         TYPE_DIGIT,
         TYPE_DOT,
-        TYPE_EXPONENT, // 'eEdD'
+        TYPE_EXPONENT, // 'eE'
         TYPE_QUOTE,
         TYPE_END,
         TYPE_OTHER,
@@ -119,7 +119,7 @@ private :
     // for debuging, this records counts how many time each parameter are called.
     std::vector<int> param_use_count;
 
-    bool finished;  // parsing is finished
+    bool finished;  // whether parsing is finished
 
     bool line_has_parsed(std::string buf, ParamPair &input_param, int n_line);
     void insert_param(ParamPair input_param);
@@ -139,7 +139,8 @@ public:
 	return *instance;
     };
 
-    void read_param_file(std::string param_file_name); 
+    void read_param_file(std::string param_file_name, bool verbose=true); 
+    void display_usage_info();
 
     bool get(std::string param_name, int &param_value, int idx=0);
     bool get(std::string param_name, int *param_value, int length);
@@ -147,6 +148,7 @@ public:
     bool get(std::string param_name, double *param_value, int length);
     bool get(std::string param_name, std::string &param_value, int idx=0);
 
+    std::vector<std::string> get(std::string param_name);
 };
 
 #endif

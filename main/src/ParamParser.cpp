@@ -11,21 +11,11 @@
 //----------------- Constructor -----------------------------
 ParamParser::ParamParser()
 {
-    bool finished = false;  // parsing is finished
+    finished = false;  // parsing is finished
 }
-//----------------- Destructor ------------------------------
-ParamParser::~ParamParser()
-{
-    // show parameters that are never used.
-    std::cout<< "---------- Parameters that are never used ----------" << std::endl;
-    for(unsigned int i=0; i<input_param_list.size(); i++)
-    {
-        if(param_use_count[i] == 0)
-            std::cout<< input_param_list[i].var_name << std::endl;
-    }
-}
+
 //----------------- read_param_file -------------------------
-void ParamParser::read_param_file(std::string param_file_name)
+void ParamParser::read_param_file(std::string param_file_name, bool verbose)
 {
     std::string buf;
     int n_line;
@@ -56,15 +46,17 @@ void ParamParser::read_param_file(std::string param_file_name)
         n_line++; // line number
     }
     param_file.close();
-    
 
-    std::cout<< "---------- Input Parameters ----------" << std::endl;
-    for(unsigned i=0; i<input_param_list.size(); i++ )
+    if(verbose)
     {
-        std::cout<< input_param_list[i].var_name << " :";
-        for(unsigned j = 0; j<input_param_list[i].values.size(); j++)
-            std::cout<< " " << input_param_list[i].values[j];
-        std::cout<< std::endl;
+        std::cout<< "---------- Input Parameters ----------" << std::endl;
+        for(unsigned i=0; i<input_param_list.size(); i++ )
+        {
+            std::cout<< input_param_list[i].var_name << " :";
+            for(unsigned j = 0; j<input_param_list[i].values.size(); j++)
+                std::cout<< " " << input_param_list[i].values[j];
+            std::cout<< std::endl;
+        }
     }
     finished = true;
 }
@@ -124,7 +116,12 @@ bool ParamParser::line_has_parsed(std::string buf, ParamPair &input_param, int n
         input_param.var_name = tokens[0];
         input_param.values.clear();
         for(i=1; i<n_values; i++)
+        {
+            //remove double quote
+            tokens[i].erase(std::remove(tokens[i].begin(), tokens[i].end(), '"'), tokens[i].end());
+            //push
             input_param.values.push_back(tokens[i]);
+        }
     }
     if (input_param.var_name == "")
         return false;
@@ -139,10 +136,10 @@ int ParamParser::get_char_type(char ch)
         return TYPE_BLANK;
     else if (ch == '-' || ch == '+') // plus minus sign
         return TYPE_SIGN;
-    else if (ch == 'e' || ch == 'E' || // exponent
-             ch == 'd' || ch == 'D')
+    else if (ch == 'e' || ch == 'E') // || // exponent
+        // ch == 'd' || ch == 'D')
         return TYPE_EXPONENT;
-    else if (ch == '_' || // alpha, underscore except 'e','E','c','D'
+    else if (ch == '_' || // alpha, underscore except 'e','E'
              ('A' <= ch && ch <= 'Z') ||
              ('a' <= ch && ch <= 'z'))
         return TYPE_WORD;
@@ -177,9 +174,10 @@ void ParamParser::insert_param(ParamPair new_param)
 //----------------- search_param_idx ----------------------------
 int ParamParser::search_param_idx(std::string str_name, unsigned int idx)
 {
-    if(!finished){
+    if(!finished)
+    {
         std::cout << "Call ParamParser::read_param_file first." << std::endl;
-	exit(-1);
+        exit(-1);
     }
 
     for(unsigned int i = 0; i<input_param_list.size(); i++)
@@ -189,7 +187,7 @@ int ParamParser::search_param_idx(std::string str_name, unsigned int idx)
             if ( idx < input_param_list[i].values.size() )
             {
                 // Update count. To prevent overflow min is used.
-                param_use_count[i] = std::min(param_use_count[i] + 1, 100000);
+                param_use_count[i] = std::min(param_use_count[i] + 1, 10000);
                 return i;
             }
             else
@@ -239,8 +237,6 @@ bool ParamParser::get(std::string param_name, double& param_value, int idx)
     if( loc >= 0)
     {
         std::string str_value = input_param_list[loc].values[idx];
-        std::replace(str_value.begin(), str_value.end(), 'D', 'E');
-        std::replace(str_value.begin(), str_value.end(), 'd', 'e');
         std::stringstream ss(str_value);
         ss >> param_value;
         return true;
@@ -272,12 +268,36 @@ bool ParamParser::get(std::string param_name, std::string& param_value, int idx)
     if( loc >= 0)
     {
         std::string str_param = input_param_list[loc].values[idx];
-        //remove double quote
-        str_param = str_param.substr(1, str_param.length()-2); 
         std::stringstream ss(str_param);
         ss >> param_value;
         return true;
     }
     else
         return false;
+}
+std::vector<std::string> ParamParser::get(std::string param_name)
+{
+    int loc;
+    loc = search_param_idx(param_name, 0);
+    std::vector<std::string> vec_values;
+    if( loc >= 0)
+    {
+        for(unsigned int i=0; i<input_param_list[loc].values.size(); i++)
+        {
+            std::string str_param = input_param_list[loc].values[i];
+            vec_values.push_back(str_param);
+        }
+    }
+    return vec_values;
+}
+//----------------- display_usage_info ------------------------------
+void ParamParser::display_usage_info()
+{
+    // show parameters that are never used.
+    std::cout<< "---------- Parameters that are never used ----------" << std::endl;
+    for(unsigned int i=0; i<input_param_list.size(); i++)
+    {
+        if(param_use_count[i] == 0)
+            std::cout<< input_param_list[i].var_name << std::endl;
+    }
 }
