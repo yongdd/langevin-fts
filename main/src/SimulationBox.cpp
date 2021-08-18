@@ -23,6 +23,12 @@ SimulationBox::~SimulationBox()
 {
     delete[] dv;
 }
+
+    double dv_at(int i);
+double SimulationBox::dv_at(int i)
+{
+    return dv[i];
+}
 //-----------------------------------------------------------
 // This method calculates inner product g and h
 double SimulationBox::integral(double *g)

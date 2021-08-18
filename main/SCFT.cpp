@@ -239,6 +239,7 @@ int main(int argc, char **argv)
         // calculte new fields using simple and Anderson mixing
         am->caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
     }
+    // estimate execution time
     chrono_end = std::chrono::system_clock::now();
     time_duration = chrono_end - chrono_start;
     std::cout<< "total time, time per step: ";

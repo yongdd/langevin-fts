@@ -22,7 +22,20 @@
 %init %{
 import_array();
 %}
-%apply (double* INPLACE_ARRAY1, int DIM1) {(double* g, int len_c)}
+%apply (double* INPLACE_ARRAY1, int DIM1){
+(double *g, int len_g),
+(double *h, int len_h),
+(double *phia, int len_pa),
+(double *phib, int len_pb),
+(double *wa, int len_wa),
+(double *wb, int len_wb),
+(double *q1_init, int len_q1),
+(double *q2_init, int len_q2),
+(double *w_in, int len_w_in),
+(double *w_out, int len_wout),
+(double *w_diff, int len_wdiff)};
+
+%apply double* OUTPUT {double &QQ};
 
 %include "ParamParser.h"
 %include "PolymerChain.h"

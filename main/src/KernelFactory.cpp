@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <array>
 #include <vector>
@@ -63,7 +62,7 @@ PolymerChain* KernelFactory::create_polymer_chain(double f, int NN, double chi_n
     return new PolymerChain(f, NN, chi_n);
 };
 SimulationBox* KernelFactory::create_simulation_box(
-    int *nx, double *lx)
+    std::array<int,3> nx, std::array<double,3>  lx)
 {
 #ifdef USE_CPU_MKL
     if (str_platform == "CPU_MKL")
