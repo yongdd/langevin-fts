@@ -21,11 +21,7 @@ int main()
     std::array<double,MM_COMPLEX> diff_sq_cplx;
     //-------------- initialize ------------
     std::cout<< "Initializing" << std::endl;
-
     MklFFT fft({II, JJ, KK});
-    //---------------- run --------------------
-    std::cout<< "Running MKL FFT 3D" << std::endl;
-
     double data_init[MM] =
     {
         0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
@@ -64,25 +60,22 @@ int main()
         {-0.973844201363205,2.06176730216391}, {0.857829657610043,-1.36198877135770},
         {0.705009791908085,2.01933903816772}, {-0.231601465597141,0.142526551270715}
     };
-
+    //---------------- Forward --------------------
+    std::cout<< "Running MKL FFT 3D" << std::endl;
     fft.forward(data_init,data_k);
-    fft.backward(data_k_answer,data_r);
-
-    //--------------- check --------------------
-    std::cout<< "Checking" << std::endl;
     std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-
-    for(int i=0; i<MM_COMPLEX; i++){
-        diff_sq_cplx[i] = pow(std::abs(data_k[i] - data_k_answer[i]),2);
-    }
-    error = *std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end());
+    for(int i=0; i<MM_COMPLEX; i++)
+        diff_sq_cplx[i] = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
+    error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
     std::cout<< "FFT Forward Error: " << error << std::endl;
     if( error > 1e-7)
         return -1;
 
+    //--------------- Backward --------------------
+    fft.backward(data_k_answer,data_r);
     for(int i=0; i<MM; i++)
         diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
-    error = *std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end());
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
     std::cout<< "FFT Backward Error: " << error << std::endl;
     if( error > 1e-7)
         return -1;

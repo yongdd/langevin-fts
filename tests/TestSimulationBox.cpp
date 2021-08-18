@@ -1,5 +1,5 @@
-
 #include <iostream>
+#include <cmath>
 #include "SimulationBox.h"
 
 int main()
@@ -21,23 +21,24 @@ int main()
     for(int i=0; i<sb.MM; i++)
         sum_w += w[i];
     
-    if( (sb.inner_product(g,h)-81.553611) > 1e-5)
-        return -1;
-        
-    if( (sb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
-        return -1;
-        
-    if( sum_w > 1e-7)
-        return -1;
-    
     //std::cout<< "Nx: "  << sb.nx[0] <<" "<< sb.nx[1] <<" "<< sb.nx[2] << std::endl;
     //std::cout<< "Lx: " << sb.lx[0] <<" "<< sb.lx[1] <<" "<< sb.lx[2] << std::endl;
     //std::cout<< "dx: " << sb.dx[0] <<" "<< sb.dx[1] <<" "<< sb.dx[2] << std::endl;
 
     //std::cout<< "sum(dV), Volume: " << volume <<" "<< sb.volume << std::endl;
-    //std::cout<< "Inner Product: "<< sb.inner_product(g,h) << std::endl;
-    //std::cout<< "Multi Inner Product: "<< sb.multi_inner_product(2, gm,hm) << std::endl;
-    //std::cout<< "sum(w): " << sum_w << std::endl;
+    std::cout<< "inner product: "<< sb.inner_product(g,h) << std::endl;
+    std::cout<< "multi inner product: "<< sb.multi_inner_product(2, gm,hm) << std::endl;
+    std::cout<< "sum(w): " << sum_w << std::endl;
+    
+    if( std::abs(sb.inner_product(g,h)-81.553611) > 1e-5)
+        return -1;
+        
+    if( std::abs(sb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
+        return -1;
+        
+    if( std::abs(sum_w) > 1e-7)
+        return -1;
+
 
     return 0;
 }

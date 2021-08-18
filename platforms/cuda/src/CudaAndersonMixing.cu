@@ -43,23 +43,13 @@ CudaAndersonMixing::CudaAndersonMixing(
     SimulationBox *sb, int num_components,
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init)
+    :AndersonMixing(sb, num_components,
+                    max_anderson, start_anderson_error,
+                    mix_min,  mix_init)
 {
     this->N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
     this->N_THREADS = CudaCommon::get_instance().N_THREADS;
 
-    this->sb = sb;
-    this->num_components = num_components;
-    this->MM = sb->MM;
-    this->TOTAL_MM = num_components*(sb->MM);
-    // anderson mixing begin if error level becomes less then start_anderson_error
-    this->start_anderson_error = start_anderson_error;
-    // max number of previous steps to calculate new field when using Anderson mixing
-    this->max_anderson = max_anderson;
-    // minimum mixing parameter
-    this->mix_min = mix_min;
-    // initialize mixing parameter
-    this->mix = mix_init;
-    this->mix_init = mix_init;
     // number of anderson mixing steps, increases from 0 to max_anderson
     n_anderson = -1;
 
@@ -68,7 +58,7 @@ CudaAndersonMixing::CudaAndersonMixing(
     // record hisotry of wout-w in GPU device memory
     cb_wdiff_hist_d = new CudaCircularBuffer(max_anderson+1, TOTAL_MM);
     // record hisotry of inner_product product of wout-w in CPU host memory
-    cb_wdiffinner_products = new CircularBuffer(max_anderson+1, max_anderson+1);
+    cb_wdiff_dots = new CircularBuffer(max_anderson+1, max_anderson+1);
 
     // define arrays for anderson mixing
     this->u_nm = new double*[max_anderson];
@@ -76,7 +66,7 @@ CudaAndersonMixing::CudaAndersonMixing(
         this->u_nm[i] = new double[max_anderson];
     this->v_n = new double[max_anderson];
     this->a_n = new double[max_anderson];
-    this->wdiffinner_products = new double[max_anderson+1];
+    this->wdiff_dots = new double[max_anderson+1];
 
     // fields arrays
     cudaMalloc((void**)&w_diff_d, sizeof(double)*TOTAL_MM);
@@ -89,14 +79,14 @@ CudaAndersonMixing::~CudaAndersonMixing()
 {
     delete cb_wout_hist_d;
     delete cb_wdiff_hist_d;
-    delete cb_wdiffinner_products;
-    
+    delete cb_wdiff_dots;
+
     for (int i=0; i<max_anderson; i++)
         delete[] u_nm[i];
     delete[] u_nm;
     delete[] v_n;
     delete[] a_n;
-    delete[] wdiffinner_products;
+    delete[] wdiff_dots;
     cudaFree(w_diff_d);
     cudaFree(w_d);
 }
@@ -109,7 +99,7 @@ void CudaAndersonMixing::reset_count()
 
     cb_wout_hist_d->reset();
     cb_wdiff_hist_d->reset();
-    cb_wdiffinner_products->reset();
+    cb_wdiff_dots->reset();
 }
 
 void CudaAndersonMixing::caculate_new_fields(
@@ -140,11 +130,11 @@ void CudaAndersonMixing::caculate_new_fields(
         // evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiffinner_products[i] = ((CudaSimulationBox *)sb)->multi_inner_product_gpu(num_components, w_diff_d,
-                                             cb_wdiff_hist_d->get_array(n_anderson-i));
+            wdiff_dots[i] = ((CudaSimulationBox *)sb)->multi_inner_product_gpu(num_components, w_diff_d,
+                                     cb_wdiff_hist_d->get_array(n_anderson-i));
         }
-        //print_array(max_anderson+1, wdiffinner_products);
-        cb_wdiffinner_products->insert(wdiffinner_products);
+        //print_array(max_anderson+1, wdiff_dots);
+        cb_wdiff_dots->insert(wdiff_dots);
     }
     // conditions to apply the simple mixing method
     if( n_anderson <= 0 )
@@ -164,15 +154,15 @@ void CudaAndersonMixing::caculate_new_fields(
         // calculate Unm and Vn
         for(int i=0; i<n_anderson; i++)
         {
-            v_n[i] = cb_wdiffinner_products->get_sym(n_anderson, n_anderson)
-                     - cb_wdiffinner_products->get_sym(n_anderson, n_anderson-i-1);
+            v_n[i] = cb_wdiff_dots->get_sym(n_anderson, n_anderson)
+                     - cb_wdiff_dots->get_sym(n_anderson, n_anderson-i-1);
 
             for(int j=0; j<n_anderson; j++)
             {
-                u_nm[i][j] = cb_wdiffinner_products->get_sym(n_anderson, n_anderson)
-                             - cb_wdiffinner_products->get_sym(n_anderson, n_anderson-i-1)
-                             - cb_wdiffinner_products->get_sym(n_anderson-j-1, n_anderson)
-                             + cb_wdiffinner_products->get_sym(n_anderson-i-1, n_anderson-j-1);
+                u_nm[i][j] = cb_wdiff_dots->get_sym(n_anderson, n_anderson)
+                             - cb_wdiff_dots->get_sym(n_anderson, n_anderson-i-1)
+                             - cb_wdiff_dots->get_sym(n_anderson-j-1, n_anderson)
+                             + cb_wdiff_dots->get_sym(n_anderson-i-1, n_anderson-j-1);
             }
         }
         //print_array(max_anderson, v_n);

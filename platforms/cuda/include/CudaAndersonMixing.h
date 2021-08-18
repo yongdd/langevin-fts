@@ -33,21 +33,14 @@ public:
 class CudaAndersonMixing : public AndersonMixing
 {
 private:
+    int N_BLOCKS, N_THREADS;
 
-    int N_BLOCKS;
-    int N_THREADS;
-
-    SimulationBox *sb;
     // a few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
     // arrays to calculate anderson mixing
-    CircularBuffer *cb_wdiffinner_products;
-    double **u_nm, *v_n, *a_n, *wdiffinner_products;
+    CircularBuffer *cb_wdiff_dots;
+    double **u_nm, *v_n, *a_n, *wdiff_dots;
     double *w_d, *w_diff_d;
-
-    int num_components, MM, TOTAL_MM;
-    double start_anderson_error, mix_min, mix, mix_init;
-    int max_anderson, n_anderson;
 
     void print_array(int n, double *a);
 public:

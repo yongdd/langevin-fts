@@ -4,6 +4,9 @@ import time
 from langevinfts import *
 
 # -------------- initialize ------------
+#pp = ParamParser.get_instance()
+#pp.read_param_file(sys.argv[1], False);
+
 max_scft_iter = 20
 tolerance = 1e-9
 n_comp = 2  # A and B

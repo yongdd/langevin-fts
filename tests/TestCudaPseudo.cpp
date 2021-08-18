@@ -128,7 +128,7 @@ int main()
     };
     for(int i=0; i<MM; i++)
         diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
-    error = *std::max_element(diff_sq.begin(),diff_sq.end());
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
     std::cout<< "Partial Partition error: "<< error << std::endl;
     if (error > 1e-7)
         return -1;
@@ -158,7 +158,7 @@ int main()
     };
     for(int i=0; i<MM; i++)
         diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
-    error = *std::max_element(diff_sq.begin(),diff_sq.end());
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
     std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
     if (error > 1e-7)
         return -1;
@@ -188,7 +188,7 @@ int main()
     };
     for(int i=0; i<MM; i++)
         diff_sq[i] = pow(phia[i] - phia_ref[i],2);
-    error = *std::max_element(diff_sq.begin(),diff_sq.end());
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
     std::cout<< "Segment Concentration A error: "<< error << std::endl;
     if (error > 1e-7)
         return -1;
@@ -218,7 +218,7 @@ int main()
     };
     for(int i=0; i<MM; i++)
         diff_sq[i] = pow(phib[i] - phib_ref[i],2);
-    error = *std::max_element(diff_sq.begin(),diff_sq.end());
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
     std::cout<< "Segment Concentration B error: "<< error << std::endl;
     if (error > 1e-7)
         return -1;

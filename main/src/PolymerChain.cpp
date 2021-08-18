@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <cmath>
 #include "PolymerChain.h"
@@ -11,8 +10,8 @@ PolymerChain::PolymerChain(double f, int NN, double chi_n)
     this->chi_n = chi_n;
 
     // grid number for A fraction
-    this->NNf = lround(NN*f);
-    if( abs(this->NNf-NN*f) > 1.e-6)
+    this->NNf = std::lround(NN*f);
+    if( std::abs(this->NNf-NN*f) > 1.e-6)
     {
         std::cerr<< "NN*f is not an integer"<< std::endl;
         exit(-1);
