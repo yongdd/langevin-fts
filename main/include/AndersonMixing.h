@@ -17,5 +17,15 @@ public:
     virtual void caculate_new_fields(
         double *w, double *w_out, double *w_diff,
         double old_error_level, double error_level) {};
+    
+    // Methods for SWIG
+    void caculate_new_fields(
+        double *w_in, int len_w_in,
+        double *w_out, int len_wout,
+        double *w_diff, int len_wdiff,
+        double old_error_level, double error_level)
+    {
+        caculate_new_fields(w_in, w_out, w_diff, old_error_level, error_level);
+    }
 };
 #endif

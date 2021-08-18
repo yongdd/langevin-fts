@@ -2,7 +2,7 @@
 #include "Pseudo.h"
 
 Pseudo::Pseudo(
-    SimulationBox *sb, 
+    SimulationBox *sb,
     PolymerChain *pc)
 {
     this->sb = sb;
@@ -27,7 +27,8 @@ Pseudo::~Pseudo()
     delete[] q2;
 }
 //----------------- init_gaussian_factor -------------------
-void Pseudo::init_gaussian_factor(int *nx, double *dx, double ds)
+void Pseudo::init_gaussian_factor(
+    std::array<int,3> nx, std::array<double,3> dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;
     double xfactor[3];
