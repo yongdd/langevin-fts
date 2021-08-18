@@ -30,11 +30,12 @@ int main()
         return -1;
     
     //std::cout<< "geometry.grids[0]: "<< nx0 << std::endl;
-    //std::cout<< "geometry.grids: ";
-    //std::cout<< nx[0] << " "<< nx[1] << " "<< nx[2] << std::endl;
-    //std::cout<< "chain.chi_n: "<< chi_n << std::endl;
-    //std::cout<< "filename: "<< filename << std::endl;
-    //std::cout<< "as_string: "<< as_string[0] << std::endl;
+    std::cout<< "geometry.grids: ";
+    std::cout<< nx[0] << " "<< nx[1] << " "<< nx[2] << std::endl;
+    std::cout<< "chain.chi_n: "<< chi_n << std::endl;
+    std::cout<< "filename: "<< filename << std::endl;
+    std::cout<< "as_string: "<< as_string[0] << std::endl;
+    
     //pp.display_usage_info();
 
     return 0;

@@ -3,19 +3,19 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 
 # Features
 * Diblock Copolymer Melt
-* 3D periodic boundaries  
-* Pseudospectral implmentation using MKL, FFTW and CUDA
+* 3D Periodic Boundaries  
+* Pseudospectral Implmentation using MKL, FFTW and CUDA
 * Accelerating L-FTS using Deep Learning
 
 # Dependencies
 #### 1. C++ Compiler
-  Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compiler. Install Intel oneAPI Base & HPIC Toolkit. They are free.
+  Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compiler. Install Intel oneAPI Base & HPC Toolkit. They are free
 
-#### 2. Fast Fourirer Transform(FFT) Library
-  The modified diffusion equations are solved by pseudospectral method, and that requires a FFT library. You can choose one of the following FFT libraries.
+#### 2. FFT Library
+  The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose one of the following FFT libraries.
 
 + **MKL**   
-  MKL is bundled with Intel Compilers.  
+  Math kernel library (MKL) is bundled with Intel Compilers.  
 
 + **FFTW**   
   https://www.fftw.org/
@@ -23,12 +23,16 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 + **CUDA**  
   https://developer.nvidia.com/cuda-toolkit  
   
-#### 3. Open Multi-Processing(OpenMP)
-  Two partial partition functions are calculated simultaneously using OpenMP in the CPU implemenation.  
+#### 3. OpenMP
+  Two partial partition functions are calculated simultaneously using open multi-processing (OpenMP) in the CPU implemenation.  
 
 #### 4. SWIG
+  A tool that connects libraries written in C++ with Python    
+  http://www.swig.org/
 
 #### 5. PyTorch
+  An open source machine learning framwork   
+  https://pytorch.org/
 
 * * *
 I tested this program under following environments.  
@@ -39,21 +43,23 @@ I tested this program under following environments.
 + OpenMP bundled with Intel Compilers 2021.3.0
 
 # Compile
-  
-  git clone `https://github.com/yongdd/Langevin_FTS_Public.git`  
-  mkdir build  
-  cd build  
-  cmake \[Options\] ../  
-  make  
+  `git clone https://github.com/yongdd/Langevin_FTS_Public.git`  
+  `mkdir build`  
+  `cd build`   
+  `cmake \[options\] ../`  
+  `make`  
 
-+  Available Options   
-  + To change compilers   
-    -DCMAKE_CXX_COMPILER=\[Your CXX Compiler, e.g. "icpc", "g++"\]   
-  + To use FFTW  
-    -DCMAKE_INCLUDE_PATH=\[FFTW_PATH\]/include -DCMAKE_FRAMEWORK_PATH=\[FFTW_PATH]/lib
-  + To use OpenMP  
-    -DUSE_OPENMP  
+  Then copy `_langevin_fts.so` and `langevinfts.py` to your folder.   
+  In python `from langevinfts import *`
 
+* * *
+   Available Options   
++ To change compilers   
+  -DCMAKE_CXX_COMPILER=\[Your CXX Compiler, e.g. "icpc", "g++"\]   
++ To use FFTW  
+   -DCMAKE_INCLUDE_PATH=\[FFTW_PATH\]/include -DCMAKE_FRAMEWORK_PATH=\[FFTW_PATH]/lib
++ To use OpenMP  
+   -DUSE_OPENMP  
 # User Guide
 
 # Developer Guide

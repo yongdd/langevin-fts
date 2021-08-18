@@ -1,5 +1,5 @@
 # CMake
-CMAKE_MINIMUM_REQUIRED(VERSION 3.14)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
 PROJECT(FTS_DEEP_LEARNING CXX CUDA)
 
@@ -38,6 +38,7 @@ ADD_LIBRARY(common
 	main/src/CircularBuffer.cpp
 	main/src/Pseudo.cpp
 	main/src/AndersonMixing.cpp
+	main/src/RandomGaussian.cpp
 	)
 
 #  Intel MKL
@@ -50,18 +51,17 @@ ENDIF()
 IF(BUILD_CPU_MKL_LIB)
 	ADD_DEFINITIONS(-DUSE_CPU_MKL)
 	ADD_LIBRARY(cpu-mkl
-        platforms/cpu/src/CpuSimulationBox.cpp
         platforms/cpu/src/MklFFT.cpp
-	platforms/cpu/src/MklPseudo.cpp
+	platforms/cpu/src/CpuPseudo.cpp
         platforms/cpu/src/CpuAndersonMixing.cpp
 	)
 ENDIF()
 
 #  FFTW 
-FIND_PATH (FFTW_INCLUDE NAMES fftw3.h PATHS /opt/fftw/3.3.8/double/include)
-FIND_LIBRARY (FFTW_LIBRARY NAMES fftw3 PATHS /opt/fftw/3.3.8/double/lib)
-MESSAGE ("${FFTW_INCLUDE}")
-MESSAGE ("${FFTW_LIBRARY}")
+FIND_PATH(FFTW_INCLUDE NAMES fftw3.h PATHS /opt/fftw/3.3.8/double/include)
+FIND_LIBRARY(FFTW_LIBRARY NAMES fftw3 PATHS /opt/fftw/3.3.8/double/lib)
+MESSAGE("${FFTW_INCLUDE}")
+MESSAGE("${FFTW_LIBRARY}")
 IF(FFTW_INCLUDE AND FFTW_LIBRARY)
 	SET(BUILD_CPU_FFTW_LIB TRUE)
 ELSE()
@@ -70,9 +70,8 @@ ENDIF()
 IF(BUILD_CPU_FFTW_LIB)
 	ADD_DEFINITIONS(-DUSE_CPU_FFTW)
         ADD_LIBRARY(cpu-fftw
-        platforms/cpu/src/CpuSimulationBox.cpp
 	platforms/cpu/src/FftwFFT.cpp
-	platforms/cpu/src/FftwPseudo.cpp
+	platforms/cpu/src/CpuPseudo.cpp
         platforms/cpu/src/CpuAndersonMixing.cpp
         )
 ENDIF()
@@ -95,6 +94,7 @@ IF( (NOT BUILD_CPU_MKL_LIB) AND
     MESSAGE( FATAL_ERROR "Could not find any FFT library, CMake will exit." )
 ENDIF()
 
+#  Factory
 ADD_LIBRARY(factory
 	main/src/KernelFactory.cpp
         )

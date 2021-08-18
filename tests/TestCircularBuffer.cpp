@@ -106,8 +106,8 @@ int main()
     vec_string.push_back(ss.str());
     ss.str("");
 
-    //for(unsigned int i=0; i<vec_string.size(); i++)
-    //    std::cout<< vec_string[i] << std::endl;
+    for(unsigned int i=0; i<vec_string.size(); i++)
+        std::cout<< vec_string[i] << std::endl;
 
     if(vec_string[0] != "cb.get_array,12354,00000,00000")
         return -1;

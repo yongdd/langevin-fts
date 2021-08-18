@@ -1,7 +1,8 @@
 
+#include <iomanip>
+#include <cmath>
 #include <string>
 #include <chrono>
-#include <iomanip>
 #include <sstream>
 #include <fstream>
 
@@ -120,7 +121,7 @@ int main(int argc, char **argv)
     error_level = 1.0e20;
 
     // -------------- print simulation parameters ------------
-    //ss << std::setw(4) << std::setfill('0') << lround(chi_n*100);
+    //ss << std::setw(4) << std::setfill('0') << std::lround(chi_n*100);
     //print_file_name = "print_" + ss.str() + ".txt" ;
     //print_stream->open(print_file_name, std::ios_base::app);
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;

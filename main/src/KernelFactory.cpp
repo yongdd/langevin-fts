@@ -3,9 +3,10 @@
 #include <vector>
 #include <string>
 
-#include "CpuSimulationBox.h"
-#include "MklPseudo.h"
-#include "FftwPseudo.h"
+#include "SimulationBox.h"
+#include "CpuPseudo.h"
+#include "MklFFT.h"
+#include "FftwFFT.h"
 #include "CpuAndersonMixing.h"
 
 #include "CudaSimulationBox.h"
@@ -66,11 +67,11 @@ SimulationBox* KernelFactory::create_simulation_box(
 {
 #ifdef USE_CPU_MKL
     if (str_platform == "CPU_MKL")
-        return new CpuSimulationBox(nx, lx);
+        return new SimulationBox(nx, lx);
 #endif
 #ifdef USE_CPU_FFTW
     if( str_platform == "CPU_FFTW")
-        return new CpuSimulationBox(nx, lx);
+        return new SimulationBox(nx, lx);
 #endif
 #ifdef USE_CUDA
     if (str_platform == "CUDA")
@@ -82,11 +83,11 @@ Pseudo* KernelFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
 #ifdef USE_CPU_MKL
     if (str_platform == "CPU_MKL")
-        return new MklPseudo(sb, pc);
+        return new CpuPseudo(sb, pc, new MklFFT(sb->nx));
 #endif
 #ifdef USE_CPU_FFTW
     if (str_platform == "CPU_FFTW")
-        return new FftwPseudo(sb, pc);
+        return new CpuPseudo(sb, pc, new FftwFFT(sb->nx));
 #endif
 #ifdef USE_CUDA
     if (str_platform == "CUDA")
