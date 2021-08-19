@@ -99,21 +99,6 @@ ADD_LIBRARY(factory
 	main/src/KernelFactory.cpp
         )
 
-#---------- EXECUTABLE -----------
-
-ADD_EXECUTABLE(scft.out main/SCFT.cpp)
-
-TARGET_LINK_LIBRARIES(scft.out
-	factory
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,${FFTW_LIBRARY},>	
-	common)
-
 #---------- Python Wrapper -----------
 
 FIND_PACKAGE(SWIG REQUIRED)
@@ -128,12 +113,12 @@ MESSAGE("${Python3_NumPy_INCLUDE_DIRS}")
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 
-SET_SOURCE_FILES_PROPERTIES(swig/LangevinFTS.i PROPERTIES CPLUSPLUS ON)
-SWIG_ADD_LIBRARY(langevin_fts
+SET_SOURCE_FILES_PROPERTIES(swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
+SWIG_ADD_LIBRARY(langevinfts
         LANGUAGE python
-        SOURCES swig/LangevinFTS.i)
+        SOURCES swig/langevinfts.i)
 
-SWIG_LINK_LIBRARIES(langevin_fts
+SWIG_LINK_LIBRARIES(langevinfts
         factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
