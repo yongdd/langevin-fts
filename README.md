@@ -12,7 +12,7 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
   Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compiler. Install Intel oneAPI Base & HPC Toolkit. They are free
 
 #### 2. FFT Library
-  The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose one of the following FFT libraries.
+  The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.
 
 + **MKL**   
   Math kernel library (MKL) is bundled with Intel Compilers.  
@@ -46,10 +46,10 @@ I tested this program under following environments.
   `git clone https://github.com/yongdd/Langevin_FTS_Public.git`  
   `mkdir build`  
   `cd build`   
-  `cmake \[options\] ../`  
+  `cmake [options] ../`  
   `make`  
 
-  Then copy `_langevin_fts.so` and `langevinfts.py` to your folder.   
+  Then copy `_langevinfts.so` and `langevinfts.py` to your folder.   
   In python `from langevinfts import *`
 
 * * *

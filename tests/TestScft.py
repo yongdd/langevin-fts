@@ -6,10 +6,10 @@ from langevinfts import *
 # -------------- initialize ------------
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
+#pp.get("platform")
 
 max_scft_iter = 20
 tolerance = 1e-9
-n_comp = 2  # A and B
 
 f = 0.3
 NN = 50
@@ -17,12 +17,13 @@ chi_n = 20
 nx = [31,49,63]
 lx = [4.0,3.0,2.0]
 
+am_n_comp = 2  # A and B
 am_max_hist= 20
 am_start_error = 8e-1
 am_mix_min = 0.1
 am_mix_init = 0.1
 
-# choose platform
+# choose platform among [CUDA, CPU_MKL, CPU_FFTW]
 factory = KernelFactory("CUDA")
 
 # create instances and assign to the variables of base classs
@@ -30,7 +31,7 @@ factory = KernelFactory("CUDA")
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am = factory.create_anderson_mixing(sb, n_comp,
+am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # assign large initial value for the energy and error
@@ -45,11 +46,7 @@ print("chi_n: %f, f: %f, NN: %d" % (pc.chi_n, pc.f, pc.NN) )
 print("Nx: %d, %d, %d" % (sb.nx[0], sb.nx[1], sb.nx[2]) )
 print("Lx: %f, %f, %f" % (sb.lx[0], sb.lx[1], sb.lx[2]) )
 print("dx: %f, %f, %f" % (sb.dx[0], sb.dx[1], sb.dx[2]) )
-
-total = 0.0;
-for i in range(0, sb.MM):
-    total += sb.dv_at(i);
-print("volume: %f, sum(dv): %f" % (sb.volume, total) )
+print("volume: %f" % (sb.volume) )
 
 #-------------- allocate array ------------
 w       = np.zeros([2, sb.MM], dtype=np.float64)
@@ -100,7 +97,7 @@ for scft_iter in range(0,max_scft_iter):
     
     energy_total  = -np.log(QQ/sb.volume)
     energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.volume
-    energy_total += sb.integral(w_plus)/sb.volume
+    energy_total -= sb.integral(w_plus)/sb.volume
     
     # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
     xi[:] = 0.5*(w[0,:]+w[1,:]-chi_n)
@@ -127,7 +124,7 @@ for scft_iter in range(0,max_scft_iter):
     if(error_level < tolerance):
         break;
     # calculte new fields using simple and Anderson mixing
-    # (Caution! We are passing w, w_out and w_diff[0] not just w[0], w_out[0], w_diff[0])
+    # (Caution! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
     am.caculate_new_fields(w[0], w_out[0], w_diff[0], old_error_level, error_level);
 
 # estimate execution time

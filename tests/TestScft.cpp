@@ -52,14 +52,15 @@ int main(int argc, char **argv)
 
     // -------------- initialize ------------
     // read file name
-    if(argc < 2)
-    {
-        std::cout<< "Input parameter file is required, e.g, 'scft.out inputs' " << std::endl;
-        exit(-1);
-    }
+    //if(argc < 2)
+    //{
+    //    std::cout<< "Input parameter file is required, e.g, 'scft.out inputs' " << std::endl;
+    //    exit(-1);
+    //}
     // initialize ParamParser
     ParamParser& pp = ParamParser::get_instance();
-    pp.read_param_file(argv[1], true);
+    //pp.read_param_file(argv[1],false);
+    pp.read_param_file("TestInputParams",false);
 
     // choose platform
     KernelFactory *factory;
