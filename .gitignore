@@ -6,8 +6,9 @@ fields_*.*
 *.sh.*
 *.png
 *.so
-.f2py_f2cmap
-make/Makefile
-test/scft/Makefile
-build/*
 __pycache__
+build
+html
+latex
+man
+

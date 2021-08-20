@@ -83,8 +83,9 @@ CudaSimulationBox::CudaSimulationBox(
     sum = new double[MM];
     cudaMalloc((void**)&sum_d, sizeof(double)*MM);
 
-    N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
-    N_THREADS = CudaCommon::get_instance().N_THREADS;
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    
     if (N_BLOCKS > MM)
     {
         std::cout<< "'the number of grids'{" <<N_BLOCKS ;
@@ -104,6 +105,9 @@ CudaSimulationBox::~CudaSimulationBox()
 double CudaSimulationBox::multi_inner_product_gpu(int n_comp, double *g_d, double *h_d)
 {
     double total{0.0};
+    
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
     switch(N_THREADS)
     {

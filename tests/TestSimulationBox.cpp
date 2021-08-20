@@ -13,12 +13,12 @@ int main()
     double hm[] {0.443984, 1.55078, 3.26028, -1.07704, 1.37609, -2.33879, -4.88014, 4.23021};
 
     volume = 0.0;
-    for(int i=0; i<sb.MM; i++)
-        volume += sb.dv[i];
+    for(int i=0; i<sb.get_MM(); i++)
+        volume += sb.get_dv(i);
     
     sb.zero_mean(w);
     sum_w = 0.0;
-    for(int i=0; i<sb.MM; i++)
+    for(int i=0; i<sb.get_MM(); i++)
         sum_w += w[i];
     
     //std::cout<< "Nx: "  << sb.nx[0] <<" "<< sb.nx[1] <<" "<< sb.nx[2] << std::endl;
@@ -32,13 +32,9 @@ int main()
     
     if( std::abs(sb.inner_product(g,h)-81.553611) > 1e-5)
         return -1;
-        
     if( std::abs(sb.multi_inner_product(2,gm,hm)+14.391321) > 1e-5)
         return -1;
-        
     if( std::abs(sum_w) > 1e-7)
         return -1;
-
-
     return 0;
 }

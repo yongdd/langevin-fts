@@ -10,10 +10,10 @@ CudaPseudo::CudaPseudo(
     const int NRANK{3};
     const int BATCH{2};
 
-    this->N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
-    this->N_THREADS = CudaCommon::get_instance().N_THREADS;
-
-    int n_grid[NRANK] = {sb->nx[0],sb->nx[1],sb->nx[2]};
+    int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)};
+    
+    const int MM = sb->get_MM();
+    const int NN = pc->get_NN();
 
     cudaMalloc((void**)&temp_d,  sizeof(double)*MM);
 
@@ -73,7 +73,15 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,
                           double *wa, double *wb, double &QQ)
 {
-
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    
+    const int MM = sb->get_MM();
+    const int NN = pc->get_NN();
+    const int NN_A = pc->get_NN_A();
+    const int NN_B = pc->get_NN_B();
+    const double ds = pc->get_ds();
+    
     double expdwa[MM];
     double expdwb[MM];
     double expdwa_half[MM];
@@ -100,7 +108,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
 
     for(int n=0; n<NN; n++)
     {
-        if(n<NNf && n<NN-NNf)
+        if(n < NN_A && n < NN_B)
         {
             onestep(
                 &q1_d[MM*n], &q1_d[MM*(n+1)],
@@ -108,7 +116,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
                 expdwa_d, expdwa_half_d,
                 expdwb_d, expdwb_half_d);
         }
-        else if(n<NNf && n>=NN-NNf)
+        else if(n < NN_A &&  n >= NN_B)
         {
             onestep(
                 &q1_d[MM*n], &q1_d[MM*(n+1)],
@@ -116,7 +124,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
                 expdwa_d, expdwa_half_d,
                 expdwa_d, expdwa_half_d);
         }
-        else if(n>=NNf && n<NN-NNf)
+        else if(n >= NN_A && n < NN_B)
         {
             onestep(
                 &q1_d[MM*n], &q1_d[MM*(n+1)],
@@ -139,17 +147,17 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
     multiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[MM*NN], &q2_d[0], 0.5, MM);
     //printf("NN, %5.3f\n", 1.0/3.0);
     // the B block dvment
-    for(int n=NN-1; n>NNf; n--)
+    for(int n=NN-1; n>NN_A; n--)
     {
         //printf("%d, %5.3f\n", n, 2.0*((n % 2) +1)/3.0);
         addMultiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[MM*n], &q2_d[MM*(NN-n)], 1.0, MM);
     }
 
     // the junction is half A and half B
-    multiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[MM*NNf], &q2_d[MM*(NN-NNf)], 0.5, MM);
+    multiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[MM*NN_A], &q2_d[MM*(NN_B)], 0.5, MM);
     linComb<<<N_BLOCKS, N_THREADS>>>(phib_d, 1.0, phib_d, 1.0, phia_d, MM);
 
-    //printf("%d, %5.3f\n", NNf, 1.0/3.0);
+    //printf("%d, %5.3f\n", NN_A, 1.0/3.0);
     //calculates the total partition function
     multiReal<<<N_BLOCKS, N_THREADS>>>(temp_d, phia_d, ((CudaSimulationBox *)sb)->dv_d, 2.0, MM);
     cudaMemcpy(temp_arr, temp_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
@@ -160,7 +168,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
     }
 
     // the A block dvment
-    for(int n=NNf-1; n>0; n--)
+    for(int n=NN_A-1; n>0; n--)
     {
         //printf("%d, %5.3f\n", n, 2.0*((n % 2) +1)/3.0);
         addMultiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[MM*n], &q2_d[MM*(NN-n)], 1.0, MM);
@@ -170,8 +178,8 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
     addMultiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[0], &q2_d[MM*NN], 0.5, MM);
 
     // normalize the concentration
-    linComb<<<N_BLOCKS, N_THREADS>>>(phia_d, (sb->volume)/QQ/NN, phia_d, 0.0, phia_d, MM);
-    linComb<<<N_BLOCKS, N_THREADS>>>(phib_d, (sb->volume)/QQ/NN, phib_d, 0.0, phib_d, MM);
+    linComb<<<N_BLOCKS, N_THREADS>>>(phia_d, (sb->get_volume())/QQ/NN, phia_d, 0.0, phia_d, MM);
+    linComb<<<N_BLOCKS, N_THREADS>>>(phib_d, (sb->get_volume())/QQ/NN, phib_d, 0.0, phib_d, MM);
 
     cudaMemcpy(phia, phia_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
     cudaMemcpy(phib, phib_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
@@ -185,6 +193,11 @@ void CudaPseudo::onestep(double *qin1_d, double *qout1_d,
                          double *expdw1_d, double *expdw1_half_d,
                          double *expdw2_d, double *expdw2_half_d)
 {
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    
+    const int MM = sb->get_MM();
+        
     //-------------- step 1 ---------- 
     // Evaluate e^(-w*ds/2) in real space
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[0],  qin1_d, expdw1_d, 1.0, MM);
@@ -245,6 +258,7 @@ void CudaPseudo::onestep(double *qin1_d, double *qout1_d,
 
 void CudaPseudo::get_partition(double *q1_out,  double *q2_out, int n)
 {
+    const int MM = sb->get_MM();
     cudaMemcpy(q1_out, &q1_d[n*MM], sizeof(double)*MM,cudaMemcpyDeviceToHost);
     cudaMemcpy(q2_out, &q2_d[n*MM], sizeof(double)*MM,cudaMemcpyDeviceToHost);
 }

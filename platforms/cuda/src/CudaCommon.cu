@@ -4,17 +4,17 @@
 
 CudaCommon::CudaCommon()
 {
-    this->N_BLOCKS = 256;
-    this->N_THREADS = 256; 
+    this->n_blocks = 256;
+    this->n_threads = 256;
 }
-void CudaCommon::set(int N_BLOCKS, int N_THREADS, int process_idx)
+void CudaCommon::set(int n_blocks, int n_threads, int process_idx)
 {
-    int devices_count;  
+    int devices_count;
     cudaError_t err;
-    
+
     CudaCommon &pp = CudaCommon::get_instance();
-    pp.N_BLOCKS = N_BLOCKS;
-    pp.N_THREADS = N_THREADS;
+    pp.set_n_blocks(n_blocks);
+    pp.set_n_threads(n_threads);
 
     // change GPU setting
     err = cudaGetDeviceCount(&devices_count);
@@ -30,18 +30,54 @@ void CudaCommon::set(int N_BLOCKS, int N_THREADS, int process_idx)
         exit (1);
     }
 }
+int CudaCommon::get_n_blocks()
+{
+    return n_blocks;
+}
+int CudaCommon::get_n_threads()
+{
+    return n_threads;
+}
+void CudaCommon::set_n_blocks(int n_blocks)
+{
+    this->n_blocks = n_blocks;
+}
+void CudaCommon::set_n_threads(int n_threads)
+{
+    this->n_threads = n_threads;
+}
+void CudaCommon::set_idx(int process_idx)
+{
+    int devices_count;
+    cudaError_t err;
+
+    // change GPU setting
+    err = cudaGetDeviceCount(&devices_count);
+    if (err != cudaSuccess)
+    {
+        std::cout<< cudaGetErrorString(err) << std::endl;
+        exit (1);
+    }
+    err = cudaSetDevice(process_idx%devices_count);
+    if (err != cudaSuccess)
+    {
+        std::cout<< cudaGetErrorString(err) << std::endl;
+        exit (1);
+    }
+}
+
 void CudaCommon::display_info()
 {
     int device;
-    int devices_count;  
+    int devices_count;
     struct cudaDeviceProp prop;
     cudaError_t err;
-    
+
     CudaCommon &pp = CudaCommon::get_instance();
-    const int N_BLOCKS = pp.N_BLOCKS;
-    const int N_THREADS = pp.N_THREADS;
-     
-     // get GPU info
+    const int N_BLOCKS = pp.get_n_blocks();
+    const int N_THREADS = pp.get_n_threads();
+
+    // get GPU info
     err = cudaGetDeviceCount(&devices_count);
     if (err != cudaSuccess)
     {
@@ -63,7 +99,7 @@ void CudaCommon::display_info()
 
     std::cout<< "---------- CUDA Setting and Device Information ----------" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
-    
+
     std::cout<< "DeviceCount: " << devices_count << std::endl;
     printf( "Device %d : \t\t\t\t%s\n", device, prop.name );
     std::cout<< "Compute capability version : \t\t" << prop.major << "." << prop.minor << std::endl;
@@ -83,11 +119,11 @@ void CudaCommon::display_info()
 
     //if(prop.deviceOverlap)
     //{
-        //std::cout<< "Device overlap : \t\t\t Yes" << std::endl;
+    //std::cout<< "Device overlap : \t\t\t Yes" << std::endl;
     //}
     //else
     //{
-        //std::cout<< "Device overlap : \t\t\t No" << std::endl;
+    //std::cout<< "Device overlap : \t\t\t No" << std::endl;
     //}
 
     if (N_THREADS > prop.maxThreadsPerBlock)

@@ -48,7 +48,7 @@ KernelFactory::KernelFactory(std::string str_platform)
     this->str_platform = str_platform;
     
     bool valid = false;
-    for(int i=0; i<valid_strings.size(); i++){
+    for(unsigned int i=0; i<valid_strings.size(); i++){
         valid = valid || (str_platform == valid_strings[i]);
     }
     
@@ -61,7 +61,7 @@ KernelFactory::KernelFactory(std::string str_platform)
 PolymerChain* KernelFactory::create_polymer_chain(double f, int NN, double chi_n)
 {
     return new PolymerChain(f, NN, chi_n);
-};
+}
 SimulationBox* KernelFactory::create_simulation_box(
     std::array<int,3> nx, std::array<double,3>  lx)
 {
@@ -83,11 +83,11 @@ Pseudo* KernelFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
 #ifdef USE_CPU_MKL
     if (str_platform == "CPU_MKL")
-        return new CpuPseudo(sb, pc, new MklFFT(sb->nx));
+        return new CpuPseudo(sb, pc, new MklFFT(sb->get_nx()));
 #endif
 #ifdef USE_CPU_FFTW
     if (str_platform == "CPU_FFTW")
-        return new CpuPseudo(sb, pc, new FftwFFT(sb->nx));
+        return new CpuPseudo(sb, pc, new FftwFFT(sb->get_nx()));
 #endif
 #ifdef USE_CUDA
     if (str_platform == "CUDA")

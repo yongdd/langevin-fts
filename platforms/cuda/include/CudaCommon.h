@@ -11,22 +11,32 @@ typedef cufftDoubleComplex ftsComplex;
 class CudaCommon
 {
 private:
+
+    int n_blocks;
+    int n_threads;
+
     CudaCommon();
     ~CudaCommon();
     // Disable copy constructor
     CudaCommon(const CudaCommon &) = delete;
     CudaCommon& operator= (const CudaCommon &) = delete;
 public:
-    int N_BLOCKS;
-    int N_THREADS;
+
 
     static CudaCommon& get_instance()
     {
         static CudaCommon* instance = new CudaCommon();
         return *instance;
     };
-    static void set(int N_BLOCKS, int N_THREADS, int process_idx);
     static void display_info();
+    static void set(int n_blocks, int n_threads, int process_idx);
+    
+    int get_n_blocks();
+    int get_n_threads();
+    
+    void set_n_blocks(int n_blocks);
+    void set_n_threads(int n_threads);
+    void set_idx(int process_idx);
 };
 
 __global__ void multiReal(double* dst,

@@ -24,10 +24,43 @@ SimulationBox::~SimulationBox()
     delete[] dv;
 }
 
-    double dv_at(int i);
-double SimulationBox::dv_at(int i)
+double dv_at(int i);
+//----------------- get methods-------------------------------------
+double SimulationBox::get_dv(int i)
 {
     return dv[i];
+}
+int SimulationBox::get_nx(int i)
+{
+    return nx[i];
+}
+double SimulationBox::get_lx(int i)
+{
+    return lx[i];
+}
+double SimulationBox::get_dx(int i)
+{
+    return dx[i];
+}
+std::array<int,3> SimulationBox::get_nx()
+{
+    return {nx[0],nx[1],nx[2]};
+}
+std::array<double,3> SimulationBox::get_lx()
+{
+    return {lx[0],lx[1],lx[2]};
+}
+std::array<double,3> SimulationBox::get_dx()
+{
+    return {dx[0],dx[1],dx[2]};
+}
+int SimulationBox::get_MM()
+{
+    return MM;
+}
+double SimulationBox::get_volume()
+{
+    return volume;
 }
 //-----------------------------------------------------------
 // This method calculates inner product g and h

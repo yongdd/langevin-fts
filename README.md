@@ -44,22 +44,18 @@ I tested this program under following environments.
 
 # Compile
   `git clone https://github.com/yongdd/Langevin_FTS_Public.git`  
+  `cd Langevin_FTS_Public`  
   `mkdir build`  
-  `cd build`   
-  `cmake [options] ../`  
+  `cd build`  
+  `cmake ../`  
   `make`  
 
   Then copy `_langevinfts.so` and `langevinfts.py` to your folder.   
-  In python `from langevinfts import *`
+  In python, import the package by adding  `from langevinfts import *`.
 
 * * *
-   Available Options   
-+ To change compilers   
-  -DCMAKE_CXX_COMPILER=\[Your CXX Compiler, e.g. "icpc", "g++"\]   
-+ To use FFTW  
-   -DCMAKE_INCLUDE_PATH=\[FFTW_PATH\]/include -DCMAKE_FRAMEWORK_PATH=\[FFTW_PATH]/lib
-+ To use OpenMP  
-   -DUSE_OPENMP  
+  You can specify your building flags with following command.   
+  `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]  -DCMAKE_INCLUDE_PATH=[Your FFTW Path]/include -DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib -DUSE_OPENMP=yes`
 # User Guide
 
 # Developer Guide

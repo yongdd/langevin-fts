@@ -1,10 +1,16 @@
 import sys
+import os
 import time
 import numpy as np
 from langevinfts import *
-from lfts_torch import *
 
 # -------------- simulation parameters ------------
+
+# OpenMP environment variables
+os.environ["KMP_STACKSIZE"] = "1G"
+os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
@@ -49,36 +55,36 @@ am = factory.create_anderson_mixing(sb, am_n_comp,
 
 # standard deviation of normal noise
 langevin_sigma = np.sqrt(2*langevin_dt/ 
-    (sb.dx[0]*sb.dx[1]*sb.dx[2]*np.sqrt(langevin_nbar/NN)*NN**1.5))
+    (sb.get_dx(0)*sb.get_dx(1)*sb.get_dx(2)*np.sqrt(langevin_nbar/NN)*NN**1.5))
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
 print("Box Dimension: 3")
 print("Precision: 8")
-print("chi_n: %f, f: %f, NN: %d" % (pc.chi_n, pc.f, pc.NN) )
-print("Nx: %d, %d, %d" % (sb.nx[0], sb.nx[1], sb.nx[2]) )
-print("Lx: %f, %f, %f" % (sb.lx[0], sb.lx[1], sb.lx[2]) )
-print("dx: %f, %f, %f" % (sb.dx[0], sb.dx[1], sb.dx[2]) )
-print("Volume: %f" % (sb.volume) )
+print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_NN()) )
+print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
+print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
+print("Volume: %f" % (sb.get_volume()) )
 
 print("Invariant Polymerization Index" % () )
 #-------------- allocate array ------------
-w         = np.zeros([2, sb.MM], dtype=np.float64)
-w_out     = np.zeros([2, sb.MM], dtype=np.float64)
-w_diff    = np.zeros([2, sb.MM], dtype=np.float64)
-w_plus    = np.zeros(    sb.MM,  dtype=np.float64)
-w_minus   = np.zeros(    sb.MM,  dtype=np.float64)
-xi        = np.zeros(    sb.MM,  dtype=np.float64)
-q1_init   = np.zeros(    sb.MM,  dtype=np.float64)
-q2_init   = np.zeros(    sb.MM,  dtype=np.float64)
-phi_a     = np.zeros(    sb.MM,  dtype=np.float64)
-phi_b     = np.zeros(    sb.MM,  dtype=np.float64)
-phi_plus  = np.zeros(    sb.MM,  dtype=np.float64)
-phi_minus = np.zeros(    sb.MM,  dtype=np.float64)
+w         = np.zeros([2, sb.get_MM()], dtype=np.float64)
+w_out     = np.zeros([2, sb.get_MM()], dtype=np.float64)
+w_diff    = np.zeros([2, sb.get_MM()], dtype=np.float64)
+w_plus    = np.zeros(    sb.get_MM(),  dtype=np.float64)
+w_minus   = np.zeros(    sb.get_MM(),  dtype=np.float64)
+xi        = np.zeros(    sb.get_MM(),  dtype=np.float64)
+q1_init   = np.zeros(    sb.get_MM(),  dtype=np.float64)
+q2_init   = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_a     = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_b     = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_plus  = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_minus = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
 print("wminus and wplus are initialized to random")
-w_plus[:] = np.random.normal(0, langevin_sigma, sb.MM)
-w_minus[:] = np.random.normal(0, langevin_sigma, sb.MM)
+w_plus[:] = np.random.normal(0, langevin_sigma, sb.get_MM())
+w_minus[:] = np.random.normal(0, langevin_sigma, sb.get_MM())
 
 # keep the level of field value
 sb.zero_mean(w_plus);
@@ -107,7 +113,7 @@ for langevin_step in range(0, langevin_max_iter):
     w[0] = w_plus[:] + w_minus[:]
     w[1] = w_plus[:] - w_minus[:]
     QQ = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
-    normal_noise = np.random.normal(0, langevin_sigma, sb.MM)
+    normal_noise = np.random.normal(0, langevin_sigma, sb.get_MM())
     g_minus = phi_a[:]-phi_b[:] + 2/chi_n*w_minus[:]
     w_minus[:] -= g_minus*langevin_dt*NN + normal_noise[:]*NN
     sb.zero_mean(w_minus)
@@ -135,9 +141,9 @@ for langevin_step in range(0, langevin_max_iter):
         
         # calculate the total energy
         energy_old = energy_total
-        energy_total  = -np.log(QQ/sb.volume)
-        energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.volume
-        energy_total -= sb.integral(w_plus)/sb.volume
+        energy_total  = -np.log(QQ/sb.get_volume())
+        energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
+        energy_total -= sb.integral(w_plus)/sb.get_volume()
         
         # calculate output fields
         g_plus = 1.0*(phi_plus[:]-1.0)
@@ -146,17 +152,17 @@ for langevin_step in range(0, langevin_max_iter):
 
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
-        error_level = np.sqrt(sb.inner_product(phi_plus-1.0,phi_plus-1.0)/sb.volume)
+        error_level = np.sqrt(sb.inner_product(phi_plus-1.0,phi_plus-1.0)/sb.get_volume())
         
         # print iteration # and error levels and check the mass conservation
-        mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.volume - 1.0
+        mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
 
         # print iteration # and error levels
         if(verbose_level == 2 or
          verbose_level == 1 and
          (error_level < saddle_tolerance or saddle_iter == saddle_max_iter )):
             # check the mass conservation
-            mass_error = sb.integral(phi_plus)/sb.volume - 1.0
+            mass_error = sb.integral(phi_plus)/sb.get_volume() - 1.0
             print("%8d %12.3E %15.7E %13.9f %13.9f" %
                 (saddle_iter, mass_error, QQ, energy_total, error_level))
         # conditions to end the iteration

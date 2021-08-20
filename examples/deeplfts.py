@@ -16,11 +16,6 @@ class FCNet3D(torch.nn.Module):
         self.conv5 = torch.nn.Conv3d(128, 128, 3, padding=1, padding_mode='circular')
         self.conv6 = torch.nn.Conv3d(128,   1, 1)
 
-        #torch.nn.init.xavier_normal_(self.conv1.weight)
-        #torch.nn.init.xavier_normal_(self.conv2.weight)
-        #torch.nn.init.xavier_normal_(self.conv3.weight)
-        #torch.nn.init.xavier_normal_(self.conv4.weight)
-
     def forward(self, x):
         x = torch.nn.functional.relu(self.conv1(x))
         x = torch.nn.functional.relu(self.conv2(x))
@@ -43,7 +38,6 @@ class DeepLFTS:
         print(self.mx, self.my, self.mz)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        #self.device = torch.device('cuda:1')
 
         if (model_file == None):
             self.net = FCNet3D()
@@ -56,13 +50,6 @@ class DeepLFTS:
             self.model_is_trained = True
 
         self.net.to(self.device)
-
-        #model_comp = torch.load('backup/model_020000.pt', map_location=self.device)
-        #for key in self.net.state_dict().keys():
-        #    print(key, self.net.state_dict()[key].shape,
-        #       torch.std(self.net.state_dict()[key] - model_comp.state_dict()[key]))
-        #for param in self.net.parameters():
-        #    print(param)
 
         print(self.net)
 
@@ -88,7 +75,6 @@ class DeepLFTS:
         
         # train data
         for i in range(0,n_train):
-            #print(i, file_list[i])
             fields = np.load(file_list[i])
             # exchange field
             X_train[i,0,:,:,:] = fields[0,:,:,:] /self.scale  
@@ -145,44 +131,11 @@ class DeepLFTS:
 
         end_time = time.time()
         total_time = end_time - start_time
-        print ("training time: ", total_time)
+        print("training time: ", total_time)
         print("test_file_name: ", file_list[n_train])
         with torch.no_grad():
             Y_pred = self.net(torch.Tensor(X_test[0:1,:,:,:,:]).to(self.device)).cpu().detach().numpy()
-        '''
-        plt.figure()
-        plt.close()
-        plt.plot(losses)
-        plt.savefig(out_name + '_graph.png')
-        plt.show()
-
-        plt.figure()
-        plt.imshow(X_test[0,0,:,:,25])
-        plt.colorbar()
-        plt.savefig(out_name + '_wminus.png')
-
-        plt.figure()
-        plt.imshow(X_test[0,1,:,:,25])
-        plt.colorbar()
-        plt.savefig(out_name + '_mask.png')
-
-        plt.figure()
-        plt.imshow(Y_pred[0,0,:,:,25])
-        plt.colorbar()
-        plt.savefig(out_name + '_out.png')
-
-        plt.figure()
-        plt.imshow(Y_test[0,0,:,:,25])
-        plt.colorbar()
-        plt.savefig(out_name + '_true.png')
-        
-        plt.figure()
-        plt.imshow(Y_pred[0,0,:,:,25] - Y_test[0,0,:,:,25])
-        plt.colorbar()
-        plt.savefig(out_name + '_diff.png')
-        plt.close()
-        '''
-
+            
     def predict(self, w_minus) :
         self.net.eval()
         X_test  = np.zeros([1, 1, self.mx, self.my, self.mz])
@@ -198,5 +151,5 @@ def save_training_data(w_minus, w_plus, file_name) :
 
 if __name__ == "__main__":
     deeplfts = DeepLFTS( (50, 50, 50), True)
-    deeplfts.train_model("training_data", "model_test" )
+    #deeplfts.train_model("training_data", "model_test" )
     #torch.save(deeplfts.net, 'initial.pt')

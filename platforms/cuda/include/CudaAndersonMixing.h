@@ -33,8 +33,6 @@ public:
 class CudaAndersonMixing : public AndersonMixing
 {
 private:
-    int N_BLOCKS, N_THREADS;
-
     // a few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
     // arrays to calculate anderson mixing

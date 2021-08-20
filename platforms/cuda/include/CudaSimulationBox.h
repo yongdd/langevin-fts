@@ -11,7 +11,6 @@
 class CudaSimulationBox : public SimulationBox
 {
 private:
-    int N_BLOCKS, N_THREADS;
     double *sum, *sum_d; // temporal storage for multi_inner_product_gpu
 public:
     double *dv_d; // dV for GPU

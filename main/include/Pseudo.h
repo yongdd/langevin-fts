@@ -12,10 +12,9 @@ class Pseudo
 {
 protected:
     SimulationBox *sb;
-
-    int MM, MM_COMPLEX;
-    int NN, NNf;
-    double ds;
+    PolymerChain *pc;
+    
+    int MM_COMPLEX;
     double *expf, *expf_half;
     
     void init_gaussian_factor(

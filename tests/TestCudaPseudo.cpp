@@ -6,8 +6,6 @@
 
 int main()
 {
-    const double PI{3.14159265358979323846};
-
     const int II{5};
     const int JJ{4};
     const int KK{3};
@@ -22,8 +20,6 @@ int main()
 
     double QQ, error;
     double Lx, Ly, Lz, f;
-    double xfactor, yfactor, zfactor, temp;
-    int itemp, jtemp, ktemp, idx;
 
 //-------------- initialize ------------
     std::cout<< "Initializing" << std::endl;
