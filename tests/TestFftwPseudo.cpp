@@ -7,8 +7,6 @@
 
 int main()
 {
-    const double PI{3.14159265358979323846};
-
     const int II{5};
     const int JJ{4};
     const int KK{3};
@@ -23,8 +21,6 @@ int main()
 
     double QQ, error;
     double Lx, Ly, Lz, f;
-    double xfactor, yfactor, zfactor, temp;
-    int itemp, jtemp, ktemp, idx;
 
 //-------------- initialize ------------
     std::cout<< "Initializing" << std::endl;
@@ -77,7 +73,7 @@ int main()
     //wb[i] = 0.0;
     //}
 
-    CpuPseudo pseudo(&sb, &pc, new FftwFFT(sb.nx));
+    CpuPseudo pseudo(&sb, &pc, new FftwFFT(sb.get_nx()));
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)

@@ -6,15 +6,12 @@ Pseudo::Pseudo(
     PolymerChain *pc)
 {
     this->sb = sb;
-    this->MM         = sb->MM;
-    this->MM_COMPLEX = sb->nx[0]*sb->nx[1]*(sb->nx[2]/2+1);
-    this->NN = pc->NN;
-    this->NNf= pc->NNf;
-    this->ds = pc->ds;
-
+    this->pc = pc;
+    this->MM_COMPLEX = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
+    
     this->expf = new double[MM_COMPLEX];
     this->expf_half = new double[MM_COMPLEX];
-    init_gaussian_factor(sb->nx, sb->dx, pc->ds);
+    init_gaussian_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
 Pseudo::~Pseudo()
 {

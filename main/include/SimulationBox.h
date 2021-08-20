@@ -10,9 +10,7 @@
 
 class SimulationBox
 {
-private:
-public:
-
+protected:
     std::array<int,3> nx;  // the number of grid in each direction
     std::array<double,3> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::array<double,3> dx;  // grid interval in each direction
@@ -20,6 +18,7 @@ public:
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
 
+public:
     SimulationBox(
         std::array<int,3> nx, std::array<double,3> lx);
     SimulationBox(int *nx, double *lx)
@@ -29,12 +28,21 @@ public:
     }) {};
     virtual ~SimulationBox();
 
-    double dv_at(int i);
+    double get_dv(int i);
+    int get_nx(int i);    
+    double get_lx(int i);
+    double get_dx(int i);
+    std::array<int,3> get_nx();    
+    std::array<double,3> get_lx();
+    std::array<double,3> get_dx();
+    int get_MM();
+    double get_volume();
+
     double integral(double *g);
     double inner_product(double *g, double *h);
     double multi_inner_product(int n_comp, double *g, double *h);
     void zero_mean(double *g);
-    
+
     // Method for SWIG
     double integral(double *g, int len_g)
     {
@@ -44,7 +52,7 @@ public:
     {
         return inner_product(g, h);
     }
-    
+
     void zero_mean(double *g, int len_g)
     {
         zero_mean(g);

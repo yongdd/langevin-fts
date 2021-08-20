@@ -1,10 +1,9 @@
 
+#include <iostream>
 #include <iomanip>
 #include <cmath>
 #include <string>
 #include <chrono>
-#include <sstream>
-#include <fstream>
 
 #include "ParamParser.h"
 #include "PolymerChain.h"
@@ -122,34 +121,31 @@ int main(int argc, char **argv)
     error_level = 1.0e20;
 
     // -------------- print simulation parameters ------------
-    //ss << std::setw(4) << std::setfill('0') << std::lround(chi_n*100);
-    //print_file_name = "print_" + ss.str() + ".txt" ;
-    //print_stream->open(print_file_name, std::ios_base::app);
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;
 
     std::cout << "Box Dimension: 3" << std::endl;
     std::cout << "Precision: 8" << std::endl;
-    std::cout << "chi_n, f, NN: " << pc->chi_n << " " << pc->f << " " << pc->NN << std::endl;
-    std::cout << "Nx: " << sb->nx[0] << " " << sb->nx[1] << " " << sb->nx[2] << std::endl;
-    std::cout << "Lx: " << sb->lx[0] << " " << sb->lx[1] << " " << sb->lx[2] << std::endl;
-    std::cout << "dx: " << sb->dx[0] << " " << sb->dx[1] << " " << sb->dx[2] << std::endl;
+    std::cout << "chi_n, f, NN: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_NN() << std::endl;
+    std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
+    std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
+    std::cout << "dx: " << sb->get_dx(0) << " " << sb->get_dx(1) << " " << sb->get_dx(2) << std::endl;
     sum = 0.0;
-    for(int i=0; i<sb->MM; i++)
-        sum += sb->dv[i];
-    std::cout << "volume, sum(dv):  " << sb->volume << " " << sum << std::endl;
+    for(int i=0; i<sb->get_MM(); i++)
+        sum += sb->get_dv(i);
+    std::cout << "volume, sum(dv):  " << sb->get_volume() << " " << sum << std::endl;
 
     //-------------- allocate array ------------
-    w       = new double[sb->MM*2];
-    w_out   = new double[sb->MM*2];
-    w_diff  = new double[sb->MM*2];
-    xi      = new double[sb->MM];
-    phia    = new double[sb->MM];
-    phib    = new double[sb->MM];
-    phitot  = new double[sb->MM];
-    w_plus  = new double[sb->MM];
-    w_minus = new double[sb->MM];
-    q1_init = new double[sb->MM];
-    q2_init = new double[sb->MM];
+    w       = new double[sb->get_MM()*2];
+    w_out   = new double[sb->get_MM()*2];
+    w_diff  = new double[sb->get_MM()*2];
+    xi      = new double[sb->get_MM()];
+    phia    = new double[sb->get_MM()];
+    phib    = new double[sb->get_MM()];
+    phitot  = new double[sb->get_MM()];
+    w_plus  = new double[sb->get_MM()];
+    w_minus = new double[sb->get_MM()];
+    q1_init = new double[sb->get_MM()];
+    q2_init = new double[sb->get_MM()];
 
     //-------------- setup fields ------------
     //call random_number(phia)
@@ -160,28 +156,28 @@ int main(int argc, char **argv)
     //   end do
 
     std::cout<< "wminus and wplus are initialized to a given test fields." << std::endl;
-    for(int i=0; i<sb->nx[0]; i++)
-        for(int j=0; j<sb->nx[1]; j++)
-            for(int k=0; k<sb->nx[2]; k++)
+    for(int i=0; i<sb->get_nx(0); i++)
+        for(int j=0; j<sb->get_nx(1); j++)
+            for(int k=0; k<sb->get_nx(2); k++)
             {
-                idx = i*sb->nx[1]*sb->nx[2] + j*sb->nx[2] + k;
+                idx = i*sb->get_nx(1)*sb->get_nx(2) + j*sb->get_nx(2) + k;
                 phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
             }
 
-    for(int i=0; i<sb->MM; i++)
+    for(int i=0; i<sb->get_MM(); i++)
     {
         phib[i] = 1.0 - phia[i];
         w[i]          = chi_n*phib[i];
-        w[i + sb->MM] = chi_n*phia[i];
+        w[i + sb->get_MM()] = chi_n*phia[i];
     }
 
     // keep the level of field value
     sb->zero_mean(&w[0]);
-    sb->zero_mean(&w[sb->MM]);
+    sb->zero_mean(&w[sb->get_MM()]);
 
     // free end initial condition. q1 is q and q2 is qdagger.
     // q1 starts from A end and q2 starts from B end.
-    for(int i=0; i<sb->MM; i++)
+    for(int i=0; i<sb->get_MM(); i++)
     {
         q1_init[i] = 1.0;
         q2_init[i] = 1.0;
@@ -196,40 +192,40 @@ int main(int argc, char **argv)
     for(int iter=0; iter<maxiter; iter++)
     {
         // for the given fields find the polymer statistics
-        pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->MM],QQ);
+        pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->get_MM()],QQ);
 
         // calculate the total energy
         energy_old = energy_total;
-        for(int i=0; i<sb->MM; i++)
+        for(int i=0; i<sb->get_MM(); i++)
         {
-            w_minus[i] = (w[i]-w[i + sb->MM])/2;
-            w_plus[i]  = (w[i]+w[i + sb->MM])/2;
+            w_minus[i] = (w[i]-w[i + sb->get_MM()])/2;
+            w_plus[i]  = (w[i]+w[i + sb->get_MM()])/2;
         }
-        energy_total  = -log(QQ/sb->volume);
-        energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->volume;
-        energy_total += sb->integral(w_plus)/sb->volume;
-        //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->volume;
+        energy_total  = -log(QQ/sb->get_volume());
+        energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->get_volume();
+        energy_total += sb->integral(w_plus)/sb->get_volume();
+        //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->get_volume();
 
-        for(int i=0; i<sb->MM; i++)
+        for(int i=0; i<sb->get_MM(); i++)
         {
             // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-            xi[i] = 0.5*(w[i]+w[i+sb->MM]-chi_n);
+            xi[i] = 0.5*(w[i]+w[i+sb->get_MM()]-chi_n);
             // calculate output fields
             w_out[i]        = chi_n*phib[i] + xi[i];
-            w_out[i+sb->MM] = chi_n*phia[i] + xi[i];
+            w_out[i+sb->get_MM()] = chi_n*phia[i] + xi[i];
         }
         sb->zero_mean(&w_out[0]);
-        sb->zero_mean(&w_out[sb->MM]);
+        sb->zero_mean(&w_out[sb->get_MM()]);
 
         // error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level;
-        for(int i=0; i<2*sb->MM; i++)
+        for(int i=0; i<2*sb->get_MM(); i++)
             w_diff[i] = w_out[i]- w[i];
         error_level = sqrt(sb->multi_inner_product(2,w_diff,w_diff)/
                            (sb->multi_inner_product(2,w,w)+1.0));
 
         // print iteration # and error levels and check the mass conservation
-        sum = (sb->integral(phia) + sb->integral(phib))/sb->volume - 1.0;
+        sum = (sb->integral(phia) + sb->integral(phib))/sb->get_volume() - 1.0;
         std::cout<< std::setw(8) << iter;
         std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
         std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
@@ -241,15 +237,13 @@ int main(int argc, char **argv)
         // calculte new fields using simple and Anderson mixing
         am->caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
     }
+
+    
     // estimate execution time
     chrono_end = std::chrono::system_clock::now();
     time_duration = chrono_end - chrono_start;
     std::cout<< "total time, time per step: ";
     std::cout<< time_duration.count() << " " << time_duration.count()/maxiter << std::endl;
-    //------------- write the final output -------------
-    //write (filename, '( "fields_", I0.6, "_", I0.4, "_", I0.7, ".dat")' ) &
-    //nint(chiW), nint(chiN*100), nint(Lx*1000)
-    //call write_data(filename)
 
     //------------- finalize -------------
     delete[] w;
@@ -271,37 +265,9 @@ int main(int argc, char **argv)
     delete factory;
 
     pp.display_usage_info();
+    
+    if (std::abs(error_level-0.001343652) > 1e-7)
+        return -1;
 
-    /*
-    !------------- write the final output -------------
-    ! this subroutine write the final output
-    subroutine write_data(filename)
-    character (len=*), intent(in) :: filename
-    integer :: i, j, k
-    open(30,file=filename,status='unknown')
-    write(30,'(A,I8)') "iter : ", iter
-    write(30,'(A,F8.3)') "chain.chiN : ", chiN
-    write(30,'(A,F8.3)') "chain.a_fraction : ", f
-    write(30,'(A,F8.3)') "chain.surface_interaction : ", chiW
-    write(30,'(A,I8)')   "chain.contour_step : ",  NN
-    write(30,'(A,I8)')   "chain.contour_step_A : ", NNf
-    write(30,'(A,3I8)')   "geometry.grids_lower_bound : ", x_lo, y_lo, z_lo
-    write(30,'(A,3I8)')   "geometry.grids_upper_bound : ", x_hi, y_hi, z_hi
-    write(30,'(A,3F8.3)') "geometry.box_size : ", Lx, Ly, Lz
-    write(30,'(A,F13.9)') "energy_total : ", energy_total
-    write(30,'(A,F13.9)') "error_level : ", error_level
-
-    write(30,*) " "
-    write(30,*) "DATA      # w_a, phi_a, w_b, phi_b"
-    do i=x_lo,x_hi
-    do j=y_lo,y_hi
-    do k=z_lo,z_hi
-      write(30,'(5F12.6)') w(i,j,k,1), phia(i,j,k), w(i,j,k,2), phib(i,j,k), phia(i,j,k)+phib(i,j,k)
-    end do
-    end do
-    end do
-    close(30)
-    end subroutine
-    end module scft
-    */
+    return 0;
 }

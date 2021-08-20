@@ -13,7 +13,6 @@
 class MklFFT : public FFT
 {
 private:
-
     double fft_normal_factor; //nomalization factor FFT
     int MM; // the number of total grids
     // pointers for forward and backward transform

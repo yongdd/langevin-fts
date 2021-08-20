@@ -15,14 +15,23 @@ SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 #---------- FTS_LIBRARIES -----------
 
+IF(CMAKE_BUILD_TYPE STREQUAL Debug)
+    IF(MSVC)
+        ADD_COMPILE_OPTIONS(/W4 /WX)
+    ELSE()
+        ADD_COMPILE_OPTIONS(-Wall -Wextra)
+    ENDIF()
+ENDIF()
+
+
 #  OpenMP
 IF(USE_OPENMP)
 	FIND_PACKAGE(OpenMP QUIET)
-	IF (OPENMP_FOUND)
-		SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-		SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-		SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-	ENDIF()
+    IF (OPENMP_FOUND)
+        SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+        SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+        SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    ENDIF()
 ENDIF()
 
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/main/include/)
@@ -32,29 +41,29 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/platforms/cuda/include/)
 #  Common Files
 
 ADD_LIBRARY(common
-	main/src/ParamParser.cpp
-	main/src/PolymerChain.cpp
-	main/src/SimulationBox.cpp
-	main/src/CircularBuffer.cpp
-	main/src/Pseudo.cpp
-	main/src/AndersonMixing.cpp
-	main/src/RandomGaussian.cpp
-	)
+    main/src/ParamParser.cpp
+    main/src/PolymerChain.cpp
+    main/src/SimulationBox.cpp
+    main/src/CircularBuffer.cpp
+    main/src/Pseudo.cpp
+    main/src/AndersonMixing.cpp
+    main/src/RandomGaussian.cpp
+    )
 
 #  Intel MKL
 FIND_PACKAGE(MKL QUIET)
 IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
-	SET(BUILD_CPU_MKL_LIB TRUE)
+    SET(BUILD_CPU_MKL_LIB TRUE)
 ELSE()
-	SET(BUILD_CPU_MKL_LIB FALSE)
+    SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
 IF(BUILD_CPU_MKL_LIB)
-	ADD_DEFINITIONS(-DUSE_CPU_MKL)
-	ADD_LIBRARY(cpu-mkl
-        platforms/cpu/src/MklFFT.cpp
-	platforms/cpu/src/CpuPseudo.cpp
-        platforms/cpu/src/CpuAndersonMixing.cpp
-	)
+    ADD_DEFINITIONS(-DUSE_CPU_MKL)
+    ADD_LIBRARY(cpu-mkl
+    	platforms/cpu/src/MklFFT.cpp
+    	platforms/cpu/src/CpuPseudo.cpp
+    	platforms/cpu/src/CpuAndersonMixing.cpp
+    	)
 ENDIF()
 
 #  FFTW 
@@ -63,29 +72,29 @@ FIND_LIBRARY(FFTW_LIBRARY NAMES fftw3 PATHS /opt/fftw/3.3.8/double/lib)
 MESSAGE("${FFTW_INCLUDE}")
 MESSAGE("${FFTW_LIBRARY}")
 IF(FFTW_INCLUDE AND FFTW_LIBRARY)
-	SET(BUILD_CPU_FFTW_LIB TRUE)
+    SET(BUILD_CPU_FFTW_LIB TRUE)
 ELSE()
-	SET(BUILD_CPU_FFTW_LIB FALSE)
+    SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
 IF(BUILD_CPU_FFTW_LIB)
-	ADD_DEFINITIONS(-DUSE_CPU_FFTW)
-        ADD_LIBRARY(cpu-fftw
-	platforms/cpu/src/FftwFFT.cpp
-	platforms/cpu/src/CpuPseudo.cpp
-        platforms/cpu/src/CpuAndersonMixing.cpp
-        )
+    ADD_DEFINITIONS(-DUSE_CPU_FFTW)
+    ADD_LIBRARY(cpu-fftw
+    	platforms/cpu/src/FftwFFT.cpp
+    	platforms/cpu/src/CpuPseudo.cpp
+    	platforms/cpu/src/CpuAndersonMixing.cpp
+    	)
 ENDIF()
 
 # NVIDIA CUDA
 FIND_PACKAGE(CUDAToolkit REQUIRED)
 IF(CUDAToolkit_FOUND)
-	ADD_DEFINITIONS(-DUSE_CUDA)
-	ADD_LIBRARY(cuda
+    ADD_DEFINITIONS(-DUSE_CUDA)
+    ADD_LIBRARY(cuda
         platforms/cuda/src/CudaCommon.cu
         platforms/cuda/src/CudaSimulationBox.cu
         platforms/cuda/src/CudaPseudo.cu
         platforms/cuda/src/CudaAndersonMixing.cu
-	)
+    	)
 ENDIF()
 
 IF( (NOT BUILD_CPU_MKL_LIB) AND
@@ -96,8 +105,8 @@ ENDIF()
 
 #  Factory
 ADD_LIBRARY(factory
-	main/src/KernelFactory.cpp
-        )
+    main/src/KernelFactory.cpp
+    )
 
 #---------- Python Wrapper -----------
 
@@ -129,7 +138,7 @@ SWIG_LINK_LIBRARIES(langevinfts
         $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,${FFTW_LIBRARY},>
         common)
 
-#---------- TEST -----------
+#---------- Test -----------
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)

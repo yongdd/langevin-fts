@@ -47,9 +47,6 @@ CudaAndersonMixing::CudaAndersonMixing(
                     max_anderson, start_anderson_error,
                     mix_min,  mix_init)
 {
-    this->N_BLOCKS = CudaCommon::get_instance().N_BLOCKS;
-    this->N_THREADS = CudaCommon::get_instance().N_THREADS;
-
     // number of anderson mixing steps, increases from 0 to max_anderson
     n_anderson = -1;
 
@@ -109,6 +106,9 @@ void CudaAndersonMixing::caculate_new_fields(
     double old_error_level,
     double error_level)
 {
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    
     double* wout_hist1_d;
     double* wout_hist2_d;
 

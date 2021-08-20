@@ -4,8 +4,7 @@ AndersonMixing::AndersonMixing(
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init)
 {
-    this->MM = sb->MM;
-    this->TOTAL_MM = num_components*(sb->MM);
+    this->TOTAL_MM = num_components*(sb->get_MM());
     
     this->sb = sb;
     this->num_components = num_components;

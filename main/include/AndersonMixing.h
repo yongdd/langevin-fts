@@ -12,7 +12,7 @@ class AndersonMixing
 protected:
     SimulationBox *sb;
     
-    int num_components, MM, TOTAL_MM;
+    int num_components, TOTAL_MM;
     double start_anderson_error, mix_min, mix, mix_init;
     int max_anderson, n_anderson;
 

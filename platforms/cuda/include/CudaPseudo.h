@@ -14,10 +14,6 @@
 class CudaPseudo : public Pseudo
 {
 private:
-
-    int N_BLOCKS;
-    int N_THREADS;
-
     cufftHandle plan_for, plan_bak;
 
     double *temp_d, *temp_arr;
@@ -35,7 +31,6 @@ private:
                  double *qin2_d, double *qout2_d,
                  double *expdw1_d, double *expdw1_half_d,
                  double *expdw2_d, double *expdw2_half_d);
-
 public:
 
     CudaPseudo(SimulationBox *sb,
