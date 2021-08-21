@@ -81,7 +81,7 @@ void CpuAndersonMixing::caculate_new_fields(
         /* evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper */
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiff_dots[i] = sb->multi_inner_product(num_components, w_diff, cb_wdiff_hist->get_array(n_anderson-i));
+            wdiff_dots[i] = sb->multi_inner_product(num_components, w_diff, cb_wdiff_hist->get_array(i));
         }
         cb_wdiff_dots->insert(wdiff_dots);
     }
@@ -105,15 +105,15 @@ void CpuAndersonMixing::caculate_new_fields(
         // calculate Unm and Vn
         for(int i=0; i<n_anderson; i++)
         {
-            v_n[i] = cb_wdiff_dots->get(n_anderson, 0)
-                     - cb_wdiff_dots->get(n_anderson, i+1);
+            v_n[i] = cb_wdiff_dots->get(0, 0)
+                     - cb_wdiff_dots->get(0, i+1);
 
             for(int j=0; j<n_anderson; j++)
             {
-                u_nm[i][j] = cb_wdiff_dots->get(n_anderson, 0)
-                             - cb_wdiff_dots->get(n_anderson, i+1)
-                             - cb_wdiff_dots->get(n_anderson, j+1)
-                             + cb_wdiff_dots->get(std::max(n_anderson-i-1, n_anderson-j-1),
+                u_nm[i][j] = cb_wdiff_dots->get(0, 0)
+                             - cb_wdiff_dots->get(0, i+1)
+                             - cb_wdiff_dots->get(0, j+1)
+                             + cb_wdiff_dots->get(std::min(i+1, j+1),
                                                   std::abs(i-j));
             }
         }
@@ -122,12 +122,12 @@ void CpuAndersonMixing::caculate_new_fields(
         //exit(-1);
 
         // calculate the new field
-        wout_hist1 = cb_wout_hist->get_array(n_anderson);
+        wout_hist1 = cb_wout_hist->get_array(0);
         for(int i=0; i<TOTAL_MM; i++)
             w[i] = wout_hist1[i];
         for(int i=0; i<n_anderson; i++)
         {
-            wout_hist2 = cb_wout_hist->get_array(n_anderson-i-1);
+            wout_hist2 = cb_wout_hist->get_array(i+1);
             for(int j=0; j<TOTAL_MM; j++)
                 w[j] += a_n[i]*(wout_hist2[j] - wout_hist1[j]);
         }
