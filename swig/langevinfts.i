@@ -8,6 +8,7 @@
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "KernelFactory.h"
+#include "RandomGaussian.h"
 %}
 
 %include "std_string.i"
@@ -42,5 +43,6 @@ import_array();
 %include "SimulationBox.h"
 %include "Pseudo.h"
 %include "AndersonMixing.h"
+%include "RandomGaussian.h"
 %include "KernelFactory.h"
 

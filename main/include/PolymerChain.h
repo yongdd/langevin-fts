@@ -17,10 +17,10 @@ private:
     double chi_n; // chi N, interaction parameter between A and B Monomers
 
 public:
-    const std::string type = "Gaussian"; 
-    // continous standard Gaussian chain
-    // "BS-N: discrete bead-spring N bonds model
-    // "BS-N-1: discrete bead-spring N-1 bonds model
+    //const std::string type = "Gaussian"; 
+    // Gaussian: continous standard Gaussian model
+    // Discrete: discrete bead-spring model
+    
     PolymerChain(double f, int NN, double chi_n);
     ~PolymerChain() {};
 

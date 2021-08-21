@@ -54,9 +54,10 @@ I tested this program under following environments.
   `make`  
 * * *
   You can specify your building flags with following command.   
-  `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]\\` 
-  `-DCMAKE_INCLUDE_PATH=[Your FFTW Path]/include\\`  
-  `-DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib -DUSE_OPENMP=yes`
+  `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"] \`   
+  `-DCMAKE_INCLUDE_PATH=[Your FFTW Path]/include \`  
+  `-DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib \`  
+  `-DUSE_OPENMP=yes`
 * * *
   Then copy `_langevinfts.so` and `langevinfts.py` to your folder.
   In python, import the package by adding  `from langevinfts import *`.

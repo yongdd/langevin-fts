@@ -105,15 +105,16 @@ void CpuAndersonMixing::caculate_new_fields(
         // calculate Unm and Vn
         for(int i=0; i<n_anderson; i++)
         {
-            v_n[i] = cb_wdiff_dots->get_sym(n_anderson, n_anderson)
-                     - cb_wdiff_dots->get_sym(n_anderson, n_anderson-i-1);
+            v_n[i] = cb_wdiff_dots->get(n_anderson, 0)
+                     - cb_wdiff_dots->get(n_anderson, i+1);
 
             for(int j=0; j<n_anderson; j++)
             {
-                u_nm[i][j] = cb_wdiff_dots->get_sym(n_anderson, n_anderson)
-                             - cb_wdiff_dots->get_sym(n_anderson, n_anderson-i-1)
-                             - cb_wdiff_dots->get_sym(n_anderson-j-1, n_anderson)
-                             + cb_wdiff_dots->get_sym(n_anderson-i-1, n_anderson-j-1);
+                u_nm[i][j] = cb_wdiff_dots->get(n_anderson, 0)
+                             - cb_wdiff_dots->get(n_anderson, i+1)
+                             - cb_wdiff_dots->get(n_anderson, j+1)
+                             + cb_wdiff_dots->get(std::max(n_anderson-i-1, n_anderson-j-1),
+                                                  std::abs(i-j));
             }
         }
         find_an(u_nm, v_n, a_n, n_anderson);

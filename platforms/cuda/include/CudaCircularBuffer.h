@@ -1,27 +1,27 @@
+#ifndef CUDA_CIRCULAR_BUFFER_H_
+#define CUDA_CIRCULAR_BUFFER_H_
+
 /*-----------------------------------------------------------------
-! A circular buffer is a data structure that uses a single,
-! fixed-size buffer as if it were connected end-to-end.
-! Each elements are 1-dmensional real array.
+! A circular buffer stores data in the GPU memory.
 !-----------------------------------------------------------------*/
-
-#ifndef CIRCULAR_BUFFER_H_
-#define CIRCULAR_BUFFER_H_
-
-class CircularBuffer
+class CudaCircularBuffer
 {
 private:
     int length; // maximum number of elements
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double* elems;
+    double* elems_d;
 
 public:
-    CircularBuffer(int length, int width);
-    ~CircularBuffer();
+    CudaCircularBuffer(int length, int width);
+    ~CudaCircularBuffer();
     void reset();
     void insert(double* new_arr);
     double* get_array(int n);
-    double get(int n, int m);
 };
+
 #endif
+
+
+
