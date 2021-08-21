@@ -1,7 +1,7 @@
 #include <cmath>
-#include "CpuPseudo.h"
+#include "CpuPseudoGaussian.h"
 
-CpuPseudo::CpuPseudo(
+CpuPseudoGaussian::CpuPseudoGaussian(
     SimulationBox *sb,
     PolymerChain *pc, FFT *fft)
     : Pseudo(sb, pc)
@@ -13,13 +13,13 @@ CpuPseudo::CpuPseudo(
     this->q1 = new double[MM*(NN+1)];
     this->q2 = new double[MM*(NN+1)];
 }
-CpuPseudo::~CpuPseudo()
+CpuPseudoGaussian::~CpuPseudoGaussian()
 {
     delete fft;
     delete[] q1;
     delete[] q2;
 }
-void CpuPseudo::find_phi(double *phia,  double *phib,
+void CpuPseudoGaussian::find_phi(double *phia,  double *phib,
                       double *q1_init, double *q2_init,
                       double *wa, double *wb, double &QQ)
 {
@@ -100,7 +100,7 @@ void CpuPseudo::find_phi(double *phia,  double *phib,
         phib[i] *= sb->get_volume()/QQ/NN;
     }
 }
-void CpuPseudo::onestep(double *qin, double *qout,
+void CpuPseudoGaussian::onestep(double *qin, double *qout,
                      double *expdw, double *expdw_half)
 {
     const int MM = sb->get_MM();
@@ -161,7 +161,7 @@ void CpuPseudo::onestep(double *qin, double *qout,
 * This is made for debugging and testing.
 * Do NOT this at main progarams.
 * */
-void CpuPseudo::get_partition(double *q1_out,  double *q2_out, int n)
+void CpuPseudoGaussian::get_partition(double *q1_out,  double *q2_out, int n)
 {
     const int MM = sb->get_MM();
     const int NN = pc->get_NN();

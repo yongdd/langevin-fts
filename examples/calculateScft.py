@@ -9,7 +9,7 @@ from langevinfts import *
 # OpenMP environment variables 
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
@@ -37,7 +37,7 @@ factory = KernelFactory("CUDA")
 # for the dynamic binding
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc)
+pseudo = factory.create_pseudo(sb, pc, "Gaussian") ## ["Gaussian", "Discrete"]
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 

@@ -1,8 +1,8 @@
 #include <complex>
-#include "CudaPseudo.h"
+#include "CudaPseudoGaussian.h"
 #include "CudaSimulationBox.h"
 
-CudaPseudo::CudaPseudo(
+CudaPseudoGaussian::CudaPseudoGaussian(
     SimulationBox *sb,
     PolymerChain *pc)
     : Pseudo(sb, pc)
@@ -44,7 +44,7 @@ CudaPseudo::CudaPseudo(
     cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
     cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
 }
-CudaPseudo::~CudaPseudo()
+CudaPseudoGaussian::~CudaPseudoGaussian()
 {
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
@@ -69,7 +69,7 @@ CudaPseudo::~CudaPseudo()
     
     delete[] temp_arr;
 }
-void CudaPseudo::find_phi(double *phia,  double *phib,
+void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,
                           double *wa, double *wb, double &QQ)
 {
@@ -142,39 +142,25 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
         }
     }
 
-    // Calculate Segment Density
-    // dvment concentration. only half contribution from the end
+    // calculate Segment Density
+    // segment concentration. only half contribution from the end
     multiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[MM*NN], &q2_d[0], 0.5, MM);
-    //printf("NN, %5.3f\n", 1.0/3.0);
-    // the B block dvment
+    // the B block segment
     for(int n=NN-1; n>NN_A; n--)
-    {
-        //printf("%d, %5.3f\n", n, 2.0*((n % 2) +1)/3.0);
         addMultiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[MM*n], &q2_d[MM*(NN-n)], 1.0, MM);
-    }
 
     // the junction is half A and half B
     multiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[MM*NN_A], &q2_d[MM*(NN_B)], 0.5, MM);
     linComb<<<N_BLOCKS, N_THREADS>>>(phib_d, 1.0, phib_d, 1.0, phia_d, MM);
 
-    //printf("%d, %5.3f\n", NN_A, 1.0/3.0);
-    //calculates the total partition function
-    multiReal<<<N_BLOCKS, N_THREADS>>>(temp_d, phia_d, ((CudaSimulationBox *)sb)->dv_d, 2.0, MM);
-    cudaMemcpy(temp_arr, temp_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
-    QQ = 0.0;
-    for(int i=0; i<MM; i++)
-    {
-        QQ = QQ + temp_arr[i];
-    }
+    // calculates the total partition function
+    QQ = 2*((CudaSimulationBox *)sb)->integral_gpu(phia_d);
 
-    // the A block dvment
+    // the A block segment
     for(int n=NN_A-1; n>0; n--)
-    {
-        //printf("%d, %5.3f\n", n, 2.0*((n % 2) +1)/3.0);
         addMultiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[MM*n], &q2_d[MM*(NN-n)], 1.0, MM);
-    }
+        
     // only half contribution from the end
-    //printf("0, %5.3f\n", 1.0/3.0);
     addMultiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[0], &q2_d[MM*NN], 0.5, MM);
 
     // normalize the concentration
@@ -188,7 +174,7 @@ void CudaPseudo::find_phi(double *phia,  double *phib,
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, we use FFT Batch.
-void CudaPseudo::onestep(double *qin1_d, double *qout1_d,
+void CudaPseudoGaussian::onestep(double *qin1_d, double *qout1_d,
                          double *qin2_d, double *qout2_d,
                          double *expdw1_d, double *expdw1_half_d,
                          double *expdw2_d, double *expdw2_half_d)
@@ -256,7 +242,7 @@ void CudaPseudo::onestep(double *qin1_d, double *qout1_d,
 // This is made for debugging and testing.
 // Do NOT this at main progarams.
 
-void CudaPseudo::get_partition(double *q1_out,  double *q2_out, int n)
+void CudaPseudoGaussian::get_partition(double *q1_out,  double *q2_out, int n)
 {
     const int MM = sb->get_MM();
     cudaMemcpy(q1_out, &q1_d[n*MM], sizeof(double)*MM,cudaMemcpyDeviceToHost);

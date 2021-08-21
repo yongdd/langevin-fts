@@ -162,6 +162,34 @@ __global__ void multiReal(double* dst,
     }
 }
 
+__global__ void mutipleMultiReal(int n_comp,
+                          double* dst,
+                          double* src1,
+                          double* src2,
+                          double  a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {  
+        dst[i] = a * src1[i] * src2[i];
+        for(int n = 1; n < n_comp; n++)
+            dst[i] += a * src1[i+n*M] * src2[i+n*M];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void divideReal(double* dst,
+                          double* src1,
+                          double* src2,
+                          double  a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = a * src1[i]/src2[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
 __global__ void addMultiReal(double* dst,
                              double* src1,
                              double* src2,

@@ -2,15 +2,18 @@
 #include <array>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #include "SimulationBox.h"
-#include "CpuPseudo.h"
+#include "CpuPseudoGaussian.h"
+#include "CpuPseudoDiscrete.h"
 #include "MklFFT.h"
 #include "FftwFFT.h"
 #include "CpuAndersonMixing.h"
 
 #include "CudaSimulationBox.h"
-#include "CudaPseudo.h"
+#include "CudaPseudoGaussian.h"
+#include "CudaPseudoDiscrete.h"
 #include "CudaAndersonMixing.h"
 
 #include "KernelFactory.h"
@@ -79,19 +82,33 @@ SimulationBox* KernelFactory::create_simulation_box(
     return NULL;
 #endif
 }
-Pseudo* KernelFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
+Pseudo* KernelFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::string str_model)
 {
+    std::transform(str_model.begin(), str_model.end(), str_model.begin(),
+    [](unsigned char c){ return std::tolower(c); });
 #ifdef USE_CPU_MKL
-    if (str_platform == "CPU_MKL")
-        return new CpuPseudo(sb, pc, new MklFFT(sb->get_nx()));
+    if (str_platform == "CPU_MKL"){
+        if ( str_model == "gaussian" )
+            return new CpuPseudoGaussian(sb, pc, new MklFFT(sb->get_nx()));
+        else if ( str_model == "discrete" )
+            return new CpuPseudoDiscrete(sb, pc, new MklFFT(sb->get_nx()));
+    }
 #endif
 #ifdef USE_CPU_FFTW
-    if (str_platform == "CPU_FFTW")
-        return new CpuPseudo(sb, pc, new FftwFFT(sb->get_nx()));
+    if (str_platform == "CPU_FFTW"){
+        if ( str_model == "gaussian" )
+            return new CpuPseudoGaussian(sb, pc, new FftwFFT(sb->get_nx()));
+        else if ( str_model == "discrete" )
+            return new CpuPseudoDiscrete(sb, pc, new FftwFFT(sb->get_nx()));
+    }
 #endif
 #ifdef USE_CUDA
-    if (str_platform == "CUDA")
-        return new CudaPseudo(sb, pc);
+    if (str_platform == "CUDA"){
+        if ( str_model == "gaussian" )
+            return new CudaPseudoGaussian(sb, pc);
+        else if ( str_model == "discrete" )
+            return new CudaPseudoDiscrete(sb, pc);
+    }
 #endif
     return NULL;
 }

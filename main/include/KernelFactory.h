@@ -27,7 +27,7 @@ public:
     {
         return create_simulation_box({nx[0],nx[1],nx[2]}, {lx[0],lx[1],lx[2]});
     }
-    Pseudo* create_pseudo(SimulationBox *sb, PolymerChain *pc);
+    Pseudo* create_pseudo(SimulationBox *sb, PolymerChain *pc, std::string str_model="Gaussian");
 
     AndersonMixing* create_anderson_mixing(
         SimulationBox *sb, int n_comp,

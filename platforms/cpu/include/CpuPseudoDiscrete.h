@@ -16,8 +16,7 @@ protected:
     FFT *fft;
     double *q1, *q2;
     
-    void onestep(double *qin, double *qout,
-                 double *expdw, double *expdw_half);
+    void onestep(double *qin, double *qout, double *expdw);
 public:
     CpuPseudoDiscrete(SimulationBox *sb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoDiscrete();
