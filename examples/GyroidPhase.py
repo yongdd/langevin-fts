@@ -1,5 +1,5 @@
 # -------------- Reference ------------
-# Matsen, M.W.; Beardsley, T.M. Polymers 2021, 13, 2437.
+# M.W. Matsen, and T.M. Beardsley, Polymers 2021, 13, 2437.
 # https://doi.org/10.3390/polym13152437
 
 import sys

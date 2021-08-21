@@ -1,3 +1,7 @@
+# -------------- Reference ------------
+# T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
+# https://doi.org/10.1021/acs.macromol.9b01904
+
 import sys
 import os
 import time
