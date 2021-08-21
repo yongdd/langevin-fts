@@ -9,7 +9,7 @@ from langevinfts import *
 # OpenMP environment variables
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
@@ -49,13 +49,13 @@ factory = KernelFactory("CUDA")
 # for the dynamic binding
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc)
+pseudo = factory.create_pseudo(sb, pc, "Gaussian") ## ["Gaussian", "Discrete"]
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
-# standard deviation of normal noise
-langevin_sigma = np.sqrt(2*langevin_dt/ 
-    (sb.get_dx(0)*sb.get_dx(1)*sb.get_dx(2)*np.sqrt(langevin_nbar/NN)*NN**1.5))
+# standard deviation of normal noise for single segment
+langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/ 
+    (sb.get_volume()*np.sqrt(langevin_nbar)*NN))
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
@@ -67,7 +67,7 @@ print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
 print("Volume: %f" % (sb.get_volume()) )
 
-print("Invariant Polymerization Index" % () )
+print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 #-------------- allocate array ------------
 w         = np.zeros([2, sb.get_MM()], dtype=np.float64)
 w_out     = np.zeros([2, sb.get_MM()], dtype=np.float64)
@@ -94,12 +94,6 @@ sb.zero_mean(w_minus);
 # q1 starts from A end and q2 starts from B end.
 q1_init[:] = 1.0;
 q2_init[:] = 1.0;
-
-# Initialize deep learning module
-# if (use_pretrained_model) :
-    # deeplfts = DeepLFTS(lfts.wminus.shape, train_model, model_file=pretrained_model)
-# else :
-    # deeplfts = DeepLFTS(lfts.wminus.shape, train_model)
 
 #------------------ run ----------------------
 print("---------- Run ----------")

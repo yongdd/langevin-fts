@@ -2,8 +2,8 @@
 * This is a derived CpuPseudo class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_H_
-#define CUDA_PSEUDO_H_
+#ifndef CUDA_PSEUDO_GAUSSIAN_H_
+#define CUDA_PSEUDO_GAUSSIAN_H_
 
 #include <array>
 #include <cufft.h>
@@ -11,7 +11,7 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudo : public Pseudo
+class CudaPseudoGaussian : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -33,9 +33,9 @@ private:
                  double *expdw2_d, double *expdw2_half_d);
 public:
 
-    CudaPseudo(SimulationBox *sb,
+    CudaPseudoGaussian(SimulationBox *sb,
                PolymerChain *pc);
-    ~CudaPseudo();
+    ~CudaPseudoGaussian();
 
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,

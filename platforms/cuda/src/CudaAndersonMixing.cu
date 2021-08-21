@@ -130,7 +130,7 @@ void CudaAndersonMixing::caculate_new_fields(
         // evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiff_dots[i] = ((CudaSimulationBox *)sb)->multi_inner_product_gpu(num_components, w_diff_d,
+            wdiff_dots[i] = ((CudaSimulationBox *)sb)->mutiple_inner_product_gpu(num_components, w_diff_d,
                                      cb_wdiff_hist_d->get_array(n_anderson-i));
         }
         //print_array(max_anderson+1, wdiff_dots);

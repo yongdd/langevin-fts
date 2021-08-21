@@ -61,7 +61,8 @@ IF(BUILD_CPU_MKL_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
     	platforms/cpu/src/MklFFT.cpp
-    	platforms/cpu/src/CpuPseudo.cpp
+    	platforms/cpu/src/CpuPseudoGaussian.cpp
+        platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
     	)
 ENDIF()
@@ -80,7 +81,8 @@ IF(BUILD_CPU_FFTW_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     ADD_LIBRARY(cpu-fftw
     	platforms/cpu/src/FftwFFT.cpp
-    	platforms/cpu/src/CpuPseudo.cpp
+    	platforms/cpu/src/CpuPseudoGaussian.cpp
+        platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
     	)
 ENDIF()
@@ -92,7 +94,8 @@ IF(CUDAToolkit_FOUND)
     ADD_LIBRARY(cuda
         platforms/cuda/src/CudaCommon.cu
         platforms/cuda/src/CudaSimulationBox.cu
-        platforms/cuda/src/CudaPseudo.cu
+        platforms/cuda/src/CudaPseudoGaussian.cu
+        platforms/cuda/src/CudaPseudoDiscrete.cu
         platforms/cuda/src/CudaAndersonMixing.cu
     	)
 ENDIF()

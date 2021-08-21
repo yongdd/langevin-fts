@@ -6,6 +6,7 @@ fields_*.*
 *.sh.*
 *.png
 *.so
+langevinfts.py
 __pycache__
 build
 html

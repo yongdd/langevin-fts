@@ -2,8 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include "SimulationBox.h"
-#include "MklFFT.h"
-#include "CpuPseudo.h"
+#include "FftwFFT.h"
+#include "CpuPseudoGaussian.h"
 
 int main()
 {
@@ -73,7 +73,7 @@ int main()
     //wb[i] = 0.0;
     //}
 
-    CpuPseudo pseudo(&sb, &pc, new MklFFT(sb.get_nx()));
+    CpuPseudoGaussian pseudo(&sb, &pc, new FftwFFT(sb.get_nx()));
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)
@@ -85,7 +85,7 @@ int main()
     }
 
     //---------------- run --------------------
-    std::cout<< "Running MKL Pseudo " << std::endl;
+    std::cout<< "Running FFTW Pseudo " << std::endl;
     pseudo.find_phi(phia, phib,q1_init,q2_init,wa,wb,QQ);
 
     //--------------- check --------------------
