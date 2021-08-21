@@ -8,7 +8,7 @@ CircularBuffer::CircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    elems = new double[length*width];
+    elems = new double[length*width]{0.0};
 }
 CircularBuffer::~CircularBuffer()
 {
@@ -31,16 +31,11 @@ void CircularBuffer::insert(double* new_arr)
 }
 double* CircularBuffer::get_array(int n)
 {
-    int i = (start+n)%length;
+    int i = (start+n_items-n-1+length)%length;
     return &elems[i*width];
 }
 double CircularBuffer::get(int n, int m)
 {
-    int i = (start+n)%length;
+    int i = (start+n_items-n-1+length)%length;
     return elems[i*width + m];
-}
-double CircularBuffer::get_sym(int n, int m)
-{
-    int i = (start+std::max(n,m))%length ;
-    return elems[i*width + abs(n-m)];
 }

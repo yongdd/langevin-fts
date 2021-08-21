@@ -96,6 +96,7 @@ IF(CUDAToolkit_FOUND)
         platforms/cuda/src/CudaSimulationBox.cu
         platforms/cuda/src/CudaPseudoGaussian.cu
         platforms/cuda/src/CudaPseudoDiscrete.cu
+        platforms/cuda/src/CudaCircularBuffer.cu
         platforms/cuda/src/CudaAndersonMixing.cu
     	)
 ENDIF()

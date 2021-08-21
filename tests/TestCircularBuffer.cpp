@@ -96,32 +96,20 @@ int main()
     vec_string.push_back(ss.str());
     ss.str("");
 
-    ss << "cb.get_sym";
-    for(int i=0; i<SIZE; i++)
-    {
-        ss << "," ;
-        for(int j=0; j<MM; j++)
-            ss << cb.get_sym(i,j);
-    }
-    vec_string.push_back(ss.str());
-    ss.str("");
-
     for(unsigned int i=0; i<vec_string.size(); i++)
         std::cout<< vec_string[i] << std::endl;
 
     if(vec_string[0] != "cb.get_array,12354,00000,00000")
         return -1;
-    if(vec_string[1] != "cb.get_array,12354,42112,00000")
+    if(vec_string[1] != "cb.get_array,42112,12354,00000")
         return -1;
-    if(vec_string[2] != "cb.get_array,12354,42112,32154")
+    if(vec_string[2] != "cb.get_array,32154,42112,12354")
         return -1;
-    if(vec_string[3] != "cb.get_array,42112,32154,54312")
+    if(vec_string[3] != "cb.get_array,54312,32154,42112")
         return -1;
-    if(vec_string[4] != "cb.get_array,32154,54312,25143")
+    if(vec_string[4] != "cb.get_array,25143,54312,32154")
         return -1;
-    if(vec_string[5] != "cb.get,32154,54312,25143")
-        return -1;
-    if(vec_string[6] != "cb.get_sym,34152,45511,15223")
+    if(vec_string[5] != "cb.get,25143,54312,32154")
         return -1;
     return 0;
 }

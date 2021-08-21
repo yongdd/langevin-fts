@@ -4,8 +4,8 @@
 ! Each elements are 1-dmensional real array.
 !-----------------------------------------------------------------*/
 
-#ifndef CPU_CIRCULAR_BUFFER_H_
-#define CPU_CIRCULAR_BUFFER_H_
+#ifndef CIRCULAR_BUFFER_H_
+#define CIRCULAR_BUFFER_H_
 
 class CircularBuffer
 {
@@ -23,6 +23,5 @@ public:
     void insert(double* new_arr);
     double* get_array(int n);
     double get(int n, int m);
-    double get_sym(int n, int m);
 };
 #endif
