@@ -11,15 +11,8 @@
 
 class PlatformSelector
 {
-private:
-    std::vector<std::string> valid_strings;
-    std::string str_platform;
-
-    void init_valid_strings();
 public:
-    PlatformSelector();
-    PlatformSelector(std::string str_platform);
-    AbstractFactory* create_factory();
+    static AbstractFactory* create_factory(std::string str_platform="CUDA");
 };
 
 #endif

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <complex>
 #include <algorithm>
-#include "FftwFFT.h"
+#include "FftwFFT3D.h"
 
 int main()
 {
@@ -21,7 +21,7 @@ int main()
     std::array<double,MM_COMPLEX> diff_sq_cplx;
     //-------------- initialize ------------
     std::cout<< "Initializing" << std::endl;
-    FftwFFT fft({II, JJ, KK});
+    FftwFFT3D fft({II, JJ, KK});
     double data_init[MM] =
     {
         0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,

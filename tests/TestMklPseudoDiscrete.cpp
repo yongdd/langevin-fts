@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "SimulationBox.h"
-#include "MklFFT.h"
+#include "MklFFT3D.h"
 #include "CpuPseudoDiscrete.h"
 
 int main()
@@ -73,7 +73,7 @@ int main()
     //wb[i] = 0.0;
     //}
 
-    CpuPseudoDiscrete pseudo(&sb, &pc, new MklFFT(sb.get_nx()));
+    CpuPseudoDiscrete pseudo(&sb, &pc, new MklFFT3D(sb.get_nx()));
 
     // q1 is q and q2 is qdagger in the note
     // free end initial condition (q1 starts from A end, q2 starts from B end)

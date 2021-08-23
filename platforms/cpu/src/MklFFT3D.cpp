@@ -1,8 +1,8 @@
 /* this module defines parameters and subroutines to conduct fast
 * Fourier transform (FFT) using math kernel library(MKL). */
-#include "MklFFT.h"
+#include "MklFFT3D.h"
 
-MklFFT::MklFFT(std::array<int,3> nx)
+MklFFT3D::MklFFT3D(std::array<int,3> nx)
 {
     MKL_LONG NX[3] = {nx[0],nx[1],nx[2]};
     this->MM = nx[0]*nx[1]*nx[2];
@@ -31,18 +31,18 @@ MklFFT::MklFFT(std::array<int,3> nx)
     // compute a normalization factor
     this->fft_normal_factor = nx[0]*nx[1]*nx[2];
 }
-MklFFT::~MklFFT()
+MklFFT3D::~MklFFT3D()
 {
     int status;
     status = DftiFreeDescriptor(&hand_forward);
     status = DftiFreeDescriptor(&hand_backward);
 }
-void MklFFT::forward(double *rdata, std::complex<double> *cdata)
+void MklFFT3D::forward(double *rdata, std::complex<double> *cdata)
 {
     int status;
     status = DftiComputeForward(hand_forward, rdata, cdata);
 }
-void MklFFT::backward(std::complex<double> *cdata, double *rdata)
+void MklFFT3D::backward(std::complex<double> *cdata, double *rdata)
 {
     int status;
     status = DftiComputeBackward(hand_backward, cdata, rdata);

@@ -1,8 +1,8 @@
 /* this module defines parameters and subroutines to conduct fast
 * Fourier transform (FFT) using math kernel library(MKL). */
 
-#ifndef MKL_FFT_H_
-#define MKL_FFT_H_
+#ifndef MKL_FFT_3D_H_
+#define MKL_FFT_3D_H_
 
 #include <array>
 #include <complex>
@@ -10,7 +10,7 @@
 #include "mkl_service.h"
 #include "mkl_dfti.h"
 
-class MklFFT : public FFT
+class MklFFT3D : public FFT
 {
 private:
     double fft_normal_factor; //nomalization factor FFT
@@ -20,9 +20,9 @@ private:
     DFTI_DESCRIPTOR_HANDLE hand_backward = NULL;
 public:
 
-    MklFFT(std::array<int,3> nx);
-    MklFFT(int *nx) : MklFFT({nx[0],nx[1],nx[2]}){};
-    ~MklFFT();
+    MklFFT3D(std::array<int,3> nx);
+    MklFFT3D(int *nx) : MklFFT3D({nx[0],nx[1],nx[2]}){};
+    ~MklFFT3D();
 
     void forward (double *rdata, std::complex<double> *cdata) override;
     void backward(std::complex<double> *cdata, double *rdata) override;

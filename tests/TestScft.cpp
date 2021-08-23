@@ -66,12 +66,11 @@ int main(int argc, char **argv)
     pp.read_param_file("TestInputParams",false);
 
     // choose platform
-    PlatformSelector *platform;
+    AbstractFactory *factory;
     if(!pp.get("platform", str_platform))
-        platform = new PlatformSelector();
+        factory = PlatformSelector::create_factory();
     else
-        platform = new PlatformSelector(str_platform);
-    AbstractFactory *factory = platform->create_factory();
+        factory = PlatformSelector::create_factory(str_platform);;
 
     // read simulation box parameters
     if(!pp.get("geometry.grids", nx))
@@ -268,7 +267,6 @@ int main(int argc, char **argv)
     delete pseudo;
     delete am;
     delete factory;
-    delete platform;
 
     pp.display_usage_info();
     

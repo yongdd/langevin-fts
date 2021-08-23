@@ -60,7 +60,8 @@ ENDIF()
 IF(BUILD_CPU_MKL_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
-    	platforms/cpu/src/MklFFT.cpp
+        platforms/cpu/src/MklFFT2D.cpp
+        platforms/cpu/src/MklFFT3D.cpp
     	platforms/cpu/src/CpuPseudoGaussian.cpp
         platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
@@ -81,7 +82,8 @@ ENDIF()
 IF(BUILD_CPU_FFTW_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     ADD_LIBRARY(cpu-fftw
-    	platforms/cpu/src/FftwFFT.cpp
+        platforms/cpu/src/FftwFFT2D.cpp
+        platforms/cpu/src/FftwFFT3D.cpp
     	platforms/cpu/src/CpuPseudoGaussian.cpp
         platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
@@ -129,10 +131,10 @@ MESSAGE("${Python3_NumPy_INCLUDE_DIRS}")
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 
-SET_SOURCE_FILES_PROPERTIES(swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
+SET_SOURCE_FILES_PROPERTIES(main/swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
 SWIG_ADD_LIBRARY(langevinfts
         LANGUAGE python
-        SOURCES swig/langevinfts.i)
+        SOURCES main/swig/langevinfts.i)
 
 SWIG_LINK_LIBRARIES(langevinfts
         factory

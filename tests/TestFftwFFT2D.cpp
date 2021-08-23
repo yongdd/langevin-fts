@@ -1,0 +1,62 @@
+#include <iostream>
+#include <complex>
+#include <iomanip>
+#include <algorithm>
+#include "FftwFFT2D.h"
+
+int main()
+{
+    const int II{5};
+    const int JJ{4};
+
+    const int MM{II*JJ};
+    const int MM_COMPLEX{II*(JJ/2+1)};
+
+    double error;
+    double data_r[MM];
+    std::complex<double> data_k[MM_COMPLEX];
+
+    std::array<double,MM> diff_sq;
+    std::array<double,MM_COMPLEX> diff_sq_cplx;
+    //-------------- initialize ------------
+    std::cout<< "Initializing" << std::endl;
+    FftwFFT2D fft({II, JJ});
+    double data_init[MM] =
+    {
+        0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
+        0.792673860e-1,0.429684069e+0,0.290531312e+0,0.453270921e+0,0.199228629e+0,
+        0.754931905e-1,0.226924328e+0,0.936407886e+0,0.979392715e+0,0.464957186e+0,
+        0.742653949e+0,0.368019859e+0,0.885231224e+0,0.406191773e+0,0.653096157e+0,
+    };
+    std::complex<double> data_k_answer[MM_COMPLEX] =
+    {
+        {10.6881904,0},                {0.7954998885,0.143345017},
+        {-0.6668551075,0},             {0.4954041066,1.798776899},
+        {-0.5050260775,0.04850456904}, {-0.4504167737,-1.947311157},
+        {0.5003159972,-1.738407521},   {-0.675930056,-0.09881542923},
+        {-0.9823256426,-0.6471590658}, {0.5003159972,1.738407521},
+        {-0.6941925918,0.7499083742},  {-0.9823256426,0.6471590658},
+        {0.4954041066,-1.798776899},   {-1.659282438,1.023353594},
+        {-0.4504167737,1.947311157},
+    };
+    //---------------- Forward --------------------
+    std::cout<< "Running FFTW 2D" << std::endl;
+    fft.forward(data_init,data_k);
+    std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
+    for(int i=0; i<MM_COMPLEX; i++)
+        diff_sq_cplx[i] = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
+    error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
+    std::cout<< "FFT Forward Error: " << error << std::endl;
+    //if( error > 1e-7)
+    //    return -1;
+
+    //--------------- Backward --------------------
+    fft.backward(data_k_answer,data_r);
+    for(int i=0; i<MM; i++)
+        diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
+    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+    std::cout<< "FFT Backward Error: " << error << std::endl;
+    //if( error > 1e-7)
+    //    return -1;
+    //return 0;
+}

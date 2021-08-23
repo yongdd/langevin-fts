@@ -7,7 +7,7 @@
 #include <string>
 #include <algorithm>
 
-#include "FftwFFT.h"
+#include "FftwFFT3D.h"
 #include "CpuPseudoGaussian.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -28,9 +28,9 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::str
     [](unsigned char c){ return std::tolower(c); });
     
     if ( str_model == "gaussian" )
-        return new CpuPseudoGaussian(sb, pc, new FftwFFT(sb->get_nx()));
+        return new CpuPseudoGaussian(sb, pc, new FftwFFT3D(sb->get_nx()));
     else if ( str_model == "discrete" )
-        return new CpuPseudoDiscrete(sb, pc, new FftwFFT(sb->get_nx()));
+        return new CpuPseudoDiscrete(sb, pc, new FftwFFT3D(sb->get_nx()));
     return NULL;
 }
 AndersonMixing* FftwFactory::create_anderson_mixing(

@@ -7,7 +7,7 @@
 #include <string>
 #include <algorithm>
 
-#include "MklFFT.h"
+#include "MklFFT3D.h"
 #include "CpuPseudoGaussian.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -28,9 +28,9 @@ Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::stri
     [](unsigned char c){ return std::tolower(c); });
     
     if ( str_model == "gaussian" )
-        return new CpuPseudoGaussian(sb, pc, new MklFFT(sb->get_nx()));
+        return new CpuPseudoGaussian(sb, pc, new MklFFT3D(sb->get_nx()));
     else if ( str_model == "discrete" )
-        return new CpuPseudoDiscrete(sb, pc, new MklFFT(sb->get_nx()));
+        return new CpuPseudoDiscrete(sb, pc, new MklFFT3D(sb->get_nx()));
     return NULL;
 }
 AndersonMixing* MklFactory::create_anderson_mixing(
