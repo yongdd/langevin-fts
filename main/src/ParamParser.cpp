@@ -201,21 +201,19 @@ bool ParamParser::get(std::string param_name, int& param_value, int idx)
 {
     int loc;
     loc = search_param_idx(param_name, idx);
-    //std::cout << "loc " << loc << std::endl ;
     if( loc >= 0)
     {
         std::stringstream ss(input_param_list[loc].values[idx]);
-        //std::cout << "get " << input_param_list[loc].values[idx] << std::endl ;
         ss >> param_value;
-        //std::cout << "get " << param_value  << std::endl ;
         return true;
     }
     else
         return false;
 }
-bool ParamParser::get(std::string param_name, int *param_value, int length)
+bool ParamParser::get(std::string param_name, std::array<int,3> &param_value)
 {
-    int loc;
+    int loc, length;
+    length = param_value.size();
     loc = search_param_idx(param_name, length-1);
     if( loc >= 0)
     {
@@ -244,9 +242,10 @@ bool ParamParser::get(std::string param_name, double& param_value, int idx)
     else
         return false;
 }
-bool ParamParser::get(std::string param_name, double *param_value, int length)
+bool ParamParser::get(std::string param_name, std::array<double,3> &param_value)
 {
-    int loc;
+    int loc, length;
+    length = param_value.size();
     loc = search_param_idx(param_name, length-1);
     if( loc >= 0)
     {

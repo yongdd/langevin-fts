@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <cmath>
 #include <string>
+#include <array>
 #include <chrono>
 
 #include "ParamParser.h"
@@ -10,7 +11,8 @@
 #include "SimulationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
-#include "KernelFactory.h"
+#include "AbstractFactory.h"
+#include "PlatformSelector.h"
 
 int main(int argc, char **argv)
 {
@@ -33,8 +35,10 @@ int main(int argc, char **argv)
     // segment concentration
     double *phia, *phib, *phitot;
     // input parameters
-    int nx[3], NN;
-    double lx[3], f, chi_n;
+    std::array<int,3> nx;
+    std::array<double,3> lx;
+    int NN;    
+    double f, chi_n;
     // platform type, (CUDA, CPU_MKL or CPU_FFTW)
     std::string str_platform;
     // Anderson mixing parmeters
@@ -62,19 +66,20 @@ int main(int argc, char **argv)
     pp.read_param_file("TestInputParams",false);
 
     // choose platform
-    KernelFactory *factory;
+    PlatformSelector *platform;
     if(!pp.get("platform", str_platform))
-        factory = new KernelFactory();
+        platform = new PlatformSelector();
     else
-        factory = new KernelFactory(str_platform);
+        platform = new PlatformSelector(str_platform);
+    AbstractFactory *factory = platform->create_factory();
 
     // read simulation box parameters
-    if(!pp.get("geometry.grids", nx, 3))
+    if(!pp.get("geometry.grids", nx))
     {
         std::cout<< "geometry.grids is not specified." << std::endl;
         exit(-1);
     }
-    if(!pp.get("geometry.box_size", lx, 3))
+    if(!pp.get("geometry.box_size", lx))
     {
         std::cout<< "geometry.box_size is not specified." << std::endl;
         exit(-1);
@@ -113,7 +118,7 @@ int main(int argc, char **argv)
     // for the dynamic binding
     PolymerChain *pc = factory->create_polymer_chain(f, NN, chi_n);
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    Pseudo *pseudo = factory->create_pseudo(sb, pc);
+    Pseudo *pseudo = factory->create_pseudo(sb, pc, "gaussian");
     AndersonMixing *am = factory->create_anderson_mixing(
                              sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
     // assign large initial value for the energy and error
@@ -263,6 +268,7 @@ int main(int argc, char **argv)
     delete pseudo;
     delete am;
     delete factory;
+    delete platform;
 
     pp.display_usage_info();
     
