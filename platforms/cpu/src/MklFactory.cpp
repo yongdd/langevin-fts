@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "MklFFT3D.h"
+#include "MklFFT2D.h"
 #include "CpuPseudoGaussian.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -18,19 +19,36 @@ PolymerChain* MklFactory::create_polymer_chain(double f, int NN, double chi_n)
     return new PolymerChain(f, NN, chi_n);
 }
 SimulationBox* MklFactory::create_simulation_box(
-    std::array<int,3> nx, std::array<double,3>  lx)
+    std::vector<int> nx, std::vector<double> lx)
 {
     return new SimulationBox(nx, lx);
 }
 Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::string str_model)
 {
     std::transform(str_model.begin(), str_model.end(), str_model.begin(),
-    [](unsigned char c){ return std::tolower(c); });
-    
+                   [](unsigned char c)
+    {
+        return std::tolower(c);
+    });
+
     if ( str_model == "gaussian" )
-        return new CpuPseudoGaussian(sb, pc, new MklFFT3D(sb->get_nx()));
+    {
+        if (sb->get_dimension() == 3)
+            return new CpuPseudoGaussian(sb, pc,
+                new MklFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
+        else if (sb->get_dimension() == 2)
+            return new CpuPseudoGaussian(sb, pc,
+                new MklFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+    }
     else if ( str_model == "discrete" )
-        return new CpuPseudoDiscrete(sb, pc, new MklFFT3D(sb->get_nx()));
+    {
+        if (sb->get_dimension() == 3)
+            return new CpuPseudoDiscrete(sb, pc,
+                new MklFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
+        else if (sb->get_dimension() == 2)
+            return new CpuPseudoDiscrete(sb, pc,
+                new MklFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+    }
     return NULL;
 }
 AndersonMixing* MklFactory::create_anderson_mixing(

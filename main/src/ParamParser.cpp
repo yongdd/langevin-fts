@@ -210,17 +210,19 @@ bool ParamParser::get(std::string param_name, int& param_value, int idx)
     else
         return false;
 }
-bool ParamParser::get(std::string param_name, std::array<int,3> &param_value)
+bool ParamParser::get(std::string param_name, std::vector<int> &param_value)
 {
-    int loc, length;
-    length = param_value.size();
-    loc = search_param_idx(param_name, length-1);
+    int loc;
+    int converted_value;
+    param_value.clear();
+    loc = search_param_idx(param_name, 0);
     if( loc >= 0)
     {
-        for(int i=0; i<length; i++)
+        for(unsigned int i=0; i<input_param_list[loc].values.size(); i++)
         {
             std::stringstream ss(input_param_list[loc].values[i]);
-            ss >> param_value[i];
+            ss >> converted_value;
+            param_value.push_back(converted_value);
         }
         return true;
     }
@@ -242,17 +244,19 @@ bool ParamParser::get(std::string param_name, double& param_value, int idx)
     else
         return false;
 }
-bool ParamParser::get(std::string param_name, std::array<double,3> &param_value)
+bool ParamParser::get(std::string param_name, std::vector<double> &param_value)
 {
-    int loc, length;
-    length = param_value.size();
-    loc = search_param_idx(param_name, length-1);
+    int loc;
+    double converted_value;
+    param_value.clear();
+    loc = search_param_idx(param_name, 0);
     if( loc >= 0)
     {
-        for(int i=0; i<length; i++)
+        for(unsigned int i=0; i<input_param_list[loc].values.size(); i++)
         {
             std::stringstream ss(input_param_list[loc].values[i]);
-            ss >> param_value[i];
+            ss >> converted_value;
+            param_value.push_back(converted_value);
         }
         return true;
     }

@@ -35,8 +35,8 @@ int main(int argc, char **argv)
     // segment concentration
     double *phia, *phib, *phitot;
     // input parameters
-    std::array<int,3> nx;
-    std::array<double,3> lx;
+    std::vector<int> nx;
+    std::vector<double> lx;
     int NN;    
     double f, chi_n;
     // platform type, (CUDA, CPU_MKL or CPU_FFTW)

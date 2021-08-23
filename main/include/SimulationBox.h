@@ -7,10 +7,12 @@
 #define SIMULATION_BOX_H_
 
 #include <array>
+#include <vector>
 
 class SimulationBox
 {
 protected:
+    int dimension;        // the dimension of simulation box
     std::array<int,3> nx;  // the number of grid in each direction
     std::array<double,3> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::array<double,3> dx;  // grid interval in each direction
@@ -19,22 +21,17 @@ protected:
     double volume; // volume of the system.
 
 public:
-    SimulationBox(
-        std::array<int,3> nx, std::array<double,3> lx);
-    SimulationBox(int *nx, double *lx)
-        : SimulationBox({nx[0],nx[1],nx[2]},
-    {
-        lx[0],lx[1],lx[2]
-    }) {};
+    SimulationBox(std::vector<int> nx, std::vector<double> lx);
     virtual ~SimulationBox();
 
-    double get_dv(int i);
-    int get_nx(int i);    
+    int get_dimension();
+    int get_nx(int i);
     double get_lx(int i);
     double get_dx(int i);
-    std::array<int,3> get_nx();    
+    std::array<int,3> get_nx();
     std::array<double,3> get_lx();
     std::array<double,3> get_dx();
+    double get_dv(int i);
     int get_MM();
     double get_volume();
 
@@ -52,7 +49,6 @@ public:
     {
         return inner_product(g, h);
     }
-
     void zero_mean(double *g, int len_g)
     {
         zero_mean(g);

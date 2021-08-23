@@ -17,8 +17,8 @@ public :
     PolymerChain* create_polymer_chain(
         double f, int NN, double chi_n) override;
     SimulationBox* create_simulation_box(
-        std::array<int,3> nx,
-        std::array<double,3>  lx) override;
+        std::vector<int> nx,
+        std::vector<double> lx) override;
     Pseudo* create_pseudo(
         SimulationBox *sb,
         PolymerChain *pc,

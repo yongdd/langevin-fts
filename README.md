@@ -31,7 +31,7 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
   http://www.swig.org/
 
 #### 5. Anaconda
-  Anaconda is a distribution of the Python pogramming languages for scientific computing.
+  Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
 
 #### 6. PyTorch

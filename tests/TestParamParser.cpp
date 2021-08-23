@@ -7,7 +7,7 @@
 int main()
 {
     int nx0;
-    std::array<int,3> nx = {1,2,3};
+    std::vector<int> nx = {1,2,3};
     double chi_n;
     std::string filename;
     std::vector<std::string> as_string;

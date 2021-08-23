@@ -21,8 +21,8 @@ public :
     virtual PolymerChain* create_polymer_chain(
         double f, int NN, double chi_n) = 0; 
     virtual SimulationBox* create_simulation_box(
-        std::array<int,3> nx,
-        std::array<double,3> lx) = 0;
+        std::vector<int> nx,
+        std::vector<double> lx) = 0;
     virtual Pseudo* create_pseudo(
         SimulationBox *sb,
         PolymerChain *pc,

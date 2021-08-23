@@ -71,8 +71,12 @@ __global__ static void multiplyReductionKernel(
 
 //----------------- Constructor -----------------------------
 CudaSimulationBox::CudaSimulationBox(
-    std::array<int,3> nx, std::array<double,3> lx)
+    std::vector<int> nx, std::vector<double> lx)
     : SimulationBox(nx, lx)
+{
+    initialize();
+}
+void CudaSimulationBox::initialize()
 {
     cudaMalloc((void**)&dv_d, sizeof(double)*MM);
     cudaMemcpy(dv_d, dv,      sizeof(double)*MM,cudaMemcpyHostToDevice);
@@ -81,7 +85,7 @@ CudaSimulationBox::CudaSimulationBox(
     sum = new double[MM];
     cudaMalloc((void**)&sum_d, sizeof(double)*MM);
     cudaMalloc((void**)&multiple_d, sizeof(double)*MM);
-    
+
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
@@ -177,8 +181,8 @@ double CudaSimulationBox::integral_gpu(double *g_d)
 double CudaSimulationBox::inner_product_gpu(double *g_d, double *h_d)
 {
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads(); 
-    
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
     multiReal<<<N_BLOCKS, N_THREADS>>>(multiple_d, g_d, h_d, 1.0, MM);
     return CudaSimulationBox::integral_gpu(multiple_d);
 }
@@ -186,8 +190,8 @@ double CudaSimulationBox::inner_product_gpu(double *g_d, double *h_d)
 double CudaSimulationBox::mutiple_inner_product_gpu(int n_comp, double *g_d, double *h_d)
 {
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads(); 
-    
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
     mutipleMultiReal<<<N_BLOCKS, N_THREADS>>>(n_comp, multiple_d, g_d, h_d, 1.0, MM);
     return CudaSimulationBox::integral_gpu(multiple_d);
 }

@@ -7,14 +7,30 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     PolymerChain *pc)
     : Pseudo(sb, pc)
 {
-    const int NRANK{3};
-    const int BATCH{2};
-
-    int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)};
-    
     const int MM = sb->get_MM();
     const int NN = pc->get_NN();
 
+    if(sb->get_dimension() == 3)
+    {
+        // create a 3D FFT plan
+        const int NRANK{3};
+        const int BATCH{2};
+        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)};
+
+        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
+        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+    }
+    else if(sb->get_dimension() == 2)
+    {
+        // create a 2D FFT plan
+        const int NRANK{2};
+        const int BATCH{2};
+        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1)};
+
+        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
+        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+    }
+    
     cudaMalloc((void**)&temp_d,  sizeof(double)*MM);
 
     cudaMalloc((void**)&qstep1_d, sizeof(double)*2*MM);
@@ -39,10 +55,6 @@ CudaPseudoGaussian::CudaPseudoGaussian(
 
     cudaMemcpy(expf_d,   expf,          sizeof(double)*MM_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(expf_half_d,  expf_half, sizeof(double)*MM_COMPLEX,cudaMemcpyHostToDevice);
-
-    /* Create a 3D FFT plan. */
-    cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-    cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
 }
 CudaPseudoGaussian::~CudaPseudoGaussian()
 {
@@ -189,14 +201,14 @@ void CudaPseudoGaussian::onestep(double *qin1_d, double *qout1_d,
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[0],  qin1_d, expdw1_d, 1.0, MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[MM], qin2_d, expdw2_d, 1.0, MM);
 
-    // Execute a Forward 3D FFT
+    // Execute a Forward FFT
     cufftExecD2Z(plan_for, qstep1_d, kqin_d);
 
     // Multiply e^(-k^2 ds/6) in fourier space
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_d, MM_COMPLEX);
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_d, MM_COMPLEX);
 
-    // Execute a backward 3D FFT
+    // Execute a backward FFT
     cufftExecZ2D(plan_bak, kqin_d, qstep1_d);
 
     // Evaluate e^(-w*ds/2) in real space
@@ -208,27 +220,27 @@ void CudaPseudoGaussian::onestep(double *qin1_d, double *qout1_d,
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0],  qin1_d, expdw1_half_d, 1.0, MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[MM], qin2_d, expdw2_half_d, 1.0, MM);
 
-    // Execute a Forward 3D FFT
+    // Execute a Forward FFT
     cufftExecD2Z(plan_for, qstep2_d, kqin_d);
 
     // Multiply e^(-k^2 ds/12) in fourier space
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_half_d, MM_COMPLEX);
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_half_d, MM_COMPLEX);
 
-    // Execute a backward 3D FFT
+    // Execute a backward FFT
     cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
 
     // Evaluate e^(-w*ds/2) in real space
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0],  &qstep2_d[0],  expdw1_d, 1.0/((double)MM), MM);
     multiReal<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[MM], &qstep2_d[MM], expdw2_d, 1.0/((double)MM), MM);
-    // Execute a Forward 3D FFT
+    // Execute a Forward FFT
     cufftExecD2Z(plan_for, qstep2_d, kqin_d);
 
     // Multiply e^(-k^2 ds/12) in fourier space
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_half_d, MM_COMPLEX);
     multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_half_d, MM_COMPLEX);
 
-    // Execute a backward 3D FFT
+    // Execute a backward FFT
     cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
 
     // Evaluate e^(-w*ds/4) in real space.

@@ -85,7 +85,7 @@ lx = input_data["lx"].tolist()
 NN = int(input_data["N"])
 f = float(input_data["f"])
 chi_n = float(input_data["chi_n"])
-polymer_model = "Discrete"
+polymer_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
@@ -109,7 +109,7 @@ factory = PlatformSelector.create_factory("CUDA")
 # for the dynamic binding
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model) ## ["Gaussian", "Discrete"]
+pseudo = factory.create_pseudo(sb, pc, polymer_model)
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
