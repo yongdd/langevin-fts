@@ -143,11 +143,15 @@ public:
     void display_usage_info();
 
     bool get(std::string param_name, int &param_value, int idx=0);
-    bool get(std::string param_name, int *param_value, int length);
     bool get(std::string param_name, double &param_value, int idx=0);
-    bool get(std::string param_name, double *param_value, int length);
+    
+    //bool get(std::string param_name, std::vector<int> param_value);
+    //bool get(std::string param_name, std::vector<double> param_value);
+    
+    bool get(std::string param_name, std::array<int,3> &param_value);
+    bool get(std::string param_name, std::array<double,3> &param_value);
+    
     bool get(std::string param_name, std::string &param_value, int idx=0);
-
     std::vector<std::string> get(std::string param_name);
 };
 

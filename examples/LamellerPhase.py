@@ -4,6 +4,7 @@
 
 import sys
 import os
+import pathlib
 import time
 import numpy as np
 from langevinfts import *
@@ -69,6 +70,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
+pathlib.Path("data").mkdir(parents=True, exist_ok=True)
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
@@ -99,7 +101,7 @@ langevin_max_iter = 10;
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = KernelFactory("CUDA")
+factory = PlatformSelector("CUDA").create_factory()
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
@@ -177,6 +179,12 @@ for langevin_step in range(0, langevin_max_iter):
     w_minus[:] = w_minus_copy[:] - 0.5*(lambda1[:]+lambda2[:])*langevin_dt + normal_noise[:]
     sb.zero_mean(w_minus)
     find_saddle_point()
+
+    if( langevin_step % 1000 == 0 ):
+        np.savez("data/fields_%06d.npz" % (langevin_step),
+        nx=nx, lx=lx, N=NN, f=pc.get_f(), chi_n=pc.get_chi_n(),
+        polymer_model=polymer_model, n_bar=langevin_nbar,
+        w_minus=w_minus, w_plus=w_plus)
 
 # estimate execution time
 time_duration = time.time() - time_start; 

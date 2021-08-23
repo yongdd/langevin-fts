@@ -64,7 +64,8 @@ IF(BUILD_CPU_MKL_LIB)
     	platforms/cpu/src/CpuPseudoGaussian.cpp
         platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
-    	)
+        platforms/cpu/src/MklFactory.cpp
+        )
 ENDIF()
 
 #  FFTW 
@@ -84,6 +85,7 @@ IF(BUILD_CPU_FFTW_LIB)
     	platforms/cpu/src/CpuPseudoGaussian.cpp
         platforms/cpu/src/CpuPseudoDiscrete.cpp
     	platforms/cpu/src/CpuAndersonMixing.cpp
+        platforms/cpu/src/FftwFactory.cpp
     	)
 ENDIF()
 
@@ -98,7 +100,8 @@ IF(CUDAToolkit_FOUND)
         platforms/cuda/src/CudaPseudoDiscrete.cu
         platforms/cuda/src/CudaCircularBuffer.cu
         platforms/cuda/src/CudaAndersonMixing.cu
-    	)
+        platforms/cuda/src/CudaFactory.cu
+        )
 ENDIF()
 
 IF( (NOT BUILD_CPU_MKL_LIB) AND
@@ -109,7 +112,7 @@ ENDIF()
 
 #  Factory
 ADD_LIBRARY(factory
-    main/src/KernelFactory.cpp
+    main/src/PlatformSelector.cpp
     )
 
 #---------- Python Wrapper -----------

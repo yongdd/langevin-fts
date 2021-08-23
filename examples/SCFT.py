@@ -32,7 +32,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = KernelFactory("CUDA")
+factory = PlatformSelector("CUDA").create_factory()
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
