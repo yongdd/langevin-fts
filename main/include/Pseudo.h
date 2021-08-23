@@ -13,10 +13,10 @@ class Pseudo
 protected:
     SimulationBox *sb;
     PolymerChain *pc;
-    
+
     int MM_COMPLEX;
     double *expf, *expf_half;
-    
+
     void init_gaussian_factor(
         std::array<int,3> nx, std::array<double,3> dx, double ds);
 public:
@@ -26,8 +26,12 @@ public:
     virtual void find_phi(
         double *phia,  double *phib,
         double *q1_init, double *q2_init,
-        double *wa, double *wb, double &QQ) {};
-        
+        double *wa, double *wb, double &QQ) = 0;
+
+    virtual void get_partition(
+        double *q1_out,
+        double *q2_out, int n) = 0;
+
     // Methods for SWIG
     void find_phi(
         double *phia, int len_pa,

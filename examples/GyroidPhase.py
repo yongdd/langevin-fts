@@ -103,7 +103,7 @@ langevin_max_iter = 5;
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = PlatformSelector("CUDA").create_factory()
+factory = PlatformSelector.create_factory("CUDA")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
