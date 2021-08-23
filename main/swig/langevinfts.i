@@ -18,6 +18,8 @@
 
 %template(IntArray3) std::array<int,3>;
 %template(DoubleArray3) std::array<double,3>;
+%template(IntVector) std::vector<int>;
+%template(DoubleVector) std::vector<double>;
 %template(StringVector) std::vector<std::string>;
 
 %include "numpy.i"

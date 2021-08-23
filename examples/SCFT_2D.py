@@ -21,9 +21,9 @@ tolerance = 1e-9
 f = 0.3
 NN = 50
 chi_n = 20
-nx = [31,49,63]
-lx = [4.0,3.0,2.0]
-polymer_model = "Gaussian"
+nx = [49,63]
+lx = [4.0,3.0]
+polymer_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 am_n_comp = 2  # A and B
 am_max_hist= 20
@@ -38,7 +38,7 @@ factory = PlatformSelector.create_factory("CUDA")
 # for the dynamic binding
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model) ## ["Gaussian", "Discrete"]
+pseudo = factory.create_pseudo(sb, pc, polymer_model) 
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
