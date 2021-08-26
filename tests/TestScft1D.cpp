@@ -22,11 +22,11 @@ int main(int argc, char **argv)
     std::chrono::system_clock::time_point chrono_start, chrono_end;
     std::chrono::duration<double> time_duration;
     // iter = number of iteration steps, maxiter = maximum number of iteration steps
-    int iter, maxiter;
+    int iter;
     // QQ = total partition function
     double QQ, energy_chain, energy_field, energy_total, energy_old;
     // error_level = variable to check convergence of the iteration
-    double error_level, old_error_level, tolerance;
+    double error_level, old_error_level;
     // input and output fields, xi is temporary storage for pressures
     double *w, *w_out, *w_diff;  // n_comp * MM
     double *xi, *w_plus, *w_minus; // MM
@@ -34,17 +34,7 @@ int main(int argc, char **argv)
     double *q1_init, *q2_init;
     // segment concentration
     double *phia, *phib, *phitot;
-    // input parameters
-    std::vector<int> nx;
-    std::vector<double> lx;
-    int NN;    
-    double f, chi_n;
-    // platform type, (CUDA, CPU_MKL or CPU_FFTW)
-    std::string str_platform;
-    // Anderson mixing parmeters
-    int max_anderson;
-    double start_anderson_error;
-    double mix_min, mix_init;
+
     // string to output file and print stream
     std::ofstream print_stream;
     std::stringstream ss;
@@ -54,80 +44,39 @@ int main(int argc, char **argv)
     double sum;
 
     // -------------- initialize ------------
-    // read file name
-    //if(argc < 2)
-    //{
-    //    std::cout<< "Input parameter file is required, e.g, 'scft.out inputs' " << std::endl;
-    //    exit(-1);
-    //}
-    // initialize ParamParser
-    ParamParser& pp = ParamParser::get_instance();
-    //pp.read_param_file(argv[1],false);
-    pp.read_param_file("TestInputParams",false);
+    // platform type, (CUDA, CPU_MKL or CPU_FFTW)
+    std::string str_platform = "CPU_FFTW";
+
+    int max_scft_iter = 20;
+    double tolerance = 1e-9;
+
+    double f = 0.3;
+    int NN = 50;
+    double chi_n = 20.0;
+    std::vector<int> nx = {263};
+    std::vector<double> lx = {4.0};
+    std::string polymer_model = "Gaussian";  // choose among [Gaussian, Discrete]
+
+    int am_n_comp = 2;  // A and B
+    int am_max_hist= 20;
+    double am_start_error = 8e-1;
+    double am_mix_min = 0.1;
+    double am_mix_init = 0.1;
 
     // choose platform
-    AbstractFactory *factory;
-    if(!pp.get("platform", str_platform))
-        factory = PlatformSelector::create_factory();
-    else
-        factory = PlatformSelector::create_factory(str_platform);;
-
-    // read simulation box parameters
-    if(!pp.get("geometry.grids", nx))
-    {
-        std::cout<< "geometry.grids is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("geometry.box_size", lx))
-    {
-        std::cout<< "geometry.box_size is not specified." << std::endl;
-        exit(-1);
-    }
-    // read chain parameters
-    if(!pp.get("chain.a_fraction", f))
-    {
-        std::cout<< "chain.a_fraction is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("chain.contour_step", NN))
-    {
-        std::cout<< "chain.contour_step is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("chain.chi_n", chi_n))
-    {
-        std::cout<< "chain.chi_n is not specified." << std::endl;
-        exit(-1);
-    }
-    // read Anderson mixing parameters
-    // anderson mixing begin if error level becomes less then start_anderson_error
-    if(!pp.get("am.start_error", start_anderson_error)) start_anderson_error = 0.01;
-    // max number of previous steps to calculate new field
-    if(!pp.get("am.step_max", max_anderson)) max_anderson = 10;
-    // minimum mixing parameter
-    if(!pp.get("am.mix_min", mix_min)) mix_min = 0.01;
-    // initial mixing parameter
-    if(!pp.get("am.mix_init", mix_init)) mix_init  = 0.1;
-
-    // read iteration parameters
-    if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
-    if(!pp.get("iter.step_saddle", maxiter)) maxiter   = 10;
+    AbstractFactory *factory = PlatformSelector::create_factory(str_platform);
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
     PolymerChain *pc = factory->create_polymer_chain(f, NN, chi_n);
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    Pseudo *pseudo = factory->create_pseudo(sb, pc, "gaussian");
-    AndersonMixing *am = factory->create_anderson_mixing(
-                             sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
-    // assign large initial value for the energy and error
-    energy_total = 1.0e20;
-    error_level = 1.0e20;
+    Pseudo *pseudo = factory->create_pseudo(sb, pc, polymer_model);
+    AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_comp,
+                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
     // -------------- print simulation parameters ------------
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;
-
-    std::cout << "Box Dimension: 3" << std::endl;
+    std::cout << "Box Dimension: " << sb->get_dimension() << std::endl;
     std::cout << "Precision: 8" << std::endl;
     std::cout << "chi_n, f, NN: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_NN() << std::endl;
     std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
@@ -171,8 +120,8 @@ int main(int argc, char **argv)
     for(int i=0; i<sb->get_MM(); i++)
     {
         phib[i] = 1.0 - phia[i];
-        w[i]          = chi_n*phib[i];
-        w[i + sb->get_MM()] = chi_n*phia[i];
+        w[i]              = pc->get_chi_n()*phib[i];
+        w[i+sb->get_MM()] = pc->get_chi_n()*phia[i];
     }
 
     // keep the level of field value
@@ -188,12 +137,16 @@ int main(int argc, char **argv)
     }
     //print_stream->close();
 
+    // assign large initial value for the energy and error
+    energy_total = 1.0e20;
+    error_level = 1.0e20;
+
     //------------------ run ----------------------
     std::cout<< "---------- Run ----------" << std::endl;
     std::cout<< "iteration, mass error, total_partition, energy_total, error_level" << std::endl;
     chrono_start = std::chrono::system_clock::now();
     // iteration begins here
-    for(int iter=0; iter<maxiter; iter++)
+    for(int iter=0; iter<max_scft_iter; iter++)
     {
         // for the given fields find the polymer statistics
         pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->get_MM()],QQ);
@@ -206,17 +159,17 @@ int main(int argc, char **argv)
             w_plus[i]  = (w[i]+w[i + sb->get_MM()])/2;
         }
         energy_total  = -log(QQ/sb->get_volume());
-        energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->get_volume();
+        energy_total += sb->inner_product(w_minus,w_minus)/pc->get_chi_n()/sb->get_volume();
         energy_total += sb->integral(w_plus)/sb->get_volume();
         //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->get_volume();
 
         for(int i=0; i<sb->get_MM(); i++)
         {
             // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-            xi[i] = 0.5*(w[i]+w[i+sb->get_MM()]-chi_n);
+            xi[i] = 0.5*(w[i]+w[i+sb->get_MM()]-pc->get_chi_n());
             // calculate output fields
-            w_out[i]        = chi_n*phib[i] + xi[i];
-            w_out[i+sb->get_MM()] = chi_n*phia[i] + xi[i];
+            w_out[i]              = pc->get_chi_n()*phib[i] + xi[i];
+            w_out[i+sb->get_MM()] = pc->get_chi_n()*phia[i] + xi[i];
         }
         sb->zero_mean(&w_out[0]);
         sb->zero_mean(&w_out[sb->get_MM()]);
@@ -242,12 +195,11 @@ int main(int argc, char **argv)
         am->caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
     }
 
-    
     // estimate execution time
     chrono_end = std::chrono::system_clock::now();
     time_duration = chrono_end - chrono_start;
     std::cout<< "total time, time per step: ";
-    std::cout<< time_duration.count() << " " << time_duration.count()/maxiter << std::endl;
+    std::cout<< time_duration.count() << " " << time_duration.count()/max_scft_iter << std::endl;
 
     //------------- finalize -------------
     delete[] w;
@@ -268,9 +220,7 @@ int main(int argc, char **argv)
     delete am;
     delete factory;
 
-    pp.display_usage_info();
-    
-    if (std::abs(error_level-0.001343652) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.022224428) > 1e-7)
         return -1;
 
     return 0;

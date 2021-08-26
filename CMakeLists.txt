@@ -8,8 +8,8 @@ SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 SET(CMAKE_CUDA_STANDARD 11)
 SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
-SET(CMAKE_BUILD_TYPE Release)
-#SET(CMAKE_BUILD_TYPE Debug  )
+#SET(CMAKE_BUILD_TYPE Release)
+SET(CMAKE_BUILD_TYPE Debug  )
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -60,6 +60,7 @@ ENDIF()
 IF(BUILD_CPU_MKL_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
+        platforms/cpu/src/MklFFT1D.cpp
         platforms/cpu/src/MklFFT2D.cpp
         platforms/cpu/src/MklFFT3D.cpp
     	platforms/cpu/src/CpuPseudoGaussian.cpp
@@ -82,6 +83,7 @@ ENDIF()
 IF(BUILD_CPU_FFTW_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     ADD_LIBRARY(cpu-fftw
+        platforms/cpu/src/FftwFFT1D.cpp
         platforms/cpu/src/FftwFFT2D.cpp
         platforms/cpu/src/FftwFFT3D.cpp
     	platforms/cpu/src/CpuPseudoGaussian.cpp

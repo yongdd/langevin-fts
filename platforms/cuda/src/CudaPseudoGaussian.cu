@@ -7,6 +7,7 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     PolymerChain *pc)
     : Pseudo(sb, pc)
 {
+    
     const int MM = sb->get_MM();
     const int NN = pc->get_NN();
 
@@ -26,6 +27,16 @@ CudaPseudoGaussian::CudaPseudoGaussian(
         const int NRANK{2};
         const int BATCH{2};
         int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1)};
+
+        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
+        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+    }
+    else if(sb->get_dimension() == 1)
+    {
+        // create a 1D FFT plan
+        const int NRANK{1};
+        const int BATCH{2};
+        int n_grid[NRANK] = {sb->get_nx(0)};
 
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);

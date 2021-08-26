@@ -29,7 +29,6 @@ Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::str
     {
         return std::tolower(c);
     });
-
     if ( str_model == "gaussian" )
         return new CudaPseudoGaussian(sb, pc);
     else if ( str_model == "discrete" )

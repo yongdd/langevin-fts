@@ -2,6 +2,7 @@
 * class MklFactory
 *-----------------------------------------------------------*/
 
+#include <iostream>
 #include <array>
 #include <vector>
 #include <string>
@@ -9,6 +10,7 @@
 
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
+#include "MklFFT1D.h"
 #include "CpuPseudoGaussian.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -39,6 +41,9 @@ Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::stri
         else if (sb->get_dimension() == 2)
             return new CpuPseudoGaussian(sb, pc,
                 new MklFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+        else if (sb->get_dimension() == 1)
+            return new CpuPseudoGaussian(sb, pc,
+                new MklFFT1D(sb->get_nx(0)));
     }
     else if ( str_model == "discrete" )
     {
@@ -48,6 +53,9 @@ Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::stri
         else if (sb->get_dimension() == 2)
             return new CpuPseudoDiscrete(sb, pc,
                 new MklFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+        else if (sb->get_dimension() == 1)
+            return new CpuPseudoGaussian(sb, pc,
+                new MklFFT1D(sb->get_nx(0)));
     }
     return NULL;
 }

@@ -32,6 +32,16 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
     }
+    else if(sb->get_dimension() == 1)
+    {
+        // create a 1D FFT plan
+        const int NRANK{1};
+        const int BATCH{2};
+        int n_grid[NRANK] = {sb->get_nx(0)};
+
+        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
+        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+    }
 
     cudaMalloc((void**)&temp_d,  sizeof(double)*MM);
 

@@ -5,28 +5,40 @@
 //----------------- Constructor -----------------------------
 SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx)
 {
-    if ( new_nx.size() != new_lx.size() ){ 
+    if ( new_nx.size() != new_lx.size() )
+    {
         std::cerr << "The sizes of nx and lx are not the same. " << std::endl;
         exit(-1);
     }
     this->dimension = new_nx.size();
-    if ( dimension != 3 && dimension != 2 ){ 
-        std::cerr << "We expect 2D or 3D, but we get " << dimension <<std::endl;
+    if ( dimension != 3 && dimension != 2 && dimension != 1 )
+    {
+        std::cerr << "We expect 1D, 2D or 3D, but we get " << dimension <<std::endl;
         exit(-1);
     }
-    
+
     for(int i=0; i<dimension; i++)
     {
         nx[i] = new_nx[i];
         lx[i] = new_lx[i];
         dx[i] = new_lx[i]/new_nx[i];
     }
-    if (dimension ==2 ){
+    if (dimension == 2 )
+    {
         nx[2] = 1;
         lx[2] = 1.0;
         dx[2] = 1.0;
     }
-    
+    else if (dimension == 1 )
+    {
+        nx[1] = 1;
+        lx[1] = 1.0;
+        dx[1] = 1.0;
+
+        nx[2] = 1;
+        lx[2] = 1.0;
+        dx[2] = 1.0;
+    }
     // the number of total grids
     MM = nx[0]*nx[1]*nx[2];
     // weight factor for integral

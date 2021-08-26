@@ -1,3 +1,5 @@
+
+#include <iostream>
 #include "cmath"
 #include "Pseudo.h"
 
@@ -7,11 +9,15 @@ Pseudo::Pseudo(
 {
     this->sb = sb;
     this->pc = pc;
-    
+
     if(sb->get_dimension()==3)
         this->MM_COMPLEX = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
     else if(sb->get_dimension()==2)
         this->MM_COMPLEX = sb->get_nx(0)*(sb->get_nx(1)/2+1);
+    else if(sb->get_dimension()==1)
+        this->MM_COMPLEX = sb->get_nx(0)/2+1;
+    else
+        std::cerr << "Pseudo: Invalid dimension " << sb->get_dimension() << std::endl;
     
     this->expf = new double[MM_COMPLEX];
     this->expf_half = new double[MM_COMPLEX];
@@ -74,6 +80,15 @@ void Pseudo::init_gaussian_factor(
                 expf_half[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1])/2);
 
             }
+        }
+    }
+    else if (sb->get_dimension()==1)
+    {
+        for(int i=0; i<nx[0]/2+1; i++)
+        {
+            expf[i] = exp(pow(i,2)*xfactor[0]);
+            expf_half[i] = exp((pow(i,2)*xfactor[0])/2);
+
         }
     }
 }
