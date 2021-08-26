@@ -48,7 +48,7 @@ error_level = 1.0e20;
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
-print("Box Dimension: 3")
+print("Box Dimension: %d" % (sb.get_dimension()))
 print("Precision: 8")
 print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_NN()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
@@ -120,7 +120,7 @@ for scft_iter in range(0,max_scft_iter):
     old_error_level = error_level
     w_diff[:,:] = w_out[:,:]- w[:,:]
     multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + +1.0
+    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
     error_level = np.sqrt(multi_dot)
     
     # print iteration # and error levels and check the mass conservation

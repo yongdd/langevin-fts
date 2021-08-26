@@ -9,6 +9,7 @@
 
 #include "FftwFFT3D.h"
 #include "FftwFFT2D.h"
+#include "FftwFFT1D.h"
 #include "CpuPseudoGaussian.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -39,6 +40,9 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::str
         else if (sb->get_dimension() == 2)
             return new CpuPseudoGaussian(sb, pc,
                 new FftwFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+        else if (sb->get_dimension() == 1)
+            return new CpuPseudoGaussian(sb, pc,
+                new FftwFFT1D(sb->get_nx(0)));
     }
     else if ( str_model == "discrete" )
     {
@@ -48,6 +52,9 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::str
         else if (sb->get_dimension() == 2)
             return new CpuPseudoDiscrete(sb, pc,
                 new FftwFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+        else if (sb->get_dimension() == 1)
+            return new CpuPseudoGaussian(sb, pc,
+                new FftwFFT1D(sb->get_nx(0)));
     }
     return NULL;
 }

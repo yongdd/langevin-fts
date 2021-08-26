@@ -68,7 +68,7 @@ I tested this program under following environments.
 
 + **Object Oriented Programming (OOP)**  
     Basic concepts of OOP such as class, inheritance and dynamic binding.   
-    In addtion, some design patterns. (class ParamParser, CudaCommon, KernelFactory)
+    In addtion, some design patterns. (class ParamParser, CudaCommon, AbstractFactory)
 
 + **Circular Buffer**  (class CircularBuffer)   
     Circular buffer is a fixed-size buffer that two ends are connected forming circular shape. It is applied in the Anderson mixing iteration to record history of fields in FIFO order.

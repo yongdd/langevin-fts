@@ -24,7 +24,7 @@ am.step_max = 20         # max number of previous steps to calculate
 
 # GPU CONFIGURATION
 gpu.num_blocks     = 256     # the number blocks 
-gpu.threads_per_block = 128  # the number of threads per block.
+gpu.threads_per_block = 256  # the number of threads per block.
                              # typically 128 or 256 is optimal.
 
 # OUTPUT
