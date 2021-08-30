@@ -4,6 +4,7 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 # Features
 * Diblock Copolymer Melt
 * 3D Periodic Boundaries  
+* 1D, 2D Periodic Boundaries (for test purpose)
 * Pseudospectral Implmentation using MKL, FFTW and CUDA
 * Accelerating L-FTS using Deep Learning
 
@@ -14,27 +15,29 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 #### 2. FFT Library
   The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.
 
-+ **MKL**   
++ **(optional) MKL**   
   Math kernel library (MKL) is bundled with Intel Compilers.  
 
-+ **FFTW**   
++ **(optional) FFTW**   
   https://www.fftw.org/
   
 + **CUDA**  
   https://developer.nvidia.com/cuda-toolkit  
   
-#### 3. OpenMP
+#### 3. (optional) OpenMP
   Two partial partition functions are calculated simultaneously using open multi-processing (OpenMP) in the CPU implemenation.  
 
-#### 4. SWIG
+#### 4. CMake 3.17+
+
+#### 5. SWIG
   A tool that connects libraries written in C++ with Python    
   http://www.swig.org/
 
-#### 5. Anaconda
+#### 6. Anaconda 3.x
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
 
-#### 6. PyTorch
+#### 7. PyTorch
   An open source machine learning framwork  
   https://pytorch.org/get-started/locally/
 * * *
@@ -59,28 +62,22 @@ I tested this program under following environments.
   `-DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib \`  
   `-DUSE_OPENMP=yes`
 * * *
-  Then copy `_langevinfts.so` and `langevinfts.py` to your folder.
+  Then copy `_langevinfts.so` and `langevinfts.py` to your folder.  
   In python, import the package by adding  `from langevinfts import *`.
 # User Guide
 
 # Developer Guide
-  A few things you need to knows.     
+  A few things you need to knows.  
 
 + **Object Oriented Programming (OOP)**  
-    Basic concepts of OOP such as class, inheritance and dynamic binding.   
+    Basic concepts of OOP such as class, inheritance and dynamic binding.  
     In addtion, some design patterns. (class ParamParser, CudaCommon, AbstractFactory)
-
-+ **Circular Buffer**  (class CircularBuffer)   
-    Circular buffer is a fixed-size buffer that two ends are connected forming circular shape. It is applied in the Anderson mixing iteration to record history of fields in FIFO order.
-
-+ **CUDA Programming** (./platforms/cuda)   
++ **CUDA Programming** (./platforms/cuda)  
     This is a introductory book written by NVIDIA members  
   https://developer.nvidia.com/cuda-example  
     Optimizing Parallel Reduction in CUDA  
-  https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf  
-
-+ **Regular Expression (RE)** (class ParamParser)   
-    I implemented a parser using RE and deterministic finite automaton (DFA) to read input parameters from file and command line. There is a good online course about RE and finite automaton.  
-  https://www.coursera.org/lecture/algorithms-part2/regular-expressions-go3D7 
+  https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
++ **(optional) Parser** (class ParamParser)   
+    I implemented a parser using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, restart with standard approach using 'bison' and 'flex'.
   
 # References

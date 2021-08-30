@@ -59,13 +59,8 @@ print("volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 w       = np.zeros([2, sb.get_MM()], dtype=np.float64)
 w_out   = np.zeros([2, sb.get_MM()], dtype=np.float64)
-w_diff  = np.zeros([2, sb.get_MM()], dtype=np.float64)
-xi      = np.zeros(    sb.get_MM(),  dtype=np.float64)
 phia    = np.zeros(    sb.get_MM(),  dtype=np.float64)
 phib    = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phitot  = np.zeros(    sb.get_MM(),  dtype=np.float64)
-w_plus  = np.zeros(    sb.get_MM(),  dtype=np.float64)
-w_minus = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q1_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q2_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
@@ -76,9 +71,9 @@ for i in range(0,sb.get_nx(0)):
             idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k;
             phia[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1;
 
-phib[:] = 1.0 - phia[:];
-w[0,:] = chi_n*phib[:];
-w[1,:] = chi_n*phia[:];
+phib = 1.0 - phia;
+w[0] = chi_n*phib;
+w[1] = chi_n*phia;
 
 # keep the level of field value
 sb.zero_mean(w[0]);
@@ -100,27 +95,27 @@ for scft_iter in range(0,max_scft_iter):
     
     # calculate the total energy
     energy_old = energy_total
-    w_minus[:] = (w[0,:]-w[1,:])/2;
-    w_plus[:]  = (w[0,:]+w[1,:])/2;
+    w_minus = (w[0]-w[1])/2;
+    w_plus  = (w[0]+w[1])/2;
     
     energy_total  = -np.log(QQ/sb.get_volume())
     energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
     energy_total -= sb.integral(w_plus)/sb.get_volume()
     
     # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-    xi[:] = 0.5*(w[0,:]+w[1,:]-chi_n)
+    xi = 0.5*(w[0]+w[1]-chi_n)
 
     # calculate output fields
-    w_out[0,:] = chi_n*phib[:] + xi[:];
-    w_out[1,:] = chi_n*phia[:] + xi[:];
+    w_out[0] = chi_n*phib + xi;
+    w_out[1] = chi_n*phia + xi;
     sb.zero_mean(w_out[0]);
     sb.zero_mean(w_out[1]);
     
     # error_level measures the "relative distance" between the input and output fields
     old_error_level = error_level
-    w_diff[:,:] = w_out[:,:]- w[:,:]
+    w_diff = w_out - w
     multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
+    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + +1.0
     error_level = np.sqrt(multi_dot)
     
     # print iteration # and error levels and check the mass conservation

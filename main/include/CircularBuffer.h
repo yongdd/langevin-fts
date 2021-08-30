@@ -22,6 +22,7 @@ public:
     void reset();
     void insert(double* new_arr);
     double* get_array(int n);
+    double* operator[] (int n);
     double get(int n, int m);
 };
 #endif

@@ -34,6 +34,11 @@ double* CircularBuffer::get_array(int n)
     int i = (start+n_items-n-1+length)%length;
     return &elems[i*width];
 }
+double* CircularBuffer::operator[] (int n)
+{
+    int i = (start+n_items-n-1+length)%length;
+    return &elems[i*width];
+}
 double CircularBuffer::get(int n, int m)
 {
     int i = (start+n_items-n-1+length)%length;
