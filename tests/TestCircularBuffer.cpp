@@ -33,10 +33,10 @@ int main()
     p_arr = new double[MM] {4,2,1,1,2};
     cb.insert( p_arr );
     delete[] p_arr;
-    ss << "cb.get_array";
+    ss << "cb.operator[]";
     for(int i=0; i<SIZE; i++)
     {
-        p_arr = cb.get_array(i);
+        p_arr = cb[i];
         ss << "," ;
         for(int j=0; j<MM; j++)
             ss << p_arr[j];
@@ -101,7 +101,7 @@ int main()
 
     if(vec_string[0] != "cb.get_array,12354,00000,00000")
         return -1;
-    if(vec_string[1] != "cb.get_array,42112,12354,00000")
+    if(vec_string[1] != "cb.operator[],42112,12354,00000")
         return -1;
     if(vec_string[2] != "cb.get_array,32154,42112,12354")
         return -1;

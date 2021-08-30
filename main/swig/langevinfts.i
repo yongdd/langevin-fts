@@ -7,7 +7,6 @@
 #include "SimulationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
-#include "RandomGaussian.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
 %}
@@ -46,6 +45,5 @@ import_array();
 %include "SimulationBox.h"
 %include "Pseudo.h"
 %include "AndersonMixing.h"
-%include "RandomGaussian.h"
 %include "AbstractFactory.h"
 %include "PlatformSelector.h"

@@ -8,8 +8,8 @@ SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 SET(CMAKE_CUDA_STANDARD 11)
 SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
-#SET(CMAKE_BUILD_TYPE Release)
-SET(CMAKE_BUILD_TYPE Debug  )
+SET(CMAKE_BUILD_TYPE Release)
+#SET(CMAKE_BUILD_TYPE Debug  )
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -47,7 +47,6 @@ ADD_LIBRARY(common
     main/src/CircularBuffer.cpp
     main/src/Pseudo.cpp
     main/src/AndersonMixing.cpp
-    main/src/RandomGaussian.cpp
     )
 
 #  Intel MKL
