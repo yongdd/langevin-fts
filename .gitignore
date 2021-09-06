@@ -13,4 +13,5 @@ build
 html
 latex
 man
-data
+data*
+checkpoints

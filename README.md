@@ -3,8 +3,8 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 
 # Features
 * Diblock Copolymer Melt
-* 3D Periodic Boundaries  
-* 1D, 2D Periodic Boundaries (for test purpose)
+* Periodic Boundaries  
+* 3D, 2D and 1D (1D and 2D are only for test purpose)
 * Pseudospectral Implmentation using MKL, FFTW and CUDA
 * Accelerating L-FTS using Deep Learning
 
@@ -81,3 +81,7 @@ I tested this program under following environments.
     I implemented a parser using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, restart with standard approach using 'bison' and 'flex'.
   
 # References
++ T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
++ M.W. Masen, J. Chem. Phys. 2020, 152, 110901
++ T.M. Beardsley, and M.W. Matsen J. Chem. Phys. 2021, 154, 124902
++ M.W. Matsen, and T.M. Beardsley, Polymers 2021, 13, 2437

@@ -73,7 +73,7 @@ pathlib.Path("data").mkdir(parents=True, exist_ok=True)
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
-input_data = np.load("GyroidPhaseData.npz")
+input_data = np.load("DiscreteGyroidPhaseData.npz")
 
 # Simulation Box
 nx = input_data["nx"].tolist()
