@@ -1,6 +1,6 @@
 # -------------- Reference ------------
-# M.W. Matsen, and T.M. Beardsley, Polymers 2021, 13, 2437.
-# https://doi.org/10.3390/polym13152437
+# T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
+# https://doi.org/10.1021/acs.macromol.9b01904
 
 import sys
 import os
@@ -8,7 +8,6 @@ import time
 import pathlib
 import numpy as np
 from langevinfts import *
-import fts_learning_2d
 
 def find_saddle_point():
     # assign large initial value for the energy and error
@@ -59,9 +58,10 @@ def find_saddle_point():
         # calculte new fields using simple and Anderson mixing
         # (Caution! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
         am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level);
-
+        
 # -------------- simulation parameters ------------
-# OpenMP environment variables 
+
+# OpenMP environment variables
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
@@ -70,38 +70,37 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
 pathlib.Path("data").mkdir(parents=True, exist_ok=True)
-model_file = "checkpoints/CP_epoch50.pth"
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
 # Simulation Box
-nx = [50, 50]
-lx = [7.5, 7.5]
+nx = [32,32,32]
+lx = [8.0,8.0,8.0]
 
 # Polymer Chain
-NN = 80
 f = 0.5
+NN = 16
 chi_n = 20
-polymer_model = "Discrete"
+polymer_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
-saddle_max_iter = 200
-am_n_comp = 1  # W+
+saddle_max_iter = 100
+am_n_comp = 1  # A and B
 am_max_hist= 20
-am_start_error = 1e-1
+am_start_error = 8e-1
 am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 5.0     # langevin step interval, delta tau
-langevin_nbar = 2000  # invariant polymerization index
-langevin_max_iter = 500000
+langevin_dt = 1.0         # langevin step interval, delta tau*N
+langevin_nbar = 1024;     # invariant polymerization index
+langevin_max_iter = 10;
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = PlatformSelector.create_factory("CPU_MKL")
+factory = PlatformSelector.create_factory("CUDA")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
@@ -117,9 +116,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/
     
 # random seed for MT19937
 np.random.seed(5489);  
-
-# Deep Learning model FTS
-model = fts_learning_2d.DeepFts2d(model_file)
+print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
@@ -142,8 +139,8 @@ phi_a        = np.zeros(    sb.get_MM(),  dtype=np.float64)
 phi_b        = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
 print("wminus and wplus are initialized to random")
-w_plus = np.random.normal(0, langevin_sigma, sb.get_MM())
-w_minus = np.random.normal(0, langevin_sigma, sb.get_MM())
+w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_MM())
+w_minus = np.random.normal(0.0, langevin_sigma, sb.get_MM())
 
 # keep the level of field value
 sb.zero_mean(w_plus);
@@ -159,7 +156,7 @@ find_saddle_point()
 print("---------- Run ----------")
 time_start = time.time()
 
-#print("iteration, mass error, total_partition, energy_total, error_level")
+print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(0, langevin_max_iter):
     
     print("langevin step: ", langevin_step)
@@ -169,9 +166,6 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
-    if (langevin_step > 5):
-        w_plus = model.generate_w_plus(w_minus/pc.get_NN(), sb.get_nx())*pc.get_NN()
-        w_plus = w_plus.astype(np.float64)
     find_saddle_point()
     
     # update w_minus: correct step 
@@ -180,8 +174,7 @@ for langevin_step in range(0, langevin_max_iter):
     sb.zero_mean(w_minus)
     find_saddle_point()
 
-    if( (langevin_step < 5000 and langevin_step % 5 == 0) or
-        (langevin_step % 2000 == 0) ):
+    if( langevin_step % 1000 == 0 ):
         np.savez("data/fields_%06d.npz" % (langevin_step),
         nx=nx, lx=lx, N=NN, f=pc.get_f(), chi_n=pc.get_chi_n(),
         polymer_model=polymer_model, n_bar=langevin_nbar,
@@ -192,3 +185,4 @@ for langevin_step in range(0, langevin_max_iter):
 time_duration = time.time() - time_start; 
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_iter) )
+

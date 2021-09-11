@@ -44,8 +44,10 @@ int main()
     std::cout<< "Running MKL FFT 2D" << std::endl;
     fft.forward(data_init,data_k);
     std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-    for(int i=0; i<MM_COMPLEX; i++)
-        diff_sq_cplx[i] = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
+    for(int i=0; i<MM_COMPLEX; i++){
+        diff_sq_cplx[i]  = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
+        diff_sq_cplx[i] += pow(std::abs(data_k[i].imag() - data_k_answer[i].imag()),2);
+    }
     error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
     std::cout<< "FFT Forward Error: " << error << std::endl;
     if(std::isnan(error) || error > 1e-7)
