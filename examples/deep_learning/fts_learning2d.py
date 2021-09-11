@@ -1,91 +1,21 @@
-import logging
 import os
 import sys
-import glob
-from tqdm import tqdm
+import logging
 import numpy as np
-#import cv2
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
-class FtsNet2d(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        kernel_size = 5
-        padding = (kernel_size-1)//2
-        
-        self.conv1 = torch.nn.Conv2d(1,   128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv2 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv3 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv4 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv5 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv6 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv7 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv8 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv9 = torch.nn.Conv2d(128, 128, kernel_size, padding=padding, padding_mode='circular')
-        self.conv10 = torch.nn.Conv2d(128,   1, 1)
-
-        # self.bn1 = torch.nn.BatchNorm3d(128)
-        # self.bn2 = torch.nn.BatchNorm3d(128)
-        # self.bn3 = torch.nn.BatchNorm3d(128)
-        # self.bn4 = torch.nn.BatchNorm3d(128)
-        # self.bn5 = torch.nn.BatchNorm3d(128)
-        
-    def forward(self, x):
-        x = torch.nn.functional.relu(self.conv1(x))
-        x = torch.nn.functional.relu(self.conv2(x))
-        x = torch.nn.functional.relu(self.conv3(x))
-        x = torch.nn.functional.relu(self.conv4(x))
-        x = torch.nn.functional.relu(self.conv5(x))
-        x = torch.nn.functional.relu(self.conv6(x))
-        x = torch.nn.functional.relu(self.conv7(x))
-        x = torch.nn.functional.relu(self.conv8(x))
-        x = torch.nn.functional.relu(self.conv9(x))
-        x = self.conv10(x)
-        return x
-
-class DFTS_Dataset(Dataset):
-    def __init__(self, data_dir):
-
-        file_list = glob.glob(data_dir + "/*.npz")
-        sample_data = np.load(file_list[0])
-        nx = sample_data["nx"]
-        self.nx = nx
-        
-        n_train = len(file_list)
-        self.__n_train = n_train
-        self.__X = np.zeros([n_train, 1, nx[0], nx[1]])
-        self.__Y = np.zeros([n_train, 1, nx[0], nx[1]])
-
-        # train data
-        for i in range(0, n_train):
-            data = np.load(file_list[i])
-            # exchange field
-            self.__X[i,0,:,:] = np.reshape(data["w_minus"],nx)/data["N"]
-            # pressure field
-            self.__Y[i,0,:,:] = np.reshape(data["w_plus"],nx)/data["N"]
-            
-        logging.info(f'{data_dir} X.shape{self.__X.shape}')
-        logging.info(f'{data_dir} Y.shape{self.__Y.shape}')
-        
-        #logging.info(f'Creating dataset with {len(self.ids)} examples')
-        
-    def __len__(self):
-        return self.__n_train
-    
-    def __getitem__(self, i):
-        return {
-            'data':   torch.tensor(self.__X[i], dtype=torch.float64),
-            'target': torch.tensor(self.__Y[i], dtype=torch.float64)
-        }
+from fts_dataset2d import *
+from fts_fcnet2d import *
+from fts_resnet2d import *
 
 class DeepFts2d:
     def __init__(self, load_net=None):
 
-        # os.environ["CUDA_VISIBLE_DEVICES"]= "0,1"
+        os.environ["CUDA_VISIBLE_DEVICES"]= "1"
         logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logging.info(f'Using device {self.device}')
@@ -96,14 +26,18 @@ class DeepFts2d:
         self.test_folder_name = "data2D/eval"
         
         self.net = FtsNet2d()
+        #self.net = FtsResNet2d()
+        #if torch.cuda.device_count() > 1:
+        #    self.net = torch.nn.DataParallel(self.net)
+        #else:
         self.net.to(device=self.device)
         
         if load_net:
             self.net.load_state_dict(torch.load(load_net, map_location=self.device))
             logging.info(f'Model loaded from {load_net}')
-        
-        self.net.double()
             
+        self.net.double()
+
     def generate_w_plus(self, w_minus, nx):
         data = np.reshape(w_minus, (1, 1, nx[0], nx[1]))
         data = torch.tensor(data, dtype=torch.float64).to(self.device)
@@ -138,13 +72,13 @@ class DeepFts2d:
         device = self.device
         
         lr = 1e-4
-        epochs = 50
+        epochs = 100
         batch_size = 20
         log_dir = "logs"
         output_dir = "checkpoints"
                 
-        train = DFTS_Dataset(self.train_folder_name)
-        val = DFTS_Dataset(self.test_folder_name)
+        train = FtsDataset2d(self.train_folder_name)
+        val = FtsDataset2d(self.test_folder_name)
         
         n_train = len(train)
         n_val = len(val)
@@ -224,15 +158,19 @@ if __name__ == '__main__':
     vmin = np.min([np.min(Y), np.min(Y_gen)])
     vmax = np.max([np.max(Y), np.max(Y_gen)])
     
-    fig, axes = plt.subplots(2,2, figsize=(10,10))
+    fig, axes = plt.subplots(3,2, figsize=(10,15))
     axes[0,0].axis("off")
     axes[0,1].axis("off")
     axes[1,0].axis("off")
     axes[1,1].axis("off")
+    axes[2,0].axis("off")
+    axes[2,1].axis("off")
     
     axes[0,0].imshow(X[0,0,:,:], cmap="jet")
     axes[1,0].imshow(Y    [0,0,:,:], vmin=vmin, vmax=vmax, cmap="jet")
     axes[1,1].imshow(Y_gen[0,0,:,:], vmin=vmin, vmax=vmax, cmap="jet")
+    axes[2,0].imshow(Y[0,0,:,:]+X[0,0,:,:], cmap="jet")
+    axes[2,1].imshow(Y[0,0,:,:]-X[0,0,:,:], cmap="jet")
     
     plt.subplots_adjust(left=0.01,bottom=0.01,
                         top=0.99,right=0.99,

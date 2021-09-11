@@ -1,7 +1,3 @@
-# -------------- Reference ------------
-# T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
-# https://doi.org/10.1021/acs.macromol.9b01904
-
 import sys
 import os
 import time
@@ -51,6 +47,7 @@ def find_saddle_point():
             mass_error = sb.integral(phi_plus)/sb.get_volume() - 1.0
             print("%8d %12.3E %15.7E %13.9f %13.9f" %
                 (saddle_iter, mass_error, QQ, energy_total, error_level))
+            return saddle_iter, QQ
         # conditions to end the iteration
         if(error_level < saddle_tolerance):
             break;
@@ -58,10 +55,9 @@ def find_saddle_point():
         # calculte new fields using simple and Anderson mixing
         # (Caution! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
         am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level);
-        
-# -------------- simulation parameters ------------
 
-# OpenMP environment variables
+# -------------- simulation parameters ------------
+# OpenMP environment variables 
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
@@ -69,34 +65,38 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
-pathlib.Path("data").mkdir(parents=True, exist_ok=True)
+data_path = "data_EMPEC2"
+pathlib.Path(data_path).mkdir(parents=True, exist_ok=True)
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
 # Simulation Box
-nx = [32,32,32]
-lx = [8.0,8.0,8.0]
+#nx = [48, 48, 48]
+#lx = [9, 9, 9] /np.sqrt(6)
+
+nx = [32, 32, 32]
+lx = [4, 4, 4]
 
 # Polymer Chain
+NN = 64
 f = 0.5
-NN = 16
-chi_n = 20
-polymer_model = "Gaussian"  # choose among [Gaussian, Discrete]
+chi_n = 10.0
+polymer_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
-saddle_max_iter = 100
-am_n_comp = 1  # A and B
+saddle_max_iter = 200
+am_n_comp = 1  # W+
 am_max_hist= 20
-am_start_error = 8e-1
+am_start_error = 1e-1
 am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 1.0         # langevin step interval, delta tau
-langevin_nbar = 1024;     # invariant polymerization index
-langevin_max_iter = 10;
+langevin_dt = 1    # langevin step interval, delta tau*N
+langevin_nbar = 1000  # invariant polymerization index
+langevin_max_iter = 2000;
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
@@ -116,8 +116,6 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/
     
 # random seed for MT19937
 np.random.seed(5489);  
-print("Random Number Generator: ", np.random.RandomState().get_state()[0])
-
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
 print("Box Dimension: %d"  % (sb.get_dimension()) )
@@ -139,8 +137,8 @@ phi_a        = np.zeros(    sb.get_MM(),  dtype=np.float64)
 phi_b        = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
 print("wminus and wplus are initialized to random")
-w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_MM())
-w_minus = np.random.normal(0.0, langevin_sigma, sb.get_MM())
+w_plus = np.random.normal(0, langevin_sigma, sb.get_MM())
+w_minus = np.random.normal(0, langevin_sigma, sb.get_MM())
 
 # keep the level of field value
 sb.zero_mean(w_plus);
@@ -156,7 +154,8 @@ find_saddle_point()
 print("---------- Run ----------")
 time_start = time.time()
 
-#print("iteration, mass error, total_partition, energy_total, error_level")
+lnQ_list = []
+print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(0, langevin_max_iter):
     
     print("langevin step: ", langevin_step)
@@ -172,17 +171,23 @@ for langevin_step in range(0, langevin_max_iter):
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
-    find_saddle_point()
+    _, QQ, = find_saddle_point()
+    lnQ_list.append(-np.log(QQ/sb.get_volume()))
+
+    if( langevin_step % 10 == 0 ):
+        print(-np.log(QQ/sb.get_volume()))
 
     if( langevin_step % 1000 == 0 ):
-        np.savez("data/fields_%06d.npz" % (langevin_step),
+        np.savez(data_path + "/fields_%06d.npz" % (langevin_step),
         nx=nx, lx=lx, N=NN, f=pc.get_f(), chi_n=pc.get_chi_n(),
         polymer_model=polymer_model, n_bar=langevin_nbar,
         random_seed=np.random.RandomState().get_state()[0],
         w_minus=w_minus, w_plus=w_plus)
 
+print(np.mean(lnQ_list[1000:]))
+np.savez("data_EMPEC2_lnQ.npz", lnQ_list)
+
 # estimate execution time
 time_duration = time.time() - time_start; 
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_iter) )
-

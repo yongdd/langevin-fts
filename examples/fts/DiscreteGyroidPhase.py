@@ -95,7 +95,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 0.8     # langevin step interval, delta tau
+langevin_dt = 0.8     # langevin step interval, delta tau*N
 langevin_nbar = input_data["n_bar"];  # invariant polymerization index
 langevin_max_iter = 5;
 
@@ -159,7 +159,7 @@ find_saddle_point()
 print("---------- Run ----------")
 time_start = time.time()
 
-#print("iteration, mass error, total_partition, energy_total, error_level")
+print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(0, langevin_max_iter):
     
     print("langevin step: ", langevin_step)

@@ -21,9 +21,9 @@ tolerance = 1e-9
 f = 0.3
 NN = 50
 chi_n = 20
-nx = [31,49,63]
-lx = [4.0,3.0,2.0]
-polymer_model = "Gaussian" # choose among [Gaussian, Discrete]
+nx = [49,63]
+lx = [4.0,3.0]
+polymer_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 am_n_comp = 2  # A and B
 am_max_hist= 20
@@ -38,7 +38,7 @@ factory = PlatformSelector.create_factory("CUDA")
 # for the dynamic binding
 pc = factory.create_polymer_chain(f, NN, chi_n)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model)
+pseudo = factory.create_pseudo(sb, pc, polymer_model) 
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -59,8 +59,8 @@ print("volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 w       = np.zeros([2, sb.get_MM()], dtype=np.float64)
 w_out   = np.zeros([2, sb.get_MM()], dtype=np.float64)
-phia    = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phib    = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_a    = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_b    = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q1_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q2_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
@@ -69,11 +69,11 @@ for i in range(0,sb.get_nx(0)):
     for j in range(0,sb.get_nx(1)):
         for k in range(0,sb.get_nx(2)):
             idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k;
-            phia[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1;
+            phi_a[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1;
 
-phib = 1.0 - phia;
-w[0] = chi_n*phib;
-w[1] = chi_n*phia;
+phi_b = 1.0 - phi_a;
+w[0] = chi_n*phi_b;
+w[1] = chi_n*phi_a;
 
 # keep the level of field value
 sb.zero_mean(w[0]);
@@ -91,7 +91,7 @@ time_start = time.time()
 # iteration begins here
 for scft_iter in range(0,max_scft_iter):
     # for the given fields find the polymer statistics
-    QQ = pseudo.find_phi(phia, phib, q1_init,q2_init,w[0],w[1])
+    QQ = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
     
     # calculate the total energy
     energy_old = energy_total
@@ -106,8 +106,8 @@ for scft_iter in range(0,max_scft_iter):
     xi = 0.5*(w[0]+w[1]-chi_n)
 
     # calculate output fields
-    w_out[0] = chi_n*phib + xi;
-    w_out[1] = chi_n*phia + xi;
+    w_out[0] = chi_n*phi_b + xi;
+    w_out[1] = chi_n*phi_a + xi;
     sb.zero_mean(w_out[0]);
     sb.zero_mean(w_out[1]);
     
@@ -119,7 +119,7 @@ for scft_iter in range(0,max_scft_iter):
     error_level = np.sqrt(multi_dot)
     
     # print iteration # and error levels and check the mass conservation
-    mass_error = (sb.integral(phia) + sb.integral(phib))/sb.get_volume() - 1.0
+    mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
     print( "%8d %12.3E %15.7E %13.9f %13.9f" %
         (scft_iter, mass_error, QQ, energy_total, error_level) )
 
@@ -134,3 +134,9 @@ for scft_iter in range(0,max_scft_iter):
 time_duration = time.time() - time_start; 
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/max_scft_iter) )
+
+# save final results
+np.savez("scft2d_fields.npz",
+        nx=sb.get_nx(), lx=sb.get_lx(), N=pc.get_NN(), f=pc.get_f(), chi_n=pc.get_chi_n(),
+        polymer_model=polymer_model, w=w, 
+        phi_a=phi_a, phi_b=phi_b)
