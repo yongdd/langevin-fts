@@ -15,12 +15,6 @@ class FtsNet2d(torch.nn.Module):
         self.conv4 = torch.nn.Conv2d(mid_channels, mid_channels, kernel_size, padding=padding, padding_mode='circular')
         self.conv5 = torch.nn.Conv2d(mid_channels, mid_channels, kernel_size, padding=padding, padding_mode='circular')
         self.conv6 = torch.nn.Conv2d(mid_channels, out_channels, 1)
-
-        # self.bn1 = torch.nn.BatchNorm3d(128)
-        # self.bn2 = torch.nn.BatchNorm3d(128)
-        # self.bn3 = torch.nn.BatchNorm3d(128)
-        # self.bn4 = torch.nn.BatchNorm3d(128)
-        # self.bn5 = torch.nn.BatchNorm3d(128)
         
     def forward(self, x):
         x = torch.nn.functional.relu(self.conv1(x))

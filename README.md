@@ -78,7 +78,7 @@ I tested this program under following environments.
     Optimizing Parallel Reduction in CUDA  
   https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
 + **(optional) Parser** (class ParamParser)   
-    I implemented a parser using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, restart with standard approach using 'bison' and 'flex'.
+    I implemented a parser using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement using standard tools such as 'bison' and 'flex'. Instead, you can use 'argparse' in python scripts.
   
 # References
 + T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
