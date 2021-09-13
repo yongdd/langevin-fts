@@ -15,7 +15,6 @@ from fts_resnet2d import *
 class DeepFts2d:
     def __init__(self, load_net=None):
 
-        os.environ["CUDA_VISIBLE_DEVICES"]= "1"
         logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logging.info(f'Using device {self.device}')
@@ -25,17 +24,18 @@ class DeepFts2d:
         self.train_folder_name = "data2D/train"
         self.test_folder_name = "data2D/eval"
         
-        self.net = FtsNet2d()
-        #self.net = FtsResNet2d()
+        if load_net:
+            #self.net.load_state_dict(torch.load(load_net, map_location=self.device))
+            self.net = torch.load(load_net, map_location=self.device)
+            logging.info(f'Model loaded from {load_net}')
+        else:
+            self.net = FtsNet2d()
+            #self.net = FtsResNet2d()
         #if torch.cuda.device_count() > 1:
         #    self.net = torch.nn.DataParallel(self.net)
         #else:
-        self.net.to(device=self.device)
-        
-        if load_net:
-            self.net.load_state_dict(torch.load(load_net, map_location=self.device))
-            logging.info(f'Model loaded from {load_net}')
             
+        self.net.to(device=self.device)
         self.net.double()
 
     def generate_w_plus(self, w_minus, nx):
@@ -57,13 +57,12 @@ class DeepFts2d:
                 with torch.no_grad():
                     y_pred = net(data)
                 loss += criterion(y_pred, target).item()
-                pbar.update()
+                pbar.update(data.shape[0])
 
             writer.add_images('exchange', data[0,0,:,:], global_step, dataformats="HW")
             writer.add_images('pred', y_pred[0,0,:,:], global_step, dataformats="HW")
             writer.add_images('true', target[0,0,:,:], global_step, dataformats="HW")
 
-        net.train()
         return loss / n_val
 
     def train_net(self,) :
@@ -139,12 +138,14 @@ class DeepFts2d:
                 logging.info('Created checkpoint directory')
             except OSError:
                 pass
-            torch.save(net.state_dict(),
-                       os.path.join(output_dir, f'CP_epoch{epoch + 1}.pth'))
+            torch.save(net, os.path.join(output_dir, f'CP_epoch{epoch + 1}.pth'))
             logging.info(f'Checkpoint {epoch + 1} saved !')
+        #torch.save(net, os.path.join(output_dir, f'epoch{epoch + 1}.pth'))
         torch.cuda.empty_cache()
 
 if __name__ == '__main__':
+    
+    os.environ["CUDA_VISIBLE_DEVICES"]= "1"
     model = DeepFts2d()
     #model = DeepFts2d("checkpoints/CP_epoch50.pth")
     model.train_net()

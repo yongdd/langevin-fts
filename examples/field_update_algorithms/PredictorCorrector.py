@@ -131,10 +131,10 @@ print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
 #-------------- allocate array ------------
-q1_init      = np.zeros(    sb.get_MM(),  dtype=np.float64)
-q2_init      = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phi_a        = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phi_b        = np.zeros(    sb.get_MM(),  dtype=np.float64)
+q1_init = np.zeros(sb.get_MM(), dtype=np.float64)
+q2_init = np.zeros(sb.get_MM(), dtype=np.float64)
+phi_a   = np.zeros(sb.get_MM(), dtype=np.float64)
+phi_b   = np.zeros(sb.get_MM(), dtype=np.float64)
 
 print("wminus and wplus are initialized to random")
 w_plus = np.random.normal(0, langevin_sigma, sb.get_MM())

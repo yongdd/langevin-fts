@@ -1,7 +1,3 @@
-# -------------- Reference ------------
-# M.W. Matsen, and T.M. Beardsley, Polymers 2021, 13, 2437.
-# https://doi.org/10.3390/polym13152437
-
 import sys
 import os
 import time
@@ -71,7 +67,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
 pathlib.Path("data").mkdir(parents=True, exist_ok=True)
-model_file = "checkpoints/CP_epoch50.pth"
+model_file = "test_models/FCN2d_5Layer_5kernel_128channel_epoch100.pth"
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
@@ -98,7 +94,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 5.0     # langevin step interval, delta tau*N
 langevin_nbar = 2000  # invariant polymerization index
-langevin_max_iter = 6
+langevin_max_iter = 200
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
@@ -120,7 +116,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/
 np.random.seed(5489);  
 
 # Deep Learning model FTS
-model = fts_learning_2d.DeepFts2d(model_file)
+model = fts_learning2d.DeepFts2d(model_file)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
@@ -170,7 +166,7 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
-    if (langevin_step >= 5):
+    if (langevin_step >= 10):
         w_plus = model.generate_w_plus(w_minus/pc.get_NN(), sb.get_nx())*pc.get_NN()
         w_plus = w_plus.astype(np.float64)
     find_saddle_point()
@@ -181,7 +177,7 @@ for langevin_step in range(0, langevin_max_iter):
     sb.zero_mean(w_minus)
     find_saddle_point()
 
-    if( (langevin_step < 5000 and langevin_step % 5 == 0) or
+    if( (langevin_step < 5000 and langevin_step % 50 == 0) or
         (langevin_step % 2000 == 0) ):
         np.savez("data/fields_%06d.npz" % (langevin_step),
         nx=nx, lx=lx, N=NN, f=pc.get_f(), chi_n=pc.get_chi_n(),

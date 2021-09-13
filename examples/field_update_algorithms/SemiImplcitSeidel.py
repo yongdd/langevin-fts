@@ -57,6 +57,8 @@ def find_saddle_point():
         am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level);
 
 # -------------- simulation parameters ------------
+# Cuda environment variables 
+os.environ["CUDA_VISIBLE_DEVICES"]= "0"
 # OpenMP environment variables 
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -65,7 +67,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
-data_path = "data_EM1"
+data_path = "data_SIS1"
 pathlib.Path(data_path).mkdir(parents=True, exist_ok=True)
 
 verbose_level = 1  # 1 : print at each langevin step.
@@ -91,9 +93,9 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 1     # langevin step interval, delta tau*N
+langevin_dt = 0.01     # langevin step interval, delta tau*N
 langevin_nbar = 1000  # invariant polymerization index
-langevin_max_iter = 1200;
+langevin_max_iter = 3000;
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
@@ -112,7 +114,12 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
     
 # random seed for MT19937
-np.random.seed(5489);  
+np.random.seed(5489); 
+
+# arrays for semi implicit Seidel
+kernel_minus = langevin_dt/(1.0 + 2/pc.get_chi_n()*langevin_dt)
+kernel_noise = 1/(1.0 + 2/pc.get_chi_n()*langevin_dt)
+
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
 print("Box Dimension: %d"  % (sb.get_dimension()) )
@@ -159,7 +166,7 @@ for langevin_step in range(0, langevin_max_iter):
     # update w_minus
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_MM())
     g_minus = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
-    w_minus += -g_minus*langevin_dt + normal_noise
+    w_minus += -kernel_minus*g_minus + kernel_noise*normal_noise
     sb.zero_mean(w_minus)
     _, QQ, = find_saddle_point()
     lnQ_list.append(-np.log(QQ/sb.get_volume()))
@@ -171,8 +178,8 @@ for langevin_step in range(0, langevin_max_iter):
         random_seed=np.random.RandomState().get_state()[0],
         w_minus=w_minus, w_plus=w_plus)
 
-print(np.mean(lnQ_list[200:]))
-np.savez("data_EM1_lnQ.npz", lnQ_list)
+print(langevin_dt, np.mean(lnQ_list[2000:]))
+np.savez("data_SIS1_lnQ.npz", lnQ_list)
 
 # estimate execution time
 time_duration = time.time() - time_start; 
