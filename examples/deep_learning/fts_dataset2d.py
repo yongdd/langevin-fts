@@ -17,8 +17,6 @@ class FtsDataset2d(Dataset):
         self.__X = np.zeros([n_train, 1, nx[0], nx[1]])
         self.__Y = np.zeros([n_train, 1, nx[0], nx[1]])
 
-        #-(g_aa_k+2*g_ab_k+g_bb_k)*w_plus_k + (g_aa_k-g_bb_k)*w_minus_k
-
         # train data
         for i in range(0, n_train):
             data = np.load(file_list[i])

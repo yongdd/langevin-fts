@@ -55,7 +55,7 @@ I tested this program under following environments.
   `cd build`  
   `cmake ../`  
   `make`   
-  `make test`
+  `make test`   
   `make install`
 * * *
   You can specify your building flags with following command.   

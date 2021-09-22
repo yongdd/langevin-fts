@@ -10,7 +10,6 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from fts_dataset2d import *
 from fts_fcnet2d import *
-from fts_resnet2d import *
 
 class DeepFts2d:
     def __init__(self, load_net=None):
@@ -148,7 +147,7 @@ class DeepFts2d:
 
 if __name__ == '__main__':
     
-    os.environ["CUDA_VISIBLE_DEVICES"]= "1"
+    #os.environ["CUDA_VISIBLE_DEVICES"]= "1"
     model = DeepFts2d()
     #model = DeepFts2d("checkpoints/CP_epoch50.pth")
     model.train_net()
