@@ -8,8 +8,8 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from fts_dataset2d import *
-from fts_fcnet2d import *
+from fts_dataset2d_diff import *
+from fts_unet2d_diff import *
 
 class DeepFts2d:
     def __init__(self, load_net=None):
@@ -20,15 +20,15 @@ class DeepFts2d:
         logging.info(f'Current cuda device {torch.cuda.current_device()}')
         logging.info(f'Count of using GPUs {torch.cuda.device_count()}')
         
-        self.train_folder_name = "data2D/train"
-        self.test_folder_name = "data2D/eval"
+        self.train_folder_name = "data2D/train_diff"
+        self.test_folder_name = "data2D/eval_diff"
         
         if load_net:
             #self.net.load_state_dict(torch.load(load_net, map_location=self.device))
             self.net = torch.load(load_net, map_location=self.device)
             logging.info(f'Model loaded from {load_net}')
         else:
-            self.net = FtsNet2d()
+            self.net = UNet2D()
             #self.net = FtsResNet2d()
         #if torch.cuda.device_count() > 1:
         #    self.net = torch.nn.DataParallel(self.net)
@@ -147,16 +147,16 @@ class DeepFts2d:
 
 if __name__ == '__main__':
     
-    #os.environ["CUDA_VISIBLE_DEVICES"]= "1"
+    os.environ["CUDA_VISIBLE_DEVICES"]= "1"
     model = DeepFts2d()
     #model = DeepFts2d("checkpoints/CP_epoch50.pth")
     model.train_net()
     
-    sample_file_name = "data2D/eval/fields_050000.npz"
+    sample_file_name = "data2D/eval_1/fields_050000.npz"
     sample_data = np.load(sample_file_name)
     nx = sample_data["nx"]
-    X = np.reshape(sample_data["w_minus"], (1, 1, nx[0], nx[1]))/sample_data["N"]
-    Y = np.reshape(sample_data["w_plus"],  (1, 1, nx[0], nx[1]))/sample_data["N"]
+    X = np.reshape(sample_data["w_minus"], (1, 1, nx[0], nx[1]))
+    Y = np.reshape(sample_data["w_plus_diff"],  (1, 1, nx[0], nx[1]))
     Y_gen = np.reshape(model.generate_w_plus(X, (nx[0], nx[1])), (1, 1, nx[0], nx[1]))
     vmin = np.min([np.min(Y), np.min(Y_gen)])
     vmax = np.max([np.max(Y), np.max(Y_gen)])
@@ -172,8 +172,6 @@ if __name__ == '__main__':
     axes[0,0].imshow(X[0,0,:,:], cmap="jet")
     axes[1,0].imshow(Y    [0,0,:,:], vmin=vmin, vmax=vmax, cmap="jet")
     axes[1,1].imshow(Y_gen[0,0,:,:], vmin=vmin, vmax=vmax, cmap="jet")
-    axes[2,0].imshow(Y[0,0,:,:]+X[0,0,:,:], cmap="jet")
-    axes[2,1].imshow(Y[0,0,:,:]-X[0,0,:,:], cmap="jet")
     
     plt.subplots_adjust(left=0.01,bottom=0.01,
                         top=0.99,right=0.99,

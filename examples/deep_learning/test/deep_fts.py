@@ -79,7 +79,7 @@ lx = [7.5, 7.5]
 # Polymer Chain
 NN = 80
 f = 0.5
-chi_n = 20
+chi_n = 10
 polymer_model = "Discrete"
 
 # Anderson Mixing 
@@ -94,7 +94,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 5.0     # langevin step interval, delta tau*N
 langevin_nbar = 2000  # invariant polymerization index
-langevin_max_iter = 200
+langevin_max_iter = 100
 
 # -------------- initialize ------------
 # choose platform among [CUDA, CPU_MKL, CPU_FFTW]
@@ -166,10 +166,37 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
+    w_plus_copy1 = w_plus.copy()
     if (langevin_step >= 10):
         w_plus = model.generate_w_plus(w_minus/pc.get_NN(), sb.get_nx())*pc.get_NN()
         #w_plus = w_plus.astype(np.float64)
+        w_plus_copy2 = w_plus.copy()
     find_saddle_point()
+    if (langevin_step >= 10 and langevin_step%10 == 0 ):
+        vmin = np.min([np.min(w_plus), np.min(w_plus_copy1), np.min(w_plus_copy2)])
+        vmax = np.max([np.max(w_plus), np.max(w_plus_copy1), np.max(w_plus_copy2)])
+        
+        #diff_max = np.max(w_plus-w_plus_copy2)
+        #diff_min = np.min(w_plus-w_plus_copy2)
+        #print(diff_min, diff_max, vmin, vmax)
+        
+        plt.figure()
+        fig, axes = plt.subplots(2,2, figsize=(10,10))
+        axes[0,0].axis("off")
+        axes[0,1].axis("off")
+        axes[1,0].axis("off")
+        axes[1,1].axis("off")
+
+        axes[0,0].imshow(np.reshape(w_minus,sb.get_nx()), vmin=vmin, vmax=vmax, cmap="jet")
+        axes[0,1].imshow(np.reshape(w_plus_copy2,sb.get_nx()), vmin=vmin, vmax=vmax, cmap="jet")
+        axes[1,0].imshow(np.reshape(w_plus,sb.get_nx()), vmin=vmin, vmax=vmax, cmap="jet")
+        axes[1,1].imshow(np.reshape(w_plus-w_plus_copy2,sb.get_nx()), vmin=-1, vmax=1, cmap="jet")
+        
+        plt.subplots_adjust(left=0.01,bottom=0.01,
+                            top=0.99,right=0.99,
+                            wspace=0.01, hspace=0.01)
+        plt.savefig('field_%05d.png' % (langevin_step))
+        plt.close()
     
     # update w_minus: correct step 
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
