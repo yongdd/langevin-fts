@@ -16,3 +16,4 @@ latex
 man
 data*
 checkpoints
+logs*

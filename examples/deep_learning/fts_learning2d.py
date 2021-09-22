@@ -71,8 +71,8 @@ class DeepFts2d:
         device = self.device
         
         lr = 1e-4
-        epochs = 100
-        batch_size = 20
+        epochs = 50
+        batch_size = 100
         log_dir = "logs"
         output_dir = "checkpoints"
                 
@@ -89,7 +89,7 @@ class DeepFts2d:
         global_step = 0
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10,20,30,40], gamma=0.5, verbose=True)
         logging.info(f'''Starting training:
             Epochs:          {epochs}
             Batch size:      {batch_size}
@@ -118,6 +118,7 @@ class DeepFts2d:
                     loss.backward()
                     #nn.utils.clip_grad_value_(net.parameters(), 0.1)
                     optimizer.step()
+                    
             
                     writer.add_scalar('Loss/train', loss.item(), global_step)
                     pbar.set_postfix(**{'loss (batch)': loss.item()})
@@ -130,7 +131,7 @@ class DeepFts2d:
                             writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), global_step)
                             writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), global_step)
                         val_loss = self.eval_net(net, val_loader, device, criterion, writer, global_step)
-                        logging.info('Validation loss: {}'.format(val_loss))
+                        logging.info('\nValidation loss: {}'.format(val_loss))
                         writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], global_step)
                         writer.add_scalar('Loss/test', val_loss, global_step)
             try:
@@ -138,6 +139,8 @@ class DeepFts2d:
                 logging.info('Created checkpoint directory')
             except OSError:
                 pass
+            scheduler.step()
+            
             torch.save(net, os.path.join(output_dir, f'CP_epoch{epoch + 1}.pth'))
             logging.info(f'Checkpoint {epoch + 1} saved !')
         #torch.save(net, os.path.join(output_dir, f'epoch{epoch + 1}.pth'))

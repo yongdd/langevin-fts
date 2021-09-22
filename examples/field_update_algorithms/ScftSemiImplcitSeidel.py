@@ -36,9 +36,9 @@ pseudo = factory.create_pseudo(sb, pc, polymer_model)
 
 # arrays for semi implicit Seidel
 space_kx, space_ky, space_kz = np.meshgrid(
-    2*np.pi/sb.get_lx(0)*np.concatenate([np.arange(sb.get_nx(1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
+    2*np.pi/sb.get_lx(1)*np.concatenate([np.arange(sb.get_nx(1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
     2*np.pi/sb.get_lx(0)*np.concatenate([np.arange(sb.get_nx(0)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-    2*np.pi/sb.get_lx(0)*np.arange(sb.get_nx(2)//2+1))
+    2*np.pi/sb.get_lx(2)*np.arange(sb.get_nx(2)//2+1))
 
 mag2_k = (space_kx**2 + space_ky**2 + space_kz**2)/6.0
 mag2_k[0,0,0] = 1.0e-5 # to prevent 'division by zero' error

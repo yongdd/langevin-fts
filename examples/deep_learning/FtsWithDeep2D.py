@@ -67,7 +67,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
 pathlib.Path("data").mkdir(parents=True, exist_ok=True)
-model_file = "test_models/FCN2d_5Layer_5kernel_128channel_epoch100.pth"
+model_file = "temp_models/FCN2d_5Layer_5kernel_128channel_epoch50.pth"
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
@@ -168,7 +168,7 @@ for langevin_step in range(0, langevin_max_iter):
     sb.zero_mean(w_minus)
     if (langevin_step >= 10):
         w_plus = model.generate_w_plus(w_minus/pc.get_NN(), sb.get_nx())*pc.get_NN()
-        w_plus = w_plus.astype(np.float64)
+        #w_plus = w_plus.astype(np.float64)
     find_saddle_point()
     
     # update w_minus: correct step 
