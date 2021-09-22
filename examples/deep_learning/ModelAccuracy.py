@@ -10,7 +10,7 @@ from fts_dataset2d import *
 train_folder_name = "data2D/train"
 test_folder_name = "data2D/eval"
 #model_file = "checkpoints/CP_epoch100.pth"
-model_file = "temp_models/FCN2d_5Layer_5kernel_128channel_epoch100_mish.pth"
+model_file = "temp_models/FCN2d_5Layer_5kernel_128channel_epoch50.pth"
 batch_size = 20
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
