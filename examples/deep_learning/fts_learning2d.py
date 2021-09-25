@@ -20,8 +20,8 @@ class DeepFts2d:
         logging.info(f'Current cuda device {torch.cuda.current_device()}')
         logging.info(f'Count of using GPUs {torch.cuda.device_count()}')
         
-        self.train_folder_name = "data2D/train"
-        self.test_folder_name = "data2D/eval"
+        self.train_folder_name = "data2D_64/train"
+        self.test_folder_name = "data2D_64/eval"
         
         if load_net:
             #self.net.load_state_dict(torch.load(load_net, map_location=self.device))
@@ -29,6 +29,7 @@ class DeepFts2d:
             logging.info(f'Model loaded from {load_net}')
         else:
             self.net = FtsNet2d()
+            #self.net = UNet2d()
             #self.net = FtsResNet2d()
         #if torch.cuda.device_count() > 1:
         #    self.net = torch.nn.DataParallel(self.net)
@@ -38,11 +39,11 @@ class DeepFts2d:
         self.net.double()
 
     def generate_w_plus(self, w_minus, nx):
-        data = np.reshape(w_minus, (1, 1, nx[0], nx[1]))
+        data = np.reshape(w_minus/10.0, (1, 1, nx[0], nx[1]))
         data = torch.tensor(data, dtype=torch.float64).to(self.device)
         #print(type(data), data.shape)
         with torch.no_grad():
-            return np.reshape(self.net(data).cpu().numpy(), nx[0]*nx[1])
+            return np.reshape(self.net(data).cpu().numpy()*10.0, nx[0]*nx[1])
             
     def eval_net(self, net, loader, device, criterion, writer, global_step):
         net.eval()
@@ -88,7 +89,7 @@ class DeepFts2d:
         global_step = 0
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10,20,30,40], gamma=0.5, verbose=True)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10,20,30], gamma=0.5, verbose=True)
         logging.info(f'''Starting training:
             Epochs:          {epochs}
             Batch size:      {batch_size}
@@ -152,11 +153,11 @@ if __name__ == '__main__':
     #model = DeepFts2d("checkpoints/CP_epoch50.pth")
     model.train_net()
     
-    sample_file_name = "data2D/eval/fields_050000.npz"
+    sample_file_name = "data_64/eval/fields_010000.npz"
     sample_data = np.load(sample_file_name)
     nx = sample_data["nx"]
-    X = np.reshape(sample_data["w_minus"], (1, 1, nx[0], nx[1]))/sample_data["N"]
-    Y = np.reshape(sample_data["w_plus"],  (1, 1, nx[0], nx[1]))/sample_data["N"]
+    X = np.reshape(sample_data["w_minus"], (1, 1, nx[0], nx[1]))/10.0
+    Y = np.reshape(sample_data["w_plus"],  (1, 1, nx[0], nx[1]))/10.0
     Y_gen = np.reshape(model.generate_w_plus(X, (nx[0], nx[1])), (1, 1, nx[0], nx[1]))
     vmin = np.min([np.min(Y), np.min(Y_gen)])
     vmax = np.max([np.max(Y), np.max(Y_gen)])

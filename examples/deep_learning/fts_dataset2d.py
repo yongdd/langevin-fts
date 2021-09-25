@@ -21,9 +21,9 @@ class FtsDataset2d(Dataset):
         for i in range(0, n_train):
             data = np.load(file_list[i])
             # exchange field
-            self.__X[i,0,:,:] = np.reshape(data["w_minus"],nx)/data["N"]
+            self.__X[i,0,:,:] = np.reshape(data["w_minus"],nx)/10.0
             # pressure field
-            self.__Y[i,0,:,:] = np.reshape(data["w_plus"],nx)/data["N"]
+            self.__Y[i,0,:,:] = np.reshape(data["w_plus"],nx)/10.0
             
         logging.info(f'{data_dir} X.shape{self.__X.shape}')
         logging.info(f'{data_dir} Y.shape{self.__Y.shape}')

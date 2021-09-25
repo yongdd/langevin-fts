@@ -73,13 +73,13 @@ verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
 # Simulation Box
-nx = [50, 50]
-lx = [7.5, 7.5]
+nx = [64, 64]
+lx = [9.6, 9.6]
 
 # Polymer Chain
 NN = 80
 f = 0.5
-chi_n = 20
+chi_n = 15
 polymer_model = "Discrete"
 
 # Anderson Mixing 
@@ -166,8 +166,8 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
-    if (langevin_step >= 10):
-        w_plus = model.generate_w_plus(w_minus/pc.get_NN(), sb.get_nx())*pc.get_NN()
+    if (langevin_step >= 15):
+        w_plus = model.generate_w_plus(w_minus, sb.get_nx())
         #w_plus = w_plus.astype(np.float64)
     find_saddle_point()
     
