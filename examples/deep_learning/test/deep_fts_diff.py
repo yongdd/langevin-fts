@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from langevinfts import *
 import fts_learning2d
-
+import fts_learning2d_diff
 def find_saddle_point():
     # assign large initial value for the energy and error
     energy_total = 1e20
@@ -67,8 +67,11 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
 pathlib.Path("data").mkdir(parents=True, exist_ok=True)
-model_file = "FCN2d_5Layer_5kernel_128channel_epoch50.pth"
-
+#model_file = "temp_FCN2d_5Layer_5kernel_128channel_epoch50.pth"
+model_file = "checkpoints/FCNet_64_CP_epoch50.pth"
+#model_file = "checkpoints/UNet_64_CP_epoch50.pth"
+#model_file = "temp_FCN2d_5Layer_5kernel_128channel_epoch50.pth"
+model_file_diff = "checkpoints/CP_epoch45.pth"
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
@@ -117,6 +120,7 @@ np.random.seed(5489);
 
 # Deep Learning model FTS
 model = fts_learning2d.DeepFts2d(model_file)
+model_diff = fts_learning2d_diff.DeepFts2d(model_file_diff)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
@@ -168,8 +172,37 @@ for langevin_step in range(0, langevin_max_iter):
     sb.zero_mean(w_minus)
     if (langevin_step >= 15):
         w_plus = model.generate_w_plus(w_minus, sb.get_nx())
+        w_plus_diff = model_diff.generate_w_plus_diff(w_minus, sb.get_nx())
+        w_plus += w_plus_diff
+        #w_plus_diff = w_plus.copy()        
+
+        W0 = np.reshape(w_minus, (nx[0], nx[1]))
+        W1 = np.reshape(w_plus, (nx[0], nx[1]))
+        W2 = np.reshape(w_plus_diff, (nx[0], nx[1]))
+        w_plus_copy = w_plus.copy()
+        find_saddle_point()
+        
+        W3 = np.reshape(w_plus-w_plus_copy, (nx[0], nx[1]))
+        
+        #vmin = np.min([np.min(Y), np.min(Y_gen)])
+        #vmax = np.max([np.max(Y), np.max(Y_gen)])
+        
+        fig, axes = plt.subplots(2,2, figsize=(10,10))
+        axes[0,0].axis("off")
+        axes[0,1].axis("off")
+        axes[1,0].axis("off")
+        axes[1,1].axis("off")
+        
+        axes[0,0].imshow(W0, cmap="jet")
+        axes[0,1].imshow(W0, cmap="jet")
+        axes[1,0].imshow(W2, vmin=-1, vmax=1, cmap="jet")
+        axes[1,1].imshow(W3, vmin=-1, vmax=1, cmap="jet")
+        
+        plt.savefig('w_plus_minus_%06d.png' % langevin_step)
+        plt.close()
         #w_plus = w_plus.astype(np.float64)
-    find_saddle_point()
+    else:
+        find_saddle_point()
     
     # update w_minus: correct step 
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
