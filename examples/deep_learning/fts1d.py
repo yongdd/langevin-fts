@@ -5,7 +5,7 @@ import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 from langevinfts import *
-import fts_learning2d
+from train1d import *
 
 def find_saddle_point():
     # assign large initial value for the energy and error
@@ -67,14 +67,14 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 #pp.read_param_file(sys.argv[1], False);
 #pp.get("platform")
 pathlib.Path("data").mkdir(parents=True, exist_ok=True)
-model_file = "FCN2d_5Layer_5kernel_128channel_epoch50.pth"
+model_file = "UNet1d_5kernel_64channel_epoch100.pth"
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
 # Simulation Box
-nx = [64, 64]
-lx = [9.6, 9.6]
+nx = [64]
+lx = [9.6]
 
 # Polymer Chain
 NN = 80
@@ -92,7 +92,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 5.0     # langevin step interval, delta tau*N
+langevin_dt = 0.8     # langevin step interval, delta tau*N
 langevin_nbar = 2000  # invariant polymerization index
 langevin_max_iter = 200
 
@@ -116,7 +116,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_MM()/
 np.random.seed(5489);  
 
 # Deep Learning model FTS
-model = fts_learning2d.DeepFts2d(model_file)
+model = DeepFts1d(model_file)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
@@ -166,11 +166,10 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     sb.zero_mean(w_minus)
-    if (langevin_step >= 15):
+    if (langevin_step >= 180):
         w_plus = model.generate_w_plus(w_minus, sb.get_nx())
-        #w_plus = w_plus.astype(np.float64)
     find_saddle_point()
-    
+        
     # update w_minus: correct step 
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise

@@ -59,8 +59,8 @@ print("volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 w       = np.zeros([2, sb.get_MM()], dtype=np.float64)
 w_out   = np.zeros([2, sb.get_MM()], dtype=np.float64)
-phi_a    = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phi_b    = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_a   = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_b   = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q1_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q2_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 

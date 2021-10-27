@@ -10,7 +10,7 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
 
 # Dependencies
 #### 1. C++ Compiler
-  Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compilers. They are free and faster than GCC. Install Intel oneAPI Base & HPC Toolkit.
+  Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compilers. Install Intel oneAPI Base & HPC Toolkit. They are free and faster than GCC even on AMD CPU.
 
 #### 2. FFT Library
   The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.

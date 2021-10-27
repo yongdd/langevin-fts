@@ -5,9 +5,9 @@ class Bottleneck(torch.nn.Module):
         super().__init__()
         self.block = torch.nn.Sequential(
             #torch.nn.BatchNorm2d(channels), #
-            torch.nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding, padding_mode='circular'), 
+            torch.nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=padding, padding_mode='circular'), 
             torch.nn.ReLU(), 
-            torch.nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding, padding_mode='circular')
+            torch.nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=padding, padding_mode='circular')
         )
 
     def forward(self, x):
@@ -15,7 +15,7 @@ class Bottleneck(torch.nn.Module):
         x = torch.nn.functional.relu(x + out)
         return x
 
-class FtsResNet2d(torch.nn.Module):
+class FtsResNet1d(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -26,9 +26,9 @@ class FtsResNet2d(torch.nn.Module):
         mid_channels = 128
         out_channels = 1
         
-        self.conv1 = torch.nn.Conv2d(in_channels,  mid_channels, kernel_size, padding=padding, padding_mode='circular')
+        self.conv1 = torch.nn.Conv1d(in_channels,  mid_channels, kernel_size, padding=padding, padding_mode='circular')
         self.conv2 = self.make_layers(mid_channels, kernel_size, padding, 20)
-        self.conv3 = torch.nn.Conv2d(mid_channels, out_channels, 1)
+        self.conv3 = torch.nn.Conv1d(mid_channels, out_channels, 1)
 
     def make_layers(self, channels, kernel_size, padding, repeat):
         layers = []
