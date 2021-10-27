@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 import time
+from scipy.io import savemat
 from langevinfts import *
 
 # -------------- initialize ------------
@@ -59,8 +60,8 @@ print("volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 w       = np.zeros([2, sb.get_MM()], dtype=np.float64)
 w_out   = np.zeros([2, sb.get_MM()], dtype=np.float64)
-phi_a    = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phi_b    = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_a   = np.zeros(    sb.get_MM(),  dtype=np.float64)
+phi_b   = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q1_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 q2_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
 
@@ -140,3 +141,9 @@ np.savez("scft3d_fields.npz",
         nx=sb.get_nx(), lx=sb.get_lx(), N=pc.get_NN(), f=pc.get_f(), chi_n=pc.get_chi_n(),
         polymer_model=polymer_model, w=w, 
         phi_a=phi_a, phi_b=phi_b)
+        
+# mdic = {"nx":sb.get_nx(), "lx":sb.get_lx(), "N":pc.get_NN(), "f":pc.get_f(), 
+        # "chi_n":pc.get_chi_n(),
+        # "polymer_model":polymer_model, "w":w, 
+        # "phi_a":phi_a, "phi_b":phi_b}
+# savemat("scft3d_fields_initial.mat", mdic)
