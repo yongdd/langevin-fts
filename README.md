@@ -6,7 +6,6 @@ Langevin Field-Theoretic Simulation (L-FTS)
 * Periodic Boundaries  
 * 3D, 2D and 1D (1D and 2D are only for test purpose)
 * Pseudospectral Implmentation using MKL, FFTW and CUDA
-* Accelerating L-FTS using Deep Learning
 
 # Dependencies
 #### 1. C++ Compiler
