@@ -1,5 +1,5 @@
-# Deep Langevin FTS
-Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
+# Langevin FTS
+Langevin Field-Theoretic Simulation (L-FTS)
 
 # Features
 * Diblock Copolymer Melt
@@ -37,9 +37,6 @@ Langevin Field-Theoretic Simulation (L-FTS) with Deep Learning
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
 
-#### 7. PyTorch
-  An open source machine learning framwork  
-  https://pytorch.org/get-started/locally/
 * * *
 I tested this program under following environments.  
 + C++ Compilers
