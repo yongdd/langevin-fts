@@ -8,12 +8,9 @@ fields_*.*
 *.png
 *.so
 temp*
-langevinfts.py
 __pycache__
 build
 html
 latex
 man
 data*
-checkpoints
-logs*
