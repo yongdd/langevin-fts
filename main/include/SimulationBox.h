@@ -12,11 +12,11 @@
 class SimulationBox
 {
 protected:
-    int dimension;        // the dimension of simulation box
+    int dim;        // the dimension of simulation box
     std::array<int,3> nx;  // the number of grid in each direction
     std::array<double,3> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::array<double,3> dx;  // grid interval in each direction
-    int MM;  // the number of total grid
+    int n_grid;  // the number of grid
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
 
@@ -24,7 +24,7 @@ public:
     SimulationBox(std::vector<int> nx, std::vector<double> lx);
     virtual ~SimulationBox();
 
-    int get_dimension();
+    int get_dim();
     int get_nx(int i);
     double get_lx(int i);
     double get_dx(int i);
@@ -32,7 +32,7 @@ public:
     std::array<double,3> get_lx();
     std::array<double,3> get_dx();
     double get_dv(int i);
-    int get_MM();
+    int get_n_grid();
     double get_volume();
 
     double integral(double *g);

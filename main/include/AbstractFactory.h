@@ -19,7 +19,7 @@ class AbstractFactory
 public :
     virtual ~AbstractFactory() {};
     virtual PolymerChain* create_polymer_chain(
-        double f, int NN, double chi_n) = 0; 
+        double f, int n_contour, double chi_n) = 0; 
     virtual SimulationBox* create_simulation_box(
         std::vector<int> nx,
         std::vector<double> lx) = 0;

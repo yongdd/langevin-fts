@@ -3,19 +3,20 @@
 #include "CpuAndersonMixing.h"
 
 CpuAndersonMixing::CpuAndersonMixing(
-    SimulationBox *sb, int num_components,
+    SimulationBox *sb, int n_comp,
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init)
-    :AndersonMixing(sb, num_components,
+    :AndersonMixing(sb, n_comp,
                     max_anderson, start_anderson_error,
                     mix_min,  mix_init)
 {
+    const int M = sb->get_n_grid();
     // number of anderson mixing steps, increases from 0 to max_anderson
     n_anderson = -1;
     // record hisotry of wout in memory
-    cb_wout_hist = new CircularBuffer(max_anderson+1, TOTAL_MM);
+    cb_wout_hist = new CircularBuffer(max_anderson+1, n_comp*M);
     // record hisotry of wout-w in memory
-    cb_wdiff_hist = new CircularBuffer(max_anderson+1, TOTAL_MM);
+    cb_wdiff_hist = new CircularBuffer(max_anderson+1, n_comp*M);
     // record hisotry of inner_product product of wout-w in memory
     cb_wdiff_dots = new CircularBuffer(max_anderson+1, max_anderson+1);
 
@@ -62,6 +63,8 @@ void CpuAndersonMixing::caculate_new_fields(
     double old_error_level,
     double error_level)
 {
+    const int M = sb->get_n_grid();
+    
     double* wout_hist1;
     double* wout_hist2;
 
@@ -81,7 +84,7 @@ void CpuAndersonMixing::caculate_new_fields(
         /* evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper */
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiff_dots[i] = sb->multi_inner_product(num_components, w_diff, cb_wdiff_hist->get_array(i));
+            wdiff_dots[i] = sb->multi_inner_product(n_comp, w_diff, cb_wdiff_hist->get_array(i));
         }
         cb_wdiff_dots->insert(wdiff_dots);
     }
@@ -95,7 +98,7 @@ void CpuAndersonMixing::caculate_new_fields(
             mix = mix*1.01;
 
         // make a simple mixing of input and output fields for the next iteration
-        for(int i=0; i<TOTAL_MM; i++)
+        for(int i=0; i<n_comp*M; i++)
         {
             w[i] = (1.0-mix)*w[i] + mix*w_out[i];
         }
@@ -123,12 +126,12 @@ void CpuAndersonMixing::caculate_new_fields(
 
         // calculate the new field
         wout_hist1 = cb_wout_hist->get_array(0);
-        for(int i=0; i<TOTAL_MM; i++)
+        for(int i=0; i<n_comp*M; i++)
             w[i] = wout_hist1[i];
         for(int i=0; i<n_anderson; i++)
         {
             wout_hist2 = cb_wout_hist->get_array(i+1);
-            for(int j=0; j<TOTAL_MM; j++)
+            for(int j=0; j<n_comp*M; j++)
                 w[j] += a_n[i]*(wout_hist2[j] - wout_hist1[j]);
         }
     }

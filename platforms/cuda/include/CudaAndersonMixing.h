@@ -25,7 +25,7 @@ private:
 public:
 
     CudaAndersonMixing(
-        SimulationBox *sb, int num_components,
+        SimulationBox *sb, int n_comp,
         int max_anderson, double start_anderson_error,
         double mix_min, double mix_init);
     ~CudaAndersonMixing();

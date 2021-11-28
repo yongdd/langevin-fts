@@ -12,13 +12,13 @@ class AndersonMixing
 protected:
     SimulationBox *sb;
     
-    int num_components, TOTAL_MM;
+    int n_comp;
     double start_anderson_error, mix_min, mix, mix_init;
     int max_anderson, n_anderson;
 
     void find_an(double **u, double *v, double *a, int n);
 public:
-    AndersonMixing(SimulationBox *sb, int num_components,
+    AndersonMixing(SimulationBox *sb, int n_comp,
                    int max_anderson, double start_anderson_error,
                    double mix_min,   double mix_init);
     virtual ~AndersonMixing(){};

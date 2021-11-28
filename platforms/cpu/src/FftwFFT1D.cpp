@@ -3,10 +3,10 @@
 
 FftwFFT1D::FftwFFT1D(int nx)
 {
-    this->MM = nx;
+    this->n_grid = nx;
 
     // dummpy arrays for FFTW_Plan. need to find a better way
-    double *data_in_dummpy = new double[this->MM];
+    double *data_in_dummpy = new double[this->n_grid];
     std::complex<double>* data_out_dummpy = new std::complex<double>[(nx/2+1)];
 
     plan_forward =  fftw_plan_dft_r2c_1d(
@@ -40,6 +40,6 @@ void FftwFFT1D::backward(std::complex<double> *cdata, double *rdata)
 {
     fftw_execute_dft_c2r(plan_backward,
                          reinterpret_cast<fftw_complex *>(cdata), rdata);
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         rdata[i] /= fft_normal_factor;
 }

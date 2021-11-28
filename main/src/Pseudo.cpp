@@ -10,17 +10,17 @@ Pseudo::Pseudo(
     this->sb = sb;
     this->pc = pc;
 
-    if(sb->get_dimension()==3)
-        this->MM_COMPLEX = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
-    else if(sb->get_dimension()==2)
-        this->MM_COMPLEX = sb->get_nx(0)*(sb->get_nx(1)/2+1);
-    else if(sb->get_dimension()==1)
-        this->MM_COMPLEX = sb->get_nx(0)/2+1;
+    if(sb->get_dim()==3)
+        this->n_complex_grid = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
+    else if(sb->get_dim()==2)
+        this->n_complex_grid = sb->get_nx(0)*(sb->get_nx(1)/2+1);
+    else if(sb->get_dim()==1)
+        this->n_complex_grid = sb->get_nx(0)/2+1;
     else
-        std::cerr << "Pseudo: Invalid dimension " << sb->get_dimension() << std::endl;
+        std::cerr << "Pseudo: Invalid dimension " << sb->get_dim() << std::endl;
     
-    this->expf = new double[MM_COMPLEX];
-    this->expf_half = new double[MM_COMPLEX];
+    this->expf = new double[n_complex_grid];
+    this->expf_half = new double[n_complex_grid];
     init_gaussian_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
 Pseudo::~Pseudo()
@@ -40,7 +40,7 @@ void Pseudo::init_gaussian_factor(
     for(int d=0; d<3; d++)
         xfactor[d] = -std::pow(2*PI/(nx[d]*dx[d]),2)*ds/6.0;
 
-    if(sb->get_dimension()==3)
+    if(sb->get_dim()==3)
     {
         for(int i=0; i<nx[0]; i++)
         {
@@ -64,7 +64,7 @@ void Pseudo::init_gaussian_factor(
             }
         }
     }
-    else if (sb->get_dimension()==2)
+    else if (sb->get_dim()==2)
     {
         for(int i=0; i<nx[0]; i++)
         {
@@ -82,7 +82,7 @@ void Pseudo::init_gaussian_factor(
             }
         }
     }
-    else if (sb->get_dimension()==1)
+    else if (sb->get_dim()==1)
     {
         for(int i=0; i<nx[0]/2+1; i++)
         {

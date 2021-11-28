@@ -10,26 +10,26 @@ SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx
         std::cerr << "The sizes of nx and lx are not the same. " << std::endl;
         exit(-1);
     }
-    this->dimension = new_nx.size();
-    if ( dimension != 3 && dimension != 2 && dimension != 1 )
+    this->dim = new_nx.size();
+    if ( dim != 3 && dim != 2 && dim != 1 )
     {
-        std::cerr << "We expect 1D, 2D or 3D, but we get " << dimension <<std::endl;
+        std::cerr << "We expect 1D, 2D or 3D, but we get " << dim <<std::endl;
         exit(-1);
     }
 
-    for(int i=0; i<dimension; i++)
+    for(int i=0; i<dim; i++)
     {
         nx[i] = new_nx[i];
         lx[i] = new_lx[i];
         dx[i] = new_lx[i]/new_nx[i];
     }
-    if (dimension == 2 )
+    if (dim == 2 )
     {
         nx[2] = 1;
         lx[2] = 1.0;
         dx[2] = 1.0;
     }
-    else if (dimension == 1 )
+    else if (dim == 1 )
     {
         nx[1] = 1;
         lx[1] = 1.0;
@@ -39,11 +39,11 @@ SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx
         lx[2] = 1.0;
         dx[2] = 1.0;
     }
-    // the number of total grids
-    MM = nx[0]*nx[1]*nx[2];
+    // the number of grids
+    n_grid = nx[0]*nx[1]*nx[2];
     // weight factor for integral
-    dv = new double[MM];
-    for(int i=0; i<MM; i++)
+    dv = new double[n_grid];
+    for(int i=0; i<n_grid; i++)
         dv[i] = dx[0]*dx[1]*dx[2];
     // system polymer
     volume = lx[0]*lx[1]*lx[2];
@@ -56,9 +56,9 @@ SimulationBox::~SimulationBox()
 
 double dv_at(int i);
 //----------------- get methods-------------------------------------
-int SimulationBox::get_dimension()
+int SimulationBox::get_dim()
 {
-    return dimension;
+    return dim;
 }
 int SimulationBox::get_nx(int i)
 {
@@ -88,9 +88,9 @@ double SimulationBox::get_dv(int i)
 {
     return dv[i];
 }
-int SimulationBox::get_MM()
+int SimulationBox::get_n_grid()
 {
-    return MM;
+    return n_grid;
 }
 double SimulationBox::get_volume()
 {
@@ -101,7 +101,7 @@ double SimulationBox::get_volume()
 double SimulationBox::integral(double *g)
 {
     double sum{0.0};
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         sum += dv[i]*g[i];
     return sum;
 }
@@ -109,7 +109,7 @@ double SimulationBox::integral(double *g)
 double SimulationBox::inner_product(double *g, double *h)
 {
     double sum{0.0};
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         sum += dv[i]*g[i]*h[i];
     return sum;
 }
@@ -117,10 +117,10 @@ double SimulationBox::inner_product(double *g, double *h)
 double SimulationBox::multi_inner_product(int n_comp, double *g, double *h)
 {
     double sum{0.0};
-    for(int n=0; n<n_comp; n++)
+    for(int n=0; n < n_comp; n++)
     {
-        for(int i=0; i<MM; i++)
-            sum += dv[i]*g[i+n*MM]*h[i+n*MM];
+        for(int i=0; i<n_grid; i++)
+            sum += dv[i]*g[i+n*n_grid]*h[i+n*n_grid];
     }
     return sum;
 }
@@ -129,8 +129,8 @@ double SimulationBox::multi_inner_product(int n_comp, double *g, double *h)
 void SimulationBox::zero_mean(double *g)
 {
     double sum{0.0};
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         sum += dv[i]*g[i];
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         g[i] -= sum/volume;
 }

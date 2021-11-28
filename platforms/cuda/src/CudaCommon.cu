@@ -149,7 +149,7 @@ void CudaCommon::display_info()
         exit (1);
     }
 }
-__global__ void multiReal(double* dst,
+__global__ void multi_real(double* dst,
                           double* src1,
                           double* src2,
                           double  a, const int M)
@@ -162,7 +162,7 @@ __global__ void multiReal(double* dst,
     }
 }
 
-__global__ void mutipleMultiReal(int n_comp,
+__global__ void mutiple_multi_real(int n_comp,
                           double* dst,
                           double* src1,
                           double* src2,
@@ -178,7 +178,7 @@ __global__ void mutipleMultiReal(int n_comp,
     }
 }
 
-__global__ void divideReal(double* dst,
+__global__ void divide_real(double* dst,
                           double* src1,
                           double* src2,
                           double  a, const int M)
@@ -190,7 +190,7 @@ __global__ void divideReal(double* dst,
         i += blockDim.x * gridDim.x;
     }
 }
-__global__ void addMultiReal(double* dst,
+__global__ void add_multi_real(double* dst,
                              double* src1,
                              double* src2,
                              double  a, const int M)
@@ -203,7 +203,7 @@ __global__ void addMultiReal(double* dst,
     }
 }
 
-__global__ void linComb(double* dst,
+__global__ void lin_comb(double* dst,
                         double a,
                         double* src1,
                         double b,
@@ -218,7 +218,7 @@ __global__ void linComb(double* dst,
     }
 }
 
-__global__ void addLinComb(double* dst,
+__global__ void add_lin_comb(double* dst,
                            double a,
                            double* src1,
                            double b,
@@ -233,7 +233,7 @@ __global__ void addLinComb(double* dst,
     }
 }
 
-__global__ void multiComplexReal(ftsComplex* a,
+__global__ void multi_complex_real(ftsComplex* a,
                                  double* b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

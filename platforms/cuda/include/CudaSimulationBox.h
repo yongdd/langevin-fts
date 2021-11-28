@@ -11,8 +11,8 @@
 class CudaSimulationBox : public SimulationBox
 {
 private:
-    double *sum, *sum_d; // temporal storage for reduction in integral_gpu
-    double *multiple_d;       // temporal storage for mutiple_inner_product_gpu
+    double *sum, *sum_d;   // temporal storage for reduction in integral_gpu
+    double *multiple_d;    // temporal storage for mutiple_inner_product_gpu
     
     void initialize();
 public:

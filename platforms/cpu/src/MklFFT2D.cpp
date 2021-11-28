@@ -5,7 +5,7 @@
 MklFFT2D::MklFFT2D(std::array<int,2> nx)
 {
     MKL_LONG NX[2] = {nx[0],nx[1]};
-    this->MM = nx[0]*nx[1];
+    this->n_grid = nx[0]*nx[1];
     
     // Execution status
     MKL_LONG status{0};
@@ -46,6 +46,6 @@ void MklFFT2D::backward(std::complex<double> *cdata, double *rdata)
 {
     int status;
     status = DftiComputeBackward(hand_backward, cdata, rdata);
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<n_grid; i++)
         rdata[i] /= fft_normal_factor;
 }

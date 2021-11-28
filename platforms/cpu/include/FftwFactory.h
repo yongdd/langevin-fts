@@ -15,7 +15,7 @@ class FftwFactory : public AbstractFactory
 {
 public :
     PolymerChain* create_polymer_chain(
-        double f, int NN, double chi_n) override;
+        double f, int n_contour, double chi_n) override;
     SimulationBox* create_simulation_box(
         std::vector<int> nx,
         std::vector<double> lx) override;
