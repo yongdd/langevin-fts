@@ -10,7 +10,7 @@ from langevinfts import *
 # OpenMP environment variables 
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
+#os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
@@ -20,10 +20,19 @@ max_scft_iter = 20
 tolerance = 1e-9
 
 f = 0.3
-NN = 50
+n_contour = 50
 chi_n = 20
 nx = [31,49,63]
-lx = [4.0,3.0,2.0]
+lx = [4.0,3.0,2.0] # as aN^(1/2) unit
+
+### for 2D
+# nx = [31,49]
+# lx = [4.0,3.0] 
+
+### for 1D
+# nx = [31]
+# lx = [4.0] 
+
 polymer_model = "Gaussian" # choose among [Gaussian, Discrete]
 
 am_n_comp = 2  # A and B
@@ -37,7 +46,7 @@ factory = PlatformSelector.create_factory("CUDA")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
-pc = factory.create_polymer_chain(f, NN, chi_n)
+pc = factory.create_polymer_chain(f, n_contour, chi_n)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc, polymer_model)
 am = factory.create_anderson_mixing(sb, am_n_comp,
@@ -49,21 +58,23 @@ error_level = 1.0e20;
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------");
-print("Box Dimension: %d" % (sb.get_dimension()))
+print("Box Dimension: %d" % (sb.get_dim()))
 print("Precision: 8")
-print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_NN()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
 print("volume: %f" % (sb.get_volume()) )
 
 #-------------- allocate array ------------
-w       = np.zeros([2, sb.get_MM()], dtype=np.float64)
-w_out   = np.zeros([2, sb.get_MM()], dtype=np.float64)
-phi_a   = np.zeros(    sb.get_MM(),  dtype=np.float64)
-phi_b   = np.zeros(    sb.get_MM(),  dtype=np.float64)
-q1_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
-q2_init = np.zeros(    sb.get_MM(),  dtype=np.float64)
+# free end initial condition. q1 is q and q2 is qdagger.
+# q1 starts from A end and q2 starts from B end.
+w       = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
+w_out   = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
+phi_a   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
+phi_b   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
+q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
+q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 
 print("wminus and wplus are initialized to a given test fields.")
 for i in range(0,sb.get_nx(0)):
@@ -79,11 +90,6 @@ w[1] = chi_n*phi_a;
 # keep the level of field value
 sb.zero_mean(w[0]);
 sb.zero_mean(w[1]);
-
-# free end initial condition. q1 is q and q2 is qdagger.
-# q1 starts from A end and q2 starts from B end.
-q1_init[:] = 1.0;
-q2_init[:] = 1.0;
 
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -137,13 +143,12 @@ print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/max_scft_iter) )
 
 # save final results
-np.savez("scft3d_fields.npz",
-        nx=sb.get_nx(), lx=sb.get_lx(), N=pc.get_NN(), f=pc.get_f(), chi_n=pc.get_chi_n(),
-        polymer_model=polymer_model, w=w, 
-        phi_a=phi_a, phi_b=phi_b)
+np.savez("scft_fields.npz",
+        dim=sb.get_dim(), nx=sb.get_nx(), lx=sb.get_lx(),
+        N=pc.get_n_contour(), f=pc.get_f(), chi_n=pc.get_chi_n(), polymer_model=polymer_model, 
+        w=w, phi_a=phi_a, phi_b=phi_b)
         
-# mdic = {"nx":sb.get_nx(), "lx":sb.get_lx(), "N":pc.get_NN(), "f":pc.get_f(), 
-        # "chi_n":pc.get_chi_n(),
-        # "polymer_model":polymer_model, "w":w, 
-        # "phi_a":phi_a, "phi_b":phi_b}
-# savemat("scft3d_fields_initial.mat", mdic)
+mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "polymer_model":polymer_model,
+        "w":w, "phi_a":phi_a, "phi_b":phi_b}
+savemat("scft_fields.mat", mdic)

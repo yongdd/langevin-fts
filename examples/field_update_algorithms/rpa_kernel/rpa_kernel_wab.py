@@ -22,7 +22,7 @@ print(phi_a.shape)
 # arrays for debye functions
 space_kx, space_ky = np.meshgrid(
     2*np.pi/lx[1]*np.arange(nx[1]//2+1),
-    2*np.pi/lx[0]*np.concatenate([np.arange(nx[0]//2), nx[0]//2-np.arange(nx[0]//2)]))
+    2*np.pi/lx[0]*np.concatenate([np.arange((nx[0]+1)//2), nx[0]//2-np.arange(nx[0]//2)]))
 mag2_k = (space_kx**2 + space_ky**2)
 print(mag2_k.shape)
 
