@@ -12,7 +12,7 @@
 class PlatformSelector
 {
 public:
-    static AbstractFactory* create_factory(std::string str_platform="CUDA");
+    static AbstractFactory* create_factory(std::string str_platform="cuda");
 };
 
 #endif

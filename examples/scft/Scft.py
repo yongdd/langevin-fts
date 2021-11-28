@@ -41,8 +41,8 @@ am_start_error = 8e-1
 am_mix_min = 0.1
 am_mix_init = 0.1
 
-# choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = PlatformSelector.create_factory("CUDA")
+# choose platform among [cuda, cpu-mkl, cpu-fftw]
+factory = PlatformSelector.create_factory("cpu-fftw")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding

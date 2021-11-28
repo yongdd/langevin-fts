@@ -44,8 +44,8 @@ int main(int argc, char **argv)
     double sum;
 
     // -------------- initialize ------------
-    // platform type, (CUDA, CPU_MKL or CPU_FFTW)
-    std::string str_platform = "CPU_FFTW";
+    // platform type, (cuda, cpu-mkl or cpu-fftw)
+    std::string str_platform = "cuda";
 
     int max_scft_iter = 20;
     double tolerance = 1e-9;
