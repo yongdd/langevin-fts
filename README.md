@@ -1,10 +1,10 @@
 # Langevin FTS
-Langevin Field-Theoretic Simulation (L-FTS)
+Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
-* Diblock Copolymer Melt
+* AB Diblock Copolymer Melt
 * Periodic Boundaries  
-* 3D, 2D and 1D (Caution! FTS in 1D and 2D has no physical meaning. They are only for testing methods)
+* 3D, 2D and 1D (Caution! FTS in 1D and 2D has no physical meaning)
 * Pseudospectral Implmentation using MKL, FFTW and CUDA
 * Gaussian and Discrete Chain Models
 
@@ -33,7 +33,7 @@ Langevin Field-Theoretic Simulation (L-FTS)
   A tool that connects libraries written in C++ with Python    
   http://www.swig.org/
 
-#### Anaconda 3.x
+#### Anaconda 3.8+
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
 

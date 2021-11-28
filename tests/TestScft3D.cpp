@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     std::vector<double> lx;
     int n_contour;
     double f, chi_n;
-    // platform type, (CUDA, CPU_MKL or CPU_FFTW)
+    // platform type, (cuda, cpu-mkl or cpu-fftw)
     std::string str_platform;
     // Anderson mixing parmeters
     int max_anderson;

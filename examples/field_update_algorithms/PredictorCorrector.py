@@ -90,8 +90,8 @@ langevin_nbar = 1000  # invariant polymerization index
 langevin_max_iter = 2000;
 
 # -------------- initialize ------------
-# choose platform among [CUDA, CPU_MKL, CPU_FFTW]
-factory = PlatformSelector.create_factory("CUDA")
+# choose platform among [cuda, cpu-mkl, cpu-fftw]
+factory = PlatformSelector.create_factory("cuda")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
