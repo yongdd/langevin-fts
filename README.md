@@ -71,13 +71,13 @@ I tested this program under following environments.
   This program is designed to run on different platforms such as FFTW, MKL and CUDA. There is a family of classes for each platform, and `abtract factory pattern` is adopted to produce these classes for given platform.
 
 #### Anderson Mixing   
-  It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structre, please follow the code in [Polymers 2021, 13, 2437]. The performance loss is only marginal.
+  It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
 
 #### Reduction in Cuda (class CudaSimulationBox)   
   Inner product of two fields is caculacted using the CUDA code that NVIDIA provides. If you want to make it simple, please reimplement it using `Cuda Thrust`.
 
 #### Parser (class ParamParser)   
-  I implemented a parser using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. Instead, you can use a `yaml` or `json` file as an input parameter file in python scripts. Using `argparse` is also good option.
+  A parser is implemented using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. Instead, you can use a `yaml` or `json` file as an input parameter file in python scripts. Using `argparse` is also good option.
   
 # References
 #### Gaussian Chain Model
