@@ -62,9 +62,7 @@ I tested this program under following environments.
   In python, import the package by adding  `from langevinfts import *`.
 
 # User Guide
-  Please look around `examples` folder. 
-
-# Cautions  
++ Please look around `examples` folder.  
 + Be aware that unit of length in this program is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
