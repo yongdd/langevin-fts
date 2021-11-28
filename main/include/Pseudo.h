@@ -14,7 +14,7 @@ protected:
     SimulationBox *sb;
     PolymerChain *pc;
 
-    int MM_COMPLEX;
+    int n_complex_grid;
     double *expf, *expf_half;
 
     void init_gaussian_factor(

@@ -9,10 +9,11 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
     PolymerChain *pc)
     : Pseudo(sb, pc)
 {
-    const int MM = sb->get_MM();
-    const int NN = pc->get_NN();
-
-    if(sb->get_dimension() == 3)
+    const int M = sb->get_n_grid();
+    const int N = pc->get_n_contour();
+    const int M_COMPLEX = this->n_complex_grid;
+    
+    if(sb->get_dim() == 3)
     {
         // create a 3D FFT plan
         const int NRANK{3};
@@ -22,7 +23,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
     }
-    else if(sb->get_dimension() == 2)
+    else if(sb->get_dim() == 2)
     {
         // create a 2D FFT plan
         const int NRANK{2};
@@ -32,7 +33,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
     }
-    else if(sb->get_dimension() == 1)
+    else if(sb->get_dim() == 1)
     {
         // create a 1D FFT plan
         const int NRANK{1};
@@ -43,23 +44,23 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
     }
 
-    cudaMalloc((void**)&temp_d,  sizeof(double)*MM);
+    cudaMalloc((void**)&temp_d,  sizeof(double)*M);
 
-    cudaMalloc((void**)&qstep_d, sizeof(double)*2*MM);
-    cudaMalloc((void**)&kqin_d,  sizeof(ftsComplex)*2*MM_COMPLEX);
+    cudaMalloc((void**)&qstep_d, sizeof(double)*2*M);
+    cudaMalloc((void**)&kqin_d,  sizeof(ftsComplex)*2*M_COMPLEX);
 
-    cudaMalloc((void**)&q_d, sizeof(double)*2*MM*NN);
+    cudaMalloc((void**)&q_d, sizeof(double)*2*M*N);
 
-    cudaMalloc((void**)&expf_d,   sizeof(double)*MM_COMPLEX);
-    cudaMalloc((void**)&expdwa_d, sizeof(double)*MM);
-    cudaMalloc((void**)&expdwb_d, sizeof(double)*MM);
+    cudaMalloc((void**)&expf_d,   sizeof(double)*M_COMPLEX);
+    cudaMalloc((void**)&expdwa_d, sizeof(double)*M);
+    cudaMalloc((void**)&expdwb_d, sizeof(double)*M);
 
-    cudaMalloc((void**)&phia_d, sizeof(double)*MM);
-    cudaMalloc((void**)&phib_d, sizeof(double)*MM);
+    cudaMalloc((void**)&phia_d, sizeof(double)*M);
+    cudaMalloc((void**)&phib_d, sizeof(double)*M);
 
-    this->temp_arr = new double[MM];
+    this->temp_arr = new double[M];
     
-    cudaMemcpy(expf_d, expf, sizeof(double)*MM_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(expf_d, expf, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
 CudaPseudoDiscrete::~CudaPseudoDiscrete()
 {
@@ -85,69 +86,69 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
                                   double *q1_init, double *q2_init,
                                   double *wa, double *wb, double &QQ)
 {
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    const int MM = sb->get_MM();
-    const int NN = pc->get_NN();
-    const int NN_A = pc->get_NN_A();
-    const int NN_B = pc->get_NN_B();
+    const int M = sb->get_n_grid();
+    const int N = pc->get_n_contour();
+    const int N_A = pc->get_n_contour_a();
+    const int N_B = pc->get_n_contour_b();
     const double ds = pc->get_ds();
 
-    double expdwa[MM];
-    double expdwb[MM];
+    double expdwa[M];
+    double expdwb[M];
 
-    for(int i=0; i<MM; i++)
+    for(int i=0; i<M; i++)
     {
         expdwa[i] = exp(-wa[i]*ds);
         expdwb[i] = exp(-wb[i]*ds);
     }
 
     // Copy array from host memory to device memory
-    cudaMemcpy(expdwa_d, expdwa, sizeof(double)*MM,cudaMemcpyHostToDevice);
-    cudaMemcpy(expdwb_d, expdwb, sizeof(double)*MM,cudaMemcpyHostToDevice);
+    cudaMemcpy(expdwa_d, expdwa, sizeof(double)*M,cudaMemcpyHostToDevice);
+    cudaMemcpy(expdwb_d, expdwb, sizeof(double)*M,cudaMemcpyHostToDevice);
 
-    cudaMemcpy(&q_d[0],  q1_init, sizeof(double)*MM, cudaMemcpyHostToDevice);
-    cudaMemcpy(&q_d[MM], q2_init, sizeof(double)*MM, cudaMemcpyHostToDevice);
+    cudaMemcpy(&q_d[0],  q1_init, sizeof(double)*M, cudaMemcpyHostToDevice);
+    cudaMemcpy(&q_d[M], q2_init, sizeof(double)*M, cudaMemcpyHostToDevice);
 
-    multiReal<<<N_BLOCKS, N_THREADS>>>(&q_d[0],  &q_d[0],  expdwa_d, 1.0, MM);
-    multiReal<<<N_BLOCKS, N_THREADS>>>(&q_d[MM], &q_d[MM], expdwb_d, 1.0, MM);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&q_d[0],  &q_d[0],  expdwa_d, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&q_d[M], &q_d[M], expdwb_d, 1.0, M);
 
-    for(int n=1; n<NN; n++)
+    for(int n=1; n<N; n++)
     {
-        if(n < NN_A && n < NN_B)
-            onestep(&q_d[2*MM*(n-1)], &q_d[2*MM*n], expdwa_d, expdwb_d);
-        else if(n < NN_A &&  n >= NN_B)
-            onestep(&q_d[2*MM*(n-1)], &q_d[2*MM*n], expdwa_d, expdwa_d);
-        else if(n >= NN_A && n < NN_B)
-            onestep(&q_d[2*MM*(n-1)], &q_d[2*MM*n], expdwb_d, expdwb_d);
+        if(n < N_A && n < N_B)
+            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwb_d);
+        else if(n < N_A &&  n >= N_B)
+            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwa_d);
+        else if(n >= N_A && n < N_B)
+            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwb_d);
         else
-            onestep(&q_d[2*MM*(n-1)], &q_d[2*MM*n], expdwb_d, expdwa_d);
+            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwa_d);
     }
 
     //calculates the total partition function
     //phia_d is used as a temporary array
-    cudaMemcpy(phia_d, q2_init, sizeof(double)*MM, cudaMemcpyHostToDevice);
-    QQ = ((CudaSimulationBox *)sb)->inner_product_gpu(&q_d[2*MM*(NN-1)],phia_d);
+    cudaMemcpy(phia_d, q2_init, sizeof(double)*M, cudaMemcpyHostToDevice);
+    QQ = ((CudaSimulationBox *)sb)->inner_product_gpu(&q_d[2*M*(N-1)],phia_d);
     
     // Calculate segment density
-    multiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q_d[0], &q_d[2*MM*(NN-1)+MM], 1.0, MM);
-    for(int n=1; n<NN_A; n++)
+    multi_real<<<N_BLOCKS, N_THREADS>>>(phia_d, &q_d[0], &q_d[2*M*(N-1)+M], 1.0, M);
+    for(int n=1; n<N_A; n++)
     {
-        addMultiReal<<<N_BLOCKS, N_THREADS>>>(phia_d, &q_d[2*MM*n], &q_d[2*MM*(NN-n-1)+MM], 1.0, MM);
+        add_multi_real<<<N_BLOCKS, N_THREADS>>>(phia_d, &q_d[2*M*n], &q_d[2*M*(N-n-1)+M], 1.0, M);
     }
-    multiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q_d[2*MM*NN_A], &q_d[2*MM*(NN_B-1)+MM], 1.0, MM);
-    for(int n=NN_A+1; n<NN; n++)
+    multi_real<<<N_BLOCKS, N_THREADS>>>(phib_d, &q_d[2*M*N_A], &q_d[2*M*(N_B-1)+M], 1.0, M);
+    for(int n=N_A+1; n<N; n++)
     {
-        addMultiReal<<<N_BLOCKS, N_THREADS>>>(phib_d, &q_d[2*MM*n], &q_d[2*MM*(NN-n-1)+MM], 1.0, MM);
+        add_multi_real<<<N_BLOCKS, N_THREADS>>>(phib_d, &q_d[2*M*n], &q_d[2*M*(N-n-1)+M], 1.0, M);
     }
 
     // normalize the concentration
-    divideReal<<<N_BLOCKS, N_THREADS>>>(phia_d, phia_d, expdwa_d, (sb->get_volume())/QQ/NN, MM);
-    divideReal<<<N_BLOCKS, N_THREADS>>>(phib_d, phib_d, expdwb_d, (sb->get_volume())/QQ/NN, MM);
+    divide_real<<<N_BLOCKS, N_THREADS>>>(phia_d, phia_d, expdwa_d, (sb->get_volume())/QQ/N, M);
+    divide_real<<<N_BLOCKS, N_THREADS>>>(phib_d, phib_d, expdwb_d, (sb->get_volume())/QQ/N, M);
 
-    cudaMemcpy(phia, phia_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
-    cudaMemcpy(phib, phib_d, sizeof(double)*MM,cudaMemcpyDeviceToHost);
+    cudaMemcpy(phia, phia_d, sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(phib, phib_d, sizeof(double)*M,cudaMemcpyDeviceToHost);
 }
 
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
@@ -156,24 +157,26 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
 void CudaPseudoDiscrete::onestep(double *qin_d, double *qout_d,
                                  double *expdw1_d, double *expdw2_d)
 {
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    const int MM = sb->get_MM();
+    
+    const int M = sb->get_n_grid();
+    const int M_COMPLEX = this->n_complex_grid;
 
     //-------------- step 1 ----------
     // Execute a Forward FFT
     cufftExecD2Z(plan_for, qin_d, kqin_d);
 
     // Multiply e^(-k^2 ds/6) in fourier space
-    multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],          expf_d, MM_COMPLEX);
-    multiComplexReal<<<N_BLOCKS, N_THREADS>>>(&kqin_d[MM_COMPLEX], expf_d, MM_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],         expf_d, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[M_COMPLEX], expf_d, M_COMPLEX);
 
     // Execute a backward FFT
     cufftExecZ2D(plan_bak, kqin_d, qout_d);
 
     // Evaluate e^(-w*ds) in real space
-    multiReal<<<N_BLOCKS, N_THREADS>>>(&qout_d[0],  &qout_d[0],  expdw1_d, 1.0/((double)MM), MM);
-    multiReal<<<N_BLOCKS, N_THREADS>>>(&qout_d[MM], &qout_d[MM], expdw2_d, 1.0/((double)MM), MM);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&qout_d[0], &qout_d[0], expdw1_d, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&qout_d[M], &qout_d[M], expdw2_d, 1.0/((double)M), M);
 }
 // Get partial partition functions
 // This is made for debugging and testing.
@@ -181,8 +184,8 @@ void CudaPseudoDiscrete::onestep(double *qin_d, double *qout_d,
 
 void CudaPseudoDiscrete::get_partition(double *q1_out,  double *q2_out, int n)
 {
-    const int MM = sb->get_MM();
-    const int NN = pc->get_NN();
-    cudaMemcpy(q1_out, &q_d[MM*(2*n-2)], sizeof(double)*MM,cudaMemcpyDeviceToHost);
-    cudaMemcpy(q2_out, &q_d[MM*(2*n-1)], sizeof(double)*MM,cudaMemcpyDeviceToHost);
+    const int M = sb->get_n_grid();
+    const int N = pc->get_n_contour();
+    cudaMemcpy(q1_out, &q_d[M*(2*n-2)], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q2_out, &q_d[M*(2*n-1)], sizeof(double)*M,cudaMemcpyDeviceToHost);
 }

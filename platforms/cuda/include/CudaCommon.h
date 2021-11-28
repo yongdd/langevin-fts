@@ -39,41 +39,41 @@ public:
     void set_idx(int process_idx);
 };
 
-__global__ void multiReal(double* dst,
+__global__ void multi_real(double* dst,
                           double* src1,
                           double* src2,
                           double  a, const int M);
                           
-__global__ void mutipleMultiReal(int n_comp,
+__global__ void mutiple_multi_real(int n_comp,
                           double* dst,
                           double* src1,
                           double* src2,
                           double  a, const int M);
                                     
-__global__ void divideReal(double* dst,
+__global__ void divide_real(double* dst,
                           double* src1,
                           double* src2,
                           double  a, const int M);
                           
-__global__ void addMultiReal(double* dst,
+__global__ void add_multi_real(double* dst,
                              double* src1,
                              double* src2,
                              double  a, const int M);
 
-__global__ void linComb(double* dst,
+__global__ void lin_comb(double* dst,
                         double a,
                         double* src1,
                         double b,
                         double* src2,
                         const int M);
 
-__global__ void addLinComb(double* dst,
+__global__ void add_lin_comb(double* dst,
                            double a,
                            double* src1,
                            double b,
                            double* src2,
                            const int M);
 
-__global__ void multiComplexReal(ftsComplex* a,
+__global__ void multi_complex_real(ftsComplex* a,
                                  double* b, const int M);
 #endif

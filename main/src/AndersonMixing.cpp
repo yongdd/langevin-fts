@@ -1,13 +1,11 @@
 #include "AndersonMixing.h"
 AndersonMixing::AndersonMixing(
-    SimulationBox *sb, int num_components,
+    SimulationBox *sb, int n_comp,
     int max_anderson, double start_anderson_error,
     double mix_min,   double mix_init)
 {
-    this->TOTAL_MM = num_components*(sb->get_MM());
-    
     this->sb = sb;
-    this->num_components = num_components;
+    this->n_comp = n_comp;
     /* anderson mixing begin if error level becomes less then start_anderson_error */
     this->start_anderson_error = start_anderson_error;
     /* max number of previous steps to calculate new field when using Anderson mixing */

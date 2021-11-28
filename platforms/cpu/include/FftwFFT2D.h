@@ -15,7 +15,7 @@ class FftwFFT2D : public FFT
 {
 private:
     double fft_normal_factor; //nomalization factor FFT
-    int MM; // the number of total grids
+    int n_grid; // the number of grids
     // pointers for forward and backward transform
     fftw_plan plan_forward, plan_backward;
 public:

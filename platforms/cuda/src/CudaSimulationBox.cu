@@ -18,7 +18,7 @@ __device__ static void warp_reduce(volatile double* sdata, int tid)
 }
 
 template <unsigned int blockSize>
-__global__ static void multiplyReductionKernel(
+__global__ static void multiply_reduction_kernel(
     double *g_d, double *h_d, double *sum_d, unsigned int M)
 {
     extern __shared__ double sdata[];
@@ -78,22 +78,22 @@ CudaSimulationBox::CudaSimulationBox(
 }
 void CudaSimulationBox::initialize()
 {
-    cudaMalloc((void**)&dv_d, sizeof(double)*MM);
-    cudaMemcpy(dv_d, dv,      sizeof(double)*MM,cudaMemcpyHostToDevice);
+    cudaMalloc((void**)&dv_d, sizeof(double)*n_grid);
+    cudaMemcpy(dv_d, dv,      sizeof(double)*n_grid,cudaMemcpyHostToDevice);
 
     // temporal storage
-    sum = new double[MM];
-    cudaMalloc((void**)&sum_d, sizeof(double)*MM);
-    cudaMalloc((void**)&multiple_d, sizeof(double)*MM);
+    sum = new double[n_grid];
+    cudaMalloc((void**)&sum_d, sizeof(double)*n_grid);
+    cudaMalloc((void**)&multiple_d, sizeof(double)*n_grid);
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    if (N_BLOCKS > MM)
+    if (N_BLOCKS > n_grid)
     {
         std::cout<< "'the number of grids'{" <<N_BLOCKS ;
         std::cout<< "} should not be less 'the number of grids'{";
-        std::cout<< MM << "}." << std::endl;
+        std::cout<< n_grid << "}." << std::endl;
         exit(-1);
     }
 }
@@ -108,65 +108,65 @@ CudaSimulationBox::~CudaSimulationBox()
 //-----------------------------------------------------------
 double CudaSimulationBox::integral_gpu(double *g_d)
 {
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
     switch(N_THREADS)
     {
     case 1024:
-        multiplyReductionKernel<1024>
+        multiply_reduction_kernel<1024>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 512:
-        multiplyReductionKernel<512>
+        multiply_reduction_kernel<512>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 256:
-        multiplyReductionKernel<256>
+        multiply_reduction_kernel<256>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 128:
-        multiplyReductionKernel<128>
+        multiply_reduction_kernel<128>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 64:
-        multiplyReductionKernel<64>
+        multiply_reduction_kernel<64>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 32:
-        multiplyReductionKernel<32>
+        multiply_reduction_kernel<32>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 16:
-        multiplyReductionKernel<16>
+        multiply_reduction_kernel<16>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 8:
-        multiplyReductionKernel<8>
+        multiply_reduction_kernel<8>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 4:
-        multiplyReductionKernel<4>
+        multiply_reduction_kernel<4>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 2:
-        multiplyReductionKernel<2>
+        multiply_reduction_kernel<2>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     case 1:
-        multiplyReductionKernel<1>
+        multiply_reduction_kernel<1>
         <<<N_BLOCKS, N_THREADS, N_THREADS*sizeof(double)>>>
-        (dv_d, g_d, sum_d, MM);
+        (dv_d, g_d, sum_d, n_grid);
         break;
     }
     cudaMemcpy(sum, sum_d, sizeof(double)*N_BLOCKS,cudaMemcpyDeviceToHost);
@@ -183,7 +183,7 @@ double CudaSimulationBox::inner_product_gpu(double *g_d, double *h_d)
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    multiReal<<<N_BLOCKS, N_THREADS>>>(multiple_d, g_d, h_d, 1.0, MM);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(multiple_d, g_d, h_d, 1.0, n_grid);
     return CudaSimulationBox::integral_gpu(multiple_d);
 }
 //-----------------------------------------------------------
@@ -192,6 +192,6 @@ double CudaSimulationBox::mutiple_inner_product_gpu(int n_comp, double *g_d, dou
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    mutipleMultiReal<<<N_BLOCKS, N_THREADS>>>(n_comp, multiple_d, g_d, h_d, 1.0, MM);
+    mutiple_multi_real<<<N_BLOCKS, N_THREADS>>>(n_comp, multiple_d, g_d, h_d, 1.0, n_grid);
     return CudaSimulationBox::integral_gpu(multiple_d);
 }

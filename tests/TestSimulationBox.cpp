@@ -13,12 +13,12 @@ int main()
     double hm[] {0.443984, 1.55078, 3.26028, -1.07704, 1.37609, -2.33879, -4.88014, 4.23021};
 
     volume = 0.0;
-    for(int i=0; i<sb.get_MM(); i++)
+    for(int i=0; i<sb.get_n_grid(); i++)
         volume += sb.get_dv(i);
     
     sb.zero_mean(w);
     sum_w = 0.0;
-    for(int i=0; i<sb.get_MM(); i++)
+    for(int i=0; i<sb.get_n_grid(); i++)
         sum_w += w[i];
     
     //std::cout<< "Nx: "  << sb.nx[0] <<" "<< sb.nx[1] <<" "<< sb.nx[2] << std::endl;

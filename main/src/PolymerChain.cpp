@@ -3,33 +3,33 @@
 #include "PolymerChain.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(double f, int NN, double chi_n)
+PolymerChain::PolymerChain(double f, int n_contour, double chi_n)
 {
     this->f = f;
-    this->NN = NN;
+    this->n_contour = n_contour;
     this->chi_n = chi_n;
 
     // grid number for A fraction
-    this->NN_A = std::lround(NN*f);
-    if( std::abs(this->NN_A-NN*f) > 1.e-6)
+    this->n_contour_a = std::lround(n_contour*f);
+    if( std::abs(this->n_contour_a-n_contour*f) > 1.e-6)
     {
-        std::cerr<< "NN*f is not an integer"<< std::endl;
+        std::cerr<< "N*f is not an integer"<< std::endl;
         exit(-1);
     }
     // grid sizes contour direction
-    this->ds = 1.0/NN;
+    this->ds = 1.0/n_contour;
 }
-int PolymerChain::get_NN()
+int PolymerChain::get_n_contour()
 {
-    return NN;
+    return n_contour;
 }
-int PolymerChain::get_NN_A()
+int PolymerChain::get_n_contour_a()
 {
-    return NN_A;
+    return n_contour_a;
 }
-int PolymerChain::get_NN_B()
+int PolymerChain::get_n_contour_b()
 {
-    return NN - NN_A;
+    return n_contour - n_contour_a;
 }
 double PolymerChain::get_f()
 {
