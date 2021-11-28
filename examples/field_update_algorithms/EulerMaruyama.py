@@ -73,7 +73,7 @@ verbose_level = 1  # 1 : print at each langevin step.
 
 # Simulation Box
 nx = [48, 48, 48]
-lx = [9, 9, 9] /np.sqrt(6)
+lx = [9, 9, 9]
 
 # Polymer Chain
 NN = 100
