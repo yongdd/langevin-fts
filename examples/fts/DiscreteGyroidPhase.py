@@ -92,7 +92,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 0.8     # langevin step interval, delta tau*N
 langevin_nbar = input_data["n_bar"];  # invariant polymerization index
-langevin_max_iter = 5;
+langevin_max_iter = 100;
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]

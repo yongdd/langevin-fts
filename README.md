@@ -10,7 +10,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Dependencies
 #### C++ Compiler
-  Any C++ compiler that supports C++11 standard or higher, but I recommend to use Intel compilers. Install Intel oneAPI Base & HPC Toolkit. They are free and faster than GCC even on AMD CPU.
+  Any C++ compiler that supports C++14 standard or higher, but I recommend to use Intel compilers. Install Intel oneAPI Base & HPC Toolkit. They are free and faster than GCC even on AMD CPU.
 
 #### FFT Library
   The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.
@@ -72,9 +72,6 @@ I tested this program under following environments.
 
 #### Anderson Mixing   
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
-
-#### Reduction in Cuda (class CudaSimulationBox)   
-  Inner product of two fields is caculacted using the CUDA code that NVIDIA provides. If you want to make it simple, please reimplement it using `Cuda Thrust`.
 
 #### Parser (class ParamParser)   
   A parser is implemented using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. Instead, you can use a `yaml` or `json` file as an input parameter file in python scripts. Using `argparse` is also good option.
