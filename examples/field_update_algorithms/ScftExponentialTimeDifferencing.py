@@ -17,7 +17,7 @@ tolerance = 1e-8
 
 # Simulation Box
 nx = [64,  64,  64]
-lx = [9.0, 9.0, 9.0]/np.sqrt(6)
+lx = [9.0, 9.0, 9.0]
 
 # Polymer Chain
 NN = 100
