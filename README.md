@@ -10,7 +10,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Dependencies
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher, but I recommend to use Intel compilers. Install Intel oneAPI Base & HPC Toolkit. They are free and faster than GCC even on AMD CPU.
+  Any C++ compiler that supports C++14 standard or higher, but I recommend to use Intel compilers. They are free and faster than GCC even on AMD CPU. If you want to Intel compilers, install Intel oneAPI Base & HPC Toolkit. 
 
 #### FFT Library
   The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.
@@ -33,9 +33,12 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
   A tool that connects libraries written in C++ with Python    
   http://www.swig.org/
 
-#### Anaconda 3.8+
+#### Anaconda 3.x
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
+
+#### (optional) mpi4py
+  Message Passing Interface (MPI) for python. Parallel tempering is implemented using MPI.
 
 * * *
 I tested this program under following environments.  
@@ -44,6 +47,8 @@ I tested this program under following environments.
 + OpenMP bundled with Intel Compilers 2021.3.0  
 
 # Compile
+  `conda create -n envlfts python=3.8 scipy`  
+  `conda activate envlfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
   `mkdir build`  
@@ -52,29 +57,32 @@ I tested this program under following environments.
   `make`   
   `make test`   
   `make install`
+  
 * * *
   You can specify your building flags with following command.   
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"] \`   
   `-DCMAKE_INCLUDE_PATH=[Your FFTW Path]/include \`  
   `-DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib \`  
   `-DUSE_OPENMP=yes`
+  
 * * *
+  To use this library, first activate virtual environment by typing `conda activate envlfts` in command line.
   In python, import the package by adding  `from langevinfts import *`.
-
+  
 # User Guide
-+ Please look around `examples` folder.  
++ This is not an application but a library for field-based simulation, and you need to write your own problem using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. Please look around `examples` folder for unstand how to use this library.
 + Be aware that unit of length in this program is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
 # Developer Guide
 #### Abstract Factory   
-  This program is designed to run on different platforms such as FFTW, MKL and CUDA. There is a family of classes for each platform, and `abtract factory pattern` is adopted to produce these classes for given platform.
+  This program is designed to run on different platforms such as FFTW, MKL and CUDA. There is a family of classes for each platform, and `abstract factory pattern` is adopted to produce these classes for given platform.
 
 #### Anderson Mixing   
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
 
 #### Parser (class ParamParser)   
-  A parser is implemented using regular expression (RE) and deterministic finite automaton (DFA) to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. Instead, you can use a `yaml` or `json` file as an input parameter file in python scripts. Using `argparse` is also good option.
+  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. Instead, you can use a `yaml` or `json` file as an input parameter file in python scripts. Using `argparse` is also good option.
   
 # References
 #### Gaussian Chain Model
