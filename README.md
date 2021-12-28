@@ -12,33 +12,12 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 #### C++ Compiler
   Any C++ compiler that supports C++14 standard or higher, but I recommend to use Intel compilers. They are free and faster than GCC even on AMD CPU. If you want to Intel compilers, install Intel oneAPI Base & HPC Toolkit. 
 
-#### FFT Library
-  The modified diffusion equations are solved by pseudospectral method, and that requires a fast Fourirer transform (FFT) library. You can choose from following FFT libraries.
-
-+ **(optional) MKL**   
-  Math kernel library (MKL) is bundled with Intel Compilers.  
-
-+ **(optional) FFTW**   
-  https://www.fftw.org/
-  
-+ **CUDA**  
+#### CUDA  
   https://developer.nvidia.com/cuda-toolkit  
-  
-#### (optional) OpenMP
-  Two partial partition functions are calculated simultaneously using open multi-processing (OpenMP) in the CPU implemenation.  
-
-#### CMake 3.17+
-
-#### SWIG
-  A tool that connects libraries written in C++ with Python    
-  http://www.swig.org/
 
 #### Anaconda 3.x
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
-
-#### (optional) mpi4py
-  Message Passing Interface (MPI) for python. Parallel tempering is implemented using MPI.
 
 * * *
 I tested this program under following environments.  
@@ -47,8 +26,9 @@ I tested this program under following environments.
 + OpenMP bundled with Intel Compilers 2021.3.0  
 
 # Compile
-  `conda create -n envlfts python=3.8 scipy`  
+  `conda create -n envlfts python=3.8 conda`  
   `conda activate envlfts`  
+  `conda install cmake=3.19 swig scipy mkl fftw openmpi mpi4py`   
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
   `mkdir build`  
@@ -61,8 +41,6 @@ I tested this program under following environments.
 * * *
   You can specify your building flags with following command.   
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"] \`   
-  `-DCMAKE_INCLUDE_PATH=[Your FFTW Path]/include \`  
-  `-DCMAKE_FRAMEWORK_PATH=[Your FFTW Path]/lib \`  
   `-DUSE_OPENMP=yes`
   
 * * *
@@ -70,13 +48,13 @@ I tested this program under following environments.
   In python, import the package by adding  `from langevinfts import *`.
   
 # User Guide
-+ This is not an application but a library for field-based simulation, and you need to write your own problem using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. Please look around `examples` folder for unstand how to use this library.
++ This is not an application but a library for field-based simulation, and you need to write your own problem using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. Please look around `examples` folder to understand how to use this library.
 + Be aware that unit of length in this program is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
 # Developer Guide
 #### Abstract Factory   
-  This program is designed to run on different platforms such as FFTW, MKL and CUDA. There is a family of classes for each platform, and `abstract factory pattern` is adopted to produce these classes for given platform.
+  This program is designed to run on different platforms such as FFTW, MKL and CUDA, there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
 
 #### Anderson Mixing   
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.

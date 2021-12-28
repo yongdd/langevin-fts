@@ -21,5 +21,6 @@ AbstractFactory* PlatformSelector::create_factory(std::string str_platform)
     if (str_platform == "cuda")
         return new CudaFactory();
 #endif
+    std::cerr << "Could not find : '" << str_platform << "'" << std::endl;
     return NULL;
 }
