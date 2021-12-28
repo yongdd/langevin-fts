@@ -19,11 +19,6 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
   Anaconda is a distribution of the Python pogramming languages for scientific computing.  
   https://www.anaconda.com/
 
-* * *
-I tested this program under following environments.  
-+ Intel oneAPI Base & Toolkit 2021.3.0  
-+ CUDA Toolkit 11.2  
-
 # Compile
   `conda create -n envlfts python=3.8 conda`  
   `conda activate envlfts`  
@@ -40,8 +35,7 @@ I tested this program under following environments.
 * * *
   You can specify your building flags with following command.   
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"] \`   
-  `-DUSE_OPENMP=yes`
-  
+
 * * *
   To use this library, first activate virtual environment by typing `conda activate envlfts` in command line.
   In python, import the package by adding  `from langevinfts import *`.
