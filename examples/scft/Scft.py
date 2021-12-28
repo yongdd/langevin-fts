@@ -10,7 +10,7 @@ from langevinfts import *
 # OpenMP environment variables 
 os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
-#os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 
 #pp = ParamParser.get_instance()
 #pp.read_param_file(sys.argv[1], False);
