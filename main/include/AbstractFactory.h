@@ -26,10 +26,10 @@ public :
     virtual Pseudo* create_pseudo(
         SimulationBox *sb,
         PolymerChain *pc,
-        std::string str_model) = 0; 
+        std::string polymer_model) = 0; 
     virtual AndersonMixing* create_anderson_mixing(
         SimulationBox *sb, int n_comp,
-        double max_anderson, double start_anderson_error,
+        double max_hist, double start_error,
         double mix_min, double mix_init) = 0; 
 };
 #endif

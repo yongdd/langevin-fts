@@ -10,7 +10,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Dependencies
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher, but I recommend to use Intel compilers. They are free and faster than GCC even on AMD CPU. If you want to Intel compilers, install Intel oneAPI Base & HPC Toolkit. 
+  Any C++ compiler that supports C++14 standard or higher.
 
 #### CUDA  
   https://developer.nvidia.com/cuda-toolkit  
@@ -23,12 +23,11 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 I tested this program under following environments.  
 + Intel oneAPI Base & Toolkit 2021.3.0  
 + CUDA Toolkit 11.2  
-+ OpenMP bundled with Intel Compilers 2021.3.0  
 
 # Compile
   `conda create -n envlfts python=3.8 conda`  
   `conda activate envlfts`  
-  `conda install cmake=3.19 swig scipy mkl fftw openmpi mpi4py`   
+  `conda install cmake=3.19 swig scipy fftw openmpi mpi4py`   
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
   `mkdir build`  
@@ -54,7 +53,7 @@ I tested this program under following environments.
 
 # Developer Guide
 #### Abstract Factory   
-  This program is designed to run on different platforms such as FFTW, MKL and CUDA, there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
+  This program is designed to run on different platforms such as MKL, FFTW and CUDA, there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
 
 #### Anderson Mixing   
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
