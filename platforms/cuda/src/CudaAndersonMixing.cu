@@ -7,30 +7,30 @@
 
 CudaAndersonMixing::CudaAndersonMixing(
     SimulationBox *sb, int n_comp,
-    int max_anderson, double start_anderson_error,
+    int max_hist, double start_error,
     double mix_min,   double mix_init)
     :AndersonMixing(sb, n_comp,
-                    max_anderson, start_anderson_error,
+                    max_hist, start_error,
                     mix_min,  mix_init)
 {
     const int M = sb->get_n_grid();
     
-    // number of anderson mixing steps, increases from 0 to max_anderson
+    // number of anderson mixing steps, increases from 0 to max_hist
     n_anderson = -1;
     // record hisotry of wout in GPU device memory
-    cb_wout_hist_d = new CudaCircularBuffer(max_anderson+1, n_comp*M);
+    cb_wout_hist_d = new CudaCircularBuffer(max_hist+1, n_comp*M);
     // record hisotry of wout-w in GPU device memory
-    cb_wdiff_hist_d = new CudaCircularBuffer(max_anderson+1, n_comp*M);
+    cb_wdiff_hist_d = new CudaCircularBuffer(max_hist+1, n_comp*M);
     // record hisotry of inner_product product of wout-w in CPU host memory
-    cb_wdiff_dots = new CircularBuffer(max_anderson+1, max_anderson+1);
+    cb_wdiff_dots = new CircularBuffer(max_hist+1, max_hist+1);
 
     // define arrays for anderson mixing
-    this->u_nm = new double*[max_anderson];
-    for(int i=0; i<max_anderson; i++)
-        this->u_nm[i] = new double[max_anderson];
-    this->v_n = new double[max_anderson];
-    this->a_n = new double[max_anderson];
-    this->wdiff_dots = new double[max_anderson+1];
+    this->u_nm = new double*[max_hist];
+    for(int i=0; i<max_hist; i++)
+        this->u_nm[i] = new double[max_hist];
+    this->v_n = new double[max_hist];
+    this->a_n = new double[max_hist];
+    this->wdiff_dots = new double[max_hist+1];
 
     // fields arrays
     cudaMalloc((void**)&w_diff_d, sizeof(double)*n_comp*M);

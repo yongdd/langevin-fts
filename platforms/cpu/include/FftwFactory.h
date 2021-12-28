@@ -25,7 +25,7 @@ public :
         std::string str_model) override;
     AndersonMixing* create_anderson_mixing(
         SimulationBox *sb, int n_comp,
-        double max_anderson, double start_anderson_error,
+        double max_hist, double start_error,
         double mix_min, double mix_init) override;
 };
 #endif
