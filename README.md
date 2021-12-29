@@ -14,13 +14,13 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 #### CUDA Toolkit 
   https://developer.nvidia.com/cuda-toolkit  
-  Environment variables must be set so that `nvcc` command can be executed. This is neccesary for `cmake` to detect your CUDA path.
 
-#### Anaconda 3.x
-  Anaconda is a distribution of the Python pogramming languages for scientific computing.  
+#### Anaconda
   https://www.anaconda.com/
 
-# Compiling and Installation
+Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
+  
+# Compiling
   `conda create -n envlfts python=3.8 cmake=3.19 conda swig scipy fftw openmpi mpi4py`  
   `conda activate envlfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
@@ -43,20 +43,18 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
 # Developer Guide
-#### Abstract Factory   
+#### Abstract Factory  
   This program is designed to run on different platforms such as MKL, FFTW and CUDA, there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
 
-#### Anderson Mixing   
+#### Anderson Mixing  
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
 
-#### Parameter Parser
-  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`.  
-  For Python, this is no longer neccesary. You can use a `yaml` or `json` file as an input parameter file in python scripts instead. Using `argparse` is also good option.
+#### Parameter Parser  
+  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In python scripts, you can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also good option.
   
 # References
 #### CUDA Implementation
-+ G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020** 43, 15
-
++ G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 #### Gaussian Chain Model
 + T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Computationally Efficient Field-Theoretic Simulations for Block Copolymer Melts, *Macromolecules* **2019**, 52, 8840   
 + M.W. Masen, Field theoretic approach for block polymer melts: SCFT and FTS, *J. Chem. Phys.* **2020**, 152, 110901   
