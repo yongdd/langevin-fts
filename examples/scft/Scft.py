@@ -8,13 +8,9 @@ from langevinfts import *
 # -------------- initialize ------------
 
 # OpenMP environment variables 
-os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
-
-#pp = ParamParser.get_instance()
-#pp.read_param_file(sys.argv[1], False);
-#pp.get("platform")
 
 max_scft_iter = 20
 tolerance = 1e-9
@@ -33,22 +29,21 @@ lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 # nx = [31]
 # lx = [4.0] 
 
-polymer_model = "Gaussian" # choose among [Gaussian, Discrete]
+chain_model = "Gaussian" # choose among [Gaussian, Discrete]
 
-am_n_comp = 2  # A and B
+am_n_comp = 2  # w[0] and w[1]
 am_max_hist= 20
 am_start_error = 8e-1
 am_mix_min = 0.1
 am_mix_init = 0.1
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
-factory = PlatformSelector.create_factory("cpu-fftw")
+factory = PlatformSelector.create_factory("cuda")
 
-# create instances and assign to the variables of base classs
-# for the dynamic binding
-pc = factory.create_polymer_chain(f, n_contour, chi_n)
+# create instances
+pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model)
+pseudo = factory.create_pseudo(sb, pc)
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -61,6 +56,7 @@ print("---------- Simulation Parameters ----------");
 print("Box Dimension: %d" % (sb.get_dim()))
 print("Precision: 8")
 print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
@@ -134,7 +130,7 @@ for scft_iter in range(0,max_scft_iter):
     if(error_level < tolerance):
         break;
     # calculte new fields using simple and Anderson mixing
-    # (Caution! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
+    # (Note! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
     am.caculate_new_fields(w[0], w_out[0], w_diff[0], old_error_level, error_level);
 
 # estimate execution time
@@ -143,12 +139,7 @@ print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/max_scft_iter) )
 
 # save final results
-np.savez("scft_fields.npz",
-        dim=sb.get_dim(), nx=sb.get_nx(), lx=sb.get_lx(),
-        N=pc.get_n_contour(), f=pc.get_f(), chi_n=pc.get_chi_n(), polymer_model=polymer_model, 
-        w=w, phi_a=phi_a, phi_b=phi_b)
-        
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "polymer_model":polymer_model,
-        "w":w, "phi_a":phi_a, "phi_b":phi_b}
-savemat("scft_fields.mat", mdic)
+        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+        "chain_model":chain_model, "w_a":w[0], "w_b":[1], "phi_a":phi_a, "phi_b":phi_b}
+savemat("fields.mat", mdic)

@@ -117,13 +117,13 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
     for(int n=1; n<N; n++)
     {
         if(n < N_A && n < N_B)
-            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwb_d);
+            one_step(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwb_d);
         else if(n < N_A &&  n >= N_B)
-            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwa_d);
+            one_step(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwa_d, expdwa_d);
         else if(n >= N_A && n < N_B)
-            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwb_d);
+            one_step(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwb_d);
         else
-            onestep(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwa_d);
+            one_step(&q_d[2*M*(n-1)], &q_d[2*M*n], expdwb_d, expdwa_d);
     }
 
     //calculates the total partition function
@@ -154,7 +154,7 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, we use FFT Batch.
-void CudaPseudoDiscrete::onestep(double *qin_d, double *qout_d,
+void CudaPseudoDiscrete::one_step(double *qin_d, double *qout_d,
                                  double *expdw1_d, double *expdw2_d)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();

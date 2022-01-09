@@ -19,14 +19,13 @@ class AbstractFactory
 public :
     virtual ~AbstractFactory() {};
     virtual PolymerChain* create_polymer_chain(
-        double f, int n_contour, double chi_n) = 0; 
+        double f, int n_contour, double chi_n, std::string model_name) = 0; 
     virtual SimulationBox* create_simulation_box(
         std::vector<int> nx,
         std::vector<double> lx) = 0;
     virtual Pseudo* create_pseudo(
         SimulationBox *sb,
-        PolymerChain *pc,
-        std::string polymer_model) = 0; 
+        PolymerChain *pc) = 0; 
     virtual AndersonMixing* create_anderson_mixing(
         SimulationBox *sb, int n_comp,
         double max_hist, double start_error,

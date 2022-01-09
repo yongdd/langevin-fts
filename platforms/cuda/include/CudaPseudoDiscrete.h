@@ -37,7 +37,7 @@ private:
     double *expdwa_d, *expdwb_d;
     double *phia_d, *phib_d;
                  
-    void onestep(double *qin_d, double *qout_d,
+    void one_step(double *qin_d, double *qout_d,
                  double *expdw1_d, double *expdw2_d);
 public:
 

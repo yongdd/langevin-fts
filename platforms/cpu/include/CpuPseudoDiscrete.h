@@ -15,8 +15,7 @@ class CpuPseudoDiscrete : public Pseudo
 protected:
     FFT *fft;
     double *q1, *q2;
-    
-    void onestep(double *qin, double *qout, double *expdw);
+    void one_step(double *qin, double *qout, double *expdw);
 public:
     CpuPseudoDiscrete(SimulationBox *sb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoDiscrete();

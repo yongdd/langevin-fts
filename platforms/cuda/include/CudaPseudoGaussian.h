@@ -27,7 +27,7 @@ private:
 
     double *expf_d, *expf_half_d;
 
-    void onestep(double *qin1_d, double *qout1_d,
+    void one_step(double *qin1_d, double *qout1_d,
                  double *qin2_d, double *qout2_d,
                  double *expdw1_d, double *expdw1_half_d,
                  double *expdw2_d, double *expdw2_half_d);

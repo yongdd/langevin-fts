@@ -1,9 +1,10 @@
 #include <iostream>
 #include <cmath>
+#include <algorithm>
 #include "PolymerChain.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(double f, int n_contour, double chi_n)
+PolymerChain::PolymerChain(double f, int n_contour, double chi_n, std::string model_name)
 {
     this->f = f;
     this->n_contour = n_contour;
@@ -18,6 +19,19 @@ PolymerChain::PolymerChain(double f, int n_contour, double chi_n)
     }
     // grid sizes contour direction
     this->ds = 1.0/n_contour;
+
+    // chain model
+    std::transform(model_name.begin(), model_name.end(), model_name.begin(),
+                   [](unsigned char c)
+    {
+        return std::tolower(c);
+    });
+    if (model_name != "gaussian" && model_name != "discrete")
+    {
+        std::cerr<< model_name<< " is an invalid chain model. This should be 'Gaussian' or 'Discrete' "<< std::endl;
+        exit(-1);
+    }
+    this->model_name = model_name;
 }
 int PolymerChain::get_n_contour()
 {
@@ -43,8 +57,7 @@ double PolymerChain::get_chi_n()
 {
     return chi_n;
 }
-////----------------- set_chi_n ----------------------------
-//void PolymerChain::set_chin(double chi_n)
-//{
-//this->chi_n = chi_n;
-//}
+std::string PolymerChain::get_model_name()
+{
+    return model_name;
+}
