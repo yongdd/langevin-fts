@@ -115,9 +115,9 @@ int main(int argc, char **argv)
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
-    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n);
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    Pseudo *pseudo = factory->create_pseudo(sb, pc, "gaussian");
+    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, "gaussian");
+    Pseudo *pseudo = factory->create_pseudo(sb, pc);
     AndersonMixing *am = factory->create_anderson_mixing(
                              sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
     // assign large initial value for the energy and error

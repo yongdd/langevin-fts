@@ -15,8 +15,7 @@ class CpuPseudoGaussian : public Pseudo
 protected:
     FFT *fft;
     double *q1, *q2;
-    
-    void onestep(double *qin, double *qout,
+    void one_step(double *qin, double *qout,
                  double *expdw, double *expdw_half);
 public:
     CpuPseudoGaussian(SimulationBox *sb, PolymerChain *pc, FFT *ff);

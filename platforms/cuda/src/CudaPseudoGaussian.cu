@@ -133,7 +133,7 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
     {
         if(n < N_A && n < N_B)
         {
-            onestep(
+            one_step(
                 &q1_d[M*n], &q1_d[M*(n+1)],
                 &q2_d[M*n], &q2_d[M*(n+1)],
                 expdwa_d, expdwa_half_d,
@@ -141,7 +141,7 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
         }
         else if(n < N_A &&  n >= N_B)
         {
-            onestep(
+            one_step(
                 &q1_d[M*n], &q1_d[M*(n+1)],
                 &q2_d[M*n], &q2_d[M*(n+1)],
                 expdwa_d, expdwa_half_d,
@@ -149,7 +149,7 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
         }
         else if(n >= N_A && n < N_B)
         {
-            onestep(
+            one_step(
                 &q1_d[M*n], &q1_d[M*(n+1)],
                 &q2_d[M*n], &q2_d[M*(n+1)],
                 expdwb_d, expdwb_half_d,
@@ -157,7 +157,7 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
         }
         else
         {
-            onestep(
+            one_step(
                 &q1_d[M*n], &q1_d[M*(n+1)],
                 &q2_d[M*n], &q2_d[M*(n+1)],
                 expdwb_d, expdwb_half_d,
@@ -197,7 +197,7 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, we use FFT Batch.
-void CudaPseudoGaussian::onestep(double *qin1_d, double *qout1_d,
+void CudaPseudoGaussian::one_step(double *qin1_d, double *qout1_d,
                          double *qin2_d, double *qout2_d,
                          double *expdw1_d, double *expdw1_half_d,
                          double *expdw2_d, double *expdw2_half_d)

@@ -60,8 +60,8 @@ def find_saddle_point():
 # Cuda environment variables 
 #os.environ["CUDA_VISIBLE_DEVICES"]= "1"
 # OpenMP environment variables 
-os.environ["KMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 
 verbose_level = 1  # 1 : print at each langevin step.
@@ -75,7 +75,7 @@ lx = [9, 9, 9]
 n_contour = 100
 f = 0.34
 chi_n = 10.0
-polymer_model = "Discrete" # choose among [Gaussian, Discrete]
+chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
@@ -97,9 +97,9 @@ factory = PlatformSelector.create_factory("cuda")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
-pc = factory.create_polymer_chain(f, n_contour, chi_n)
+pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model)
+pseudo = factory.create_pseudo(sb, pc)
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -129,6 +129,7 @@ print("---------- Simulation Parameters ----------");
 print("Box Dimension: %d"  % (sb.get_dim()) )
 print("Precision: 8")
 print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )

@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     double chi_n = 20.0;
     std::vector<int> nx = {49, 63};
     std::vector<double> lx = {4.0,3.0};
-    std::string polymer_model = "Gaussian";  // choose among [Gaussian, Discrete]
+    std::string chain_model = "Gaussian";  // choose among [Gaussian, Discrete]
 
     int am_n_comp = 2;  // A and B
     int am_max_hist= 20;
@@ -68,9 +68,9 @@ int main(int argc, char **argv)
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
-    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n);
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    Pseudo *pseudo = factory->create_pseudo(sb, pc, polymer_model);
+    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model);
+    Pseudo *pseudo = factory->create_pseudo(sb, pc);
     AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_comp,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

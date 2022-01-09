@@ -50,10 +50,10 @@ void CpuPseudoGaussian::find_phi(double *phia,  double *phib,
                 q1[i] = q1_init[i];
             // diffusion of A chain
             for(int n=1; n<=N_A; n++)
-                onestep(&q1[(n-1)*M],&q1[n*M],expdwa,expdwa_half);
+                one_step(&q1[(n-1)*M],&q1[n*M],expdwa,expdwa_half);
             // diffusion of B chain
             for(int n=N_A+1; n<=N; n++)
-                onestep(&q1[(n-1)*M],&q1[n*M],expdwb,expdwb_half);
+                one_step(&q1[(n-1)*M],&q1[n*M],expdwb,expdwb_half);
         }
         #pragma omp section
         {
@@ -61,10 +61,10 @@ void CpuPseudoGaussian::find_phi(double *phia,  double *phib,
                 q2[i+N*M] = q2_init[i];
             // diffusion of B chain
             for(int n=N; n>=N_A+1; n--)
-                onestep(&q2[n*M],&q2[(n-1)*M],expdwb,expdwb_half);
+                one_step(&q2[n*M],&q2[(n-1)*M],expdwb,expdwb_half);
             // diffusion of A chain
             for(int n=N_A; n>=1; n--)
-                onestep(&q2[n*M],&q2[(n-1)*M],expdwa,expdwa_half);
+                one_step(&q2[n*M],&q2[(n-1)*M],expdwa,expdwa_half);
         }
     }
     // compute segment concentration with Simpson quadratrue.
@@ -100,7 +100,7 @@ void CpuPseudoGaussian::find_phi(double *phia,  double *phib,
         phib[i] *= sb->get_volume()/QQ/N;
     }
 }
-void CpuPseudoGaussian::onestep(double *qin, double *qout,
+void CpuPseudoGaussian::one_step(double *qin, double *qout,
                      double *expdw, double *expdw_half)
 {
     const int M = sb->get_n_grid();

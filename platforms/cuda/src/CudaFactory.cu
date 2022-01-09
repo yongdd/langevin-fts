@@ -5,7 +5,6 @@
 #include <array>
 #include <vector>
 #include <string>
-#include <algorithm>
 
 #include "CudaSimulationBox.h"
 #include "CudaPseudoGaussian.h"
@@ -13,25 +12,21 @@
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
-PolymerChain* CudaFactory::create_polymer_chain(double f, int NN, double chi_n)
+PolymerChain* CudaFactory::create_polymer_chain(double f, int NN, double chi_n, std::string model_name)
 {
-    return new PolymerChain(f, NN, chi_n);
+    return new PolymerChain(f, NN, chi_n, model_name);
 }
 SimulationBox* CudaFactory::create_simulation_box(
     std::vector<int> nx, std::vector<double>  lx)
 {
     return new CudaSimulationBox(nx, lx);
 }
-Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::string str_model)
+Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
-    std::transform(str_model.begin(), str_model.end(), str_model.begin(),
-                   [](unsigned char c)
-    {
-        return std::tolower(c);
-    });
-    if ( str_model == "gaussian" )
+    std::string model_name = pc->get_model_name();
+    if ( model_name == "gaussian" )
         return new CudaPseudoGaussian(sb, pc);
-    else if ( str_model == "discrete" )
+    else if ( model_name == "discrete" )
         return new CudaPseudoDiscrete(sb, pc);
     return NULL;
 }

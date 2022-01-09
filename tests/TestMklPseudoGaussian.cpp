@@ -30,7 +30,7 @@ int main()
     Ly = 3.0;
     Lz = 2.0;
 
-    PolymerChain pc(f, NN, 0.0);    
+    PolymerChain pc(f, NN, 0.0, "Gaussian");    
     SimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});    
 
     // initialize pseudo spectral parameters

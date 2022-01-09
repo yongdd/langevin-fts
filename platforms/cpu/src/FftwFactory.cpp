@@ -5,7 +5,6 @@
 #include <array>
 #include <vector>
 #include <string>
-#include <algorithm>
 
 #include "FftwFFT3D.h"
 #include "FftwFFT2D.h"
@@ -15,24 +14,19 @@
 #include "CpuAndersonMixing.h"
 #include "FftwFactory.h"
 
-PolymerChain* FftwFactory::create_polymer_chain(double f, int n_contour, double chi_n)
+PolymerChain* FftwFactory::create_polymer_chain(double f, int n_contour, double chi_n, std::string model_name)
 {
-    return new PolymerChain(f, n_contour, chi_n);
+    return new PolymerChain(f, n_contour, chi_n, model_name);
 }
 SimulationBox* FftwFactory::create_simulation_box(
     std::vector<int> nx, std::vector<double> lx)
 {
     return new SimulationBox(nx, lx);
 }
-Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::string str_model)
+Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
-    std::transform(str_model.begin(), str_model.end(), str_model.begin(),
-                   [](unsigned char c)
-    {
-        return std::tolower(c);
-    });
-
-    if ( str_model == "gaussian" )
+    std::string model_name = pc->get_model_name();
+    if ( model_name == "gaussian" )
     {
         if (sb->get_dim() == 3)
             return new CpuPseudoGaussian(sb, pc,
@@ -44,7 +38,7 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc, std::str
             return new CpuPseudoGaussian(sb, pc,
                 new FftwFFT1D(sb->get_nx(0)));
     }
-    else if ( str_model == "discrete" )
+    else if ( model_name == "discrete" )
     {
         if (sb->get_dim() == 3)
             return new CpuPseudoDiscrete(sb, pc,

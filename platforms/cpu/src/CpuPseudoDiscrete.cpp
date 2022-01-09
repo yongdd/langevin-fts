@@ -46,10 +46,10 @@ void CpuPseudoDiscrete::find_phi(double *phia,  double *phib,
                 q1[i] = h_a[i]*q1_init[i];
             // diffusion of A chain
             for(int n=1; n<N_A; n++)
-                onestep(&q1[(n-1)*M],&q1[n*M],h_a);
+                one_step(&q1[(n-1)*M],&q1[n*M],h_a);
             // diffusion of B chain
             for(int n=N_A; n<N; n++)
-                onestep(&q1[(n-1)*M],&q1[n*M],h_b);
+                one_step(&q1[(n-1)*M],&q1[n*M],h_b);
         }
         #pragma omp section
         {
@@ -57,10 +57,10 @@ void CpuPseudoDiscrete::find_phi(double *phia,  double *phib,
                 q2[i+(N-1)*M] = h_b[i]*q2_init[i];
             // diffusion of B chain
             for(int n=N-1; n>N_A; n--)
-                onestep(&q2[n*M],&q2[(n-1)*M],h_b);
+                one_step(&q2[n*M],&q2[(n-1)*M],h_b);
             // diffusion of A chain
             for(int n=N_A; n>0; n--)
-                onestep(&q2[n*M],&q2[(n-1)*M],h_a);
+                one_step(&q2[n*M],&q2[(n-1)*M],h_a);
         }
     }
     // Compute segment concentration A
@@ -89,7 +89,7 @@ void CpuPseudoDiscrete::find_phi(double *phia,  double *phib,
         phib[i] *= sb->get_volume()/h_b[i]/QQ/N;
     }
 }
-void CpuPseudoDiscrete::onestep(double *qin, double *qout,
+void CpuPseudoDiscrete::one_step(double *qin, double *qout,
                                 double *expdw)
 {
     const int M = sb->get_n_grid();

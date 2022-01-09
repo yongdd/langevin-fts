@@ -7,6 +7,7 @@ import os
 import time
 import pathlib
 import numpy as np
+from scipy.io import savemat
 from langevinfts import *
 
 def find_saddle_point():
@@ -62,7 +63,7 @@ def find_saddle_point():
 # -------------- simulation parameters ------------
 
 # OpenMP environment variables
-os.environ["KMP_STACKSIZE"] = "1G"
+os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 
@@ -77,7 +78,7 @@ lx = [8.0,8.0,8.0]
 f = 0.5
 NN = 16
 chi_n = 20
-polymer_model = "Gaussian"  # choose among [Gaussian, Discrete]
+chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
@@ -99,9 +100,9 @@ factory = PlatformSelector.create_factory("cuda")
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding
-pc = factory.create_polymer_chain(f, NN, chi_n)
+pc = factory.create_polymer_chain(f, NN, chi_n, chain_model)
 sb = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc, polymer_model)
+pseudo = factory.create_pseudo(sb, pc)
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -118,6 +119,7 @@ print("---------- Simulation Parameters ----------");
 print("Box Dimension: %d"  % (sb.get_dim()) )
 print("Precision: 8")
 print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
@@ -166,12 +168,13 @@ for langevin_step in range(0, langevin_max_iter):
     sb.zero_mean(w_minus)
     find_saddle_point()
 
-    # if( langevin_step % 1000 == 0 ):
-        # np.savez("data/fields_%06d.npz" % (langevin_step),
-        # nx=nx, lx=lx, N=NN, f=pc.get_f(), chi_n=pc.get_chi_n(),
-        # polymer_model=polymer_model, n_bar=langevin_nbar,
-        # random_seed=np.random.RandomState().get_state()[0],
-        # w_minus=w_minus, w_plus=w_plus)
+    if( langevin_step % 1000 == 0 ):
+        mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+            "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
+            "random_seed":np.random.RandomState().get_state()[0],
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
+        savemat("fields_%06d.mat" % langevin_step, mdic)
 
 # estimate execution time
 time_duration = time.time() - time_start; 
