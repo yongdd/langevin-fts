@@ -6,3 +6,6 @@
 6. Homopolymers
 7. Complex Chain Architecture
 8. Packaging with Conda
+9. Double GPU CUDA (q, q^dagger)
+10. GPU bandwith test
+11. UnitTest: Anderson Mixing
