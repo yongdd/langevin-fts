@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CpuPseudo class
+* This is an abstract CudaPseudoDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_H_
-#define CUDA_PSEUDO_H_
+#ifndef CUDA_PSEUDO_DISCRETE_H_
+#define CUDA_PSEUDO_DISCRETE_H_
 
 #include <array>
 #include <cufft.h>
@@ -16,7 +16,6 @@ class CudaPseudoDiscrete : public Pseudo
 private:
     cufftHandle plan_for, plan_bak;
 
-    double *temp_d, *temp_arr;
     // partition function and complementry partition are 
     // contiguously stored in q_d for every contour step.
     // In other words,
@@ -30,7 +29,6 @@ private:
     // ......
     
     double *q_d;
-    double *qstep_d;
     ftsComplex *kqin_d;
 
     double *expf_d;

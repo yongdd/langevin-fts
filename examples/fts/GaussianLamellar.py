@@ -98,13 +98,12 @@ langevin_max_iter = 10;
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 factory = PlatformSelector.create_factory("cuda")
 
-# create instances and assign to the variables of base classs
-# for the dynamic binding
-pc = factory.create_polymer_chain(f, NN, chi_n, chain_model)
-sb = factory.create_simulation_box(nx, lx)
+# create instances
+pc     = factory.create_polymer_chain(f, NN, chi_n, chain_model)
+sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am = factory.create_anderson_mixing(sb, am_n_comp,
-    am_max_hist, am_start_error, am_mix_min, am_mix_init)
+am     = factory.create_anderson_mixing(sb, am_n_comp,
+               am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise for single segment
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/ 

@@ -11,39 +11,30 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     const int N = pc->get_n_contour();
     const int M_COMPLEX = this->n_complex_grid;
 
+    // Create FFT plan
+    const int BATCH{2};
+    const int NRANK{sb->get_dim()};
+    int n_grid[NRANK];
+
     if(sb->get_dim() == 3)
     {
-        // create a 3D FFT plan
-        const int NRANK{3};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
+        n_grid[1] = sb->get_nx(1);
+        n_grid[2] = sb->get_nx(2);
     }
     else if(sb->get_dim() == 2)
     {
-        // create a 2D FFT plan
-        const int NRANK{2};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
+        n_grid[1] = sb->get_nx(1);
     }
     else if(sb->get_dim() == 1)
     {
-        // create a 1D FFT plan
-        const int NRANK{1};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
     }
+    cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
+    cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
     
-    cudaMalloc((void**)&temp_d,  sizeof(double)*M);
-
+    // Memory allocation
     cudaMalloc((void**)&qstep1_d, sizeof(double)*2*M);
     cudaMalloc((void**)&qstep2_d, sizeof(double)*2*M);
     cudaMalloc((void**)&kqin_d,   sizeof(ftsComplex)*2*M_COMPLEX);
@@ -62,8 +53,6 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     cudaMalloc((void**)&expf_d,      sizeof(double)*M_COMPLEX);
     cudaMalloc((void**)&expf_half_d, sizeof(double)*M_COMPLEX);
 
-    this->temp_arr = new double[M];
-
     cudaMemcpy(expf_d,   expf,          sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(expf_half_d,  expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
@@ -76,7 +65,6 @@ CudaPseudoGaussian::~CudaPseudoGaussian()
     cudaFree(qstep2_d);
     cudaFree(kqin_d);
 
-    cudaFree(temp_d);
     cudaFree(q1_d);
     cudaFree(q2_d);
 
@@ -89,8 +77,6 @@ CudaPseudoGaussian::~CudaPseudoGaussian()
 
     cudaFree(expf_d);
     cudaFree(expf_half_d);
-    
-    delete[] temp_arr;
 }
 void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,

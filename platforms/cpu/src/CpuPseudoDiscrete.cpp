@@ -80,7 +80,7 @@ void CpuPseudoDiscrete::find_phi(double *phia,  double *phib,
             phib[i] += q1[i+n*M]*q2[i+n*M];
     }
     // calculates the total partition function
-    QQ = sb->integral(&q1[(N-1)*M]);
+    QQ = sb->inner_product(&q1[(N-1)*M], q1_init);
 
     // normalize the concentration
     for(int i=0; i<M; i++)
