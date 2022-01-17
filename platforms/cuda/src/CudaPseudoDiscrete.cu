@@ -12,43 +12,32 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
     const int M_COMPLEX = this->n_complex_grid;
-    
+        
+    // Create FFT plan
+    const int BATCH{2};
+    const int NRANK{sb->get_dim()};
+    int n_grid[NRANK];
+
     if(sb->get_dim() == 3)
     {
-        // create a 3D FFT plan
-        const int NRANK{3};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
+        n_grid[1] = sb->get_nx(1);
+        n_grid[2] = sb->get_nx(2);
     }
     else if(sb->get_dim() == 2)
     {
-        // create a 2D FFT plan
-        const int NRANK{2};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0),sb->get_nx(1)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
+        n_grid[1] = sb->get_nx(1);
     }
     else if(sb->get_dim() == 1)
     {
-        // create a 1D FFT plan
-        const int NRANK{1};
-        const int BATCH{2};
-        int n_grid[NRANK] = {sb->get_nx(0)};
-
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D, BATCH);
+        n_grid[0] = sb->get_nx(0);
     }
+    cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
+    cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
 
-    cudaMalloc((void**)&temp_d,  sizeof(double)*M);
-
-    cudaMalloc((void**)&qstep_d, sizeof(double)*2*M);
+    // Memory allocation
     cudaMalloc((void**)&kqin_d,  sizeof(ftsComplex)*2*M_COMPLEX);
-
     cudaMalloc((void**)&q_d, sizeof(double)*2*M*N);
 
     cudaMalloc((void**)&expf_d,   sizeof(double)*M_COMPLEX);
@@ -57,8 +46,6 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
 
     cudaMalloc((void**)&phia_d, sizeof(double)*M);
     cudaMalloc((void**)&phib_d, sizeof(double)*M);
-
-    this->temp_arr = new double[M];
     
     cudaMemcpy(expf_d, expf, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
@@ -67,10 +54,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
 
-    cudaFree(qstep_d);
     cudaFree(kqin_d);
-
-    cudaFree(temp_d);
     cudaFree(q_d);
 
     cudaFree(expf_d);
@@ -79,8 +63,6 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
 
     cudaFree(phia_d);
     cudaFree(phib_d);
-
-    delete[] temp_arr;
 }
 void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
                                   double *q1_init, double *q2_init,
@@ -108,10 +90,10 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
     cudaMemcpy(expdwa_d, expdwa, sizeof(double)*M,cudaMemcpyHostToDevice);
     cudaMemcpy(expdwb_d, expdwb, sizeof(double)*M,cudaMemcpyHostToDevice);
 
-    cudaMemcpy(&q_d[0],  q1_init, sizeof(double)*M, cudaMemcpyHostToDevice);
+    cudaMemcpy(&q_d[0], q1_init, sizeof(double)*M, cudaMemcpyHostToDevice);
     cudaMemcpy(&q_d[M], q2_init, sizeof(double)*M, cudaMemcpyHostToDevice);
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&q_d[0],  &q_d[0],  expdwa_d, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&q_d[0], &q_d[0], expdwa_d, 1.0, M);
     multi_real<<<N_BLOCKS, N_THREADS>>>(&q_d[M], &q_d[M], expdwb_d, 1.0, M);
 
     for(int n=1; n<N; n++)
@@ -151,9 +133,6 @@ void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
     cudaMemcpy(phib, phib_d, sizeof(double)*M,cudaMemcpyDeviceToHost);
 }
 
-// Advance two partial partition functions simultaneously using Richardson extrapolation.
-// Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
-// To increase GPU usage, we use FFT Batch.
 void CudaPseudoDiscrete::one_step(double *qin_d, double *qout_d,
                                  double *expdw1_d, double *expdw2_d)
 {

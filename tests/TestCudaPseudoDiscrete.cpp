@@ -29,7 +29,7 @@ int main()
     Ly = 3.0;
     Lz = 2.0;
 
-    CudaCommon::set(8,8,0);
+    CudaCommon::get_instance().set(8,8,0);
     PolymerChain pc(f, NN, 0.0, "Discrete");
     CudaSimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});
 

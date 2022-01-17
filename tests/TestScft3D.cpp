@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     // initialize ParamParser
     ParamParser& pp = ParamParser::get_instance();
     //pp.read_param_file(argv[1],false);
-    pp.read_param_file("TestInputParams",false);
+    pp.read_param_file("TestInputParams", true);
 
     // choose platform
     AbstractFactory *factory;
@@ -89,9 +89,9 @@ int main(int argc, char **argv)
         std::cout<< "chain.a_fraction is not specified." << std::endl;
         exit(-1);
     }
-    if(!pp.get("chain.contour_step", n_contour))
+    if(!pp.get("chain.n_contour", n_contour))
     {
-        std::cout<< "chain.contour_step is not specified." << std::endl;
+        std::cout<< "chain.n_contour is not specified." << std::endl;
         exit(-1);
     }
     if(!pp.get("chain.chi_n", chi_n))
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
     // anderson mixing begin if error level becomes less then start_anderson_error
     if(!pp.get("am.start_error", start_anderson_error)) start_anderson_error = 0.01;
     // max number of previous steps to calculate new field
-    if(!pp.get("am.step_max", max_anderson)) max_anderson = 10;
+    if(!pp.get("am.n_max", max_anderson)) max_anderson = 10;
     // minimum mixing parameter
     if(!pp.get("am.mix_min", mix_min)) mix_min = 0.01;
     // initial mixing parameter
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 
     // read iteration parameters
     if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
-    if(!pp.get("iter.step_saddle", max_sctf_iter)) max_sctf_iter   = 10;
+    if(!pp.get("iter.n_step_saddle", max_sctf_iter)) max_sctf_iter   = 10;
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding

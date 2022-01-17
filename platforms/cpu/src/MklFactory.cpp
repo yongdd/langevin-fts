@@ -62,3 +62,7 @@ AndersonMixing* MklFactory::create_anderson_mixing(
                sb, n_comp, max_anderson,
                start_anderson_error, mix_min, mix_init);
 }
+void MklFactory::display_info()
+{
+    std::cout << "cpu-mkl" << std::endl;
+}

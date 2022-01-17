@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is a derived CpuPseudo class
+* This is an abstract CudaPseudoGaussian class
 *------------------------------------------------------------*/
 
 #ifndef CUDA_PSEUDO_GAUSSIAN_H_

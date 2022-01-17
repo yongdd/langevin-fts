@@ -29,6 +29,7 @@ public :
     virtual AndersonMixing* create_anderson_mixing(
         SimulationBox *sb, int n_comp,
         double max_hist, double start_error,
-        double mix_min, double mix_init) = 0; 
+        double mix_min, double mix_init) = 0;
+    virtual void display_info() = 0;
 };
 #endif

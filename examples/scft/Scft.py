@@ -38,6 +38,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
+print("Available Platforms: ", PlatformSelector.avail_platforms())
 factory = PlatformSelector.create_factory("cuda")
 
 # create instances
@@ -60,7 +61,7 @@ print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("volume: %f" % (sb.get_volume()) )
+print("Volume: %f" % (sb.get_volume()) )
 
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
@@ -72,7 +73,7 @@ phi_b   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 
-print("wminus and wplus are initialized to a given test fields.")
+print("w_minus and w_plus are initialized to a given test fields.")
 for i in range(0,sb.get_nx(0)):
     for j in range(0,sb.get_nx(1)):
         for k in range(0,sb.get_nx(2)):

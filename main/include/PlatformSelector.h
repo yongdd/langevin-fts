@@ -12,6 +12,7 @@
 class PlatformSelector
 {
 public:
+    static std::vector<std::string> avail_platforms();
     static AbstractFactory* create_factory(std::string str_platform="cuda");
 };
 

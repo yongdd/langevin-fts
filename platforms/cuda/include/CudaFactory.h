@@ -26,5 +26,6 @@ public :
         SimulationBox *sb, int n_comp,
         double max_hist, double start_error,
         double mix_min, double mix_init) override;
+    void display_info() override;
 };
 #endif

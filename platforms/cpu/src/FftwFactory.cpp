@@ -2,6 +2,7 @@
 * class FftwFactory
 *-----------------------------------------------------------*/
 
+#include <iostream>
 #include <array>
 #include <vector>
 #include <string>
@@ -60,4 +61,8 @@ AndersonMixing* FftwFactory::create_anderson_mixing(
     return new CpuAndersonMixing(
                sb, n_comp, max_anderson,
                start_anderson_error, mix_min, mix_init);
+}
+void FftwFactory::display_info()
+{
+    std::cout << "cpu-fftw" << std::endl;
 }
