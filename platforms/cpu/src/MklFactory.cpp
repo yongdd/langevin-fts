@@ -48,7 +48,7 @@ Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
             return new CpuPseudoDiscrete(sb, pc,
                 new MklFFT2D({sb->get_nx(0),sb->get_nx(1)}));
         else if (sb->get_dim() == 1)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoDiscrete(sb, pc,
                 new MklFFT1D(sb->get_nx(0)));
     }
     return NULL;

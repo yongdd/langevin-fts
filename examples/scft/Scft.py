@@ -26,10 +26,10 @@ lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 # lx = [4.0,3.0] 
 
 ### for 1D
-# nx = [31]
-# lx = [4.0] 
+#nx = [31]
+#lx = [4.0] 
 
-chain_model = "Gaussian" # choose among [Gaussian, Discrete]
+chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 am_n_comp = 2  # w[0] and w[1]
 am_max_hist= 20
