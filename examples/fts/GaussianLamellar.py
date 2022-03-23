@@ -9,57 +9,8 @@ import pathlib
 import numpy as np
 from scipy.io import savemat
 from langevinfts import *
+from find_saddle_point import *
 
-def find_saddle_point():
-    # assign large initial value for the energy and error
-    energy_total = 1e20
-    error_level = 1e20
-
-    # reset Anderson mixing module
-    am.reset_count()
-
-    # saddle point iteration begins here
-    for saddle_iter in range(0,saddle_max_iter):
-        
-        # for the given fields find the polymer statistics
-        QQ = pseudo.find_phi(phi_a, phi_b, 
-                q1_init,q2_init,
-                w_plus + w_minus,
-                w_plus - w_minus)
-        phi_plus = phi_a + phi_b
-        
-        # calculate output fields
-        g_plus = 1.0*(phi_plus-1.0)
-        w_plus_out = w_plus + g_plus 
-        sb.zero_mean(w_plus_out);
-
-        # error_level measures the "relative distance" between the input and output fields
-        old_error_level = error_level
-        error_level = np.sqrt(sb.inner_product(phi_plus-1.0,phi_plus-1.0)/sb.get_volume())
-
-        # print iteration # and error levels
-        if(verbose_level == 2 or
-         verbose_level == 1 and
-         (error_level < saddle_tolerance or saddle_iter == saddle_max_iter-1 )):
-             
-            # calculate the total energy
-            energy_old = energy_total
-            energy_total  = -np.log(QQ/sb.get_volume())
-            energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
-            energy_total -= sb.integral(w_plus)/sb.get_volume()
-
-            # check the mass conservation
-            mass_error = sb.integral(phi_plus)/sb.get_volume() - 1.0
-            print("%8d %12.3E %15.7E %13.9f %13.9f" %
-                (saddle_iter, mass_error, QQ, energy_total, error_level))
-        # conditions to end the iteration
-        if(error_level < saddle_tolerance):
-            break;
-            
-        # calculte new fields using simple and Anderson mixing
-        # (Caution! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
-        am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level);
-        
 # -------------- simulation parameters ------------
 
 # OpenMP environment variables
@@ -71,19 +22,19 @@ verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
 # Simulation Box
-nx = [64,64,64]
-lx = [8.0,8.0,8.0]
+nx = [64, 64, 64]
+lx = [8.0, 8.0, 8.0]
 
 # Polymer Chain
 f = 0.5
-NN = 16
+n_contour = 16
 chi_n = 20
 chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
 saddle_max_iter = 100
-am_n_comp = 1  # A and B
+am_n_comp = 1  # W+
 am_max_hist= 20
 am_start_error = 8e-1
 am_mix_min = 0.1
@@ -91,15 +42,15 @@ am_mix_init = 0.1
 
 # Langevin Dynamics
 langevin_dt = 0.8         # langevin step interval, delta tau*N
-langevin_nbar = 1024;     # invariant polymerization index
-langevin_max_iter = 10;
+langevin_nbar = 1024     # invariant polymerization index
+langevin_max_iter = 10
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 factory = PlatformSelector.create_factory("cuda")
 
 # create instances
-pc     = factory.create_polymer_chain(f, NN, chi_n, chain_model)
+pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(sb, am_n_comp,
@@ -110,11 +61,11 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
     
 # random seed for MT19937
-np.random.seed(5489);  
+np.random.seed(5489)
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
 # -------------- print simulation parameters ------------
-print("---------- Simulation Parameters ----------");
+print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
 print("Precision: 8")
 print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
@@ -141,10 +92,13 @@ w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 
 # keep the level of field value
-sb.zero_mean(w_plus);
-sb.zero_mean(w_minus);
+sb.zero_mean(w_plus)
+sb.zero_mean(w_minus)
 
-find_saddle_point()
+find_saddle_point(pc, sb, pseudo, am,
+    q1_init, q2_init, w_plus, w_minus, 
+    phi_a, phi_b, 
+    saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
 print("---------- Run ----------")
 time_start = time.time()
@@ -158,14 +112,18 @@ for langevin_step in range(0, langevin_max_iter):
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
-    sb.zero_mean(w_minus)
-    find_saddle_point()
-    
+    find_saddle_point(pc, sb, pseudo, am,
+        q1_init, q2_init, w_plus, w_minus, 
+        phi_a, phi_b, 
+        saddle_max_iter, saddle_tolerance, verbose_level)
+
     # update w_minus: correct step 
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    sb.zero_mean(w_minus)
-    find_saddle_point()
+    find_saddle_point(pc, sb, pseudo, am,
+        q1_init, q2_init, w_plus, w_minus, 
+        phi_a, phi_b, 
+        saddle_max_iter, saddle_tolerance, verbose_level)
 
     if( langevin_step % 1000 == 0 ):
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
@@ -176,7 +134,7 @@ for langevin_step in range(0, langevin_max_iter):
         savemat("fields_%06d.mat" % langevin_step, mdic)
 
 # estimate execution time
-time_duration = time.time() - time_start; 
+time_duration = time.time() - time_start
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_iter) )
 

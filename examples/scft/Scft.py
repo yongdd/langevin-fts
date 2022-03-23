@@ -15,10 +15,10 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 max_scft_iter = 20
 tolerance = 1e-9
 
-f = 0.3
-n_contour = 50
-chi_n = 20
-nx = [31,49,63]
+f = 0.3            # A-fraction, f
+n_contour = 50     # segment number, N
+chi_n = 20         # Flory-Huggins Parameters * N
+nx = [31,49,63]    # grids number
 lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 
 ### for 2D
@@ -31,15 +31,16 @@ lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
-am_n_comp = 2  # w[0] and w[1]
-am_max_hist= 20
-am_start_error = 8e-1
-am_mix_min = 0.1
-am_mix_init = 0.1
+am_n_comp = 2         # w[0] and w[1]
+am_max_hist= 20       # maximum number of history
+am_start_error = 8e-1 # when switch to AM from simple mixing
+am_mix_min = 0.1      # minimum mixing rate of simple mixing
+am_mix_init = 0.1     # inital mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
 factory = PlatformSelector.create_factory("cuda")
+factory.display_info()
 
 # create instances
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
@@ -49,11 +50,11 @@ am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # assign large initial value for the energy and error
-energy_total = 1.0e20;
-error_level = 1.0e20;
+energy_total = 1.0e20
+error_level = 1.0e20
 
 # -------------- print simulation parameters ------------
-print("---------- Simulation Parameters ----------");
+print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (sb.get_dim()))
 print("Precision: 8")
 print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
@@ -77,16 +78,16 @@ print("w_minus and w_plus are initialized to a given test fields.")
 for i in range(0,sb.get_nx(0)):
     for j in range(0,sb.get_nx(1)):
         for k in range(0,sb.get_nx(2)):
-            idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k;
-            phi_a[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1;
+            idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
+            phi_a[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1
 
-phi_b = 1.0 - phi_a;
-w[0] = chi_n*phi_b;
-w[1] = chi_n*phi_a;
+phi_b = 1.0 - phi_a
+w[0] = chi_n*phi_b
+w[1] = chi_n*phi_a
 
 # keep the level of field value
-sb.zero_mean(w[0]);
-sb.zero_mean(w[1]);
+sb.zero_mean(w[0])
+sb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -99,8 +100,8 @@ for scft_iter in range(0,max_scft_iter):
     
     # calculate the total energy
     energy_old = energy_total
-    w_minus = (w[0]-w[1])/2;
-    w_plus  = (w[0]+w[1])/2;
+    w_minus = (w[0]-w[1])/2
+    w_plus  = (w[0]+w[1])/2
     
     energy_total  = -np.log(QQ/sb.get_volume())
     energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
@@ -110,16 +111,16 @@ for scft_iter in range(0,max_scft_iter):
     xi = 0.5*(w[0]+w[1]-chi_n)
 
     # calculate output fields
-    w_out[0] = chi_n*phi_b + xi;
-    w_out[1] = chi_n*phi_a + xi;
-    sb.zero_mean(w_out[0]);
-    sb.zero_mean(w_out[1]);
+    w_out[0] = chi_n*phi_b + xi
+    w_out[1] = chi_n*phi_a + xi
+    sb.zero_mean(w_out[0])
+    sb.zero_mean(w_out[1])
     
     # error_level measures the "relative distance" between the input and output fields
     old_error_level = error_level
     w_diff = w_out - w
     multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + +1.0
+    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
     error_level = np.sqrt(multi_dot)
     
     # print iteration # and error levels and check the mass conservation
@@ -129,13 +130,16 @@ for scft_iter in range(0,max_scft_iter):
 
     # conditions to end the iteration
     if(error_level < tolerance):
-        break;
+        break
     # calculte new fields using simple and Anderson mixing
-    # (Note! we are now passing entire w, w_out and w_diff not just w[0], w_out[0] and w_diff[0])
-    am.caculate_new_fields(w[0], w_out[0], w_diff[0], old_error_level, error_level);
-
+    am.caculate_new_fields(
+        np.reshape(w,      2*sb.get_n_grid()),
+        np.reshape(w_out,  2*sb.get_n_grid()),
+        np.reshape(w_diff, 2*sb.get_n_grid()),
+        old_error_level, error_level)
+    
 # estimate execution time
-time_duration = time.time() - time_start; 
+time_duration = time.time() - time_start
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/max_scft_iter) )
 
