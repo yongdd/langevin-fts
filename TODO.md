@@ -9,3 +9,5 @@
 9. Double GPU CUDA (q, q^dagger)
 10. GPU bandwith test
 11. UnitTest: Anderson Mixing
+12. example:SCFT Gyroid
+13. example:SCFT Natural Period

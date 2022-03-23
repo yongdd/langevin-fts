@@ -22,7 +22,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
   
 # Compiling
-  `conda create -n envlfts python=3.8 cmake=3.19 conda swig scipy fftw openmpi mpi4py`  
+  `conda create -n envlfts python=3.8 cmake=3.19 conda swig scipy fftw openmpi`  
   `conda activate envlfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
@@ -38,8 +38,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 # User Guide
-+ This is not an application but a library for the field-based simulation, and you need to write your own problem using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.
-+ To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In python, import the package by adding  `from langevinfts import *`. Please look around `examples` folder to understand how to use this library.
++ This is not an application but a library for the field-based simulation, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. Basic SCFT and L-FTS implementations are provided in  `examples` folder.
++ To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In python, import the package by adding  `from langevinfts import *`.
 + Be aware that unit of length in this program is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
@@ -56,6 +56,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # References
 #### CUDA Implementation
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
++ D. Yong, Y. Kim, S. Jo, D.Y. Ryu, and .U. Kim*, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces, *Macromolecules* **2021**, 54, 11304   
 #### Gaussian Chain Model
 + T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Computationally Efficient Field-Theoretic Simulations for Block Copolymer Melts, *Macromolecules* **2019**, 52, 8840   
 + M.W. Masen, Field theoretic approach for block polymer melts: SCFT and FTS, *J. Chem. Phys.* **2020**, 152, 110901   
