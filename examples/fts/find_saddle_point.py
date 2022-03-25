@@ -5,6 +5,7 @@ def find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus, 
     phi_a, phi_b, 
     saddle_max_iter, saddle_tolerance, verbose_level):
+        
     # assign large initial value for the energy and error
     energy_total = 1e20
     error_level = 1e20

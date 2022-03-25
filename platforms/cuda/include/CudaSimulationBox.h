@@ -13,17 +13,17 @@ class CudaSimulationBox : public SimulationBox
 private:
     double *sum, *sum_d;   // temporal storage for reduction in integral_gpu
     double *multiple_d;    // temporal storage for mutiple_inner_product_gpu
+    double *dv_d; // dV for GPU
     
     void initialize();
 public:
-    double *dv_d; // dV for GPU
-
     CudaSimulationBox(std::vector<int> nx, std::vector<double> lx);
     ~CudaSimulationBox() override;
 
     double integral_gpu(double *g_d);
     double inner_product_gpu(double *g_d, double *h_d);
     double mutiple_inner_product_gpu(int n_comp, double *g_d, double *h_d);
-
+    
+    void set_lx(std::vector<double> new_lx) override;
 };
 #endif

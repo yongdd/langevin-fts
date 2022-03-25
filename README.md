@@ -7,6 +7,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * 3D, 2D and 1D (Caution! FTS in 1D and 2D has no physical meaning)
 * Pseudospectral Implmentation using MKL, FFTW and CUDA
 * Gaussian and Discrete Chain Models
+* Linux
 
 # Dependencies
 #### C++ Compiler
@@ -44,7 +45,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 
 # Developer Guide
-#### Abstract Factory  
+#### Platforms  
   This program is designed to run on different platforms such as MKL, FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
 
 #### Anderson Mixing  
@@ -56,7 +57,6 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # References
 #### CUDA Implementation
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
-+ D. Yong, Y. Kim, S. Jo, D.Y. Ryu, and .U. Kim*, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces, *Macromolecules* **2021**, 54, 11304   
 #### Gaussian Chain Model
 + T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Computationally Efficient Field-Theoretic Simulations for Block Copolymer Melts, *Macromolecules* **2019**, 52, 8840   
 + M.W. Masen, Field theoretic approach for block polymer melts: SCFT and FTS, *J. Chem. Phys.* **2020**, 152, 110901   
@@ -65,3 +65,5 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
 ####  Field-Update Algorithms
 + D.L. Vigil, K.T. Delaney, and G.H. Fredrickson, Quantitative Comparison of Field-Update Algorithms for Polymer SCFT and FTS, *Macromolecules* **2021**, 54, 21, 9804
+#### My Work
++ D. Yong, Y. Kim, S. Jo, D.Y. Ryu, and .U. Kim*, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces, *Macromolecules* **2021**, 54, 11304   

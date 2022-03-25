@@ -12,6 +12,10 @@ os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 
+# GPU environment variables
+os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
+os.environ["LFTS_GPU_NUM_THREADS"] = "256"
+
 max_scft_iter = 20
 tolerance = 1e-9
 

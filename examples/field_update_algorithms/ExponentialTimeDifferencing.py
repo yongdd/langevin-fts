@@ -115,7 +115,7 @@ time_start = time.time()
 
 lnQ_list = []
 print("iteration, mass error, total_partition, energy_total, error_level")
-for langevin_step in range(0, langevin_max_iter):
+for langevin_step in range(1, langevin_max_iter+1):
     
     print("langevin step: ", langevin_step)
     # update w_minus
