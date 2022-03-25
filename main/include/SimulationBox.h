@@ -35,6 +35,8 @@ public:
     int get_n_grid();
     double get_volume();
 
+    virtual void set_lx(std::vector<double> new_lx);
+
     double integral(double *g);
     double inner_product(double *g, double *h);
     double multi_inner_product(int n_comp, double *g, double *h);

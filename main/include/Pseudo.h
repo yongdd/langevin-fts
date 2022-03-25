@@ -17,7 +17,7 @@ protected:
     int n_complex_grid;
     double *expf, *expf_half;
 
-    void init_gaussian_factor(
+    void set_exp_factor(
         std::array<int,3> nx, std::array<double,3> dx, double ds);
 public:
     Pseudo(SimulationBox *sb, PolymerChain *pc);
@@ -31,6 +31,10 @@ public:
     virtual void get_partition(
         double *q1_out,
         double *q2_out, int n) = 0;
+
+    virtual void update(){
+        set_exp_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
+    }
 
     // Methods for SWIG
     void find_phi(

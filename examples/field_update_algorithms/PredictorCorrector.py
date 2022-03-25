@@ -98,7 +98,7 @@ time_start = time.time()
 
 lnQ_list = []
 print("iteration, mass error, total_partition, energy_total, error_level")
-for langevin_step in range(0, langevin_max_iter):
+for langevin_step in range(1, langevin_max_iter+1):
     
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
@@ -120,7 +120,7 @@ for langevin_step in range(0, langevin_max_iter):
         saddle_max_iter, saddle_tolerance, verbose_level)
     lnQ_list.append(-np.log(QQ/sb.get_volume()))
 
-print(np.mean(lnQ_list[1000:]))
+print(langevin_dt, np.mean(lnQ_list[1000:]))
 
 # estimate execution time
 time_duration = time.time() - time_start

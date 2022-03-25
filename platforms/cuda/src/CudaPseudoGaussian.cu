@@ -53,8 +53,8 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     cudaMalloc((void**)&expf_d,      sizeof(double)*M_COMPLEX);
     cudaMalloc((void**)&expf_half_d, sizeof(double)*M_COMPLEX);
 
-    cudaMemcpy(expf_d,   expf,          sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
-    cudaMemcpy(expf_half_d,  expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(expf_d,      expf,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(expf_half_d, expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
 CudaPseudoGaussian::~CudaPseudoGaussian()
 {
@@ -78,6 +78,16 @@ CudaPseudoGaussian::~CudaPseudoGaussian()
     cudaFree(expf_d);
     cudaFree(expf_half_d);
 }
+
+void CudaPseudoGaussian::update()
+{
+    const int M_COMPLEX = this->n_complex_grid;
+    
+    Pseudo::update();
+    cudaMemcpy(expf_d,      expf,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(expf_half_d, expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+}
+
 void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
                           double *q1_init, double *q2_init,
                           double *wa, double *wb, double &QQ)

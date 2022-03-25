@@ -21,7 +21,7 @@ Pseudo::Pseudo(
     
     this->expf = new double[n_complex_grid];
     this->expf_half = new double[n_complex_grid];
-    init_gaussian_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
+    set_exp_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
 Pseudo::~Pseudo()
 {
@@ -29,7 +29,7 @@ Pseudo::~Pseudo()
     delete[] expf_half;
 }
 //----------------- init_gaussian_factor -------------------
-void Pseudo::init_gaussian_factor(
+void Pseudo::set_exp_factor(
     std::array<int,3> nx, std::array<double,3> dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;

@@ -43,6 +43,8 @@ public:
                        PolymerChain *pc);
     ~CudaPseudoDiscrete();
 
+    void update() override;
+
     void find_phi(double *phia,  double *phib,
                   double *q1_init, double *q2_init,
                   double *wa, double *wb, double &QQ) override;

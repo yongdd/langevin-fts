@@ -96,6 +96,38 @@ double SimulationBox::get_volume()
 {
     return volume;
 }
+//----------------- set methods-------------------------------------
+void SimulationBox::set_lx(std::vector<double> new_lx)
+{
+    if ( new_lx.size() != dim )
+    {
+        std::cerr << "The sizes of new nx and dimension are not the same. " << std::endl;
+        exit(-1);
+    }
+
+    for(int i=0; i<dim; i++)
+    {
+        lx[i] = new_lx[i];
+        dx[i] = new_lx[i]/nx[i];
+    }
+    if (dim == 2 )
+    {
+        lx[2] = 1.0;
+        dx[2] = 1.0;
+    }
+    else if (dim == 1 )
+    {
+        lx[1] = 1.0;
+        dx[1] = 1.0;
+
+        lx[2] = 1.0;
+        dx[2] = 1.0;
+    }
+    // weight factor for integral
+    for(int i=0; i<n_grid; i++)
+        dv[i] = dx[0]*dx[1]*dx[2];
+    volume = lx[0]*lx[1]*lx[2];
+}
 //-----------------------------------------------------------
 // This method calculates inner product g and h
 double SimulationBox::integral(double *g)

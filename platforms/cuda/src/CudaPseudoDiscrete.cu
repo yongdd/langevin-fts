@@ -64,6 +64,15 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     cudaFree(phia_d);
     cudaFree(phib_d);
 }
+
+void CudaPseudoDiscrete::update()
+{
+    const int M_COMPLEX = this->n_complex_grid;
+    
+    Pseudo::update();
+    cudaMemcpy(expf_d, expf, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+}
+
 void CudaPseudoDiscrete::find_phi(double *phia,  double *phib,
                                   double *q1_init, double *q2_init,
                                   double *wa, double *wb, double &QQ)

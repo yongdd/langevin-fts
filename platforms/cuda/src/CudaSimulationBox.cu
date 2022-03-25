@@ -24,7 +24,6 @@ void CudaSimulationBox::initialize()
     sum = new double[n_grid];
     cudaMalloc((void**)&sum_d, sizeof(double)*n_grid);
     cudaMalloc((void**)&multiple_d, sizeof(double)*n_grid);
-    
 }
 //----------------- Destructor -----------------------------
 CudaSimulationBox::~CudaSimulationBox()
@@ -33,6 +32,12 @@ CudaSimulationBox::~CudaSimulationBox()
     cudaFree(dv_d);
     cudaFree(sum_d);
     cudaFree(multiple_d);
+}
+//-----------------------------------------------------------
+void CudaSimulationBox::set_lx(std::vector<double> new_lx)
+{
+    SimulationBox::set_lx(new_lx);
+    cudaMemcpy(dv_d, dv,  sizeof(double)*n_grid,cudaMemcpyHostToDevice);
 }
 //-----------------------------------------------------------
 double CudaSimulationBox::integral_gpu(double *g_d)
