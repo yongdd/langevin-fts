@@ -107,7 +107,7 @@ int main(int argc, char **argv)
     //     phia(:,:,k) = phia(:,:,z_lo)
     //   end do
 
-    std::cout<< "wminus and wplus are initialized to a given test fields." << std::endl;
+    std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
     for(int i=0; i<sb->get_nx(0); i++)
         for(int j=0; j<sb->get_nx(1); j++)
             for(int k=0; k<sb->get_nx(2); k++)

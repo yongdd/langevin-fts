@@ -23,8 +23,8 @@ int main(int argc, char **argv)
     // chrono timer
     std::chrono::system_clock::time_point chrono_start, chrono_end;
     std::chrono::duration<double> time_duration;
-    // iter = number of iteration steps, max_sctf_iter = maximum number of iteration steps
-    int iter, max_sctf_iter;
+    // iter = number of iteration steps, max_scft_iter = maximum number of iteration steps
+    int iter, max_scft_iter;
     // QQ = total partition function
     double QQ, energy_chain, energy_field, energy_total, energy_old;
     // error_level = variable to check convergence of the iteration
@@ -62,6 +62,7 @@ int main(int argc, char **argv)
     //    std::cout<< "Input parameter file is required, e.g, 'scft.out inputs' " << std::endl;
     //    exit(-1);
     //}
+    
     // initialize ParamParser
     ParamParser& pp = ParamParser::get_instance();
     //pp.read_param_file(argv[1],false);
@@ -117,7 +118,7 @@ int main(int argc, char **argv)
 
     // read iteration parameters
     if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
-    if(!pp.get("iter.n_step_saddle", max_sctf_iter)) max_sctf_iter   = 10;
+    if(!pp.get("iter.n_step_saddle", max_scft_iter)) max_scft_iter   = 10;
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
@@ -165,7 +166,7 @@ int main(int argc, char **argv)
     //     phia(:,:,k) = phia(:,:,z_lo)
     //   end do
 
-    std::cout<< "wminus and wplus are initialized to a given test fields." << std::endl;
+    std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
     for(int i=0; i<sb->get_nx(0); i++)
         for(int j=0; j<sb->get_nx(1); j++)
             for(int k=0; k<sb->get_nx(2); k++)
@@ -204,7 +205,7 @@ int main(int argc, char **argv)
     chrono_start = std::chrono::system_clock::now();
 
     // iteration begins here
-    for(int iter=0; iter<max_sctf_iter; iter++)
+    for(int iter=0; iter<max_scft_iter; iter++)
     {
         // for the given fields find the polymer statistics
         pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->get_n_grid()],QQ);
@@ -258,7 +259,7 @@ int main(int argc, char **argv)
     chrono_end = std::chrono::system_clock::now();
     time_duration = chrono_end - chrono_start;
     std::cout<< "total time, time per step: ";
-    std::cout<< time_duration.count() << " " << time_duration.count()/max_sctf_iter << std::endl;
+    std::cout<< time_duration.count() << " " << time_duration.count()/max_scft_iter << std::endl;
 
     //------------- finalize -------------
     delete[] w;
@@ -281,7 +282,7 @@ int main(int argc, char **argv)
 
     pp.display_usage_info();
 
-    if (std::isnan(error_level) || std::abs(error_level-0.001343652) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.009246095) > 1e-7)
         return -1;
 
     return 0;

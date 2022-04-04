@@ -3,13 +3,13 @@
 ##platform = "cuda"           # cuda, cpu-mkl, cpu-fftw
 
 # SIMULATION BOX
-geometry.grids        = 31  49  63   # the number of simulation grids
-geometry.box_size     = 4.0 3.0 2.0  # simulation box as aN^(1/2) unit
+geometry.grids     = 31  49  23   # the number of simulation grids
+geometry.box_size  = 4.0 3.0 2.0  # simulation box as aN^(1/2) unit
 
 # POLYMER CHAIN
-chain.chi_n                 = 20.0  # Flory Huggins parameter. 
-chain.a_fraction            = 0.3   # f
-chain.n_contour          = 50    # N
+chain.chi_n      = 20.0  # Flory Huggins parameter. 
+chain.a_fraction = 0.3   # f
+chain.n_contour  = 50    # N
 
 # ITERATION PARAMETER
 iter.n_step_saddle = 20   # max number of saddle point approximation iterations.
@@ -21,11 +21,6 @@ am.mix_min = 0.1         # minimum mixing parameter of simple mixing.
 am.start_error = 8.0e-1  # anderson mixing begin if error_level < start_error.
 am.n_max = 20            # max number of previous steps to calculate
                          # new field when using Anderson mixing.
-
-# GPU CONFIGURATION
-gpu.n_blocks = 256     # the number blocks 
-gpu.n_threads = 256     # the number of threads per block.
-                       # typically 128 or 256 is optimal.
 
 # OUTPUT
 output.filename = "fields"
