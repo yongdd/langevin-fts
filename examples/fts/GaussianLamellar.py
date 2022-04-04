@@ -1,3 +1,7 @@
+# This program will produce a lamellar phase from random initial condition
+# For test purpose, this program stops after 10 Langevin steps
+# change "langevin_max_iter" to a larger number for the actual simulation
+#
 # -------------- Reference ------------
 # T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
 # https://doi.org/10.1021/acs.macromol.9b01904
@@ -31,7 +35,7 @@ n_contour = 16
 chi_n = 20
 chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
-# Anderson Mixing 
+# Anderson Mixing
 saddle_tolerance = 1e-4
 saddle_max_iter = 100
 am_n_comp = 1  # W+
@@ -57,9 +61,9 @@ am     = factory.create_anderson_mixing(sb, am_n_comp,
                am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise for single segment
-langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/ 
+langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
-    
+
 # random seed for MT19937
 np.random.seed(5489)
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
@@ -87,7 +91,7 @@ q2_init = np.ones (sb.get_n_grid(), dtype=np.float64)
 phi_a   = np.zeros(sb.get_n_grid(), dtype=np.float64)
 phi_b   = np.zeros(sb.get_n_grid(), dtype=np.float64)
 
-print("wminus and wplus are initialized to random")
+print("w_minus and w_plus are initialized to random")
 w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 
@@ -96,8 +100,8 @@ sb.zero_mean(w_plus)
 sb.zero_mean(w_minus)
 
 find_saddle_point(pc, sb, pseudo, am,
-    q1_init, q2_init, w_plus, w_minus, 
-    phi_a, phi_b, 
+    q1_init, q2_init, w_plus, w_minus,
+    phi_a, phi_b,
     saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -105,7 +109,7 @@ time_start = time.time()
 
 print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(0, langevin_max_iter):
-    
+
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
     w_minus_copy = w_minus.copy()
@@ -113,16 +117,16 @@ for langevin_step in range(0, langevin_max_iter):
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
     find_saddle_point(pc, sb, pseudo, am,
-        q1_init, q2_init, w_plus, w_minus, 
-        phi_a, phi_b, 
+        q1_init, q2_init, w_plus, w_minus,
+        phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
-    # update w_minus: correct step 
+    # update w_minus: correct step
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
     find_saddle_point(pc, sb, pseudo, am,
-        q1_init, q2_init, w_plus, w_minus, 
-        phi_a, phi_b, 
+        q1_init, q2_init, w_plus, w_minus,
+        phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     if( langevin_step % 1000 == 0 ):
@@ -137,4 +141,3 @@ for langevin_step in range(0, langevin_max_iter):
 time_duration = time.time() - time_start
 print( "total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_iter) )
-
