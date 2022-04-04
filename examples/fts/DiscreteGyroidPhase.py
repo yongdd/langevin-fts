@@ -11,7 +11,7 @@ import os
 import time
 import pathlib
 import numpy as np
-from scipy.io import savemat
+from scipy.io import loadmat, savemat
 from langevinfts import *
 from find_saddle_point import *
 
@@ -27,16 +27,16 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
-input_data = np.load("GyroidInput.npz")
+input_data = loadmat("GyroidInput.mat", squeeze_me=True)
 
 # Simulation Box
-nx = input_data["nx"].tolist()
-lx = input_data["lx"].tolist()
+nx = [64, 64, 64,]
+lx = [7.31, 7.31, 7.31]
 
 # Polymer Chain
-n_contour = int(input_data["N"])
-f = float(input_data["f"])
-chi_n = float(input_data["chi_n"])
+n_contour = 90
+f = 0.4
+chi_n = 18.35
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
@@ -50,7 +50,7 @@ am_mix_init = 0.1
 
 # Langevin Dynamics
 langevin_dt = 0.8     # langevin step interval, delta tau*N
-langevin_nbar = input_data["n_bar"]  # invariant polymerization index
+langevin_nbar = 10000  # invariant polymerization index
 langevin_max_iter = 10
 
 # -------------- initialize ------------

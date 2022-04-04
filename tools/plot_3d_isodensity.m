@@ -1,6 +1,6 @@
 
 % Load Data
-load("data_simulation_chin18.0/fields_100000.mat");
+load("fields.mat");
 v = reshape(phi_a,[nx(3), nx(2), nx(1)]);
 v = permute(v,[2 3 1]);
 

@@ -1,3 +1,6 @@
+# To run this file, install 'plotly'
+# https://plotly.com/python/getting-started
+
 import plotly.graph_objects as go
 import numpy as np
 import scipy.io as sio

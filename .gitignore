@@ -2,6 +2,7 @@
 *.o
 *.mod
 fields_*.*
+fields.mat
 *.dat
 *.out
 *.sh.*
