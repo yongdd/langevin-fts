@@ -1,5 +1,5 @@
 1. Parallel Tempering
-2. Finding Unit Cell Using Stress
+2. Finding Unit Cell By Calculating Stress
 3. Neutral Boundary Condition
 4. Conformationally Asymmetric BCPs
 5. Homopolymers
