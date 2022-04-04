@@ -29,6 +29,20 @@ std::vector<std::string> PlatformSelector::avail_platforms()
 #endif
     return names;
 }
+AbstractFactory* PlatformSelector::create_factory()
+{
+#ifdef USE_CPU_MKL
+    return new MklFactory();
+#endif
+#ifdef USE_CPU_FFTW
+    return new FftwFactory();
+#endif
+#ifdef USE_CUDA
+    return new CudaFactory();
+#endif
+    std::cerr << "Not available platform" << std::endl;
+    return NULL;
+}
 AbstractFactory* PlatformSelector::create_factory(std::string str_platform)
 {
 #ifdef USE_CPU_MKL
