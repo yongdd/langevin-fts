@@ -4,6 +4,8 @@
 #include <cmath>
 #include <string>
 #include <array>
+#include <vector>
+#include <algorithm>
 #include <chrono>
 
 #include "ParamParser.h"
@@ -67,10 +69,14 @@ int main(int argc, char **argv)
 
     // choose platform
     AbstractFactory *factory;
-    if(!pp.get("platform", str_platform))
-        factory = PlatformSelector::create_factory();
+    std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
+    if(pp.get("platform", str_platform))
+        if( std::find(std::begin(avail_platforms), std::end(avail_platforms), str_platform) != std::end(avail_platforms))
+            factory = PlatformSelector::create_factory(str_platform);
+        else
+            factory = PlatformSelector::create_factory();
     else
-        factory = PlatformSelector::create_factory(str_platform);;
+        factory = PlatformSelector::create_factory();
 
     // read simulation box parameters
     if(!pp.get("geometry.grids", nx))

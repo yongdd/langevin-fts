@@ -41,7 +41,12 @@ langevin_max_iter = 2000
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
-factory = PlatformSelector.create_factory("cuda")
+if "cuda" in PlatformSelector.avail_platforms():
+    platform = "cuda"
+else:
+    platform = PlatformSelector.avail_platforms()[0]
+print("platform :", platform)
+factory = PlatformSelector.create_factory(platform)
 
 # create instances and assign to the variables of base classs
 # for the dynamic binding

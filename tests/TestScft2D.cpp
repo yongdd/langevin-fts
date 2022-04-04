@@ -45,8 +45,7 @@ int main(int argc, char **argv)
 
     // -------------- initialize ------------
     // platform type, (cuda, cpu-mkl or cpu-fftw)
-    std::string str_platform = "cuda";
-    
+
     int max_scft_iter = 20;
     double tolerance = 1e-9;
 
@@ -64,7 +63,7 @@ int main(int argc, char **argv)
     double am_mix_init = 0.1;
 
     // choose platform
-    AbstractFactory *factory = PlatformSelector::create_factory(str_platform);
+    AbstractFactory *factory = PlatformSelector::create_factory();
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding

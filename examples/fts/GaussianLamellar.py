@@ -51,7 +51,12 @@ langevin_max_iter = 10
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
-factory = PlatformSelector.create_factory("cuda")
+if "cuda" in PlatformSelector.avail_platforms():
+    platform = "cuda"
+else:
+    platform = PlatformSelector.avail_platforms()[0]
+print("platform :", platform)
+factory = PlatformSelector.create_factory(platform)
 
 # create instances
 pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
