@@ -86,16 +86,14 @@ lx = [3.5,3.5,3.5]  # as aN^(1/2) unit
 
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
-am_n_comp = 2         # w[0] and w[1]
+am_n_comp = 2         # w_a (w[0]) and w_b (w[1])
 am_max_hist= 20       # maximum number of history
 am_start_error = 1e-2 # when switch to AM from simple mixing
 am_mix_min = 0.1      # minimum mixing rate of simple mixing
-am_mix_init = 0.1     # inital mixing rate of simple mixing
+am_mix_init = 0.1     # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
-print("Available Platforms: ", PlatformSelector.avail_platforms())
 factory = PlatformSelector.create_factory("cuda")
-factory.display_info()
 
 # create instances
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
@@ -152,7 +150,7 @@ time_start = time.time()
 
 # find the natural period of gyroid
 res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-6, options={'disp':True})
-print('Natural box size: ', res.x, '(aN^1/2)')
+print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
 
 # estimate execution time
 time_duration = time.time() - time_start
