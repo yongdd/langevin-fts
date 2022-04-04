@@ -16,7 +16,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 #### C++ Compiler
   Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler. It is faster than gcc even when AMD CPU is used.
 
-#### CUDA Toolkit 
+#### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
   Required for the GPU computation. If it is not installed, ask admin for its installation.
 
@@ -25,7 +25,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 * * *
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
-  
+
 # Compiling
   `conda create -n envlfts python=3.8 cmake=3.19 conda swig scipy fftw openmpi`  
   `conda activate envlfts`  
@@ -37,14 +37,14 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make`   
   `make test`   
   `make install`
-  
+
 * * *
   You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
-+ ** A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts. **   
++ **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroidPhase.py, fts/GaussianLamellar.py**   
 + To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
