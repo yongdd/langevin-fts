@@ -2,10 +2,17 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include "MklFactory.h"
-#include "FftwFactory.h"
-#include "CudaFactory.h"
-#include "CudaCommon.h"
+
+#ifdef USE_CPU_MKL
+    #include "MklFactory.h"
+#endif
+#ifdef USE_CPU_FFTW
+    #include "FftwFactory.h"
+#endif
+#ifdef USE_CUDA
+    #include "CudaFactory.h"
+    #include "CudaCommon.h"
+#endif
 #include "PlatformSelector.h"
 
 std::vector<std::string> PlatformSelector::avail_platforms()
