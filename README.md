@@ -27,7 +27,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-  `conda create -n envlfts python=3.8 cmake=3.19 conda git swig scipy fftw openmpi`  
+  `conda create -n envlfts python cmake conda git swig scipy fftw openmpi`  
   `conda activate envlfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
@@ -41,7 +41,12 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 * * *
   You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
-
+* * *
+  If you want to remove all installations :cry:, type following commands.   
+   
+   `conda deactivate`   
+   `conda env remove -n envlfts`   
+   
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
 + **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroidPhase.py, fts/GaussianLamellar.py**   
