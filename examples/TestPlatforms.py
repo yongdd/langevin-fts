@@ -50,7 +50,7 @@ for dim in [1,2,3]:
     for chain_model in ["Discrete", "Gaussian"]:
         print("-" * 50)
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
-        print("platform,  total time, time per iter, mass error, test output")
+        print("platform, time per iter, mass error, test output")
         for platform in PlatformSelector.avail_platforms():
 
             factory = PlatformSelector.create_factory(platform)
@@ -140,5 +140,5 @@ for dim in [1,2,3]:
             
             # estimate execution time
             time_duration = time.time() - time_start
-            print("%8s: %11.5f, %13.5f, %10.3E, %12.9f" %
-                (platform, time_duration, time_duration/max_scft_iter, mass_error, error_level) )
+            print("%8s: %13.5f, %10.3E, %12.9f" %
+                (platform, time_duration/max_scft_iter, mass_error, error_level) )

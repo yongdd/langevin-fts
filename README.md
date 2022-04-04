@@ -27,7 +27,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-  `conda create -n envlfts python cmake conda git swig scipy fftw openmpi`  
+  `conda create -n envlfts python=3.10 cmake=3.19 conda git swig scipy fftw openmpi`  
   `conda activate envlfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
