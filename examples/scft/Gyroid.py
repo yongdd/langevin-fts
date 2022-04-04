@@ -1,3 +1,5 @@
+# For the start, change "Major Simulation Parameters", currently in lines 81-87
+# and "Initial Fields", currently in lines 129-142
 import sys
 import os
 import numpy as np
@@ -7,15 +9,15 @@ import scipy.optimize
 from langevinfts import *
 
 def find_saddle_point(lx):
-    
+
     # set box size
     sb.set_lx(lx)
     pseudo.update()
-    
+
     # assign large initial value for the energy and error
     energy_total = 1.0e20
     error_level = 1.0e20
-    
+
     # reset Anderson mixing module
     am.reset_count()
 
@@ -23,16 +25,16 @@ def find_saddle_point(lx):
     for scft_iter in range(0,max_scft_iter):
         # for the given fields find the polymer statistics
         QQ = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
-        
+
         # calculate the total energy
         energy_old = energy_total
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
-        
+
         energy_total  = -np.log(QQ/sb.get_volume())
         energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
         energy_total -= sb.integral(w_plus)/sb.get_volume()
-        
+
         # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
         xi = 0.5*(w[0]+w[1]-chi_n)
 
@@ -41,14 +43,14 @@ def find_saddle_point(lx):
         w_out[1] = chi_n*phi_a + xi
         sb.zero_mean(w_out[0])
         sb.zero_mean(w_out[1])
-        
+
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
         w_diff = w_out - w
         multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
         multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
         error_level = np.sqrt(multi_dot)
-        
+
         # print iteration # and error levels and check the mass conservation
         mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
         print( "%8d %12.3E %15.7E %13.9f %13.9f" %
@@ -67,7 +69,7 @@ def find_saddle_point(lx):
 
 # -------------- initialize ------------
 
-# OpenMP environment variables 
+# OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
@@ -75,6 +77,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
 max_scft_iter = 1000
 tolerance = 1e-9
 
+# Major Simulation Parameters
 f = 0.36            # A-fraction, f
 n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
@@ -122,14 +125,15 @@ phi_b   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 
-print("w_minus and w_plus are initialized to gyroid phase.")
+# Initial Fields
+print("w_A and w_B are initialized to gyroid phase.")
 for i in range(0,sb.get_nx(0)):
     xx = (i+1)*2*np.pi/sb.get_nx(0)
     for j in range(0,sb.get_nx(1)):
         yy = (j+1)*2*np.pi/sb.get_nx(1)
         for k in range(0,sb.get_nx(2)):
             zz = (k+1)*2*np.pi/sb.get_nx(2)
-            c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) + 
+            c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
                 np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))

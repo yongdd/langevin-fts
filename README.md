@@ -2,19 +2,23 @@
 Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
-* AB Diblock Copolymer Melt
+* SCFT and L-FTS   
+* AB Diblock Copolymer Melt   
+* Chain Model: Gaussian, Discrete   
 * Periodic Boundaries  
-* 3D, 2D and 1D (Caution! FTS in 1D and 2D has no physical meaning)
-* Pseudospectral Implmentation using MKL, FFTW and CUDA
-* Gaussian and Discrete Chain Models
-* Linux
+* 3D, 2D and 1D (Caution! Use FTS in 1D and 2D only for the test. It does not have a physical meaning.)   
+* Pseudospectral Method, Anderson Mixing   
+* Platforms: MKL, FFTW (CPU) and CUDA (GPU)   
 
 # Dependencies
+#### Linux System
+
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler.
+  Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler. It is faster than gcc even when AMD CPU is used.
 
 #### CUDA Toolkit 
-  https://developer.nvidia.com/cuda-toolkit  
+  https://developer.nvidia.com/cuda-toolkit   
+  Required for the GPU computation. If it is not installed, ask admin for its installation.
 
 #### Anaconda
   https://www.anaconda.com/
@@ -35,25 +39,27 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make install`
   
 * * *
-  You can specify your C++ compiler with following command.   
+  You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 # User Guide
-+ This is not an application but a library for the field-based simulation, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. Basic SCFT and L-FTS implementations are provided in  `examples` folder.
-+ To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In python, import the package by adding  `from langevinfts import *`.
-+ Be aware that unit of length in this program is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
-+ Open source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
++ This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
++ ** A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts. **   
++ To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
++ Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
++ Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
++ Matlab and Python tools for visualization are included in `tools` folder.   
 
 # Developer Guide
 #### Platforms  
-  This program is designed to run on different platforms such as MKL, FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.
+  This program is designed to run on different platforms such as MKL, FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.   
 
 #### Anderson Mixing  
-  It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.
+  It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. The performance loss is only marginal.   
 
 #### Parameter Parser  
-  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In python scripts, you can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also good option.
-  
+  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
+
 # References
 #### CUDA Implementation
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
