@@ -36,9 +36,9 @@ public:
         double *w_diff, int len_wdiff,
         double old_error_level, double error_level)
     {
-        assert(len_w_in  == sb->get_n_grid());
-        assert(len_wout  == sb->get_n_grid());
-        assert(len_wdiff == sb->get_n_grid());
+        assert(len_w_in  == n_comp*sb->get_n_grid());
+        assert(len_wout  == n_comp*sb->get_n_grid());
+        assert(len_wdiff == n_comp*sb->get_n_grid());
         caculate_new_fields(w_in, w_out, w_diff, old_error_level, error_level);
     }
 };
