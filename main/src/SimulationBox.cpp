@@ -99,7 +99,7 @@ double SimulationBox::get_volume()
 //----------------- set methods-------------------------------------
 void SimulationBox::set_lx(std::vector<double> new_lx)
 {
-    if ( new_lx.size() != dim )
+    if ( new_lx.size() != (unsigned int) dim )
     {
         std::cerr << "The sizes of new nx and dimension are not the same. " << std::endl;
         exit(-1);

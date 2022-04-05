@@ -8,6 +8,7 @@
 
 #include <array>
 #include <vector>
+#include <cassert>
 
 class SimulationBox
 {
@@ -45,14 +46,18 @@ public:
     // Method for SWIG
     double integral(double *g, int len_g)
     {
+        assert(len_g == n_grid);
         return integral(g);
     }
     double inner_product(double *g, int len_g, double *h, int len_h)
     {
+        assert(len_g == n_grid);
+        assert(len_h == n_grid);
         return inner_product(g, h);
     }
     void zero_mean(double *g, int len_g)
     {
+        assert(len_g == n_grid);
         zero_mean(g);
     };
 };

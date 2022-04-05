@@ -5,6 +5,7 @@
 #ifndef ANDERSON_MIXING_H_
 #define ANDERSON_MIXING_H_
 
+#include <cassert>
 #include "SimulationBox.h"
 
 class AndersonMixing
@@ -26,7 +27,7 @@ public:
     virtual void reset_count() {};
     virtual void caculate_new_fields(
         double *w, double *w_out, double *w_diff,
-        double old_error_level, double error_level) {};
+        double old_error_level, double error_level)=0;
 
     // Methods for SWIG
     void caculate_new_fields(
@@ -35,6 +36,9 @@ public:
         double *w_diff, int len_wdiff,
         double old_error_level, double error_level)
     {
+        assert(len_w_in  == sb->get_n_grid());
+        assert(len_wout  == sb->get_n_grid());
+        assert(len_wdiff == sb->get_n_grid());
         caculate_new_fields(w_in, w_out, w_diff, old_error_level, error_level);
     }
 };

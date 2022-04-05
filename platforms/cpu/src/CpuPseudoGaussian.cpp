@@ -26,7 +26,7 @@ void CpuPseudoGaussian::find_phi(double *phia,  double *phib,
     const int M     = sb->get_n_grid();
     const int N     = pc->get_n_contour();
     const int N_A   = pc->get_n_contour_a();
-    const int N_B   = pc->get_n_contour_b();
+    //const int N_B   = pc->get_n_contour_b();
     const double ds = pc->get_ds();
     
     double expdwa[M];

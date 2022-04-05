@@ -5,6 +5,7 @@
 #ifndef PSEUDO_H_
 #define PSEUDO_H_
 
+#include <cassert>
 #include "SimulationBox.h"
 #include "PolymerChain.h"
 
@@ -46,6 +47,12 @@ public:
         double *wb, int len_wb,
         double &QQ)
     {
+        assert(len_pa == sb->get_n_grid());
+        assert(len_pb == sb->get_n_grid());
+        assert(len_q1 == sb->get_n_grid());
+        assert(len_q2 == sb->get_n_grid());
+        assert(len_wa == sb->get_n_grid());
+        assert(len_wb == sb->get_n_grid());
         find_phi(phia, phib, q1_init, q2_init, wa, wb, QQ);
     }
 };
