@@ -14,17 +14,16 @@
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
 
-int main(int argc, char **argv)
+int main()
 {
     // math constatns
     const double PI = 3.14159265358979323846;
     // chrono timer
     std::chrono::system_clock::time_point chrono_start, chrono_end;
     std::chrono::duration<double> time_duration;
-    // iter = number of iteration steps, maxiter = maximum number of iteration steps
-    int iter;
+
     // QQ = total partition function
-    double QQ, energy_chain, energy_field, energy_total, energy_old;
+    double QQ, energy_total;
     // error_level = variable to check convergence of the iteration
     double error_level, old_error_level;
     // input and output fields, xi is temporary storage for pressures
@@ -151,7 +150,6 @@ int main(int argc, char **argv)
         pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->get_n_grid()],QQ);
 
         // calculate the total energy
-        energy_old = energy_total;
         for(int i=0; i<sb->get_n_grid(); i++)
         {
             w_minus[i] = (w[i]-w[i + sb->get_n_grid()])/2;
