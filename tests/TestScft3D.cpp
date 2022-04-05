@@ -281,7 +281,7 @@ int main()
 
     pp.display_usage_info();
 
-    if (std::isnan(error_level) || std::abs(error_level-0.009246095) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.001343652) > 1e-7)
         return -1;
 
     return 0;
