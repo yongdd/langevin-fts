@@ -136,13 +136,13 @@ for langevin_step in range(1, langevin_max_iter+1):
         phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
-    if( langevin_step % 1000 == 0 ):
-        mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
-            "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
-            "random_seed":np.random.RandomState().get_state()[0],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
-        savemat("fields_%06d.mat" % langevin_step, mdic)
+# write data
+mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+    "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+    "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
+    "random_seed":np.random.RandomState().get_state()[0],
+    "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
+savemat("fields.mat", mdic)
 
 # estimate execution time
 time_duration = time.time() - time_start
