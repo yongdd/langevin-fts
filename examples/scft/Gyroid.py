@@ -154,7 +154,7 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 time_start = time.time()
 
 # find the natural period of gyroid
-res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-6, options={'disp':True})
+res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
 print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
 
 # estimate execution time
