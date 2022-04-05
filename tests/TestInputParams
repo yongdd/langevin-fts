@@ -3,7 +3,7 @@
 ##platform = "cuda"           # cuda, cpu-mkl, cpu-fftw
 
 # SIMULATION BOX
-geometry.grids     = 31  49  23   # the number of simulation grids
+geometry.grids     = 31  49  63   # the number of simulation grids
 geometry.box_size  = 4.0 3.0 2.0  # simulation box as aN^(1/2) unit
 
 # POLYMER CHAIN

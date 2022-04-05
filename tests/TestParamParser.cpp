@@ -29,7 +29,7 @@ int main()
     
     if( nx0 != 31)
         return -1;
-    if( nx[0] != 31 || nx[1] != 49 || nx[2] != 23)
+    if( nx[0] != 31 || nx[1] != 49 || nx[2] != 63)
         return -1;
     if( (chi_n - 20.0) > 1e-7)
         return -1;
