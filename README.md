@@ -14,7 +14,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler. It is faster than gcc even when AMD CPU is used.
+  Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler. The Intel compiler is faster than gcc even when AMD CPU is used.
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   

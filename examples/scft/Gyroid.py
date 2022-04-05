@@ -1,5 +1,5 @@
 # For the start, change "Major Simulation Parameters", currently in lines 81-87
-# and "Initial Fields", currently in lines 129-142
+# and "Initial Fields", currently in lines 132-145
 import sys
 import os
 import numpy as np
@@ -72,7 +72,7 @@ def find_saddle_point(lx):
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"  # 0, 1 or 2
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1 or 2
 
 max_scft_iter = 1000
 tolerance = 1e-9
