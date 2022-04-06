@@ -156,6 +156,7 @@ time_start = time.time()
 # find the natural period of gyroid
 res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
 print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
+print('Free energy per chain: ', res.fun, 'kT')
 
 # estimate execution time
 time_duration = time.time() - time_start
