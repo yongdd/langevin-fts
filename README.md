@@ -38,7 +38,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make test`   
   `make install`
    
-If you encounter `segmentation fault` during the test, type `ulimit -s 32767` in the command line.   
+**If you encounter `segmentation fault`, type `ulimit -s 32767` in the command line.**   
 
 * * *
   You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
