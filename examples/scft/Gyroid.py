@@ -94,9 +94,9 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
-	platform = "cuda"
+    platform = "cuda"
 else:
-	platform = PlatformSelector.avail_platforms()[0]
+    platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
