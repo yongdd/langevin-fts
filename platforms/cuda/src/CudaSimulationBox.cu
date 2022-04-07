@@ -2,6 +2,9 @@
 * This class defines simulation box parameters and provide
 * methods that compute inner product in a given geometry.
 *--------------------------------------------------------------*/
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+
 #include <iostream>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
