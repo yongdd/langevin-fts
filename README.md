@@ -41,7 +41,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 * You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
-* **If you encounter `segmentation fault`, type following commands**      
+* **If you encounter `segmentation fault`, type following commands.**      
   `ulimit -s unlimited`   
   `export OMP_STACKSIZE=1G`   
    
