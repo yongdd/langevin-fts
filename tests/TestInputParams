@@ -12,7 +12,7 @@ chain.a_fraction = 0.3   # f
 chain.n_contour  = 50    # N
 
 # ITERATION PARAMETER
-iter.n_step_saddle = 20   # max number of saddle point approximation iterations.
+iter.n_step_saddle = 2   # max number of saddle point approximation iterations.
 iter.tolerance = 1.0e-9   # exit loop if error level < tolerance.
 
 # ANDERSON MIXING
