@@ -36,16 +36,16 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `cmake ../`  
   `make`   
   `make test`   
-  `make install`
+  `make install`   
    
-**If you encounter `segmentation fault`, type `ulimit -s unlimited` in the command line.**   
-
-* * *
-  You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
+* You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
-* * *
-  If you want to remove all installations :cry:, type following commands.   
+
+* **If you encounter `segmentation fault`, type following commands**      
+  `ulimit -s unlimited`
+  `export OMP_STACKSIZE=1G`
    
+*  If you want to remove all installations :cry:, type following commands.   
    `conda deactivate`   
    `conda env remove -n envlfts`   
    
