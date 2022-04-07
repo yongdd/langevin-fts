@@ -3,6 +3,7 @@
 #include <complex>
 #include <iomanip>
 #include <algorithm>
+#include <random>
 #include "FftwFFT2D.h"
 
 int main()
@@ -61,5 +62,36 @@ int main()
     std::cout<< "FFT Backward Error: " << error << std::endl;
     if(std::isnan(error) || error > 1e-7)
         return -1;
+
     return 0;
+    //--------------- Test with large array --------------------
+    /*
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
+    
+    const int L_II{347};
+    const int L_JJ{513};
+    const int L_MM{L_II*L_JJ};
+    const int L_COMPLEX_MM{L_II*(L_JJ/2+1)};
+    FftwFFT2D l_fft({L_II, L_JJ});
+    
+    double l_data_init[L_MM];
+    double l_data_r[L_MM];
+    std::complex<double> l_data_k[L_COMPLEX_MM];
+    std::array<double,L_MM> l_diff_sq;
+    
+    for (int i = 0; i < L_MM; i++)
+        l_data_init[i] = dis(gen);
+        
+    l_fft.forward(l_data_init, l_data_k);
+    l_fft.backward(l_data_k, l_data_r);
+    
+    for(int i=0; i<L_MM; i++)
+        l_diff_sq[i] = pow(std::abs(l_data_r[i] - l_data_init[i]),2);
+    error = sqrt(*std::max_element(l_diff_sq.begin(), l_diff_sq.end()));
+    std::cout<< "Test with lage array, Error: " << error << std::endl;
+    if(std::isnan(error) || error > 1e-7)
+        return -1;
+    */
 }

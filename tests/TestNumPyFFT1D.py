@@ -21,3 +21,14 @@ error = np.max(np.absolute(data_r - data_init))
 print("FFT Backward Error: ", error)
 if(np.isnan(error) or error > 1e-7):
     sys.exit(-1);
+
+"""
+#--------------- Test with large array --------------------
+data_init = np.random.uniform(-1.0,1.0, 5797)
+data_k = np.fft.rfft(data_init)
+data_r = np.fft.irfft(data_k, len(data_init))
+error = np.max(np.absolute(data_r - data_init))
+print("Test with lage array, Error: ", error)
+if(np.isnan(error) or error > 1e-7):
+    sys.exit(-1);
+"""

@@ -1,12 +1,13 @@
-
+#include <cstdlib>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
 #include <string>
 #include <array>
+#include <chrono>
+
 #include <vector>
 #include <algorithm>
-#include <chrono>
 
 #include "ParamParser.h"
 #include "PolymerChain.h"
@@ -18,6 +19,10 @@
 
 int main()
 {
+    setenv("MKL_NUM_THREADS","1", 0); //  # always 1
+    setenv("OMP_STACKSIZE", "1G", 0);
+    setenv("OMP_MAX_ACTIVE_LEVELS", "2", 0);  //# 0, 1 or 2
+    
     // math constatns
     const double PI = 3.14159265358979323846;
     // chrono timer
@@ -78,6 +83,9 @@ int main()
             factory = PlatformSelector::create_factory();
     else
         factory = PlatformSelector::create_factory();
+    
+    std::cout << "-------- Platform ------" << std::endl;
+    factory->display_info();
 
     // read simulation box parameters
     if(!pp.get("geometry.grids", nx))
@@ -245,7 +253,7 @@ int main()
         std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
         std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
         std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
-        std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
+        std::cout<< std::setw(15) << std::setprecision(13) << std::fixed << error_level << std::endl;
 
         // conditions to end the iteration
         if(error_level < tolerance) break;
@@ -281,7 +289,7 @@ int main()
 
     pp.display_usage_info();
 
-    if (std::isnan(error_level) || std::abs(error_level-0.001343652) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.9133680347885) > 1e-7)
         return -1;
 
     return 0;
