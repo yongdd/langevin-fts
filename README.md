@@ -42,8 +42,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 * **If you encounter `segmentation fault`, type following commands**      
-  `ulimit -s unlimited`
-  `export OMP_STACKSIZE=1G`
+  `ulimit -s unlimited`   
+  `export OMP_STACKSIZE=1G`   
    
 *  If you want to remove all installations :cry:, type following commands.   
    `conda deactivate`   
