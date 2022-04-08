@@ -1,5 +1,5 @@
 %Load File
-load("fields_000200.mat");
+load("fields_002000.mat");
 
 %Plot 3D
 h=figure;
