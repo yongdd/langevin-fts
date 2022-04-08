@@ -33,7 +33,6 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 print("Available Platforms: ", PlatformSelector.avail_platforms())
 
 for dim in [1,2,3]:
-
     ### for 1D
     if (dim == 1):
         nx = [31]

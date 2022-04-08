@@ -1,6 +1,6 @@
 # The input file produces a gyroid phase with compositional fluctuation
-# For test purpose, this program stops after 10 Langevin steps
-# change "langevin_max_iter" to a larger number for the actual simulation
+# For test purpose, this program stops after 200 Langevin steps
+# change "langevin_max_step" to a larger number for the actual simulation
 #
 # -------------- Reference ------------
 # M.W. Matsen, and T.M. Beardsley, Polymers 2021, 13, 2437.
@@ -51,7 +51,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 0.8     # langevin step interval, delta tau*N
 langevin_nbar = 10000  # invariant polymerization index
-langevin_max_iter = 10
+langevin_max_step = 200
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
@@ -110,12 +110,16 @@ find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
     phi_a, phi_b,
     saddle_max_iter, saddle_tolerance, verbose_level)
+    
+# init structure function
+sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, sb.get_nx()[:sb.get_dim()])),np.float64)
+
 #------------------ run ----------------------
 print("---------- Run ----------")
 time_start = time.time()
 
 print("iteration, mass error, total_partition, energy_total, error_level")
-for langevin_step in range(1, langevin_max_iter+1):
+for langevin_step in range(1, langevin_max_step+1):
 
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
@@ -136,15 +140,32 @@ for langevin_step in range(1, langevin_max_iter+1):
         phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
-# write data
-mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-    "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
-    "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
-    "random_seed":np.random.RandomState().get_state()[0],
-    "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
-savemat("fields.mat", mdic)
+    # calcaluate structure function
+    if ( langevin_step % 10 == 0):
+        sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, sb.get_nx()))/sb.get_n_grid())**2
+
+    # save structure function
+    if ( langevin_step % 100 == 0):
+        sf_average *= 10/100*sb.get_volume()*np.sqrt(langevin_nbar)/pc.get_chi_n()**2
+        sf_average -= 1.0/(2*pc.get_chi_n())
+        mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+        "chain_model":pc.get_model_name(),
+        "langevin_dt":langevin_dt, "langevin_nbar":langevin_nbar,
+        "structure_function":sf_average}
+        savemat( "structure_function_%06d.mat" % (langevin_step), mdic)
+        sf_average[:,:,:] = 0.0
+
+    # write density and field data
+    if (langevin_step % 100 == 0):
+        mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+            "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
+            "random_seed":np.random.RandomState().get_state()[0],
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
+        savemat( "fields_%06d.mat" % (langevin_step), mdic)
 
 # estimate execution time
 time_duration = time.time() - time_start
 print( "total time: %f, time per step: %f" %
-    (time_duration, time_duration/langevin_max_iter) )
+    (time_duration, time_duration/langevin_max_step) )

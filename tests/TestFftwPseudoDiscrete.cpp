@@ -8,10 +8,6 @@
 
 int main()
 {
-    setenv("MKL_NUM_THREADS","1", 0); //  # always "1"
-    setenv("OMP_STACKSIZE", "1G", 0);
-    setenv("OMP_MAX_ACTIVE_LEVELS", "2", 0);  //# "0", "1" or "2"
-    
     const int II{5};
     const int JJ{4};
     const int KK{3};

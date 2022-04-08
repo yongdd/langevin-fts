@@ -121,12 +121,12 @@ print("Volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-w_out   = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-phi_a   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
-phi_b   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
-q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
-q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
+w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
+w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
+phi_a   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
+phi_b   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
+q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
+q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
 print("w_A and w_B are initialized to gyroid phase.")
@@ -141,8 +141,9 @@ for i in range(0,sb.get_nx(0)):
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
             idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
-            w[0,idx] = -0.364*c1+0.133*c2
-            w[1,idx] = 0.302*c1-0.106*c2
+            w[0,i,j,k] = -0.364*c1+0.133*c2
+            w[1,i,j,k] = 0.302*c1-0.106*c2
+w = np.reshape(w, [2, sb.get_n_grid()])
 
 # keep the level of field value
 sb.zero_mean(w[0])

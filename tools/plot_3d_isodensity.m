@@ -1,6 +1,5 @@
-
 % Load Data
-load("fields.mat");
+load("fields_002000.mat");
 v = reshape(phi_a,[nx(3), nx(2), nx(1)]);
 v = permute(v,[2 3 1]);
 
@@ -23,7 +22,6 @@ set(p1,'FaceColor',c(1,:),'EdgeColor','none');
 p2 = patch(isocaps(x,y,z,v,isovalue),'FaceColor','interp',...
     'EdgeColor','none');
 alpha(p1,0.5)
-%alpha(p2,0.8)
 
 % View & Light
 axis([1 nx(1) 1 nx(2) 1 nx(3)])
