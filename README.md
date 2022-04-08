@@ -54,7 +54,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroidPhase.py, fts/GaussianLamellar.py**   
 + To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
-+ The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same values used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
++ The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
 + Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 + Matlab and Python tools for visualization are included in `tools` folder.   
 
