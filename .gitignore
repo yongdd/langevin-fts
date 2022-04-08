@@ -3,6 +3,8 @@
 *.mod
 fields_*.*
 fields.mat
+structure_function*.mat
+3d_isosurface.html
 *.dat
 *.out
 *.sh.*

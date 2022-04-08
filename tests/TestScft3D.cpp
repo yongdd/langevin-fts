@@ -19,10 +19,6 @@
 
 int main()
 {
-    setenv("MKL_NUM_THREADS","1", 0); //  # always "1"
-    setenv("OMP_STACKSIZE", "1G", 0);
-    setenv("OMP_MAX_ACTIVE_LEVELS", "2", 0);  //# "0", "1" or "2"
-    
     // math constatns
     const double PI = 3.14159265358979323846;
     // chrono timer
@@ -211,6 +207,8 @@ int main()
     std::cout<< "---------- Run ----------" << std::endl;
     std::cout<< "iteration, mass error, total_partition, energy_total, error_level" << std::endl;
     chrono_start = std::chrono::system_clock::now();
+
+    std::cout<< getenv("OMP_STACKSIZE") << std::endl;
 
     // iteration begins here
     for(int iter=0; iter<max_scft_iter; iter++)

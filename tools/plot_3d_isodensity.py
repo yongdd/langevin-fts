@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 import scipy.io as sio
 
-mdic = sio.loadmat("data_simulation_chin18.4/fields_200000.mat", squeeze_me=True)
+mdic = sio.loadmat("fields_002000.mat", squeeze_me=True)
 nx = mdic['nx']
 lx = mdic['lx']
 phi_a = mdic['phi_a']

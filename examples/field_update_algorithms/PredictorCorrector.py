@@ -37,7 +37,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 1.0    # langevin step interval, delta tau*N
 langevin_nbar = 1000  # invariant polymerization index
-langevin_max_iter = 2000
+langevin_max_step = 2000
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
@@ -103,7 +103,7 @@ time_start = time.time()
 
 lnQ_list = []
 print("iteration, mass error, total_partition, energy_total, error_level")
-for langevin_step in range(1, langevin_max_iter+1):
+for langevin_step in range(1, langevin_max_step+1):
     
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
@@ -130,4 +130,4 @@ print(langevin_dt, np.mean(lnQ_list[1000:]))
 # estimate execution time
 time_duration = time.time() - time_start
 print( "total time: %f, time per step: %f" %
-    (time_duration, time_duration/langevin_max_iter) )
+    (time_duration, time_duration/langevin_max_step) )
