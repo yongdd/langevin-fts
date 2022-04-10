@@ -24,6 +24,6 @@ public:
         double *phia,  double *phib,
         double *q1_init, double *q2_init,
         double *wa, double *wb, double &QQ) override;
-    void get_partition(double *q1_out,  double *q2_out, int n) override;
+    void get_partition(double *q1_out, int n1, double *q2_out, int n2) override;
 };
 #endif

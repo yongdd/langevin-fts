@@ -262,9 +262,9 @@ void CudaPseudoGaussian::one_step(double *qin1_d, double *qout1_d,
 // This is made for debugging and testing.
 // Do NOT this at main progarams.
 
-void CudaPseudoGaussian::get_partition(double *q1_out,  double *q2_out, int n)
+void CudaPseudoGaussian::get_partition(double *q1_out, int n1, double *q2_out, int n2)
 {
     const int M = sb->get_n_grid();
-    cudaMemcpy(q1_out, &q1_d[n*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
-    cudaMemcpy(q2_out, &q2_d[n*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q1_out, &q1_d[n1*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q2_out, &q2_d[n2*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
 }
