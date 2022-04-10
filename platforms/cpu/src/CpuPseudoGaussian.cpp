@@ -162,14 +162,14 @@ void CpuPseudoGaussian::one_step(double *qin, double *qout,
 * This is made for debugging and testing.
 * Do NOT this at main progarams.
 * */
-void CpuPseudoGaussian::get_partition(double *q1_out,  double *q2_out, int n)
+void CpuPseudoGaussian::get_partition(double *q1_out, int n1, double *q2_out, int n2)
 {
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
     
     for(int i=0; i<M; i++)
     {
-        q1_out[i] =q1[n*M+i];
-        q2_out[i] =q2[(N-n)*M+i];
+        q1_out[i] =q1[n1*M+i];
+        q2_out[i] =q2[(N-n2)*M+i];
     }
 }

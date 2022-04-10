@@ -169,11 +169,10 @@ void CudaPseudoDiscrete::one_step(double *qin_d, double *qout_d,
 // Get partial partition functions
 // This is made for debugging and testing.
 // Do NOT this at main progarams.
-
-void CudaPseudoDiscrete::get_partition(double *q1_out,  double *q2_out, int n)
+void CudaPseudoDiscrete::get_partition(double *q1_out, int n1, double *q2_out, int n2)
 {
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
-    cudaMemcpy(q1_out, &q_d[M*(2*n-2)], sizeof(double)*M,cudaMemcpyDeviceToHost);
-    cudaMemcpy(q2_out, &q_d[M*(2*n-1)], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q1_out, &q_d[M*(2*n1-2)], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q2_out, &q_d[M*(2*n2-1)], sizeof(double)*M,cudaMemcpyDeviceToHost);
 }

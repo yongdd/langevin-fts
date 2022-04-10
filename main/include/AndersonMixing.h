@@ -32,8 +32,8 @@ public:
     // Methods for SWIG
     void caculate_new_fields(
         double *w_in, int len_w_in,
-        double *w_out, int len_wout,
-        double *w_diff, int len_wdiff,
+        double *w_out, int len_w_out,
+        double *w_diff, int len_w_diff,
         double old_error_level, double error_level)
     {
         assert(len_w_in  == n_comp*sb->get_n_grid());
