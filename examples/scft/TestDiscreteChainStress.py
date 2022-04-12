@@ -1,5 +1,3 @@
-# For the start, change "Major Simulation Parameters", currently in lines 81-87
-# and "Initial Fields", currently in lines 132-145
 import sys
 import os
 import numpy as np
@@ -7,23 +5,6 @@ import time
 from scipy.io import savemat
 import scipy.optimize
 from langevinfts import *
-
-def psum_cubic(summax=100):
-    a=np.sqrt(f*np.power(epsilon,2)+(1.0-f))
-    psum = 0.0
-    dpdl_sum = 0.0
-    for i in range(1,summax):
-        tmp_erf=np.sqrt(i/6.0)*np.pi*a/sb.get_dx(0)/np.sqrt(NN)
-        erf=math.erf(tmp_erf)
-        psum = psum + np.power(np.sqrt(3.0/(2.0*np.pi*i))*erf,3)
-        dpdl_sum = dpdl_sum + np.power(3.0/(2.0*np.pi*i),1.5)*(erf-2.0*tmp_erf/np.sqrt(np.pi)*np.exp(-np.power(tmp_erf,2)))*np.power(erf,2)
-    psum = psum + np.power(3.0/(2.0*np.pi),1.5)*sp.zeta(1.5,summax+1)
-    dpdl_sum = dpdl_sum + np.power(3.0/(2.0*np.pi),1.5)*sp.zeta(1.5,summax+1)
-
-
-    psum=psum*sb.get_dv(0)*np.power(np.sqrt(NN)/a,3)
-    dpdl_sum=dpdl_sum*3.0*sb.get_dv(0)*np.power(np.sqrt(NN)/a,3)/sb.get_lx(0)
-    return psum, dpdl_sum
 
 def find_saddle_point(lx):
 
