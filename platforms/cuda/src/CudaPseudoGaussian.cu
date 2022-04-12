@@ -265,6 +265,7 @@ void CudaPseudoGaussian::one_step(double *qin1_d, double *qout1_d,
 void CudaPseudoGaussian::get_partition(double *q1_out, int n1, double *q2_out, int n2)
 {
     const int M = sb->get_n_grid();
+    const int N = pc->get_n_contour();
     cudaMemcpy(q1_out, &q1_d[n1*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
-    cudaMemcpy(q2_out, &q2_d[n2*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q2_out, &q2_d[(N-n2)*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
 }

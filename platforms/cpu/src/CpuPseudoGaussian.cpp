@@ -170,6 +170,6 @@ void CpuPseudoGaussian::get_partition(double *q1_out, int n1, double *q2_out, in
     for(int i=0; i<M; i++)
     {
         q1_out[i] =q1[n1*M+i];
-        q2_out[i] =q2[(N-n2)*M+i];
+        q2_out[i] =q2[n2*M+i];
     }
 }

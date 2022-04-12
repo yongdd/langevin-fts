@@ -91,7 +91,7 @@ int main()
     //--------------- check --------------------
     std::cout<< "Checking"<< std::endl;
     std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-    pseudo.get_partition(q1_last, NN, q2_last, NN);
+    pseudo.get_partition(q1_last, NN, q2_last, 1);
 
     //std::cout.precision(7);
     //std::cout<< "Total Partition :" << QQ << std::endl;
