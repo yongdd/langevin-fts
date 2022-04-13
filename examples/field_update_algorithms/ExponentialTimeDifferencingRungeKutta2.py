@@ -110,10 +110,8 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-q1_init = np.ones (sb.get_n_grid(), dtype=np.float64)
-q2_init = np.ones (sb.get_n_grid(), dtype=np.float64)
-phi_a   = np.zeros(sb.get_n_grid(), dtype=np.float64)
-phi_b   = np.zeros(sb.get_n_grid(), dtype=np.float64)
+q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
+q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 
 print("wminus and wplus are initialized to random")
 w_plus  = np.random.normal(0, langevin_sigma, sb.get_n_grid())
@@ -123,9 +121,9 @@ w_minus = np.random.normal(0, langevin_sigma, sb.get_n_grid())
 sb.zero_mean(w_plus)
 sb.zero_mean(w_minus)
 
-find_saddle_point(pc, sb, pseudo, am,
-    q1_init, q2_init, w_plus, w_minus, 
-    phi_a, phi_b, 
+# find saddle point of the pressure field
+phi_a, phi_b, _, _ = find_saddle_point(pc, sb, pseudo, am,
+    q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -143,9 +141,8 @@ for langevin_step in range(1, langevin_max_step+1):
     w_minus_copy = w_minus.copy()
     g_minus_copy = g_minus.copy()
     w_minus += -exp_kernel_minus*g_minus + exp_kernel_noise*normal_noise
-    _, QQ, = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, _, _ = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus, 
-        phi_a, phi_b, 
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     # Runge-Kuta step 2    
@@ -153,15 +150,14 @@ for langevin_step in range(1, langevin_max_step+1):
     w_minus += exp_kernel_second*(
          - g_minus      + kernel_minus*w_minus
          + g_minus_copy - kernel_minus*w_minus_copy)
-    _, QQ, = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, Q, _ = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus, 
-        phi_a, phi_b, 
         saddle_max_iter, saddle_tolerance, verbose_level)
-    lnQ_list.append(-np.log(QQ/sb.get_volume()))
+    lnQ_list.append(-np.log(Q/sb.get_volume()))
 
 print(langevin_dt, np.mean(lnQ_list[1000:]))
 
 # estimate execution time
 time_duration = time.time() - time_start
-print( "total time: %f, time per step: %f" %
+print("total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_step) )

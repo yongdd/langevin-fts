@@ -20,9 +20,9 @@ def find_saddle_point(lx):
     am.reset_count()
 
     # iteration begins here
-    for scft_iter in range(0,max_scft_iter):
+    for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
-        Q = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
+        phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 
         # calculate the total energy
         energy_old = energy_total
@@ -55,7 +55,7 @@ def find_saddle_point(lx):
             (scft_iter, mass_error, Q, energy_total, error_level) )
 
         # conditions to end the iteration
-        if(error_level < tolerance):
+        if error_level < tolerance:
             break
         # calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(
@@ -64,7 +64,7 @@ def find_saddle_point(lx):
             np.reshape(w_diff, 2*sb.get_n_grid()),
             old_error_level, error_level)
     
-    if (use_stress):
+    if use_stress:
         
         #initialize arrays for stress calculation
         if sb.get_dim()==3:
@@ -99,7 +99,7 @@ def find_saddle_point(lx):
         stress_z = 0.0
         
         for n in range(1, pc.get_n_contour()):
-            pseudo.get_partition(q1_out, n, q2_out, n+1)
+            q1_out, q2_out = pseudo.get_partition(n, n+1)
             
             q1_out_k = np.fft.fftn(np.reshape(q1_out, sb.get_nx()))
             q2_out_k = np.fft.fftn(np.reshape(q2_out, sb.get_nx()))
@@ -180,12 +180,8 @@ print("Volume: %f" % (sb.get_volume()) )
 # q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(sb.get_nx()),  dtype=np.float64)
 w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
-phi_a   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
-phi_b   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-q1_out  = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-q2_out  = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
 #print("w_A and w_B are initialized to random field.")
@@ -234,9 +230,10 @@ else:
 
 # estimate execution time
 time_duration = time.time() - time_start
-print( "total time: %f " % time_duration)
+print("total time: %f " % time_duration)
 
 # save final results
+phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
         "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
         "chain_model":chain_model, "w_a":w[0], "w_b":[1], "phi_a":phi_a, "phi_b":phi_b}

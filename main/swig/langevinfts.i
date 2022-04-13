@@ -25,22 +25,24 @@
 %init %{
 import_array();
 %}
-%apply (double* INPLACE_ARRAY1, int DIM1){
-(double *g, int len_g),
-(double *h, int len_h),
-(double *phia, int len_pa),
-(double *phib, int len_pb),
-(double *wa, int len_wa),
-(double *wb, int len_wb),
+%apply (double *IN_ARRAY1, int DIM1){
 (double *q1_init, int len_q1),
 (double *q2_init, int len_q2),
-(double *q1_out, int len_q1),
-(double *q2_out, int len_q2),
+(double *w_a, int len_w_a),
+(double *w_b, int len_w_b)};
+%apply (double *INPLACE_ARRAY1, int DIM1){
+(double *g, int len_g),
+(double *h, int len_h),
 (double *w_in, int len_w_in),
 (double *w_out, int len_w_out),
 (double *w_diff, int len_w_diff)};
+%apply (double **ARGOUTVIEWM_ARRAY1, int *DIM1){
+(double **phi_a, int *len_p_a),
+(double **phi_b, int *len_p_b),
+(double **q1_out, int *len_q1),
+(double **q2_out, int *len_q2)};
 
-%apply double* OUTPUT {double &QQ};
+%apply double* OUTPUT {double &single_partition};
 
 %include "ParamParser.h"
 %include "PolymerChain.h"

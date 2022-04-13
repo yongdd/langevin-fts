@@ -3,7 +3,6 @@ from langevinfts import *
 
 def find_saddle_point(pc, sb, pseudo, am, 
     q1_init, q2_init, w_plus, w_minus, 
-    phi_a, phi_b, 
     saddle_max_iter, saddle_tolerance, verbose_level):
         
     # assign large initial value for the energy and error
@@ -14,13 +13,10 @@ def find_saddle_point(pc, sb, pseudo, am,
     am.reset_count()
 
     # saddle point iteration begins here
-    for saddle_iter in range(0,saddle_max_iter):
+    for saddle_iter in range(1,saddle_max_iter+1):
         
         # for the given fields find the polymer statistics
-        QQ = pseudo.find_phi(phi_a, phi_b, 
-                q1_init,q2_init,
-                w_plus + w_minus,
-                w_plus - w_minus)
+        phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init, w_plus + w_minus, w_plus - w_minus)
         phi_plus = phi_a + phi_b
         
         # calculate output fields
@@ -35,21 +31,21 @@ def find_saddle_point(pc, sb, pseudo, am,
         # print iteration # and error levels
         if(verbose_level == 2 or
          verbose_level == 1 and
-         (error_level < saddle_tolerance or saddle_iter == saddle_max_iter-1)):
+         (error_level < saddle_tolerance or saddle_iter == saddle_max_iter)):
              
             # calculate the total energy
             energy_old = energy_total
-            energy_total  = -np.log(QQ/sb.get_volume())
+            energy_total  = -np.log(Q/sb.get_volume())
             energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
             energy_total -= sb.integral(w_plus)/sb.get_volume()
 
             # check the mass conservation
             mass_error = sb.integral(phi_plus)/sb.get_volume() - 1.0
             print("%8d %12.3E %15.7E %13.9f %13.9f" %
-                (saddle_iter, mass_error, QQ, energy_total, error_level))
-            return saddle_iter, QQ
+                (saddle_iter, mass_error, Q, energy_total, error_level))
+            return phi_a, phi_b, Q, saddle_iter
         # conditions to end the iteration
-        if(error_level < saddle_tolerance):
+        if error_level < saddle_tolerance:
             break
             
         # calculte new fields using simple and Anderson mixing

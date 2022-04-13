@@ -1,5 +1,5 @@
-# For the start, change "Major Simulation Parameters", currently in lines 81-87
-# and "Initial Fields", currently in lines 132-145
+# For the start, change "Major Simulation Parameters", currently in lines 81-86
+# and "Initial Fields", currently in lines 130-144
 import sys
 import os
 import numpy as np
@@ -22,16 +22,16 @@ def find_saddle_point(lx):
     am.reset_count()
 
     # iteration begins here
-    for scft_iter in range(0,max_scft_iter):
+    for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
-        QQ = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
+        phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 
         # calculate the total energy
         energy_old = energy_total
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
-        energy_total  = -np.log(QQ/sb.get_volume())
+        energy_total  = -np.log(Q/sb.get_volume())
         energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
         energy_total -= sb.integral(w_plus)/sb.get_volume()
 
@@ -54,10 +54,10 @@ def find_saddle_point(lx):
         # print iteration # and error levels and check the mass conservation
         mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
         print( "%8d %12.3E %15.7E %13.9f %13.9f" %
-            (scft_iter, mass_error, QQ, energy_total, error_level) )
+            (scft_iter, mass_error, Q, energy_total, error_level) )
 
         # conditions to end the iteration
-        if(error_level < tolerance):
+        if error_level < tolerance:
             break
         # calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(
@@ -83,9 +83,9 @@ n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
 nx = [32,32,32]     # grids number
 lx = [3.3,3.3,3.3]  # as aN^(1/2) unit
-
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
+# Anderson mixing
 am_n_comp = 2         # w_a (w[0]) and w_b (w[1])
 am_max_hist= 20       # maximum number of history
 am_start_error = 1e-2 # when switch to AM from simple mixing
@@ -123,8 +123,6 @@ print("Volume: %f" % (sb.get_volume()) )
 # q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
 w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
-phi_a   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
-phi_b   = np.zeros(    sb.get_n_grid(),   dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
@@ -163,9 +161,10 @@ print('Free energy per chain: ', np.round(res.fun,6), 'kT')
 
 # estimate execution time
 time_duration = time.time() - time_start
-print( "total time: %f " % time_duration)
+print("total time: %f " % time_duration)
 
 # save final results
+phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
         "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
         "chain_model":chain_model, "w_a":w[0], "w_b":[1], "phi_a":phi_a, "phi_b":phi_b}
