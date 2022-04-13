@@ -1,6 +1,6 @@
 load("structure_function_002000.mat");
 
-% Grid intervals should be the same
+% Grid intervals should be the same in this script. Need to be updated.
 if (abs(lx(1)/nx(1) - lx(2)/nx(2)) + abs(lx(1)/nx(1) - lx(3)/nx(3)) + abs(lx(1)/nx(1) - lx(3)/nx(3)) > 1.e-5)
     print("Grid intervals should be the same")
 end

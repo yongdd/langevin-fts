@@ -8,7 +8,7 @@ bond_t = 100;
 
 if strcmpi(chain_model,'Discrete')
     % calculate v_cell * rho_zero
-    vcellrho = double(n_bar)^0.5*double(N)*dv;
+    vcellrho = double(nbar)^0.5*double(N)*dv;
     % summation of P_i using discrete chain
     sum = 0.0;
     for i=1:bond_t
@@ -20,7 +20,7 @@ if strcmpi(chain_model,'Discrete')
 elseif strcmpi(chain_model,'Gaussian')
     func = @(x,y,z) stucture_function_RPA_athermal(f, sqrt(x.^2+y.^2+z.^2)/sqrt(6));
     int = integral3(func, -pi/dx(1), pi/dx(1), -pi/dx(2), pi/dx(2), -pi/dx(3), pi/dx(3));
-    z_inf = 1 - int/sqrt(double(n_bar))/(8*pi^3*f*(1-f));
+    z_inf = 1 - int/sqrt(double(nbar))/(8*pi^3*f*(1-f));
 end
 
 fprintf("z_inf: %.7f \n", z_inf);
