@@ -63,7 +63,7 @@ pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(sb, am_n_comp,
-               am_max_hist, am_start_error, am_mix_min, am_mix_init)
+            am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise for single segment
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
@@ -91,10 +91,8 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-q1_init = np.ones (sb.get_n_grid(), dtype=np.float64)
-q2_init = np.ones (sb.get_n_grid(), dtype=np.float64)
-phi_a   = np.zeros(sb.get_n_grid(), dtype=np.float64)
-phi_b   = np.zeros(sb.get_n_grid(), dtype=np.float64)
+q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
+q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 
 print("w_minus and w_plus are initialized to random")
 w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
@@ -104,9 +102,8 @@ w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 sb.zero_mean(w_plus)
 sb.zero_mean(w_minus)
 
-find_saddle_point(pc, sb, pseudo, am,
+phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
-    phi_a, phi_b,
     saddle_max_iter, saddle_tolerance, verbose_level)
     
 # init structure function
@@ -125,25 +122,23 @@ for langevin_step in range(1, langevin_max_step+1):
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
-    find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus,
-        phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     # update w_minus: correct step
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus,
-        phi_a, phi_b,
         saddle_max_iter, saddle_tolerance, verbose_level)
         
     # calcaluate structure function
-    if ( langevin_step % 10 == 0):
+    if langevin_step % 10 == 0:
         sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, sb.get_nx()))/sb.get_n_grid())**2
 
     # save structure function
-    if ( langevin_step % 1000 == 0):
+    if langevin_step % 1000 == 0:
         sf_average *= 10/1000*sb.get_volume()*np.sqrt(langevin_nbar)/pc.get_chi_n()**2
         sf_average -= 1.0/(2*pc.get_chi_n())
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
@@ -155,7 +150,7 @@ for langevin_step in range(1, langevin_max_step+1):
         sf_average[:,:,:] = 0.0
 
     # write density and field data
-    if (langevin_step % 1000 == 0):
+    if langevin_step % 1000 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
             "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
             "chain_model":pc.get_model_name(), "n_bar":langevin_nbar,
@@ -165,5 +160,5 @@ for langevin_step in range(1, langevin_max_step+1):
 
 # estimate execution time
 time_duration = time.time() - time_start
-print( "total time: %f, time per step: %f" %
+print("total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_step) )

@@ -71,8 +71,6 @@ for dim in [1,2,3]:
             # q1 starts from A end and q2 starts from B end.
             w       = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
             w_out   = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-            phi_a   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
-            phi_b   = np.zeros(    sb.get_n_grid(),  dtype=np.float64)
             q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
             q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
 
@@ -81,11 +79,8 @@ for dim in [1,2,3]:
                 for j in range(0,sb.get_nx(1)):
                     for k in range(0,sb.get_nx(2)):
                         idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
-                        phi_a[idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1
-
-            phi_b = 1.0 - phi_a
-            w[0] = chi_n*phi_b
-            w[1] = chi_n*phi_a
+                        w[0,idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1
+            w[1] = -w[0]
 
             # keep the level of field value
             sb.zero_mean(w[0])
@@ -95,16 +90,16 @@ for dim in [1,2,3]:
             #print("iteration, mass error, total_partition, energy_total, error_level")
             time_start = time.time()
             # iteration begins here
-            for scft_iter in range(0,max_scft_iter):
+            for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                QQ = pseudo.find_phi(phi_a, phi_b, q1_init,q2_init,w[0],w[1])
+                phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
                 
                 # calculate the total energy
                 energy_old = energy_total
                 w_minus = (w[0]-w[1])/2
                 w_plus  = (w[0]+w[1])/2
                 
-                energy_total  = -np.log(QQ/sb.get_volume())
+                energy_total  = -np.log(Q/sb.get_volume())
                 energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
                 energy_total -= sb.integral(w_plus)/sb.get_volume()
                 
@@ -128,7 +123,7 @@ for dim in [1,2,3]:
                 mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
 
                 # conditions to end the iteration
-                if(error_level < tolerance):
+                if error_level < tolerance:
                     break
                 # calculte new fields using simple and Anderson mixing
                 am.caculate_new_fields(
