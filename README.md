@@ -6,7 +6,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * AB Diblock Copolymer Melt   
 * Chain Model: Gaussian, Discrete   
 * Periodic Boundaries  
-* 3D, 2D and 1D (Caution! Use FTS in 1D and 2D only for the test. It does not have a physical meaning.)   
+* 3D, 2D and 1D
 * Pseudospectral Method, Anderson Mixing   
 * Platforms: MKL, FFTW (CPU) and CUDA (GPU)   
 
@@ -56,7 +56,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
 + Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
-+ Matlab and Python tools for visualization are included in `tools` folder.   
++ Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
++ Matlab and Python tools for visualization and renormalization of  are included in `tools` folder.   
 
 # Developer Guide
 #### Platforms  
@@ -77,6 +78,9 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 #### L-FTS adopting Discrete Chain Model
 + T.M. Beardsley, and M.W. Matsen, Fluctuation correction for the order–disorder transition of diblock copolymer melts, *J. Chem. Phys.* **2021**, 154, 124902   
 + M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
+#### Renormalization of the Flory-Huggins Parameter
++ T.M. Beardsley, and M.W. Matsen, Calibration of the Flory-Huggins interaction parameter in field-theoretic simulations, *J. Chem. Phys.* **2019**, 150, 174902
++ T.M. Beardsley, and M.W. Matsen, Fluctuation correction for the order–disorder transition of diblock copolymer melts, *J. Chem. Phys.* **2021**, 154, 124902
 #### Field-Update Algorithms
 + D.L. Vigil, K.T. Delaney, and G.H. Fredrickson, Quantitative Comparison of Field-Update Algorithms for Polymer SCFT and FTS, *Macromolecules* **2021**, 54, 21, 9804
 #### My Work
