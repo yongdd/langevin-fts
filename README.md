@@ -57,7 +57,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
 + Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
-+ Matlab and Python tools for visualization and renormalization of  are included in `tools` folder.   
++ Matlab and Python tools for visualization and renormalization are included in `tools` folder.   
 
 # Developer Guide
 #### Platforms  
