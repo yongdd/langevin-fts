@@ -35,62 +35,80 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
     
     // Memory allocation
-    cudaMalloc((void**)&qstep1_d, sizeof(double)*2*M);
-    cudaMalloc((void**)&qstep2_d, sizeof(double)*2*M);
-    cudaMalloc((void**)&kqin_d,   sizeof(ftsComplex)*2*M_COMPLEX);
+    cudaMalloc((void**)&d_q_step1, sizeof(double)*2*M);
+    cudaMalloc((void**)&d_q_step2, sizeof(double)*2*M);
+    cudaMalloc((void**)&d_k_q_in,   sizeof(ftsComplex)*2*M_COMPLEX);
 
-    cudaMalloc((void**)&q1_d, sizeof(double)*M*(N+1));
-    cudaMalloc((void**)&q2_d, sizeof(double)*M*(N+1));
+    cudaMalloc((void**)&d_q_1, sizeof(double)*M*(N+1));
+    cudaMalloc((void**)&d_q_2, sizeof(double)*M*(N+1));
 
-    cudaMalloc((void**)&expdwa_d,      sizeof(double)*M);
-    cudaMalloc((void**)&expdwb_d,      sizeof(double)*M);
-    cudaMalloc((void**)&expdwa_half_d, sizeof(double)*M);
-    cudaMalloc((void**)&expdwb_half_d, sizeof(double)*M);
+    cudaMalloc((void**)&d_exp_dw_a,      sizeof(double)*M);
+    cudaMalloc((void**)&d_exp_dw_b,      sizeof(double)*M);
+    cudaMalloc((void**)&d_exp_dw_a_half, sizeof(double)*M);
+    cudaMalloc((void**)&d_exp_dw_b_half, sizeof(double)*M);
 
-    cudaMalloc((void**)&phia_d, sizeof(double)*M);
-    cudaMalloc((void**)&phib_d, sizeof(double)*M);
+    cudaMalloc((void**)&d_phi_a, sizeof(double)*M);
+    cudaMalloc((void**)&d_phi_b, sizeof(double)*M);
 
-    cudaMalloc((void**)&expf_d,      sizeof(double)*M_COMPLEX);
-    cudaMalloc((void**)&expf_half_d, sizeof(double)*M_COMPLEX);
+    cudaMalloc((void**)&d_boltz_bond_a,      sizeof(double)*M_COMPLEX);
+    cudaMalloc((void**)&d_boltz_bond_b,      sizeof(double)*M_COMPLEX);
+    cudaMalloc((void**)&d_boltz_bond_a_half, sizeof(double)*M_COMPLEX);
+    cudaMalloc((void**)&d_boltz_bond_b_half, sizeof(double)*M_COMPLEX);
 
-    cudaMemcpy(expf_d,      expf,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
-    cudaMemcpy(expf_half_d, expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    update();
 }
 CudaPseudoGaussian::~CudaPseudoGaussian()
 {
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
 
-    cudaFree(qstep1_d);
-    cudaFree(qstep2_d);
-    cudaFree(kqin_d);
+    cudaFree(d_q_step1);
+    cudaFree(d_q_step2);
+    cudaFree(d_k_q_in);
 
-    cudaFree(q1_d);
-    cudaFree(q2_d);
+    cudaFree(d_q_1);
+    cudaFree(d_q_2);
 
-    cudaFree(expdwa_d);
-    cudaFree(expdwb_d);
-    cudaFree(expdwa_half_d);
-    cudaFree(expdwb_half_d);
-    cudaFree(phia_d);
-    cudaFree(phib_d);
+    cudaFree(d_exp_dw_a);
+    cudaFree(d_exp_dw_b);
+    cudaFree(d_exp_dw_a_half);
+    cudaFree(d_exp_dw_b_half);
+    cudaFree(d_phi_a);
+    cudaFree(d_phi_b);
 
-    cudaFree(expf_d);
-    cudaFree(expf_half_d);
+    cudaFree(d_boltz_bond_a);
+    cudaFree(d_boltz_bond_b);
+    cudaFree(d_boltz_bond_a_half);
+    cudaFree(d_boltz_bond_b_half);
 }
 
 void CudaPseudoGaussian::update()
 {
-    const int M_COMPLEX = this->n_complex_grid;
+    double step_a, step_b;
+    const double eps = pc->get_epsilon();
+    const double f = pc->get_f();
     
-    Pseudo::update();
-    cudaMemcpy(expf_d,      expf,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
-    cudaMemcpy(expf_half_d, expf_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    const int M_COMPLEX = this->n_complex_grid;
+    double boltz_bond_a[M_COMPLEX], boltz_bond_a_half[M_COMPLEX];
+    double boltz_bond_b[M_COMPLEX], boltz_bond_b_half[M_COMPLEX];
+
+    step_a = eps*eps/(f*eps*eps + (1.0-f));
+    step_b = 1.0/(f*eps*eps + (1.0-f));
+    
+    set_boltz_bond(boltz_bond_a,      step_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
+    set_boltz_bond(boltz_bond_b,      step_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
+    set_boltz_bond(boltz_bond_a_half, step_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+    set_boltz_bond(boltz_bond_b_half, step_b/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+
+    cudaMemcpy(d_boltz_bond_a,      boltz_bond_a,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_boltz_bond_b,      boltz_bond_b,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_boltz_bond_a_half, boltz_bond_a_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_boltz_bond_b_half, boltz_bond_b_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
 
-void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
-                          double *q1_init, double *q2_init,
-                          double *wa, double *wb, double &QQ)
+void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
+                          double *q_1_init, double *q_2_init,
+                          double *w_a, double *w_b, double &single_partition)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -101,28 +119,28 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
     const int N_B = pc->get_n_contour_b();
     const double ds = pc->get_ds();
     
-    double expdwa[M];
-    double expdwb[M];
-    double expdwa_half[M];
-    double expdwb_half[M];
+    double exp_dw_a[M];
+    double exp_dw_b[M];
+    double exp_dw_a_half[M];
+    double exp_dw_b_half[M];
 
     for(int i=0; i<M; i++)
     {
-        expdwa     [i] = exp(-wa[i]*ds*0.5);
-        expdwb     [i] = exp(-wb[i]*ds*0.5);
-        expdwa_half[i] = exp(-wa[i]*ds*0.25);
-        expdwb_half[i] = exp(-wb[i]*ds*0.25);
+        exp_dw_a     [i] = exp(-w_a[i]*ds*0.5);
+        exp_dw_b     [i] = exp(-w_b[i]*ds*0.5);
+        exp_dw_a_half[i] = exp(-w_a[i]*ds*0.25);
+        exp_dw_b_half[i] = exp(-w_b[i]*ds*0.25);
     }
 
     // Copy array from host memory to device memory
-    cudaMemcpy(expdwa_d, expdwa, sizeof(double)*M,cudaMemcpyHostToDevice);
-    cudaMemcpy(expdwb_d, expdwb, sizeof(double)*M,cudaMemcpyHostToDevice);
-    cudaMemcpy(expdwa_half_d, expdwa_half, sizeof(double)*M,cudaMemcpyHostToDevice);
-    cudaMemcpy(expdwb_half_d, expdwb_half, sizeof(double)*M,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_exp_dw_a, exp_dw_a, sizeof(double)*M,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_exp_dw_b, exp_dw_b, sizeof(double)*M,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_exp_dw_a_half, exp_dw_a_half, sizeof(double)*M,cudaMemcpyHostToDevice);
+    cudaMemcpy(d_exp_dw_b_half, exp_dw_b_half, sizeof(double)*M,cudaMemcpyHostToDevice);
 
-    cudaMemcpy(&q1_d[0], q1_init, sizeof(double)*M,
+    cudaMemcpy(&d_q_1[0], q_1_init, sizeof(double)*M,
                cudaMemcpyHostToDevice);
-    cudaMemcpy(&q2_d[0], q2_init, sizeof(double)*M,
+    cudaMemcpy(&d_q_2[0], q_2_init, sizeof(double)*M,
                cudaMemcpyHostToDevice);
 
     for(int n=0; n<N; n++)
@@ -130,73 +148,83 @@ void CudaPseudoGaussian::find_phi(double *phia,  double *phib,
         if(n < N_A && n < N_B)
         {
             one_step(
-                &q1_d[M*n], &q1_d[M*(n+1)],
-                &q2_d[M*n], &q2_d[M*(n+1)],
-                expdwa_d, expdwa_half_d,
-                expdwb_d, expdwb_half_d);
+                &d_q_1[M*n], &d_q_1[M*(n+1)],
+                &d_q_2[M*n], &d_q_2[M*(n+1)],
+                d_boltz_bond_a, d_boltz_bond_a_half,
+                d_boltz_bond_b, d_boltz_bond_b_half,
+                d_exp_dw_a, d_exp_dw_a_half,
+                d_exp_dw_b, d_exp_dw_b_half);
         }
         else if(n < N_A &&  n >= N_B)
         {
             one_step(
-                &q1_d[M*n], &q1_d[M*(n+1)],
-                &q2_d[M*n], &q2_d[M*(n+1)],
-                expdwa_d, expdwa_half_d,
-                expdwa_d, expdwa_half_d);
+                &d_q_1[M*n], &d_q_1[M*(n+1)],
+                &d_q_2[M*n], &d_q_2[M*(n+1)],
+                d_boltz_bond_a, d_boltz_bond_a_half,
+                d_boltz_bond_a, d_boltz_bond_a_half,
+                d_exp_dw_a, d_exp_dw_a_half,
+                d_exp_dw_a, d_exp_dw_a_half);
         }
         else if(n >= N_A && n < N_B)
         {
             one_step(
-                &q1_d[M*n], &q1_d[M*(n+1)],
-                &q2_d[M*n], &q2_d[M*(n+1)],
-                expdwb_d, expdwb_half_d,
-                expdwb_d, expdwb_half_d);
+                &d_q_1[M*n], &d_q_1[M*(n+1)],
+                &d_q_2[M*n], &d_q_2[M*(n+1)],
+                d_boltz_bond_b, d_boltz_bond_b_half,
+                d_boltz_bond_b, d_boltz_bond_b_half,
+                d_exp_dw_b, d_exp_dw_b_half,
+                d_exp_dw_b, d_exp_dw_b_half);
         }
         else
         {
             one_step(
-                &q1_d[M*n], &q1_d[M*(n+1)],
-                &q2_d[M*n], &q2_d[M*(n+1)],
-                expdwb_d, expdwb_half_d,
-                expdwa_d, expdwa_half_d);
+                &d_q_1[M*n], &d_q_1[M*(n+1)],
+                &d_q_2[M*n], &d_q_2[M*(n+1)],
+                d_boltz_bond_b, d_boltz_bond_b_half,
+                d_boltz_bond_a, d_boltz_bond_a_half,
+                d_exp_dw_b, d_exp_dw_b_half,
+                d_exp_dw_a, d_exp_dw_a_half);
         }
     }
 
     // calculate Segment Density
     // segment concentration. only half contribution from the end
-    multi_real<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[M*N], &q2_d[0], 0.5, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_b, &d_q_1[M*N], &d_q_2[0], 0.5, M);
     // the B block segment
     for(int n=N-1; n>N_A; n--)
-        add_multi_real<<<N_BLOCKS, N_THREADS>>>(phib_d, &q1_d[M*n], &q2_d[M*(N-n)], 1.0, M);
+        add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_b, &d_q_1[M*n], &d_q_2[M*(N-n)], 1.0, M);
 
     // the junction is half A and half B
-    multi_real<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[M*N_A], &q2_d[M*(N_B)], 0.5, M);
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(phib_d, 1.0, phib_d, 1.0, phia_d, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[M*N_A], &d_q_2[M*(N_B)], 0.5, M);
+    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_b, 1.0, d_phi_b, 1.0, d_phi_a, M);
 
     // calculates the total partition function
-    QQ = 2*((CudaSimulationBox *)sb)->integral_gpu(phia_d);
+    single_partition = 2*((CudaSimulationBox *)sb)->integral_gpu(d_phi_a);
 
     // the A block segment
     for(int n=N_A-1; n>0; n--)
-        add_multi_real<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[M*n], &q2_d[M*(N-n)], 1.0, M);
+        add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[M*n], &d_q_2[M*(N-n)], 1.0, M);
         
     // only half contribution from the end
-    add_multi_real<<<N_BLOCKS, N_THREADS>>>(phia_d, &q1_d[0], &q2_d[M*N], 0.5, M);
+    add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[0], &d_q_2[M*N], 0.5, M);
 
     // normalize the concentration
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(phia_d, (sb->get_volume())/QQ/N, phia_d, 0.0, phia_d, M);
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(phib_d, (sb->get_volume())/QQ/N, phib_d, 0.0, phib_d, M);
+    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_a, (sb->get_volume())/single_partition/N, d_phi_a, 0.0, d_phi_a, M);
+    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_b, (sb->get_volume())/single_partition/N, d_phi_b, 0.0, d_phi_b, M);
 
-    cudaMemcpy(phia, phia_d, sizeof(double)*M,cudaMemcpyDeviceToHost);
-    cudaMemcpy(phib, phib_d, sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(phi_a, d_phi_a, sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(phi_b, d_phi_b, sizeof(double)*M,cudaMemcpyDeviceToHost);
 }
 
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, we use FFT Batch.
-void CudaPseudoGaussian::one_step(double *qin1_d, double *qout1_d,
-                         double *qin2_d, double *qout2_d,
-                         double *expdw1_d, double *expdw1_half_d,
-                         double *expdw2_d, double *expdw2_half_d)
+void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
+                                  double *d_q_in2,        double *d_q_out2,
+                                  double *d_boltz_bond_1, double *d_boltz_bond_1_half,
+                                  double *d_boltz_bond_2, double *d_boltz_bond_2_half,
+                                  double *d_exp_dw_1,     double *d_exp_dw_1_half,
+                                  double *d_exp_dw_2,     double *d_exp_dw_2_half)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -206,66 +234,66 @@ void CudaPseudoGaussian::one_step(double *qin1_d, double *qout1_d,
         
     //-------------- step 1 ---------- 
     // Evaluate e^(-w*ds/2) in real space
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[0], qin1_d, expdw1_d, 1.0, M);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[M], qin2_d, expdw2_d, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[0], d_q_in1, d_exp_dw_1, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[M], d_q_in2, d_exp_dw_2, 1.0, M);
 
-    // Execute a Forward FFT
-    cufftExecD2Z(plan_for, qstep1_d, kqin_d);
+    // Execute a Forw_ard FFT
+    cufftExecD2Z(plan_for, d_q_step1, d_k_q_in);
 
     // Multiply e^(-k^2 ds/6) in fourier space
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],         expf_d, M_COMPLEX);
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[M_COMPLEX], expf_d, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[0],         d_boltz_bond_1, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[M_COMPLEX], d_boltz_bond_2, M_COMPLEX);
 
-    // Execute a backward FFT
-    cufftExecZ2D(plan_bak, kqin_d, qstep1_d);
+    // Execute a backw_ard FFT
+    cufftExecZ2D(plan_bak, d_k_q_in, d_q_step1);
 
     // Evaluate e^(-w*ds/2) in real space
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[0], &qstep1_d[0], expdw1_d, 1.0/((double)M), M);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep1_d[M], &qstep1_d[M], expdw2_d, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[0], &d_q_step1[0], d_exp_dw_1, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[M], &d_q_step1[M], d_exp_dw_2, 1.0/((double)M), M);
 
     //-------------- step 2 ----------
     // Evaluate e^(-w*ds/4) in real space
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0], qin1_d, expdw1_half_d, 1.0, M);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[M], qin2_d, expdw2_half_d, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[0], d_q_in1, d_exp_dw_1_half, 1.0, M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[M], d_q_in2, d_exp_dw_2_half, 1.0, M);
 
-    // Execute a Forward FFT
-    cufftExecD2Z(plan_for, qstep2_d, kqin_d);
+    // Execute a Forw_ard FFT
+    cufftExecD2Z(plan_for, d_q_step2, d_k_q_in);
 
     // Multiply e^(-k^2 ds/12) in fourier space
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],         expf_half_d, M_COMPLEX);
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[M_COMPLEX], expf_half_d, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[0],         d_boltz_bond_1_half, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[M_COMPLEX], d_boltz_bond_2_half, M_COMPLEX);
 
-    // Execute a backward FFT
-    cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
+    // Execute a backw_ard FFT
+    cufftExecZ2D(plan_bak, d_k_q_in, d_q_step2);
 
     // Evaluate e^(-w*ds/2) in real space
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0], &qstep2_d[0], expdw1_d, 1.0/((double)M), M);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[M], &qstep2_d[M], expdw2_d, 1.0/((double)M), M);
-    // Execute a Forward FFT
-    cufftExecD2Z(plan_for, qstep2_d, kqin_d);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[0], &d_q_step2[0], d_exp_dw_1, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[M], &d_q_step2[M], d_exp_dw_2, 1.0/((double)M), M);
+    // Execute a Forw_ard FFT
+    cufftExecD2Z(plan_for, d_q_step2, d_k_q_in);
 
     // Multiply e^(-k^2 ds/12) in fourier space
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[0],         expf_half_d, M_COMPLEX);
-    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&kqin_d[M_COMPLEX], expf_half_d, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[0],         d_boltz_bond_1_half, M_COMPLEX);
+    multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_k_q_in[M_COMPLEX], d_boltz_bond_2_half, M_COMPLEX);
 
-    // Execute a backward FFT
-    cufftExecZ2D(plan_bak, kqin_d, qstep2_d);
+    // Execute a backw_ard FFT
+    cufftExecZ2D(plan_bak, d_k_q_in, d_q_step2);
 
     // Evaluate e^(-w*ds/4) in real space.
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[0],  &qstep2_d[0], expdw1_half_d, 1.0/((double)M), M);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(&qstep2_d[M], &qstep2_d[M],  expdw2_half_d, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[0], &d_q_step2[0], d_exp_dw_1_half, 1.0/((double)M), M);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2[M], &d_q_step2[M], d_exp_dw_2_half, 1.0/((double)M), M);
     //-------------- step 3 ----------
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(qout1_d, 4.0/3.0, &qstep2_d[0], -1.0/3.0, &qstep1_d[0],  M);
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(qout2_d, 4.0/3.0, &qstep2_d[M], -1.0/3.0, &qstep1_d[M], M);
+    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out1, 4.0/3.0, &d_q_step2[0], -1.0/3.0, &d_q_step1[0],  M);
+    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out2, 4.0/3.0, &d_q_step2[M], -1.0/3.0, &d_q_step1[M], M);
 }
 // Get partial partition functions
 // This is made for debugging and testing.
 // Do NOT this at main progarams.
 
-void CudaPseudoGaussian::get_partition(double *q1_out, int n1, double *q2_out, int n2)
+void CudaPseudoGaussian::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
-    cudaMemcpy(q1_out, &q1_d[n1*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
-    cudaMemcpy(q2_out, &q2_d[(N-n2)*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q_1_out, &d_q_1[n1*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
+    cudaMemcpy(q_2_out, &d_q_2[(N-n2)*M], sizeof(double)*M,cudaMemcpyDeviceToHost);
 }

@@ -66,7 +66,7 @@ int main()
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
-    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model);
+    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
     Pseudo *pseudo = factory->create_pseudo(sb, pc);
     AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_comp,

@@ -15,11 +15,13 @@ private:
     double f; // A fraction (1-f is the B fraction)
     double ds;  // discrete step sizes
     double chi_n; // chi N, interaction parameter between A and B Monomers
+    double epsilon; // epsilon = a_A/a_B, conformational asymmetry
+                    // a = sqrt(f*a_A^2 + (1-f)*a_B^2)
     std::string model_name;   // "Gaussian": continous standard Gaussian model
                               // "Discrete": discrete bead-spring model
 public:
 
-    PolymerChain(double f, int n_contour, double chi_n, std::string model_name);
+    PolymerChain(double f, int n_contour, double chi_n, std::string model_name, double epsilon);
     ~PolymerChain() {};
 
     int get_n_contour();    // N
@@ -28,6 +30,7 @@ public:
     double get_f();
     double get_ds();
     double get_chi_n();
+    double get_epsilon();
     std::string get_model_name();
 
 };

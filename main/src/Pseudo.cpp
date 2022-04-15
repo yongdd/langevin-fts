@@ -18,18 +18,9 @@ Pseudo::Pseudo(
         this->n_complex_grid = sb->get_nx(0)/2+1;
     else
         std::cerr << "Pseudo: Invalid dimension " << sb->get_dim() << std::endl;
-    
-    this->expf = new double[n_complex_grid];
-    this->expf_half = new double[n_complex_grid];
-    set_exp_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
-Pseudo::~Pseudo()
-{
-    delete[] expf;
-    delete[] expf_half;
-}
-//----------------- init_gaussian_factor -------------------
-void Pseudo::set_exp_factor(
+//----------------- set_boltz_bond -------------------
+void Pseudo::set_boltz_bond(double *boltz_bond, double step,
     std::array<int,3> nx, std::array<double,3> dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;
@@ -58,8 +49,7 @@ void Pseudo::set_exp_factor(
                 {
                     ktemp = k;
                     idx = i* nx[1]*(nx[2]/2+1) + j*(nx[2]/2+1) + k;
-                    expf[idx] = exp(pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2]);
-                    expf_half[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2])/2);
+                    boltz_bond[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2])*step);
                 }
             }
         }
@@ -76,9 +66,7 @@ void Pseudo::set_exp_factor(
             {
                 jtemp = j;
                 idx = i* (nx[1]/2+1) + j;
-                expf[idx] = exp(pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]);
-                expf_half[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1])/2);
-
+                boltz_bond[idx] = exp((pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1])*step);
             }
         }
     }
@@ -86,9 +74,7 @@ void Pseudo::set_exp_factor(
     {
         for(int i=0; i<nx[0]/2+1; i++)
         {
-            expf[i] = exp(pow(i,2)*xfactor[0]);
-            expf_half[i] = exp((pow(i,2)*xfactor[0])/2);
-
+            boltz_bond[i] = exp((pow(i,2)*xfactor[0])*step);
         }
     }
 }

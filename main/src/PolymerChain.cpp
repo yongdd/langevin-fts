@@ -4,11 +4,13 @@
 #include "PolymerChain.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(double f, int n_contour, double chi_n, std::string model_name)
+PolymerChain::PolymerChain(double f, int n_contour,
+    double chi_n, std::string model_name, double epsilon)
 {
     this->f = f;
     this->n_contour = n_contour;
     this->chi_n = chi_n;
+    this->epsilon = epsilon;
 
     // grid number for A fraction
     this->n_contour_a = std::lround(n_contour*f);
@@ -56,6 +58,10 @@ double PolymerChain::get_ds()
 double PolymerChain::get_chi_n()
 {
     return chi_n;
+}
+double PolymerChain::get_epsilon()
+{
+    return epsilon;
 }
 std::string PolymerChain::get_model_name()
 {

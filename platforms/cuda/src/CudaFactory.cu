@@ -14,9 +14,10 @@
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
-PolymerChain* CudaFactory::create_polymer_chain(double f, int NN, double chi_n, std::string model_name)
+PolymerChain* CudaFactory::create_polymer_chain(
+    double f, int NN, double chi_n, std::string model_name, double epsilon)
 {
-    return new PolymerChain(f, NN, chi_n, model_name);
+    return new PolymerChain(f, NN, chi_n, model_name, epsilon);
 }
 SimulationBox* CudaFactory::create_simulation_box(
     std::vector<int> nx, std::vector<double>  lx)

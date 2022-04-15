@@ -65,7 +65,6 @@ def find_saddle_point(lx):
             old_error_level, error_level)
     
     if use_stress:
-        
         #initialize arrays for stress calculation
         if sb.get_dim()==3:
             space_ky, space_kx, space_kz = np.meshgrid(
@@ -142,7 +141,7 @@ am_start_error = 1e-1 # when switch to AM from simple mixing
 am_mix_min = 0.1      # minimum mixing rate of simple mixing
 am_mix_init = 0.1     # initial mixing rate of simple mixing
 
-# use stress for find unit cell
+# use stress for finding unit cell
 use_stress = True
 
 if chain_model.lower() != "discrete":
@@ -236,5 +235,5 @@ print("total time: %f " % time_duration)
 phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
         "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
-        "chain_model":chain_model, "w_a":w[0], "w_b":[1], "phi_a":phi_a, "phi_b":phi_b}
+        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
 savemat("fields.mat", mdic)
