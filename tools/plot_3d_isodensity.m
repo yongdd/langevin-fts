@@ -7,13 +7,13 @@ v = permute(v,[2 3 1]);
 h=figure;
 c = jet(1024);
 colormap(c)
-caxis([0.5 1])
+caxis([0.0 1])
 
 % Mesh
 [x,y,z] = meshgrid(1:nx(1),1:nx(2),1:nx(3));
 x = double(x); y = double(y); z = double(z);
 %v = smooth3(v);
-isovalue = 0.5;
+isovalue = f;
 
 % Isosurface
 p1 = patch(isosurface(x,y,z,v,isovalue));

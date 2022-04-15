@@ -8,11 +8,11 @@ CudaCircularBuffer::CudaCircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    cudaMalloc((void**)&elems_d, sizeof(double)*length*width);
+    cudaMalloc((void**)&d_elems, sizeof(double)*length*width);
 }
 CudaCircularBuffer::~CudaCircularBuffer()
 {
-    cudaFree(elems_d);
+    cudaFree(d_elems);
 }
 void CudaCircularBuffer::reset()
 {
@@ -22,7 +22,7 @@ void CudaCircularBuffer::reset()
 void CudaCircularBuffer::insert(double* new_arr)
 {
     int i = (start+n_items)%length;
-    cudaMemcpy(&elems_d[i*width], new_arr, sizeof(double)*width, cudaMemcpyHostToDevice);
+    cudaMemcpy(&d_elems[i*width], new_arr, sizeof(double)*width, cudaMemcpyHostToDevice);
     if (n_items == length)
         start = (start+1)%length;
     n_items = min(n_items+1, length);
@@ -30,5 +30,5 @@ void CudaCircularBuffer::insert(double* new_arr)
 double* CudaCircularBuffer::get_array(int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return &elems_d[i*width];
+    return &d_elems[i*width];
 }

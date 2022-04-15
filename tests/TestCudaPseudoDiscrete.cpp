@@ -30,7 +30,7 @@ int main()
     Lz = 2.0;
 
     CudaCommon::get_instance().set(8,8,0);
-    PolymerChain pc(f, NN, 0.0, "Discrete");
+    PolymerChain pc(f, NN, 0.0, "Discrete", 1.0);
     CudaSimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});
 
     // initialize pseudo spectral parameters

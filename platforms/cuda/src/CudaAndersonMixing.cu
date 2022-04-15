@@ -17,12 +17,12 @@ CudaAndersonMixing::CudaAndersonMixing(
     
     // number of anderson mixing steps, increases from 0 to max_hist
     n_anderson = -1;
-    // record hisotry of wout in GPU device memory
-    cb_wout_hist_d = new CudaCircularBuffer(max_hist+1, n_comp*M);
-    // record hisotry of wout-w in GPU device memory
-    cb_wdiff_hist_d = new CudaCircularBuffer(max_hist+1, n_comp*M);
-    // record hisotry of inner_product product of wout-w in CPU host memory
-    cb_wdiff_dots = new CircularBuffer(max_hist+1, max_hist+1);
+    // record hisotry of w_out in GPU device memory
+    d_cb_w_out_hist = new CudaCircularBuffer(max_hist+1, n_comp*M);
+    // record hisotry of w_out-w in GPU device memory
+    d_cb_w_diff_hist = new CudaCircularBuffer(max_hist+1, n_comp*M);
+    // record hisotry of inner_product product of w_out-w in CPU host memory
+    cb_w_diff_dots = new CircularBuffer(max_hist+1, max_hist+1);
 
     // define arrays for anderson mixing
     this->u_nm = new double*[max_hist];
@@ -30,29 +30,30 @@ CudaAndersonMixing::CudaAndersonMixing(
         this->u_nm[i] = new double[max_hist];
     this->v_n = new double[max_hist];
     this->a_n = new double[max_hist];
-    this->wdiff_dots = new double[max_hist+1];
+    this->w_diff_dots = new double[max_hist+1];
 
     // fields arrays
-    cudaMalloc((void**)&w_diff_d, sizeof(double)*n_comp*M);
-    cudaMalloc((void**)&w_d, sizeof(double)*n_comp*M);
+    cudaMalloc((void**)&d_w_diff, sizeof(double)*n_comp*M);
+    cudaMalloc((void**)&d_w,      sizeof(double)*n_comp*M);
 
     // reset_count
     reset_count();
 }
 CudaAndersonMixing::~CudaAndersonMixing()
 {
-    delete cb_wout_hist_d;
-    delete cb_wdiff_hist_d;
-    delete cb_wdiff_dots;
+    delete d_cb_w_out_hist;
+    delete d_cb_w_diff_hist;
+    delete cb_w_diff_dots;
 
     for (int i=0; i<max_anderson; i++)
         delete[] u_nm[i];
     delete[] u_nm;
     delete[] v_n;
     delete[] a_n;
-    delete[] wdiff_dots;
-    cudaFree(w_diff_d);
-    cudaFree(w_d);
+    delete[] w_diff_dots;
+    
+    cudaFree(d_w_diff);
+    cudaFree(d_w);
 }
 void CudaAndersonMixing::reset_count()
 {
@@ -61,9 +62,9 @@ void CudaAndersonMixing::reset_count()
     /* number of anderson mixing steps, increases from 0 to max_anderson */
     n_anderson = -1;
 
-    cb_wout_hist_d->reset();
-    cb_wdiff_hist_d->reset();
-    cb_wdiff_dots->reset();
+    d_cb_w_out_hist->reset();
+    d_cb_w_diff_hist->reset();
+    cb_w_diff_dots->reset();
 }
 
 void CudaAndersonMixing::caculate_new_fields(
@@ -77,10 +78,10 @@ void CudaAndersonMixing::caculate_new_fields(
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
     const int M = sb->get_n_grid();
-    double* wout_hist1_d;
-    double* wout_hist2_d;
+    double* d_w_out_hist1;
+    double* d_w_out_hist2;
 
-    cudaMemcpy(w_diff_d, w_diff, sizeof(double)*n_comp*M, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w_diff, w_diff, sizeof(double)*n_comp*M, cudaMemcpyHostToDevice);
 
     //printf("mix: %f\n", mix);
     // condition to start anderson mixing
@@ -92,17 +93,17 @@ void CudaAndersonMixing::caculate_new_fields(
         n_anderson = std::min(max_anderson, n_anderson);
         
         // store the input and output field (the memory is used in a periodic way)
-        cb_wout_hist_d->insert(w_out);
-        cb_wdiff_hist_d->insert(w_diff);
+        d_cb_w_out_hist->insert(w_out);
+        d_cb_w_diff_hist->insert(w_diff);
 
-        // evaluate wdiff inner_product products for calculating Unm and Vn in Thompson's paper
+        // evaluate w_diff inner_product products for calculating Unm and Vn in Thompson's paper
         for(int i=0; i<= n_anderson; i++)
         {
-            wdiff_dots[i] = ((CudaSimulationBox *)sb)->mutiple_inner_product_gpu(n_comp, w_diff_d,
-                                     cb_wdiff_hist_d->get_array(i));
+            w_diff_dots[i] = ((CudaSimulationBox *)sb)->mutiple_inner_product_gpu(n_comp, d_w_diff,
+                                     d_cb_w_diff_hist->get_array(i));
         }
-        //print_array(max_anderson+1, wdiff_dots);
-        cb_wdiff_dots->insert(wdiff_dots);
+        //print_array(max_anderson+1, w_diff_dots);
+        cb_w_diff_dots->insert(w_diff_dots);
     }
     // conditions to apply the simple mixing method
     if( n_anderson <= 0 )
@@ -122,15 +123,15 @@ void CudaAndersonMixing::caculate_new_fields(
         // calculate Unm and Vn
         for(int i=0; i<n_anderson; i++)
         {
-            v_n[i] = cb_wdiff_dots->get(0, 0)
-                     - cb_wdiff_dots->get(0, i+1);
+            v_n[i] = cb_w_diff_dots->get(0, 0)
+                     - cb_w_diff_dots->get(0, i+1);
 
             for(int j=0; j<n_anderson; j++)
             {
-                u_nm[i][j] = cb_wdiff_dots->get(0, 0)
-                             - cb_wdiff_dots->get(0, i+1)
-                             - cb_wdiff_dots->get(0, j+1)
-                             + cb_wdiff_dots->get(std::min(i+1, j+1),
+                u_nm[i][j] = cb_w_diff_dots->get(0, 0)
+                             - cb_w_diff_dots->get(0, i+1)
+                             - cb_w_diff_dots->get(0, j+1)
+                             + cb_w_diff_dots->get(std::min(i+1, j+1),
                                                   std::abs(i-j));
             }
         }
@@ -139,14 +140,14 @@ void CudaAndersonMixing::caculate_new_fields(
         find_an(u_nm, v_n, a_n, n_anderson);
 
         // calculate the new field
-        wout_hist1_d = cb_wout_hist_d->get_array(0);
-        cudaMemcpy(w_d, wout_hist1_d, sizeof(double)*n_comp*M,cudaMemcpyDeviceToDevice);
+        d_w_out_hist1 = d_cb_w_out_hist->get_array(0);
+        cudaMemcpy(d_w, d_w_out_hist1, sizeof(double)*n_comp*M,cudaMemcpyDeviceToDevice);
         for(int i=0; i<n_anderson; i++)
         {
-            wout_hist2_d = cb_wout_hist_d->get_array(i+1);
-            add_lin_comb<<<N_BLOCKS, N_THREADS>>>(w_d, a_n[i], wout_hist2_d, -a_n[i], wout_hist1_d, n_comp*M);
+            d_w_out_hist2 = d_cb_w_out_hist->get_array(i+1);
+            add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w, a_n[i], d_w_out_hist2, -a_n[i], d_w_out_hist1, n_comp*M);
         }
-        cudaMemcpy(w, w_d, sizeof(double)*n_comp*M,cudaMemcpyDeviceToHost);
+        cudaMemcpy(w, d_w, sizeof(double)*n_comp*M,cudaMemcpyDeviceToHost);
     }
 }
 void CudaAndersonMixing::print_array(int n, double *a)

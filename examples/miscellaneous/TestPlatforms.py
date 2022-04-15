@@ -16,12 +16,13 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 
-max_scft_iter = 10
+max_scft_iter = 2
 tolerance = 1e-9
 
 f = 0.3            # A-fraction, f
 n_contour = 50     # segment number, N
 chi_n = 20         # Flory-Huggins Parameters * N
+epsilon = 2.5      # a_A/a_B, conformational asymmetry
 
 am_n_comp = 2         # w[0] and w[1]
 am_max_hist= 20       # maximum number of history
@@ -50,13 +51,14 @@ for dim in [1,2,3]:
         print("-" * 50)
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
         print("platform, time per iter, mass error, test output")
+        test_output = []
         for platform in PlatformSelector.avail_platforms():
 
             factory = PlatformSelector.create_factory(platform)
             #factory.display_info()
 
             # create instances
-            pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
+            pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
             sb = factory.create_simulation_box(nx, lx)
             pseudo = factory.create_pseudo(sb, pc)
             am = factory.create_anderson_mixing(sb, am_n_comp,
@@ -132,7 +134,14 @@ for dim in [1,2,3]:
                     np.reshape(w_diff, 2*sb.get_n_grid()),
                     old_error_level, error_level)
             
+            test_output.append(error_level)
             # estimate execution time
             time_duration = time.time() - time_start
             print("%8s: %13.5f, %10.3E, %12.9f" %
                 (platform, time_duration/max_scft_iter, mass_error, error_level) )
+        
+        # Test error
+        print("Standard deviation: " ,np.std(test_output))
+        if np.std(test_output) > 1e-8:
+            print("Each platform should give the same result")
+            sys.exit(-1);

@@ -16,15 +16,13 @@ class Pseudo
 protected:
     SimulationBox *sb;
     PolymerChain *pc;
-
     int n_complex_grid;
-    double *expf, *expf_half;
 
-    void set_exp_factor(
+    void set_boltz_bond(double *boltz_bond, double step,
         std::array<int,3> nx, std::array<double,3> dx, double ds);
 public:
     Pseudo(SimulationBox *sb, PolymerChain *pc);
-    virtual ~Pseudo();
+    virtual ~Pseudo() {};
 
     virtual void find_phi(
         double *phi_a,  double *phi_b,
@@ -35,9 +33,7 @@ public:
         double *q1, int n1,
         double *q2, int n2) = 0;
 
-    virtual void update(){
-        set_exp_factor(sb->get_nx(), sb->get_dx(), pc->get_ds());
-    }
+    virtual void update() = 0;
 
     // Methods for SWIG
     void find_phi(
@@ -49,25 +45,24 @@ public:
         double *w_b, int len_w_b,
         double &single_partition)
     {
-
         assert(len_q1  == sb->get_n_grid());
         assert(len_q2  == sb->get_n_grid());
         assert(len_w_a == sb->get_n_grid());
         assert(len_w_b == sb->get_n_grid());
         
-        double *phi_a_dynamic = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        double *phi_b_dynamic = (double *) malloc(sb->get_n_grid()*sizeof(double));
+        double *phi_a_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
+        double *phi_b_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
         
-        assert(phi_a_dynamic != NULL);
-        assert(phi_b_dynamic != NULL);
+        assert(phi_a_alloc != NULL);
+        assert(phi_b_alloc != NULL);
         
-        if (phi_a_dynamic == NULL)
+        if (phi_a_alloc == NULL)
             std::cout << "Failed malloc() for phi_a" << std::endl;
-        if (phi_b_dynamic == NULL)
+        if (phi_b_alloc == NULL)
             std::cout << "Failed malloc() for phi_b" << std::endl;
             
-        *phi_a = phi_a_dynamic;
-        *phi_b = phi_b_dynamic;
+        *phi_a = phi_a_alloc;
+        *phi_b = phi_b_alloc;
         
         *len_p_a = sb->get_n_grid();
         *len_p_b = sb->get_n_grid();
@@ -79,20 +74,19 @@ public:
         double **q2_out, int *len_q2, 
         int n1, int n2)
     {
+        double *q1_out_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
+        double *q2_out_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
         
-        double *q1_out_dynamic = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        double *q2_out_dynamic = (double *) malloc(sb->get_n_grid()*sizeof(double));
+        assert(q1_out_alloc != NULL);
+        assert(q2_out_alloc != NULL);
         
-        assert(q1_out_dynamic != NULL);
-        assert(q2_out_dynamic != NULL);
-        
-        if (q1_out_dynamic == NULL)
+        if (q1_out_alloc == NULL)
             std::cout << "Failed malloc() for q1_out" << std::endl;
-        if (q2_out_dynamic == NULL)
+        if (q2_out_alloc == NULL)
             std::cout << "Failed malloc() for q2_out" << std::endl;
             
-        *q1_out = q1_out_dynamic;
-        *q2_out = q2_out_dynamic;
+        *q1_out = q1_out_alloc;
+        *q2_out = q2_out_alloc;
         
         *len_q1 = sb->get_n_grid();
         *len_q2 = sb->get_n_grid();

@@ -11,7 +11,7 @@ private:
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double* elems_d;
+    double* d_elems;
 
 public:
     CudaCircularBuffer(int length, int width);

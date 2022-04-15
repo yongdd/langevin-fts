@@ -15,11 +15,11 @@ class CudaAndersonMixing : public AndersonMixing
 {
 private:
     // a few previous field values are stored for anderson mixing in GPU
-    CudaCircularBuffer *cb_wout_hist_d, *cb_wdiff_hist_d;
+    CudaCircularBuffer *d_cb_w_out_hist, *d_cb_w_diff_hist;
     // arrays to calculate anderson mixing
-    CircularBuffer *cb_wdiff_dots;
-    double **u_nm, *v_n, *a_n, *wdiff_dots;
-    double *w_d, *w_diff_d;
+    CircularBuffer *cb_w_diff_dots;
+    double **u_nm, *v_n, *a_n, *w_diff_dots;
+    double *d_w, *d_w_diff;
 
     void print_array(int n, double *a);
 public:

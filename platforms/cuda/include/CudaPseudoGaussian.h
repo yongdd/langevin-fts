@@ -16,34 +16,36 @@ class CudaPseudoGaussian : public Pseudo
 private:
     cufftHandle plan_for, plan_bak;
 
-    double *temp_d, *temp_arr;
-    double *q1_d, *q2_d;
-    double *qstep1_d, *qstep2_d;
-    ftsComplex *kqin_d;
+    double *d_temp, *temp_arr;
+    double *d_q_1, *d_q_2;
+    double *d_q_step1, *d_q_step2;
+    ftsComplex *d_k_q_in;
 
-    double *expdwa_d, *expdwa_half_d;
-    double *expdwb_d, *expdwb_half_d;
-    double *phia_d, *phib_d;
+    double *d_exp_dw_a, *d_exp_dw_a_half;
+    double *d_exp_dw_b, *d_exp_dw_b_half;
+    double *d_phi_a,  *d_phi_b;
+    
+    double *d_boltz_bond_a, *d_boltz_bond_a_half;
+    double *d_boltz_bond_b, *d_boltz_bond_b_half;
 
-    double *expf_d, *expf_half_d;
-
-    void one_step(double *qin1_d, double *qout1_d,
-                 double *qin2_d, double *qout2_d,
-                 double *expdw1_d, double *expdw1_half_d,
-                 double *expdw2_d, double *expdw2_half_d);
+    void one_step(double *d_q_1_in, double *d_q_1_out,
+                  double *d_q_2_in, double *d_q_2_out,
+                  double *d_boltz_bond_1, double *d_boltz_bond_1_half,
+                  double *d_boltz_bond_2, double *d_boltz_bond_2_half,
+                  double *d_exp_dw_1, double *d_exp_dw_1_half,
+                  double *d_exp_dw_2, double *d_exp_dw_2_half);
 public:
 
-    CudaPseudoGaussian(SimulationBox *sb,
-               PolymerChain *pc);
+    CudaPseudoGaussian(SimulationBox *sb, PolymerChain *pc);
     ~CudaPseudoGaussian();
 
     void update() override;
 
-    void find_phi(double *phia,  double *phib,
-                  double *q1_init, double *q2_init,
-                  double *wa, double *wb, double &QQ) override;
+    void find_phi(double *phi_a,  double *phi_b,
+                  double *q_1_init, double *q_2_init,
+                  double *w_a, double *w_b, double &single_partition) override;
 
-    void get_partition(double *q1_out, int n1, double *q2_out, int n2) override;
+    void get_partition(double *q_1_out, int n1, double *q_2_out, int n2) override;
 };
 
 #endif

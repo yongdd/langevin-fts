@@ -13,7 +13,9 @@ phi_a_2d = reshape(data(:,:,1),[nx(2), nx(3)]);
 image(phi_a_2d(:,:),'CDataMapping','scaled');
 set(gca,'DataAspectRatio',[1 1 1]); % need to be changed...
 axis off;
-colormap jet;
+c = jet(1024);
+colormap(c)
+caxis([0.0 1])
 colorbar('FontSize',20)
 %caxis([-0.45 0.45])
 

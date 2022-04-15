@@ -15,9 +15,10 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
-PolymerChain* MklFactory::create_polymer_chain(double f, int n_contour, double chi_n, std::string model_name)
+PolymerChain* MklFactory::create_polymer_chain(
+    double f, int NN, double chi_n, std::string model_name, double epsilon)
 {
-    return new PolymerChain(f, n_contour, chi_n, model_name);
+    return new PolymerChain(f, NN, chi_n, model_name, epsilon);
 }
 SimulationBox* MklFactory::create_simulation_box(
     std::vector<int> nx, std::vector<double> lx)
