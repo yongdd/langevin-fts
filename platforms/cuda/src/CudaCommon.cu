@@ -163,14 +163,25 @@ __global__ void add_lin_comb(double* dst,
     }
 }
 
-__global__ void multi_complex_real(ftsComplex* a,
-                                 double* b, const int M)
+__global__ void multi_complex_real(ftsComplex* dst,
+                                 double* src, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        a[i].x = a[i].x * b[i];
-        a[i].y = a[i].y * b[i];
+        dst[i].x = dst[i].x * src[i];
+        dst[i].y = dst[i].y * src[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+__global__ void multi_complex_conjugate(double* dst,
+                                 ftsComplex* src1,
+                                 ftsComplex* src2, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = src1[i].x * src2[i].x + src1[i].y * src2[i].y;
         i += blockDim.x * gridDim.x;
     }
 }

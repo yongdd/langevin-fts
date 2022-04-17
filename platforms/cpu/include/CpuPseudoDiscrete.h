@@ -22,6 +22,7 @@ public:
     ~CpuPseudoDiscrete();
 
     void update() override;
+    std::array<double,3> dq_dl() override;
     void find_phi(
         double *phi_a,  double *phi_b,
         double *q_1_init, double *q_2_init,

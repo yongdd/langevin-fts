@@ -75,8 +75,8 @@ eps = pc.get_epsilon()
 f = pc.get_f()
 norm_segment = (f*eps**2 + (1-f))
 
-print("---------- Statistical Segment Length <x^2>*N*(epsilon^2+1) ----------")
-print("n'th segment,  theory, caculation")
+print("---------- Statistical Segment Length <x^2> ----------")
+print("n'th segment, theory, caculation")
 phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "gaussian"):
