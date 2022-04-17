@@ -65,7 +65,7 @@ def find_saddle_point(lx):
             old_error_level, error_level)
     
     if use_stress:
-        stress_array = np.array(pseudo.dq_dl()[0:sb.get_dim()])/Q
+        stress_array = np.array(pseudo.dq_dl()[-sb.get_dim():])/Q
         return stress_array
     else:
         return energy_total
@@ -81,7 +81,7 @@ max_scft_iter = 1000
 tolerance = 1e-8
 
 # Major Simulation Parameters
-f = 0.36            # A-fraction, f
+f = 0.30            # A-fraction, f
 n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
 epsilon = 2.0       # a_A/a_B, conformational asymmetry
@@ -109,6 +109,8 @@ use_stress = True
 #[3.13305012 3.61800653] D, 31, FE
 #[3.13305186 3.61799861] D, 31, CPU
 #[3.13305186 3.61799861] D, 31, GPU
+
+#[3.13303768 3.6185239 ]
 
 #[3.1330375  3.61852269] D, 32, FE
 #[3.13303996 3.61851564] D, 32, CPU
@@ -227,11 +229,11 @@ time_start = time.time()
 
 # find the natural period of gyroid
 if (use_stress):
-    res = scipy.optimize.root(find_saddle_point, lx, tol=1e-6, options={'disp':True})
+    res = scipy.optimize.root(find_saddle_point, lx, tol=1e-5, options={'disp':True})
     print('Unit cell that make the stress zero: ', res.x, '(aN^1/2)')
     print('Stress in each direction: ', res.fun, )
 else:
-    res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-6, options={'disp':True})
+    res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
     print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
     print('Free energy per chain: ', res.fun, 'kT')
 

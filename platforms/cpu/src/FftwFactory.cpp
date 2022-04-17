@@ -35,10 +35,10 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
                 new FftwFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 2)
             return new CpuPseudoGaussian(sb, pc,
-                new FftwFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+                new FftwFFT2D({sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 1)
             return new CpuPseudoGaussian(sb, pc,
-                new FftwFFT1D(sb->get_nx(0)));
+                new FftwFFT1D(sb->get_nx(2)));
     }
     else if ( model_name == "discrete" )
     {
@@ -47,10 +47,10 @@ Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
                 new FftwFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 2)
             return new CpuPseudoDiscrete(sb, pc,
-                new FftwFFT2D({sb->get_nx(0),sb->get_nx(1)}));
+                new FftwFFT2D({sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 1)
             return new CpuPseudoDiscrete(sb, pc,
-                new FftwFFT1D(sb->get_nx(0)));
+                new FftwFFT1D(sb->get_nx(2)));
     }
     return NULL;
 }

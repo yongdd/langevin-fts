@@ -7,7 +7,7 @@ import scipy.optimize
 from langevinfts import *
 
 def find_saddle_point(lx):
-
+    
     # set box size
     sb.set_lx(lx)
     pseudo.update()
@@ -66,21 +66,10 @@ def find_saddle_point(lx):
     
     if use_stress:
         #initialize arrays for stress calculation
-        if sb.get_dim()==3:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
-        elif sb.get_dim()==2:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.arange(1))
-        elif sb.get_dim()==1:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.arange(1),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.arange(1))
+        space_ky, space_kx, space_kz = np.meshgrid(
+            2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
+            2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
+            2*np.pi/sb.get_lx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
 
         mag2_k = space_kx**2 + space_ky**2 + space_kz**2
         g_k = np.exp(-mag2_k/6.0/pc.get_n_contour())
@@ -144,7 +133,8 @@ def find_saddle_point(lx):
         
         stress_array = np.multiply(np.real([stress_x, stress_y, stress_z]),
             1.0/(sb.get_n_grid())**2/pc.get_n_contour()/(Q/sb.get_volume()))
-        return stress_array[0:sb.get_dim()]
+            
+        return stress_array[-sb.get_dim():]
     else:
         return energy_total
 
@@ -159,7 +149,7 @@ max_scft_iter = 1000
 tolerance = 1e-8
 
 # Major Simulation Parameters
-f = 0.36            # A-fraction, f
+f = 0.30            # A-fraction, f
 n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
 epsilon = 2.0       # a_A/a_B, conformational asymmetry
@@ -211,7 +201,7 @@ print("Volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2]+list(sb.get_nx()),  dtype=np.float64)
+w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
 w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
@@ -256,11 +246,11 @@ time_start = time.time()
 
 # find the natural period of gyroid
 if (use_stress):
-    res = scipy.optimize.root(find_saddle_point, lx, tol=1e-6, options={'disp':True})
+    res = scipy.optimize.root(find_saddle_point, lx, tol=1e-5, options={'disp':True})
     print('Unit cell that make the stress zero: ', res.x, '(aN^1/2)')
     print('Stress in each direction: ', res.fun, )
 else:
-    res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-6, options={'disp':True})
+    res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
     print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
     print('Free energy per chain: ', res.fun, 'kT')
 
