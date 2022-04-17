@@ -28,18 +28,86 @@ CpuPseudoGaussian::~CpuPseudoGaussian()
 }
 void CpuPseudoGaussian::update()
 {
-    double step_a, step_b;
+    double bond_length_a, bond_length_b;
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
     
-    step_a = eps*eps/(f*eps*eps + (1.0-f));
-    step_b = 1.0/(f*eps*eps + (1.0-f));
+    bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
+    bond_length_b = 1.0/(f*eps*eps + (1.0-f));
     
-    set_boltz_bond(boltz_bond_a,      step_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
-    set_boltz_bond(boltz_bond_b,      step_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
-    set_boltz_bond(boltz_bond_a_half, step_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
-    set_boltz_bond(boltz_bond_b_half, step_b/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_a,      bond_length_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_b,      bond_length_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_a_half, bond_length_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_b_half, bond_length_b/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
+std::array<double,3> CpuPseudoGaussian::dq_dl()
+{
+    // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
+    // Then, we can use results of real-to-complex Fourier transform as it is.
+    // It is not problematic, since we only need the real part of stress calculation.
+    
+    const int dim  = sb->get_dim();
+    const int M    = sb->get_n_grid();
+    const int N    = pc->get_n_contour();
+    const int N_A  = pc->get_n_contour_a();
+    const int M_COMPLEX = this->n_complex_grid;
+    
+    const double eps = pc->get_epsilon();
+    const double f = pc->get_f();
+    const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
+    const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
+    const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
+    double bond_length;
+    
+    std::array<double,3> stress;
+    std::complex<double> k_q_1[M_COMPLEX];
+    std::complex<double> k_q_2[M_COMPLEX];
+    
+    double temp;
+    double fourier_basis_x[M_COMPLEX]{0.0};
+    double fourier_basis_y[M_COMPLEX]{0.0};
+    double fourier_basis_z[M_COMPLEX]{0.0};
+    
+    get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
+
+    for(int i=0; i<sb->get_dim(); i++)
+        stress[i] = 0.0;
+
+    for(int n=0; n<N+1; n++)
+    {
+        fft->forward(&q_1[n*M],k_q_1);
+        fft->forward(&q_2[n*M],k_q_2);
+        
+        if (n == 0){
+            bond_length = bond_length_a/2;
+        }
+        else if ( n < N_A){
+            bond_length = bond_length_a;
+        }
+        else if ( n == N_A){
+            bond_length = bond_length_ab;
+        }
+        else if ( n < N){
+            bond_length = bond_length_b;
+        }
+        else if ( n == N){
+            bond_length = bond_length_b/2;
+        }         
+
+        for(int i=0; i<M_COMPLEX; i++)
+        {
+            temp = bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real();
+            stress[0] += temp*fourier_basis_x[i];
+            stress[1] += temp*fourier_basis_y[i];
+            stress[2] += temp*fourier_basis_z[i];
+        }
+    }
+    for(int d=0; d<dim; d++)
+        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+    
+    return stress;
+}
+
 void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
                       double *q_1_init, double *q_2_init,
                       double *w_a, double *w_b, double &single_partition)

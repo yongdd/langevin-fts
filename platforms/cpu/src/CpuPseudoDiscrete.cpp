@@ -10,12 +10,12 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
     const int N = pc->get_n_contour();
 
     this->fft = fft;
-    this->boltz_bond_a = new double[n_complex_grid];
-    this->boltz_bond_b = new double[n_complex_grid];
+    this->boltz_bond_a  = new double[n_complex_grid];
+    this->boltz_bond_b  = new double[n_complex_grid];
     this->boltz_bond_ab = new double[n_complex_grid];
     this->q_1 = new double[M*N] {0.0};
     this->q_2 = new double[M*N] {0.0};
-    
+
     update();
 }
 CpuPseudoDiscrete::~CpuPseudoDiscrete()
@@ -27,17 +27,80 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
 }
 void CpuPseudoDiscrete::update()
 {
-    double step_a, step_b, step_ab;
+    double bond_length_a, bond_length_b, bond_length_ab;
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
+
+    bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
+    bond_length_b = 1.0/(f*eps*eps + (1.0-f));
+    bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
+
+    get_boltz_bond(boltz_bond_a,  bond_length_a,  sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_b,  bond_length_b,  sb->get_nx(), sb->get_dx(), pc->get_ds());
+    get_boltz_bond(boltz_bond_ab, bond_length_ab, sb->get_nx(), sb->get_dx(), pc->get_ds());
+}
+std::array<double,3> CpuPseudoDiscrete::dq_dl()
+{
+    // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
+    // Then, we can use results of real-to-complex Fourier transform as it is.
+    // It is not problematic, since we only need the real part of stress calculation.
     
-    step_a = eps*eps/(f*eps*eps + (1.0-f));
-    step_b = 1.0/(f*eps*eps + (1.0-f));
-    step_ab = 0.5*step_a + 0.5*step_b;
+    const int dim  = sb->get_dim();
+    const int M    = sb->get_n_grid();
+    const int N    = pc->get_n_contour();
+    const int N_A  = pc->get_n_contour_a();
+    const int M_COMPLEX = this->n_complex_grid;
     
-    set_boltz_bond(boltz_bond_a,  step_a,  sb->get_nx(), sb->get_dx(), pc->get_ds());
-    set_boltz_bond(boltz_bond_b,  step_b,  sb->get_nx(), sb->get_dx(), pc->get_ds());
-    set_boltz_bond(boltz_bond_ab, step_ab, sb->get_nx(), sb->get_dx(), pc->get_ds());
+    const double eps = pc->get_epsilon();
+    const double f = pc->get_f();
+    const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
+    const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
+    const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
+    double temp, bond_length, *boltz_bond;
+    
+    std::array<double,3> stress;
+    std::complex<double> k_q_1[M_COMPLEX];
+    std::complex<double> k_q_2[M_COMPLEX];
+    
+    double fourier_basis_x[M_COMPLEX];
+    double fourier_basis_y[M_COMPLEX];
+    double fourier_basis_z[M_COMPLEX];
+    
+    get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
+
+    for(int i=0; i<sb->get_dim(); i++)
+        stress[i] = 0.0;
+
+    for(int n=1; n<N; n++)
+    {
+        fft->forward(&q_1[(n-1)*M],k_q_1);
+        fft->forward(&q_2[ n   *M],k_q_2);
+        
+        if ( n < N_A){
+            bond_length = bond_length_a;
+            boltz_bond = boltz_bond_a;
+        }
+        else if ( n == N_A){
+            bond_length = bond_length_ab;
+            boltz_bond = boltz_bond_ab;
+        }
+        else if ( n < N){
+            bond_length = bond_length_b;
+            boltz_bond = boltz_bond_b;
+        }
+        
+        for(int i=0; i<M_COMPLEX; i++)
+        {
+            temp = bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real();
+            stress[0] += temp*fourier_basis_x[i];
+            stress[1] += temp*fourier_basis_y[i];
+            stress[2] += temp*fourier_basis_z[i];
+        }
+    }
+    for(int d=0; d<dim; d++)
+        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+
+    return stress;
 }
 void CpuPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
                                  double *q_1_init, double *q_2_init,
@@ -114,11 +177,11 @@ void CpuPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
     }
 }
 void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
-                                double *boltz_bond, double *exp_dw)
+                                 double *boltz_bond, double *exp_dw)
 {
     const int M = sb->get_n_grid();
     const int M_COMPLEX = this->n_complex_grid;
-    
+
     std::complex<double> k_q_in[M_COMPLEX];
     // 3D fourier discrete transform, forward and inplace
     fft->forward(q_in,k_q_in);

@@ -71,6 +71,10 @@ __global__ void add_lin_comb(double* dst,
                            double* src2,
                            const int M);
 
-__global__ void multi_complex_real(ftsComplex* a,
-                                 double* b, const int M);
+__global__ void multi_complex_real(ftsComplex* dst,
+                                 double* src, const int M);
+
+__global__ void multi_complex_conjugate(double* dst,
+                                 ftsComplex* src1,
+                                 ftsComplex* src2, const int M);
 #endif

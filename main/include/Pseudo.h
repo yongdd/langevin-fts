@@ -18,22 +18,28 @@ protected:
     PolymerChain *pc;
     int n_complex_grid;
 
-    void set_boltz_bond(double *boltz_bond, double step,
+    void get_boltz_bond(double *boltz_bond, double bond_length_variance,
         std::array<int,3> nx, std::array<double,3> dx, double ds);
+
+    void get_weighted_fourier_basis(
+        double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
+        std::array<int,3> nx, std::array<double,3> dx);
 public:
     Pseudo(SimulationBox *sb, PolymerChain *pc);
     virtual ~Pseudo() {};
 
+    virtual void update() = 0;
+    
     virtual void find_phi(
         double *phi_a,  double *phi_b,
         double *q1_init, double *q2_init,
         double *w_a, double *w_b, double &single_partition) = 0;
-
+        
     virtual void get_partition(
         double *q1, int n1,
         double *q2, int n2) = 0;
-
-    virtual void update() = 0;
+        
+    virtual std::array<double,3> dq_dl() = 0;
 
     // Methods for SWIG
     void find_phi(

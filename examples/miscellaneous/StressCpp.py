@@ -65,54 +65,8 @@ def find_saddle_point(lx):
             old_error_level, error_level)
     
     if use_stress:
-        #initialize arrays for stress calculation
-        if sb.get_dim()==3:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
-        elif sb.get_dim()==2:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.arange(1))
-        elif sb.get_dim()==1:
-            space_ky, space_kx, space_kz = np.meshgrid(
-                2*np.pi/sb.get_lx(1)*np.arange(1),
-                2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-                2*np.pi/sb.get_lx(2)*np.arange(1))
-
-        mag2_k = space_kx**2 + space_ky**2 + space_kz**2
-        mag2_k[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
-
-        g_k = np.exp(-mag2_k/6.0/pc.get_n_contour())
-        g_k[0,0,0] = 1.0
-
-        g_k_x = g_k * space_kx[:,:,:]**2
-        g_k_y = g_k * space_ky[:,:,:]**2
-        g_k_z = g_k * space_kz[:,:,:]**2
-        
-        # caculating stress
-        stress_x = 0.0
-        stress_y = 0.0
-        stress_z = 0.0
-        
-        for n in range(1, pc.get_n_contour()):
-            q1_out, q2_out = pseudo.get_partition(n, n+1)
-            
-            q1_out_k = np.fft.fftn(np.reshape(q1_out, sb.get_nx()))
-            q2_out_k = np.fft.fftn(np.reshape(q2_out, sb.get_nx()))
-            
-            stress_x += np.sum(q1_out_k*np.conj(q2_out_k)*g_k_x)
-            stress_y += np.sum(q1_out_k*np.conj(q2_out_k)*g_k_y)
-            stress_z += np.sum(q1_out_k*np.conj(q2_out_k)*g_k_z)
-            
-        stress_x *= 1.0/(3.0*sb.get_lx(0))
-        stress_y *= 1.0/(3.0*sb.get_lx(1))
-        stress_z *= 1.0/(3.0*sb.get_lx(2))
-        stress_array = np.multiply(np.real([stress_x, stress_y, stress_z]),
-            1.0/(sb.get_n_grid())**2/pc.get_n_contour()/(Q/sb.get_volume()))
-        return stress_array[0:sb.get_dim()]
+        stress_array = np.array(pseudo.dq_dl()[0:sb.get_dim()])/Q
+        return stress_array
     else:
         return energy_total
 
@@ -130,8 +84,9 @@ tolerance = 1e-8
 f = 0.36            # A-fraction, f
 n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
+epsilon = 2.0       # a_A/a_B, conformational asymmetry
 nx = [32,32,32]     # grids number
-lx = [3.3,3.4,3.5]  # as aN^(1/2) unit
+lx = [3.5,3.5,3.5]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
@@ -144,9 +99,58 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 # use stress for finding unit cell
 use_stress = True
 
-if chain_model.lower() != "discrete":
-    print("This is a test program. Only 'Discrete' chain model is available now")
-    exit()
+#[3.45369971] D, 31, FE
+#[3.45369961] D, 31, CPU
+#[3.45369961] D, 31, GPU
+#[3.45168121] D, 32, FE
+#[3.45168187] D, 32, CPU
+#[3.45168187] D, 32, GPU
+
+#[3.13305012 3.61800653] D, 31, FE
+#[3.13305186 3.61799861] D, 31, CPU
+#[3.13305186 3.61799861] D, 31, GPU
+
+#[3.1330375  3.61852269] D, 32, FE
+#[3.13303996 3.61851564] D, 32, CPU
+#[3.13303996 3.61851565] D, 32, GPU
+
+#[3.89024855 3.89041043 3.88891139] D, 31, FE
+#[3.89023387 3.89040209 3.88891398] D, 31, CPU
+#[3.89023386 3.89040205 3.88891401] D, 31, GPU
+
+#[3.88985882 3.88985806 3.88985764] D, 32, FE
+#[3.88986151 3.88986161 3.88986162] D, 32, CPU
+#[3.88986151 3.8898615  3.88986174] D, 32, GPU
+
+#[3.45875285] G, 31, FE
+#[3.45387881] G, 31
+#[3.45387881] G, 31, CPU
+#[3.45387881] G, 31, GPU
+
+#[3.4568217]  G, 32, FE
+#[3.45267581] G, 32
+#[3.45267581] G, 32, CPU
+#[3.45267581] G, 32, GPU
+
+#[3.13518938 3.62048445] G, 31, FE
+#[3.13220859 3.61696481] G, 31
+#[3.13220859 3.61696482] G, 31, CPU
+#[3.13220859 3.61696482] G, 31, GPU
+
+#[3.13518961 3.62091294] G, 32, FE
+#[3.13223572 3.61744164] G, 32
+#[3.13223573 3.61744165] G, 32, CPU
+#[3.13223573 3.61744164] G, 32, GPU
+
+#[3.89278648 3.89296259 3.89201472] G, 31, FE
+#[3.88905361 3.88914876 3.88848473] G, 31
+#[3.88905355 3.88914882 3.88848473] G, 31, GPU
+#[3.88905363 3.88914873 3.88848473] G, 31, CPU
+
+#[3.89260891 3.8926072  3.89260755] G, 32, FE
+#[3.88892214 3.88892232 3.88892231] G, 32
+#[3.88892215 3.88892231 3.88892231] G, 32, GPU
+#[3.88892212 3.88892234 3.8889223]  G, 32, CPU
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -157,7 +161,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
+pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am = factory.create_anderson_mixing(sb, am_n_comp,
@@ -169,6 +173,7 @@ print("Box Dimension: %d" % (sb.get_dim()))
 print("Precision: 8")
 print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
 print("%s chain model" % (pc.get_model_name()) )
+print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
@@ -183,9 +188,6 @@ q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
-#print("w_A and w_B are initialized to random field.")
-#w[0] = np.random.normal(0.0, 1.0, sb.get_n_grid())
-#w[1] = np.random.normal(0.0, 1.0, sb.get_n_grid())
 # for i in range(0,sb.get_nx(0)):
    # for j in range(0,sb.get_nx(1)):
        # for k in range(0,sb.get_nx(2)):
@@ -206,7 +208,13 @@ for i in range(0,sb.get_nx(0)):
             idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
             w[0,i,j,k] = -0.364*c1+0.133*c2
             w[1,i,j,k] = 0.302*c1-0.106*c2
+            
 w = np.reshape(w, [2, sb.get_n_grid()])
+
+#print("w_A and w_B are initialized to random field.")
+#np.random.seed(5489) # random seed for MT19937
+#w[0] = np.random.normal(0.0, 1.0, sb.get_n_grid())
+#w[1] = np.random.normal(0.0, 1.0, sb.get_n_grid())
 
 # keep the level of field value
 sb.zero_mean(w[0])

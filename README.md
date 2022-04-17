@@ -5,6 +5,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * SCFT and L-FTS   
 * AB Diblock Copolymer Melt  
 * **(beta version)** Conformational Asymmetry   
+* **(beta version)** Stress Calculation (Discrete chain only)
 * Chain Model: Gaussian, Discrete   
 * Periodic Boundaries  
 * 3D, 2D and 1D
