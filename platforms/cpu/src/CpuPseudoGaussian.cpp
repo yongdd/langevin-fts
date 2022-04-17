@@ -46,7 +46,7 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
     // Then, we can use results of real-to-complex Fourier transform as it is.
     // It is not problematic, since we only need the real part of stress calculation.
     
-    const int dim  = sb->get_dim();
+    const int DIM  = sb->get_dim();
     const int M    = sb->get_n_grid();
     const int N    = pc->get_n_contour();
     const int N_A  = pc->get_n_contour_a();
@@ -70,7 +70,7 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
     
     get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
-    for(int i=0; i<sb->get_dim(); i++)
+    for(int i=0; i<3; i++)
         stress[i] = 0.0;
 
     for(int n=0; n<N+1; n++)
@@ -94,15 +94,23 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
             bond_length = bond_length_b/2;
         }         
 
-        for(int i=0; i<M_COMPLEX; i++)
+        if ( DIM >= 3 )
         {
-            temp = bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real();
-            stress[0] += temp*fourier_basis_x[i];
-            stress[1] += temp*fourier_basis_y[i];
-            stress[2] += temp*fourier_basis_z[i];
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[0] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+        }
+        if ( DIM >= 2 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[1] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+        }
+        if ( DIM >= 1 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[2] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
         }
     }
-    for(int d=0; d<dim; d++)
+    for(int d=0; d<3; d++)
         stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
     
     return stress;

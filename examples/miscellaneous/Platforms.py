@@ -50,8 +50,9 @@ for dim in [1,2,3]:
     for chain_model in ["Discrete", "Gaussian"]:
         print("-" * 50)
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
-        print("platform, time per iter, mass error, test output")
+        print("platform, time per iter, mass error, output1 (error), dq output2 (dqdl)")
         test_output = []
+        test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
 
             factory = PlatformSelector.create_factory(platform)
@@ -134,14 +135,17 @@ for dim in [1,2,3]:
                     np.reshape(w_diff, 2*sb.get_n_grid()),
                     old_error_level, error_level)
             
+            dqdl = np.linalg.norm(np.array(pseudo.dq_dl()[-sb.get_dim():]))/Q
             test_output.append(error_level)
+            test_dqdl.append(dqdl)
+            
             # estimate execution time
             time_duration = time.time() - time_start
-            print("%8s: %13.5f, %10.3E, %12.9f" %
-                (platform, time_duration/max_scft_iter, mass_error, error_level) )
+            print("%8s: %13.5f, %10.3E, %12.9f, %12.9f" %
+                (platform, time_duration/max_scft_iter, mass_error, error_level, dqdl) )
         
         # Test error
-        print("Standard deviation: " ,np.std(test_output))
+        print("Standard deviations: " ,np.std(test_output), np.std(test_dqdl))
         if np.std(test_output) > 1e-8:
             print("Each platform should give the same result")
             sys.exit(-1);

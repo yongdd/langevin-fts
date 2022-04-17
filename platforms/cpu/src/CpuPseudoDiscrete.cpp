@@ -44,60 +44,71 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // Then, we can use results of real-to-complex Fourier transform as it is.
     // It is not problematic, since we only need the real part of stress calculation.
-    
-    const int dim  = sb->get_dim();
+
+    const int DIM  = sb->get_dim();
     const int M    = sb->get_n_grid();
     const int N    = pc->get_n_contour();
     const int N_A  = pc->get_n_contour_a();
     const int M_COMPLEX = this->n_complex_grid;
-    
+
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
     const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
     const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
     const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
     double temp, bond_length, *boltz_bond;
-    
+
     std::array<double,3> stress;
     std::complex<double> k_q_1[M_COMPLEX];
     std::complex<double> k_q_2[M_COMPLEX];
-    
+
     double fourier_basis_x[M_COMPLEX];
     double fourier_basis_y[M_COMPLEX];
     double fourier_basis_z[M_COMPLEX];
-    
+
     get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
-    for(int i=0; i<sb->get_dim(); i++)
+    for(int i=0; i<3; i++)
         stress[i] = 0.0;
 
     for(int n=1; n<N; n++)
     {
         fft->forward(&q_1[(n-1)*M],k_q_1);
         fft->forward(&q_2[ n   *M],k_q_2);
-        
-        if ( n < N_A){
+
+        if ( n < N_A)
+        {
             bond_length = bond_length_a;
             boltz_bond = boltz_bond_a;
         }
-        else if ( n == N_A){
+        else if ( n == N_A)
+        {
             bond_length = bond_length_ab;
             boltz_bond = boltz_bond_ab;
         }
-        else if ( n < N){
+        else if ( n < N)
+        {
             bond_length = bond_length_b;
             boltz_bond = boltz_bond_b;
         }
-        
-        for(int i=0; i<M_COMPLEX; i++)
+
+        if ( DIM >= 3 )
         {
-            temp = bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real();
-            stress[0] += temp*fourier_basis_x[i];
-            stress[1] += temp*fourier_basis_y[i];
-            stress[2] += temp*fourier_basis_z[i];
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[0] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+        }
+        if ( DIM >= 2 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[1] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+        }
+        if ( DIM >= 1 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                stress[2] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
         }
     }
-    for(int d=0; d<dim; d++)
+    for(int d=0; d<3; d++)
         stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
 
     return stress;

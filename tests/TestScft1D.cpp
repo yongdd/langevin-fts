@@ -112,7 +112,7 @@ int main()
             for(int k=0; k<sb->get_nx(2); k++)
             {
                 idx = i*sb->get_nx(1)*sb->get_nx(2) + j*sb->get_nx(2) + k;
-                phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
+                phia[idx]= cos(2.0*PI*i/2.74)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/4.68)*0.1;
             }
 
     for(int i=0; i<sb->get_n_grid(); i++)

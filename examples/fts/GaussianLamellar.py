@@ -107,7 +107,7 @@ phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
     saddle_max_iter, saddle_tolerance, verbose_level)
     
 # init structure function
-sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, sb.get_nx()[:sb.get_dim()])),np.float64)
+sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, sb.get_nx())),np.float64)
 
 #------------------ run ----------------------
 print("---------- Run ----------")

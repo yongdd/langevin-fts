@@ -19,25 +19,25 @@ SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx
 
     for(int i=0; i<dim; i++)
     {
-        nx[i] = new_nx[i];
-        lx[i] = new_lx[i];
-        dx[i] = new_lx[i]/new_nx[i];
+        nx[i+3-dim] = new_nx[i];
+        lx[i+3-dim] = new_lx[i];
+        dx[i+3-dim] = new_lx[i]/new_nx[i];
     }
     if (dim == 2 )
     {
-        nx[2] = 1;
-        lx[2] = 1.0;
-        dx[2] = 1.0;
+        nx[0] = 1;
+        lx[0] = 1.0;
+        dx[0] = 1.0;
     }
     else if (dim == 1 )
     {
+        nx[0] = 1;
+        lx[0] = 1.0;
+        dx[0] = 1.0;
+
         nx[1] = 1;
         lx[1] = 1.0;
         dx[1] = 1.0;
-
-        nx[2] = 1;
-        lx[2] = 1.0;
-        dx[2] = 1.0;
     }
     // the number of grids
     n_grid = nx[0]*nx[1]*nx[2];
@@ -107,21 +107,21 @@ void SimulationBox::set_lx(std::vector<double> new_lx)
 
     for(int i=0; i<dim; i++)
     {
-        lx[i] = new_lx[i];
-        dx[i] = new_lx[i]/nx[i];
+        lx[i+3-dim] = new_lx[i];
+        dx[i+3-dim] = new_lx[i]/nx[i+3-dim];
     }
     if (dim == 2 )
     {
-        lx[2] = 1.0;
-        dx[2] = 1.0;
+        lx[0] = 1.0;
+        dx[0] = 1.0;
     }
     else if (dim == 1 )
     {
+        lx[0] = 1.0;
+        dx[0] = 1.0;
+
         lx[1] = 1.0;
         dx[1] = 1.0;
-
-        lx[2] = 1.0;
-        dx[2] = 1.0;
     }
     // weight factor for integral
     for(int i=0; i<n_grid; i++)

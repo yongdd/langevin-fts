@@ -29,12 +29,12 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     }
     else if(sb->get_dim() == 2)
     {
-        n_grid[0] = sb->get_nx(0);
-        n_grid[1] = sb->get_nx(1);
+        n_grid[0] = sb->get_nx(1);
+        n_grid[1] = sb->get_nx(2);
     }
     else if(sb->get_dim() == 1)
     {
-        n_grid[0] = sb->get_nx(0);
+        n_grid[0] = sb->get_nx(2);
     }
     cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
     cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
@@ -119,7 +119,7 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-    const int dim  = sb->get_dim();
+    const int DIM  = sb->get_dim();
     const int M    = sb->get_n_grid();
     const int N    = pc->get_n_contour();
     const int N_A  = pc->get_n_contour_a();
@@ -157,7 +157,7 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
 
     thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
-    for(int i=0; i<sb->get_dim(); i++)
+    for(int i=0; i<3; i++)
         stress[i] = 0.0;
 
     for(int n=0; n<N+1; n++)
@@ -183,16 +183,23 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
         }
         
         multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
-        
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length, M_COMPLEX);
-        stress[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length, M_COMPLEX);
-        stress[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length, M_COMPLEX);
-        stress[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-    
+        if ( DIM >= 3 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length, M_COMPLEX);
+            stress[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
+        if ( DIM >= 2 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length, M_COMPLEX);
+            stress[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
+        if ( DIM >= 1 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length, M_COMPLEX);
+            stress[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
     }
-    for(int d=0; d<dim; d++)
+    for(int d=0; d<3; d++)
         stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
 
     cudaFree(d_fourier_basis_x);

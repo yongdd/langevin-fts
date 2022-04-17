@@ -66,21 +66,11 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
 np.random.seed(5489)
 
 # arrays for exponential time differencing
-if sb.get_dim()==3:
-    space_ky, space_kx, space_kz = np.meshgrid(
-        2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-        2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-        2*np.pi/sb.get_lx(2)*np.arange(sb.get_nx(2)//2+1))
-elif sb.get_dim()==2:
-    space_ky, space_kx, space_kz = np.meshgrid(
-        2*np.pi/sb.get_lx(1)*np.arange(sb.get_nx(1)//2+1),
-        2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-        2*np.pi/sb.get_lx(2)*np.arange(1))
-elif sb.get_dim()==1:
-    space_ky, space_kx, space_kz = np.meshgrid(
-        2*np.pi/sb.get_lx(1)*np.arange(1),
-        2*np.pi/sb.get_lx(0)*np.arange(sb.get_nx(0)//2+1),
-        2*np.pi/sb.get_lx(2)*np.arange(1))
+space_ky, space_kx, space_kz = np.meshgrid(
+    2*np.pi/sb.get_lx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
+    2*np.pi/sb.get_lx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
+    2*np.pi/sb.get_lx(2)*np.arange(sb.get_nx(2)//2+1))
+
 mag2_k = (space_kx**2 + space_ky**2 + space_kz**2)/6.0
 mag2_k[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
 

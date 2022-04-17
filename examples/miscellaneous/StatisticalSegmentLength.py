@@ -18,7 +18,7 @@ n_contour = 100           # segment number, N
 chi_n = 20               # Flory-Huggins Parameters * N
 epsilon = 2.0            # a_A/a_B, conformational asymmetry
 nx = [64,64,64]          # grids number
-lx = [6.,4.,8.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Gaussian" # choose among [Gaussian, Discrete]
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
@@ -54,21 +54,10 @@ q1_init = np.zeros (   sb.get_n_grid(),  dtype=np.float64)
 q2_init = np.zeros (   sb.get_n_grid(),  dtype=np.float64)
 q1_init[0] = np.prod(sb.get_nx())/np.prod(sb.get_lx())
 
-if sb.get_dim()==3:
-    space_y, space_x, space_z = np.meshgrid(
-        sb.get_lx(1)/sb.get_nx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-        sb.get_lx(0)/sb.get_nx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-        sb.get_lx(2)/sb.get_nx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
-elif sb.get_dim()==2:
-    space_y, space_x, space_z = np.meshgrid(
-        sb.get_lx(1)/sb.get_nx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-        sb.get_lx(0)/sb.get_nx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-        sb.get_lx(2)/sb.get_nx(2)*np.arange(1))
-elif sb.get_dim()==1:
-    space_y, space_x, space_z = np.meshgrid(
-        sb.get_lx(1)/sb.get_nx(1)*np.arange(1),
-        sb.get_lx(0)/sb.get_nx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-        sb.get_lx(2)/sb.get_nx(2)*np.arange(1))
+space_y, space_x, space_z = np.meshgrid(
+    sb.get_lx(1)/sb.get_nx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
+    sb.get_lx(0)/sb.get_nx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
+    sb.get_lx(2)/sb.get_nx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
 squared_x = space_x**2 + space_y**2 + space_z**2
 
 eps = pc.get_epsilon()
