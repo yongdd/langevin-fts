@@ -45,7 +45,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 0.8         # langevin step interval, delta tau*N
+langevin_dt = 0.8        # langevin step interval, delta tau*N
 langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 
@@ -83,7 +83,6 @@ print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
 print("Volume: %f" % (sb.get_volume()) )
-
 print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
