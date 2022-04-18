@@ -57,8 +57,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
-+ Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
++ Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces resonable results.  
 + Matlab and Python tools for visualization and renormalization are included in `tools` folder.   
 
 # Developer Guide
@@ -71,20 +71,14 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 #### Parameter Parser  
   A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
 
+#### Python Binding  
+  `SWIG` will generate Python interfaces for the C++ headers listed in the `main/swig/langevinfts.i`. Please read the page below to learn how to handle C++ data types with NumPy.   
+   https://numpy.org/doc/stable/reference/swig.interface-file.html    
+
 # References
 #### CUDA Implementation
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
-#### L-FTS adopting Gaussian Chain Model
-+ T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Computationally Efficient Field-Theoretic Simulations for Block Copolymer Melts, *Macromolecules* **2019**, 52, 8840   
-+ M.W. Masen, Field theoretic approach for block polymer melts: SCFT and FTS, *J. Chem. Phys.* **2020**, 152, 110901   
-#### L-FTS adopting Discrete Chain Model
-+ T.M. Beardsley, and M.W. Matsen, Fluctuation correction for the order–disorder transition of diblock copolymer melts, *J. Chem. Phys.* **2021**, 154, 124902   
+#### Langevin FTS
 + M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
-#### Renormalization of the Flory-Huggins Parameter
-+ B. Vorselaars, P. Stasiak, and M.W. Matsen, Field-Theoretic Simulation of Block Copolymers at Experimentally Relevant Molecular Weights, *Macromolecules* **2015**, 48, 9071
-+ T.M. Beardsley, and M.W. Matsen, Calibration of the Flory-Huggins interaction parameter in field-theoretic simulations, *J. Chem. Phys.* **2019**, 150, 174902
-+ T.M. Beardsley, and M.W. Matsen, Fluctuation correction for the order–disorder transition of diblock copolymer melts, *J. Chem. Phys.* **2021**, 154, 124902
-#### Field-Update Algorithms
-+ D.L. Vigil, K.T. Delaney, and G.H. Fredrickson, Quantitative Comparison of Field-Update Algorithms for Polymer SCFT and FTS, *Macromolecules* **2021**, 54, 21, 9804
 #### My Work
 + D. Yong, Y. Kim, S. Jo, D.Y. Ryu, and .U. Kim*, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces, *Macromolecules* **2021**, 54, 11304   
