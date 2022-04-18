@@ -64,6 +64,7 @@ def find_saddle_point(lx):
             np.reshape(w_out,  2*sb.get_n_grid()),
             np.reshape(w_diff, 2*sb.get_n_grid()),
             old_error_level, error_level)
+
     return energy_total
 
 # -------------- initialize ------------
@@ -73,17 +74,16 @@ os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
-max_scft_iter = 1000
-tolerance = 1e-8
+max_scft_iter = 2000
+tolerance = 1e-7
 
 # Major Simulation Parameters
-f = 0.3           # A-fraction, f
+f = 0.25          # A-fraction, f
 n_contour = 100   # segment number, N
 chi_n = 25        # Flory-Huggins Parameters * N
 epsilon = 2.0     # a_A/a_B, conformational asymmetry, default = 1.0
-                  # currently, it does not work well with high epsilon and high chiN
-nx = [64,64,64]   # grid numbers
-lx = [4.,4.,4.]   # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+nx = [64,64,32]   # grid numbers
+lx = [7.0,7.0,4.0]   # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Gaussian"    # choose among [Gaussian, Discrete]
 
 # Anderson mixing
@@ -129,9 +129,17 @@ q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
-print("w_A and w_B are initialized to A15 phase.")
-sphere_positions = [[0,0,0],[1/4,1/2,0],[3/4,1/2,0],[1/2,0,1/4],
-                    [1/2,0,3/4],[0,1/4,1/2],[0,3/4,1/2],[1/2,1/2,1/2]]
+print("w_A and w_B are initialized to Sigma phase.")
+# [Ref: https://doi.org/10.3390/app2030654]
+sphere_positions = [[0.01,0.01,0.01],[0.51,0.51,0.52], #A
+[0.40,0.40,0.01],[0.61,0.61,0.01],[0.10,0.91,0.52],[0.91,0.10,0.52], #B
+[0.13,0.47,0.01],[0.26,0.95,0.01],[0.47,0.13,0.01],[0.95,0.26,0.01], #C
+[0.04,0.64,0.52],[0.38,0.97,0.52],[0.64,0.04,0.52],[0.97,0.38,0.52], #C
+[0.07,0.76,0.01],[0.54,0.89,0.01],[0.76,0.07,0.01],[0.89,0.54,0.01], #D
+[0.25,0.44,0.52],[0.44,0.25,0.52],[0.57,0.77,0.52],[0.77,0.57,0.52], #D
+[0.19,0.19,0.26],[0.32,0.70,0.26],[0.70,0.32,0.26],[0.83,0.83,0.26], #E
+[0.19,0.19,0.77],[0.32,0.70,0.77],[0.70,0.32,0.77],[0.83,0.83,0.77]] #E
+
 for x,y,z in sphere_positions:
     mx, my, mz = np.round((np.array([x, y, z])*sb.get_nx())).astype(np.int32)
     w[0,mx,my,mz] = -1/np.prod(sb.get_dx())
@@ -148,9 +156,11 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 time_start = time.time()
 
 # find the natural period of gyroid
-res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
+res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-4, options={'disp':True})
 print('Unit cell that minimizes the free energy: ', np.round(res.x, 4), '(aN^1/2)')
 print('Free energy per chain: ', np.round(res.fun,6), 'kT')
+
+#find_saddle_point(lx)
 
 # estimate execution time
 time_duration = time.time() - time_start

@@ -82,7 +82,7 @@ f = 0.36            # A-fraction, f
 n_contour = 100     # segment number, N
 chi_n = 20          # Flory-Huggins Parameters * N
 epsilon = 1.0       # a_A/a_B, conformational asymmetry
-nx = [32,32,32]     # grids number
+nx = [32,32,32]     # grid numbers
 lx = [3.3,3.3,3.3]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
@@ -159,8 +159,6 @@ res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':T
 print('Unit cell that minimizes the free energy: ', np.round(res.x, 4), '(aN^1/2)')
 print('Free energy per chain: ', np.round(res.fun,6), 'kT')
 
-#print(res)
-
 # estimate execution time
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
@@ -168,6 +166,6 @@ print("total time: %f " % time_duration)
 # save final results
 phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
 savemat("fields.mat", mdic)
