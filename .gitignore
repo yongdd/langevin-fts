@@ -5,6 +5,7 @@ fields_*.*
 fields.mat
 structure_function*.mat
 3d_isosurface.html
+examples/scft/plot_3d_isodensity.m
 *.dat
 *.out
 *.sh.*
