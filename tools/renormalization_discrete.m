@@ -1,4 +1,3 @@
-% This script is only valid only for conformationally symmetric diblock
 clear all;
 
 load("fields_000200.mat");
@@ -17,10 +16,10 @@ if strcmpi(chain_model,'Discrete')
     % additional contribution is calculated using continuous chain
     sum = sum +  2/sqrt(0.5+bond_t)*(3*double(N)/(2*pi))^1.5*dv;
     z_inf = 1 - (1 + 2*sum)/vcellrho;
-elseif strcmpi(chain_model,'Gaussian')
-    func = @(x,y,z) stucture_function_RPA_athermal(f, sqrt(x.^2+y.^2+z.^2)/sqrt(6));
-    int = integral3(func, -pi/dx(1), pi/dx(1), -pi/dx(2), pi/dx(2), -pi/dx(3), pi/dx(3));
-    z_inf = 1 - int/sqrt(double(nbar))/(8*pi^3*f*(1-f));
+%elseif strcmpi(chain_model,'Gaussian')
+    %func = @(x,y,z) stucture_function_RPA_athermal(f, sqrt(x.^2+y.^2+z.^2)/sqrt(6));
+    %int = integral3(func, -pi/dx(1), pi/dx(1), -pi/dx(2), pi/dx(2), -pi/dx(3), pi/dx(3));
+    %z_inf = 1 - int/sqrt(double(nbar))/(8*pi^3*f*(1-f));
 end
 
 fprintf("z_inf: %.7f \n", z_inf);

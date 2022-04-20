@@ -112,7 +112,7 @@ sb.zero_mean(w_plus)
 sb.zero_mean(w_minus)
 
 # find saddle point of the pressure field
-phi_a, phi_b, _, _ = find_saddle_point(pc, sb, pseudo, am,
+phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
@@ -131,7 +131,7 @@ for langevin_step in range(1, langevin_max_step+1):
     w_minus_copy = w_minus.copy()
     g_minus_copy = g_minus.copy()
     w_minus += -exp_kernel_minus*g_minus + exp_kernel_noise*normal_noise
-    phi_a, phi_b, _, _ = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus, 
         saddle_max_iter, saddle_tolerance, verbose_level)
 
@@ -140,7 +140,7 @@ for langevin_step in range(1, langevin_max_step+1):
     w_minus += exp_kernel_second*(
          - g_minus      + kernel_minus*w_minus
          + g_minus_copy - kernel_minus*w_minus_copy)
-    phi_a, phi_b, Q, _ = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, Q = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus, 
         saddle_max_iter, saddle_tolerance, verbose_level)
     lnQ_list.append(-np.log(Q/sb.get_volume()))

@@ -1,39 +1,70 @@
-# This program will produce a lamellar phase from random initial condition
-# For test purpose, this program stops after 2000 Langevin steps
-# change "langevin_max_step" to a larger number for the actual simulation
-#
 # -------------- Reference ------------
-# T.M. Beardsley, R.K.W. Spencer, and M.W. Matsen, Macromolecules 2019, 52, 8840
-# https://doi.org/10.1021/acs.macromol.9b01904
+# T.M. Beardsley, and M.W. Matsen, J. Chem. Phys. 2021, 154, 124902 
+# https://doi.org/10.1063/5.0046167
 
 import sys
 import os
 import time
 import pathlib
 import numpy as np
-from scipy.io import savemat
+import scipy.special as sp
+from scipy.io import loadmat, savemat
 from langevinfts import *
 from find_saddle_point import *
 
-# -------------- simulation parameters ------------
+def renormal_psum(lx, nx, n_contour, nbar, summax=100):
 
+    # cell volume * rho_0
+    dx = np.array(lx)/np.array(nx)
+    dv = np.prod(dx)
+    vcellrho = n_contour*np.sqrt(nbar)*dv
+
+    # z_infinity
+    sum_p_i = 0.0
+    prod_alpha = lambda i, dx, n_contour: \
+        dx*np.sqrt(3*n_contour/(2*np.pi*i))*sp.erf(np.pi/dx*np.sqrt(i/6/n_contour))
+    prod_alpha_array = np.zeros(summax)
+    for i in range(0,summax):
+        prod_alpha_array[i] = prod_alpha(i+1,lx[0]/nx[0],n_contour) \
+                               *prod_alpha(i+1,lx[1]/nx[1],n_contour) \
+                               *prod_alpha(i+1,lx[2]/nx[2],n_contour)
+        sum_p_i += prod_alpha_array[i]
+    sum_p_i += np.power(3*n_contour/(2*np.pi),1.5)*dv*2/np.sqrt(0.5+summax)
+    z_inf = 1-(1+2*sum_p_i)/vcellrho
+    
+    # d(z_infinity)/dl
+    sum_p_i = np.array([0.0, 0.0, 0.0])
+    for i in range(0,summax):
+        for n in range(0,3):
+            sum_p_i[n] += np.exp(-(i+1)*np.pi**2/(6*dx[n]**2*n_contour)) \
+                *prod_alpha_array[i]/prod_alpha(i+1,dx[n],n_contour)
+    dz_inf_dl = (1+2*sum_p_i)/vcellrho/np.array(lx)
+    
+    return z_inf, dz_inf_dl
+
+# -------------- simulation parameters ------------
+# Cuda environment variables
+# os.environ["CUDA_VISIBLE_DEVICES"]= "1"
 # OpenMP environment variables
-os.environ["OMP_STACKSIZE"] = "1G"
+
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
+input_data = loadmat("CylinderInput.mat", squeeze_me=True)
+
 # Simulation Box
-nx = [32, 32, 32]
-lx = [8.0, 8.0, 8.0]
+nx = [64, 48, 48]
+lx = [6.4, 5.52, 4.8151]
 
 # Polymer Chain
-f = 0.5
-n_contour = 16
-chi_n = 20
-chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
+n_contour = 90
+f = 1.0/3.0
+chi_n = 21.0
+chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
 saddle_tolerance = 1e-4
@@ -45,9 +76,9 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 0.8        # langevin step interval, delta tau*N
-langevin_nbar = 1024     # invariant polymerization index
-langevin_max_step = 2000
+langevin_dt = 0.8     # langevin step interval, delta tau*N
+langevin_nbar = 10000  # invariant polymerization index
+langevin_max_step = 200
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
@@ -93,9 +124,9 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 
-print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
-w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
+print("w_minus and w_plus are initialized to cylinder")
+w_plus  = (input_data["w_a"] + input_data["w_b"])/2
+w_minus = (input_data["w_a"] - input_data["w_b"])/2
 
 # keep the level of field value
 sb.zero_mean(w_plus)
@@ -104,9 +135,6 @@ sb.zero_mean(w_minus)
 phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
-    
-# init structure function
-sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, sb.get_nx())),np.float64)
 
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -128,34 +156,39 @@ for langevin_step in range(1, langevin_max_step+1):
     # update w_minus: correct step
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, Q = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus,
         saddle_max_iter, saddle_tolerance, verbose_level)
-        
-    # calcaluate structure function
-    if langevin_step % 10 == 0:
-        sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, sb.get_nx()))/sb.get_n_grid())**2
-
-    # save structure function
-    if langevin_step % 1000 == 0:
-        sf_average *= 10/1000*sb.get_volume()*np.sqrt(langevin_nbar)/pc.get_chi_n()**2
-        sf_average -= 1.0/(2*pc.get_chi_n())
-        mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
-        "chain_model":pc.get_model_name(),
-        "dt":langevin_dt, "nbar":langevin_nbar,
-        "structure_function":sf_average}
-        savemat( "structure_function_%06d.mat" % (langevin_step), mdic)
-        sf_average[:,:,:] = 0.0
 
     # write density and field data
-    if langevin_step % 1000 == 0:
+    if langevin_step % 100 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
             "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
             "random_seed":np.random.RandomState().get_state(),
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
+        
+    # caculate stress
+    
+        # d(Q/V)/d(Lx) / (Q/V)
+    stress_dq_dl = -np.array(pseudo.dq_dl())/Q
+        
+        # d(z_inf)/d(Lx)
+    w_minus_deriv = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
+    stress_z_inf = -w_minus_deriv*pc.get_chi_n()/z_inf*dz_inf_dl
+    stress = stress_dq_dl + stress_z_inf
+    
+    # box move
+    box_lambda = stress[0]*sb.get_lx(0)-stress[1]*sb.get_lx(1)/2-stress[2]*sb.get_lx(2)/2
+    new_box_lambda = 1 - 0.01*box_lambda
+    new_lx = np.array([sb.get_lx(0)*new_box_lambda, sb.get_lx(1)/np.sqrt(new_box_lambda), sb.get_lx(2)/np.sqrt(new_box_lambda)])
+    print("new volume: ", np.prod(new_lx), "new Lx:", new_lx)
+    
+    # change box size
+    sb.set_lx(new_lx)
+    pseudo.update()
 
 # estimate execution time
 time_duration = time.time() - time_start

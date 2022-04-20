@@ -3,6 +3,9 @@ load("fields_002000.mat");
 v = reshape(phi_a,[nx(3), nx(2), nx(1)]);
 v = permute(v,[2 3 1]);
 
+nx = double(nx);
+dx = lx./nx;
+
 % Colormap
 h=figure;
 c = jet(1024);
@@ -10,8 +13,7 @@ colormap(c)
 caxis([0.0 1])
 
 % Mesh
-[x,y,z] = meshgrid(1:nx(1),1:nx(2),1:nx(3));
-x = double(x); y = double(y); z = double(z);
+[x,y,z] = meshgrid(dx(1):dx(1):lx(1),dx(2):dx(2):lx(2),dx(3):dx(3):lx(3));
 %v = smooth3(v);
 isovalue = f;
 
@@ -24,10 +26,10 @@ p2 = patch(isocaps(x,y,z,v,isovalue),'FaceColor','interp',...
 alpha(p1,0.5)
 
 % View & Light
-axis([1 nx(1) 1 nx(2) 1 nx(3)])
-axis off
+%axis([0 lx(1) 0 lx(2) 0 lx(3)])
+%axis off
 lighting gouraud
-daspect(double(nx)./lx)     % to change the ratio of axis
+daspect([1 1 1])
 view(30,20)
 camlight right
 
