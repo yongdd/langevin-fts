@@ -40,6 +40,7 @@ def find_saddle_point(pc, sb, pseudo, am,
             energy_old = energy_total
             energy_total  = -np.log(Q/sb.get_volume())
             energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
+            energy_total += pc.get_chi_n()/4
             energy_total -= sb.integral(w_plus)/sb.get_volume()
 
             # check the mass conservation
@@ -52,4 +53,4 @@ def find_saddle_point(pc, sb, pseudo, am,
             
         # calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
-    return phi_a, phi_b
+    return phi_a, phi_b, Q

@@ -78,21 +78,15 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
         fft->forward(&q_1[n*M],k_q_1);
         fft->forward(&q_2[n*M],k_q_2);
         
-        if (n == 0){
-            bond_length = bond_length_a/2;
-        }
-        else if ( n < N_A){
+        if ( n < N_A){
             bond_length = bond_length_a;
         }
         else if ( n == N_A){
             bond_length = bond_length_ab;
         }
-        else if ( n < N){
+        else if ( n <= N){
             bond_length = bond_length_b;
         }
-        else if ( n == N){
-            bond_length = bond_length_b/2;
-        }         
 
         if ( DIM >= 3 )
         {

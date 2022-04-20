@@ -166,20 +166,14 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
         cudaMemcpy(&d_q_in_2m[M], &d_q_2[(N-n)*M], sizeof(double)*M,cudaMemcpyDeviceToDevice);
         cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
     
-        if (n == 0){
-            bond_length = bond_length_a/2;
-        }
-        else if ( n < N_A){
+        if ( n < N_A){
             bond_length = bond_length_a;
         }
         else if ( n == N_A){
             bond_length = bond_length_ab;
         }
-        else if ( n < N){
+        else if ( n <= N){
             bond_length = bond_length_b;
-        }
-        else if ( n == N){
-            bond_length = bond_length_b/2;
         }
         
         multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);

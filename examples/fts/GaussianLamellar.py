@@ -69,20 +69,20 @@ am     = factory.create_anderson_mixing(sb, am_n_comp,
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
 
-# random seed for MT19937
-np.random.seed(5489)
-print("Random Number Generator: ", np.random.RandomState().get_state()[0])
-
+## random seed for MT19937
+#np.random.seed(5489)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
 print("Precision: 8")
-print("chi_n: %f, f: %f, NN: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
 print("%s chain model" % (pc.get_model_name()) )
+print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
 print("Volume: %f" % (sb.get_volume()) )
+
 print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
@@ -101,7 +101,7 @@ w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 sb.zero_mean(w_plus)
 sb.zero_mean(w_minus)
 
-phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
+phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
     
@@ -121,14 +121,14 @@ for langevin_step in range(1, langevin_max_step+1):
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
     lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus += -lambda1*langevin_dt + normal_noise
-    phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     # update w_minus: correct step
     lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    phi_a, phi_b = find_saddle_point(pc, sb, pseudo, am,
+    phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
         q1_init, q2_init, w_plus, w_minus,
         saddle_max_iter, saddle_tolerance, verbose_level)
         
@@ -141,7 +141,7 @@ for langevin_step in range(1, langevin_max_step+1):
         sf_average *= 10/1000*sb.get_volume()*np.sqrt(langevin_nbar)/pc.get_chi_n()**2
         sf_average -= 1.0/(2*pc.get_chi_n())
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":pc.get_model_name(),
         "dt":langevin_dt, "nbar":langevin_nbar,
         "structure_function":sf_average}
@@ -151,7 +151,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # write density and field data
     if langevin_step % 1000 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
+            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
             "random_seed":np.random.RandomState().get_state(),
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
