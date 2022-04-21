@@ -1,6 +1,9 @@
-# -------------- Reference ------------
-# T.M. Beardsley, and M.W. Matsen, J. Chem. Phys. 2021, 154, 124902 
-# https://doi.org/10.1063/5.0046167
+# (Caution!) In my experiment, box-altering move is accurate 
+# only when simulation cell dV is close to cubic.
+# If the cell changes too much from cubic during box-altering move,
+# redo the simulation with prefered sized cubic box.
+# In this example, initial box size is [4.46,4.46,4.46],
+# but prefered box size is about [4.36,4.36,4.36].
 
 import sys
 import os
@@ -54,16 +57,16 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
-input_data = loadmat("CylinderInput.mat", squeeze_me=True)
+input_data = loadmat("LamellarInput.mat", squeeze_me=True)
 
 # Simulation Box
-nx = [64, 48, 48]
-lx = [6.4, 5.52, 4.8151]
+nx = [40, 40, 40]
+lx = [4.46,4.46,4.46]
 
 # Polymer Chain
 n_contour = 90
-f = 1.0/3.0
-chi_n = 21.0
+f = 0.5
+chi_n = 16.75
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
@@ -124,7 +127,7 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 
-print("w_minus and w_plus are initialized to cylinder")
+print("w_minus and w_plus are initialized to lamellar")
 w_plus  = (input_data["w_a"] + input_data["w_b"])/2
 w_minus = (input_data["w_a"] - input_data["w_b"])/2
 
@@ -177,12 +180,12 @@ for langevin_step in range(1, langevin_max_step+1):
     z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
     dfield_dl = -dfield_dchin*pc.get_chi_n()/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
-    #print(-dlogQ_dl, dfield_dl, dH_dl)
+    print(-dlogQ_dl, dfield_dl, dH_dl)
     
     # box move
-    box_lambda = box_lambda - 0.01 * (dH_dl[0]*sb.get_lx(0)-dH_dl[1]*sb.get_lx(1)/2-dH_dl[2]*sb.get_lx(2)/2)/box_lambda
+    box_lambda = box_lambda - 0.01*(dH_dl[0]*sb.get_lx(0)-dH_dl[1]*sb.get_lx(1)/2-dH_dl[2]*sb.get_lx(2)/2)/box_lambda
     new_lx = np.array([init_lx[0]*box_lambda, init_lx[1]/np.sqrt(box_lambda), init_lx[2]/np.sqrt(box_lambda)])
-    print("new volume: ", np.prod(new_lx), "new Lx:", new_lx)
+    print("new Lx:", new_lx)
     
     # change box size
     sb.set_lx(new_lx)
