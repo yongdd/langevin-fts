@@ -136,10 +136,12 @@ phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 
+# for box move
+init_lx = sb.get_lx()
+box_lambda = 1.0
 #------------------ run ----------------------
 print("---------- Run ----------")
 time_start = time.time()
-
 print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
@@ -170,20 +172,16 @@ for langevin_step in range(1, langevin_max_step+1):
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
         
     # caculate stress
-    
-        # d(Q/V)/d(Lx) / (Q/V)
-    stress_dq_dl = -np.array(pseudo.dq_dl())/Q
-        
-        # d(z_inf)/d(Lx)
-    w_minus_deriv = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
+    dlogQ_dl = np.array(pseudo.dq_dl())/Q
+    dfield_dchin = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
     z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
-    stress_z_inf = -w_minus_deriv*pc.get_chi_n()/z_inf*dz_inf_dl
-    stress = stress_dq_dl + stress_z_inf
+    dfield_dl = -dfield_dchin*pc.get_chi_n()/z_inf*dz_inf_dl
+    dH_dl = -dlogQ_dl + dfield_dl
+    #print(-dlogQ_dl, dfield_dl, dH_dl)
     
     # box move
-    box_lambda = stress[0]*sb.get_lx(0)-stress[1]*sb.get_lx(1)/2-stress[2]*sb.get_lx(2)/2
-    new_box_lambda = 1 - 0.01*box_lambda
-    new_lx = np.array([sb.get_lx(0)*new_box_lambda, sb.get_lx(1)/np.sqrt(new_box_lambda), sb.get_lx(2)/np.sqrt(new_box_lambda)])
+    box_lambda = box_lambda - 0.01 * (dH_dl[0]*sb.get_lx(0)-dH_dl[1]*sb.get_lx(1)/2-dH_dl[2]*sb.get_lx(2)/2)/box_lambda
+    new_lx = np.array([init_lx[0]*box_lambda, init_lx[1]/np.sqrt(box_lambda), init_lx[2]/np.sqrt(box_lambda)])
     print("new volume: ", np.prod(new_lx), "new Lx:", new_lx)
     
     # change box size

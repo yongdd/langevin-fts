@@ -26,7 +26,7 @@ p2 = patch(isocaps(x,y,z,v,isovalue),'FaceColor','interp',...
 alpha(p1,0.5)
 
 % View & Light
-%axis([0 lx(1) 0 lx(2) 0 lx(3)])
+axis([0 lx(1) 0 lx(2) 0 lx(3)])
 %axis off
 lighting gouraud
 daspect([1 1 1])

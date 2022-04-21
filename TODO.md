@@ -6,3 +6,6 @@
 7. Multi GPU CUDA
 8. GPU bandwith test
 9. UnitTest: Anderson Mixing
+10. Validation Check for Pseudo Parameters
+11. UnitTest: example/miscellaneous
+12. UnitTest: Stress
