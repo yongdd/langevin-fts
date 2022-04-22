@@ -65,7 +65,7 @@ pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(sb, am_n_comp,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
-# standard deviation of normal noise for single segment
+# standard deviation of normal noise
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
 
@@ -99,7 +99,6 @@ w_minus = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
 
 # keep the level of field value
 sb.zero_mean(w_plus)
-sb.zero_mean(w_minus)
 
 phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
     q1_init, q2_init, w_plus, w_minus,
