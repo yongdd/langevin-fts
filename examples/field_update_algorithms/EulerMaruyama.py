@@ -48,15 +48,14 @@ else:
 print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
-# create instances and assign to the variables of base classs
-# for the dynamic binding
+# create instances
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am = factory.create_anderson_mixing(sb, am_n_comp,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
-# standard deviation of normal noise for single segment
+# standard deviation of normal noise
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/ 
     (sb.get_volume()*np.sqrt(langevin_nbar)))
     
@@ -83,13 +82,12 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
 
-print("wminus and wplus are initialized to random")
+print("w_minus and w_plus are initialized to random")
 w_plus  = np.random.normal(0, langevin_sigma, sb.get_n_grid())
 w_minus = np.random.normal(0, langevin_sigma, sb.get_n_grid())
 
 # keep the level of field value
 sb.zero_mean(w_plus)
-sb.zero_mean(w_minus)
 
 # find saddle point of the pressure field
 phi_a, phi_b, _, = find_saddle_point(pc, sb, pseudo, am,
