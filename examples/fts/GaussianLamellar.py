@@ -152,7 +152,8 @@ for langevin_step in range(1, langevin_max_step+1):
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
             "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
-            "random_seed":np.random.RandomState().get_state(),
+            "random_generator":np.random.RandomState().get_state()[0],
+            "random_seed":np.random.RandomState().get_state()[1],
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
 

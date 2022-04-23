@@ -1,5 +1,5 @@
 # (Caution!) In my experiment, box-altering move is accurate 
-# only when simulation cell dV is close to cubic. (or it could be a bug)
+# only when simulation cell dV is close to cubic.
 # If the cell changes too much from cubic during box-altering move,
 # redo the simulation with prefered sized cubic box.
 # In this example, initial box size is [4.46,4.46,4.46],
@@ -178,7 +178,8 @@ for langevin_step in range(1, langevin_max_step+1):
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
             "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
-            "random_seed":np.random.RandomState().get_state(),
+            "random_generator":np.random.RandomState().get_state()[0],
+            "random_seed":np.random.RandomState().get_state()[1],
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
         
@@ -187,8 +188,8 @@ for langevin_step in range(1, langevin_max_step+1):
     dfield_dchin = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
     dfield_dl = -dfield_dchin*pc.get_chi_n()/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
-    #print(-dlogQ_dl, dfield_dl, dH_dl)
-    
+    #print(-dlogQ_dl, dfield_dl)
+
     # box move
     box_lambda = box_lambda - 0.01*(dH_dl[0]*sb.get_lx(0)-dH_dl[1]*sb.get_lx(1)/2-dH_dl[2]*sb.get_lx(2)/2)/box_lambda
     new_lx = np.array([init_lx[0]*box_lambda, init_lx[1]/np.sqrt(box_lambda), init_lx[2]/np.sqrt(box_lambda)])
