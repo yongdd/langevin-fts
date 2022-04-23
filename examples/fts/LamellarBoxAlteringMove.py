@@ -1,9 +1,9 @@
 # (Caution!) In my experiment, box-altering move is accurate 
-# only when simulation cell dV is close to cubic.
+# only when simulation cell dV is close to cubic. (or it could be a bug)
 # If the cell changes too much from cubic during box-altering move,
 # redo the simulation with prefered sized cubic box.
 # In this example, initial box size is [4.46,4.46,4.46],
-# but prefered box size is about [4.36,4.36,4.36].
+# but prefered size of cubic box is about [4.36,4.36,4.36].
 
 import sys
 import os
@@ -66,7 +66,7 @@ lx = [4.46,4.46,4.46]
 # Polymer Chain
 n_contour = 90
 f = 0.5
-chi_n = 16.75
+effective_chi_n = 12.75
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
@@ -81,7 +81,7 @@ am_mix_init = 0.1
 # Langevin Dynamics
 langevin_dt = 0.8     # langevin step interval, delta tau*N
 langevin_nbar = 10000  # invariant polymerization index
-langevin_max_step = 200
+langevin_max_step = 2000
 
 # -------------- initialize ------------
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
@@ -91,6 +91,10 @@ else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
+
+# calculate bare chi_n
+z_inf, dz_inf_dl = renormal_psum(lx, nx, n_contour, langevin_nbar)
+chi_n = effective_chi_n/z_inf
 
 # create instances
 pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
@@ -147,6 +151,11 @@ time_start = time.time()
 print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
+    # calculate bare chi_n
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
+    chi_n = effective_chi_n/z_inf
+    pc.set_chi_n(chi_n)
+
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
     w_minus_copy = w_minus.copy()
@@ -176,10 +185,9 @@ for langevin_step in range(1, langevin_max_step+1):
     # caculate stress
     dlogQ_dl = np.array(pseudo.dq_dl())/Q
     dfield_dchin = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
-    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
     dfield_dl = -dfield_dchin*pc.get_chi_n()/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
-    print(-dlogQ_dl, dfield_dl, dH_dl)
+    #print(-dlogQ_dl, dfield_dl, dH_dl)
     
     # box move
     box_lambda = box_lambda - 0.01*(dH_dl[0]*sb.get_lx(0)-dH_dl[1]*sb.get_lx(1)/2-dH_dl[2]*sb.get_lx(2)/2)/box_lambda
