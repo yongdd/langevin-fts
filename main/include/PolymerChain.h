@@ -33,5 +33,6 @@ public:
     double get_epsilon();
     std::string get_model_name();
 
+    void set_chi_n(double chi_n);
 };
 #endif

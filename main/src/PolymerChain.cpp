@@ -67,3 +67,7 @@ std::string PolymerChain::get_model_name()
 {
     return model_name;
 }
+void PolymerChain::set_chi_n(double chi_n)
+{
+    this->chi_n = chi_n;
+}
