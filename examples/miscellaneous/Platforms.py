@@ -50,7 +50,7 @@ for dim in [1,2,3]:
     for chain_model in ["Discrete", "Gaussian"]:
         print("-" * 50)
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
-        print("platform, time per iter, mass error, output1 (error), dq output2 (dqdl)")
+        print("platform, time per iter, mass error, output1 (error), output2 (dqdl)")
         test_output = []
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
