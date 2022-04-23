@@ -196,6 +196,7 @@ for langevin_step in range(1, langevin_max_step+1):
     
     # change box size
     sb.set_lx(new_lx)
+    # update bond parameters using new lx
     pseudo.update()
 
 # estimate execution time

@@ -11,6 +11,7 @@ def find_saddle_point(lx):
 
     # set box size
     sb.set_lx(lx)
+    # update bond parameters using new lx
     pseudo.update()
 
     # assign large initial value for the energy and error
