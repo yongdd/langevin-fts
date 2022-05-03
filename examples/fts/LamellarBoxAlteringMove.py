@@ -15,7 +15,11 @@ from scipy.io import loadmat, savemat
 from langevinfts import *
 from find_saddle_point import *
 
-def renormal_psum(lx, nx, n_contour, nbar, summax=100):
+def renormal_psum(lx, nx, n_contour, epsilon, nbar, summax=100):
+
+    if( np.abs(epsilon - 1.0) > 1e-7):
+        print("Currently only conformationally symmetric chains are supported.") 
+        sys.exit()
 
     # cell volume * rho_0
     dx = np.array(lx)/np.array(nx)
@@ -93,7 +97,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # calculate bare chi_n
-z_inf, dz_inf_dl = renormal_psum(lx, nx, n_contour, langevin_nbar)
+z_inf, dz_inf_dl = renormal_psum(lx, nx, n_contour, 1.0, langevin_nbar)
 chi_n = effective_chi_n/z_inf
 
 # create instances
@@ -152,7 +156,7 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
     # calculate bare chi_n
-    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), pc.get_epsilon(), langevin_nbar)
     chi_n = effective_chi_n/z_inf
     pc.set_chi_n(chi_n)
 
