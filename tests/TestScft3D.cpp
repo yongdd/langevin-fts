@@ -24,12 +24,11 @@ int main()
     // chrono timer
     std::chrono::system_clock::time_point chrono_start, chrono_end;
     std::chrono::duration<double> time_duration;
-    // max_scft_iter = maximum number of iteration steps
-    int max_scft_iter;
+
     // QQ = total partition function
     double QQ, energy_total;
     // error_level = variable to check convergence of the iteration
-    double error_level, old_error_level, tolerance;
+    double error_level, old_error_level;
     // input and output fields, xi is temporary storage for pressures
     double *w, *w_out, *w_diff;  // n_comp * MM
     double *xi, *w_plus, *w_minus; // MM
@@ -37,17 +36,7 @@ int main()
     double *q1_init, *q2_init;
     // segment concentration
     double *phia, *phib, *phitot;
-    // input parameters
-    std::vector<int> nx;
-    std::vector<double> lx;
-    int n_contour;
-    double f, chi_n;
-    // platform type, (cuda, cpu-mkl or cpu-fftw)
-    std::string str_platform;
-    // Anderson mixing parmeters
-    int max_anderson;
-    double start_anderson_error;
-    double mix_min, mix_init;
+
     // string to output file and print stream
     std::ofstream print_stream;
     std::stringstream ss;
@@ -57,89 +46,38 @@ int main()
     double sum;
 
     // -------------- initialize ------------
-    // read file name
-    //if(argc < 2)
-    //{
-    //    std::cout<< "Input parameter file is required, e.g, 'scft.out inputs' " << std::endl;
-    //    exit(-1);
-    //}
-    
-    // initialize ParamParser
-    ParamParser& pp = ParamParser::get_instance();
-    //pp.read_param_file(argv[1],false);
-    pp.read_param_file("TestInputParams", true);
+    // platform type, (cuda, cpu-mkl or cpu-fftw)
+
+    int max_scft_iter = 20;
+    double tolerance = 1e-9;
+
+    double f = 0.3;
+    int n_contour = 50;
+    double chi_n = 20.0;
+    std::vector<int> nx = {31,49,23};
+    std::vector<double> lx = {4.0,3.0,2.0};
+    std::string chain_model = "Gaussian";  // choose among [Gaussian, Discrete]
+
+    int am_n_comp = 2;  // A and B
+    int am_max_hist= 20;
+    double am_start_error = 8e-1;
+    double am_mix_min = 0.1;
+    double am_mix_init = 0.1;
 
     // choose platform
-    AbstractFactory *factory;
-    std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-    if(pp.get("platform", str_platform))
-        if( std::find(std::begin(avail_platforms), std::end(avail_platforms), str_platform) != std::end(avail_platforms))
-            factory = PlatformSelector::create_factory(str_platform);
-        else
-            factory = PlatformSelector::create_factory();
-    else
-        factory = PlatformSelector::create_factory();
-    
-    std::cout << "-------- Platform ------" << std::endl;
-    factory->display_info();
-
-    // read simulation box parameters
-    if(!pp.get("geometry.grids", nx))
-    {
-        std::cout<< "geometry.grids is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("geometry.box_size", lx))
-    {
-        std::cout<< "geometry.box_size is not specified." << std::endl;
-        exit(-1);
-    }
-    // read chain parameters
-    if(!pp.get("chain.a_fraction", f))
-    {
-        std::cout<< "chain.a_fraction is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("chain.n_contour", n_contour))
-    {
-        std::cout<< "chain.n_contour is not specified." << std::endl;
-        exit(-1);
-    }
-    if(!pp.get("chain.chi_n", chi_n))
-    {
-        std::cout<< "chain.chi_n is not specified." << std::endl;
-        exit(-1);
-    }
-    // read Anderson mixing parameters
-    // anderson mixing begin if error level becomes less then start_anderson_error
-    if(!pp.get("am.start_error", start_anderson_error)) start_anderson_error = 0.01;
-    // max number of previous steps to calculate new field
-    if(!pp.get("am.n_max", max_anderson)) max_anderson = 10;
-    // minimum mixing parameter
-    if(!pp.get("am.mix_min", mix_min)) mix_min = 0.01;
-    // initial mixing parameter
-    if(!pp.get("am.mix_init", mix_init)) mix_init  = 0.1;
-
-    // read iteration parameters
-    if(!pp.get("iter.tolerance", tolerance)) tolerance = 5.0e-9;
-    if(!pp.get("iter.n_step_saddle", max_scft_iter)) max_scft_iter   = 10;
+    AbstractFactory *factory = PlatformSelector::create_factory();
 
     // create instances and assign to the variables of base classs
     // for the dynamic binding
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, "gaussian", 1.0);
+    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
     Pseudo *pseudo = factory->create_pseudo(sb, pc);
-    AndersonMixing *am = factory->create_anderson_mixing(
-                             sb, 2, max_anderson, start_anderson_error, mix_min, mix_init);
-    // assign large initial value for the energy and error
-    energy_total = 1.0e20;
-    error_level = 1.0e20;
+    AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_comp,
+                                        am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
     // -------------- print simulation parameters ------------
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;
-
     std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
-    std::cout << "Precision: 8" << std::endl;
     std::cout << "chi_n, f, N: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_n_contour() << std::endl;
     std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
     std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
@@ -207,9 +145,6 @@ int main()
     std::cout<< "---------- Run ----------" << std::endl;
     std::cout<< "iteration, mass error, total_partition, energy_total, error_level" << std::endl;
     chrono_start = std::chrono::system_clock::now();
-
-    std::cout<< getenv("OMP_STACKSIZE") << std::endl;
-
     // iteration begins here
     for(int iter=0; iter<max_scft_iter; iter++)
     {
@@ -251,14 +186,13 @@ int main()
         std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
         std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
         std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
-        std::cout<< std::setw(15) << std::setprecision(13) << std::fixed << error_level << std::endl;
+        std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
 
         // conditions to end the iteration
         if(error_level < tolerance) break;
         // calculte new fields using simple and Anderson mixing
         am->caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
     }
-
 
     // estimate execution time
     chrono_end = std::chrono::system_clock::now();
@@ -285,9 +219,7 @@ int main()
     delete am;
     delete factory;
 
-    pp.display_usage_info();
-
-    if (std::isnan(error_level) || std::abs(error_level-0.9133680347885) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.009307729) > 1e-7)
         return -1;
 
     return 0;
