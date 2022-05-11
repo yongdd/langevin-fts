@@ -12,7 +12,7 @@
 
 class CpuPseudoDiscrete : public Pseudo
 {
-protected:
+private:
     FFT *fft;
     double *q_1, *q_2;
     double *boltz_bond_a, *boltz_bond_b, *boltz_bond_ab;

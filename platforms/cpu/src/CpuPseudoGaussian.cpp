@@ -7,8 +7,8 @@ CpuPseudoGaussian::CpuPseudoGaussian(
     : Pseudo(sb, pc)
 {
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_contour();  
-    
+    const int N = pc->get_n_contour();
+
     this->fft = fft;
     this->boltz_bond_a = new double[n_complex_grid];
     this->boltz_bond_b = new double[n_complex_grid];
@@ -16,7 +16,7 @@ CpuPseudoGaussian::CpuPseudoGaussian(
     this->boltz_bond_b_half = new double[n_complex_grid];
     this->q_1 = new double[M*(N+1)];
     this->q_2 = new double[M*(N+1)];
-    
+
     update();
 }
 CpuPseudoGaussian::~CpuPseudoGaussian()
@@ -31,95 +31,161 @@ void CpuPseudoGaussian::update()
     double bond_length_a, bond_length_b;
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
-    
+
     bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
     bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-    
+
     get_boltz_bond(boltz_bond_a,      bond_length_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
     get_boltz_bond(boltz_bond_b,      bond_length_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
     get_boltz_bond(boltz_bond_a_half, bond_length_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
     get_boltz_bond(boltz_bond_b_half, bond_length_b/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
 }
+
+void CpuPseudoGaussian::init_simpson_rule_coeff(double *coeff, const int N)
+{
+	// Initialize the coefficients for the Simpson's 1/3 rule.
+    if ( N % 2 == 0) // when the number of contour step is an even number
+    {
+        coeff[0] = 1.0/3.0;
+        for(int n=1; n<=N-1; n++)
+        {
+            if ( n % 2 == 1)
+                coeff[n] = 4.0/3.0;
+            else
+                coeff[n] = 2.0/3.0;
+        }
+        coeff[N] = 1.0/3.0;
+    }
+    else // when the number of contour step is an odd number, use the Simpson's 3/8 rule for the last three points.
+    {
+        coeff[0] = 1.0/3.0;
+        for(int n=1; n<=N-4; n++)
+        {
+            if ( n % 2 == 1)
+                coeff[n] = 4.0/3.0;
+            else
+                coeff[n] = 2.0/3.0;
+        }
+        coeff[N]   = 3.0/8.0;
+        coeff[N-1] = 9.0/8.0;
+        coeff[N-2] = 9.0/8.0;
+        coeff[N-3] = 3.0/8.0 + 1.0/3.0;
+    }
+}
+
 std::array<double,3> CpuPseudoGaussian::dq_dl()
 {
+    // This method should be invoked after invoking find_phi().
+
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
-    // Then, we can use results of real-to-complex Fourier transform as it is.
-    // It is not problematic, since we only need the real part of stress calculation.
-    
+    // We only need the real part of stress calculation.
+
     const int DIM  = sb->get_dim();
     const int M    = sb->get_n_grid();
     const int N    = pc->get_n_contour();
     const int N_A  = pc->get_n_contour_a();
     const int M_COMPLEX = this->n_complex_grid;
-    
+
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
     const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
     const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-    const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
     double bond_length;
-    
-    std::array<double,3> stress;
+
+    std::array<double,3> dq_dl;
     std::complex<double> k_q_1[M_COMPLEX];
     std::complex<double> k_q_2[M_COMPLEX];
-    
-    double temp;
-    double fourier_basis_x[M_COMPLEX]{0.0};
-    double fourier_basis_y[M_COMPLEX]{0.0};
-    double fourier_basis_z[M_COMPLEX]{0.0};
-    
+
+    double simpson_rule_coeff_a[N_A+1];
+    double simpson_rule_coeff_b[N-N_A+1];
+    double fourier_basis_x[M_COMPLEX] {0.0};
+    double fourier_basis_y[M_COMPLEX] {0.0};
+    double fourier_basis_z[M_COMPLEX] {0.0};
+
     get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
     for(int i=0; i<3; i++)
-        stress[i] = 0.0;
+        dq_dl[i] = 0.0;
 
-    for(int n=0; n<N+1; n++)
+	init_simpson_rule_coeff(simpson_rule_coeff_a, N_A);
+    for(int n=0; n<=N_A; n++)
     {
         fft->forward(&q_1[n*M],k_q_1);
         fft->forward(&q_2[n*M],k_q_2);
-        
-        if ( n < N_A){
-            bond_length = bond_length_a;
-        }
-        else if ( n == N_A){
-            bond_length = bond_length_ab;
-        }
-        else if ( n <= N){
-            bond_length = bond_length_b;
-        }
 
         if ( DIM >= 3 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[0] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                dq_dl[0] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
         }
         if ( DIM >= 2 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[1] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                dq_dl[1] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
         }
         if ( DIM >= 1 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[2] += bond_length*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                dq_dl[2] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
         }
     }
-    for(int d=0; d<3; d++)
-        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
     
-    return stress;
+	init_simpson_rule_coeff(simpson_rule_coeff_b, N-N_A);
+    for(int n=N_A; n<=N; n++)
+    {
+        fft->forward(&q_1[n*M],k_q_1);
+        fft->forward(&q_2[n*M],k_q_2);
+        if ( DIM >= 3 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                dq_dl[0] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+        }
+        if ( DIM >= 2 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                dq_dl[1] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+        }
+        if ( DIM >= 1 )
+        {
+            for(int i=0; i<M_COMPLEX; i++)
+                dq_dl[2] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+        }
+    }
+    
+    for(int d=0; d<3; d++)
+        dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+
+    return dq_dl;
+}
+
+void CpuPseudoGaussian::calculate_phi_one_type(
+    double *phi, const int N_START, const int N_END)
+{
+    const int M = sb->get_n_grid();
+    double simpson_rule_coeff[N_END-N_START+1];
+
+	init_simpson_rule_coeff(simpson_rule_coeff, N_END-N_START);
+
+    // Compute segment concentration
+    for(int i=0; i<M; i++)
+        phi[i] = simpson_rule_coeff[0]*q_1[i+N_START*M]*q_2[i+N_START*M];
+    for(int n=N_START+1; n<=N_END; n++)
+    {
+        for(int i=0; i<M; i++)
+            phi[i] += simpson_rule_coeff[n-N_START]*q_1[i+n*M]*q_2[i+n*M];
+    }
 }
 
 void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
-                      double *q_1_init, double *q_2_init,
-                      double *w_a, double *w_b, double &single_partition)
+                                 double *q_1_init, double *q_2_init,
+                                 double *w_a, double *w_b, double &single_partition)
 {
     const int M     = sb->get_n_grid();
     const int N     = pc->get_n_contour();
     const int N_A   = pc->get_n_contour_a();
     //const int N_B   = pc->get_n_contour_b();
     const double ds = pc->get_ds();
-    
+
     double exp_dw_a[M];
     double exp_dw_b[M];
     double exp_dw_a_half[M];
@@ -142,13 +208,13 @@ void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
             // diffusion of A chain
             for(int n=1; n<=N_A; n++)
                 one_step(&q_1[(n-1)*M],&q_1[n*M],
-                    boltz_bond_a,boltz_bond_a_half,
-                    exp_dw_a,exp_dw_a_half);
+                         boltz_bond_a,boltz_bond_a_half,
+                         exp_dw_a,exp_dw_a_half);
             // diffusion of B chain
             for(int n=N_A+1; n<=N; n++)
                 one_step(&q_1[(n-1)*M],&q_1[n*M],
-                    boltz_bond_b,boltz_bond_b_half,
-                    exp_dw_b,exp_dw_b_half);
+                         boltz_bond_b,boltz_bond_b_half,
+                         exp_dw_b,exp_dw_b_half);
         }
         #pragma omp section
         {
@@ -157,38 +223,22 @@ void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
             // diffusion of B chain
             for(int n=N; n>=N_A+1; n--)
                 one_step(&q_2[n*M],&q_2[(n-1)*M],
-                    boltz_bond_b,boltz_bond_b_half,
-                    exp_dw_b,exp_dw_b_half);
+                         boltz_bond_b,boltz_bond_b_half,
+                         exp_dw_b,exp_dw_b_half);
             // diffusion of A chain
             for(int n=N_A; n>=1; n--)
                 one_step(&q_2[n*M],&q_2[(n-1)*M],
-                    boltz_bond_a,boltz_bond_a_half,
-                    exp_dw_a,exp_dw_a_half);
+                         boltz_bond_a,boltz_bond_a_half,
+                         exp_dw_a,exp_dw_a_half);
         }
     }
-    // compute segment concentration with Simpson quadratrue.
-    // segment concentration. only half contribution from the end
-    for(int i=0; i<M; i++)
-        phi_a[i] = q_1[i]*q_2[i]/2;
-    for(int n=1; n<=N_A-1; n++)
-    {
-        for(int i=0; i<M; i++)
-            phi_a[i] += q_1[i+n*M]*q_2[i+n*M];
-    }
-    // the junction is half A and half B
-    for(int i=0; i<M; i++)
-    {
-        phi_b[i] = q_1[i+N_A*M]*q_2[i+N_A*M]/2;
-        phi_a[i] += phi_b[i];
-    }
-    for(int n=N_A+1; n<=N-1; n++)
-    {
-        for(int i=0; i<M; i++)
-            phi_b[i] += q_1[i+n*M]*q_2[i+n*M];
-    }
-    // only half contribution from the end
-    for(int i=0; i<M; i++)
-        phi_b[i] += q_1[i+N*M]*q_2[i+N*M]/2;
+
+    // segment concentration.
+    // A block
+    calculate_phi_one_type(phi_a, 0, N_A);
+    // B block
+    calculate_phi_one_type(phi_b, N_A, N);
+
     // calculates the single chain partition function
     single_partition = sb->inner_product(&q_1[N_A*M],&q_2[N_A*M]);
 
@@ -200,8 +250,8 @@ void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
     }
 }
 void CpuPseudoGaussian::one_step(double *q_in, double *q_out,
-                     double *boltz_bond, double *boltz_bond_half,
-                     double *exp_dw, double *exp_dw_half)
+                                 double *boltz_bond, double *boltz_bond_half,
+                                 double *exp_dw, double *exp_dw_half)
 {
     const int M = sb->get_n_grid();
     const int M_COMPLEX = this->n_complex_grid;
@@ -266,7 +316,7 @@ void CpuPseudoGaussian::get_partition(double *q_1_out, int n1, double *q_2_out, 
 {
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
-    
+
     for(int i=0; i<M; i++)
     {
         q_1_out[i] =q_1[n1*M+i];

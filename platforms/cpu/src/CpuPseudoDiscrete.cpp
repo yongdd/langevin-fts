@@ -41,9 +41,10 @@ void CpuPseudoDiscrete::update()
 }
 std::array<double,3> CpuPseudoDiscrete::dq_dl()
 {
+    // This method should be invoked after invoking find_phi().
+
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
-    // Then, we can use results of real-to-complex Fourier transform as it is.
-    // It is not problematic, since we only need the real part of stress calculation.
+    // We only need the real part of stress calculation.
 
     const int DIM  = sb->get_dim();
     const int M    = sb->get_n_grid();
@@ -58,7 +59,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
     double temp, bond_length, *boltz_bond;
 
-    std::array<double,3> stress;
+    std::array<double,3> dq_dl;
     std::complex<double> k_q_1[M_COMPLEX];
     std::complex<double> k_q_2[M_COMPLEX];
 
@@ -69,7 +70,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
     for(int i=0; i<3; i++)
-        stress[i] = 0.0;
+        dq_dl[i] = 0.0;
 
     for(int n=1; n<N; n++)
     {
@@ -95,23 +96,23 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         if ( DIM >= 3 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[0] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                dq_dl[0] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
         }
         if ( DIM >= 2 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[1] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                dq_dl[1] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
         }
         if ( DIM >= 1 )
         {
             for(int i=0; i<M_COMPLEX; i++)
-                stress[2] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                dq_dl[2] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
         }
     }
     for(int d=0; d<3; d++)
-        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+        dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
 
-    return stress;
+    return dq_dl;
 }
 void CpuPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
                                  double *q_1_init, double *q_2_init,

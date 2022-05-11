@@ -38,7 +38,7 @@ CudaPseudoGaussian::CudaPseudoGaussian(
     }
     cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
     cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
-    
+
     // Memory allocation
     cudaMalloc((void**)&d_q_step1, sizeof(double)*2*M);
     cudaMalloc((void**)&d_q_step2, sizeof(double)*2*M);
@@ -92,14 +92,14 @@ void CudaPseudoGaussian::update()
     double bond_length_a, bond_length_b;
     const double eps = pc->get_epsilon();
     const double f = pc->get_f();
-    
+
     const int M_COMPLEX = this->n_complex_grid;
     double boltz_bond_a[M_COMPLEX], boltz_bond_a_half[M_COMPLEX];
     double boltz_bond_b[M_COMPLEX], boltz_bond_b_half[M_COMPLEX];
 
     bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
     bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-    
+
     get_boltz_bond(boltz_bond_a,      bond_length_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
     get_boltz_bond(boltz_bond_b,      bond_length_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
     get_boltz_bond(boltz_bond_a_half, bond_length_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
@@ -110,11 +110,45 @@ void CudaPseudoGaussian::update()
     cudaMemcpy(d_boltz_bond_a_half, boltz_bond_a_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(d_boltz_bond_b_half, boltz_bond_b_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
 }
+
+void CudaPseudoGaussian::init_simpson_rule_coeff(double *coeff, const int N)
+{
+	// Initialize the coefficients for the Simpson's 1/3 rule.
+    if ( N % 2 == 0) // when the number of contour step is an even number
+    {
+        coeff[0] = 1.0/3.0;
+        for(int n=1; n<=N-1; n++)
+        {
+            if ( n % 2 == 1)
+                coeff[n] = 4.0/3.0;
+            else
+                coeff[n] = 2.0/3.0;
+        }
+        coeff[N] = 1.0/3.0;
+    }
+    else // when the number of contour step is an odd number, use the Simpson's 3/8 rule for the last three points.
+    {
+        coeff[0] = 1.0/3.0;
+        for(int n=1; n<=N-4; n++)
+        {
+            if ( n % 2 == 1)
+                coeff[n] = 4.0/3.0;
+            else
+                coeff[n] = 2.0/3.0;
+        }
+        coeff[N]   = 3.0/8.0;
+        coeff[N-1] = 9.0/8.0;
+        coeff[N-2] = 9.0/8.0;
+        coeff[N-3] = 3.0/8.0 + 1.0/3.0;
+    }
+}
+
 std::array<double,3> CudaPseudoGaussian::dq_dl()
 {
+    // This method should be invoked after invoking find_phi().
+
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
-    // Then, we can use results of real-to-complex Fourier transform as it is.
-    // It is not problematic, since we only need the real part of stress calculation.
+    // We only need the real part of stress calculation.
 
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -129,19 +163,19 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
     const double f = pc->get_f();
     const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
     const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-    const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
-    double bond_length;
 
-    std::array<double,3> stress;
-    double fourier_basis_x[M_COMPLEX]{0.0};
-    double fourier_basis_y[M_COMPLEX]{0.0};
-    double fourier_basis_z[M_COMPLEX]{0.0};
-    
+    std::array<double,3> dq_dl;
+    double simpson_rule_coeff_a[N_A+1];
+    double simpson_rule_coeff_b[N-N_A+1];
+    double fourier_basis_x[M_COMPLEX] {0.0};
+    double fourier_basis_y[M_COMPLEX] {0.0};
+    double fourier_basis_z[M_COMPLEX] {0.0};
+
     double *d_fourier_basis_x;
     double *d_fourier_basis_y;
     double *d_fourier_basis_z;
     double *d_q_in_2m, *d_q_multi, *d_stress_sum;
-    
+
     get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
     cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX);
@@ -150,7 +184,7 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
     cudaMalloc((void**)&d_q_in_2m,         sizeof(double)*2*M);
     cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX);
     cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX);
-    
+
     cudaMemcpy(d_fourier_basis_x, fourier_basis_x, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(d_fourier_basis_y, fourier_basis_y, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
     cudaMemcpy(d_fourier_basis_z, fourier_basis_z, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice);
@@ -158,43 +192,60 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
     thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
     for(int i=0; i<3; i++)
-        stress[i] = 0.0;
+        dq_dl[i] = 0.0;
 
-    for(int n=0; n<N+1; n++)
+	init_simpson_rule_coeff(simpson_rule_coeff_a, N_A);
+    for(int n=0; n<=N_A; n++)
     {
         cudaMemcpy(&d_q_in_2m[0], &d_q_1[n*M],     sizeof(double)*M,cudaMemcpyDeviceToDevice);
         cudaMemcpy(&d_q_in_2m[M], &d_q_2[(N-n)*M], sizeof(double)*M,cudaMemcpyDeviceToDevice);
         cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
-    
-        if ( n < N_A){
-            bond_length = bond_length_a;
-        }
-        else if ( n == N_A){
-            bond_length = bond_length_ab;
-        }
-        else if ( n <= N){
-            bond_length = bond_length_b;
-        }
-        
+
         multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
         if ( DIM >= 3 )
         {
-            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length, M_COMPLEX);
-            stress[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_a, M_COMPLEX);
+            dq_dl[0] += simpson_rule_coeff_a[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
         if ( DIM >= 2 )
         {
-            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length, M_COMPLEX);
-            stress[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_a, M_COMPLEX);
+            dq_dl[1] += simpson_rule_coeff_a[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
         if ( DIM >= 1 )
         {
-            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length, M_COMPLEX);
-            stress[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_a, M_COMPLEX);
+            dq_dl[2] += simpson_rule_coeff_a[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
     }
+
+	init_simpson_rule_coeff(simpson_rule_coeff_b, N-N_A);
+    for(int n=N_A; n<=N; n++)
+    {
+        cudaMemcpy(&d_q_in_2m[0], &d_q_1[n*M],     sizeof(double)*M,cudaMemcpyDeviceToDevice);
+        cudaMemcpy(&d_q_in_2m[M], &d_q_2[(N-n)*M], sizeof(double)*M,cudaMemcpyDeviceToDevice);
+        cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
+
+        multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
+        if ( DIM >= 3 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_b, M_COMPLEX);
+            dq_dl[0] += simpson_rule_coeff_b[n-N_A]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
+        if ( DIM >= 2 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_b, M_COMPLEX);
+            dq_dl[1] += simpson_rule_coeff_b[n-N_A]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
+        if ( DIM >= 1 )
+        {
+            multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_b, M_COMPLEX);
+            dq_dl[2] += simpson_rule_coeff_b[n-N_A]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+        }
+    }
+
     for(int d=0; d<3; d++)
-        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+        dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
 
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
@@ -203,22 +254,41 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 
-    return stress;
+    return dq_dl;
 }
-
-void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
-                          double *q_1_init, double *q_2_init,
-                          double *w_a, double *w_b, double &single_partition)
+void CudaPseudoGaussian::calculate_phi_one_type(
+    double *d_phi, const int N_START, const int N_END)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    
+
+    const int M = sb->get_n_grid();
+    const int N = pc->get_n_contour();
+    double simpson_rule_coeff[N_END-N_START+1];
+
+	init_simpson_rule_coeff(simpson_rule_coeff, N_END-N_START);
+
+    // Compute segment concentration
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, &d_q_1[M*N_START], &d_q_2[M*(N-N_START)], simpson_rule_coeff[0], M);
+    for(int n=N_START+1; n<=N_END; n++)
+    {
+        add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, &d_q_1[M*n], &d_q_2[M*(N-n)], simpson_rule_coeff[n-N_START], M);
+    }
+}
+
+void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
+                                  double *q_1_init, double *q_2_init,
+                                  double *w_a, double *w_b, double &single_partition)
+{
+    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
     const int N_A = pc->get_n_contour_a();
     const int N_B = pc->get_n_contour_b();
     const double ds = pc->get_ds();
-    
+
     double exp_dw_a[M];
     double exp_dw_b[M];
     double exp_dw_a_half[M];
@@ -287,26 +357,15 @@ void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
         }
     }
 
-    // calculate Segment Density
-    // segment concentration. only half contribution from the end
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_b, &d_q_1[M*N], &d_q_2[0], 0.5, M);
-    // the B block segment
-    for(int n=N-1; n>N_A; n--)
-        add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_b, &d_q_1[M*n], &d_q_2[M*(N-n)], 1.0, M);
-
-    // the junction is half A and half B
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[M*N_A], &d_q_2[M*(N_B)], 0.5, M);
-    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_b, 1.0, d_phi_b, 1.0, d_phi_a, M);
-
     // calculates the total partition function
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[M*N_A], &d_q_2[M*(N_B)], 0.5, M);
     single_partition = 2*((CudaSimulationBox *)sb)->integral_gpu(d_phi_a);
 
-    // the A block segment
-    for(int n=N_A-1; n>0; n--)
-        add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[M*n], &d_q_2[M*(N-n)], 1.0, M);
-        
-    // only half contribution from the end
-    add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi_a, &d_q_1[0], &d_q_2[M*N], 0.5, M);
+    // segment concentration.
+    // A block
+    calculate_phi_one_type(d_phi_a, 0, N_A);
+    // B block
+    calculate_phi_one_type(d_phi_b, N_A, N);
 
     // normalize the concentration
     lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_a, (sb->get_volume())/single_partition/N, d_phi_a, 0.0, d_phi_a, M);
@@ -318,7 +377,7 @@ void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
 
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
-// To increase GPU usage, we use FFT Batch.
+// To increase GPU usage, FFT Batch is utilized.
 void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
                                   double *d_q_in2,        double *d_q_out2,
                                   double *d_boltz_bond_1, double *d_boltz_bond_1_half,
@@ -328,11 +387,11 @@ void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    
+
     const int M = sb->get_n_grid();
     const int M_COMPLEX = this->n_complex_grid;
-        
-    //-------------- step 1 ---------- 
+
+    //-------------- step 1 ----------
     // Evaluate e^(-w*ds/2) in real space
     multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[0], d_q_in1, d_exp_dw_1, 1.0, M);
     multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1[M], d_q_in2, d_exp_dw_2, 1.0, M);
