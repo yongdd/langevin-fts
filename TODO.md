@@ -10,9 +10,7 @@
 11. UnitTest: example/miscellaneous
 12. UnitTest: Stress
 13. Separate AndersonMixig Output
-14. READEM envlfts -> lfts
 15. Handling Exception and Assert 
-16. Rearrange Files
 16. process bar
 17. Variable 'Gaussian' -> 'Continous' ?
 18. Variable 'n_contous' -> 'n_segment' ?

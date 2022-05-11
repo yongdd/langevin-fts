@@ -39,19 +39,19 @@ IF (OPENMP_FOUND)
     SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 ENDIF()
 
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/main/include/)
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/platforms/cpu/include/)
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/platforms/cuda/include/)
+INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/main/)
+INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cpu/)
+INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
 #  Common Files
 
 ADD_LIBRARY(common
-    main/src/ParamParser.cpp
-    main/src/PolymerChain.cpp
-    main/src/SimulationBox.cpp
-    main/src/CircularBuffer.cpp
-    main/src/Pseudo.cpp
-    main/src/AndersonMixing.cpp
+    src/main/ParamParser.cpp
+    src/main/PolymerChain.cpp
+    src/main/SimulationBox.cpp
+    src/main/CircularBuffer.cpp
+    src/main/Pseudo.cpp
+    src/main/AndersonMixing.cpp
     )
 
 #  Intel MKL
@@ -64,13 +64,13 @@ ENDIF()
 IF(BUILD_CPU_MKL_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
-        platforms/cpu/src/MklFFT1D.cpp
-        platforms/cpu/src/MklFFT2D.cpp
-        platforms/cpu/src/MklFFT3D.cpp
-    	platforms/cpu/src/CpuPseudoGaussian.cpp
-        platforms/cpu/src/CpuPseudoDiscrete.cpp
-    	platforms/cpu/src/CpuAndersonMixing.cpp
-        platforms/cpu/src/MklFactory.cpp
+        src/platforms/cpu/MklFFT1D.cpp
+        src/platforms/cpu/MklFFT2D.cpp
+        src/platforms/cpu/MklFFT3D.cpp
+    	src/platforms/cpu/CpuPseudoGaussian.cpp
+        src/platforms/cpu/CpuPseudoDiscrete.cpp
+    	src/platforms/cpu/CpuAndersonMixing.cpp
+        src/platforms/cpu/MklFactory.cpp
         )
 ENDIF()
 
@@ -88,13 +88,13 @@ IF(BUILD_CPU_FFTW_LIB)
     INCLUDE_DIRECTORIES(${FFTW_INCLUDE})
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     ADD_LIBRARY(cpu-fftw
-        platforms/cpu/src/FftwFFT1D.cpp
-        platforms/cpu/src/FftwFFT2D.cpp
-        platforms/cpu/src/FftwFFT3D.cpp
-    	platforms/cpu/src/CpuPseudoGaussian.cpp
-        platforms/cpu/src/CpuPseudoDiscrete.cpp
-    	platforms/cpu/src/CpuAndersonMixing.cpp
-        platforms/cpu/src/FftwFactory.cpp
+        src/platforms/cpu/FftwFFT1D.cpp
+        src/platforms/cpu/FftwFFT2D.cpp
+        src/platforms/cpu/FftwFFT3D.cpp
+    	src/platforms/cpu/CpuPseudoGaussian.cpp
+        src/platforms/cpu/CpuPseudoDiscrete.cpp
+    	src/platforms/cpu/CpuAndersonMixing.cpp
+        src/platforms/cpu/FftwFactory.cpp
     	)
 ENDIF()
 
@@ -105,13 +105,13 @@ IF(CUDAToolkit_FOUND)
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
-        platforms/cuda/src/CudaCommon.cu
-        platforms/cuda/src/CudaSimulationBox.cu
-        platforms/cuda/src/CudaPseudoGaussian.cu
-        platforms/cuda/src/CudaPseudoDiscrete.cu
-        platforms/cuda/src/CudaCircularBuffer.cu
-        platforms/cuda/src/CudaAndersonMixing.cu
-        platforms/cuda/src/CudaFactory.cu
+        src/platforms/cuda/CudaCommon.cu
+        src/platforms/cuda/CudaSimulationBox.cu
+        src/platforms/cuda/CudaPseudoGaussian.cu
+        src/platforms/cuda/CudaPseudoDiscrete.cu
+        src/platforms/cuda/CudaCircularBuffer.cu
+        src/platforms/cuda/CudaAndersonMixing.cu
+        src/platforms/cuda/CudaFactory.cu
         )
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES OFF)
 ENDIF()
@@ -124,7 +124,7 @@ ENDIF()
 
 #  Factory
 ADD_LIBRARY(factory
-    main/src/PlatformSelector.cpp
+    src/main/PlatformSelector.cpp
     )
 
 #---------- Python Wrapper -----------
@@ -141,11 +141,11 @@ FIND_PACKAGE(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 
-SET_SOURCE_FILES_PROPERTIES(main/swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
+SET_SOURCE_FILES_PROPERTIES(src/swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
 
 SWIG_ADD_LIBRARY(langevinfts
     LANGUAGE python
-    SOURCES main/swig/langevinfts.i)
+    SOURCES src/swig/langevinfts.i)
 
 SWIG_LINK_LIBRARIES(langevinfts
 	factory

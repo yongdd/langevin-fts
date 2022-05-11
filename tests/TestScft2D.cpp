@@ -50,7 +50,7 @@ int main()
 
     double f = 0.3;
     int n_contour = 50;
-    double chi_n = 20.0;
+    double chi_n = 25.0;
     std::vector<int> nx = {49, 63};
     std::vector<double> lx = {4.0,3.0};
     std::string chain_model = "Gaussian";  // choose among [Gaussian, Discrete]
@@ -75,7 +75,6 @@ int main()
     // -------------- print simulation parameters ------------
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;
     std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
-    std::cout << "Precision: 8" << std::endl;
     std::cout << "chi_n, f, N: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_n_contour() << std::endl;
     std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
     std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
@@ -112,7 +111,7 @@ int main()
             for(int k=0; k<sb->get_nx(2); k++)
             {
                 idx = i*sb->get_nx(1)*sb->get_nx(2) + j*sb->get_nx(2) + k;
-                phia[idx]= cos(2.0*PI*i/2.74)*cos(2.0*PI*j/4.68)*cos(2.0*PI*k/3.48)*0.1;
+                phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
             }
 
     for(int i=0; i<sb->get_n_grid(); i++)
@@ -217,7 +216,7 @@ int main()
     delete am;
     delete factory;
 
-    if (std::isnan(error_level) || std::abs(error_level-0.016984456) > 1e-7)
+    if (std::isnan(error_level) || std::abs(error_level-0.008730824) > 1e-7)
         return -1;
 
     return 0;
