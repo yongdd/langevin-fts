@@ -99,9 +99,10 @@ void CudaPseudoDiscrete::update()
 
 std::array<double,3> CudaPseudoDiscrete::dq_dl()
 {
+    // This method should be invoked after invoking find_phi().
+
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
-    // Then, we can use results of real-to-complex Fourier transform as it is.
-    // It is not problematic, since we only need the real part of stress calculation.
+    // We only need the real part of stress calculation.
 
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -119,7 +120,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
     const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
     double bond_length, *d_boltz_bond;
 
-    std::array<double,3> stress;
+    std::array<double,3> dq_dl;
     double fourier_basis_x[M_COMPLEX] {0.0};
     double fourier_basis_y[M_COMPLEX] {0.0};
     double fourier_basis_z[M_COMPLEX] {0.0};
@@ -145,7 +146,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
     thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
     for(int i=0; i<3; i++)
-        stress[i] = 0.0;
+        dq_dl[i] = 0.0;
 
     // Bond between A segments
     for(int n=1; n<N; n++)
@@ -175,21 +176,21 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         if ( DIM >= 3 )
         {
             multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0,   M_COMPLEX);
-            stress[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
         if ( DIM >= 2 )
         {
             multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0,   M_COMPLEX);
-            stress[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
         if ( DIM >= 1 )
         {
             multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0,   M_COMPLEX);
-            stress[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+            dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
         }
     }
     for(int d=0; d<3; d++)
-        stress[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+        dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
 
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
@@ -198,7 +199,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 
-    return stress;
+    return dq_dl;
 }
 
 void CudaPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,

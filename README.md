@@ -5,7 +5,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * SCFT and L-FTS   
 * AB Diblock Copolymer Melt  
 * **(beta version)** Conformational Asymmetry   
-* **(beta version)** Stress Calculation (Discrete chain only)
+* **(beta version)** Stress Calculation
 * Chain Model: Gaussian, Discrete   
 * Periodic Boundaries  
 * 3D, 2D and 1D
@@ -29,8 +29,8 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-  `conda create -n envlfts python=3.9 cmake=3.19 conda git swig scipy fftw openmpi`  
-  `conda activate envlfts`  
+  `conda create -n lfts python=3.9 cmake=3.19 conda git swig scipy fftw openmpi`  
+  `conda activate lfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts`  
   `mkdir build`  
@@ -49,12 +49,12 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
    
 *  If you want to remove all installations :cry:, type following commands.   
    `conda deactivate`   
-   `conda env remove -n envlfts`   
+   `conda env remove -n lfts`   
    
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
 + **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroid.py, fts/GaussianLamellar.py**   
-+ To use this library, first activate virtual environment by typing `conda activate envlfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
++ To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.

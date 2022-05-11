@@ -12,7 +12,7 @@
 
 class CpuPseudoGaussian : public Pseudo
 {
-protected:
+private:
     FFT *fft;
     double *q_1, *q_2;
     double *boltz_bond_a, *boltz_bond_a_half;
@@ -20,6 +20,8 @@ protected:
     void one_step(double *q_in, double *q_out, 
                   double *boltz_bond, double *boltz_bond_half,
                   double *exp_dw, double *exp_dw_half);
+    void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
+    void init_simpson_rule_coeff(double *coeff, const int N);
 public:
     CpuPseudoGaussian(SimulationBox *sb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoGaussian();

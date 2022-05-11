@@ -17,5 +17,6 @@ build
 html
 latex
 man
-development
+devel
+doc
 data*

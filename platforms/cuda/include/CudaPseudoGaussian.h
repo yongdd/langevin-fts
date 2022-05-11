@@ -34,6 +34,8 @@ private:
                   double *d_boltz_bond_2, double *d_boltz_bond_2_half,
                   double *d_exp_dw_1, double *d_exp_dw_1_half,
                   double *d_exp_dw_2, double *d_exp_dw_2_half);
+    void calculate_phi_one_type(double *d_phi, const int N_START, const int N_END);
+    void init_simpson_rule_coeff(double *coeff, const int N);
 public:
 
     CudaPseudoGaussian(SimulationBox *sb, PolymerChain *pc);

@@ -15,11 +15,7 @@ from scipy.io import loadmat, savemat
 from langevinfts import *
 from find_saddle_point import *
 
-def renormal_psum(lx, nx, n_contour, epsilon, nbar, summax=100):
-
-    if( np.abs(epsilon - 1.0) > 1e-7):
-        print("Currently only conformationally symmetric chains are supported.") 
-        sys.exit()
+def renormal_psum(lx, nx, n_contour, nbar, summax=100):
 
     # cell volume * rho_0
     dx = np.array(lx)/np.array(nx)
@@ -107,6 +103,9 @@ pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(sb, am_n_comp,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
+if( np.abs(pc.get_epsilon() - 1.0) > 1e-7):
+	raise Exception("Currently, only conformationally symmetric chains (epsilon==1) are supported.") 
+
 # standard deviation of normal noise
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
     (sb.get_volume()*np.sqrt(langevin_nbar)))
@@ -156,7 +155,7 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
     # calculate bare chi_n
-    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), pc.get_epsilon(), langevin_nbar)
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
     chi_n = effective_chi_n/z_inf
     pc.set_chi_n(chi_n)
 
