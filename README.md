@@ -72,7 +72,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
 
 #### Python Binding  
-  `SWIG` will generate Python interfaces for the C++ headers listed in the `main/swig/langevinfts.i`. Please read the page below to learn how to handle C++ data types with NumPy.   
+  `SWIG` will generate Python interfaces for the C++ headers listed in the `src/swig/langevinfts.i`. Please read the page below to learn how to handle C++ data types with NumPy.   
    https://numpy.org/doc/stable/reference/swig.interface-file.html    
 
 # References
