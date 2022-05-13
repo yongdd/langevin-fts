@@ -12,6 +12,7 @@
 13. Separate AndersonMixig Output
 15. Handling Exception and Assert 
 16. process bar
+16  numpy input 
 17. Variable 'Gaussian' -> 'Continous' ?
 18. Variable 'n_contous' -> 'n_segment' ?
 19. User Interface layer?
