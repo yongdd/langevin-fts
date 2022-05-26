@@ -35,13 +35,11 @@ Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
-    SimulationBox *sb, int n_var,
-    int max_hist, double start_error,
+    int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
     return new CudaAndersonMixing(
-               sb, n_var, max_hist,
-               start_error, mix_min, mix_init);
+        n_var, max_hist, start_error, mix_min, mix_init);
 }
 void CudaFactory::display_info()
 {

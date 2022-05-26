@@ -2,12 +2,9 @@
 #include <algorithm>
 #include "CpuAndersonMixing.h"
 
-CpuAndersonMixing::CpuAndersonMixing(
-    SimulationBox *sb, int n_var,
-    int max_hist, double start_error,
-    double mix_min,   double mix_init)
-    :AndersonMixing(sb, n_var,
-                    max_hist, start_error,
+CpuAndersonMixing::CpuAndersonMixing(int n_var, int max_hist, 
+    double start_error, double mix_min, double mix_init)
+    :AndersonMixing(n_var, max_hist, start_error,
                     mix_min,  mix_init)
 {
     // number of anderson mixing steps, increases from 0 to max_hist
@@ -55,7 +52,7 @@ void CpuAndersonMixing::reset_count()
     cb_w_deriv_hist->reset();
     cb_w_deriv_dots->reset();
 }
-double CpuAndersonMixing::non_integral_dot_product(double *a, double *b)
+double CpuAndersonMixing::dot_product(double *a, double *b)
 {
     double sum{0.0};
     for(int i; i<n_var; i++)
@@ -89,7 +86,7 @@ void CpuAndersonMixing::caculate_new_fields(
         /* evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper */
         for(int i=0; i<= n_anderson; i++)
         {
-            w_deriv_dots[i] = non_integral_dot_product(w_deriv, cb_w_deriv_hist->get_array(i));
+            w_deriv_dots[i] = dot_product(w_deriv, cb_w_deriv_hist->get_array(i));
         }
         cb_w_deriv_dots->insert(w_deriv_dots);
     }

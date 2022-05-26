@@ -1,10 +1,7 @@
 #include "AndersonMixing.h"
-AndersonMixing::AndersonMixing(
-    SimulationBox *sb, int n_var,
-    int max_hist, double start_error,
-    double mix_min, double mix_init)
+AndersonMixing::AndersonMixing(int n_var, int max_hist,
+    double start_error, double mix_min, double mix_init)
 {
-    this->sb = sb;
     /* the number of variables to be determined */
     this->n_var = n_var;
     /* anderson mixing begin if error level becomes less then start_anderson_error */

@@ -24,8 +24,7 @@ public :
         SimulationBox *sb,
         PolymerChain *pc) override;
     AndersonMixing* create_anderson_mixing(
-        SimulationBox *sb, int n_var,
-        int max_hist, double start_error,
+        int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) override;
     void display_info() override;
 };

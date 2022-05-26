@@ -27,6 +27,7 @@ lx = [8.0, 8.0, 8.0]
 f = 0.5
 n_contour = 16
 chi_n = 20
+epsilon = 1.0            # a_A/a_B, conformational asymmetry
 chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
@@ -53,10 +54,10 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
+pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am     = factory.create_anderson_mixing(sb, am_n_var,
+am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise
