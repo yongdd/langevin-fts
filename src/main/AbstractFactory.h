@@ -28,8 +28,7 @@ public :
         SimulationBox *sb,
         PolymerChain *pc) = 0; 
     virtual AndersonMixing* create_anderson_mixing(
-        SimulationBox *sb, int n_var,
-        int max_hist, double start_error,
+        int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) = 0;
     virtual void display_info() = 0;
 };

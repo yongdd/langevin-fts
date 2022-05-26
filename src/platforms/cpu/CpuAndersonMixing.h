@@ -19,14 +19,12 @@ private:
     // a matrix and arrays for determining coefficients
     double **u_nm, *v_n, *a_n;
     
-    double non_integral_dot_product(double *a, double *b);
+    double dot_product(double *a, double *b);
     void print_array(int n, double *a);
 public:
 
-    CpuAndersonMixing(
-        SimulationBox *sb, int n_var,
-        int max_hist, double start_error,
-        double mix_min, double mix_init);
+    CpuAndersonMixing(int n_var, int max_hist,
+        double start_error, double mix_min, double mix_init);
     ~CpuAndersonMixing();
       
     void reset_count() override;

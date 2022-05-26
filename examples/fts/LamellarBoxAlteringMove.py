@@ -67,6 +67,7 @@ lx = [4.46,4.46,4.46]
 n_contour = 90
 f = 0.5
 effective_chi_n = 12.75
+epsilon = 1.0            # a_A/a_B, conformational asymmetry
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson Mixing
@@ -97,10 +98,10 @@ z_inf, dz_inf_dl = renormal_psum(lx, nx, n_contour, 1.0, langevin_nbar)
 chi_n = effective_chi_n/z_inf
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model)
+pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am     = factory.create_anderson_mixing(sb, am_n_var,
+am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 if( np.abs(pc.get_epsilon() - 1.0) > 1e-7):

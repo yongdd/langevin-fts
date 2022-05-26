@@ -8,15 +8,10 @@
 #include "CudaAndersonMixing.h"
 
 CudaAndersonMixing::CudaAndersonMixing(
-    SimulationBox *sb, int n_var,
-    int max_hist, double start_error,
+    int n_var, int max_hist, double start_error,
     double mix_min,   double mix_init)
-    :AndersonMixing(sb, n_var,
-                    max_hist, start_error,
-                    mix_min,  mix_init)
+    :AndersonMixing(n_var, max_hist, start_error, mix_min, mix_init)
 {
-    const int M = sb->get_n_grid();
-    
     // number of anderson mixing steps, increases from 0 to max_hist
     n_anderson = -1;
     // record hisotry of w_out in GPU device memory
@@ -80,8 +75,7 @@ void CudaAndersonMixing::caculate_new_fields(
 {
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-    const int M = sb->get_n_grid();
+    
     double *d_w_out_hist1;
     double *d_w_out_hist2;
 

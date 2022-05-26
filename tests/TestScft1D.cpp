@@ -64,13 +64,12 @@ int main()
     // choose platform
     AbstractFactory *factory = PlatformSelector::create_factory();
 
-    // create instances and assign to the variables of base classs
-    // for the dynamic binding
-    PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
-    SimulationBox *sb = factory->create_simulation_box(nx, lx);
-    Pseudo *pseudo = factory->create_pseudo(sb, pc);
-    AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_var,
-                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
+    // create instances and assign to the variables of base classs for the dynamic binding
+    SimulationBox *sb  = factory->create_simulation_box(nx, lx);
+    PolymerChain *pc   = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
+    Pseudo *pseudo     = factory->create_pseudo(sb, pc);
+    AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
+                        am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
     // -------------- print simulation parameters ------------
     std::cout<< "---------- Simulation Parameters ----------" << std::endl;

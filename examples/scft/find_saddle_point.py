@@ -13,7 +13,7 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
     am.reset_count()
 
     # array for output fields
-    w_out = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
+    w_out = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
 
     # iteration begins here
     print("iteration, mass error, total_partition, energy_total, error_level, box size")
@@ -51,7 +51,7 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
 
         # print iteration # and error levels and check the mass conservation
         mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
-        print( "%8d %12.3E %15.7E %15.9f %15.7E" %
+        print("%8d %12.3E %15.7E %15.9f %15.7E" %
             (scft_iter, mass_error, Q, energy_total, error_level), end=' ')
 
         # conditions to end the iteration

@@ -26,10 +26,8 @@ private:
     void print_array(int n, double *a);
 public:
 
-    CudaAndersonMixing(
-        SimulationBox *sb, int n_var,
-        int max_hist, double start_error,
-        double mix_min, double mix_init);
+    CudaAndersonMixing(int n_var, int max_hist,
+        double start_error, double mix_min, double mix_init);
     ~CudaAndersonMixing();
 
     void reset_count() override;

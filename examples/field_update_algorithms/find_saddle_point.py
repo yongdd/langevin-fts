@@ -45,7 +45,7 @@ def find_saddle_point(pc, sb, pseudo, am,
 
             # check the mass conservation
             mass_error = sb.integral(phi_plus)/sb.get_volume() - 1.0
-            print("%8d %12.3E %15.7E %13.9f %13.9f" %
+            print("%8d %12.3E %15.7E %15.9f %15.7E" %
                 (saddle_iter, mass_error, Q, energy_total, error_level))
         # conditions to end the iteration
         if error_level < saddle_tolerance:

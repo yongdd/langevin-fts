@@ -62,7 +62,7 @@ for dim in [1,2,3]:
             pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
             sb = factory.create_simulation_box(nx, lx)
             pseudo = factory.create_pseudo(sb, pc)
-            am = factory.create_anderson_mixing(sb, am_n_comp*np.prod(nx).item(),
+            am = factory.create_anderson_mixing(am_n_comp*np.prod(nx).item(),
                 am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
             # assign large initial value for the energy and error
