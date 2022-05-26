@@ -58,7 +58,7 @@ int main()
     std::vector<double> lx = {4.0,3.0,2.0};
     std::string chain_model = "Gaussian";  // choose among [Gaussian, Discrete]
 
-    int am_n_comp = 2;  // A and B
+    int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
     int am_max_hist= 20;
     double am_start_error = 8e-1;
     double am_mix_min = 0.1;
@@ -72,7 +72,7 @@ int main()
     SimulationBox *sb = factory->create_simulation_box(nx, lx);
     PolymerChain *pc = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
     Pseudo *pseudo = factory->create_pseudo(sb, pc);
-    AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_comp,
+    AndersonMixing *am = factory->create_anderson_mixing(sb, am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
     // -------------- print simulation parameters ------------

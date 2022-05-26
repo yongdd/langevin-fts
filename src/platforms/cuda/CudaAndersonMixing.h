@@ -15,24 +15,26 @@ class CudaAndersonMixing : public AndersonMixing
 {
 private:
     // a few previous field values are stored for anderson mixing in GPU
-    CudaCircularBuffer *d_cb_w_out_hist, *d_cb_w_diff_hist;
-    // arrays to calculate anderson mixing
-    CircularBuffer *cb_w_diff_dots;
-    double **u_nm, *v_n, *a_n, *w_diff_dots;
-    double *d_w, *d_w_diff;
-
+    CudaCircularBuffer *d_cb_w_out_hist, *d_cb_w_deriv_hist;
+    CircularBuffer *cb_w_deriv_dots;
+    double *w_deriv_dots;
+    // a matrix and arrays for determining coefficients
+    double **u_nm, *v_n, *a_n;
+    // temporary arrays
+    double *d_w, *d_w_deriv, *d_sum;
+    
     void print_array(int n, double *a);
 public:
 
     CudaAndersonMixing(
-        SimulationBox *sb, int n_comp,
+        SimulationBox *sb, int n_var,
         int max_hist, double start_error,
         double mix_min, double mix_init);
     ~CudaAndersonMixing();
 
     void reset_count() override;
     void caculate_new_fields(
-        double *w, double *w_out, double *w_diff,
+        double *w, double *w_out, double *w_deriv,
         double old_error_level, double error_level) override;
 
 };

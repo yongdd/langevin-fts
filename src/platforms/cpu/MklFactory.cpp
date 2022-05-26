@@ -55,13 +55,13 @@ Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
     return NULL;
 }
 AndersonMixing* MklFactory::create_anderson_mixing(
-    SimulationBox *sb, int n_comp,
-    double max_anderson, double start_anderson_error,
+    SimulationBox *sb, int n_var,
+    int max_hist, double start_error,
     double mix_min, double mix_init)
 {
     return new CpuAndersonMixing(
-               sb, n_comp, max_anderson,
-               start_anderson_error, mix_min, mix_init);
+               sb, n_var, max_hist,
+               start_error, mix_min, mix_init);
 }
 void MklFactory::display_info()
 {

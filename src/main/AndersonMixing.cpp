@@ -1,15 +1,16 @@
 #include "AndersonMixing.h"
 AndersonMixing::AndersonMixing(
-    SimulationBox *sb, int n_comp,
-    int max_anderson, double start_anderson_error,
-    double mix_min,   double mix_init)
+    SimulationBox *sb, int n_var,
+    int max_hist, double start_error,
+    double mix_min, double mix_init)
 {
     this->sb = sb;
-    this->n_comp = n_comp;
+    /* the number of variables to be determined */
+    this->n_var = n_var;
     /* anderson mixing begin if error level becomes less then start_anderson_error */
-    this->start_anderson_error = start_anderson_error;
-    /* max number of previous steps to calculate new field when using Anderson mixing */
-    this->max_anderson = max_anderson;
+    this->start_error = start_error;
+    /* max number of histories to calculate new field when using Anderson mixing */
+    this->max_hist = max_hist;
     /* minimum mixing parameter */
     this->mix_min = mix_min;
     /* initialize mixing parameter */

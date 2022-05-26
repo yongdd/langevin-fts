@@ -1,72 +1,11 @@
-# For the start, change "Major Simulation Parameters", currently in lines 81-86
-# and "Initial Fields", currently in lines 130-144
-import sys
+# For the start, change "Major Simulation Parameters", currently in lines 20-27
+# and "Initial Fields", currently in lines 70-84
 import os
 import numpy as np
 import time
 from scipy.io import savemat
-import scipy.optimize
 from langevinfts import *
-
-def find_saddle_point(lx):
-
-    # set box size
-    sb.set_lx(lx)
-    # update bond parameters using new lx
-    pseudo.update()
-
-    # assign large initial value for the energy and error
-    energy_total = 1.0e20
-    error_level = 1.0e20
-
-    # reset Anderson mixing module
-    am.reset_count()
-
-    # iteration begins here
-    for scft_iter in range(1,max_scft_iter+1):
-        # for the given fields find the polymer statistics
-        phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
-
-        # calculate the total energy
-        energy_old = energy_total
-        w_minus = (w[0]-w[1])/2
-        w_plus  = (w[0]+w[1])/2
-
-        energy_total  = -np.log(Q/sb.get_volume())
-        energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
-        energy_total -= sb.integral(w_plus)/sb.get_volume()
-
-        # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-        xi = 0.5*(w[0]+w[1]-chi_n)
-
-        # calculate output fields
-        w_out[0] = chi_n*phi_b + xi
-        w_out[1] = chi_n*phi_a + xi
-        sb.zero_mean(w_out[0])
-        sb.zero_mean(w_out[1])
-
-        # error_level measures the "relative distance" between the input and output fields
-        old_error_level = error_level
-        w_diff = w_out - w
-        multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-        multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
-        error_level = np.sqrt(multi_dot)
-
-        # print iteration # and error levels and check the mass conservation
-        mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
-        print( "%8d %12.3E %15.7E %13.9f %13.9f" %
-            (scft_iter, mass_error, Q, energy_total, error_level) )
-
-        # conditions to end the iteration
-        if error_level < tolerance:
-            break
-        # calculte new fields using simple and Anderson mixing
-        am.caculate_new_fields(
-            np.reshape(w,      2*sb.get_n_grid()),
-            np.reshape(w_out,  2*sb.get_n_grid()),
-            np.reshape(w_diff, 2*sb.get_n_grid()),
-            old_error_level, error_level)
-    return energy_total
+from find_saddle_point import *
 
 # -------------- initialize ------------
 
@@ -76,7 +15,7 @@ os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 max_scft_iter = 1000
-tolerance = 1e-8
+tolerance = 1e-6
 
 # Major Simulation Parameters
 f = 0.36            # A-fraction, f
@@ -85,14 +24,14 @@ chi_n = 20          # Flory-Huggins Parameters * N
 epsilon = 1.0       # a_A/a_B, conformational asymmetry
 nx = [32,32,32]     # grid numbers
 lx = [3.3,3.3,3.3]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-chain_model = "Discrete" # choose among [Gaussian, Discrete]
+chain_model = "Gaussian" # choose among [Gaussian, Discrete]
 
 # Anderson mixing
-am_n_comp = 2         # w_a (w[0]) and w_b (w[1])
-am_max_hist= 20       # maximum number of history
-am_start_error = 1e-2 # when switch to AM from simple mixing
-am_mix_min = 0.1      # minimum mixing rate of simple mixing
-am_mix_init = 0.1     # initial mixing rate of simple mixing
+am_n_var = 2*np.prod(nx).item()+len(lx)  # w_a (w[0]) and w_b (w[1]) + lx
+am_max_hist= 20                          # maximum number of history
+am_start_error = 1e-2                    # when switch to AM from simple mixing
+am_mix_min = 0.1                         # minimum mixing rate of simple mixing
+am_mix_init = 0.1                        # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -106,7 +45,7 @@ factory = PlatformSelector.create_factory(platform)
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am = factory.create_anderson_mixing(sb, am_n_comp,
+am = factory.create_anderson_mixing(sb, am_n_var,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
@@ -125,7 +64,6 @@ print("Volume: %f" % (sb.get_volume()) )
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
-w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
@@ -152,20 +90,16 @@ sb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")
-print("iteration, mass error, total_partition, energy_total, error_level")
 time_start = time.time()
 
-# find the natural period of gyroid
-res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-5, options={'disp':True})
-print('Unit cell that minimizes the free energy: ', np.round(res.x, 4), '(aN^1/2)')
-print('Free energy per chain: ', np.round(res.fun,6), 'kT')
+phi_a, phi_b, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx,
+    q1_init, q2_init, w, max_scft_iter, tolerance)
 
 # estimate execution time
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # save final results
-phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
         "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
