@@ -24,7 +24,7 @@ CpuAndersonMixing::CpuAndersonMixing(int n_var, int max_hist,
     this->a_n = new double[max_hist];
     this->w_deriv_dots = new double[max_hist+1];
 
-    /* reset_count */
+    // reset_count
     reset_count();
 
 }
@@ -43,9 +43,9 @@ CpuAndersonMixing::~CpuAndersonMixing()
 }
 void CpuAndersonMixing::reset_count()
 {
-    /* initialize mixing parameter */
+    // initialize mixing parameter
     mix = mix_init;
-    /* number of anderson mixing steps, increases from 0 to max_hist */
+    // number of anderson mixing steps, increases from 0 to max_hist
     n_anderson = -1;
 
     cb_w_out_hist->reset();
@@ -55,7 +55,7 @@ void CpuAndersonMixing::reset_count()
 double CpuAndersonMixing::dot_product(double *a, double *b)
 {
     double sum{0.0};
-    for(int i; i<n_var; i++)
+    for(int i=0; i<n_var; i++)
         sum += a[i]*b[i];
     return sum;
 }
@@ -67,23 +67,21 @@ void CpuAndersonMixing::caculate_new_fields(
     double old_error_level,
     double error_level)
 {
-    double* w_out_hist1;
-    double* w_out_hist2;
+    double *w_out_hist1;
+    double *w_out_hist2;
 
-    //printf("mix: %f\n", mix);
-    /* condition to start anderson mixing */
+    // condition to start anderson mixing
     if(error_level < start_error || n_anderson >= 0)
         n_anderson = n_anderson + 1;
-    if( n_anderson >= 0 )
+    if(n_anderson >= 0)
     {
-        /* number of histories to use for anderson mixing */
+        // number of histories to use for anderson mixing
         n_anderson = std::min(max_hist, n_anderson);
-        /* store the input and output field (the memory is used in a periodic way) */
-
+        // store the input and output field (the memory is used in a periodic way)
         cb_w_out_hist->insert(w_out);
         cb_w_deriv_hist->insert(w_deriv);
 
-        /* evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper */
+        // evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
         for(int i=0; i<= n_anderson; i++)
         {
             w_deriv_dots[i] = dot_product(w_deriv, cb_w_deriv_hist->get_array(i));
@@ -91,7 +89,7 @@ void CpuAndersonMixing::caculate_new_fields(
         cb_w_deriv_dots->insert(w_deriv_dots);
     }
     // conditions to apply the simple mixing method
-    if( n_anderson <= 0 )
+    if(n_anderson <= 0)
     {
         // dynamically change mixing parameter
         if (old_error_level < error_level)
@@ -123,7 +121,8 @@ void CpuAndersonMixing::caculate_new_fields(
             }
         }
         find_an(u_nm, v_n, a_n, n_anderson);
-        //print_array(max_hist, v_n);
+        //std::cout << "v_n2" << std::endl;
+        //print_array(n_anderson+1, v_n);
         //exit(-1);
 
         // calculate the new field
@@ -138,7 +137,7 @@ void CpuAndersonMixing::caculate_new_fields(
         }
     }
 }
-
+// print array for debugging 
 void CpuAndersonMixing::print_array(int n, double *a)
 {
     for(int i=0; i<n-1; i++)
