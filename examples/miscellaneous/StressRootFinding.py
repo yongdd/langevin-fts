@@ -1,4 +1,3 @@
-import sys
 import os
 import numpy as np
 import time
@@ -21,6 +20,7 @@ def find_saddle_point(lx):
     am.reset_count()
 
     # iteration begins here
+    print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
         phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
@@ -91,18 +91,18 @@ lx = [3.4]#,3.5,3.7]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 
 chain_model = "Gaussian" # choose among [Gaussian, Discrete]
 
-am_n_comp = 2         # w_a (w[0]) and w_b (w[1])
-am_max_hist= 20       # maximum number of history
-am_start_error = 1e-1 # when switch to AM from simple mixing
-am_mix_min = 0.1      # minimum mixing rate of simple mixing
-am_mix_init = 0.1     # initial mixing rate of simple mixing
+am_n_var = 2*np.prod(nx).item() # w_a (w[0]) and w_b (w[1])
+am_max_hist= 20                 # maximum number of history
+am_start_error = 1e-1           # when switch to AM from simple mixing
+am_mix_min = 0.1                # minimum mixing rate of simple mixing
+am_mix_init = 0.1               # initial mixing rate of simple mixing
 
 # use stress for finding unit cell
 use_stress = True
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
-    platform = "cpu-fftw"
+    platform = "cuda"
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
@@ -112,7 +112,7 @@ factory = PlatformSelector.create_factory(platform)
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am = factory.create_anderson_mixing(sb, am_n_comp,
+am = factory.create_anderson_mixing(sb, am_n_var,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
@@ -157,7 +157,6 @@ sb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")
-print("iteration, mass error, total_partition, energy_total, error_level")
 time_start = time.time()
 
 # find the natural period of gyroid
@@ -173,10 +172,3 @@ else:
 # estimate execution time
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
-
-# save final results
-phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
-mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(),
-        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
-savemat("fields.mat", mdic)

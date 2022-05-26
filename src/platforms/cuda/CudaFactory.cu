@@ -27,21 +27,7 @@ SimulationBox* CudaFactory::create_simulation_box(
 Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
-    //bool use_two_gpus = false;
-    //const char *ENV_VAR = getenv("LFTS_USE_TWO_GPUS");
-    //std::string env_var(ENV_VAR ? ENV_VAR : "");
-    //if (env_var == "yes" || env_var == "y" ||
-        //env_var == "YES" || env_var == "Y" ||
-        //env_var == "on" || env_var == "true" ||
-        //env_var == "ON" || env_var == "TRUE"){
-        //use_two_gpus = true;
-    //}
-    //if(use_two_gpus && model_name == "discrete")
-        //return new CudaPseudoDiscreteTwoGpu(sb, pc);
-    //if(use_two_gpus && model_name == "gaussian")
-        //return NULL;
-    //else 
-    
+
     if( model_name == "gaussian" )
         return new CudaPseudoGaussian(sb, pc);
     else if ( model_name == "discrete" )
@@ -49,13 +35,13 @@ Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
-    SimulationBox *sb, int n_comp,
-    double max_anderson, double start_anderson_error,
+    SimulationBox *sb, int n_var,
+    int max_hist, double start_error,
     double mix_min, double mix_init)
 {
     return new CudaAndersonMixing(
-               sb, n_comp, max_anderson,
-               start_anderson_error, mix_min, mix_init);
+               sb, n_var, max_hist,
+               start_error, mix_min, mix_init);
 }
 void CudaFactory::display_info()
 {

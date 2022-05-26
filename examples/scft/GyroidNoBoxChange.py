@@ -26,11 +26,11 @@ lx = [3.3,3.3,3.3]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson mixing
-am_n_comp = 2         # w_a (w[0]) and w_b (w[1])
-am_max_hist= 20       # maximum number of history
-am_start_error = 1e-2 # when switch to AM from simple mixing
-am_mix_min = 0.1      # minimum mixing rate of simple mixing
-am_mix_init = 0.1     # initial mixing rate of simple mixing
+am_n_var = 2*np.prod(nx).item()  # w_a (w[0]) and w_b (w[1]) + lx
+am_max_hist= 20                  # maximum number of history
+am_start_error = 1e-2            # when switch to AM from simple mixing
+am_mix_min = 0.1                 # minimum mixing rate of simple mixing
+am_mix_init = 0.1                # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -44,7 +44,7 @@ factory = PlatformSelector.create_factory(platform)
 pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
-am = factory.create_anderson_mixing(sb, am_n_comp,
+am = factory.create_anderson_mixing(sb, am_n_var,
     am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
@@ -151,7 +151,6 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # save final results
-phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
         "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}

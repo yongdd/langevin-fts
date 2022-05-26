@@ -54,8 +54,8 @@ ADD_LIBRARY(common
     src/main/AndersonMixing.cpp
     )
 
-#  Intel MKL
-FIND_PACKAGE(MKL)
+# Intel MKL
+# FIND_PACKAGE(MKL)
 IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
     SET(BUILD_CPU_MKL_LIB TRUE)
 ELSE()

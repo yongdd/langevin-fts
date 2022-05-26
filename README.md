@@ -10,13 +10,13 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * Periodic Boundaries  
 * 3D, 2D and 1D
 * Pseudospectral Method, Anderson Mixing   
-* Platforms: MKL, FFTW (CPU) and CUDA (GPU)   
+* Platforms: FFTW (CPU) and CUDA (GPU)   
 
 # Dependencies
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher. If you want to use MKL, install Intel compiler. The Intel compiler is faster than gcc even when AMD CPU is used.
+  Any C++ compiler that supports C++14 standard or higher, but the Intel compiler is recommened if available. It is faster than gcc even when AMD CPU is used.
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
@@ -63,7 +63,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 
 # Developer Guide
 #### Platforms  
-  This program is designed to run on different platforms such as MKL, FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.   
+  This program is designed to run on different platforms such as FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.   
 
 #### Anderson Mixing  
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. There will be a performance loss of 5~10%.
