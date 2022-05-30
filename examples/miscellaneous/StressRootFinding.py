@@ -130,7 +130,7 @@ print("Volume: %f" % (sb.get_volume()) )
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2]+list(sb.get_nx()),  dtype=np.float64)
+w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
 w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
 q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)

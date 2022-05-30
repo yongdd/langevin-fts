@@ -1,4 +1,5 @@
 #include "AndersonMixing.h"
+
 AndersonMixing::AndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
 {

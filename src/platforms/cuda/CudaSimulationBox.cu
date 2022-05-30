@@ -2,9 +2,6 @@
 * This class defines simulation box parameters and provide
 * methods that compute inner product in a given geometry.
 *--------------------------------------------------------------*/
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <iostream>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
@@ -20,13 +17,13 @@ CudaSimulationBox::CudaSimulationBox(
 }
 void CudaSimulationBox::initialize()
 {
-    cudaMalloc((void**)&d_dv, sizeof(double)*n_grid);
-    cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid,cudaMemcpyHostToDevice);
+    sum = new double[n_grid];
+    gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*n_grid));
+    gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid,cudaMemcpyHostToDevice));
 
     // temporal storage
-    sum = new double[n_grid];
-    cudaMalloc((void**)&d_sum, sizeof(double)*n_grid);
-    cudaMalloc((void**)&d_multiple, sizeof(double)*n_grid);
+    gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*n_grid));
+    gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*n_grid));
 }
 //----------------- Destructor -----------------------------
 CudaSimulationBox::~CudaSimulationBox()
@@ -40,7 +37,7 @@ CudaSimulationBox::~CudaSimulationBox()
 void CudaSimulationBox::set_lx(std::vector<double> new_lx)
 {
     SimulationBox::set_lx(new_lx);
-    cudaMemcpy(d_dv, dv,  sizeof(double)*n_grid,cudaMemcpyHostToDevice);
+    gpu_error_check(cudaMemcpy(d_dv, dv,  sizeof(double)*n_grid,cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------
 double CudaSimulationBox::integral_gpu(double *d_g)

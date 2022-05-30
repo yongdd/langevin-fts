@@ -45,16 +45,12 @@ ADD_LIBRARY(common
     src/main/CircularBuffer.cpp
     src/main/Pseudo.cpp
     src/main/AndersonMixing.cpp
-    )
+)
 
 # Intel MKL
-FIND_PACKAGE(MKL)
+# FIND_PACKAGE(MKL)
 IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
     SET(BUILD_CPU_MKL_LIB TRUE)
-ELSE()
-    SET(BUILD_CPU_MKL_LIB FALSE)
-ENDIF()
-IF(BUILD_CPU_MKL_LIB)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
         src/platforms/cpu/MklFFT1D.cpp
@@ -64,7 +60,9 @@ IF(BUILD_CPU_MKL_LIB)
         src/platforms/cpu/CpuPseudoDiscrete.cpp
     	src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
-        )
+    )
+ELSE()
+    SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
 
 #  FFTW 
@@ -74,10 +72,6 @@ MESSAGE("${FFTW_INCLUDE}")
 MESSAGE("${FFTW_LIBRARY}")
 IF(FFTW_INCLUDE AND FFTW_LIBRARY)
     SET(BUILD_CPU_FFTW_LIB TRUE)
-ELSE()
-    SET(BUILD_CPU_FFTW_LIB FALSE)
-ENDIF()
-IF(BUILD_CPU_FFTW_LIB)
     INCLUDE_DIRECTORIES(${FFTW_INCLUDE})
     ADD_DEFINITIONS(-DUSE_CPU_FFTW)
     ADD_LIBRARY(cpu-fftw
@@ -88,8 +82,11 @@ IF(BUILD_CPU_FFTW_LIB)
         src/platforms/cpu/CpuPseudoDiscrete.cpp
     	src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/FftwFactory.cpp
-    	)
+    )
+ELSE()
+    SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
+
 
 #  NVIDIA CUDA
 FIND_PACKAGE(CUDAToolkit)
@@ -105,7 +102,7 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
         src/platforms/cuda/CudaFactory.cu
-        )
+    )
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES OFF)
 ENDIF()
 
@@ -118,44 +115,33 @@ ENDIF()
 #  Factory
 ADD_LIBRARY(factory
     src/main/PlatformSelector.cpp
-    )
+)
 
 #---------- Python Wrapper -----------
-
-FIND_PACKAGE(SWIG REQUIRED)
-INCLUDE(${SWIG_USE_FILE})
-
 FIND_PACKAGE(Python3 COMPONENTS Interpreter Development NumPy REQUIRED)
-
-#MESSAGE("${Python3_EXECUTABLE}")
-#MESSAGE("${Python3_INCLUDE_DIRS}")
-#MESSAGE("${Python3_NumPy_INCLUDE_DIRS}")
+FIND_PACKAGE(pybind11 CONFIG REQUIRED)
+SET(PYBIND11_CPP_STANDARD -std=c++14)
 
 INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 
-SET_SOURCE_FILES_PROPERTIES(src/swig/langevinfts.i PROPERTIES CPLUSPLUS ON)
+PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp)
 
-SWIG_ADD_LIBRARY(langevinfts
-    LANGUAGE python
-    SOURCES src/swig/langevinfts.i)
-
-SWIG_LINK_LIBRARIES(langevinfts
-	factory
+TARGET_LINK_LIBRARIES(langevinfts PRIVATE 
+    factory
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
+	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
 	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
 	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,${FFTW_LIBRARY},>
 	common
-	)
+)
 
+FILE(GLOB FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/langevinfts*.so")
 EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/_langevinfts.so DESTINATION ${PYTHON_SITE_PACKAGES})
-INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/langevinfts.py DESTINATION ${PYTHON_SITE_PACKAGES})
-    
+INSTALL(FILES "${FILE_NAME}" DESTINATION ${PYTHON_SITE_PACKAGES})
 #---------- Test -----------
 
 ENABLE_TESTING()

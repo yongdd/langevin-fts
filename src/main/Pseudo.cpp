@@ -7,6 +7,11 @@ Pseudo::Pseudo(
     SimulationBox *sb,
     PolymerChain *pc)
 {
+    if (sb == nullptr)
+        throw_with_line_number("SimulationBox *sb is null pointer");
+    if (pc == nullptr)
+        throw_with_line_number("PolymerChain *pc is null pointer");
+
     this->sb = sb;
     this->pc = pc;
     this->n_complex_grid = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
