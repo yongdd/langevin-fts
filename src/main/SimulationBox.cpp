@@ -1,22 +1,31 @@
 
 #include <iostream>
+#include <sstream>
 #include "SimulationBox.h"
 
 //----------------- Constructor -----------------------------
 SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx)
 {
     if ( new_nx.size() != new_lx.size() )
-    {
-        std::cerr << "The sizes of nx and lx are not the same. " << std::endl;
-        exit(-1);
+        throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
+    if ( new_nx.size() != 3 && new_nx.size() != 2 && new_nx.size() != 1)
+        throw_with_line_number("We expect 1D, 2D or 3D, but we get " + std::to_string(new_nx.size()));
+    if (std::any_of(new_nx.begin(), new_nx.end(), [](int nx) { return nx <= 0;})){
+        std::stringstream ss_nx;
+        std::copy(new_nx.begin(), new_nx.end(), std::ostream_iterator<int>(ss_nx, ", "));
+        std::string str_nx = ss_nx.str();
+        str_nx = str_nx.substr(0, str_nx.length()-2);
+        throw_with_line_number("nx (" + str_nx + ") must be positive numbers");
     }
-    this->dim = new_nx.size();
-    if ( dim != 3 && dim != 2 && dim != 1 )
-    {
-        std::cerr << "We expect 1D, 2D or 3D, but we get " << dim <<std::endl;
-        exit(-1);
+    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
+        std::stringstream ss_lx;
+        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
+        std::string str_lx = ss_lx.str();
+        str_lx = str_lx.substr(0, str_lx.length()-2);
+        throw_with_line_number("lx (" + str_lx + ") must be positive numbers");
     }
 
+    this->dim = new_nx.size();
     for(int i=0; i<dim; i++)
     {
         nx[i+3-dim] = new_nx[i];
@@ -100,9 +109,14 @@ double SimulationBox::get_volume()
 void SimulationBox::set_lx(std::vector<double> new_lx)
 {
     if ( new_lx.size() != (unsigned int) dim )
-    {
-        std::cerr << "The sizes of new nx and dimension are not the same. " << std::endl;
-        exit(-1);
+        throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");
+
+    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
+        std::stringstream ss_lx;
+        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
+        std::string str_lx = ss_lx.str();
+        str_lx = str_lx.substr(0, str_lx.length()-2);
+        throw_with_line_number("new lx (" + str_lx + ") must be positive numbers");
     }
 
     for(int i=0; i<dim; i++)

@@ -133,7 +133,7 @@ for scft_iter in range(1,max_scft_iter+1):
 
     # print iteration # and error levels and check the mass conservation
     mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
-    print( "%8d %12.3E %15.7E %13.9f %13.9f" %
+    print("%8d %12.3E %15.7E %15.9f %15.7E" %
         (scft_iter, mass_error, Q, energy_total, error_level) )
 
     # conditions to end the iteration

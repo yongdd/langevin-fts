@@ -7,6 +7,7 @@
 
 #include <array>
 #include <complex>
+#include "Exception.h"
 
 class FFT
 {

@@ -3,28 +3,35 @@
 
 FftwFFT2D::FftwFFT2D(std::array<int,2> nx)
 {
-    this->n_grid = nx[0]*nx[1];
+    try
+    {
+        this->n_grid = nx[0]*nx[1];
 
-    // dummpy arrays for FFTW_Plan. need to find a better way
-    double *data_in_dummpy = new double[this->n_grid];
-    std::complex<double>* data_out_dummpy = new std::complex<double>[nx[0]*(nx[1]/2+1)];
+        // dummpy arrays for FFTW_Plan. need to find a better way
+        double *data_in_dummpy = new double[this->n_grid];
+        std::complex<double>* data_out_dummpy = new std::complex<double>[nx[0]*(nx[1]/2+1)];
 
-    plan_forward =  fftw_plan_dft_r2c_2d(
-                        nx[0],nx[1]
-                        ,data_in_dummpy,
-                        reinterpret_cast<fftw_complex*> (data_out_dummpy),
-                        FFTW_MEASURE);
-    plan_backward = fftw_plan_dft_c2r_2d(
-                        nx[0],nx[1],
-                        reinterpret_cast<fftw_complex *> (data_out_dummpy),
-                        data_in_dummpy,
-                        FFTW_MEASURE); //FFTW_MEASURE, FFTW_ESTIMATE
+        plan_forward =  fftw_plan_dft_r2c_2d(
+                            nx[0],nx[1]
+                            ,data_in_dummpy,
+                            reinterpret_cast<fftw_complex*> (data_out_dummpy),
+                            FFTW_MEASURE);
+        plan_backward = fftw_plan_dft_c2r_2d(
+                            nx[0],nx[1],
+                            reinterpret_cast<fftw_complex *> (data_out_dummpy),
+                            data_in_dummpy,
+                            FFTW_MEASURE); //FFTW_MEASURE, FFTW_ESTIMATE
 
-    delete[] data_in_dummpy;
-    delete[] data_out_dummpy;
+        delete[] data_in_dummpy;
+        delete[] data_out_dummpy;
 
-    // compute a normalization factor
-    this->fft_normal_factor = nx[0]*nx[1];
+        // compute a normalization factor
+        this->fft_normal_factor = nx[0]*nx[1];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }
 FftwFFT2D::~FftwFFT2D()
 {

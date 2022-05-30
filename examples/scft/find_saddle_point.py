@@ -22,7 +22,6 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
         phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 
         # calculate the total energy
-        energy_old = energy_total
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
@@ -59,15 +58,15 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
             break
 
         # calculte new fields using simple and Anderson mixing
-        am_out  = np.concatenate((np.reshape(w,      2*sb.get_n_grid()), lx))
-        am_in   = np.concatenate((np.reshape(w_out,  2*sb.get_n_grid()), lx + stress_array))
+        am_new  = np.concatenate((np.reshape(w,      2*sb.get_n_grid()), lx))
+        am_out  = np.concatenate((np.reshape(w_out,  2*sb.get_n_grid()), lx + stress_array))
         am_diff = np.concatenate((np.reshape(w_diff, 2*sb.get_n_grid()), stress_array))
-        am.caculate_new_fields(am_out, am_in, am_diff, old_error_level, error_level)
+        am.caculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
         # set box size
-        w[0] = am_out[0:sb.get_n_grid()]
-        w[1] = am_out[sb.get_n_grid():2*sb.get_n_grid()]
-        lx = am_out[-sb.get_dim():]
+        w[0] = am_new[0:sb.get_n_grid()]
+        w[1] = am_new[sb.get_n_grid():2*sb.get_n_grid()]
+        lx = am_new[-sb.get_dim():]
         print(np.round(lx,7))
         sb.set_lx(lx)
         # update bond parameters using new lx

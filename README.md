@@ -29,12 +29,10 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-  `conda create -n lfts python=3.9 cmake=3.19 conda git swig scipy fftw openmpi`  
+  `conda create -n lfts python=3.9 cmake=3.19 conda git pybind11 scipy fftw openmpi`  
   `conda activate lfts`  
   `git clone https://github.com/yongdd/langevin-fts.git`  
-  `cd langevin-fts`  
-  `mkdir build`  
-  `cd build`  
+  `cd langevin-fts && mkdir build && cd build`  
   `cmake ../`  
   `make`   
   `make test`   
@@ -72,8 +70,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
 
 #### Python Binding  
-  `SWIG` will generate Python interfaces for the C++ headers listed in the `src/swig/langevinfts.i`. Please read the page below to learn how to handle C++ data types with NumPy.   
-   https://numpy.org/doc/stable/reference/swig.interface-file.html    
+  `pybind11` is utilized to generate Python interfaces for the C++ classes.   
+   https://pybind11.readthedocs.io/en/stable/index.html 
 
 # References
 #### CUDA Implementation

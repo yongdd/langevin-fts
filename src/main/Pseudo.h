@@ -8,8 +8,16 @@
 #include <iostream>
 #include <cassert>
 #include <cstdio>
+#include <tuple>
+
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+
 #include "SimulationBox.h"
 #include "PolymerChain.h"
+#include "Exception.h"
+
+namespace py = pybind11;
 
 class Pseudo
 {
@@ -41,63 +49,60 @@ public:
         
     virtual std::array<double,3> dq_dl() = 0;
 
-    // Methods for SWIG
-    void find_phi(
-        double **phi_a, int *len_p_a,
-        double **phi_b, int *len_p_b,
-        double *q1_init, int len_q1,
-        double *q2_init, int len_q2,
-        double *w_a, int len_w_a,
-        double *w_b, int len_w_b,
-        double &single_partition)
+    // Methods for pybind11
+    std::tuple<py::array_t<double>, py::array_t<double>, double>
+    find_phi(py::array_t<double> q1_init, py::array_t<double> q2_init, py::array_t<double> w_a, py::array_t<double> w_b)
     {
-        assert(len_q1  == sb->get_n_grid());
-        assert(len_q2  == sb->get_n_grid());
-        assert(len_w_a == sb->get_n_grid());
-        assert(len_w_b == sb->get_n_grid());
-        
-        double *phi_a_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        double *phi_b_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        
-        assert(phi_a_alloc != NULL);
-        assert(phi_b_alloc != NULL);
-        
-        if (phi_a_alloc == NULL)
-            std::cout << "Failed malloc() for phi_a" << std::endl;
-        if (phi_b_alloc == NULL)
-            std::cout << "Failed malloc() for phi_b" << std::endl;
+        const int M = sb->get_n_grid();
+        py::buffer_info buf_q1_init = q1_init.request();
+        py::buffer_info buf_q2_init = q2_init.request();
+        py::buffer_info buf_w_a = w_a.request();
+        py::buffer_info buf_w_b = w_b.request();
+
+        if (buf_q1_init.size != M)
+            throw_with_line_number("Size of input q1_init (" + std::to_string(buf_q1_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+        if (buf_q2_init.size != M)
+            throw_with_line_number("Size of input q2_init (" + std::to_string(buf_q2_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+        if (buf_w_a.size != M)
+            throw_with_line_number("Size of input w_a ("     + std::to_string(buf_w_a.size)     + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+        if (buf_w_b.size != M)
+            throw_with_line_number("Size of input w_b ("     + std::to_string(buf_w_b.size)     + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+
+        try{
+            double single_partition;
+            py::array_t<double> phi_a = py::array_t<double>(M);
+            py::array_t<double> phi_b = py::array_t<double>(M);
+            py::buffer_info buf_phi_a = phi_a.request();
+            py::buffer_info buf_phi_b = phi_b.request();
+
+            find_phi((double*) buf_phi_a.ptr,   (double*) buf_phi_b.ptr,
+                    (double*) buf_q1_init.ptr, (double*) buf_q2_init.ptr,
+                    (double*) buf_w_a.ptr,     (double*) buf_w_b.ptr, single_partition);
             
-        *phi_a = phi_a_alloc;
-        *phi_b = phi_b_alloc;
-        
-        *len_p_a = sb->get_n_grid();
-        *len_p_b = sb->get_n_grid();
-        
-        find_phi(*phi_a, *phi_b, q1_init, q2_init, w_a, w_b, single_partition);
-    }
-    void get_partition(
-        double **q1_out, int *len_q1,  
-        double **q2_out, int *len_q2, 
-        int n1, int n2)
+            return std::make_tuple(std::move(phi_a), std::move(phi_b), single_partition);
+        }
+        catch(std::exception& exc)
+        {
+            throw_without_line_number(exc.what());
+        }
+    };
+    std::tuple<py::array_t<double>, py::array_t<double>> get_partition(int n1, int n2)
     {
-        double *q1_out_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        double *q2_out_alloc = (double *) malloc(sb->get_n_grid()*sizeof(double));
-        
-        assert(q1_out_alloc != NULL);
-        assert(q2_out_alloc != NULL);
-        
-        if (q1_out_alloc == NULL)
-            std::cout << "Failed malloc() for q1_out" << std::endl;
-        if (q2_out_alloc == NULL)
-            std::cout << "Failed malloc() for q2_out" << std::endl;
+        try{
+            const int M = sb->get_n_grid();
+            py::array_t<double> q1 = py::array_t<double>(M);
+            py::array_t<double> q2 = py::array_t<double>(M);
+            py::buffer_info buf_q1 = q1.request();
+            py::buffer_info buf_q2 = q2.request();
+
+            get_partition((double*) buf_q1.ptr, n1, (double*) buf_q2.ptr, n2);
             
-        *q1_out = q1_out_alloc;
-        *q2_out = q2_out_alloc;
-        
-        *len_q1 = sb->get_n_grid();
-        *len_q2 = sb->get_n_grid();
-        
-        get_partition(*q1_out, n1, *q2_out, n2);
-    }
+            return std::make_tuple(std::move(q1), std::move(q2));
+        }
+        catch(std::exception& exc)
+        {
+            throw_with_line_number(exc.what());
+        }
+    };
 };
 #endif

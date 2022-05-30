@@ -46,36 +46,21 @@ void CudaFactory::display_info()
     int device;
     int devices_count;
     struct cudaDeviceProp prop;
-    cudaError_t err;
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
     // get GPU info
-    err = cudaGetDeviceCount(&devices_count);
-    if (err != cudaSuccess)
-    {
-        std::cout<< cudaGetErrorString(err) << std::endl;
-        exit (1);
-    }
-    err = cudaGetDevice(&device);
-    if (err != cudaSuccess)
-    {
-        std::cout<< cudaGetErrorString(err) << std::endl;
-        exit (1);
-    }
-    err = cudaGetDeviceProperties(&prop, device);
-    if (err != cudaSuccess)
-    {
-        std::cout<< cudaGetErrorString(err) << std::endl;
-        exit (1);
-    }
+    gpu_error_check(cudaGetDeviceCount(&devices_count));
+    gpu_error_check(cudaGetDevice(&device));
+    gpu_error_check(cudaGetDeviceProperties(&prop, device));
 
     std::cout<< "---------- CUDA Setting and Device Information ----------" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
 
     std::cout<< "DeviceCount: " << devices_count << std::endl;
-    printf( "Device %d: \t\t\t\t%s\n", device, prop.name );
+    std::cout<< "Device " << device << ": \t\t\t\t" << prop.name << std::endl;
+
     std::cout<< "Compute capability version: \t\t" << prop.major << "." << prop.minor << std::endl;
     std::cout<< "Multiprocessor: \t\t\t" << prop.multiProcessorCount << std::endl;
 
@@ -92,24 +77,12 @@ void CudaFactory::display_info()
     std::cout<< prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", " << prop.maxGridSize[2] << ")\n";
 
     if(prop.deviceOverlap)
-    {
-    std::cout<< "Device overlap: \t\t\tYes" << std::endl;
-    }
+        std::cout<< "Device overlap: \t\t\tYes" << std::endl;
     else
-    {
-    std::cout<< "Device overlap: \t\t\tNo" << std::endl;
-    }
+        std::cout<< "Device overlap: \t\t\tNo" << std::endl;
 
     if (N_THREADS > prop.maxThreadsPerBlock)
-    {
-        std::cout<< "'threads_per_block' cannot be greater than 'Maximum threads per block'" << std::endl;
-        exit (1);
-    }
-
+        throw_with_line_number("'threads_per_block' cannot be greater than 'Maximum threads per block'");
     if (N_BLOCKS > prop.maxGridSize[0])
-    {
-        std::cout<< "The number of blocks cannot be greater than 'Max size of a grid size (x)'" << std::endl;
-        exit (1);
-    }
-    
+        throw_with_line_number("The number of blocks cannot be greater than 'Max size of a grid size (x)'");
 }

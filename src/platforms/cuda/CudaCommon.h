@@ -1,8 +1,14 @@
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+
 #include <complex>
 #include <cufft.h>
+#include <thrust/system_error.h>
+#include <thrust/system/cuda/error.h>
+#include "Exception.h"
 
 typedef cufftDoubleComplex ftsComplex;
 
@@ -23,8 +29,14 @@ public:
 
     static CudaCommon& get_instance()
     {
-        static CudaCommon* instance = new CudaCommon();
-        return *instance;
+        try{
+            static CudaCommon* instance = new CudaCommon();
+            return *instance;
+        }
+        catch(std::exception& exc)
+        {
+            throw_without_line_number(exc.what());
+        }
     };
     void set(int n_blocks, int n_threads, int process_idx);
     
@@ -35,6 +47,9 @@ public:
     void set_n_threads(int n_threads);
     void set_idx(int process_idx);
 };
+
+#define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
+void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
 __global__ void multi_real(double* dst,
                           double* src1,

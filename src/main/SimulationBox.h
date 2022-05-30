@@ -10,6 +10,13 @@
 #include <vector>
 #include <cassert>
 
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+
+#include "Exception.h"
+
+namespace py = pybind11;
+
 class SimulationBox
 {
 protected:
@@ -26,12 +33,12 @@ public:
     virtual ~SimulationBox();
 
     int get_dim();
-    int get_nx(int i);
-    double get_lx(int i);
-    double get_dx(int i);
     std::array<int,3> get_nx();
+    int get_nx(int i);
     std::array<double,3> get_lx();
+    double get_lx(int i);
     std::array<double,3> get_dx();
+    double get_dx(int i);
     double get_dv(int i);
     int get_n_grid();
     double get_volume();
@@ -43,22 +50,38 @@ public:
     double multi_inner_product(int n_comp, double *g, double *h);
     void zero_mean(double *g);
 
-    // Method for SWIG
-    double integral(double *g, int len_g)
-    {
-        assert(len_g == n_grid);
-        return integral(g);
-    }
-    double inner_product(double *g, int len_g, double *h, int len_h)
-    {
-        assert(len_g == n_grid);
-        assert(len_h == n_grid);
-        return inner_product(g, h);
-    }
-    void zero_mean(double *g, int len_g)
-    {
-        assert(len_g == n_grid);
-        zero_mean(g);
+    // Methods for pybind11
+    double integral(py::array_t<double> g) {
+        py::buffer_info buf = g.request();
+        if (buf.size != n_grid) {
+            throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
+        }
+        return integral((double*) buf.ptr);
+    };
+    double inner_product(py::array_t<double> g, py::array_t<double> h) {
+        py::buffer_info buf1 = g.request();
+        py::buffer_info buf2 = h.request();
+        if (buf1.size != n_grid) 
+            throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
+        if (buf2.size != n_grid)
+            throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
+        return inner_product((double*) buf1.ptr, (double*) buf2.ptr);
+    };
+    double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
+        py::buffer_info buf1 = g.request();
+        py::buffer_info buf2 = h.request();
+        if (buf1.size != n_comp*n_grid) 
+            throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x n_grid' (" + std::to_string(n_comp*n_grid) + ") must match");
+        if (buf2.size != n_comp*n_grid)
+            throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x n_grid' (" + std::to_string(n_comp*n_grid) + ") must match");
+        return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
+    };
+    void zero_mean(py::array_t<double> g) {
+        py::buffer_info buf = g.request();
+        if (buf.size != n_grid) {
+            throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
+        }
+        zero_mean((double*) buf.ptr);
     };
 };
 #endif
