@@ -1,6 +1,10 @@
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+
 #include <iostream>
 #include <cstdlib>
 #include <string>
+
 #include "CudaCommon.h"
 
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func)

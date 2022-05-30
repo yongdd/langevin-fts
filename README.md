@@ -16,7 +16,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher, but the Intel compiler is recommened if available. It is faster than gcc even when AMD CPU is used.
+  Any C++ compiler that supports C++14 standard or higher.
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
@@ -38,7 +38,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make test`   
   `make install`   
    
-* You can specify your C++ compiler with the following command. (`icpc` is recommened if available)  
+* You can specify your C++ compiler with the following command. 
   `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 * **If you encounter `segmentation fault`, type following commands.**      
