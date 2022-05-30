@@ -1,6 +1,8 @@
 /*----------------------------------------------------------
 * class CudaFactory
 *-----------------------------------------------------------*/
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
 
 #include <iostream>
 #include <array>
@@ -10,7 +12,6 @@
 #include "CudaSimulationBox.h"
 #include "CudaPseudoGaussian.h"
 #include "CudaPseudoDiscrete.h"
-//#include "CudaPseudoDiscreteTwoGpu.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
