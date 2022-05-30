@@ -139,9 +139,16 @@ TARGET_LINK_LIBRARIES(langevinfts PRIVATE
 	common
 )
 
-FILE(GLOB FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/langevinfts*.so")
 EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-INSTALL(FILES "${FILE_NAME}" DESTINATION ${PYTHON_SITE_PACKAGES})
+INSTALL(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/" DESTINATION ${PYTHON_SITE_PACKAGES}
+        FILES_MATCHING
+        PATTERN "langevinfts*.so"
+        PATTERN ".cmake" EXCLUDE
+        PATTERN "CMakeFiles" EXCLUDE
+        PATTERN "Testing" EXCLUDE
+        PATTERN "tests" EXCLUDE
+)
+
 #---------- Test -----------
 
 ENABLE_TESTING()
