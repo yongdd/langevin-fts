@@ -1,3 +1,6 @@
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
@@ -449,12 +452,12 @@ void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
         throw_without_line_number(exc.what());
     }
 }
-// Get partial partition functions
-// This is made for debugging and testing.
-// Do NOT this at main progarams.
-
 void CudaPseudoGaussian::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
+    // This method should be invoked after invoking find_phi().
+    
+    // Get partial partition functions
+    // This is made for debugging and testing.
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
         
