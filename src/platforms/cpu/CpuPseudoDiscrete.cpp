@@ -241,13 +241,13 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
         throw_without_line_number(exc.what());
     }
 }
-
-/* Get partial partition functions
-* This is made for debugging and testing.
-* Do NOT this at main progarams.
-* */
 void CpuPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
+    // This method should be invoked after invoking find_phi().
+    
+    // Get partial partition functions
+    // This is made for debugging and testing.
+
     const int M = sb->get_n_grid();
     const int N = pc->get_n_contour();
 

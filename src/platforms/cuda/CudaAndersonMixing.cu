@@ -1,3 +1,6 @@
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+
 #include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>

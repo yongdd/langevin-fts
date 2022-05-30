@@ -1,9 +1,6 @@
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <complex>
 #include <cufft.h>
 #include <thrust/system_error.h>
