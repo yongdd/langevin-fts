@@ -4,8 +4,8 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 # Features
 * SCFT and L-FTS   
 * AB Diblock Copolymer Melt  
-* **(beta version)** Conformational Asymmetry   
-* **(beta version)** Stress Calculation
+* Conformational Asymmetry   
+* Stress Calculation   
 * Chain Model: Gaussian, Discrete   
 * Periodic Boundaries  
 * 3D, 2D and 1D
@@ -78,5 +78,6 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 #### Langevin FTS
 + M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
-#### My Work
-+ D. Yong, Y. Kim, S. Jo, D.Y. Ryu, and .U. Kim*, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces, *Macromolecules* **2021**, 54, 11304   
+
+# Citation
+Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, **2022**, in revision
