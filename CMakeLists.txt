@@ -12,11 +12,9 @@ SET(CMAKE_BUILD_TYPE Release)
 #SET(CMAKE_BUILD_TYPE Debug  )
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 ADD_COMPILE_OPTIONS(-ffast-math)
 
 #---------- FTS_LIBRARIES -----------
-
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     SET(CMAKE_VERBOSE_MAKEFILE ON)
     #IF(MSVC)
@@ -26,7 +24,7 @@ IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     #ENDIF()
 ENDIF()
 
-#  OpenMP
+# OpenMP
 FIND_PACKAGE(OpenMP)
 IF (OPENMP_FOUND)
     SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -34,19 +32,18 @@ IF (OPENMP_FOUND)
     SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 ENDIF()
 
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/main/)
+INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/common/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cpu/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
-#  Common Files
-
+# Common Files
 ADD_LIBRARY(common
-    src/main/ParamParser.cpp
-    src/main/PolymerChain.cpp
-    src/main/SimulationBox.cpp
-    src/main/CircularBuffer.cpp
-    src/main/Pseudo.cpp
-    src/main/AndersonMixing.cpp
+    src/common/ParamParser.cpp
+    src/common/PolymerChain.cpp
+    src/common/SimulationBox.cpp
+    src/common/CircularBuffer.cpp
+    src/common/Pseudo.cpp
+    src/common/AndersonMixing.cpp
 )
 
 # Intel MKL
@@ -116,7 +113,7 @@ ENDIF()
 
 #  Factory
 ADD_LIBRARY(factory
-    src/main/PlatformSelector.cpp
+    src/common/PlatformSelector.cpp
 )
 
 #---------- Python Wrapper -----------
@@ -145,6 +142,5 @@ EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_li
 INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/langevinfts.so" DESTINATION ${PYTHON_SITE_PACKAGES})
 
 #---------- Test -----------
-
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)
