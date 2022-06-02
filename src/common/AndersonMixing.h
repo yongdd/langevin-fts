@@ -51,8 +51,7 @@ public:
         }
         catch(std::exception& exc)
         {
-            std::cerr << exc.what() << std::endl;
-            throw_with_line_number("");
+            throw_without_line_number(exc.what());
         }
     };
 

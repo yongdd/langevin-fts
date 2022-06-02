@@ -37,9 +37,6 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make`   
   `make test`   
   `make install`   
-   
-* You can specify your C++ compiler with the following command.   
-  `cmake ../  -DCMAKE_CXX_COMPILER=[Your CXX Compiler, e.g. "icpc", "g++"]`  
 
 * **If you encounter `segmentation fault`, type following commands.**      
   `ulimit -s unlimited`   

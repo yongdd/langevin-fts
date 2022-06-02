@@ -14,4 +14,4 @@
 17. Variable 'Gaussian' -> 'Continous' ?
 18. Variable 'n_contous' -> 'n_segment' ?
 19. User Interface layer?
-20. GUI? 
+20. GUI?
