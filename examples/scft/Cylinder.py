@@ -4,6 +4,7 @@ import os
 import numpy as np
 import time
 from scipy.io import savemat
+from scipy.ndimage.filters import gaussian_filter
 from langevinfts import *
 from find_saddle_point import *
 
@@ -15,16 +16,16 @@ os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 max_scft_iter = 1000
-tolerance = 1e-6
+tolerance = 1e-7
 
 # Major Simulation Parameters
-f = 0.36            # A-fraction, f
-n_contour = 100     # segment number, N
-chi_n = 20          # Flory-Huggins Parameters * N
+f = 1.0/3.0         # A-fraction, f
+n_contour = 90      # segment number, N
+chi_n = 15.0        # Flory-Huggins Parameters * N
 epsilon = 1.0       # a_A/a_B, conformational asymmetry
-nx = [32,32,32]     # grid numbers
-lx = [3.3,3.3,3.3]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-chain_model = "Gaussian" # choose among [Gaussian, Discrete]
+nx = [64,48,48]     # grid numbers
+lx = [6.4,5.52,np.sqrt(3.0/4.0)*5.52]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson mixing
 am_n_var = 2*np.prod(nx).item()+len(lx)  # w_a (w[0]) and w_b (w[1]) + lx
@@ -68,21 +69,17 @@ q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
-print("w_A and w_B are initialized to gyroid phase.")
-# [Ref: https://pubs.acs.org/doi/pdf/10.1021/ma951138i]
-for i in range(0,sb.get_nx(0)):
-    xx = (i+1)*2*np.pi/sb.get_nx(0)
-    for j in range(0,sb.get_nx(1)):
-        yy = (j+1)*2*np.pi/sb.get_nx(1)
-        for k in range(0,sb.get_nx(2)):
-            zz = (k+1)*2*np.pi/sb.get_nx(2)
-            c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
-                np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
-            c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
-                np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
-            idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
-            w[0,i,j,k] = -0.3164*c1 +0.1074*c2
-            w[1,i,j,k] =  0.3164*c1 -0.1074*c2
+print("w_A and w_B are initialized to cylindrical phase.")
+cylinder_positions = [
+[0.0,0.0],[0.0,1/3],[0.0,2/3],
+[1/2,0.0],[1/2,1/3],[1/2,2/3],
+[1/4,1/6],[1/4,3/6],[1/4,5/6],
+[3/4,1/6],[3/4,3/6],[3/4,5/6]]
+for y,z in cylinder_positions:
+    _, my, mz = np.round((np.array([0, y, z])*sb.get_nx())).astype(np.int32)
+    w[0,:,my,mz] = -1/np.prod(sb.get_dx())
+w[0] = gaussian_filter(w[0], sigma=np.min(sb.get_nx())/15, mode='wrap')
+w = np.reshape(w, [2, sb.get_n_grid()])
 
 w = np.reshape(w, [2, sb.get_n_grid()])
 
