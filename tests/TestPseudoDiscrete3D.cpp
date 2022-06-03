@@ -2,9 +2,22 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
-#include "SimulationBox.h"
+#include "PolymerChain.h"
+#ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
+#include "SimulationBox.h"
 #include "CpuPseudoDiscrete.h"
+#endif
+#ifdef USE_CPU_FFTW
+#include "FftwFFT3D.h"
+#include "SimulationBox.h"
+#include "CpuPseudoDiscrete.h"
+#endif
+#ifdef USE_CUDA
+#include "CudaSimulationBox.h"
+#include "SimulationBox.h"
+#include "CudaPseudoDiscrete.h"
+#endif
 
 int main()
 {
@@ -14,28 +27,21 @@ int main()
     const int MM{II*JJ*KK};
     const int NN{4};
 
-    double phia[MM], phib[MM];
+    double phi_a[MM], phi_b[MM];
     double q1_init[MM] {0.0}, q2_init[MM] {0.0};
     double q1_last[MM], q2_last[MM];
 
     std::array<double,MM> diff_sq;
-
     double QQ, error;
     double Lx, Ly, Lz, f;
-
-//-------------- initialize ------------
-    std::cout<< "Initializing" << std::endl;
 
     f = 0.5;
     Lx = 4.0;
     Ly = 3.0;
     Lz = 2.0;
 
-    PolymerChain pc(f, NN, 0.0, "Discrete", 1.0);
-    SimulationBox sb({II,JJ,KK}, {Lx,Ly,Lz});
-
     // initialize pseudo spectral parameters
-    double wa[MM] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
+    double w_a[MM] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
                      0.792673860e-1,0.429684069e+0,0.290531312e+0,0.453270921e+0,0.199228629e+0,
                      0.754931905e-1,0.226924328e+0,0.936407886e+0,0.979392715e+0,0.464957186e+0,
                      0.742653949e+0,0.368019859e+0,0.885231224e+0,0.406191773e+0,0.653096157e+0,
@@ -48,13 +54,7 @@ int main()
                      0.217988206e+0,0.273487202e+0,0.937672578e+0,0.570540523e+0,0.409071185e+0,
                      0.391548274e-1,0.663478965e+0,0.260755447e+0,0.503943226e+0,0.979481790e+0
                     };
-
-    //idx = 0*JJ*KK + 0*KK + KK-1;
-    //std::cout<< "wa[0][0][KK-1]: " << wa[idx] << std::endl;
-    //idx = 0*JJ*KK + 1*KK + 0;
-    //std::cout<< "wa[0][1][0]: " << wa[idx] << std::endl;
-
-    double wb[MM] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
+    double w_b[MM] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
                      0.604752856e+0,0.890062293e+0,0.328557615e+0,0.965824739e+0,0.865399960e+0,
                      0.698893686e+0,0.857947305e+0,0.594897904e+0,0.248187208e+0,0.155686710e+0,
                      0.116803898e+0,0.711146609e+0,0.107610460e+0,0.143034307e+0,0.123131521e+0,
@@ -67,39 +67,6 @@ int main()
                      0.872008750e+0,0.116289041e+0,0.917713893e+0,0.710076955e+0,0.442712526e+0,
                      0.516722213e+0,0.253395805e+0,0.472950065e-1,0.152934959e+0,0.292486174e+0
                     };
-
-    //for(int i=0; i<MM; i++)
-    //{
-    //wa[i] = 0.0;
-    //wb[i] = 0.0;
-    //}
-
-    CpuPseudoDiscrete pseudo(&sb, &pc, new MklFFT3D(sb.get_nx()));
-
-    // q1 is q and q2 is qdagger in the note
-    // free end initial condition (q1 starts from A end, q2 starts from B end)
-    // free end initial condition (q1 starts from A end, q2 starts from B end)
-    for(int i=0; i<MM; i++)
-    {
-        q1_init[i] = 1.0;
-        q2_init[i] = 1.0;
-    }
-
-    //---------------- run --------------------
-    std::cout<< "Running MKL Pseudo " << std::endl;
-    pseudo.find_phi(phia, phib,q1_init,q2_init,wa,wb,QQ);
-
-    //--------------- check --------------------
-    std::cout<< "Checking"<< std::endl;
-    std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-    pseudo.get_partition(q1_last, NN, q2_last, 1);
-
-    //std::cout.precision(7);
-    //std::cout<< "Total Partition :" << QQ << std::endl;
-    //std::cout<< "q2_last :" << std::endl;
-    //for(int i=0; i<MM; i++)
-        //std::cout<< q2_last[i] << ", ";
-    //std::cout<< std::endl;
 
     double q1_last_ref[MM] =
     {
@@ -124,13 +91,6 @@ int main()
         0.6565188163, 0.6397814783, 0.6643697285,
         0.7451651245, 0.7103777775, 0.6601950486,
     };
-    for(int i=0; i<MM; i++)
-        diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
-    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-    std::cout<< "Partial Partition error: "<< error << std::endl;
-    if (std::isnan(error) || error > 1e-7)
-        return -1;
-
     double q2_last_ref[MM] =
     {
         0.7176798338, 0.6042915134, 0.5918953965,
@@ -154,14 +114,8 @@ int main()
         0.6659624911, 0.7423527556, 0.5904088681,
         0.6964611731, 0.6392740127, 0.5386998310,
     };
-    for(int i=0; i<MM; i++)
-        diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
-    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-    std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
-    if (std::isnan(error) || error > 1e-7)
-        return -1;
 
-    double phia_ref[MM] =
+    double phi_a_ref[MM] =
     {
         0.5871562287, 0.4892126961, 0.4803222522,
         0.4165447787, 0.4353225376, 0.5636010020,
@@ -184,14 +138,7 @@ int main()
         0.5381591404, 0.5957594220, 0.4787623392,
         0.5699577844, 0.5218485135, 0.4385727829,
     };
-    for(int i=0; i<MM; i++)
-        diff_sq[i] = pow(phia[i] - phia_ref[i],2);
-    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-    std::cout<< "Segment Concentration A error: "<< error << std::endl;
-    if (std::isnan(error) || error > 1e-7)
-        return -1;
-
-    double phib_ref[MM] =
+    double phi_b_ref[MM] =
     {
         0.5993807185, 0.5098300867, 0.5316831637,
         0.4376979637, 0.5225050305, 0.4821473007,
@@ -214,11 +161,77 @@ int main()
         0.5308744790, 0.5240701503, 0.5287361831,
         0.6026298306, 0.5704206516, 0.5204642918,
     };
+
+    // q1 is q and q2 is qdagger in the note
+    // free end initial condition (q1 starts from A end, q2 starts from B end)
+    // free end initial condition (q1 starts from A end, q2 starts from B end)
     for(int i=0; i<MM; i++)
-        diff_sq[i] = pow(phib[i] - phib_ref[i],2);
-    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-    std::cout<< "Segment Concentration B error: "<< error << std::endl;
-    if (std::isnan(error) || error > 1e-7)
-        return -1;
+    {
+        q1_init[i] = 1.0;
+        q2_init[i] = 1.0;
+    }
+
+    //-------------- initialize ------------
+    std::cout<< "Initializing" << std::endl;
+    PolymerChain pc(f, NN, 0.0, "Discrete", 1.0);
+    std::vector<Pseudo*> pseudo_list;
+    #ifdef USE_CPU_MKL
+    pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+    #endif
+    #ifdef USE_CPU_FFTW
+    pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new FftwFFT3D({II,JJ,KK})));
+    #endif
+    #ifdef USE_CUDA
+    pseudo_list.push_back(new CudaPseudoDiscrete(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+    #endif
+
+    // For each platform    
+    for(Pseudo* pseudo : pseudo_list){
+        for(int i=0; i<MM; i++){
+            phi_a[i] = 0.0;
+            phi_b[i] = 0.0;
+            q1_last[i] = 0.0;
+            q2_last[i] = 0.0;
+        }
+        //---------------- run --------------------
+        std::cout<< "Running Pseudo " << std::endl;
+        pseudo->find_phi(phi_a, phi_b, q1_init, q2_init, w_a, w_b, QQ);
+
+        //--------------- check --------------------
+        std::cout<< "Checking"<< std::endl;
+        std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
+        pseudo->get_partition(q1_last, NN, q2_last, 1);
+
+        for(int i=0; i<MM; i++)
+            diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
+        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        std::cout<< "Partial Partition error: "<< error << std::endl;
+        if (std::isnan(error) || error > 1e-7)
+            return -1;
+
+        for(int i=0; i<MM; i++)
+            diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
+        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
+        if (std::isnan(error) || error > 1e-7)
+            return -1;
+
+
+        for(int i=0; i<MM; i++)
+            diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
+        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        std::cout<< "Segment Concentration A error: "<< error << std::endl;
+        if (std::isnan(error) || error > 1e-7)
+            return -1;
+
+        for(int i=0; i<MM; i++)
+            diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
+        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        std::cout<< "Segment Concentration B error: "<< error << std::endl;
+        if (std::isnan(error) || error > 1e-7)
+            return -1;
+        
+        delete pseudo;
+    }
     return 0;
 }

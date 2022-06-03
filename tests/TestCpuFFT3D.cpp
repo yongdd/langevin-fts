@@ -3,11 +3,16 @@
 #include <complex>
 #include <algorithm>
 #include <random>
+
+#ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
+#endif
+#ifdef USE_CPU_FFTW
+#include "FftwFFT3D.h"
+#endif
 
 int main()
 {
-
     const int II{5};
     const int JJ{4};
     const int KK{3};
@@ -21,9 +26,7 @@ int main()
 
     std::array<double,MM> diff_sq;
     std::array<double,MM_COMPLEX> diff_sq_cplx;
-    //-------------- initialize ------------
-    std::cout<< "Initializing" << std::endl;
-    MklFFT3D fft({II, JJ, KK});
+
     double data_init[MM] =
     {
         0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
@@ -62,59 +65,47 @@ int main()
         {-0.973844201363205,2.06176730216391}, {0.857829657610043,-1.36198877135770},
         {0.705009791908085,2.01933903816772}, {-0.231601465597141,0.142526551270715}
     };
-    //---------------- Forward --------------------
-    std::cout<< "Running MKL FFT 3D" << std::endl;
-    fft.forward(data_init,data_k);
-    std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-    for(int i=0; i<MM_COMPLEX; i++){
-        diff_sq_cplx[i]  = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
-        diff_sq_cplx[i] += pow(std::abs(data_k[i].imag() - data_k_answer[i].imag()),2);
-    }
-    error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
-    std::cout<< "FFT Forward Error: " << error << std::endl;
-    if(std::isnan(error) || error > 1e-7)
-        return -1;
 
-    //--------------- Backward --------------------
-    fft.backward(data_k_answer,data_r);
-    for(int i=0; i<MM; i++)
-        diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
-    error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-    std::cout<< "FFT Backward Error: " << error << std::endl;
-    if(std::isnan(error) || error > 1e-7)
-        return -1;
+    //-------------- initialize ------------
+    std::cout<< "Initializing" << std::endl;
+    std::vector<FFT*> fft_list;
+    #ifdef USE_CPU_MKL
+    fft_list.push_back(new MklFFT3D({II,JJ,KK}));
+    #endif
+    #ifdef USE_CPU_FFTW
+    fft_list.push_back(new FftwFFT3D({II,JJ,KK}));
+    #endif
 
-    return 0;
-    //--------------- Test with large array --------------------
-    /*
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dis(-1.0, 1.0);
-    
-    const int L_II{89};
-    const int L_JJ{101};
-    const int L_KK{119};
+    // For each platform    
+    for(FFT* fft : fft_list){
+        for(int i=0; i<MM; i++)
+            data_r[i] = 0.0;
+        for(int i=0; i<MM_COMPLEX; i++)
+            data_k[i] = 0.0;
 
-    const int L_MM{L_II*L_JJ*L_KK};
-    const int L_COMPLEX_MM{L_II*L_JJ*(L_KK/2+1)};
-    FftwFFT3D l_fft({L_II, L_JJ, L_KK});
-    
-    double l_data_init[L_MM];
-    double l_data_r[L_MM];
-    std::complex<double> l_data_k[L_COMPLEX_MM];
-    std::array<double,L_MM> l_diff_sq;
-    
-    for (int i = 0; i < L_MM; i++)
-        l_data_init[i] = dis(gen);
+        //---------------- Forward --------------------
+        std::cout<< "Running FFT 3D" << std::endl;
+        fft->forward(data_init,data_k);
+        std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
+        for(int i=0; i<MM_COMPLEX; i++){
+            diff_sq_cplx[i]  = pow(std::abs(data_k[i].real() - data_k_answer[i].real()),2);
+            diff_sq_cplx[i] += pow(std::abs(data_k[i].imag() - data_k_answer[i].imag()),2);
+        }
+        error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
+        std::cout<< "FFT Forward Error: " << error << std::endl;
+        if(std::isnan(error) || error > 1e-7)
+            return -1;
+
+        //--------------- Backward --------------------
+        fft->backward(data_k_answer,data_r);
+        for(int i=0; i<MM; i++)
+            diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
+        error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+        std::cout<< "FFT Backward Error: " << error << std::endl;
+        if(std::isnan(error) || error > 1e-7)
+            return -1;
         
-    l_fft.forward(l_data_init, l_data_k);
-    l_fft.backward(l_data_k, l_data_r);
-    
-    for(int i=0; i<L_MM; i++)
-        l_diff_sq[i] = pow(std::abs(l_data_r[i] - l_data_init[i]),2);
-    error = sqrt(*std::max_element(l_diff_sq.begin(), l_diff_sq.end()));
-    std::cout<< "Test with lage array, Error: " << error << std::endl;
-    if(std::isnan(error) || error > 1e-7)
-        return -1;
-    */
+        delete fft;
+    }
+    return 0;
 }

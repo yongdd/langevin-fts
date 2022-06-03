@@ -81,8 +81,6 @@ for y,z in cylinder_positions:
 w[0] = gaussian_filter(w[0], sigma=np.min(sb.get_nx())/15, mode='wrap')
 w = np.reshape(w, [2, sb.get_n_grid()])
 
-w = np.reshape(w, [2, sb.get_n_grid()])
-
 # keep the level of field value
 sb.zero_mean(w[0])
 sb.zero_mean(w[1])

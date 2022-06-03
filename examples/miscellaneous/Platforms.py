@@ -32,7 +32,7 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
-
+print("*" * 30, "Run", "*" * 30)
 for dim in [1,2,3]:
     ### for 1D
     if (dim == 1):
@@ -48,7 +48,6 @@ for dim in [1,2,3]:
         lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 
     for chain_model in ["Discrete", "Gaussian"]:
-        print("-" * 50)
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
         print("platform, time per iter, mass error, output1 (error), output2 (dqdl)")
         test_output = []
@@ -141,12 +140,13 @@ for dim in [1,2,3]:
             
             # estimate execution time
             time_duration = time.time() - time_start
-            print("%8s: %13.5f, %10.3E, %12.9f, %12.9f" %
+            print("%8s: %13.5f, %10.3E, %14.5E, %14.5E" %
                 (platform, time_duration/max_scft_iter, mass_error, error_level, dqdl) )
         
         # Test error
-        print("Standard deviations: " ,np.std(test_output), np.std(test_dqdl))
+        print("Standard deviations: %9.5E, %9.5E" % (np.std(test_output), np.std(test_dqdl)))
         if np.std(test_output) > 1e-8 or np.std(test_dqdl) > 1e-8 \
 		or np.isnan(np.std(test_output)) or np.isnan(np.std(test_dqdl)):
             print("Each platform should give the same result")
             sys.exit(-1);
+        print("-" * 50)
