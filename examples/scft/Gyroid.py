@@ -69,6 +69,7 @@ q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
 print("w_A and w_B are initialized to gyroid phase.")
+# [Ref: https://pubs.acs.org/doi/pdf/10.1021/ma951138i]
 for i in range(0,sb.get_nx(0)):
     xx = (i+1)*2*np.pi/sb.get_nx(0)
     for j in range(0,sb.get_nx(1)):
@@ -80,8 +81,9 @@ for i in range(0,sb.get_nx(0)):
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
             idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
-            w[0,i,j,k] = -0.364*c1+0.133*c2
-            w[1,i,j,k] = 0.302*c1-0.106*c2
+            w[0,i,j,k] = -0.3164*c1 +0.1074*c2
+            w[1,i,j,k] =  0.3164*c1 -0.1074*c2
+
 w = np.reshape(w, [2, sb.get_n_grid()])
 
 # keep the level of field value
