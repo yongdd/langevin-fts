@@ -3,7 +3,7 @@ import numpy as np
 from langevinfts import *
 
 def find_saddle_point(pc, sb, pseudo, am, lx,
-    q1_init, q2_init, w, max_iter, tolerance):
+    q1_init, q2_init, w, max_iter, tolerance, is_box_altering=True):
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20
@@ -38,38 +38,50 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
         sb.zero_mean(w_out[0])
         sb.zero_mean(w_out[1])
 
-        # Calculate stress
-        stress_array = np.array(pseudo.dq_dl()[-sb.get_dim():])/Q
-
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
         w_diff = w_out - w
         multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
         multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
-        error_level = np.sqrt(multi_dot) + np.sqrt(np.sum(stress_array)**2)
 
         # print iteration # and error levels and check the mass conservation
         mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
+
+        if (is_box_altering):
+            # Calculate stress
+            stress_array = np.array(pseudo.dq_dl()[-sb.get_dim():])/Q
+            error_level = np.sqrt(multi_dot) + np.sqrt(np.sum(stress_array)**2)
+            print_end = " "
+        else:
+            error_level = np.sqrt(multi_dot)
+            print_end = "\n"
         print("%8d %12.3E %15.7E %15.9f %15.7E" %
-            (scft_iter, mass_error, Q, energy_total, error_level), end=' ')
+            (scft_iter, mass_error, Q, energy_total, error_level), end=print_end)
 
         # conditions to end the iteration
         if error_level < tolerance:
             break
 
         # calculte new fields using simple and Anderson mixing
-        am_new  = np.concatenate((np.reshape(w,      2*sb.get_n_grid()), lx))
-        am_out  = np.concatenate((np.reshape(w_out,  2*sb.get_n_grid()), lx + stress_array))
-        am_diff = np.concatenate((np.reshape(w_diff, 2*sb.get_n_grid()), stress_array))
-        am.caculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
+        if (is_box_altering):
+            am_new  = np.concatenate((np.reshape(w,      2*sb.get_n_grid()), lx))
+            am_out  = np.concatenate((np.reshape(w_out,  2*sb.get_n_grid()), lx + stress_array))
+            am_diff = np.concatenate((np.reshape(w_diff, 2*sb.get_n_grid()), stress_array))
+            am.caculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
-        # set box size
-        w[0] = am_new[0:sb.get_n_grid()]
-        w[1] = am_new[sb.get_n_grid():2*sb.get_n_grid()]
-        lx = am_new[-sb.get_dim():]
-        print(np.round(lx,7))
-        sb.set_lx(lx)
-        # update bond parameters using new lx
-        pseudo.update()
+            # set box size
+            w[0] = am_new[0:sb.get_n_grid()]
+            w[1] = am_new[sb.get_n_grid():2*sb.get_n_grid()]
+            lx = am_new[-sb.get_dim():]
+            print(np.round(lx,7))
+            sb.set_lx(lx)
+            # update bond parameters using new lx
+            pseudo.update()
+        else:
+            am.caculate_new_fields(
+            np.reshape(w,      2*sb.get_n_grid()),
+            np.reshape(w_out,  2*sb.get_n_grid()),
+            np.reshape(w_diff, 2*sb.get_n_grid()),
+            old_error_level, error_level)
 
     return phi_a, phi_b, Q, energy_total

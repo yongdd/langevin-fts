@@ -90,7 +90,7 @@ print("---------- Run ----------")
 time_start = time.time()
 
 phi_a, phi_b, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx,
-    q1_init, q2_init, w, max_scft_iter, tolerance)
+    q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
 time_duration = time.time() - time_start
