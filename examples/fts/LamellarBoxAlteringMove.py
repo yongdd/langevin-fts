@@ -116,7 +116,6 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("Precision: 8")
 print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
