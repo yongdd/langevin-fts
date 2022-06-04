@@ -149,9 +149,9 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
         std::array<double,3> dq_dl;
         double simpson_rule_coeff_a[N_A+1];
         double simpson_rule_coeff_b[N-N_A+1];
-        double fourier_basis_x[M_COMPLEX] {0.0};
-        double fourier_basis_y[M_COMPLEX] {0.0};
-        double fourier_basis_z[M_COMPLEX] {0.0};
+        double fourier_basis_x[M_COMPLEX];
+        double fourier_basis_y[M_COMPLEX];
+        double fourier_basis_z[M_COMPLEX];
 
         double *d_fourier_basis_x;
         double *d_fourier_basis_y;
