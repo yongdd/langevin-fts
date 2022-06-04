@@ -14,6 +14,9 @@
 
 namespace py = pybind11;
 
+template <typename... Args>
+using overload_cast_ = py::detail::overload_cast_impl<Args...>;
+
 PYBIND11_MODULE(langevinfts, m)
 {
     py::class_<PolymerChain>(m, "PolymerChain")
@@ -31,32 +34,32 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<SimulationBox>(m, "SimulationBox")
         .def(py::init<std::vector<int>, std::vector<double>>())
         .def("get_dim", &SimulationBox::get_dim)
-        .def("get_nx", py::overload_cast<>(&SimulationBox::get_nx))
-        .def("get_nx", py::overload_cast<int>(&SimulationBox::get_nx))
-        .def("get_lx", py::overload_cast<>(&SimulationBox::get_lx))
-        .def("get_lx", py::overload_cast<int>(&SimulationBox::get_lx))
-        .def("get_dx", py::overload_cast<>(&SimulationBox::get_dx))
-        .def("get_dx", py::overload_cast<int>(&SimulationBox::get_dx))
+        .def("get_nx", overload_cast_<>()(&SimulationBox::get_nx))
+        .def("get_nx", overload_cast_<int>()(&SimulationBox::get_nx))
+        .def("get_lx", overload_cast_<>()(&SimulationBox::get_lx))
+        .def("get_lx", overload_cast_<int>()(&SimulationBox::get_lx))
+        .def("get_dx", overload_cast_<>()(&SimulationBox::get_dx))
+        .def("get_dx", overload_cast_<int>()(&SimulationBox::get_dx))
         .def("get_dv", &SimulationBox::get_dv)
         .def("get_n_grid", &SimulationBox::get_n_grid)
         .def("get_volume", &SimulationBox::get_volume)
         .def("set_lx", &SimulationBox::set_lx)
-        .def("integral", py::overload_cast<py::array_t<double>>(&SimulationBox::integral))
-        .def("inner_product", py::overload_cast<py::array_t<double>,py::array_t<double>>(&SimulationBox::inner_product))
-        .def("multi_inner_product", py::overload_cast<int,py::array_t<double>,py::array_t<double>>(&SimulationBox::multi_inner_product))
-        .def("zero_mean", py::overload_cast<py::array_t<double>>(&SimulationBox::zero_mean));
+        .def("integral", overload_cast_<py::array_t<double>>()(&SimulationBox::integral))
+        .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&SimulationBox::inner_product))
+        .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&SimulationBox::multi_inner_product))
+        .def("zero_mean", overload_cast_<py::array_t<double>>()(&SimulationBox::zero_mean));
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
-        .def("find_phi", py::overload_cast<py::array_t<double>, py::array_t<double>,
-            py::array_t<double>, py::array_t<double>>(&Pseudo::find_phi), py::return_value_policy::move)
-        .def("get_partition", py::overload_cast<int, int>(&Pseudo::get_partition), py::return_value_policy::move)
+        .def("find_phi", overload_cast_<py::array_t<double>, py::array_t<double>,
+            py::array_t<double>, py::array_t<double>>()(&Pseudo::find_phi), py::return_value_policy::move)
+        .def("get_partition", overload_cast_<int, int>()(&Pseudo::get_partition), py::return_value_policy::move)
         .def("dq_dl", &Pseudo::dq_dl);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)
-        .def("caculate_new_fields",py::overload_cast<py::array_t<double>, py::array_t<double>,
-            py::array_t<double>, double, double>(&AndersonMixing::caculate_new_fields));
+        .def("caculate_new_fields",overload_cast_<py::array_t<double>, py::array_t<double>,
+            py::array_t<double>, double, double>()(&AndersonMixing::caculate_new_fields));
 
     py::class_<AbstractFactory>(m, "AbstractFactory")
         .def("create_polymer_chain", &AbstractFactory::create_polymer_chain)
@@ -68,5 +71,5 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def("create_factory", py::overload_cast<std::string>(&PlatformSelector::create_factory));
+        .def("create_factory", overload_cast_<std::string>()(&PlatformSelector::create_factory));
 }

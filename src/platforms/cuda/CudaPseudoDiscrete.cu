@@ -136,9 +136,9 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         double bond_length, *d_boltz_bond;
 
         std::array<double,3> dq_dl;
-        double fourier_basis_x[M_COMPLEX] {0.0};
-        double fourier_basis_y[M_COMPLEX] {0.0};
-        double fourier_basis_z[M_COMPLEX] {0.0};
+        double fourier_basis_x[M_COMPLEX];
+        double fourier_basis_y[M_COMPLEX];
+        double fourier_basis_z[M_COMPLEX];
 
         double *d_fourier_basis_x;
         double *d_fourier_basis_y;

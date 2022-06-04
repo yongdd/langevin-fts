@@ -83,9 +83,9 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
 
         double simpson_rule_coeff_a[N_A+1];
         double simpson_rule_coeff_b[N-N_A+1];
-        double fourier_basis_x[M_COMPLEX] {0.0};
-        double fourier_basis_y[M_COMPLEX] {0.0};
-        double fourier_basis_z[M_COMPLEX] {0.0};
+        double fourier_basis_x[M_COMPLEX];
+        double fourier_basis_y[M_COMPLEX];
+        double fourier_basis_z[M_COMPLEX];
 
         get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
 
