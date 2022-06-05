@@ -15,8 +15,8 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         this->boltz_bond_a  = new double[n_complex_grid];
         this->boltz_bond_b  = new double[n_complex_grid];
         this->boltz_bond_ab = new double[n_complex_grid];
-        this->q_1 = new double[M*N] {0.0};
-        this->q_2 = new double[M*N] {0.0};
+        this->q_1 = new double[M*N];
+        this->q_2 = new double[M*N];
 
         update();
     }
