@@ -1,34 +1,49 @@
-load("structure_function_002000.mat");
+clear all;
 
-% Grid intervals should be the same in this script. Need to be updated.
-if (abs(lx(1)/nx(1) - lx(2)/nx(2)) + abs(lx(1)/nx(1) - lx(3)/nx(3)) + abs(lx(1)/nx(1) - lx(3)/nx(3)) > 1.e-5)
-    print("Grid intervals should be the same")
+load('structure_function_002000.mat');
+
+% Calculate k (Fourier mode) sqaure 
+k2         = zeros(nx(1),nx(2),nx(3)/2+1);
+k2_mapping = zeros(nx(1),nx(2),nx(3)/2+1);
+for i = 0:nx(1)-1
+    for j = 0:nx(2)-1
+        for k = 0:nx(3)/2
+            k2(i+1,j+1,k+1) = round((double(i)/lx(1))^2 + (double(j)/lx(2))^2 + (double(k)/lx(3))^2,7);
+        end
+    end
+end
+% Remove duplicates and set mapping
+k2_unique = unique(k2);
+for i = 0:nx(1)-1
+    for j = 0:nx(2)-1
+        for k = 0:nx(3)/2
+            idx = find(k2_unique == round((double(i)/lx(1))^2 + (double(j)/lx(2))^2 + (double(k)/lx(3))^2,7));
+            k2_mapping(i+1,j+1,k+1) = idx;
+        end
+    end
 end
 
-v = structure_function;
-v_mag = zeros(1, nx(1)^2 + nx(2)^2 + nx(3)^2);
-v_mag_count = zeros(1, nx(1)^2 + nx(2)^2 + nx(3)^2);
-
-for langevin_iter = 1000:1000:2000
-    file_name = sprintf("structure_function_%06d.mat", langevin_iter);
-    disp(file_name)
+% Read data and caculate averages
+sf_mag   = zeros(size(k2_unique));
+sf_count = zeros(size(k2_unique));
+for langevin_iter = 50000:50000:500000
+    file_name = sprintf('structure_function_%06d.mat', langevin_iter);
+    fprintf('%s\n', file_name);
     load(file_name);
     v = structure_function;
     for i = 0:nx(1)-1
         for j = 0:nx(2)-1
             for k = 0:nx(3)/2
-                v_mag(i^2+j^2+k^2+1) = v_mag(i^2+j^2+k^2+1) + v(i+1,j+1,k+1);
-                v_mag_count(i^2+j^2+k^2+1) = v_mag_count(i^2+j^2+k^2+1) + 1;
+                idx = k2_mapping(i+1,j+1,k+1);
+                sf_mag(idx) = sf_mag(idx) + structure_function(i+1,j+1,k+1);
+                sf_count(idx) = sf_count(idx) + 1;
             end
         end
     end
 end
 
-non_zero_points = v_mag_count > 0;
-x2 = 0:nx(1)^2 + nx(2)^2 + nx(3)^2-1;
-x = sqrt(double(x2(non_zero_points)))*2*pi/lx(1);
-y2 = v_mag./v_mag_count;
-y = y2(non_zero_points);
+x = sqrt(double(k2_unique))*2*pi;
+y = sf_mag./sf_count;
 y(1) = 0.0;
 
 h=figure;

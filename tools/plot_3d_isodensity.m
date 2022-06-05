@@ -38,5 +38,5 @@ set(h, 'PaperPositionMode', 'auto');     % [ auto | {manual} ]
 set(h, 'PaperUnits', 'points');          % [ {inches} | centimeters | normalized | points ]
 set(h, 'PaperPosition', [0 0 800 500]);  % [left,bottom,width,height]
 % [~,outfilename,~] = fileparts(filename);
-print (h,"isodensity",'-dpng') % print (h,'bulk','-dpdf')
+print (h,'isodensity','-dpng') % print (h,'bulk','-dpdf')
 % close(h)
