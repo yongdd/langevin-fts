@@ -12,6 +12,7 @@ for i = 0:nx(1)-1
         end
     end
 end
+
 % Remove duplicates and set mapping
 k2_unique = unique(k2);
 for i = 0:nx(1)-1
@@ -26,7 +27,7 @@ end
 % Read data and caculate averages
 sf_mag   = zeros(size(k2_unique));
 sf_count = zeros(size(k2_unique));
-for langevin_iter = 50000:50000:500000
+for langevin_iter = 1000:1000:2000
     file_name = sprintf('structure_function_%06d.mat', langevin_iter);
     fprintf('%s\n', file_name);
     load(file_name);
@@ -41,11 +42,11 @@ for langevin_iter = 50000:50000:500000
         end
     end
 end
-
 x = sqrt(double(k2_unique))*2*pi;
 y = sf_mag./sf_count;
 y(1) = 0.0;
 
+# Plot
 h=figure;
 semilogy(x,y);
 xlim([2 14])
