@@ -1,7 +1,9 @@
+clear all;
+
 %Load File
 load("fields.mat");
 
-%Plot 3D
+%Plot
 h=figure;
 %data = wpd;
 data = phi_a;
@@ -25,6 +27,6 @@ set(h, 'PaperUnits', 'points');
 set(h, 'PaperPosition', [0 0 500 500]);
 % [left,bottom,width,height]
 %[~,outfilename,~] = fileparts(filename);
-print (h,"2d_slice_image",'-dpng') % print (h,'bulk','-dpdf')
+print (h,"2d_density",'-dpng') % print (h,'bulk','-dpdf')
 %print (h,strcat("pressure_", outfilename),'-dpng') % print (h,'bulk','-dpdf')
 %close(h)

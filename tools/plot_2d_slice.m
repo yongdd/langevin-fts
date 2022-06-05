@@ -1,7 +1,9 @@
+clear all;
+
 %Load File
 load("fields_002000.mat");
 
-%Plot 3D
+%Plot
 h=figure;
 %data = wpd;
 data = phi_a;
