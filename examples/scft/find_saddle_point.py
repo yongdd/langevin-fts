@@ -16,7 +16,10 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
     w_out = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
 
     # iteration begins here
-    print("iteration, mass error, total_partition, energy_total, error_level, box size")
+    if (is_box_altering):
+        print("iteration, mass error, total_partition, energy_total, error_level, box size")
+    else:
+        print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
         phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
@@ -46,17 +49,18 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
 
         # print iteration # and error levels and check the mass conservation
         mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
-
+        error_level = np.sqrt(multi_dot)
+        
         if (is_box_altering):
             # Calculate stress
             stress_array = np.array(pseudo.dq_dl()[-sb.get_dim():])/Q
-            error_level = np.sqrt(multi_dot) + np.sqrt(np.sum(stress_array)**2)
-            print_end = " "
+            error_level += np.sqrt(np.sum(stress_array)**2)
+            print("%8d %12.3E %15.7E %15.9f %15.7E" %
+            (scft_iter, mass_error, Q, energy_total, error_level), end=" ")
+            print("\t[", ",".join(["%10.7f" % (x) for x in lx]), "]")
         else:
-            error_level = np.sqrt(multi_dot)
-            print_end = "\n"
-        print("%8d %12.3E %15.7E %15.9f %15.7E" %
-            (scft_iter, mass_error, Q, energy_total, error_level), end=print_end)
+            print("%8d %12.3E %15.7E %15.9f %15.7E" %
+            (scft_iter, mass_error, Q, energy_total, error_level))
 
         # conditions to end the iteration
         if error_level < tolerance:
@@ -73,7 +77,6 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
             w[0] = am_new[0:sb.get_n_grid()]
             w[1] = am_new[sb.get_n_grid():2*sb.get_n_grid()]
             lx = am_new[-sb.get_dim():]
-            print(np.round(lx,7))
             sb.set_lx(lx)
             # update bond parameters using new lx
             pseudo.update()
