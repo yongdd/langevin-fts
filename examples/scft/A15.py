@@ -14,7 +14,7 @@ os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 max_scft_iter = 1000
-tolerance = 1e-6
+tolerance = 1e-8
 
 # Major Simulation Parameters
 f = 0.3           # A-fraction, f
@@ -69,8 +69,9 @@ q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
 print("w_A and w_B are initialized to A15 phase.")
-sphere_positions = [[0,0,0],[1/4,1/2,0],[3/4,1/2,0],[1/2,0,1/4],
-                    [1/2,0,3/4],[0,1/4,1/2],[0,3/4,1/2],[1/2,1/2,1/2]]
+sphere_positions = [[0,0,0],[1/2,1/2,1/2],
+[1/4,1/2,0],[3/4,1/2,0],[1/2,0,1/4],[1/2,0,3/4],[0,1/4,1/2],[0,3/4,1/2]]
+
 for x,y,z in sphere_positions:
     mx, my, mz = np.round((np.array([x, y, z])*sb.get_nx())).astype(np.int32)
     w[0,mx,my,mz] = -1/np.prod(sb.get_dx())
