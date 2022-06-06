@@ -29,7 +29,7 @@ chain_model = "Discrete" # choose among [Gaussian, Discrete]
 # Anderson Mixing 
 saddle_tolerance = 1e-4
 saddle_max_iter = 200
-am_n_var = np.prod(nx).item() # W+
+am_n_var = np.prod(nx) # W+
 am_max_hist= 20
 am_start_error = 1e-1
 am_mix_min = 0.1

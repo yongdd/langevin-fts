@@ -27,11 +27,11 @@ lx = [3.3,3.3,3.3]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Discrete" # choose among [Gaussian, Discrete]
 
 # Anderson mixing
-am_n_var = 2*np.prod(nx).item()  # w_a (w[0]) and w_b (w[1]) + lx
-am_max_hist= 20                  # maximum number of history
-am_start_error = 1e-2            # when switch to AM from simple mixing
-am_mix_min = 0.1                 # minimum mixing rate of simple mixing
-am_mix_init = 0.1                # initial mixing rate of simple mixing
+am_n_var = 2*np.prod(nx)  # w_a (w[0]) and w_b (w[1]) + lx
+am_max_hist= 20           # maximum number of history
+am_start_error = 1e-2     # when switch to AM from simple mixing
+am_mix_min = 0.1          # minimum mixing rate of simple mixing
+am_mix_init = 0.1         # initial mixing rate of simple mixing
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
