@@ -15,7 +15,7 @@ os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 max_scft_iter = 1000
-tolerance = 1e-7
+tolerance = 1e-8
 
 # Major Simulation Parameters
 f = 0.5             # A-fraction, f
