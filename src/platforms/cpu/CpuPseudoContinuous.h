@@ -1,16 +1,16 @@
 /*-------------------------------------------------------------
-* This is an abstract CpuPseudoGaussian class
+* This is an abstract CpuPseudoContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_GAUSSIAN_H_
-#define CPU_PSEUDO_GAUSSIAN_H_
+#ifndef CPU_PSEUDO_CONTINUOUS_H_
+#define CPU_PSEUDO_CONTINUOUS_H_
 
 #include "SimulationBox.h"
 #include "PolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudoGaussian : public Pseudo
+class CpuPseudoContinuous : public Pseudo
 {
 private:
     FFT *fft;
@@ -23,8 +23,8 @@ private:
     void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
-    CpuPseudoGaussian(SimulationBox *sb, PolymerChain *pc, FFT *ff);
-    ~CpuPseudoGaussian();
+    CpuPseudoContinuous(SimulationBox *sb, PolymerChain *pc, FFT *ff);
+    ~CpuPseudoContinuous();
     
     void update() override;
     std::array<double,3> dq_dl() override;

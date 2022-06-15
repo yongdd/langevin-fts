@@ -49,11 +49,11 @@ int main()
     double tolerance = 1e-9;
 
     double f = 0.3;
-    int n_contour = 50;
+    int n_segment = 50;
     double chi_n = 25.0;
     std::vector<int> nx = {263};
     std::vector<double> lx = {4.0};
-    std::string chain_model = "Gaussian";  // choose among [Gaussian, Discrete]
+    std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
 
     int am_n_var = 2*nx[0];  // A and B
     int am_max_hist= 20;
@@ -69,7 +69,7 @@ int main()
 
         // create instances and assign to the variables of base classs for the dynamic binding
         SimulationBox *sb  = factory->create_simulation_box(nx, lx);
-        PolymerChain *pc   = factory->create_polymer_chain(f, n_contour, chi_n, chain_model, 1.0);
+        PolymerChain *pc   = factory->create_polymer_chain(f, n_segment, chi_n, chain_model, 1.0);
         Pseudo *pseudo     = factory->create_pseudo(sb, pc);
         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
@@ -77,7 +77,7 @@ int main()
         // -------------- print simulation parameters ------------
         std::cout<< "---------- Simulation Parameters ----------" << std::endl;
         std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
-        std::cout << "chi_n, f, N: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_n_contour() << std::endl;
+        std::cout << "chi_n, f, N: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_n_segment() << std::endl;
         std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
         std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
         std::cout << "dx: " << sb->get_dx(0) << " " << sb->get_dx(1) << " " << sb->get_dx(2) << std::endl;

@@ -20,7 +20,7 @@ max_scft_iter = 2
 tolerance = 1e-9
 
 f = 0.3            # A-fraction, f
-n_contour = 50     # segment number, N
+n_segment = 50     # segment number, N
 chi_n = 20         # Flory-Huggins Parameters * N
 epsilon = 2.5      # a_A/a_B, conformational asymmetry
 
@@ -47,7 +47,7 @@ for dim in [1,2,3]:
         nx = [31,49,63]    # grids number
         lx = [4.0,3.0,2.0] # as aN^(1/2) unit
 
-    for chain_model in ["Discrete", "Gaussian"]:
+    for chain_model in ["Discrete", "Continuous"]:
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
         print("platform, time per iter, mass error, output1 (error), output2 (dqdl)")
         test_output = []
@@ -58,7 +58,7 @@ for dim in [1,2,3]:
             #factory.display_info()
 
             # create instances
-            pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+            pc = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
             sb = factory.create_simulation_box(nx, lx)
             pseudo = factory.create_pseudo(sb, pc)
             am = factory.create_anderson_mixing(am_n_comp*np.prod(nx),

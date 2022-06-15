@@ -6,7 +6,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * AB Diblock Copolymer Melt  
 * Conformational Asymmetry   
 * Stress Calculation   
-* Chain Model: Gaussian, Discrete   
+* Chain Model: Continuous, Discrete   
 * Periodic Boundaries  
 * 3D, 2D and 1D
 * Pseudospectral Method, Anderson Mixing   
@@ -48,7 +48,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
    
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
-+ **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroid.py, fts/GaussianLamellar.py**   
++ **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroid.py, fts/ContinuousLamellar.py**   
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that unit of length in this library is end-to-end chain length *aN^(1/2)*, not gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.

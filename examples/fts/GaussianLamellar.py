@@ -25,10 +25,10 @@ lx = [8.0, 8.0, 8.0]
 
 # Polymer Chain
 f = 0.5
-n_contour = 16
+n_segment = 16
 chi_n = 20
 epsilon = 1.0            # a_A/a_B, conformational asymmetry
-chain_model = "Gaussian"  # choose among [Gaussian, Discrete]
+chain_model = "Continuous"  # choose among [Continuous, Discrete]
 
 # Anderson Mixing
 saddle_tolerance = 1e-4
@@ -54,7 +54,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
@@ -69,7 +69,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
@@ -134,7 +134,7 @@ for langevin_step in range(1, langevin_max_step+1):
         sf_average *= 10/1000*sb.get_volume()*np.sqrt(langevin_nbar)/pc.get_chi_n()**2
         sf_average -= 1.0/(2*pc.get_chi_n())
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
+        "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":pc.get_model_name(),
         "dt":langevin_dt, "nbar":langevin_nbar,
         "structure_function":sf_average}
@@ -144,7 +144,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # write density and field data
     if langevin_step % 1000 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
+            "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],

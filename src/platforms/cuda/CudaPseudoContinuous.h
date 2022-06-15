@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is an abstract CudaPseudoGaussian class
+* This is an abstract CudaPseudoContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_GAUSSIAN_H_
-#define CUDA_PSEUDO_GAUSSIAN_H_
+#ifndef CUDA_PSEUDO_CONTINUOUS_H_
+#define CUDA_PSEUDO_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>
@@ -11,7 +11,7 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudoGaussian : public Pseudo
+class CudaPseudoContinuous : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -38,8 +38,8 @@ private:
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
 
-    CudaPseudoGaussian(SimulationBox *sb, PolymerChain *pc);
-    ~CudaPseudoGaussian();
+    CudaPseudoContinuous(SimulationBox *sb, PolymerChain *pc);
+    ~CudaPseudoContinuous();
 
     void update() override;
     std::array<double,3> dq_dl() override;

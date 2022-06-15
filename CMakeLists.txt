@@ -51,7 +51,7 @@ IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
         src/platforms/cpu/MklFFT1D.cpp
         src/platforms/cpu/MklFFT2D.cpp
         src/platforms/cpu/MklFFT3D.cpp
-    	src/platforms/cpu/CpuPseudoGaussian.cpp
+    	src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
     	src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
@@ -73,7 +73,7 @@ IF(FFTW_INCLUDE AND FFTW_LIBRARY)
         src/platforms/cpu/FftwFFT1D.cpp
         src/platforms/cpu/FftwFFT2D.cpp
         src/platforms/cpu/FftwFFT3D.cpp
-    	src/platforms/cpu/CpuPseudoGaussian.cpp
+    	src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
     	src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/FftwFactory.cpp
@@ -92,7 +92,7 @@ IF(CUDAToolkit_FOUND)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
         src/platforms/cuda/CudaSimulationBox.cu
-        src/platforms/cuda/CudaPseudoGaussian.cu
+        src/platforms/cuda/CudaPseudoContinuous.cu
         src/platforms/cuda/CudaPseudoDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu

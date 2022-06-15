@@ -6,17 +6,17 @@
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "SimulationBox.h"
-#include "CpuPseudoGaussian.h"
+#include "CpuPseudoContinuous.h"
 #endif
 #ifdef USE_CPU_FFTW
 #include "FftwFFT3D.h"
 #include "SimulationBox.h"
-#include "CpuPseudoGaussian.h"
+#include "CpuPseudoContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaSimulationBox.h"
 #include "SimulationBox.h"
-#include "CudaPseudoGaussian.h"
+#include "CudaPseudoContinuous.h"
 #endif
 
 int main()
@@ -173,16 +173,16 @@ int main()
 
     //-------------- initialize ------------
     std::cout<< "Initializing" << std::endl;
-    PolymerChain pc(f, NN, 0.0, "Gaussian", 1.0);
+    PolymerChain pc(f, NN, 0.0, "Continuous", 1.0);
     std::vector<Pseudo*> pseudo_list;
     #ifdef USE_CPU_MKL
-    pseudo_list.push_back(new CpuPseudoGaussian(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+    pseudo_list.push_back(new CpuPseudoContinuous(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
     #endif
     #ifdef USE_CPU_FFTW
-    pseudo_list.push_back(new CpuPseudoGaussian(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new FftwFFT3D({II,JJ,KK})));
+    pseudo_list.push_back(new CpuPseudoContinuous(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new FftwFFT3D({II,JJ,KK})));
     #endif
     #ifdef USE_CUDA
-    pseudo_list.push_back(new CudaPseudoGaussian(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+    pseudo_list.push_back(new CudaPseudoContinuous(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
     #endif
 
     // For each platform    

@@ -10,7 +10,7 @@
 #include <string>
 
 #include "CudaSimulationBox.h"
-#include "CudaPseudoGaussian.h"
+#include "CudaPseudoContinuous.h"
 #include "CudaPseudoDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
@@ -29,8 +29,8 @@ Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
 
-    if( model_name == "gaussian" )
-        return new CudaPseudoGaussian(sb, pc);
+    if( model_name == "continuous" )
+        return new CudaPseudoContinuous(sb, pc);
     else if ( model_name == "discrete" )
         return new CudaPseudoDiscrete(sb, pc);
     return NULL;

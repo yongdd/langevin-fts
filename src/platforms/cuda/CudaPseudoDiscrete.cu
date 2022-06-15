@@ -16,7 +16,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
     try
     {
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
+        const int N = pc->get_n_segment();
         const int M_COMPLEX = this->n_complex_grid;
 
         // Create FFT plan
@@ -124,8 +124,8 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
 
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_contour();
-        const int N_A  = pc->get_n_contour_a();
+        const int N    = pc->get_n_segment();
+        const int N_A  = pc->get_n_segment_a();
         const int M_COMPLEX = this->n_complex_grid;
 
         const double eps = pc->get_epsilon();
@@ -232,9 +232,9 @@ void CudaPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
-        const int N_A = pc->get_n_contour_a();
-        const int N_B = pc->get_n_contour_b();
+        const int N = pc->get_n_segment();
+        const int N_A = pc->get_n_segment_a();
+        const int N_B = pc->get_n_segment_b();
         const double ds = pc->get_ds();
 
         double exp_dw_a[M];
@@ -349,7 +349,7 @@ void CudaPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out,
     // Get partial partition functions
     // This is made for debugging and testing.
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_contour();
+    const int N = pc->get_n_segment();
 
     if (n1 < 1 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [1, " + std::to_string(N) + "]");

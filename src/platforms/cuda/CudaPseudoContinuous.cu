@@ -4,18 +4,18 @@
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
-#include "CudaPseudoGaussian.h"
+#include "CudaPseudoContinuous.h"
 #include "CudaSimulationBox.h"
 #include "SimpsonQuadrature.h"
 
-CudaPseudoGaussian::CudaPseudoGaussian(
+CudaPseudoContinuous::CudaPseudoContinuous(
     SimulationBox *sb,
     PolymerChain *pc)
     : Pseudo(sb, pc)
 {
     try{
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
+        const int N = pc->get_n_segment();
         const int M_COMPLEX = this->n_complex_grid;
 
         // Create FFT plan
@@ -69,7 +69,7 @@ CudaPseudoGaussian::CudaPseudoGaussian(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoGaussian::~CudaPseudoGaussian()
+CudaPseudoContinuous::~CudaPseudoContinuous()
 {
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
@@ -94,7 +94,7 @@ CudaPseudoGaussian::~CudaPseudoGaussian()
     cudaFree(d_boltz_bond_b_half);
 }
 
-void CudaPseudoGaussian::update()
+void CudaPseudoContinuous::update()
 {
     try{
         double bond_length_a, bond_length_b;
@@ -124,7 +124,7 @@ void CudaPseudoGaussian::update()
     }
 }
 
-std::array<double,3> CudaPseudoGaussian::dq_dl()
+std::array<double,3> CudaPseudoContinuous::dq_dl()
 {
     // This method should be invoked after invoking find_phi().
 
@@ -137,8 +137,8 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
 
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_contour();
-        const int N_A  = pc->get_n_contour_a();
+        const int N    = pc->get_n_segment();
+        const int N_A  = pc->get_n_segment_a();
         const int M_COMPLEX = this->n_complex_grid;
 
         const double eps = pc->get_epsilon();
@@ -243,7 +243,7 @@ std::array<double,3> CudaPseudoGaussian::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoGaussian::calculate_phi_one_type(
+void CudaPseudoContinuous::calculate_phi_one_type(
     double *d_phi, const int N_START, const int N_END)
 {
     try
@@ -252,7 +252,7 @@ void CudaPseudoGaussian::calculate_phi_one_type(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
+        const int N = pc->get_n_segment();
         double simpson_rule_coeff[N_END-N_START+1];
 
         SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_END-N_START);
@@ -270,7 +270,7 @@ void CudaPseudoGaussian::calculate_phi_one_type(
     }
 }
 
-void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
+void CudaPseudoContinuous::find_phi(double *phi_a,  double *phi_b,
                                   double *q_1_init, double *q_2_init,
                                   double *w_a, double *w_b, double &single_partition)
 {
@@ -279,9 +279,9 @@ void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
-        const int N_A = pc->get_n_contour_a();
-        const int N_B = pc->get_n_contour_b();
+        const int N = pc->get_n_segment();
+        const int N_A = pc->get_n_segment_a();
+        const int N_B = pc->get_n_segment_b();
         const double ds = pc->get_ds();
 
         double exp_dw_a[M];
@@ -378,7 +378,7 @@ void CudaPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, FFT Batch is utilized.
-void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
+void CudaPseudoContinuous::one_step(double *d_q_in1,        double *d_q_out1,
                                   double *d_q_in2,        double *d_q_out2,
                                   double *d_boltz_bond_1, double *d_boltz_bond_1_half,
                                   double *d_boltz_bond_2, double *d_boltz_bond_2_half,
@@ -452,14 +452,14 @@ void CudaPseudoGaussian::one_step(double *d_q_in1,        double *d_q_out1,
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoGaussian::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
+void CudaPseudoContinuous::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
     // This method should be invoked after invoking find_phi().
     
     // Get partial partition functions
     // This is made for debugging and testing.
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_contour();
+    const int N = pc->get_n_segment();
         
     if (n1 < 0 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [0, " + std::to_string(N) + "]");
