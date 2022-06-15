@@ -10,23 +10,23 @@
 class PolymerChain
 {
 private:
-    int n_contour;  // number of contour steps, N
-    int n_contour_a;  // number of contour steps for A fraction, N_A
+    int n_segment;  // number of segements, N
+    int n_segment_a;  // number of A segements, N_A
     double f; // A fraction (1-f is the B fraction)
     double ds;  // discrete step sizes
     double chi_n; // chi N, interaction parameter between A and B Monomers
     double epsilon; // epsilon = a_A/a_B, conformational asymmetry
                     // a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-    std::string model_name;   // "Gaussian": continous standard Gaussian model
+    std::string model_name;   // "Continuous": continous standard Gaussian model
                               // "Discrete": discrete bead-spring model
 public:
 
-    PolymerChain(double f, int n_contour, double chi_n, std::string model_name, double epsilon);
+    PolymerChain(double f, int n_segment, double chi_n, std::string model_name, double epsilon);
     ~PolymerChain() {};
 
-    int get_n_contour();    // N
-    int get_n_contour_a();  // N_A
-    int get_n_contour_b();  // N_B
+    int get_n_segment();    // N
+    int get_n_segment_a();  // N_A
+    int get_n_segment_b();  // N_B
     double get_f();
     double get_ds();
     double get_chi_n();

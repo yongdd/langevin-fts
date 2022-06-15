@@ -10,7 +10,7 @@
 #include "FftwFFT3D.h"
 #include "FftwFFT2D.h"
 #include "FftwFFT1D.h"
-#include "CpuPseudoGaussian.h"
+#include "CpuPseudoContinuous.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "FftwFactory.h"
@@ -28,16 +28,16 @@ SimulationBox* FftwFactory::create_simulation_box(
 Pseudo* FftwFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
-    if ( model_name == "gaussian" )
+    if ( model_name == "continuous" )
     {
         if (sb->get_dim() == 3)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new FftwFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 2)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new FftwFFT2D({sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 1)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new FftwFFT1D(sb->get_nx(2)));
     }
     else if ( model_name == "discrete" )

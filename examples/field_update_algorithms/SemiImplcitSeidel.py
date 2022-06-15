@@ -22,11 +22,11 @@ nx = [48, 48, 48]
 lx = [9, 9, 9]
 
 # Polymer Chain
-n_contour = 100
+n_segment = 100
 f = 0.34
 chi_n = 10.0
 epsilon = 1.0            # a_A/a_B, conformational asymmetry
-chain_model = "Discrete" # choose among [Gaussian, Discrete]
+chain_model = "Discrete" # choose among [Continuous, Discrete]
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
@@ -52,7 +52,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
@@ -72,7 +72,7 @@ kernel_noise = 1/(1.0 + 2/pc.get_chi_n()*langevin_dt)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )

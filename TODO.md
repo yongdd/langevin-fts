@@ -11,7 +11,5 @@
 12. UnitTest: Stress
 13. Separate AndersonMixig Output
 16. process bar
-17. Variable 'Gaussian' -> 'Continous' ?
-18. Variable 'n_contous' -> 'n_segment' ?
 19. User Interface layer?
 20. GUI?

@@ -1,8 +1,8 @@
 #include <cmath>
-#include "CpuPseudoGaussian.h"
+#include "CpuPseudoContinuous.h"
 #include "SimpsonQuadrature.h"
 
-CpuPseudoGaussian::CpuPseudoGaussian(
+CpuPseudoContinuous::CpuPseudoContinuous(
     SimulationBox *sb,
     PolymerChain *pc, FFT *fft)
     : Pseudo(sb, pc)
@@ -10,7 +10,7 @@ CpuPseudoGaussian::CpuPseudoGaussian(
     try
     {
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
+        const int N = pc->get_n_segment();
 
         this->fft = fft;
         this->boltz_bond_a = new double[n_complex_grid];
@@ -27,14 +27,14 @@ CpuPseudoGaussian::CpuPseudoGaussian(
         throw_without_line_number(exc.what());
     }
 }
-CpuPseudoGaussian::~CpuPseudoGaussian()
+CpuPseudoContinuous::~CpuPseudoContinuous()
 {
     delete fft;
     delete[] boltz_bond_a, boltz_bond_a_half;
     delete[] boltz_bond_b, boltz_bond_b_half;
     delete[] q_1, q_2;
 }
-void CpuPseudoGaussian::update()
+void CpuPseudoContinuous::update()
 {
     try
     {
@@ -56,7 +56,7 @@ void CpuPseudoGaussian::update()
     }
 }
 
-std::array<double,3> CpuPseudoGaussian::dq_dl()
+std::array<double,3> CpuPseudoContinuous::dq_dl()
 {
     // This method should be invoked after invoking find_phi().
 
@@ -67,8 +67,8 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
     {
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_contour();
-        const int N_A  = pc->get_n_contour_a();
+        const int N    = pc->get_n_segment();
+        const int N_A  = pc->get_n_segment_a();
         const int M_COMPLEX = this->n_complex_grid;
 
         const double eps = pc->get_epsilon();
@@ -148,7 +148,7 @@ std::array<double,3> CpuPseudoGaussian::dq_dl()
     }
 }
 
-void CpuPseudoGaussian::calculate_phi_one_type(
+void CpuPseudoContinuous::calculate_phi_one_type(
     double *phi, const int N_START, const int N_END)
 {
     try
@@ -173,16 +173,16 @@ void CpuPseudoGaussian::calculate_phi_one_type(
     }
 }
 
-void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
+void CpuPseudoContinuous::find_phi(double *phi_a,  double *phi_b,
                                  double *q_1_init, double *q_2_init,
                                  double *w_a, double *w_b, double &single_partition)
 {
     try
     {
         const int M     = sb->get_n_grid();
-        const int N     = pc->get_n_contour();
-        const int N_A   = pc->get_n_contour_a();
-        //const int N_B   = pc->get_n_contour_b();
+        const int N     = pc->get_n_segment();
+        const int N_A   = pc->get_n_segment_a();
+        //const int N_B   = pc->get_n_segment_b();
         const double ds = pc->get_ds();
 
         double exp_dw_a[M];
@@ -253,7 +253,7 @@ void CpuPseudoGaussian::find_phi(double *phi_a,  double *phi_b,
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoGaussian::one_step(double *q_in, double *q_out,
+void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
                                  double *boltz_bond, double *boltz_bond_half,
                                  double *exp_dw, double *exp_dw_half)
 {
@@ -318,14 +318,14 @@ void CpuPseudoGaussian::one_step(double *q_in, double *q_out,
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoGaussian::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
+void CpuPseudoContinuous::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
     // This method should be invoked after invoking find_phi().
     
     // Get partial partition functions
     // This is made for debugging and testing.
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_contour();
+    const int N = pc->get_n_segment();
 
     if (n1 < 0 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [0, " + std::to_string(N) + "]");

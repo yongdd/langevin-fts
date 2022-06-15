@@ -15,32 +15,32 @@ from scipy.io import loadmat, savemat
 from langevinfts import *
 from find_saddle_point import *
 
-def renormal_psum(lx, nx, n_contour, nbar, summax=100):
+def renormal_psum(lx, nx, n_segment, nbar, summax=100):
 
     # cell volume * rho_0
     dx = np.array(lx)/np.array(nx)
     dv = np.prod(dx)
-    vcellrho = n_contour*np.sqrt(nbar)*dv
+    vcellrho = n_segment*np.sqrt(nbar)*dv
 
     # z_infinity
     sum_p_i = 0.0
-    prod_alpha = lambda i, dx, n_contour: \
-        dx*np.sqrt(3*n_contour/(2*np.pi*i))*sp.erf(np.pi/dx*np.sqrt(i/6/n_contour))
+    prod_alpha = lambda i, dx, n_segment: \
+        dx*np.sqrt(3*n_segment/(2*np.pi*i))*sp.erf(np.pi/dx*np.sqrt(i/6/n_segment))
     prod_alpha_array = np.zeros(summax)
     for i in range(0,summax):
-        prod_alpha_array[i] = prod_alpha(i+1,lx[0]/nx[0],n_contour) \
-                               *prod_alpha(i+1,lx[1]/nx[1],n_contour) \
-                               *prod_alpha(i+1,lx[2]/nx[2],n_contour)
+        prod_alpha_array[i] = prod_alpha(i+1,lx[0]/nx[0],n_segment) \
+                               *prod_alpha(i+1,lx[1]/nx[1],n_segment) \
+                               *prod_alpha(i+1,lx[2]/nx[2],n_segment)
         sum_p_i += prod_alpha_array[i]
-    sum_p_i += np.power(3*n_contour/(2*np.pi),1.5)*dv*2/np.sqrt(0.5+summax)
+    sum_p_i += np.power(3*n_segment/(2*np.pi),1.5)*dv*2/np.sqrt(0.5+summax)
     z_inf = 1-(1+2*sum_p_i)/vcellrho
     
     # d(z_infinity)/dl
     sum_p_i = np.array([0.0, 0.0, 0.0])
     for i in range(0,summax):
         for n in range(0,3):
-            sum_p_i[n] += np.exp(-(i+1)*np.pi**2/(6*dx[n]**2*n_contour)) \
-                *prod_alpha_array[i]/prod_alpha(i+1,dx[n],n_contour)
+            sum_p_i[n] += np.exp(-(i+1)*np.pi**2/(6*dx[n]**2*n_segment)) \
+                *prod_alpha_array[i]/prod_alpha(i+1,dx[n],n_segment)
     dz_inf_dl = (1+2*sum_p_i)/vcellrho/np.array(lx)
     
     return z_inf, dz_inf_dl
@@ -64,11 +64,11 @@ nx = [40, 40, 40]
 lx = [4.46,4.46,4.46]
 
 # Polymer Chain
-n_contour = 90
+n_segment = 90
 f = 0.5
 effective_chi_n = 12.75
 epsilon = 1.0            # a_A/a_B, conformational asymmetry
-chain_model = "Discrete" # choose among [Gaussian, Discrete]
+chain_model = "Discrete" 
 
 # Anderson Mixing
 saddle_tolerance = 1e-4
@@ -94,11 +94,11 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # calculate bare chi_n
-z_inf, dz_inf_dl = renormal_psum(lx, nx, n_contour, 1.0, langevin_nbar)
+z_inf, dz_inf_dl = renormal_psum(lx, nx, n_segment, langevin_nbar)
 chi_n = effective_chi_n/z_inf
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
@@ -116,7 +116,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
@@ -155,7 +155,7 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
     # calculate bare chi_n
-    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_contour(), langevin_nbar)
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_segment(), langevin_nbar)
     chi_n = effective_chi_n/z_inf
     pc.set_chi_n(chi_n)
 
@@ -179,7 +179,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # write density and field data
     if langevin_step % 100 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-            "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
+            "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],

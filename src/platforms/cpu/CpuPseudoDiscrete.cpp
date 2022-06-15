@@ -9,7 +9,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
     try
     {
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_contour();
+        const int N = pc->get_n_segment();
 
         this->fft = fft;
         this->boltz_bond_a  = new double[n_complex_grid];
@@ -64,8 +64,8 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     {
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_contour();
-        const int N_A  = pc->get_n_contour_a();
+        const int N    = pc->get_n_segment();
+        const int N_A  = pc->get_n_segment_a();
         const int M_COMPLEX = this->n_complex_grid;
 
         const double eps = pc->get_epsilon();
@@ -142,9 +142,9 @@ void CpuPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
     try
     {
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_contour();
-        const int N_A  = pc->get_n_contour_a();
-        //const int N_B  = pc->get_n_contour_b();
+        const int N    = pc->get_n_segment();
+        const int N_A  = pc->get_n_segment_a();
+        //const int N_B  = pc->get_n_segment_b();
         const double ds = pc->get_ds();
 
         double h_a[M];
@@ -249,7 +249,7 @@ void CpuPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out, 
     // This is made for debugging and testing.
 
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_contour();
+    const int N = pc->get_n_segment();
 
     if (n1 < 1 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [1, " + std::to_string(N) + "]");

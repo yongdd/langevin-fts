@@ -12,12 +12,12 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 # Major Simulation Parameters
 f = 0.3                  # A-fraction, f
-n_contour = 100           # segment number, N
+n_segment = 100           # segment number, N
 chi_n = 20               # Flory-Huggins Parameters * N
 epsilon = 2.0            # a_A/a_B, conformational asymmetry
 nx = [64,64,64]          # grids number
 lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-chain_model = "Gaussian" # choose among [Gaussian, Discrete]
+chain_model = "Continuous" # choose among [Continuous, Discrete]
 
 # choose platform among [cuda, cpu-mkl, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -28,14 +28,14 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+pc = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
 sb = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (sb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
@@ -65,8 +65,8 @@ print("---------- Statistical Segment Length <x^2> ----------")
 print("n'th segment, theory, caculation")
 phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
 pred_mean_squared_x = 0
-if(pc.get_model_name().lower() == "gaussian"):
-    for n in range(0, pc.get_n_contour()+1):
+if(pc.get_model_name().lower() == "continuous"):
+    for n in range(0, pc.get_n_segment()+1):
         q1_out, _ = pseudo.get_partition(n, 0)
         q1_out = np.reshape(q1_out, sb.get_nx())
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
@@ -74,15 +74,15 @@ if(pc.get_model_name().lower() == "gaussian"):
         print("%8d: %10.4f, %10.4f"
             % (n,
               sb.get_dim()/3*pred_mean_squared_x,
-              pc.get_n_contour()*norm_segment*mean_squared_x))
+              pc.get_n_segment()*norm_segment*mean_squared_x))
         
-        if (n < pc.get_n_contour_a()):
+        if (n < pc.get_n_segment_a()):
             pred_mean_squared_x += eps**2
         else:
             pred_mean_squared_x += 1
             
 elif(pc.get_model_name().lower() == "discrete"):
-    for n in range(1, pc.get_n_contour()+1):
+    for n in range(1, pc.get_n_segment()+1):
         q1_out, _ = pseudo.get_partition(n, 0)
         q1_out = np.reshape(q1_out, sb.get_nx())
 
@@ -90,11 +90,11 @@ elif(pc.get_model_name().lower() == "discrete"):
         print("%8d: %10.4f, %10.4f"
             % (n,
                sb.get_dim()/3*pred_mean_squared_x,
-               pc.get_n_contour()*norm_segment*mean_squared_x))
+               pc.get_n_segment()*norm_segment*mean_squared_x))
 
-        if (n < pc.get_n_contour_a()):
+        if (n < pc.get_n_segment_a()):
             pred_mean_squared_x += eps**2
-        elif (n == pc.get_n_contour_a()):
+        elif (n == pc.get_n_segment_a()):
             pred_mean_squared_x += (eps**2 + 1)/2
         else:
             pred_mean_squared_x += 1

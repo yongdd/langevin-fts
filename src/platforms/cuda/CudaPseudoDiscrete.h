@@ -17,7 +17,7 @@ private:
     cufftHandle plan_for, plan_bak;
 
     // partition function and complementry partition are 
-    // contiguously stored in q_d for every contour step.
+    // contiguously stored in q_d for every segment step.
     // In other words,
     // q       (r,1)   = q_d[0]          ~ q_d[MM-1]
     // q^dagger(r,N)   = q_d[MM]         ~ q_d[2*MM-1]

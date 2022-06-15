@@ -10,7 +10,7 @@
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
-#include "CpuPseudoGaussian.h"
+#include "CpuPseudoContinuous.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
@@ -28,16 +28,16 @@ SimulationBox* MklFactory::create_simulation_box(
 Pseudo* MklFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
-    if ( model_name == "gaussian" )
+    if ( model_name == "continuous" )
     {
         if (sb->get_dim() == 3)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new MklFFT3D({sb->get_nx(0),sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 2)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new MklFFT2D({sb->get_nx(1),sb->get_nx(2)}));
         else if (sb->get_dim() == 1)
-            return new CpuPseudoGaussian(sb, pc,
+            return new CpuPseudoContinuous(sb, pc,
                 new MklFFT1D(sb->get_nx(2)));
     }
     else if ( model_name == "discrete" )

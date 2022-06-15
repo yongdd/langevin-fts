@@ -18,12 +18,12 @@ tolerance = 1e-8
 
 # Major Simulation Parameters
 f = 0.25          # A-fraction, f
-n_contour = 100   # segment number, N
+n_segment = 100   # segment number, N
 chi_n = 25        # Flory-Huggins Parameters * N
 epsilon = 2.0     # a_A/a_B, conformational asymmetry, default = 1.0
 nx = [64,64,32]   # grid numbers
 lx = [7.0,7.0,4.0]   # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-chain_model = "Gaussian"    # choose among [Gaussian, Discrete]
+chain_model = "Continuous"    # choose among [Continuous, Discrete]
 
 # Anderson mixing
 am_n_var = 2*np.prod(nx)+len(lx)  # w_a (w[0]) and w_b (w[1]) + lx
@@ -41,7 +41,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform)
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_contour, chi_n, chain_model, epsilon)
+pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
 sb     = factory.create_simulation_box(nx, lx)
 pseudo = factory.create_pseudo(sb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
@@ -50,7 +50,7 @@ am     = factory.create_anderson_mixing(am_n_var,
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (sb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_contour()) )
+print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
@@ -101,6 +101,6 @@ print("total time: %f " % time_duration)
 
 # save final results
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_contour(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
+        "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
 savemat("fields.mat", mdic)
