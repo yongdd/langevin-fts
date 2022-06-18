@@ -2,7 +2,7 @@ __pycache__
 .vscode
 build
 doc
-devel
+temp
 *.dat
 *.out
 *.png
