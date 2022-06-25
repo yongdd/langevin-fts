@@ -46,7 +46,7 @@ x = sqrt(double(k2_unique))*2*pi;
 y = sf_mag./sf_count;
 y(1) = 0.0;
 
-# Plot
+% Plot
 h=figure;
 semilogy(x,y);
 xlim([2 14])
