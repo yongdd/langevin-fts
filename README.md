@@ -38,8 +38,11 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make test`   
   `make install`   
 
-* To use MKL, specify your C++ compiler with the following command.   
-  cmake ../ -DCMAKE_CXX_COMPILER=icpc   
+* If you want to use FFTW library, clone from `fftw` branch. This is distributed under GPL license.  
+  `git clone -b fftw https://github.com/yongdd/langevin-fts.git`     
+
+* To use MKL, choose Intel C++ compiler with the following command.   
+  `cmake ../ -DCMAKE_CXX_COMPILER=icpc`   
 
 * **If you encounter `segmentation fault`, type following commands.**      
   `ulimit -s unlimited`   
