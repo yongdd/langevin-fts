@@ -10,11 +10,6 @@
 #include "SimulationBox.h"
 #include "CpuPseudoDiscrete.h"
 #endif
-#ifdef USE_CPU_FFTW
-#include "FftwFFT3D.h"
-#include "SimulationBox.h"
-#include "CpuPseudoDiscrete.h"
-#endif
 #ifdef USE_CUDA
 #include "CudaSimulationBox.h"
 #include "SimulationBox.h"
@@ -181,9 +176,6 @@ int main()
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
-        #endif
-        #ifdef USE_CPU_FFTW
-        pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new FftwFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoDiscrete(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));

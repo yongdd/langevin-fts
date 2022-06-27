@@ -1,6 +1,6 @@
 # This inputs file is used by TestScft.cpp and TestParamParser.cpp
 
-platform = "cpu-fftw"           # cuda, cpu-mkl, cpu-fftw
+platform = "cuda"         # cuda, cpu-mkl
 
 # SIMULATION BOX
 geometry.grids     = 31  49  63   # the number of simulation grids

@@ -7,7 +7,7 @@ data_init = [0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.96191
 data_k_answer = [3.497839818+0j, -0.7248383037+0.4777381112j, -0.5654030903-0.05431399883j]
 
 #---------------- Forward --------------------
-print("Running FFTW 1D")
+print("Running FFT 1D")
 print("If error is less than 1.0e-7, it is ok!")
 data_k = np.fft.rfft(data_init)
 error = np.max(np.absolute(data_k - data_k_answer))
