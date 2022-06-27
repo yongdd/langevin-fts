@@ -5,11 +5,9 @@
 #include <random>
 
 #include "Exception.h"
+#include "FFT.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#endif
-#ifdef USE_CPU_FFTW
-#include "FftwFFT3D.h"
 #endif
 
 int main()
@@ -74,9 +72,6 @@ int main()
         std::vector<FFT*> fft_list;
         #ifdef USE_CPU_MKL
         fft_list.push_back(new MklFFT3D({II,JJ,KK}));
-        #endif
-        #ifdef USE_CPU_FFTW
-        fft_list.push_back(new FftwFFT3D({II,JJ,KK}));
         #endif
 
         // For each platform    

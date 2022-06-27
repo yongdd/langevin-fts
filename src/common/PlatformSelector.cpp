@@ -7,9 +7,6 @@
 #ifdef USE_CPU_MKL
 #include "MklFactory.h"
 #endif
-#ifdef USE_CPU_FFTW
-#include "FftwFactory.h"
-#endif
 #ifdef USE_CUDA
 #include "CudaFactory.h"
 #include "CudaCommon.h"
@@ -21,9 +18,6 @@ std::vector<std::string> PlatformSelector::avail_platforms()
     std::vector<std::string> names;
 #ifdef USE_CPU_MKL
     names.push_back("cpu-mkl");
-#endif
-#ifdef USE_CPU_FFTW
-    names.push_back("cpu-fftw");
 #endif
 #ifdef USE_CUDA
     names.push_back("cuda");
@@ -37,9 +31,6 @@ AbstractFactory *PlatformSelector::create_factory()
 #ifdef USE_CPU_MKL
     return new MklFactory();
 #endif
-#ifdef USE_CPU_FFTW
-    return new FftwFactory();
-#endif
 #ifdef USE_CUDA
     return new CudaFactory();
 #endif
@@ -51,10 +42,6 @@ AbstractFactory *PlatformSelector::create_factory(std::string str_platform)
 #ifdef USE_CPU_MKL
     if (str_platform == "cpu-mkl")
         return new MklFactory();
-#endif
-#ifdef USE_CPU_FFTW
-    if (str_platform == "cpu-fftw")
-        return new FftwFactory();
 #endif
 #ifdef USE_CUDA
     if (str_platform == "cuda")

@@ -42,7 +42,7 @@ data_k_answer = [
 data_init = np.reshape(data_init, (5,4,3))
 data_k_answer = np.reshape(data_k_answer, (5,4,2))
 #---------------- Forward --------------------
-print("Running FFTW 3D")
+print("Running FFT 3D")
 print("If error is less than 1.0e-7, it is ok!")
 data_k = np.fft.rfftn(data_init)
 error = np.max(np.absolute(data_k - data_k_answer))

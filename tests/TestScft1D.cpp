@@ -46,7 +46,7 @@ int main()
         double sum;
 
         // -------------- initialize ------------
-        // platform type, (cuda, cpu-mkl or cpu-fftw)
+        // platform type, [cuda, cpu-mkl]
         
         int max_scft_iter = 20;
         double tolerance = 1e-9;

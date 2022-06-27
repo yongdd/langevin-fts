@@ -43,7 +43,7 @@ ADD_LIBRARY(common
 )
 
 # Intel MKL
-# FIND_PACKAGE(MKL)
+FIND_PACKAGE(MKL)
 IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
@@ -59,29 +59,6 @@ IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
 ELSE()
     SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
-
-#  FFTW 
-FIND_PATH(FFTW_INCLUDE NAMES fftw3.h)
-FIND_LIBRARY(FFTW_LIBRARY NAMES fftw3)
-MESSAGE("${FFTW_INCLUDE}")
-MESSAGE("${FFTW_LIBRARY}")
-IF(FFTW_INCLUDE AND FFTW_LIBRARY)
-    SET(BUILD_CPU_FFTW_LIB TRUE)
-    INCLUDE_DIRECTORIES(${FFTW_INCLUDE})
-    ADD_DEFINITIONS(-DUSE_CPU_FFTW)
-    ADD_LIBRARY(cpu-fftw
-        src/platforms/cpu/FftwFFT1D.cpp
-        src/platforms/cpu/FftwFFT2D.cpp
-        src/platforms/cpu/FftwFFT3D.cpp
-    	src/platforms/cpu/CpuPseudoContinuous.cpp
-        src/platforms/cpu/CpuPseudoDiscrete.cpp
-    	src/platforms/cpu/CpuAndersonMixing.cpp
-        src/platforms/cpu/FftwFactory.cpp
-    )
-ELSE()
-    SET(BUILD_CPU_FFTW_LIB FALSE)
-ENDIF()
-
 
 #  NVIDIA CUDA
 FIND_PACKAGE(CUDAToolkit)
@@ -102,7 +79,6 @@ IF(CUDAToolkit_FOUND)
 ENDIF()
 
 IF( (NOT BUILD_CPU_MKL_LIB) AND
-    (NOT BUILD_CPU_FFTW_LIB) AND
     (NOT CUDAToolkit_FOUND) )
     MESSAGE( FATAL_ERROR "Could not find any FFT library, CMake will exit." )
 ENDIF()
@@ -130,8 +106,6 @@ TARGET_LINK_LIBRARIES(langevinfts PRIVATE
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
-	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
-	$<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,${FFTW_LIBRARY},>
 	common
 )
 
