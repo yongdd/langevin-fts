@@ -12,13 +12,13 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * Periodic Boundaries  
 * 3D, 2D and 1D
 * Pseudospectral Method, Anderson Mixing   
-* Platforms: FFTW (CPU) and CUDA (GPU)   
+* Platforms: FFTW, MKL (CPU) and CUDA (GPU)   
 
 # Dependencies
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++14 standard or higher.
+  Any C++ compiler that supports C++14 standard or higher. To use MKL, install Intel oneAPI toolkit.
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
@@ -33,12 +33,14 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Compiling
   `conda create -n lfts python=3.9 cmake=3.19 conda git pybind11 scipy fftw openmpi`  
   `conda activate lfts`  
-  `git clone -b fftw https://github.com/yongdd/langevin-fts.git`  
-  `cd langevin-fts && mkdir build && cd build`  
+  `mkdir build && cd build`  
   `cmake ../`  
   `make`   
   `make test`   
   `make install`   
+
+* To use MKL, choose Intel C++ compiler with the following command.   
+  `cmake ../ -DCMAKE_CXX_COMPILER=icpc`   
 
 * **If you encounter `segmentation fault`, type following commands.**      
   `ulimit -s unlimited`   
@@ -60,7 +62,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 
 # Developer Guide
 #### Platforms  
-  This program is designed to run on different platforms such as FFTW and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.   
+  This program is designed to run on different platforms such as FFTW, MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform `abstract factory pattern` is adopted.   
 
 #### Anderson Mixing  
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. There will be a performance loss of 5~10%.
