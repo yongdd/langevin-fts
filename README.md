@@ -33,7 +33,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Compiling
   `conda create -n lfts python=3.9 cmake=3.19 conda git pybind11 scipy fftw openmpi`  
   `conda activate lfts`  
-  `git clone -b devel https://github.com/yongdd/langevin-fts.git`  
+  `git clone -b fftw https://github.com/yongdd/langevin-fts.git`  
   `cd langevin-fts && mkdir build && cd build`  
   `cmake ../`  
   `make`   
