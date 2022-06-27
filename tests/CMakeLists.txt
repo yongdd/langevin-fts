@@ -24,6 +24,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
 		$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
 		$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
 		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
 		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
 		common
 		)

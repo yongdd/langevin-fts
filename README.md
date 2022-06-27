@@ -38,13 +38,16 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   `make test`   
   `make install`   
 
+* To use MKL, specify your C++ compiler with the following command.   
+  cmake ../ -DCMAKE_CXX_COMPILER=icpc   
+
 * **If you encounter `segmentation fault`, type following commands.**      
   `ulimit -s unlimited`   
   `export OMP_STACKSIZE=1G`   
    
 *  If you want to remove all installations :cry:, type following commands.   
-   `conda deactivate`   
-   `conda env remove -n lfts`   
+  `conda deactivate`   
+  `conda env remove -n lfts`   
    
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
@@ -67,8 +70,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
   A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
 
 #### Python Binding  
-  `pybind11` is utilized to generate Python interfaces for the C++ classes.   
-   https://pybind11.readthedocs.io/en/stable/index.html 
+ `pybind11` is utilized to generate Python interfaces for the C++ classes.   
+  https://pybind11.readthedocs.io/en/stable/index.html   
 
 # References
 #### CUDA Implementation
