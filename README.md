@@ -1,7 +1,7 @@
 # Langevin FTS
 Langevin Field-Theoretic Simulation (L-FTS) for Python
 
-This branch includes FFTW library, which is distributed under GPL license.
+**This branch includes FFTW library, which is distributed under GPL license.**
 
 # Features
 * SCFT and L-FTS   
