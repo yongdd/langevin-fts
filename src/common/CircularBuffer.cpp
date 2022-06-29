@@ -9,6 +9,9 @@ CircularBuffer::CircularBuffer(int length, int width)
     this->n_items = 0;
 
     elems = new double[length*width];
+    for(int i=0; i<length*width; i++){
+        elems[i] = 0.0;
+    }
 }
 CircularBuffer::~CircularBuffer()
 {

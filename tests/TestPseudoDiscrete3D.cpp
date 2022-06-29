@@ -5,15 +5,20 @@
 
 #include "Exception.h"
 #include "PolymerChain.h"
+#ifdef USE_CUDA
+#include "CudaSimulationBox.h"
+#include "SimulationBox.h"
+#include "CudaPseudoDiscrete.h"
+#endif
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "SimulationBox.h"
 #include "CpuPseudoDiscrete.h"
 #endif
-#ifdef USE_CUDA
-#include "CudaSimulationBox.h"
+#ifdef USE_CPU_POCKET_FFT
+#include "PocketFFT3D.h"
 #include "SimulationBox.h"
-#include "CudaPseudoDiscrete.h"
+#include "CpuPseudoDiscrete.h"
 #endif
 
 int main()
@@ -174,11 +179,14 @@ int main()
         std::cout<< "Initializing" << std::endl;
         PolymerChain pc(f, NN, 0.0, "Discrete", 1.0);
         std::vector<Pseudo*> pseudo_list;
+        #ifdef USE_CUDA
+        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        #endif
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
-        #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        #ifdef USE_CPU_POCKET_FFT
+        pseudo_list.push_back(new CpuPseudoDiscrete(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new PocketFFT3D({II,JJ,KK})));
         #endif
 
         // For each platform    
