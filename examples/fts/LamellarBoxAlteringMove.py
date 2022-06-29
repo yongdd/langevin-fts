@@ -105,7 +105,7 @@ am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 if( np.abs(pc.get_epsilon() - 1.0) > 1e-7):
-	raise Exception("Currently, only conformationally symmetric chains (epsilon==1) are supported.") 
+    raise Exception("Currently, only conformationally symmetric chains (epsilon==1) are supported.") 
 
 # standard deviation of normal noise
 langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/

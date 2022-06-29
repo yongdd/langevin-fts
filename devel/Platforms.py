@@ -146,7 +146,7 @@ for dim in [1,2,3]:
         # Test error
         print("Standard deviations: %9.5E, %9.5E" % (np.std(test_output), np.std(test_dqdl)))
         if np.std(test_output) > 1e-8 or np.std(test_dqdl) > 1e-8 \
-		or np.isnan(np.std(test_output)) or np.isnan(np.std(test_dqdl)):
+        or np.isnan(np.std(test_output)) or np.isnan(np.std(test_dqdl)):
             print("Each platform should give the same result")
             sys.exit(-1);
         print("-" * 50)

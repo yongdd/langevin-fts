@@ -52,9 +52,9 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT1D.cpp
         src/platforms/cpu/MklFFT2D.cpp
         src/platforms/cpu/MklFFT3D.cpp
-    	src/platforms/cpu/CpuPseudoContinuous.cpp
+        src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
-    	src/platforms/cpu/CpuAndersonMixing.cpp
+        src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
 ELSE()
@@ -102,17 +102,17 @@ PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp)
 SET_TARGET_PROPERTIES(langevinfts PROPERTIES SUFFIX ".so")
 TARGET_LINK_LIBRARIES(langevinfts PRIVATE 
     factory
-	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
-	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
+    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
+    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
+    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
-	common
+    common
 )
 
 EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
