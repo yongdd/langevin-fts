@@ -49,7 +49,7 @@ for dim in [1,2,3]:
 
     for chain_model in ["Discrete", "Continuous"]:
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
-        print("platform, time per iter, mass error, output1 (error), output2 (dqdl)")
+        print(" "*4,"platform, time per iter, mass error, output1 (error), output2 (dqdl)")
         test_output = []
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
@@ -140,7 +140,7 @@ for dim in [1,2,3]:
             
             # estimate execution time
             time_duration = time.time() - time_start
-            print("%8s: %13.5f, %10.3E, %14.5E, %14.5E" %
+            print("%13s: %13.5f, %10.3E, %15.5E, %15.5E" %
                 (platform, time_duration/max_scft_iter, mass_error, error_level, dqdl) )
         
         # Test error
