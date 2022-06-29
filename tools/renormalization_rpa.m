@@ -5,8 +5,8 @@ dx = lx./double(nx);
 dv = dx(1)*dx(2)*dx(3);
 
 if abs(epsilon - 1.0) > 1e-7
-	fprintf("Currently, only conformationally symmetric chains (epsilon==1) are supported.\n");
-	return;
+    fprintf("Currently, only conformationally symmetric chains (epsilon==1) are supported.\n");
+    return;
 end
 
 if strcmpi(chain_model,'Discrete')
