@@ -19,7 +19,7 @@ nx = [64,64,64]          # grids number
 lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-mkl, cpu-pocketfft]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

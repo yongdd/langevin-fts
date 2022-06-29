@@ -33,7 +33,7 @@ am_start_error = 1e-2     # when switch to AM from simple mixing
 am_mix_min = 0.1          # minimum mixing rate of simple mixing
 am_mix_init = 0.1         # initial mixing rate of simple mixing
 
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-mkl, cpu-pocketfft]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

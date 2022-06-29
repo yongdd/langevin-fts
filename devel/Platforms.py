@@ -30,7 +30,7 @@ am_start_error = 8e-1 # when switch to AM from simple mixing
 am_mix_min = 0.1      # minimum mixing rate of simple mixing
 am_mix_init = 0.1     # initial mixing rate of simple mixing
 
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-mkl, cpu-pocketfft]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
 print("*" * 30, "Run", "*" * 30)
 for dim in [1,2,3]:

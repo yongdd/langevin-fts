@@ -100,7 +100,7 @@ am_mix_init = 0.1        # initial mixing rate of simple mixing
 # use stress for finding unit cell
 use_stress = True
 
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-mkl, cpu-pocketfft]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

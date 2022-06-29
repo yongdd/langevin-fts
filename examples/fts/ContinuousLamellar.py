@@ -45,7 +45,7 @@ langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 
 # -------------- initialize ------------
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-mkl, cpu-pocketfft]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

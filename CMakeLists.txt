@@ -60,6 +60,20 @@ ELSE()
     SET(BUILD_CPU_MKL_LIB FALSE)
 ENDIF()
 
+# Pocket FFT
+SET(BUILD_CPU_POCKET_FFT_LIB TRUE)
+ADD_DEFINITIONS(-DUSE_CPU_POCKET_FFT)
+ADD_DEFINITIONS(-DPOCKETFFT_NO_MULTITHREADING)
+ADD_LIBRARY(cpu-pocketfft
+    src/platforms/cpu/PocketFFT1D.cpp
+    src/platforms/cpu/PocketFFT2D.cpp
+    src/platforms/cpu/PocketFFT3D.cpp
+    src/platforms/cpu/CpuPseudoContinuous.cpp
+    src/platforms/cpu/CpuPseudoDiscrete.cpp
+    src/platforms/cpu/CpuAndersonMixing.cpp
+    src/platforms/cpu/PocketFFTFactory.cpp
+    )
+
 #  NVIDIA CUDA
 FIND_PACKAGE(CUDAToolkit)
 IF(CUDAToolkit_FOUND)
@@ -79,6 +93,7 @@ IF(CUDAToolkit_FOUND)
 ENDIF()
 
 IF( (NOT BUILD_CPU_MKL_LIB) AND
+    (NOT BUILD_CPU_POCKET_FFT_LIB) AND
     (NOT CUDAToolkit_FOUND) )
     MESSAGE( FATAL_ERROR "Could not find any FFT library, CMake will exit." )
 ENDIF()
@@ -107,6 +122,7 @@ TARGET_LINK_LIBRARIES(langevinfts PRIVATE
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
+    $<IF:$<BOOL:${BUILD_CPU_POCKET_FFT_LIB}>,cpu-pocketfft,>
 	common
 )
 

@@ -9,6 +9,9 @@
 #ifdef USE_CPU_MKL
 #include "MklFFT2D.h"
 #endif
+#ifdef USE_CPU_POCKET_FFT
+#include "PocketFFT2D.h"
+#endif
 
 int main()
 {
@@ -51,6 +54,9 @@ int main()
         std::vector<FFT*> fft_list;
         #ifdef USE_CPU_MKL
         fft_list.push_back(new MklFFT2D({II,JJ}));
+        #endif
+        #ifdef USE_CPU_POCKET_FFT
+        fft_list.push_back(new PocketFFT2D({II,JJ}));
         #endif
 
         // For each platform    
