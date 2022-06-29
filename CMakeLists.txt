@@ -43,8 +43,9 @@ ADD_LIBRARY(common
 )
 
 # Intel MKL
-FIND_PACKAGE(MKL)
-IF(MKL_FOUND AND CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
+SET(ENV{MKL_ROOT} "$ENV{MKLROOT}")
+FIND_PACKAGE(MKL CONFIG)
+IF(MKL_FOUND)
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
@@ -105,8 +106,12 @@ TARGET_LINK_LIBRARIES(langevinfts PRIVATE
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
 	$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
 	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
-	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
+	$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
+    $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
 	common
 )
 

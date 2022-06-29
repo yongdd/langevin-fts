@@ -18,14 +18,18 @@ FOREACH(FILE_NAME ${FILE_LIST})
 	ENDIF()
 
 	ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
-	TARGET_LINK_LIBRARIES(${TEST_NAME}
+	TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
 		factory
 		$<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
 		$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
 		$<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
 		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-mkl,>
-		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-qmkl,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
+		$<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
 		common
 		)
 	IF(${TEST_NAME} MATCHES "ParamParser" OR ${TEST_NAME} MATCHES "Scft")
