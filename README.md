@@ -29,7 +29,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-  ```
+  ```Shell
 conda create -n test python=3.9 cmake=3.19 conda git \
 pybind11 scipy openmpi  
 conda activate lfts  
@@ -37,26 +37,26 @@ mkdir build && cd build
 cmake ../  
 make -j8  
 make test  
-make install    
+make install  
 ```
 To use MKL, choose Intel C++ compiler with the following command.   
-  ```
+  ```Shell
 cmake ../ -DCMAKE_CXX_COMPILER=icpc  
 ```
 **If you encounter `segmentation fault`, type following commands.**   
-  ```
+  ```Shell
 ulimit -s unlimited   
 export OMP_STACKSIZE=1G   
 ```
 If you want to remove all installations :cry:, type following commands.   
-  ```
+  ```Shell
 conda deactivate     
 conda env remove -n lfts     
 ```
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
 + **A few basic SCFT and L-FTS scripts are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroid.py, fts/ContinuousLamellar.py.**   
-+ If your ultimate goal is to use deep learning boosted L-FTS.
++ If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)  
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that the unit of length in this library is the end-to-end chain length *aN^(1/2)*, not the gyration of radius *a(N/6)^(1/2)*, where *a* is statistical segment length and *N* is polymerziation index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
@@ -70,9 +70,6 @@ conda env remove -n lfts
 
 * **Anderson Mixing**    
   It is neccesery to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copys. If you do not want to use such data structure, please follow the code in [*Polymers* **2021**, 13, 2437]. There will be a performance loss of 5~10%.
-
-* **Parameter Parser**    
-  A parser is implemented using `regular expression` and `deterministic finite automaton` to read input parameters from a file. If you want to modify or improve syntax for parameter file, reimplement the parser using standard tools such as `bison` and `flex`. In Python scripts, it is no longer necessary. You can use a `yaml` or `json` file as an input parameter file instead. Using `argparse` is also a good option.   
 
 * **Python Binding**    
   `pybind11` is utilized to generate Python interfaces for the C++ classes.   
