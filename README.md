@@ -39,17 +39,20 @@ make
 make test   
 make install   
 ```  
+
 * If you want to use FFTW library, clone from `fftw` branch. That is distributed under GPL license.  
-  ```
+```
 git clone -b fftw https://github.com/yongdd/langevin-fts.git  
 ```  
+
 * **If you encounter `segmentation fault`, type following commands.**     
-  ``` 
+``` 
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
 ```  
+
 *  If you want to remove all installations :cry:, type following commands.   
-  ```
+```
 conda deactivate  
 conda env remove -n lfts  
 ```  
