@@ -29,7 +29,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
 # Compiling
-```
+  ```
 conda create -n lfts python=3.9 cmake=3.19 conda git pybind11 scipy openmpi  
 conda activate lfts  
 git clone https://github.com/yongdd/langevin-fts.git  
@@ -40,16 +40,16 @@ make test
 make install   
 ```
 * If you want to use FFTW library, clone from `fftw` branch. That is distributed under GPL license.  
-```
+  ```
 git clone -b fftw https://github.com/yongdd/langevin-fts.git  
 ```
 * **If you encounter `segmentation fault`, type following commands.**     
-``` 
+  ``` 
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
 ```
 *  If you want to remove all installations :cry:, type following commands.   
-```
+  ```
 conda deactivate  
 conda env remove -n lfts  
 ```
