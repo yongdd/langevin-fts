@@ -38,21 +38,21 @@ cmake ../
 make  
 make test   
 make install   
-```
+```  
 * If you want to use FFTW library, clone from `fftw` branch. That is distributed under GPL license.  
   ```
 git clone -b fftw https://github.com/yongdd/langevin-fts.git  
-```
+```  
 * **If you encounter `segmentation fault`, type following commands.**     
   ``` 
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
-```
+```  
 *  If you want to remove all installations :cry:, type following commands.   
   ```
 conda deactivate  
 conda env remove -n lfts  
-```
+```  
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
 + **A few basic SCFT and L-FTS implementations are provided in `examples` folder. Please start from those scripts: scft/Gyroid.py, fts/DiscreteGyroid.py, fts/ContinuousLamellar.py**   
