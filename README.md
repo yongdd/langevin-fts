@@ -31,7 +31,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Compiling
   ```Shell
 conda create -n lfts python=3.9 cmake=3.19 conda git \
-      pybind11 scipy openmpi  
+      pybind11 scipy fftw openmpi  
 conda activate lfts  
 mkdir build && cd build  
 cmake ../  
