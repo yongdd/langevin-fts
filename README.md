@@ -32,13 +32,14 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 
 # Compiling
   ```
-conda create -n lfts python=3.9 cmake=3.19 conda git pybind11 scipy fftw openmpi    
-conda activate lfts    
-mkdir build && cd build    
-cmake ../    
-make     
-make test     
-make install   
+conda create -n test python=3.9 cmake=3.19 conda git \
+pybind11 scipy openmpi  
+conda activate lfts  
+mkdir build && cd build  
+cmake ../  
+make  
+make test  
+make install    
 ```
 To use MKL, choose Intel C++ compiler with the following command.   
   ```
