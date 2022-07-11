@@ -39,10 +39,6 @@ make -j8
 make test  
 make install  
 ```
-To use MKL, choose Intel C++ compiler with the following command.   
-  ```Shell
-cmake ../ -DCMAKE_CXX_COMPILER=icpc  
-```
 **If you encounter `segmentation fault`, type following commands.**   
   ```Shell
 ulimit -s unlimited   
@@ -82,4 +78,4 @@ G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-c
 M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
 
 # Citation
-Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, *Macromolecules* **2022**, accepted
+Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, *Macromolecules* **2022**, in press
