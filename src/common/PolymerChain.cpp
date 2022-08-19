@@ -5,29 +5,37 @@
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(double f, int n_segment,
-    double chi_n, std::string model_name, double epsilon)
+PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_length, std::string model_name)
 {
-    if( f <= 0 || f >= 1)
-        throw_with_line_number("A fraction f (" + std::to_string(f) + ") must be in range (0, 1)");
-    if( n_segment <= 0)
-        throw_with_line_number("The number of segments (" +std::to_string(n_segment) + ") must be a postive number");
-    if( chi_n < 0)
-        throw_with_line_number("The Flory-Hunggins parameter (" +std::to_string(chi_n) + ") must be a non-negative number");
-    if( epsilon <= 0)
-        throw_with_line_number("Conformational asymmetry (" +std::to_string(epsilon) + ") must be a postive number");
+   
+    if( n_segment.size() != bond_length.size())
+        throw_with_line_number("The number of blocks for n_segment (" +std::to_string(n_segment.size()) + ") and bond_length (" +std::to_string(bond_length.size()) + ")must be consistent");
+    
+    this->n_block = n_segment.size();
+    for(int i=0; i<n_block; i++)
+    {
+        if( n_segment[i] <= 0)
+            throw_with_line_number("The number of segments (" +std::to_string(n_segment[i]) + ") must be a postive number");
+        if( bond_length[i] <= 0)
+            throw_with_line_number("The bond length (" +std::to_string(n_segment[i]) + ") must be a postive number");
+    }
 
-    this->f = f;
     this->n_segment = n_segment;
-    this->chi_n = chi_n;
-    this->epsilon = epsilon;
+    
+    this->n_segment_total = 0;
+    for(int i=0; i<n_block; i++)
+    {
+        this->n_segment_total += this->n_segment[i];
+    }
+    //bond length is stored as its square
+    this->bond_length = {};
+    for(int i=0; i<n_block; i++)
+    {
+        this->bond_length.push_back(bond_length[i]*bond_length[i]*this->n_segment_total);
+    }
 
-    // the number of A segments
-    this->n_segment_a = std::lround(n_segment*f);
-    if( std::abs(this->n_segment_a-n_segment*f) > 1.e-6)
-        throw_with_line_number("N*f (" + std::to_string(n_segment*f) + ") is not an integer");
     // segment step size
-    this->ds = 1.0/n_segment;
+    this->ds = 1.0/this->n_segment_total;
 
     // chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
@@ -40,42 +48,47 @@ PolymerChain::PolymerChain(double f, int n_segment,
         throw_with_line_number(model_name + " is an invalid chain model. This must be 'Continuous' or 'Discrete'");
     }
     this->model_name = model_name;
+
+    this->block_start = {0};
+    for(int i=0; i<n_block; i++)
+    {
+        block_start.push_back(block_start.back() + n_segment[i]);
+    }  
+
 }
-int PolymerChain::get_n_segment()
+int PolymerChain::get_n_block()
+{
+    return n_block;
+}
+std::vector<int> PolymerChain::get_n_segment()
 {
     return n_segment;
 }
-int PolymerChain::get_n_segment_a()
+int PolymerChain::get_n_segment(int block)
 {
-    return n_segment_a;
+    return n_segment[block];
 }
-int PolymerChain::get_n_segment_b()
+int PolymerChain::get_n_segment_total()
 {
-    return n_segment - n_segment_a;
-}
-double PolymerChain::get_f()
-{
-    return f;
+    return n_segment_total;
 }
 double PolymerChain::get_ds()
 {
     return ds;
 }
-double PolymerChain::get_chi_n()
+std::vector<double> PolymerChain::get_bond_length()
 {
-    return chi_n;
+    return bond_length;
 }
-double PolymerChain::get_epsilon()
+double PolymerChain::get_bond_length(int block)
 {
-    return epsilon;
+    return bond_length[block];
 }
 std::string PolymerChain::get_model_name()
 {
     return model_name;
 }
-void PolymerChain::set_chi_n(double chi_n)
+std::vector<int> PolymerChain::get_block_start()
 {
-    if( chi_n < 0)
-        throw_with_line_number("The Flory-Hunggins parameter (" +std::to_string(chi_n) + ") must be a non-negative number");
-    this->chi_n = chi_n;
+    return block_start;
 }

@@ -10,7 +10,7 @@
 #include "PolymerChain.h"
 #include "SimulationBox.h"
 #include "Pseudo.h"
-#include "AndersonMixing.h"
+#include "AndersonMixing.h" 
 
 // Design Pattern : Abstract Factory
 
@@ -19,8 +19,9 @@ class AbstractFactory
 public :
     virtual ~AbstractFactory() {};
     virtual PolymerChain* create_polymer_chain(
-        double f, int n_segment, double chi_n, 
-        std::string model_name, double epsilon=1.0) = 0;
+        std::vector<int> n_segment, 
+        std::vector<double> bond_length,
+        std::string model_name) = 0;
     virtual SimulationBox* create_simulation_box(
         std::vector<int> nx,
         std::vector<double> lx) = 0;
