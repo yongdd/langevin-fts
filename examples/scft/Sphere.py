@@ -40,21 +40,26 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-factory = PlatformSelector.create_factory(platform)
+simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+
+# calculate chain parameters
+bond_length = [np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5),
+                np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5)]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
-sb     = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc)
-am     = factory.create_anderson_mixing(am_n_var,
+pc     = simulation.create_polymer_chain(N_pc, bond_length)
+sb     = simulation.create_simulation_box(nx, lx)
+pseudo = simulation.create_pseudo(sb, pc)
+am     = simulation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (sb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
-print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
+print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
@@ -90,7 +95,7 @@ sb.zero_mean(w[1])
 print("---------- Run ----------")
 time_start = time.time()
 
-phi_a, phi_b, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx,
+phi, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx, chi_n,
     q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
@@ -99,6 +104,6 @@ print("total time: %f " % time_duration)
 
 # save final results
 mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-        "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
-        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
+        "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
 savemat("fields.mat", mdic)

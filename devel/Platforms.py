@@ -54,14 +54,14 @@ for dim in [1,2,3]:
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
 
-            factory = PlatformSelector.create_factory(platform)
-            #factory.display_info()
+            simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+            #simulation.display_info()
 
             # create instances
-            pc = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
-            sb = factory.create_simulation_box(nx, lx)
-            pseudo = factory.create_pseudo(sb, pc)
-            am = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
+            pc = simulation.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
+            sb = simulation.create_simulation_box(nx, lx)
+            pseudo = simulation.create_pseudo(sb, pc)
+            am = simulation.create_anderson_mixing(am_n_comp*np.prod(nx),
                 am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
             # assign large initial value for the energy and error
@@ -94,7 +94,7 @@ for dim in [1,2,3]:
             # iteration begins here
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
+                phi, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
                 
                 # calculate the total energy
                 energy_old = energy_total
@@ -102,7 +102,7 @@ for dim in [1,2,3]:
                 w_plus  = (w[0]+w[1])/2
                 
                 energy_total  = -np.log(Q/sb.get_volume())
-                energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
+                energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
                 energy_total -= sb.integral(w_plus)/sb.get_volume()
                 
                 # calculate pressure field for the new field calculation, the method is modified from Fredrickson's

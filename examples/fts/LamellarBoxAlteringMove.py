@@ -85,26 +85,31 @@ langevin_nbar = 10000  # invariant polymerization index
 langevin_max_step = 2000
 
 # -------------- initialize ------------
+# calculate chain parameters
+bond_length = [np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5),
+                np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5)]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-factory = PlatformSelector.create_factory(platform)
+simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # calculate bare chi_n
 z_inf, dz_inf_dl = renormal_psum(lx, nx, n_segment, langevin_nbar)
 chi_n = effective_chi_n/z_inf
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
-sb     = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc)
-am     = factory.create_anderson_mixing(am_n_var,
+pc     = simulation.create_polymer_chain(N_pc, bond_length)
+sb     = simulation.create_simulation_box(nx, lx)
+pseudo = simulation.create_pseudo(sb, pc)
+am     = simulation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
-if( np.abs(pc.get_epsilon() - 1.0) > 1e-7):
+if( np.abs(epsilon - 1.0) > 1e-7):
     raise Exception("Currently, only conformationally symmetric chains (epsilon==1) are supported.") 
 
 # standard deviation of normal noise
@@ -116,9 +121,9 @@ langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
-print("Conformational asymmetry (epsilon): %f" % (pc.get_epsilon()) )
+print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
 print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
@@ -141,7 +146,7 @@ w_minus = (input_data["w_a"] - input_data["w_b"])/2
 # keep the level of field value
 sb.zero_mean(w_plus)
 
-phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
+phi, _ = find_saddle_point(pc, sb, pseudo, am, chi_n,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 
@@ -155,41 +160,40 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
     # calculate bare chi_n
-    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_segment(), langevin_nbar)
+    z_inf, dz_inf_dl = renormal_psum(sb.get_lx(), sb.get_nx(), pc.get_n_segment_total(), langevin_nbar)
     chi_n = effective_chi_n/z_inf
-    pc.set_chi_n(chi_n)
 
     print("langevin step: ", langevin_step)
     # update w_minus: predict step
     w_minus_copy = w_minus.copy()
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
-    lambda1 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
+    lambda1 = phi[0]-phi[1] + 2*w_minus/chi_n
     w_minus += -lambda1*langevin_dt + normal_noise
-    phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
+    phi, _ = find_saddle_point(pc, sb, pseudo, am, chi_n,
         q1_init, q2_init, w_plus, w_minus,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     # update w_minus: correct step
-    lambda2 = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
+    lambda2 = phi[0]-phi[1] + 2*w_minus/chi_n
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    phi_a, phi_b, Q = find_saddle_point(pc, sb, pseudo, am,
+    phi, Q = find_saddle_point(pc, sb, pseudo, am, chi_n,
         q1_init, q2_init, w_plus, w_minus,
         saddle_max_iter, saddle_tolerance, verbose_level)
 
     # write density and field data
     if langevin_step % 100 == 0:
         mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
-            "N":pc.get_n_segment(), "f":pc.get_f(), "chi_n":pc.get_chi_n(), "epsilon":pc.get_epsilon(),
+            "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
             "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi[0], "phi_b":phi[1]}
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
         
     # caculate stress
     dlogQ_dl = np.array(pseudo.dq_dl())/Q
-    dfield_dchin = 1/4 - sb.inner_product(w_minus,w_minus)/pc.get_chi_n()**2/sb.get_volume()
-    dfield_dl = -dfield_dchin*pc.get_chi_n()/z_inf*dz_inf_dl
+    dfield_dchin = 1/4 - sb.inner_product(w_minus,w_minus)/chi_n**2/sb.get_volume()
+    dfield_dl = -dfield_dchin*chi_n/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
     #print(-dlogQ_dl, dfield_dl)
 
