@@ -37,7 +37,7 @@ int main()
         // initial value of q, q_dagger
         double *q1_init, *q2_init;
         // segment concentration
-        double *phia, *phib, *phitot;
+        double *phi, *phia, *phib, *phitot;
 
         // string to output file and print stream
         std::ofstream print_stream;
@@ -56,9 +56,12 @@ int main()
         double f = 0.3;
         int n_segment = 50;
         double chi_n = 20.0;
+        
         std::vector<int> nx = {31,49,23};
         std::vector<double> lx = {4.0,3.0,2.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
+        std::vector<int> N_chain = {int(std::round(f*n_segment)), int(std::round((1-f)*n_segment))};
+        std::vector<double> bond_length = {std::pow(n_segment,-0.5), std::pow(n_segment,-0.5)};
 
         int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
         int am_max_hist= 20;
@@ -74,7 +77,7 @@ int main()
 
             // create instances and assign to the variables of base classs for the dynamic binding
             SimulationBox *sb  = factory->create_simulation_box(nx, lx);
-            PolymerChain *pc   = factory->create_polymer_chain(f, n_segment, chi_n, chain_model, 1.0);
+            PolymerChain *pc   = factory->create_polymer_chain(N_chain,bond_length,chain_model);
             Pseudo *pseudo     = factory->create_pseudo(sb, pc);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
@@ -82,7 +85,7 @@ int main()
             // -------------- print simulation parameters ------------
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
-            std::cout << "chi_n, f, N: " << pc->get_chi_n() << " " << pc->get_f() << " " << pc->get_n_segment() << std::endl;
+            std::cout << "chi_n, f, N: " << chi_n << " " << f << " " << pc->get_n_segment_total() << std::endl;
             std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
             std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
             std::cout << "dx: " << sb->get_dx(0) << " " << sb->get_dx(1) << " " << sb->get_dx(2) << std::endl;
@@ -96,14 +99,15 @@ int main()
             w_out   = new double[sb->get_n_grid()*2];
             w_diff  = new double[sb->get_n_grid()*2];
             xi      = new double[sb->get_n_grid()];
-            phia    = new double[sb->get_n_grid()];
-            phib    = new double[sb->get_n_grid()];
+            phi     = new double[sb->get_n_grid()*2];
             phitot  = new double[sb->get_n_grid()];
             w_plus  = new double[sb->get_n_grid()];
             w_minus = new double[sb->get_n_grid()];
             q1_init = new double[sb->get_n_grid()];
             q2_init = new double[sb->get_n_grid()];
 
+            phia = &phi[0];
+            phib = &phi[sb->get_n_grid()];
             //-------------- setup fields ------------
             //call random_number(phia)
             //   phia = reshape( phia, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
@@ -124,8 +128,8 @@ int main()
             for(int i=0; i<sb->get_n_grid(); i++)
             {
                 phib[i] = 1.0 - phia[i];
-                w[i]              = pc->get_chi_n()*phib[i];
-                w[i+sb->get_n_grid()] = pc->get_chi_n()*phia[i];
+                w[i]              = chi_n*phib[i];
+                w[i+sb->get_n_grid()] = chi_n*phia[i];
             }
 
             // keep the level of field value
@@ -153,7 +157,7 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->find_phi(phia, phib,q1_init,q2_init,&w[0],&w[sb->get_n_grid()],QQ);
+                pseudo->find_phi(phi,q1_init,q2_init,w,QQ);
 
                 // calculate the total energy
                 for(int i=0; i<sb->get_n_grid(); i++)
@@ -162,17 +166,17 @@ int main()
                     w_plus[i]  = (w[i]+w[i + sb->get_n_grid()])/2;
                 }
                 energy_total  = -log(QQ/sb->get_volume());
-                energy_total += sb->inner_product(w_minus,w_minus)/pc->get_chi_n()/sb->get_volume();
+                energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->get_volume();
                 energy_total += sb->integral(w_plus)/sb->get_volume();
                 //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->get_volume();
 
                 for(int i=0; i<sb->get_n_grid(); i++)
                 {
                     // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-                    xi[i] = 0.5*(w[i]+w[i+sb->get_n_grid()]-pc->get_chi_n());
+                    xi[i] = 0.5*(w[i]+w[i+sb->get_n_grid()]-chi_n);
                     // calculate output fields
-                    w_out[i]              = pc->get_chi_n()*phib[i] + xi[i];
-                    w_out[i+sb->get_n_grid()] = pc->get_chi_n()*phia[i] + xi[i];
+                    w_out[i]              = chi_n*phib[i] + xi[i];
+                    w_out[i+sb->get_n_grid()] = chi_n*phia[i] + xi[i];
                 }
                 sb->zero_mean(&w_out[0]);
                 sb->zero_mean(&w_out[sb->get_n_grid()]);
@@ -209,8 +213,7 @@ int main()
             delete[] w_out;
             delete[] w_diff;
             delete[] xi;
-            delete[] phia;
-            delete[] phib;
+            delete[] phi;
             delete[] phitot;
             delete[] w_plus;
             delete[] w_minus;
