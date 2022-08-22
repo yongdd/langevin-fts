@@ -17,7 +17,8 @@ max_scft_iter = 1000
 tolerance = 1e-8
 
 # Example number
-example_number = 3
+# Change this parameter to run different examples
+example_number = 1
 
 # Major Simulation Parameters
 f = 0.5             # A-fraction, f
