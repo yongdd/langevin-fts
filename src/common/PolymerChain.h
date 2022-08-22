@@ -16,6 +16,7 @@ private:
     std::vector<int> n_segment;  // number of segements, [N_A, N_B, ...]
     std::vector<double> bond_length;  // bond length of each blocks [a_A, a_B, ...]
     double ds;  // discrete step sizes
+    double relative_length; // relative chain length
     //double epsilon; // epsilon = a_A/a_B, conformational asymmetry
                     // a = sqrt(f*a_A^2 + (1-f)*a_B^2)
     std::string model_name;   // "Continuous": continous standard Gaussian model
@@ -32,6 +33,7 @@ public:
     int get_n_segment(int block);
     int get_n_segment_total();
     double get_ds();
+    double get_relative_length();
     std::vector<double> get_bond_length();
     double get_bond_length(int block);
     std::string get_model_name();
