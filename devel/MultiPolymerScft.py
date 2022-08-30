@@ -18,18 +18,18 @@ tolerance = 1e-8
 
 # Example number
 # Change this parameter to run different examples
-example_number = 1
+example_number = 2
 
 # Major Simulation Parameters
-f = 0.5             # A-fraction, f
-n_segment = 90     # segment number, N
+f = 0.5             # A-fraction of major BCP chain, f
+n_segment = 90     # segment number of major BCP chain, N
 chi_n = 13.27        # Flory-Huggins Parameters * N
 epsilon = 1.0       # a_A/a_B, conformational asymmetry
 nx = [32,32,32]     # grid numbers
 lx = [4.36,4.36,4.36]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Discrete" # choose among [Continuous, Discrete]
 
-frac_bcp = 0.7      # fraction of major BCP chain
+frac_bcp = 0.7      # volume fraction of major BCP chain
                     # second polymer chain parameters are defined below
 
 # Anderson mixing
@@ -166,22 +166,22 @@ for scft_iter in range(1,max_scft_iter+1):
     w_minus = (w[0]-w[1])/2
     w_plus  = (w[0]+w[1])/2
 
-    volume_bcp = frac_bcp*sb.get_volume()
-    energy_total  = -np.log(Q_bcp/volume_bcp)
-    energy_total += sb.inner_product(w_minus,w_minus)/chi_n/volume_bcp
-    energy_total -= sb.integral(w_plus)/volume_bcp
+    energy_total = -frac_bcp*(np.log(Q_bcp/sb.get_volume()))
+    energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
+    energy_total -= sb.integral(w_plus)/sb.get_volume()
+    
     ###### Example 01 ######
     if example_number == 1:
-        volume_homo_a = (1.0-frac_bcp)*sb.get_volume()
-        energy_total += -volume_homo_a/(N_homo/n_segment*volume_bcp)*np.log(Q_homo_a/volume_homo_a)
+        alpha = N_homo/n_segment
+        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_homo_a/sb.get_volume()))
     ###### Example 02 ######
     if example_number == 2:
-        volume_rand = (1.0-frac_bcp)*sb.get_volume()
-        energy_total += -volume_rand/(N_rcp/n_segment*volume_bcp)*np.log(Q_rand/volume_rand) ####나중에 다시 볼 것
+        alpha = N_rcp/n_segment
+        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_rand/sb.get_volume()))
     ###### Example 03 ######
     if example_number == 3:
-        volume_bcp2 = (1.0-frac_bcp)*sb.get_volume()
-        energy_total += -volume_bcp2/(N2/n_segment*volume_bcp)*np.log(Q_bcp_2/volume_bcp2)
+        alpha = N2/n_segment
+        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_bcp_2/sb.get_volume()))
 
     # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
     xi = 0.5*(w[0]+w[1]-chi_n)
