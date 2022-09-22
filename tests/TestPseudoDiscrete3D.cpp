@@ -199,7 +199,7 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::vector<int> N_chain = {int(std::round(f*NN)), int(std::round((1.0-f)*NN))};
-        std::vector<double> bond_length = {std::pow(NN,-0.5), std::pow(NN,-0.5)};
+        std::vector<double> bond_length = {1.0, 1.0};
         PolymerChain pc(N_chain, bond_length, "Discrete");
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL

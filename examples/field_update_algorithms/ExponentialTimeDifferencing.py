@@ -44,8 +44,8 @@ langevin_max_step = 2000
 
 # -------------- initialize ------------
 # calculate chain parameters
-bond_length = [np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5),
-                np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5)]
+bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+                                 1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
 # choose platform among [cuda, cpu-mkl]
@@ -57,7 +57,7 @@ print("platform :", platform)
 simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # create instances
-pc     = simulation.create_polymer_chain(N_pc, bond_length)
+pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
 sb     = simulation.create_simulation_box(nx, lx)
 pseudo = simulation.create_pseudo(sb, pc)
 am     = simulation.create_anderson_mixing(am_n_var,

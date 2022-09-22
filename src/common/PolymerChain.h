@@ -14,11 +14,10 @@ private:
     int n_block;
     int n_segment_total; // number of segements, N
     std::vector<int> n_segment;  // number of segements, [N_A, N_B, ...]
-    std::vector<double> bond_length;  // bond length of each blocks [a_A, a_B, ...]
+    std::vector<double> bond_length;  // bond length of each blocks [a_A^2*N, a_B^2*N, ...]
+                                      // bond length is stored as its square*N_total
     double ds;  // discrete step sizes
     double relative_length; // relative chain length
-    //double epsilon; // epsilon = a_A/a_B, conformational asymmetry
-                    // a = sqrt(f*a_A^2 + (1-f)*a_B^2)
     std::string model_name;   // "Continuous": continous standard Gaussian model
                               // "Discrete": discrete bead-spring model
     std::vector<int> block_start; // index of starting segment of each block

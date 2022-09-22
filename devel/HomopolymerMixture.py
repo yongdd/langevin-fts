@@ -44,13 +44,13 @@ simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # create instances
 sb     = simulation.create_simulation_box(nx, lx)
-## create diblock copolymer with a_A, a_B such that  a = sqrt(f*a_A^2 + (1-f)*a_B^2), a_A/a_B = epsilon
+## create diblock copolymer with a_A, a_B such that  a_B*N_B^(1/2) = 1, a_A/a_B = epsilon
+## note: N_B is multiplied to every bond length variables because a_B*N_B^(1/2) is unit length.
+bond_len_b_sqr_n = 1                                # a_B*N_B^(1/2) = 1
+bond_len_a_sqr_n = epsilon**2 * bond_len_b_sqr_n    # a_A*N_B^(1/2), epsilon = a_A/a_B
 
-bond_length_b = np.power(n_segment_B,-0.5) # a_B*N_B^(1/2) = 1
-bond_length_a = epsilon * bond_length_b    # epsilon = a_A/a_B
-
-pc_A = simulation.create_polymer_chain([n_segment_A], [bond_length_a])
-pc_B = simulation.create_polymer_chain([n_segment_B], [bond_length_b])
+pc_A = simulation.create_polymer_chain([n_segment_A], [bond_len_a_sqr_n])
+pc_B = simulation.create_polymer_chain([n_segment_B], [bond_len_b_sqr_n])
 
 ###### Additional example ######
 ## this code adds AB random copolymer instead of polymer A
@@ -58,9 +58,9 @@ pc_B = simulation.create_polymer_chain([n_segment_B], [bond_length_b])
 #
 # frac_rcp = frac_A    # RCP fraction
 # rcp_A_frac = 0.5     # fraction of A monomer in RCP
-# bond_length_rcp = np.sqrt(rcp_A_frac*bond_length_a**2 + (1-rcp_A_frac)*bond_length_b**2)
+# bond_len_rcp_sqr_n = np.sqrt(rcp_A_frac*bond_len_a_sqr_n + (1-rcp_A_frac)*bond_len_b_sqr_n) #a_rand*N_B^(1/2)
 # n_segment_rcp = n_segment_A
-# pc_rcp = simulation.create_polymer_chain([n_segment_rcp], [bond_length_rcp])
+# pc_rcp = simulation.create_polymer_chain([n_segment_rcp], [bond_len_rcp_sqr_n])
 ##
 
 ## pseudo should be created for each chain used in simulation
@@ -134,14 +134,14 @@ for scft_iter in range(1,max_scft_iter+1):
     w_minus = (w[0]-w[1])/2
     w_plus  = (w[0]+w[1])/2
 
-    alpha = n_segment_B/n_segment_A
-    energy_total  = -frac_A*alpha*np.log(Q_A/sb.get_volume())
+    n_segment_ratio = n_segment_A/n_segment_B
+    energy_total  = -frac_A/n_segment_ratio*np.log(Q_A/sb.get_volume())
     energy_total -= (1.0-frac_A)*np.log(Q_B/sb.get_volume())
     energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
     energy_total -= sb.integral(w_plus)/sb.get_volume()
     ###### Additional example ######
-    #alpha = n_segment_B/n_segment_rcp
-    #energy_total  = -frac_rcp*alpha*np.log(Q_rcp/sb.get_volume())
+    #n_segment_ratio = n_segment_rcp/n_segment_B
+    #energy_total  = -frac_rcp/n_segment_ratio*np.log(Q_rcp/sb.get_volume())
     #energy_total -= (1.0-frac_rcp)*np.log(Q_B/sb.get_volume())
     #energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
     #energy_total -= sb.integral(w_plus)/sb.get_volume()

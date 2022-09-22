@@ -50,19 +50,19 @@ simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 # create instances
 sb     = simulation.create_simulation_box(nx, lx)
 ## create diblock copolymer with a_A, a_B such that  a = sqrt(f*a_A^2 + (1-f)*a_B^2), a_A/a_B = epsilon
-
-bond_length_a = np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5)
-bond_length_b = np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))*np.power(n_segment,-0.5)
+## bond_len_a_sqr_n = a_A^2*N, bond_len_b_sqr_n = a_B^2*N 
+bond_len_a_sqr_n = epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))
+bond_len_b_sqr_n = 1.0/(f*epsilon*epsilon + (1.0-f))
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
-pc = simulation.create_polymer_chain(N_pc, [bond_length_a,bond_length_b])
+pc = simulation.create_polymer_chain(N_pc, [bond_len_a_sqr_n,bond_len_a_sqr_n])
 
 ###### Example 01 ######
 ## this code adds homopolymer A with length N_A = 45
 ## homopolymer A takes 30 percent of the system (70 percent of bcp)
-## it uses previously calculated bond_length_a
+## it uses previously calculated bond_len_a_sqr_n
 if example_number == 1:
     N_homo = 45
-    pc_homo_a = simulation.create_polymer_chain([N_homo], [bond_length_a])
+    pc_homo_a = simulation.create_polymer_chain([N_homo], [bond_len_a_sqr_n])
 
 ###### Example 02 ######
 ## this code adds A,B random copolymer with A fraction of 0.7, length = N_rcp = 70
@@ -70,17 +70,17 @@ if example_number == 1:
 if example_number == 2:
     N_rcp = 70
     random_A_frac = 0.7
-    bond_length_rand = np.sqrt(random_A_frac*bond_length_a**2 + (1-random_A_frac)*bond_length_b**2) ###맞는지 좀 생각해 볼 것
-    pc_rand = simulation.create_polymer_chain([N_rcp], [bond_length_rand])
+    bond_len_rand_sqr_n = np.sqrt(random_A_frac*bond_len_a_sqr_n + (1-random_A_frac)*bond_len_b_sqr_n)
+    pc_rand = simulation.create_polymer_chain([N_rcp], [bond_len_rand_sqr_n])
 
 ###### Example 03 ######
 ## this code adds another A,B block copolymer with fraction f2 = 0.4, length = N2 = 45
-## additional chain shares previously calculated bond_length_a/b
+## additional chain shares previously calculated bond_len_a/b_sqr_n
 if example_number == 3:
     f2 = 0.4
     N2 = 45
     N_pc2 = [int(f2*N2),int((1-f2)*N2)]
-    pc2 = simulation.create_polymer_chain(N_pc2, [bond_length_a,bond_length_b])
+    pc2 = simulation.create_polymer_chain(N_pc2, [bond_len_a_sqr_n,bond_len_b_sqr_n])
 
 ## pseudo should be created for each chain used in simulation
 pseudo = simulation.create_pseudo(sb, pc)
@@ -129,8 +129,6 @@ sb.zero_mean(w[1])
 print("---------- Run ----------")
 time_start = time.time()
 
-#phi, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx, chi_n,
-#    q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
 # assign large initial value for the energy and error
 energy_total = 1.0e20
 error_level = 1.0e20
@@ -172,16 +170,16 @@ for scft_iter in range(1,max_scft_iter+1):
     
     ###### Example 01 ######
     if example_number == 1:
-        alpha = N_homo/n_segment
-        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_homo_a/sb.get_volume()))
+        n_segment_ratio  = N_homo/n_segment
+        energy_total -= ((1.0-frac_bcp)/n_segment_ratio)*(np.log(Q_homo_a/sb.get_volume()))
     ###### Example 02 ######
     if example_number == 2:
-        alpha = N_rcp/n_segment
-        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_rand/sb.get_volume()))
+        n_segment_ratio = N_rcp/n_segment
+        energy_total -= ((1.0-frac_bcp)/n_segment_ratio)*(np.log(Q_rand/sb.get_volume()))
     ###### Example 03 ######
     if example_number == 3:
-        alpha = N2/n_segment
-        energy_total -= ((1.0-frac_bcp)/alpha)*(np.log(Q_bcp_2/sb.get_volume()))
+        n_segment_ratio = N2/n_segment
+        energy_total -= ((1.0-frac_bcp)/n_segment_ratio)*(np.log(Q_bcp_2/sb.get_volume()))
 
     # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
     xi = 0.5*(w[0]+w[1]-chi_n)

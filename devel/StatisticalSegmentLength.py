@@ -19,6 +19,11 @@ nx = [64,64,64]          # grids number
 lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
+# calculate chain parameters
+bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
@@ -28,7 +33,7 @@ print("platform :", platform)
 simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # create instances
-pc = simulation.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
+pc = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
 sb = simulation.create_simulation_box(nx, lx)
 pseudo = simulation.create_pseudo(sb, pc)
 
