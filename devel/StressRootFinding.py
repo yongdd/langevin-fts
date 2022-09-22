@@ -38,8 +38,8 @@ def find_saddle_point(lx):
         xi = 0.5*(w[0]+w[1]-chi_n)
 
         # calculate output fields
-        w_out[0] = chi_n*phi_b + xi
-        w_out[1] = chi_n*phi_a + xi
+        w_out[0] = chi_n*phi[1] + xi
+        w_out[1] = chi_n*phi[0] + xi
         sb.zero_mean(w_out[0])
         sb.zero_mean(w_out[1])
 
@@ -51,7 +51,7 @@ def find_saddle_point(lx):
         error_level = np.sqrt(multi_dot)
 
         # print iteration # and error levels and check the mass conservation
-        mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
+        mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
         print( "%8d %12.3E %15.7E %13.9f %15.11f" %
             (scft_iter, mass_error, Q, energy_total, error_level) )
 
@@ -100,6 +100,11 @@ am_mix_init = 0.1        # initial mixing rate of simple mixing
 # use stress for finding unit cell
 use_stress = True
 
+# calculate chain parameters
+bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
@@ -109,7 +114,7 @@ print("platform :", platform)
 simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # create instances
-pc     = simulation.create_polymer_chain(N_pc, bond_length)
+pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
 sb     = simulation.create_simulation_box(nx, lx)
 pseudo = simulation.create_pseudo(sb, pc)
 am     = simulation.create_anderson_mixing(am_n_var,

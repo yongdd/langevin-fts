@@ -58,7 +58,7 @@ int main()
         std::vector<double> lx = {4.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
         std::vector<int> N_chain = {int(std::round(f*n_segment)), int(std::round((1-f)*n_segment))};
-        std::vector<double> bond_length = {std::pow(n_segment,-0.5), std::pow(n_segment,-0.5)};
+        std::vector<double> bond_length = {1.0,1.0};
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist= 20;

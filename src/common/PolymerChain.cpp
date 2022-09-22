@@ -28,13 +28,14 @@ PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_
         this->n_segment_total += this->n_segment[i];
     }
     //bond length is stored as its square*N_total
-    this->bond_length = {};
+    this->bond_length = bond_length;
+
     this->relative_length = 0;
     for(int i=0; i<n_block; i++)
     {
-        this->bond_length.push_back(bond_length[i]*bond_length[i]*this->n_segment_total);
-        this->relative_length += bond_length[i]*bond_length[i]*n_segment[i];
+        this->relative_length += bond_length[i]*n_segment[i];
     }
+    this->relative_length /= this->n_segment_total;
 
     // segment step size
     this->ds = this->relative_length/this->n_segment_total;
