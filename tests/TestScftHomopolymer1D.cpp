@@ -26,7 +26,7 @@ int main()
         std::chrono::duration<double> time_duration;
 
         // QQ = total partition function
-        double QQ, energy_total;
+        double QQ_a, QQ_b, energy_total;
         // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
         // input and output fields, xi is temporary storage for pressures
@@ -47,20 +47,22 @@ int main()
 
         // -------------- initialize ------------
         // platform type, [cuda, cpu-mkl]
-
+        
         int max_scft_iter = 20;
         double tolerance = 1e-9;
 
-        double f = 0.3;
-        int n_segment = 50;
-        double chi_n = 25.0;
-        std::vector<int> nx = {49, 63};
-        std::vector<double> lx = {4.0,3.0};
-        std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
-        std::vector<int> N_chain = {int(std::round(f*n_segment)), int(std::round((1-f)*n_segment))};
-        std::vector<double> bond_length = {1.0,1.0};
+        double frac_a = 0.5;
+        int n_segment_a = 50;
+        int n_segment_b = 50;
+        double chi_n = 3.0;
+        std::vector<int> nx = {263};
+        std::vector<double> lx = {5.0};
+        std::string chain_model = "Discrete";  // choose among [Continuous, Discrete]
+        std::vector<int> N_chain_a = {n_segment_a};
+        std::vector<int> N_chain_b = {n_segment_b};
+        std::vector<double> bond_length = {1.0};
 
-        int am_n_var= 2*nx[0]*nx[1];  // A and B
+        int am_n_var = 2*nx[0];  // A and B
         int am_max_hist= 20;
         double am_start_error = 8e-1;
         double am_mix_min = 0.1;
@@ -74,15 +76,17 @@ int main()
 
             // create instances and assign to the variables of base classs for the dynamic binding
             SimulationBox *sb  = factory->create_simulation_box(nx, lx);
-            PolymerChain *pc   = factory->create_polymer_chain(N_chain,bond_length,chain_model);
-            Pseudo *pseudo     = factory->create_pseudo(sb, pc);
+            PolymerChain *pc_a = factory->create_polymer_chain(N_chain_a,bond_length,chain_model);
+            PolymerChain *pc_b = factory->create_polymer_chain(N_chain_b,bond_length,chain_model);
+            Pseudo *pseudo_a   = factory->create_pseudo(sb, pc_a);
+            Pseudo *pseudo_b   = factory->create_pseudo(sb, pc_b);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
             // -------------- print simulation parameters ------------
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
-            std::cout << "chi_n, f, N: " << chi_n << " " << f << " " << pc->get_n_segment_total() << std::endl;
+            std::cout << "chi_n, frac_a, N_a, N_b: " << chi_n << " " << frac_a << " " << pc_a->get_n_segment_total() << " " << pc_b->get_n_segment_total() << std::endl;
             std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
             std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
             std::cout << "dx: " << sb->get_dx(0) << " " << sb->get_dx(1) << " " << sb->get_dx(2) << std::endl;
@@ -119,13 +123,13 @@ int main()
                     for(int k=0; k<sb->get_nx(2); k++)
                     {
                         idx = i*sb->get_nx(1)*sb->get_nx(2) + j*sb->get_nx(2) + k;
-                        phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
+                        phia[idx]= cos(2*(sb->get_nx(2)-k)/sb->get_nx(2)*PI);
                     }
 
             for(int i=0; i<sb->get_n_grid(); i++)
             {
                 phib[i] = 1.0 - phia[i];
-                w[i]              = chi_n*phib[i];
+                w[i]                  = chi_n*phib[i];
                 w[i+sb->get_n_grid()] = chi_n*phia[i];
             }
 
@@ -148,13 +152,20 @@ int main()
 
             //------------------ run ----------------------
             std::cout<< "---------- Run ----------" << std::endl;
-            std::cout<< "iteration, mass error, total_partition, energy_total, error_level" << std::endl;
+            std::cout<< "iteration, mass error, total_partition_a, _b, energy_total, error_level" << std::endl;
             chrono_start = std::chrono::system_clock::now();
             // iteration begins here
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->find_phi(phi,q1_init,q2_init,w,QQ);
+                pseudo_a->find_phi(phia,q1_init,q2_init,&w[0],QQ_a);
+                pseudo_b->find_phi(phib,q1_init,q2_init,&w[sb->get_n_grid()],QQ_b);
+
+                for(int i=0; i<sb->get_n_grid(); i++)
+                {
+                    phia[i] = phia[i]*frac_a;
+                    phib[i] = phib[i]*(1.0-frac_a);
+                }
 
                 // calculate the total energy
                 for(int i=0; i<sb->get_n_grid(); i++)
@@ -162,7 +173,8 @@ int main()
                     w_minus[i] = (w[i]-w[i + sb->get_n_grid()])/2;
                     w_plus[i]  = (w[i]+w[i + sb->get_n_grid()])/2;
                 }
-                energy_total  = -log(QQ/sb->get_volume());
+                energy_total  = -frac_a*log(QQ_a/sb->get_volume());
+                energy_total -= (1.0-frac_a)*log(QQ_b/sb->get_volume());
                 energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->get_volume();
                 energy_total += sb->integral(w_plus)/sb->get_volume();
                 //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->get_volume();
@@ -172,7 +184,7 @@ int main()
                     // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
                     xi[i] = 0.5*(w[i]+w[i+sb->get_n_grid()]-chi_n);
                     // calculate output fields
-                    w_out[i]              = chi_n*phib[i] + xi[i];
+                    w_out[i]                  = chi_n*phib[i] + xi[i];
                     w_out[i+sb->get_n_grid()] = chi_n*phia[i] + xi[i];
                 }
                 sb->zero_mean(&w_out[0]);
@@ -189,7 +201,8 @@ int main()
                 sum = (sb->integral(phia) + sb->integral(phib))/sb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
+                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ_a;
+                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ_b;
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
 
@@ -217,13 +230,14 @@ int main()
             delete[] q1_init;
             delete[] q2_init;
 
-            delete pc;
+            delete pc_a;
+            delete pc_b;
             delete sb;
-            delete pseudo;
+            delete pseudo_a;
+            delete pseudo_b;
             delete am;
             delete factory;
-
-            if (std::isnan(error_level) || std::abs(error_level-0.008730824) > 1e-7)
+            if (std::isnan(error_level) || std::abs(error_level-0.000823320) > 1e-7)
                 return -1;
         }
         return 0;

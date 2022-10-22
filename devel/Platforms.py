@@ -30,6 +30,11 @@ am_start_error = 8e-1 # when switch to AM from simple mixing
 am_mix_min = 0.1      # minimum mixing rate of simple mixing
 am_mix_init = 0.1     # initial mixing rate of simple mixing
 
+# calculate chain parameters
+bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+
 # choose platform among [cuda, cpu-mkl]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
 print("*" * 30, "Run", "*" * 30)
@@ -54,14 +59,14 @@ for dim in [1,2,3]:
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
 
-            factory = PlatformSelector.create_factory(platform)
-            #factory.display_info()
+            simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+            #simulation.display_info()
 
             # create instances
-            pc = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
-            sb = factory.create_simulation_box(nx, lx)
-            pseudo = factory.create_pseudo(sb, pc)
-            am = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
+            pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
+            sb = simulation.create_simulation_box(nx, lx)
+            pseudo = simulation.create_pseudo(sb, pc)
+            am = simulation.create_anderson_mixing(am_n_comp*np.prod(nx),
                 am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
             # assign large initial value for the energy and error
@@ -94,7 +99,7 @@ for dim in [1,2,3]:
             # iteration begins here
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
+                phi, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
                 
                 # calculate the total energy
                 energy_old = energy_total
@@ -102,15 +107,15 @@ for dim in [1,2,3]:
                 w_plus  = (w[0]+w[1])/2
                 
                 energy_total  = -np.log(Q/sb.get_volume())
-                energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
+                energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
                 energy_total -= sb.integral(w_plus)/sb.get_volume()
                 
                 # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
                 xi = 0.5*(w[0]+w[1]-chi_n)
 
                 # calculate output fields
-                w_out[0] = chi_n*phi_b + xi
-                w_out[1] = chi_n*phi_a + xi
+                w_out[0] = chi_n*phi[1] + xi
+                w_out[1] = chi_n*phi[0] + xi
                 sb.zero_mean(w_out[0])
                 sb.zero_mean(w_out[1])
                 
@@ -122,7 +127,7 @@ for dim in [1,2,3]:
                 error_level = np.sqrt(multi_dot)
                 
                 # print iteration # and error levels and check the mass conservation
-                mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
+                mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
 
                 # conditions to end the iteration
                 if error_level < tolerance:

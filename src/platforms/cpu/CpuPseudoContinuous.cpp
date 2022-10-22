@@ -10,13 +10,18 @@ CpuPseudoContinuous::CpuPseudoContinuous(
     try
     {
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_segment();
+        const int N_B = pc->get_n_block();
+        const int N = pc->get_n_segment_total();
 
+        this->n_block = N_B;
         this->fft = fft;
-        this->boltz_bond_a = new double[n_complex_grid];
-        this->boltz_bond_b = new double[n_complex_grid];
-        this->boltz_bond_a_half = new double[n_complex_grid];
-        this->boltz_bond_b_half = new double[n_complex_grid];
+        this->boltz_bond = new double*[N_B];
+        this->boltz_bond_half = new double*[N_B];
+        for (int b=0; b<N_B; b++)
+        {
+            this->boltz_bond[b]= new double[n_complex_grid];
+            this->boltz_bond_half[b] = new double[n_complex_grid];
+        }
         this->q_1 = new double[M*(N+1)];
         this->q_2 = new double[M*(N+1)];
 
@@ -29,26 +34,28 @@ CpuPseudoContinuous::CpuPseudoContinuous(
 }
 CpuPseudoContinuous::~CpuPseudoContinuous()
 {
+    const int N_B = n_block;
+
     delete fft;
-    delete[] boltz_bond_a, boltz_bond_a_half;
-    delete[] boltz_bond_b, boltz_bond_b_half;
+    for (int b=0; b<N_B; b++)
+    {
+        delete[] boltz_bond[b];
+        delete[] boltz_bond_half[b];
+    }
+    delete[] boltz_bond, boltz_bond_half;
     delete[] q_1, q_2;
 }
 void CpuPseudoContinuous::update()
 {
     try
     {
-        double bond_length_a, bond_length_b;
-        const double eps = pc->get_epsilon();
-        const double f = pc->get_f();
+        const int N_B = pc->get_n_block();
 
-        bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
-        bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-
-        get_boltz_bond(boltz_bond_a,      bond_length_a,   sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_b,      bond_length_b,   sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_a_half, bond_length_a/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_b_half, bond_length_b/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+        for (int b=0; b<N_B; b++)
+        {
+        get_boltz_bond(boltz_bond[b],      pc->get_bond_length(b),   sb->get_nx(), sb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length(b)/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+        }
     }
     catch(std::exception& exc)
     {
@@ -67,22 +74,19 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
     {
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_segment();
-        const int N_A  = pc->get_n_segment_a();
+        const int N    = pc->get_n_segment_total();
+        const int N_B = pc->get_n_block();
+        const std::vector<int> N_SEG    = pc->get_n_segment();
         const int M_COMPLEX = this->n_complex_grid;
-
-        const double eps = pc->get_epsilon();
-        const double f = pc->get_f();
-        const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
-        const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-        double bond_length;
+        const std::vector<int> seg_start= pc->get_block_start();
 
         std::array<double,3> dq_dl;
         std::complex<double> k_q_1[M_COMPLEX];
         std::complex<double> k_q_2[M_COMPLEX];
 
-        double simpson_rule_coeff_a[N_A+1];
-        double simpson_rule_coeff_b[N-N_A+1];
+        //double simpson_rule_coeff_a[N_A+1];
+        //double simpson_rule_coeff_b[N-N_A+1];
+        double simpson_rule_coeff[N];
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -91,49 +95,29 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
 
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
-
-        SimpsonQuadrature::init_coeff(simpson_rule_coeff_a, N_A);
-        for(int n=0; n<=N_A; n++)
+        for(int b=0; b<N_B; b++)
         {
-            fft->forward(&q_1[n*M],k_q_1);
-            fft->forward(&q_2[n*M],k_q_2);
+            SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_SEG[b]);
+            for(int n=seg_start[b]; n<=seg_start[b+1]; n++)
+            {
+                fft->forward(&q_1[n*M],k_q_1);
+                fft->forward(&q_2[n*M],k_q_2);
 
-            if ( DIM >= 3 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[0] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
-            }
-            if ( DIM >= 2 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[1] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
-            }
-            if ( DIM >= 1 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[2] += simpson_rule_coeff_a[n]*bond_length_a*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
-            }
-        }
-        
-        SimpsonQuadrature::init_coeff(simpson_rule_coeff_b, N-N_A);
-        for(int n=N_A; n<=N; n++)
-        {
-            fft->forward(&q_1[n*M],k_q_1);
-            fft->forward(&q_2[n*M],k_q_2);
-            if ( DIM >= 3 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[0] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
-            }
-            if ( DIM >= 2 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[1] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
-            }
-            if ( DIM >= 1 )
-            {
-                for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[2] += simpson_rule_coeff_b[n-N_A]*bond_length_b*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                if ( DIM >= 3 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                }
+                if ( DIM >= 2 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                }
+                if ( DIM >= 1 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                }
             }
         }
         
@@ -173,29 +157,29 @@ void CpuPseudoContinuous::calculate_phi_one_type(
     }
 }
 
-void CpuPseudoContinuous::find_phi(double *phi_a,  double *phi_b,
+void CpuPseudoContinuous::find_phi(double *phi,
                                  double *q_1_init, double *q_2_init,
-                                 double *w_a, double *w_b, double &single_partition)
+                                 double *w_block, double &single_partition)
 {
     try
     {
-        const int M     = sb->get_n_grid();
-        const int N     = pc->get_n_segment();
-        const int N_A   = pc->get_n_segment_a();
-        //const int N_B   = pc->get_n_segment_b();
-        const double ds = pc->get_ds();
+        const int  M        = sb->get_n_grid();
+        const int  N        = pc->get_n_segment_total();
+        const int  N_B      = pc->get_n_block();
+        const std::vector<int> N_SEG    = pc->get_n_segment();
+        const double ds     = pc->get_ds();
+        const std::vector<int> seg_start= pc->get_block_start();
 
-        double exp_dw_a[M];
-        double exp_dw_b[M];
-        double exp_dw_a_half[M];
-        double exp_dw_b_half[M];
+        double exp_dw[N_B][M];
+        double exp_dw_half[N_B][M];
 
-        for(int i=0; i<M; i++)
+        for(int b=0; b<N_B; b++)
         {
-            exp_dw_a     [i] = exp(-w_a[i]*ds*0.5);
-            exp_dw_b     [i] = exp(-w_b[i]*ds*0.5);
-            exp_dw_a_half[i] = exp(-w_a[i]*ds*0.25);
-            exp_dw_b_half[i] = exp(-w_b[i]*ds*0.25);
+            for(int i=0; i<M; i++)
+            {
+                exp_dw     [b][i] = exp(-w_block[b*M+i]*ds*0.5);
+                exp_dw_half[b][i] = exp(-w_block[b*M+i]*ds*0.25);
+            }
         }
 
         #pragma omp parallel sections num_threads(2)
@@ -204,49 +188,42 @@ void CpuPseudoContinuous::find_phi(double *phi_a,  double *phi_b,
             {
                 for(int i=0; i<M; i++)
                     q_1[i] = q_1_init[i];
-                // diffusion of A chain
-                for(int n=1; n<=N_A; n++)
-                    one_step(&q_1[(n-1)*M],&q_1[n*M],
-                            boltz_bond_a,boltz_bond_a_half,
-                            exp_dw_a,exp_dw_a_half);
-                // diffusion of B chain
-                for(int n=N_A+1; n<=N; n++)
-                    one_step(&q_1[(n-1)*M],&q_1[n*M],
-                            boltz_bond_b,boltz_bond_b_half,
-                            exp_dw_b,exp_dw_b_half);
+                // diffusion of each blocks
+                for(int b=0; b<N_B; b++)
+                {
+                    for(int n=seg_start[b]+1; n<=seg_start[b+1]; n++)
+                        one_step(&q_1[(n-1)*M],&q_1[n*M],
+                                boltz_bond[b],boltz_bond_half[b],
+                                exp_dw[b],exp_dw_half[b]);
+                }
             }
             #pragma omp section
             {
                 for(int i=0; i<M; i++)
                     q_2[i+N*M] = q_2_init[i];
-                // diffusion of B chain
-                for(int n=N; n>=N_A+1; n--)
-                    one_step(&q_2[n*M],&q_2[(n-1)*M],
-                            boltz_bond_b,boltz_bond_b_half,
-                            exp_dw_b,exp_dw_b_half);
-                // diffusion of A chain
-                for(int n=N_A; n>=1; n--)
-                    one_step(&q_2[n*M],&q_2[(n-1)*M],
-                            boltz_bond_a,boltz_bond_a_half,
-                            exp_dw_a,exp_dw_a_half);
+                for(int b=N_B-1; b>=0; b--)
+                {
+                    for(int n=seg_start[b+1]; n>=seg_start[b]+1; n--)
+                        one_step(&q_2[n*M],&q_2[(n-1)*M],
+                                boltz_bond[b],boltz_bond_half[b],
+                                exp_dw[b],exp_dw_half[b]);
+                }
             }
         }
 
         // segment concentration.
-        // A block
-        calculate_phi_one_type(phi_a, 0, N_A);
-        // B block
-        calculate_phi_one_type(phi_b, N_A, N);
+        for(int b=0; b<N_B; b++)
+        {
+            calculate_phi_one_type(&phi[b*M], seg_start[b], seg_start[b+1]);
+        }
 
         // calculates the single chain partition function
-        single_partition = sb->inner_product(&q_1[N_A*M],&q_2[N_A*M]);
+        single_partition = sb->inner_product(&q_1[N*M],&q_2[N*M]);
 
         // normalize the concentration
-        for(int i=0; i<M; i++)
-        {
-            phi_a[i] *= sb->get_volume()/single_partition/N;
-            phi_b[i] *= sb->get_volume()/single_partition/N;
-        }
+        for(int b=0; b<N_B; b++)
+            for(int i=0; i<M; i++)
+                phi[b*M+i] *= sb->get_volume()/single_partition/N;
     }
     catch(std::exception& exc)
     {
@@ -325,7 +302,7 @@ void CpuPseudoContinuous::get_partition(double *q_1_out, int n1, double *q_2_out
     // Get partial partition functions
     // This is made for debugging and testing.
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_segment();
+    const int N = pc->get_n_segment_total();
 
     if (n1 < 0 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [0, " + std::to_string(N) + "]");
