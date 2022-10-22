@@ -2,7 +2,7 @@ from posixpath import lexists
 import numpy as np
 from langevinfts import *
 
-def find_saddle_point(pc, sb, pseudo, am, lx,
+def find_saddle_point(pc, sb, pseudo, am, lx, chi_n,
     q1_init, q2_init, w, max_iter, tolerance, is_box_altering=True):
 
     # assign large initial value for the energy and error
@@ -22,22 +22,23 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
         print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
-        phi_a, phi_b, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
+        phi, Q = pseudo.find_phi(q1_init,q2_init,w)
+        phi = phi.reshape(2,sb.get_n_grid())
 
         # calculate the total energy
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
         energy_total  = -np.log(Q/sb.get_volume())
-        energy_total += sb.inner_product(w_minus,w_minus)/pc.get_chi_n()/sb.get_volume()
+        energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
         energy_total -= sb.integral(w_plus)/sb.get_volume()
 
         # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-        xi = 0.5*(w[0]+w[1]-pc.get_chi_n())
+        xi = 0.5*(w[0]+w[1]-chi_n)
 
         # calculate output fields
-        w_out[0] = pc.get_chi_n()*phi_b + xi
-        w_out[1] = pc.get_chi_n()*phi_a + xi
+        w_out[0] = chi_n*phi[1] + xi
+        w_out[1] = chi_n*phi[0] + xi
         sb.zero_mean(w_out[0])
         sb.zero_mean(w_out[1])
 
@@ -48,7 +49,7 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
         multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
 
         # print iteration # and error levels and check the mass conservation
-        mass_error = (sb.integral(phi_a) + sb.integral(phi_b))/sb.get_volume() - 1.0
+        mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
         error_level = np.sqrt(multi_dot)
         
         if (is_box_altering):
@@ -87,4 +88,4 @@ def find_saddle_point(pc, sb, pseudo, am, lx,
             np.reshape(w_diff, 2*sb.get_n_grid()),
             old_error_level, error_level)
 
-    return phi_a, phi_b, Q, energy_total
+    return phi, Q, energy_total

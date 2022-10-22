@@ -43,19 +43,24 @@ langevin_nbar = 1000  # invariant polymerization index
 langevin_max_step = 2000
 
 # -------------- initialize ------------
+# calculate chain parameters
+bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-factory = PlatformSelector.create_factory(platform)
+simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(f, n_segment, chi_n, chain_model, epsilon)
-sb     = factory.create_simulation_box(nx, lx)
-pseudo = factory.create_pseudo(sb, pc)
-am     = factory.create_anderson_mixing(am_n_var,
+pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
+sb     = simulation.create_simulation_box(nx, lx)
+pseudo = simulation.create_pseudo(sb, pc)
+am     = simulation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise
@@ -76,13 +81,13 @@ mag2_k[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
 g_k = 2*(mag2_k+np.exp(-mag2_k)-1.0)/mag2_k**2
 g_k[0,0,0] = 1.0
 
-exp_kernel_minus =         (1.0 - np.exp(-(2/pc.get_chi_n())*langevin_dt))/(2/pc.get_chi_n())
-exp_kernel_noise = np.sqrt((1.0 - np.exp(-(4/pc.get_chi_n())*langevin_dt))/(4/pc.get_chi_n()*langevin_dt))
+exp_kernel_minus =         (1.0 - np.exp(-(2/chi_n)*langevin_dt))/(2/chi_n)
+exp_kernel_noise = np.sqrt((1.0 - np.exp(-(4/chi_n)*langevin_dt))/(4/chi_n*langevin_dt))
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (sb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (pc.get_chi_n(), pc.get_f(), pc.get_n_segment()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
@@ -107,7 +112,7 @@ w_minus = np.random.normal(0, langevin_sigma, sb.get_n_grid())
 sb.zero_mean(w_plus)
 
 # find saddle point of the pressure field
-phi_a, phi_b, _ = find_saddle_point(pc, sb, pseudo, am,
+phi, _ = find_saddle_point(pc, sb, pseudo, am, chi_n,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
@@ -121,9 +126,9 @@ for langevin_step in range(1, langevin_max_step+1):
     print("langevin step: ", langevin_step)
     # update w_minus
     normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
-    g_minus = phi_a-phi_b + 2*w_minus/pc.get_chi_n()
+    g_minus = phi[0]-phi[1] + 2*w_minus/chi_n
     w_minus += -exp_kernel_minus*g_minus + exp_kernel_noise*normal_noise
-    phi_a, phi_b, Q = find_saddle_point(pc, sb, pseudo, am,
+    phi, Q = find_saddle_point(pc, sb, pseudo, am, chi_n,
         q1_init, q2_init, w_plus, w_minus, 
         saddle_max_iter, saddle_tolerance, verbose_level)
     lnQ_list.append(-np.log(Q/sb.get_volume()))

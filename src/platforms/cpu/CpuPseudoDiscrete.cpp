@@ -9,15 +9,24 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
     try
     {
         const int M = sb->get_n_grid();
-        const int N = pc->get_n_segment();
+        const int N_B = pc->get_n_block();
+        const int N = pc->get_n_segment_total();
 
+        this->n_block = N_B;
         this->fft = fft;
-        this->boltz_bond_a  = new double[n_complex_grid];
-        this->boltz_bond_b  = new double[n_complex_grid];
-        this->boltz_bond_ab = new double[n_complex_grid];
+        this->boltz_bond = new double*[N_B];
+        if (N_B>1)
+            this->boltz_bond_middle = new double*[N_B-1];
+
+        this->boltz_bond[0]= new double[n_complex_grid];
+        for (int b=0; b<N_B-1; b++)
+        {
+            this->boltz_bond[b+1]= new double[n_complex_grid];
+            this->boltz_bond_middle[b] = new double[n_complex_grid];
+        }
         this->q_1 = new double[M*N];
         this->q_2 = new double[M*N];
-
+        
         update();
     }
     catch(std::exception& exc)
@@ -27,26 +36,36 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
 }
 CpuPseudoDiscrete::~CpuPseudoDiscrete()
 {
+    const int N_B = n_block;
+
     delete fft;
-    delete[] boltz_bond_a, boltz_bond_b, boltz_bond_ab;
-    delete[] q_1;
-    delete[] q_2;
+    delete[] boltz_bond[0];
+    for (int b=0; b<N_B-1; b++)
+    {
+        delete[] boltz_bond[b+1];
+        delete[] boltz_bond_middle[b];
+    }
+    delete[] boltz_bond;
+    if (N_B>1)
+        delete[] boltz_bond_middle;
+    delete[] q_1, q_2;
+
 }
 void CpuPseudoDiscrete::update()
 {
     try
     {
-        double bond_length_a, bond_length_b, bond_length_ab;
-        const double eps = pc->get_epsilon();
-        const double f = pc->get_f();
+        double bond_length_middle;
+        const int N_B = pc->get_n_block();
 
-        bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
-        bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-        bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
+        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  sb->get_nx(), sb->get_dx(), pc->get_ds());
+        for (int b=0; b<N_B-1; b++)
+        {
+            bond_length_middle = 0.5*pc->get_bond_length(b) + 0.5*pc->get_bond_length(b+1);
+            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  sb->get_nx(), sb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  sb->get_nx(), sb->get_dx(), pc->get_ds());
+        }
 
-        get_boltz_bond(boltz_bond_a,  bond_length_a,  sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_b,  bond_length_b,  sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_ab, bond_length_ab, sb->get_nx(), sb->get_dx(), pc->get_ds());
     }
     catch(std::exception& exc)
     {
@@ -64,16 +83,13 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     {
         const int DIM  = sb->get_dim();
         const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_segment();
-        const int N_A  = pc->get_n_segment_a();
+        const int N_B = pc->get_n_block();
+        const int N    = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
+        const std::vector<int> seg_start= pc->get_block_start();
 
-        const double eps = pc->get_epsilon();
-        const double f = pc->get_f();
-        const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
-        const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-        const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
-        double temp, bond_length, *boltz_bond;
+        //const double bond_length_middle;// = 0.5*bond_length_a + 0.5*bond_length_b;
+        double temp, bond_length_now, *boltz_bond_now;
 
         std::array<double,3> dq_dl;
         std::complex<double> k_q_1[M_COMPLEX];
@@ -92,37 +108,39 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         {
             fft->forward(&q_1[(n-1)*M],k_q_1);
             fft->forward(&q_2[ n   *M],k_q_2);
-
-            if ( n < N_A)
+            if ( n < seg_start[1])
             {
-                bond_length = bond_length_a;
-                boltz_bond = boltz_bond_a;
+                bond_length_now = pc->get_bond_length(0);
+                boltz_bond_now = boltz_bond[0];
             }
-            else if ( n == N_A)
+            for(int b=1; b<N_B; b++)
             {
-                bond_length = bond_length_ab;
-                boltz_bond = boltz_bond_ab;
-            }
-            else if ( n < N)
-            {
-                bond_length = bond_length_b;
-                boltz_bond = boltz_bond_b;
+                if ( n == seg_start[b])
+                {
+                    bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
+                    boltz_bond_now = boltz_bond_middle[b-1];
+                }
+                else if ( n < seg_start[b+1])
+                {
+                    bond_length_now = pc->get_bond_length(b);
+                    boltz_bond_now = boltz_bond[b];
+                }
             }
 
             if ( DIM >= 3 )
             {
                 for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[0] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                    dq_dl[0] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
             }
             if ( DIM >= 2 )
             {
                 for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[1] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                    dq_dl[1] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
             }
             if ( DIM >= 1 )
             {
                 for(int i=0; i<M_COMPLEX; i++)
-                    dq_dl[2] += bond_length*boltz_bond[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                    dq_dl[2] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
             }
         }
         for(int d=0; d<3; d++)
@@ -135,81 +153,78 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::find_phi(double *phi_a,  double *phi_b,
-                                 double *q_1_init, double *q_2_init,
-                                 double *w_a, double *w_b, double &single_partition)
+void CpuPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_init,
+                                 double *w_block, double &single_partition)
 {
     try
     {
-        const int M    = sb->get_n_grid();
-        const int N    = pc->get_n_segment();
-        const int N_A  = pc->get_n_segment_a();
-        //const int N_B  = pc->get_n_segment_b();
-        const double ds = pc->get_ds();
+        const int  M        = sb->get_n_grid();
+        const int  N        = pc->get_n_segment_total();
+        const int  N_B      = pc->get_n_block();
+        const std::vector<int> N_SEG    = pc->get_n_segment();
+        const double ds     = pc->get_ds();
+        const std::vector<int> seg_start= pc->get_block_start();
 
-        double h_a[M];
-        double h_b[M];
+        double exp_dw[N_B][M];
 
-        for(int i=0; i<M; i++)
-        {
-            h_a[i] = exp(-w_a[i]*ds);
-            h_b[i] = exp(-w_b[i]*ds);
-        }
+        for(int b=0; b<N_B; b++)
+            for(int i=0; i<M; i++)
+                exp_dw[b][i] = exp(-w_block[b*M+i]*ds);
 
         #pragma omp parallel sections num_threads(2)
         {
             #pragma omp section
             {
                 for(int i=0; i<M; i++)
-                    q_1[i] = h_a[i]*q_1_init[i];
-                // diffusion of A segment
-                for(int n=1; n<N_A; n++)
-                    one_step(&q_1[(n-1)*M],&q_1[n*M],boltz_bond_a, h_a);
-                // diffusion of B from A segment
-                one_step(&q_1[(N_A-1)*M],&q_1[N_A*M],boltz_bond_ab,h_b);
-                // diffusion of B segment
-                for(int n=N_A+1; n<N; n++)
-                    one_step(&q_1[(n-1)*M],&q_1[n*M],boltz_bond_b, h_b);
+                    q_1[i] = exp_dw[0][i]*q_1_init[i];
+
+                // diffusion of first block segments
+                for(int n=1; n<seg_start[1]; n++)
+                    one_step(&q_1[(n-1)*M],&q_1[n*M],boltz_bond[0], exp_dw[0]);
+                for(int b=1; b<N_B; b++)
+                {
+                    // diffusion of segment between blocks
+                    one_step(&q_1[(seg_start[b]-1)*M],&q_1[seg_start[b]*M],boltz_bond_middle[b-1],exp_dw[b]);
+                    // diffusion of b-th block segments
+                    for(int n=seg_start[b]+1; n<seg_start[b+1]; n++)
+                        one_step(&q_1[(n-1)*M],&q_1[n*M],boltz_bond[b], exp_dw[b]);
+                }
             }
             #pragma omp section
             {
                 for(int i=0; i<M; i++)
-                    q_2[i+(N-1)*M] = h_b[i]*q_2_init[i];
-                // diffusion of B segment
-                for(int n=N-1; n>N_A; n--)
-                    one_step(&q_2[n*M],&q_2[(n-1)*M],boltz_bond_b, h_b);
-                // diffusion of A from B segment
-                one_step(&q_2[N_A*M],&q_2[(N_A-1)*M],boltz_bond_ab,h_a);
-                // diffusion of A segment
-                for(int n=N_A-1; n>0; n--)
-                    one_step(&q_2[n*M],&q_2[(n-1)*M],boltz_bond_a, h_a);
+                    q_2[i+(N-1)*M] = exp_dw[N_B-1][i]*q_2_init[i];
+                // diffusion of last block segments
+                for(int n=N-1; n>seg_start[N_B-1]; n--)
+                    one_step(&q_2[n*M],&q_2[(n-1)*M],boltz_bond[N_B-1], exp_dw[N_B-1]);
+                for(int b=N_B-1; b>0; b--)
+                {
+                    // diffusion of segment between blocks
+                    one_step(&q_2[seg_start[b]*M],&q_2[(seg_start[b]-1)*M],boltz_bond_middle[b-1],exp_dw[b-1]);
+                    // diffusion of (b-1)th block segment
+                    for(int n=seg_start[b]-1; n>0; n--)
+                        one_step(&q_2[n*M],&q_2[(n-1)*M],boltz_bond[b-1], exp_dw[b-1]);
+                }
             }
         }
-        // Compute segment concentration A
-        for(int i=0; i<M; i++)
-            phi_a[i] = q_1[i]*q_2[i];
-        for(int n=1; n<N_A; n++)
+        // Compute segment concentration of each blocks
+        for(int b=0; b<N_B; b++)
         {
             for(int i=0; i<M; i++)
-                phi_a[i] += q_1[i+n*M]*q_2[i+n*M];
-        }
-        // Compute segment concentration B
-        for(int i=0; i<M; i++)
-            phi_b[i] = q_1[i+N_A*M]*q_2[i+N_A*M];
-        for(int n=N_A+1; n<N; n++)
-        {
-            for(int i=0; i<M; i++)
-                phi_b[i] += q_1[i+n*M]*q_2[i+n*M];
+                phi[b*M+i] = q_1[i+seg_start[b]*M]*q_2[i+seg_start[b]*M];
+            for(int n=seg_start[b]+1; n<seg_start[b+1]; n++)
+            {
+                for(int i=0; i<M; i++)
+                    phi[b*M+i] += q_1[i+n*M]*q_2[i+n*M];
+            }
         }
         // calculates the single chain partition function
         single_partition = sb->inner_product(&q_1[(N-1)*M], q_1_init);
 
         // normalize the concentration
-        for(int i=0; i<M; i++)
-        {
-            phi_a[i] *= sb->get_volume()/h_a[i]/single_partition/N;
-            phi_b[i] *= sb->get_volume()/h_b[i]/single_partition/N;
-        }
+        for(int b=0; b<N_B; b++)
+            for(int i=0; i<M; i++)
+                phi[b*M+i] *= sb->get_volume()/exp_dw[b][i]/single_partition/N;
     }
     catch(std::exception& exc)
     {
@@ -249,7 +264,7 @@ void CpuPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out, 
     // This is made for debugging and testing.
 
     const int M = sb->get_n_grid();
-    const int N = pc->get_n_segment();
+    const int N = pc->get_n_segment_total();
 
     if (n1 < 1 || n1 > N)
         throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [1, " + std::to_string(N) + "]");
