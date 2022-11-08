@@ -70,7 +70,7 @@ norm_segment = (f*eps**2 + (1-f))
 
 print("---------- Statistical Segment Length <x^2> ----------")
 print("n'th segment, theory, caculation")
-phi, Q = pseudo.find_phi(q1_init,q2_init,w)
+phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
 pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "continuous"):
     for n in range(0, pc.get_n_segment_total()+1):

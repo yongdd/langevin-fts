@@ -120,13 +120,13 @@ w_out = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
 print("iteration, mass error, total_partition, energy_total, error_level")
 for scft_iter in range(1,max_scft_iter+1):
     # for the given fields find the polymer statistics
-    phi_A, Q_A = pseudo_A.find_phi(q1_init,q2_init,w[0])
-    phi_B, Q_B = pseudo_B.find_phi(q1_init,q2_init,w[1])
+    phi_A, Q_A = pseudo_A.compute_statistics(q1_init,q2_init,w[0])
+    phi_B, Q_B = pseudo_B.compute_statistics(q1_init,q2_init,w[1])
     
     phi[0] = phi_A*frac_A
     phi[1] = phi_B*(1.0-frac_A)
     ###### Additional example ######
-    # phi_rcp, Q_rcp = pseudo_rcp.find_phi(q1_init,q2_init,rcp_A_frac*w[0]+(1.0-rcp_A_frac)*w[1])
+    # phi_rcp, Q_rcp = pseudo_rcp.compute_statistics(q1_init,q2_init,rcp_A_frac*w[0]+(1.0-rcp_A_frac)*w[1])
     # phi[0] = phi_rcp*rcp_A_frac*frac_rcp
     # phi[1] = phi_rcp*(1.0-rcp_A_frac)*frac_rcp + phi_B*(1.0-frac_rcp)
 

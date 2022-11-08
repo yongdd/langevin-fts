@@ -16,7 +16,7 @@ def find_saddle_point(pc, cb, pseudo, am, chi_n,
     for saddle_iter in range(1,saddle_max_iter+1):
         
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.find_phi(
+        phi, Q = pseudo.compute_statistics(
             q1_init, q2_init,
             np.stack((w_plus+w_minus,w_plus-w_minus), axis=0))
         phi = phi.reshape(pc.get_n_block(),cb.get_n_grid())

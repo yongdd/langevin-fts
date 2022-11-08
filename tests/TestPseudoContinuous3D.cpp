@@ -218,9 +218,8 @@ int main()
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            //pseudo->find_phi(phi_a, phi_b, q1_init, q2_init, w_a, w_b, QQ);
-            pseudo->find_phi(phi, q1_init, q2_init, w, QQ);
-
+            //pseudo->compute_statistics(phi_a, phi_b, q1_init, q2_init, w_a, w_b, QQ);
+            pseudo->compute_statistics(phi, q1_init, q2_init, w, QQ);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;

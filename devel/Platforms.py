@@ -101,7 +101,7 @@ for dim in [1,2,3]:
             # iteration begins here
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                phi, Q = pseudo.find_phi(q1_init,q2_init,w)
+                phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
                 phi = phi.reshape(2,cb.get_n_grid())
                 
                 # calculate the total energy

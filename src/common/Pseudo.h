@@ -39,7 +39,7 @@ public:
 
     virtual void update() = 0;
     
-    virtual void find_phi(
+    virtual void compute_statistics(
         double *phi, double *q_1_init, double *q_2_init,
         double *w_block, double &single_partition) = 0;
         
@@ -51,7 +51,7 @@ public:
 
     // Methods for pybind11
     std::tuple<py::array_t<double>, double>
-    find_phi(py::array_t<double> q1_init, py::array_t<double> q2_init, py::array_t<double> w_block)
+    compute_statistics(py::array_t<double> q1_init, py::array_t<double> q2_init, py::array_t<double> w_block)
     {
         const int M = cb->get_n_grid();
         const int N_B = pc->get_n_block();
@@ -83,7 +83,7 @@ public:
             py::array_t<double> phi = py::array_t<double>(N_B*M);
             py::buffer_info buf_phi = phi.request();
             
-            find_phi((double*) buf_phi.ptr,
+            compute_statistics((double*) buf_phi.ptr,
                     (double*) buf_q1_init.ptr, (double*) buf_q2_init.ptr,
                     (double*) buf_w_block.ptr, single_partition);
             return std::make_tuple(std::move(phi), single_partition);

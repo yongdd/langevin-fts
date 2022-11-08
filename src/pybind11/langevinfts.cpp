@@ -52,8 +52,8 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
-        .def("find_phi", overload_cast_<py::array_t<double>, py::array_t<double>,
-            py::array_t<double>>()(&Pseudo::find_phi), py::return_value_policy::move)
+        .def("compute_statistics", overload_cast_<py::array_t<double>, py::array_t<double>,
+            py::array_t<double>>()(&Pseudo::compute_statistics), py::return_value_policy::move)
         .def("get_partition", overload_cast_<int, int>()(&Pseudo::get_partition), py::return_value_policy::move)
         .def("dq_dl", &Pseudo::dq_dl);
 

@@ -154,7 +154,7 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->find_phi(phi,q1_init,q2_init,w,QQ);
+                pseudo->compute_statistics(phi,q1_init,q2_init,w,QQ);
 
                 // calculate the total energy
                 for(int i=0; i<cb->get_n_grid(); i++)
