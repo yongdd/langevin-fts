@@ -158,8 +158,8 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo_a->find_phi(phia,q1_init,q2_init,&w[0],QQ_a);
-                pseudo_b->find_phi(phib,q1_init,q2_init,&w[cb->get_n_grid()],QQ_b);
+                pseudo_a->compute_statistics(phia,q1_init,q2_init,&w[0],QQ_a);
+                pseudo_b->compute_statistics(phib,q1_init,q2_init,&w[cb->get_n_grid()],QQ_b);
 
                 for(int i=0; i<cb->get_n_grid(); i++)
                 {

@@ -124,7 +124,7 @@ void CudaPseudoDiscrete::update()
 
 std::array<double,3> CudaPseudoDiscrete::dq_dl()
 {
-    // This method should be invoked after invoking find_phi().
+    // This method should be invoked after invoking compute_statistics().
 
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // We only need the real part of stress calculation.
@@ -235,7 +235,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
     }
 }
 
-void CudaPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_init,
+void CudaPseudoDiscrete::compute_statistics(double *phi, double *q_1_init, double *q_2_init,
                                   double *w_block, double &single_partition)
 {
     try
@@ -356,7 +356,7 @@ void CudaPseudoDiscrete::one_step(double *d_q_in,          double *d_q_out,
 }
 void CudaPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
 {
-    // This method should be invoked after invoking find_phi().
+    // This method should be invoked after invoking compute_statistics().
     
     // Get partial partition functions
     // This is made for debugging and testing.

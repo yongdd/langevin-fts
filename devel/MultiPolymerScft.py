@@ -143,21 +143,21 @@ w_out = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
 print("iteration, mass error, total_partition, energy_total, error_level")
 for scft_iter in range(1,max_scft_iter+1):
     # for the given fields find the polymer statistics
-    phi_bcp, Q_bcp = pseudo.find_phi(q1_init,q2_init,w)
+    phi_bcp, Q_bcp = pseudo.compute_statistics(q1_init,q2_init,w)
     phi_bcp = phi_bcp.reshape(pc.get_n_block(),cb.get_n_grid())
     ###### Example 01 ######
     if example_number == 1:
-        phi_homo_a, Q_homo_a = pseudo_homo_a.find_phi(q1_init,q2_init,w[0])
+        phi_homo_a, Q_homo_a = pseudo_homo_a.compute_statistics(q1_init,q2_init,w[0])
         phi[0] = phi_bcp[0]*frac_bcp + phi_homo_a*(1.0-frac_bcp)
         phi[1] = phi_bcp[1]*frac_bcp
     ###### Example 02 ######
     if example_number == 2:
-        phi_rand, Q_rand = pseudo_rand.find_phi(q1_init,q2_init,random_A_frac*w[0]+(1.0-random_A_frac)*w[1])
+        phi_rand, Q_rand = pseudo_rand.compute_statistics(q1_init,q2_init,random_A_frac*w[0]+(1.0-random_A_frac)*w[1])
         phi[0] = phi_bcp[0]*frac_bcp + phi_rand*random_A_frac*(1.0-frac_bcp)
         phi[1] = phi_bcp[1]*frac_bcp + phi_rand*(1.0-random_A_frac)*(1.0-frac_bcp)
     ###### Example 03 ######
     if example_number == 3:
-        phi_bcp_2, Q_bcp_2 = pseudo_pc2.find_phi(q1_init,q2_init,w)
+        phi_bcp_2, Q_bcp_2 = pseudo_pc2.compute_statistics(q1_init,q2_init,w)
         phi[0] = phi_bcp[0]*frac_bcp + phi_bcp_2[0]*(1.0-frac_bcp)
         phi[1] = phi_bcp[1]*frac_bcp + phi_bcp_2[1]*(1.0-frac_bcp)
     # calculate the total energy

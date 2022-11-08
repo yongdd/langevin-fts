@@ -219,7 +219,7 @@ int main()
             }
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->find_phi(phi, q1_init, q2_init, w, QQ);
+            pseudo->compute_statistics(phi, q1_init, q2_init, w, QQ);
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
