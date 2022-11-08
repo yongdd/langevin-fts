@@ -62,12 +62,12 @@ PYBIND11_MODULE(langevinfts, m)
         .def("caculate_new_fields",overload_cast_<py::array_t<double>, py::array_t<double>,
             py::array_t<double>, double, double>()(&AndersonMixing::caculate_new_fields));
 
-    // py::class_<AbstractFactory>(m, "AbstractFactory")
-    //     .def("create_polymer_chain", &AbstractFactory::create_polymer_chain)
-    //     .def("create_computation_box", &AbstractFactory::create_computation_box)
-    //     .def("create_pseudo", &AbstractFactory::create_pseudo)
-    //     .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
-    //     .def("display_info", &AbstractFactory::display_info);
+    py::class_<AbstractFactory>(m, "AbstractFactory")
+        .def("create_polymer_chain", &AbstractFactory::create_polymer_chain)
+        .def("create_computation_box", &AbstractFactory::create_computation_box)
+        .def("create_pseudo", &AbstractFactory::create_pseudo)
+        .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
+        .def("display_info", &AbstractFactory::display_info);
 
     py::class_<SingleChainStatistics>(m, "SingleChainStatistics")
         .def(py::init<std::string, std::string>())
