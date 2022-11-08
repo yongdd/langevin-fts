@@ -1,10 +1,10 @@
 
 #include <iostream>
 #include <sstream>
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 
 //----------------- Constructor -----------------------------
-SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx)
+ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx)
 {
     if ( new_nx.size() != new_lx.size() )
         throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
@@ -58,55 +58,55 @@ SimulationBox::SimulationBox(std::vector<int> new_nx, std::vector<double> new_lx
     volume = lx[0]*lx[1]*lx[2];
 }
 //----------------- Destructor -----------------------------
-SimulationBox::~SimulationBox()
+ComputationBox::~ComputationBox()
 {
     delete[] dv;
 }
 
 double dv_at(int i);
 //----------------- get methods-------------------------------------
-int SimulationBox::get_dim()
+int ComputationBox::get_dim()
 {
     return dim;
 }
-int SimulationBox::get_nx(int i)
+int ComputationBox::get_nx(int i)
 {
     return nx[i];
 }
-double SimulationBox::get_lx(int i)
+double ComputationBox::get_lx(int i)
 {
     return lx[i];
 }
-double SimulationBox::get_dx(int i)
+double ComputationBox::get_dx(int i)
 {
     return dx[i];
 }
-std::array<int,3> SimulationBox::get_nx()
+std::array<int,3> ComputationBox::get_nx()
 {
     return {nx[0],nx[1],nx[2]};
 }
-std::array<double,3> SimulationBox::get_lx()
+std::array<double,3> ComputationBox::get_lx()
 {
     return {lx[0],lx[1],lx[2]};
 }
-std::array<double,3> SimulationBox::get_dx()
+std::array<double,3> ComputationBox::get_dx()
 {
     return {dx[0],dx[1],dx[2]};
 }
-double SimulationBox::get_dv(int i)
+double ComputationBox::get_dv(int i)
 {
     return dv[i];
 }
-int SimulationBox::get_n_grid()
+int ComputationBox::get_n_grid()
 {
     return n_grid;
 }
-double SimulationBox::get_volume()
+double ComputationBox::get_volume()
 {
     return volume;
 }
 //----------------- set methods-------------------------------------
-void SimulationBox::set_lx(std::vector<double> new_lx)
+void ComputationBox::set_lx(std::vector<double> new_lx)
 {
     if ( new_lx.size() != (unsigned int) dim )
         throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");
@@ -144,7 +144,7 @@ void SimulationBox::set_lx(std::vector<double> new_lx)
 }
 //-----------------------------------------------------------
 // This method calculates inner product g and h
-double SimulationBox::integral(double *g)
+double ComputationBox::integral(double *g)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
@@ -152,7 +152,7 @@ double SimulationBox::integral(double *g)
     return sum;
 }
 // This method calculates inner product g and h
-double SimulationBox::inner_product(double *g, double *h)
+double ComputationBox::inner_product(double *g, double *h)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
@@ -160,7 +160,7 @@ double SimulationBox::inner_product(double *g, double *h)
     return sum;
 }
 //-----------------------------------------------------------
-double SimulationBox::multi_inner_product(int n_comp, double *g, double *h)
+double ComputationBox::multi_inner_product(int n_comp, double *g, double *h)
 {
     double sum{0.0};
     for(int n=0; n < n_comp; n++)
@@ -172,7 +172,7 @@ double SimulationBox::multi_inner_product(int n_comp, double *g, double *h)
 }
 //-----------------------------------------------------------
 // This method makes the input a zero-meaned matrix
-void SimulationBox::zero_mean(double *g)
+void ComputationBox::zero_mean(double *g)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)

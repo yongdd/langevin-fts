@@ -7,7 +7,7 @@
 
 #include <array>
 #include <cufft.h>
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
@@ -39,7 +39,7 @@ private:
                   double *d_exp_dw_1,     double *d_exp_dw_2);
 public:
 
-    CudaPseudoDiscrete(SimulationBox *sb, PolymerChain *pc);
+    CudaPseudoDiscrete(ComputationBox *cb, PolymerChain *pc);
     ~CudaPseudoDiscrete();
 
     void update() override;

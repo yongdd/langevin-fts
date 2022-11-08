@@ -40,37 +40,39 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+computation = SingleChainStatistics.create_computation(platform, chain_model)
 
 # calculate chain parameters
-bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+# a : statistical segment length, N: n_segment
+# a_sq_n = a^2 * N
+a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
                                  1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
 # create instances
-pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
-sb     = simulation.create_simulation_box(nx, lx)
-pseudo = simulation.create_pseudo(sb, pc)
-am     = simulation.create_anderson_mixing(am_n_var,
+pc     = computation.create_polymer_chain(N_pc, a_sq_n)
+cb     = computation.create_computation_box(nx, lx)
+pseudo = computation.create_pseudo(cb, pc)
+am     = computation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d" % (sb.get_dim()))
+print("Box Dimension: %d" % (cb.get_dim()))
 print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
-print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
-print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
-print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("Volume: %f" % (sb.get_volume()) )
+print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
-q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
+w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
+q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
+q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 
 # Initial Fields
 print("w_A and w_B are initialized to cylindrical phase.")
@@ -82,20 +84,20 @@ for i in range(0,n_unitcell):
             sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
             sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
 for x,y,z in sphere_positions:
-    mx, my, mz = np.round((np.array([x, y, z])*sb.get_nx())).astype(np.int32)
-    w[0,mx,my,mz] = -1/np.prod(sb.get_dx())
-w[0] = gaussian_filter(w[0], sigma=np.min(sb.get_nx())/15, mode='wrap')
-w = np.reshape(w, [2, sb.get_n_grid()])
+    mx, my, mz = np.round((np.array([x, y, z])*cb.get_nx())).astype(np.int32)
+    w[0,mx,my,mz] = -1/np.prod(cb.get_dx())
+w[0] = gaussian_filter(w[0], sigma=np.min(cb.get_nx())/15, mode='wrap')
+w = np.reshape(w, [2, cb.get_n_grid()])
 
 # keep the level of field value
-sb.zero_mean(w[0])
-sb.zero_mean(w[1])
+cb.zero_mean(w[0])
+cb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")
 time_start = time.time()
 
-phi, Q, energy_total = find_saddle_point(pc, sb, pseudo, am, lx, chi_n,
+phi, Q, energy_total = find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
     q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
@@ -103,7 +105,7 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # save final results
-mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
         "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
 savemat("fields.mat", mdic)

@@ -36,10 +36,11 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 ADD_LIBRARY(common
     src/common/ParamParser.cpp
     src/common/PolymerChain.cpp
-    src/common/SimulationBox.cpp
+    src/common/ComputationBox.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
     src/common/AndersonMixing.cpp
+    src/common/SingleChainStatistics.cpp
 )
 
 # Intel MKL
@@ -69,7 +70,7 @@ IF(CUDAToolkit_FOUND)
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
-        src/platforms/cuda/CudaSimulationBox.cu
+        src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudoContinuous.cu
         src/platforms/cuda/CudaPseudoDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu

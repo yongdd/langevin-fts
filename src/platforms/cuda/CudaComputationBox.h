@@ -1,14 +1,14 @@
 /*-------------------------------------------------------------
-* This is a derived CudaSimulationBox class
+* This is a derived CudaComputationBox class
 *------------------------------------------------------------*/
 
 #ifndef CUDA_SIMULATION_BOX_H_
 #define CUDA_SIMULATION_BOX_H_
 
 #include <vector>
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 
-class CudaSimulationBox : public SimulationBox
+class CudaComputationBox : public ComputationBox
 {
 private:
     double *sum, *d_sum;   // temporal storage for reduction in integral_gpu
@@ -17,8 +17,8 @@ private:
     
     void initialize();
 public:
-    CudaSimulationBox(std::vector<int> nx, std::vector<double> lx);
-    ~CudaSimulationBox() override;
+    CudaComputationBox(std::vector<int> nx, std::vector<double> lx);
+    ~CudaComputationBox() override;
 
     double integral_gpu(double *d_g);
     double inner_product_gpu(double *d_g, double *d_h);

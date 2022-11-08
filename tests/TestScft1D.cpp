@@ -9,7 +9,7 @@
 #include "Exception.h"
 #include "ParamParser.h"
 #include "PolymerChain.h"
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -73,38 +73,38 @@ int main()
             factory->display_info();
 
             // create instances and assign to the variables of base classs for the dynamic binding
-            SimulationBox *sb  = factory->create_simulation_box(nx, lx);
+            ComputationBox *cb = factory->create_computation_box(nx, lx);
             PolymerChain *pc   = factory->create_polymer_chain(N_chain,bond_length,chain_model);
-            Pseudo *pseudo     = factory->create_pseudo(sb, pc);
+            Pseudo *pseudo     = factory->create_pseudo(cb, pc);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
             // -------------- print simulation parameters ------------
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
-            std::cout << "Box Dimension: " << sb->get_dim() << std::endl;
+            std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
             std::cout << "chi_n, f, N: " << chi_n << " " << f << " " << pc->get_n_segment_total() << std::endl;
-            std::cout << "Nx: " << sb->get_nx(0) << " " << sb->get_nx(1) << " " << sb->get_nx(2) << std::endl;
-            std::cout << "Lx: " << sb->get_lx(0) << " " << sb->get_lx(1) << " " << sb->get_lx(2) << std::endl;
-            std::cout << "dx: " << sb->get_dx(0) << " " << sb->get_dx(1) << " " << sb->get_dx(2) << std::endl;
+            std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
+            std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
+            std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
             sum = 0.0;
-            for(int i=0; i<sb->get_n_grid(); i++)
-                sum += sb->get_dv(i);
-            std::cout << "volume, sum(dv):  " << sb->get_volume() << " " << sum << std::endl;
+            for(int i=0; i<cb->get_n_grid(); i++)
+                sum += cb->get_dv(i);
+            std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
             //-------------- allocate array ------------
-            w       = new double[sb->get_n_grid()*2];
-            w_out   = new double[sb->get_n_grid()*2];
-            w_diff  = new double[sb->get_n_grid()*2];
-            xi      = new double[sb->get_n_grid()];
-            phi     = new double[sb->get_n_grid()*2];
-            phitot  = new double[sb->get_n_grid()];
-            w_plus  = new double[sb->get_n_grid()];
-            w_minus = new double[sb->get_n_grid()];
-            q1_init = new double[sb->get_n_grid()];
-            q2_init = new double[sb->get_n_grid()];
+            w       = new double[cb->get_n_grid()*2];
+            w_out   = new double[cb->get_n_grid()*2];
+            w_diff  = new double[cb->get_n_grid()*2];
+            xi      = new double[cb->get_n_grid()];
+            phi     = new double[cb->get_n_grid()*2];
+            phitot  = new double[cb->get_n_grid()];
+            w_plus  = new double[cb->get_n_grid()];
+            w_minus = new double[cb->get_n_grid()];
+            q1_init = new double[cb->get_n_grid()];
+            q2_init = new double[cb->get_n_grid()];
 
             phia = &phi[0];
-            phib = &phi[sb->get_n_grid()];
+            phib = &phi[cb->get_n_grid()];
             //-------------- setup fields ------------
             //call random_number(phia)
             //   phia = reshape( phia, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
@@ -114,28 +114,28 @@ int main()
             //   end do
 
             std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
-            for(int i=0; i<sb->get_nx(0); i++)
-                for(int j=0; j<sb->get_nx(1); j++)
-                    for(int k=0; k<sb->get_nx(2); k++)
+            for(int i=0; i<cb->get_nx(0); i++)
+                for(int j=0; j<cb->get_nx(1); j++)
+                    for(int k=0; k<cb->get_nx(2); k++)
                     {
-                        idx = i*sb->get_nx(1)*sb->get_nx(2) + j*sb->get_nx(2) + k;
+                        idx = i*cb->get_nx(1)*cb->get_nx(2) + j*cb->get_nx(2) + k;
                         phia[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
                     }
 
-            for(int i=0; i<sb->get_n_grid(); i++)
+            for(int i=0; i<cb->get_n_grid(); i++)
             {
                 phib[i] = 1.0 - phia[i];
                 w[i]              = chi_n*phib[i];
-                w[i+sb->get_n_grid()] = chi_n*phia[i];
+                w[i+cb->get_n_grid()] = chi_n*phia[i];
             }
 
             // keep the level of field value
-            sb->zero_mean(&w[0]);
-            sb->zero_mean(&w[sb->get_n_grid()]);
+            cb->zero_mean(&w[0]);
+            cb->zero_mean(&w[cb->get_n_grid()]);
 
             // free end initial condition. q1 is q and q2 is qdagger.
             // q1 starts from A end and q2 starts from B end.
-            for(int i=0; i<sb->get_n_grid(); i++)
+            for(int i=0; i<cb->get_n_grid(); i++)
             {
                 q1_init[i] = 1.0;
                 q2_init[i] = 1.0;
@@ -157,36 +157,36 @@ int main()
                 pseudo->find_phi(phi,q1_init,q2_init,w,QQ);
 
                 // calculate the total energy
-                for(int i=0; i<sb->get_n_grid(); i++)
+                for(int i=0; i<cb->get_n_grid(); i++)
                 {
-                    w_minus[i] = (w[i]-w[i + sb->get_n_grid()])/2;
-                    w_plus[i]  = (w[i]+w[i + sb->get_n_grid()])/2;
+                    w_minus[i] = (w[i]-w[i + cb->get_n_grid()])/2;
+                    w_plus[i]  = (w[i]+w[i + cb->get_n_grid()])/2;
                 }
-                energy_total  = -log(QQ/sb->get_volume());
-                energy_total += sb->inner_product(w_minus,w_minus)/chi_n/sb->get_volume();
-                energy_total += sb->integral(w_plus)/sb->get_volume();
-                //energy_total += sb->inner_product(ext_w_minus,ext_w_minus)/chi_b/sb->get_volume();
+                energy_total  = -log(QQ/cb->get_volume());
+                energy_total += cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                energy_total += cb->integral(w_plus)/cb->get_volume();
+                //energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
 
-                for(int i=0; i<sb->get_n_grid(); i++)
+                for(int i=0; i<cb->get_n_grid(); i++)
                 {
                     // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
-                    xi[i] = 0.5*(w[i]+w[i+sb->get_n_grid()]-chi_n);
+                    xi[i] = 0.5*(w[i]+w[i+cb->get_n_grid()]-chi_n);
                     // calculate output fields
                     w_out[i]              = chi_n*phib[i] + xi[i];
-                    w_out[i+sb->get_n_grid()] = chi_n*phia[i] + xi[i];
+                    w_out[i+cb->get_n_grid()] = chi_n*phia[i] + xi[i];
                 }
-                sb->zero_mean(&w_out[0]);
-                sb->zero_mean(&w_out[sb->get_n_grid()]);
+                cb->zero_mean(&w_out[0]);
+                cb->zero_mean(&w_out[cb->get_n_grid()]);
 
                 // error_level measures the "relative distance" between the input and output fields
                 old_error_level = error_level;
-                for(int i=0; i<2*sb->get_n_grid(); i++)
+                for(int i=0; i<2*cb->get_n_grid(); i++)
                     w_diff[i] = w_out[i]- w[i];
-                error_level = sqrt(sb->multi_inner_product(2,w_diff,w_diff)/
-                                (sb->multi_inner_product(2,w,w)+1.0));
+                error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
+                                (cb->multi_inner_product(2,w,w)+1.0));
 
                 // print iteration # and error levels and check the mass conservation
-                sum = (sb->integral(phia) + sb->integral(phib))/sb->get_volume() - 1.0;
+                sum = (cb->integral(phia) + cb->integral(phib))/cb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                 std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ;
@@ -218,7 +218,7 @@ int main()
             delete[] q2_init;
 
             delete pc;
-            delete sb;
+            delete cb;
             delete pseudo;
             delete am;
             delete factory;

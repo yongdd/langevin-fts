@@ -6,12 +6,12 @@
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "CpuPseudoContinuous.h"
 #endif
 #ifdef USE_CUDA
-#include "CudaSimulationBox.h"
-#include "SimulationBox.h"
+#include "CudaComputationBox.h"
+#include "ComputationBox.h"
 #include "CudaPseudoContinuous.h"
 #endif
 
@@ -201,10 +201,10 @@ int main()
         PolymerChain pc(N_chain, bond_length, "Continuous");
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoContinuous(new SimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoContinuous(new CudaSimulationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
         #endif
 
         // For each platform    

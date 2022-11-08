@@ -6,7 +6,7 @@
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
 #include "CudaCommon.h"
-#include "CudaSimulationBox.h"
+#include "CudaComputationBox.h"
 #include "CudaCircularBuffer.h"
 #include "CudaAndersonMixing.h"
 

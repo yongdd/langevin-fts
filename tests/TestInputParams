@@ -2,9 +2,9 @@
 
 platform = "cuda"         # cuda, cpu-mkl
 
-# SIMULATION BOX
+# Simulation Grids and Lengths
 geometry.grids     = 31  49  63   # the number of simulation grids
-geometry.box_size  = 4.0 3.0 2.0  # simulation box as aN^(1/2) unit
+geometry.box_size  = 4.0 3.0 2.0  # Simulation Grids and Lengths as aN^(1/2) unit
 
 # POLYMER CHAIN
 chain.chi_n      = 20.0  # Flory Huggins parameter. 

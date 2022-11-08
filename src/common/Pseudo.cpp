@@ -4,17 +4,17 @@
 #include "Pseudo.h"
 
 Pseudo::Pseudo(
-    SimulationBox *sb,
+    ComputationBox *cb,
     PolymerChain *pc)
 {
-    if (sb == nullptr)
-        throw_with_line_number("SimulationBox *sb is null pointer");
+    if (cb == nullptr)
+        throw_with_line_number("ComputationBox *cb is null pointer");
     if (pc == nullptr)
         throw_with_line_number("PolymerChain *pc is null pointer");
 
-    this->sb = sb;
+    this->cb = cb;
     this->pc = pc;
-    this->n_complex_grid = sb->get_nx(0)*sb->get_nx(1)*(sb->get_nx(2)/2+1);
+    this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
 }
 //----------------- get_boltz_bond -------------------
 void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,

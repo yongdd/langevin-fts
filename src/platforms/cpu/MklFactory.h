@@ -6,7 +6,7 @@
 #define MKL_FACTORY_H_
 
 #include "PolymerChain.h"
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -18,11 +18,11 @@ public :
         std::vector<int> n_segment, 
         std::vector<double> bond_length,
         std::string model_name) override;
-    SimulationBox* create_simulation_box(
+    ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx) override;
     Pseudo* create_pseudo(
-        SimulationBox *sb,
+        ComputationBox *cb,
         PolymerChain *pc) override;
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

@@ -5,7 +5,7 @@
 #ifndef CPU_ANDERSON_MIXING_H_
 #define CPU_ANDERSON_MIXING_H_
 
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "CircularBuffer.h"
 #include "AndersonMixing.h"
 
