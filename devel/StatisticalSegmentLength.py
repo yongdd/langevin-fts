@@ -70,7 +70,7 @@ norm_segment = (f*eps**2 + (1-f))
 
 print("---------- Statistical Segment Length <x^2> ----------")
 print("n'th segment, theory, caculation")
-phi, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
+phi, Q = pseudo.find_phi(q1_init,q2_init,w)
 pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "continuous"):
     for n in range(0, pc.get_n_segment_total()+1):
@@ -83,14 +83,14 @@ if(pc.get_model_name().lower() == "continuous"):
               cb.get_dim()/3*pred_mean_squared_x,
               pc.get_n_segment_total()*norm_segment*mean_squared_x))
         
-        if (n < pc.get_n_segment_a()):
+        if (n < pc.get_n_segment(0)):
             pred_mean_squared_x += eps**2
         else:
             pred_mean_squared_x += 1
             
 elif(pc.get_model_name().lower() == "discrete"):
     for n in range(1, pc.get_n_segment_total()+1):
-        q1_out, _ = pseudo.get_partition(n, 0)
+        q1_out, _ = pseudo.get_partition(n, 1)
         q1_out = np.reshape(q1_out, cb.get_nx())
 
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
@@ -99,9 +99,9 @@ elif(pc.get_model_name().lower() == "discrete"):
                cb.get_dim()/3*pred_mean_squared_x,
                pc.get_n_segment_total()*norm_segment*mean_squared_x))
 
-        if (n < pc.get_n_segment_a()):
+        if (n < pc.get_n_segment(0)):
             pred_mean_squared_x += eps**2
-        elif (n == pc.get_n_segment_a()):
+        elif (n == pc.get_n_segment(0)):
             pred_mean_squared_x += (eps**2 + 1)/2
         else:
             pred_mean_squared_x += 1

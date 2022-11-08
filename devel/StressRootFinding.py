@@ -23,7 +23,8 @@ def find_saddle_point(lx):
     print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.find_phi(q1_init,q2_init,w[0],w[1])
+        phi, Q = pseudo.find_phi(q1_init,q2_init,w)
+        phi = phi.reshape(2,cb.get_n_grid())
 
         # calculate the total energy
         energy_old = energy_total
