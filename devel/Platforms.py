@@ -31,8 +31,10 @@ am_mix_min = 0.1      # minimum mixing rate of simple mixing
 am_mix_init = 0.1     # initial mixing rate of simple mixing
 
 # calculate chain parameters
-bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+# a : statistical segment length, N: n_segment
+# a_sq_n = a^2 * N
+a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)), 
+            1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
 # choose platform among [cuda, cpu-mkl]
@@ -59,15 +61,15 @@ for dim in [1,2,3]:
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
 
-            simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
-            #simulation.display_info()
+            computation = SingleChainStatistics.create_computation(platform, chain_model)
+            #computation.display_info()
 
             # create instances
-            pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
-            sb = simulation.create_simulation_box(nx, lx)
-            pseudo = simulation.create_pseudo(sb, pc)
-            am = simulation.create_anderson_mixing(am_n_comp*np.prod(nx),
-                am_max_hist, am_start_error, am_mix_min, am_mix_init)
+            pc     = computation.create_polymer_chain(N_pc, a_sq_n)
+            cb     = computation.create_computation_box(nx, lx)
+            pseudo = computation.create_pseudo(cb, pc)
+            am     = computation.create_anderson_mixing(am_n_comp*np.prod(nx),
+                        am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
             # assign large initial value for the energy and error
             energy_total = 1.0e20
@@ -76,22 +78,22 @@ for dim in [1,2,3]:
             #-------------- allocate array ------------
             # free end initial condition. q1 is q and q2 is qdagger.
             # q1 starts from A end and q2 starts from B end.
-            w       = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-            w_out   = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-            q1_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
-            q2_init = np.ones (    sb.get_n_grid(),  dtype=np.float64)
+            w       = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
+            w_out   = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
+            q1_init = np.ones (    cb.get_n_grid(),  dtype=np.float64)
+            q2_init = np.ones (    cb.get_n_grid(),  dtype=np.float64)
 
             #print("w_minus and w_plus are initialized to a given test fields.")
-            for i in range(0,sb.get_nx(0)):
-                for j in range(0,sb.get_nx(1)):
-                    for k in range(0,sb.get_nx(2)):
-                        idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
+            for i in range(0,cb.get_nx(0)):
+                for j in range(0,cb.get_nx(1)):
+                    for k in range(0,cb.get_nx(2)):
+                        idx = i*cb.get_nx(1)*cb.get_nx(2) + j*cb.get_nx(2) + k
                         w[0,idx]= np.cos(2.0*np.pi*i/4.68)*np.cos(2.0*np.pi*j/3.48)*np.cos(2.0*np.pi*k/2.74)*0.1
             w[1] = -w[0]
 
             # keep the level of field value
-            sb.zero_mean(w[0])
-            sb.zero_mean(w[1])
+            cb.zero_mean(w[0])
+            cb.zero_mean(w[1])
 
             #------------------ run ----------------------
             #print("iteration, mass error, total_partition, energy_total, error_level")
@@ -106,9 +108,9 @@ for dim in [1,2,3]:
                 w_minus = (w[0]-w[1])/2
                 w_plus  = (w[0]+w[1])/2
                 
-                energy_total  = -np.log(Q/sb.get_volume())
-                energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
-                energy_total -= sb.integral(w_plus)/sb.get_volume()
+                energy_total  = -np.log(Q/cb.get_volume())
+                energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+                energy_total -= cb.integral(w_plus)/cb.get_volume()
                 
                 # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
                 xi = 0.5*(w[0]+w[1]-chi_n)
@@ -116,30 +118,30 @@ for dim in [1,2,3]:
                 # calculate output fields
                 w_out[0] = chi_n*phi[1] + xi
                 w_out[1] = chi_n*phi[0] + xi
-                sb.zero_mean(w_out[0])
-                sb.zero_mean(w_out[1])
+                cb.zero_mean(w_out[0])
+                cb.zero_mean(w_out[1])
                 
                 # error_level measures the "relative distance" between the input and output fields
                 old_error_level = error_level
                 w_diff = w_out - w
-                multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-                multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
+                multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
+                multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
                 error_level = np.sqrt(multi_dot)
                 
                 # print iteration # and error levels and check the mass conservation
-                mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
+                mass_error = (cb.integral(phi[0]) + cb.integral(phi[1]))/cb.get_volume() - 1.0
 
                 # conditions to end the iteration
                 if error_level < tolerance:
                     break
                 # calculte new fields using simple and Anderson mixing
                 am.caculate_new_fields(
-                    np.reshape(w,      2*sb.get_n_grid()),
-                    np.reshape(w_out,  2*sb.get_n_grid()),
-                    np.reshape(w_diff, 2*sb.get_n_grid()),
+                    np.reshape(w,      2*cb.get_n_grid()),
+                    np.reshape(w_out,  2*cb.get_n_grid()),
+                    np.reshape(w_diff, 2*cb.get_n_grid()),
                     old_error_level, error_level)
             
-            dqdl = np.linalg.norm(np.array(pseudo.dq_dl()[-sb.get_dim():]))/Q
+            dqdl = np.linalg.norm(np.array(pseudo.dq_dl()[-cb.get_dim():]))/Q
             test_output.append(error_level)
             test_dqdl.append(dqdl)
             

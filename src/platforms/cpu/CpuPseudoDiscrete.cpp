@@ -2,13 +2,13 @@
 #include "CpuPseudoDiscrete.h"
 
 CpuPseudoDiscrete::CpuPseudoDiscrete(
-    SimulationBox *sb,
+    ComputationBox *cb,
     PolymerChain *pc, FFT *fft)
-    : Pseudo(sb, pc)
+    : Pseudo(cb, pc)
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         const int N = pc->get_n_segment_total();
 
@@ -58,12 +58,12 @@ void CpuPseudoDiscrete::update()
         double bond_length_middle;
         const int N_B = pc->get_n_block();
 
-        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  sb->get_nx(), sb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
         for (int b=0; b<N_B-1; b++)
         {
             bond_length_middle = 0.5*pc->get_bond_length(b) + 0.5*pc->get_bond_length(b+1);
-            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  sb->get_nx(), sb->get_dx(), pc->get_ds());
-            get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  sb->get_nx(), sb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  cb->get_nx(), cb->get_dx(), pc->get_ds());
         }
 
     }
@@ -81,8 +81,8 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
 
     try
     {
-        const int DIM  = sb->get_dim();
-        const int M    = sb->get_n_grid();
+        const int DIM  = cb->get_dim();
+        const int M    = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         const int N    = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
@@ -99,7 +99,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
 
-        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
+        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
 
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
@@ -144,7 +144,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
             }
         }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
 
         return dq_dl;
     }
@@ -158,7 +158,7 @@ void CpuPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_init
 {
     try
     {
-        const int  M        = sb->get_n_grid();
+        const int  M        = cb->get_n_grid();
         const int  N        = pc->get_n_segment_total();
         const int  N_B      = pc->get_n_block();
         const std::vector<int> N_SEG    = pc->get_n_segment();
@@ -219,12 +219,12 @@ void CpuPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_init
             }
         }
         // calculates the single chain partition function
-        single_partition = sb->inner_product(&q_1[(N-1)*M], q_1_init);
+        single_partition = cb->inner_product(&q_1[(N-1)*M], q_1_init);
 
         // normalize the concentration
         for(int b=0; b<N_B; b++)
             for(int i=0; i<M; i++)
-                phi[b*M+i] *= sb->get_volume()/exp_dw[b][i]/single_partition/N;
+                phi[b*M+i] *= cb->get_volume()/exp_dw[b][i]/single_partition/N;
     }
     catch(std::exception& exc)
     {
@@ -236,7 +236,7 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
         std::complex<double> k_q_in[M_COMPLEX];
@@ -263,7 +263,7 @@ void CpuPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out, 
     // Get partial partition functions
     // This is made for debugging and testing.
 
-    const int M = sb->get_n_grid();
+    const int M = cb->get_n_grid();
     const int N = pc->get_n_segment_total();
 
     if (n1 < 1 || n1 > N)

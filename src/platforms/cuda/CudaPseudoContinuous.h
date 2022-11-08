@@ -7,7 +7,7 @@
 
 #include <array>
 #include <cufft.h>
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
@@ -39,7 +39,7 @@ private:
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
 
-    CudaPseudoContinuous(SimulationBox *sb, PolymerChain *pc);
+    CudaPseudoContinuous(ComputationBox *cb, PolymerChain *pc);
     ~CudaPseudoContinuous();
 
     void update() override;

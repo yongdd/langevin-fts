@@ -6,12 +6,12 @@
 #include <pybind11/numpy.h>
 
 #include "PolymerChain.h"
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
+#include "SingleChainStatistics.h"
 #include "PlatformSelector.h"
-#include "FieldTheoreticSimulation.h"
 
 namespace py = pybind11;
 
@@ -32,23 +32,23 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_bond_length", overload_cast_<int>()(&PolymerChain::get_bond_length))
         .def("get_model_name", &PolymerChain::get_model_name);
 
-    py::class_<SimulationBox>(m, "SimulationBox")
+    py::class_<ComputationBox>(m, "ComputationBox")
         .def(py::init<std::vector<int>, std::vector<double>>())
-        .def("get_dim", &SimulationBox::get_dim)
-        .def("get_nx", overload_cast_<>()(&SimulationBox::get_nx))
-        .def("get_nx", overload_cast_<int>()(&SimulationBox::get_nx))
-        .def("get_lx", overload_cast_<>()(&SimulationBox::get_lx))
-        .def("get_lx", overload_cast_<int>()(&SimulationBox::get_lx))
-        .def("get_dx", overload_cast_<>()(&SimulationBox::get_dx))
-        .def("get_dx", overload_cast_<int>()(&SimulationBox::get_dx))
-        .def("get_dv", &SimulationBox::get_dv)
-        .def("get_n_grid", &SimulationBox::get_n_grid)
-        .def("get_volume", &SimulationBox::get_volume)
-        .def("set_lx", &SimulationBox::set_lx)
-        .def("integral", overload_cast_<py::array_t<double>>()(&SimulationBox::integral))
-        .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&SimulationBox::inner_product))
-        .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&SimulationBox::multi_inner_product))
-        .def("zero_mean", overload_cast_<py::array_t<double>>()(&SimulationBox::zero_mean));
+        .def("get_dim", &ComputationBox::get_dim)
+        .def("get_nx", overload_cast_<>()(&ComputationBox::get_nx))
+        .def("get_nx", overload_cast_<int>()(&ComputationBox::get_nx))
+        .def("get_lx", overload_cast_<>()(&ComputationBox::get_lx))
+        .def("get_lx", overload_cast_<int>()(&ComputationBox::get_lx))
+        .def("get_dx", overload_cast_<>()(&ComputationBox::get_dx))
+        .def("get_dx", overload_cast_<int>()(&ComputationBox::get_dx))
+        .def("get_dv", &ComputationBox::get_dv)
+        .def("get_n_grid", &ComputationBox::get_n_grid)
+        .def("get_volume", &ComputationBox::get_volume)
+        .def("set_lx", &ComputationBox::set_lx)
+        .def("integral", overload_cast_<py::array_t<double>>()(&ComputationBox::integral))
+        .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&ComputationBox::inner_product))
+        .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
+        .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
@@ -64,19 +64,20 @@ PYBIND11_MODULE(langevinfts, m)
 
     // py::class_<AbstractFactory>(m, "AbstractFactory")
     //     .def("create_polymer_chain", &AbstractFactory::create_polymer_chain)
-    //     .def("create_simulation_box", &AbstractFactory::create_simulation_box)
+    //     .def("create_computation_box", &AbstractFactory::create_computation_box)
     //     .def("create_pseudo", &AbstractFactory::create_pseudo)
     //     .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
     //     .def("display_info", &AbstractFactory::display_info);
-    py::class_<FieldTheoreticSimulation>(m, "FieldTheoreticSimulation")
+
+    py::class_<SingleChainStatistics>(m, "SingleChainStatistics")
         .def(py::init<std::string, std::string>())
-        .def("get_model_name", &FieldTheoreticSimulation::get_model_name)
-        .def("create_polymer_chain", &FieldTheoreticSimulation::create_polymer_chain)
-        .def("create_simulation", &FieldTheoreticSimulation::create_simulation)
-        .def("create_simulation_box", &FieldTheoreticSimulation::create_simulation_box)
-        .def("create_pseudo", &FieldTheoreticSimulation::create_pseudo)
-        .def("create_anderson_mixing", &FieldTheoreticSimulation::create_anderson_mixing)
-        .def("display_info", &FieldTheoreticSimulation::display_info);
+        .def("get_model_name", &SingleChainStatistics::get_model_name)
+        .def("create_polymer_chain", &SingleChainStatistics::create_polymer_chain)
+        .def("create_computation", &SingleChainStatistics::create_computation)
+        .def("create_computation_box", &SingleChainStatistics::create_computation_box)
+        .def("create_pseudo", &SingleChainStatistics::create_pseudo)
+        .def("create_anderson_mixing", &SingleChainStatistics::create_anderson_mixing)
+        .def("display_info", &SingleChainStatistics::display_info);
 
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())

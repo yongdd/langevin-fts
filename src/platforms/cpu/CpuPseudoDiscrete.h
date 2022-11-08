@@ -5,7 +5,7 @@
 #ifndef CPU_PSEUDO_DISCRETE_H_
 #define CPU_PSEUDO_DISCRETE_H_
 
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
@@ -20,7 +20,7 @@ private:
     double **boltz_bond_middle;
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
 public:
-    CpuPseudoDiscrete(SimulationBox *sb, PolymerChain *pc, FFT *ff);
+    CpuPseudoDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoDiscrete();
 
     void update() override;

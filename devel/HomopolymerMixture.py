@@ -40,17 +40,17 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+computation = SingleChainStatistics.create_computation(platform, chain_model)
 
 # create instances
-sb     = simulation.create_simulation_box(nx, lx)
+cb     = computation.create_computation_box(nx, lx)
 ## create diblock copolymer with a_A, a_B such that  a_B*N_B^(1/2) = 1, a_A/a_B = epsilon
 ## note: N_B is multiplied to every bond length variables because a_B*N_B^(1/2) is unit length.
-bond_len_b_sqr_n = 1                                # a_B*N_B^(1/2) = 1
-bond_len_a_sqr_n = epsilon**2 * bond_len_b_sqr_n    # a_A*N_B^(1/2), epsilon = a_A/a_B
+a_B_sq_n = 1                        # a_B*N_B^(1/2) = 1
+a_A_sq_n = epsilon**2 * a_B_sq_n    # a_A*N_B^(1/2), epsilon = a_A/a_B
 
-pc_A = simulation.create_polymer_chain([n_segment_A], [bond_len_a_sqr_n])
-pc_B = simulation.create_polymer_chain([n_segment_B], [bond_len_b_sqr_n])
+pc_A = computation.create_polymer_chain([n_segment_A], [a_A_sq_n])
+pc_B = computation.create_polymer_chain([n_segment_B], [a_B_sq_n])
 
 ###### Additional example ######
 ## this code adds AB random copolymer instead of polymer A
@@ -58,49 +58,49 @@ pc_B = simulation.create_polymer_chain([n_segment_B], [bond_len_b_sqr_n])
 #
 # frac_rcp = frac_A    # RCP fraction
 # rcp_A_frac = 0.5     # fraction of A monomer in RCP
-# bond_len_rcp_sqr_n = np.sqrt(rcp_A_frac*bond_len_a_sqr_n + (1-rcp_A_frac)*bond_len_b_sqr_n) #a_rand*N_B^(1/2)
+# bond_len_rcp_sq_n = np.sqrt(rcp_A_frac*a_A_sq_n + (1-rcp_A_frac)*a_B_sq_n) #a_rand*N_B^(1/2)
 # n_segment_rcp = n_segment_A
-# pc_rcp = simulation.create_polymer_chain([n_segment_rcp], [bond_len_rcp_sqr_n])
+# pc_rcp = computation.create_polymer_chain([n_segment_rcp], [bond_len_rcp_sq_n])
 ##
 
 ## pseudo should be created for each chain used in simulation
-pseudo_A = simulation.create_pseudo(sb, pc_A)
-pseudo_B = simulation.create_pseudo(sb, pc_B)
+pseudo_A = computation.create_pseudo(cb, pc_A)
+pseudo_B = computation.create_pseudo(cb, pc_B)
 
 ###### Additional example ######
-# pseudo_rcp   = simulation.create_pseudo(sb, pc_rcp)
+# pseudo_rcp   = computation.create_pseudo(cb, pc_rcp)
 
-am     = simulation.create_anderson_mixing(am_n_var,
+am     = computation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d" % (sb.get_dim()))
+print("Box Dimension: %d" % (cb.get_dim()))
 print("chi_n: %f, f: %f, N_A: %d, N_B: %d" % (chi_n, frac_A, pc_A.get_n_segment_total(), pc_B.get_n_segment_total()) ) 
-print("%s chain model" % (simulation.get_model_name()) )
+print("%s chain model" % (computation.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
-print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
-print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
-print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("Volume: %f" % (sb.get_volume()) )
+print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
-q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-phi     = np.zeros((2, sb.get_n_grid()),  dtype=np.float64)
+w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
+q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
+q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
+phi     = np.zeros((2, cb.get_n_grid()),  dtype=np.float64)
 # Initial Fields
 print("w_A and w_B are initialized to lamellar phase.")
-for i in range(0,sb.get_nx(2)):
-    w[0,:,:,i] =  np.cos(2*np.pi*i/sb.get_nx(2))
-    w[1,:,:,i] = -np.cos(2*np.pi*i/sb.get_nx(2))
-w = np.reshape(w, [2, sb.get_n_grid()])
+for i in range(0,cb.get_nx(2)):
+    w[0,:,:,i] =  np.cos(2*np.pi*i/cb.get_nx(2))
+    w[1,:,:,i] = -np.cos(2*np.pi*i/cb.get_nx(2))
+w = np.reshape(w, [2, cb.get_n_grid()])
 
 # keep the level of field value
-sb.zero_mean(w[0])
-sb.zero_mean(w[1])
+cb.zero_mean(w[0])
+cb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")
@@ -114,7 +114,7 @@ error_level = 1.0e20
 am.reset_count()
 
 # array for output fields
-w_out = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
+w_out = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
 
 # iteration begins here
 print("iteration, mass error, total_partition, energy_total, error_level")
@@ -135,16 +135,16 @@ for scft_iter in range(1,max_scft_iter+1):
     w_plus  = (w[0]+w[1])/2
 
     n_segment_ratio = n_segment_A/n_segment_B
-    energy_total  = -frac_A/n_segment_ratio*np.log(Q_A/sb.get_volume())
-    energy_total -= (1.0-frac_A)*np.log(Q_B/sb.get_volume())
-    energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
-    energy_total -= sb.integral(w_plus)/sb.get_volume()
+    energy_total  = -frac_A/n_segment_ratio*np.log(Q_A/cb.get_volume())
+    energy_total -= (1.0-frac_A)*np.log(Q_B/cb.get_volume())
+    energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+    energy_total -= cb.integral(w_plus)/cb.get_volume()
     ###### Additional example ######
     #n_segment_ratio = n_segment_rcp/n_segment_B
-    #energy_total  = -frac_rcp/n_segment_ratio*np.log(Q_rcp/sb.get_volume())
-    #energy_total -= (1.0-frac_rcp)*np.log(Q_B/sb.get_volume())
-    #energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
-    #energy_total -= sb.integral(w_plus)/sb.get_volume()
+    #energy_total  = -frac_rcp/n_segment_ratio*np.log(Q_rcp/cb.get_volume())
+    #energy_total -= (1.0-frac_rcp)*np.log(Q_B/cb.get_volume())
+    #energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+    #energy_total -= cb.integral(w_plus)/cb.get_volume()
 
 
     # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
@@ -153,17 +153,17 @@ for scft_iter in range(1,max_scft_iter+1):
     # calculate output fields
     w_out[0] = chi_n*phi[1] + xi
     w_out[1] = chi_n*phi[0] + xi
-    sb.zero_mean(w_out[0])
-    sb.zero_mean(w_out[1])
+    cb.zero_mean(w_out[0])
+    cb.zero_mean(w_out[1])
 
     # error_level measures the "relative distance" between the input and output fields
     old_error_level = error_level
     w_diff = w_out - w
-    multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-    multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
+    multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
+    multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
 
     # print iteration # and error levels and check the mass conservation
-    mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
+    mass_error = (cb.integral(phi[0]) + cb.integral(phi[1]))/cb.get_volume() - 1.0
     error_level = np.sqrt(multi_dot)
     print("%8d %12.3E %15.7E %15.7E %15.9f %15.7E" %
     (scft_iter, mass_error, Q_A, Q_B, energy_total, error_level))
@@ -177,9 +177,9 @@ for scft_iter in range(1,max_scft_iter+1):
 
     # calculte new fields using simple and Anderson mixing
     am.caculate_new_fields(
-    np.reshape(w,      2*sb.get_n_grid()),
-    np.reshape(w_out,  2*sb.get_n_grid()),
-    np.reshape(w_diff, 2*sb.get_n_grid()),
+    np.reshape(w,      2*cb.get_n_grid()),
+    np.reshape(w_out,  2*cb.get_n_grid()),
+    np.reshape(w_diff, 2*cb.get_n_grid()),
     old_error_level, error_level)
 
 # estimate execution time
@@ -187,12 +187,12 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # save final results
-mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
         "N_A":pc_A.get_n_segment_total(),"N_B":pc_B.get_n_segment_total(), "frac_A":frac_A, "chi_n":chi_n, "epsilon":epsilon,
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
 savemat("fields.mat", mdic)
 ###### Additional example ######
-# mdic = {"dim":sb.get_dim(), "nx":sb.get_nx(), "lx":sb.get_lx(),
+# mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
 #         "N_rcp":pc_rcp.get_n_segment_total(),"N_B":pc_B.get_n_segment_total(), "frac_rcp":frac_rcp, "rcp_A_frac":rcp_A_frac, "chi_n":chi_n, "epsilon":epsilon,
 #         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
 # savemat("fields.mat", mdic)

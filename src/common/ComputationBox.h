@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------
-* This is an abstract SimulationBox class.
-* This class defines simulation box parameters and provide
+* This is an abstract ComputationBox class.
+* This class defines Computation Grids and Lengths parameters, and provide
 * methods that compute inner product in a given geometry.
 *--------------------------------------------------------------*/
-#ifndef SIMULATION_BOX_H_
-#define SIMULATION_BOX_H_
+#ifndef COMPUTATION_BOX_H_
+#define COMPUTATION_BOX_H_
 
 #include <array>
 #include <vector>
@@ -17,10 +17,10 @@
 
 namespace py = pybind11;
 
-class SimulationBox
+class ComputationBox
 {
 protected:
-    int dim;        // the dimension of simulation box
+    int dim;        // the dimension of Computation Grids and Lengths
     std::array<int,3> nx;  // the number of grid in each direction
     std::array<double,3> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::array<double,3> dx;  // grid interval in each direction
@@ -29,8 +29,8 @@ protected:
     double volume; // volume of the system.
 
 public:
-    SimulationBox(std::vector<int> nx, std::vector<double> lx);
-    virtual ~SimulationBox();
+    ComputationBox(std::vector<int> nx, std::vector<double> lx);
+    virtual ~ComputationBox();
 
     int get_dim();
     std::array<int,3> get_nx();

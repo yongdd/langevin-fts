@@ -13,7 +13,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Exception.h"
 
@@ -22,7 +22,7 @@ namespace py = pybind11;
 class Pseudo
 {
 protected:
-    SimulationBox *sb;
+    ComputationBox *cb;
     PolymerChain *pc;
     int n_complex_grid;
     int n_block;
@@ -34,7 +34,7 @@ protected:
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::array<int,3> nx, std::array<double,3> dx);
 public:
-    Pseudo(SimulationBox *sb, PolymerChain *pc);
+    Pseudo(ComputationBox *cb, PolymerChain *pc);
     virtual ~Pseudo() {};
 
     virtual void update() = 0;
@@ -53,7 +53,7 @@ public:
     std::tuple<py::array_t<double>, double>
     find_phi(py::array_t<double> q1_init, py::array_t<double> q2_init, py::array_t<double> w_block)
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         py::buffer_info buf_q1_init = q1_init.request();
         py::buffer_info buf_q2_init = q2_init.request();
@@ -96,7 +96,7 @@ public:
     std::tuple<py::array_t<double>, py::array_t<double>> get_partition(int n1, int n2)
     {
         try{
-            const int M = sb->get_n_grid();
+            const int M = cb->get_n_grid();
             py::array_t<double> q1 = py::array_t<double>(M);
             py::array_t<double> q2 = py::array_t<double>(M);
             py::buffer_info buf_q1 = q1.request();

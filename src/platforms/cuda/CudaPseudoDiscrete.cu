@@ -6,40 +6,40 @@
 #include <thrust/device_ptr.h>
 #include <iostream>
 #include "CudaPseudoDiscrete.h"
-#include "CudaSimulationBox.h"
+#include "CudaComputationBox.h"
 
 CudaPseudoDiscrete::CudaPseudoDiscrete(
-    SimulationBox *sb,
+    ComputationBox *cb,
     PolymerChain *pc)
-    : Pseudo(sb, pc)
+    : Pseudo(cb, pc)
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         const int N = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
 
         // Create FFT plan
         const int BATCH{2};
-        const int NRANK{sb->get_dim()};
+        const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
 
         this->n_block = N_B;
-        if(sb->get_dim() == 3)
+        if(cb->get_dim() == 3)
         {
-            n_grid[0] = sb->get_nx(0);
-            n_grid[1] = sb->get_nx(1);
-            n_grid[2] = sb->get_nx(2);
+            n_grid[0] = cb->get_nx(0);
+            n_grid[1] = cb->get_nx(1);
+            n_grid[2] = cb->get_nx(2);
         }
-        else if(sb->get_dim() == 2)
+        else if(cb->get_dim() == 2)
         {
-            n_grid[0] = sb->get_nx(1);
-            n_grid[1] = sb->get_nx(2);
+            n_grid[0] = cb->get_nx(1);
+            n_grid[1] = cb->get_nx(2);
         }
-        else if(sb->get_dim() == 1)
+        else if(cb->get_dim() == 1)
         {
-            n_grid[0] = sb->get_nx(2);
+            n_grid[0] = cb->get_nx(2);
         }
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
@@ -105,13 +105,13 @@ void CudaPseudoDiscrete::update()
         const int M_COMPLEX = this->n_complex_grid;
         double boltz_bond[N_B][M_COMPLEX], boltz_bond_middle[N_B][M_COMPLEX];
 
-        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  sb->get_nx(), sb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
         gpu_error_check(cudaMemcpy(d_boltz_bond[0],  boltz_bond[0],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         for (int b=0; b<N_B-1; b++)
         {
             bond_length_middle = 0.5*pc->get_bond_length(b) + 0.5*pc->get_bond_length(b+1);
-            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  sb->get_nx(), sb->get_dx(), pc->get_ds());
-            get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  sb->get_nx(), sb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  cb->get_nx(), cb->get_dx(), pc->get_ds());
             gpu_error_check(cudaMemcpy(d_boltz_bond[b+1],  boltz_bond[b+1],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_boltz_bond_middle[b],  boltz_bond_middle[b],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
@@ -133,8 +133,8 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int DIM  = sb->get_dim();
-        const int M    = sb->get_n_grid();
+        const int DIM  = cb->get_dim();
+        const int M    = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         const int N    = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
@@ -155,7 +155,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         double *d_fourier_basis_z;
         double *d_q_in_2m, *d_q_multi, *d_stress_sum;
 
-        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
+        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
 
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
@@ -218,7 +218,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
             }
         }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
 
         cudaFree(d_fourier_basis_x);
         cudaFree(d_fourier_basis_y);
@@ -243,7 +243,7 @@ void CudaPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_ini
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int  M        = sb->get_n_grid();
+        const int  M        = cb->get_n_grid();
         const int  N        = pc->get_n_segment_total();
         const int  N_B      = pc->get_n_block();
         const std::vector<int> N_SEG    = pc->get_n_segment();
@@ -299,7 +299,7 @@ void CudaPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_ini
         //calculates the total partition function
         //d_phi is used as a temporary array
         gpu_error_check(cudaMemcpy(&d_phi[0], q_2_init, sizeof(double)*M, cudaMemcpyHostToDevice));
-        single_partition = ((CudaSimulationBox *)sb)->inner_product_gpu(&d_q[2*M*(N-1)],&d_phi[0]);
+        single_partition = ((CudaComputationBox *)cb)->inner_product_gpu(&d_q[2*M*(N-1)],&d_phi[0]);
 
         // Calculate segment density
         for(int b=0; b<N_B; b++)
@@ -313,7 +313,7 @@ void CudaPseudoDiscrete::find_phi(double *phi, double *q_1_init, double *q_2_ini
 
         // normalize the concentration
         for(int b=0; b<N_B; b++)
-            divide_real<<<N_BLOCKS, N_THREADS>>>(&d_phi[b*M], &d_phi[b*M], d_exp_dw[b], (sb->get_volume())/single_partition/N, M);
+            divide_real<<<N_BLOCKS, N_THREADS>>>(&d_phi[b*M], &d_phi[b*M], d_exp_dw[b], (cb->get_volume())/single_partition/N, M);
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*N_B*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -331,7 +331,7 @@ void CudaPseudoDiscrete::one_step(double *d_q_in,          double *d_q_out,
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
         //-------------- step 1 ----------
@@ -360,7 +360,7 @@ void CudaPseudoDiscrete::get_partition(double *q_1_out, int n1, double *q_2_out,
     
     // Get partial partition functions
     // This is made for debugging and testing.
-    const int M = sb->get_n_grid();
+    const int M = cb->get_n_grid();
     const int N = pc->get_n_segment_total();
 
     if (n1 < 1 || n1 > N)

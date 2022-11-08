@@ -8,7 +8,7 @@ from langevinfts import *
 def find_saddle_point(lx):
 
     # set box size
-    sb.set_lx(lx)
+    cb.set_lx(lx)
     # update bond parameters using new lx
     pseudo.update()
 
@@ -30,9 +30,9 @@ def find_saddle_point(lx):
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
-        energy_total  = -np.log(Q/sb.get_volume())
-        energy_total += sb.inner_product(w_minus,w_minus)/chi_n/sb.get_volume()
-        energy_total -= sb.integral(w_plus)/sb.get_volume()
+        energy_total  = -np.log(Q/cb.get_volume())
+        energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+        energy_total -= cb.integral(w_plus)/cb.get_volume()
 
         # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
         xi = 0.5*(w[0]+w[1]-chi_n)
@@ -40,18 +40,18 @@ def find_saddle_point(lx):
         # calculate output fields
         w_out[0] = chi_n*phi[1] + xi
         w_out[1] = chi_n*phi[0] + xi
-        sb.zero_mean(w_out[0])
-        sb.zero_mean(w_out[1])
+        cb.zero_mean(w_out[0])
+        cb.zero_mean(w_out[1])
 
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
         w_diff = w_out - w
-        multi_dot = sb.inner_product(w_diff[0],w_diff[0]) + sb.inner_product(w_diff[1],w_diff[1])
-        multi_dot /= sb.inner_product(w[0],w[0]) + sb.inner_product(w[1],w[1]) + 1.0
+        multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
+        multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
         error_level = np.sqrt(multi_dot)
 
         # print iteration # and error levels and check the mass conservation
-        mass_error = (sb.integral(phi[0]) + sb.integral(phi[1]))/sb.get_volume() - 1.0
+        mass_error = (cb.integral(phi[0]) + cb.integral(phi[1]))/cb.get_volume() - 1.0
         print( "%8d %12.3E %15.7E %13.9f %15.11f" %
             (scft_iter, mass_error, Q, energy_total, error_level) )
 
@@ -60,13 +60,13 @@ def find_saddle_point(lx):
             break
         # calculte new fields using simple and Anderson mixing
         am.caculate_new_fields(
-            np.reshape(w,      2*sb.get_n_grid()),
-            np.reshape(w_out,  2*sb.get_n_grid()),
-            np.reshape(w_diff, 2*sb.get_n_grid()),
+            np.reshape(w,      2*cb.get_n_grid()),
+            np.reshape(w_out,  2*cb.get_n_grid()),
+            np.reshape(w_diff, 2*cb.get_n_grid()),
             old_error_level, error_level)
     
     if use_stress:
-        stress_array = np.array(pseudo.dq_dl()[-sb.get_dim():])/Q
+        stress_array = np.array(pseudo.dq_dl()[-cb.get_dim():])/Q
         return stress_array
     else:
         return energy_total
@@ -101,7 +101,9 @@ am_mix_init = 0.1        # initial mixing rate of simple mixing
 use_stress = True
 
 # calculate chain parameters
-bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+# a : statistical segment length, N: n_segment
+# a_sq_n = a^2 * N
+a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
                                  1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
@@ -111,53 +113,53 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+computation = SingleChainStatistics.create_computation(platform, chain_model)
 
 # create instances
-pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
-sb     = simulation.create_simulation_box(nx, lx)
-pseudo = simulation.create_pseudo(sb, pc)
-am     = simulation.create_anderson_mixing(am_n_var,
+pc     = computation.create_polymer_chain(N_pc, a_sq_n)
+cb     = computation.create_computation_box(nx, lx)
+pseudo = computation.create_pseudo(cb, pc)
+am     = computation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d" % (sb.get_dim()))
+print("Box Dimension: %d" % (cb.get_dim()))
 print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
-print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
-print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
-print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("Volume: %f" % (sb.get_volume()) )
+print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2]+list(sb.get_nx()), dtype=np.float64)
-w_out   = np.zeros([2, sb.get_n_grid()],  dtype=np.float64)
-q1_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
-q2_init = np.ones (    sb.get_n_grid(),   dtype=np.float64)
+w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
+w_out   = np.zeros([2, cb.get_n_grid()],  dtype=np.float64)
+q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
+q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 
 print("w_A and w_B are initialized to gyroid phase.")
-for i in range(0,sb.get_nx(0)):
-    xx = (i+1)*2*np.pi/sb.get_nx(0)
-    for j in range(0,sb.get_nx(1)):
-        yy = (j+1)*2*np.pi/sb.get_nx(1)
-        for k in range(0,sb.get_nx(2)):
-            zz = (k+1)*2*np.pi/sb.get_nx(2)
+for i in range(0,cb.get_nx(0)):
+    xx = (i+1)*2*np.pi/cb.get_nx(0)
+    for j in range(0,cb.get_nx(1)):
+        yy = (j+1)*2*np.pi/cb.get_nx(1)
+        for k in range(0,cb.get_nx(2)):
+            zz = (k+1)*2*np.pi/cb.get_nx(2)
             c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
                 np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
-            idx = i*sb.get_nx(1)*sb.get_nx(2) + j*sb.get_nx(2) + k
+            idx = i*cb.get_nx(1)*cb.get_nx(2) + j*cb.get_nx(2) + k
             w[0,i,j,k] = -0.364*c1+0.133*c2
             w[1,i,j,k] = 0.302*c1-0.106*c2
-w = np.reshape(w, [2, sb.get_n_grid()])
+w = np.reshape(w, [2, cb.get_n_grid()])
 
 # keep the level of field value
-sb.zero_mean(w[0])
-sb.zero_mean(w[1])
+cb.zero_mean(w[0])
+cb.zero_mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")

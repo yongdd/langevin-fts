@@ -5,7 +5,7 @@
 #ifndef CPU_PSEUDO_CONTINUOUS_H_
 #define CPU_PSEUDO_CONTINUOUS_H_
 
-#include "SimulationBox.h"
+#include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
@@ -23,7 +23,7 @@ private:
     void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
-    CpuPseudoContinuous(SimulationBox *sb, PolymerChain *pc, FFT *ff);
+    CpuPseudoContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoContinuous();
     
     void update() override;

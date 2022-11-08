@@ -20,7 +20,9 @@ lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
 # calculate chain parameters
-bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+# a : statistical segment length, N: n_segment
+# a_sq_n = a^2 * N
+a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
                                  1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
@@ -30,36 +32,36 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+computation = SingleChainStatistics.create_computation(platform, chain_model)
 
 # create instances
-pc = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
-sb = simulation.create_simulation_box(nx, lx)
-pseudo = simulation.create_pseudo(sb, pc)
+pc     = computation.create_polymer_chain(N_pc, a_sq_n)
+cb     = computation.create_computation_box(nx, lx)
+pseudo = computation.create_pseudo(cb, pc)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d" % (sb.get_dim()))
+print("Box Dimension: %d" % (cb.get_dim()))
 print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
-print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
-print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
-print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("Volume: %f" % (sb.get_volume()) )
+print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2, sb.get_n_grid()], dtype=np.float64)
-q1_init = np.zeros (   sb.get_n_grid(),  dtype=np.float64)
-q2_init = np.zeros (   sb.get_n_grid(),  dtype=np.float64)
-q1_init[0] = np.prod(sb.get_nx())/np.prod(sb.get_lx())
+w       = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
+q1_init = np.zeros (   cb.get_n_grid(),  dtype=np.float64)
+q2_init = np.zeros (   cb.get_n_grid(),  dtype=np.float64)
+q1_init[0] = np.prod(cb.get_nx())/np.prod(cb.get_lx())
 
 space_y, space_x, space_z = np.meshgrid(
-    sb.get_lx(1)/sb.get_nx(1)*np.concatenate([np.arange((sb.get_nx(1)+1)//2), sb.get_nx(1)//2-np.arange(sb.get_nx(1)//2)]),
-    sb.get_lx(0)/sb.get_nx(0)*np.concatenate([np.arange((sb.get_nx(0)+1)//2), sb.get_nx(0)//2-np.arange(sb.get_nx(0)//2)]),
-    sb.get_lx(2)/sb.get_nx(2)*np.concatenate([np.arange((sb.get_nx(2)+1)//2), sb.get_nx(2)//2-np.arange(sb.get_nx(2)//2)]))
+    cb.get_lx(1)/cb.get_nx(1)*np.concatenate([np.arange((cb.get_nx(1)+1)//2), cb.get_nx(1)//2-np.arange(cb.get_nx(1)//2)]),
+    cb.get_lx(0)/cb.get_nx(0)*np.concatenate([np.arange((cb.get_nx(0)+1)//2), cb.get_nx(0)//2-np.arange(cb.get_nx(0)//2)]),
+    cb.get_lx(2)/cb.get_nx(2)*np.concatenate([np.arange((cb.get_nx(2)+1)//2), cb.get_nx(2)//2-np.arange(cb.get_nx(2)//2)]))
 squared_x = space_x**2 + space_y**2 + space_z**2
 
 eps = epsilon
@@ -73,12 +75,12 @@ pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "continuous"):
     for n in range(0, pc.get_n_segment_total()+1):
         q1_out, _ = pseudo.get_partition(n, 0)
-        q1_out = np.reshape(q1_out, sb.get_nx())
+        q1_out = np.reshape(q1_out, cb.get_nx())
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
                     
         print("%8d: %10.4f, %10.4f"
             % (n,
-              sb.get_dim()/3*pred_mean_squared_x,
+              cb.get_dim()/3*pred_mean_squared_x,
               pc.get_n_segment_total()*norm_segment*mean_squared_x))
         
         if (n < pc.get_n_segment_a()):
@@ -89,12 +91,12 @@ if(pc.get_model_name().lower() == "continuous"):
 elif(pc.get_model_name().lower() == "discrete"):
     for n in range(1, pc.get_n_segment_total()+1):
         q1_out, _ = pseudo.get_partition(n, 0)
-        q1_out = np.reshape(q1_out, sb.get_nx())
+        q1_out = np.reshape(q1_out, cb.get_nx())
 
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
         print("%8d: %10.4f, %10.4f"
             % (n,
-               sb.get_dim()/3*pred_mean_squared_x,
+               cb.get_dim()/3*pred_mean_squared_x,
                pc.get_n_segment_total()*norm_segment*mean_squared_x))
 
         if (n < pc.get_n_segment_a()):

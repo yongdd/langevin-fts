@@ -3,13 +3,13 @@
 #include "SimpsonQuadrature.h"
 
 CpuPseudoContinuous::CpuPseudoContinuous(
-    SimulationBox *sb,
+    ComputationBox *cb,
     PolymerChain *pc, FFT *fft)
-    : Pseudo(sb, pc)
+    : Pseudo(cb, pc)
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int N_B = pc->get_n_block();
         const int N = pc->get_n_segment_total();
 
@@ -53,8 +53,8 @@ void CpuPseudoContinuous::update()
 
         for (int b=0; b<N_B; b++)
         {
-        get_boltz_bond(boltz_bond[b],      pc->get_bond_length(b),   sb->get_nx(), sb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length(b)/2, sb->get_nx(), sb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[b],      pc->get_bond_length(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
         }
     }
     catch(std::exception& exc)
@@ -72,8 +72,8 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
 
     try
     {
-        const int DIM  = sb->get_dim();
-        const int M    = sb->get_n_grid();
+        const int DIM  = cb->get_dim();
+        const int M    = cb->get_n_grid();
         const int N    = pc->get_n_segment_total();
         const int N_B = pc->get_n_block();
         const std::vector<int> N_SEG    = pc->get_n_segment();
@@ -91,7 +91,7 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
 
-        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, sb->get_nx(), sb->get_dx());
+        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
 
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
@@ -122,7 +122,7 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
         }
         
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*sb->get_lx(d)*M*M*N/sb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
 
         return dq_dl;
     }
@@ -137,7 +137,7 @@ void CpuPseudoContinuous::calculate_phi_one_type(
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         double simpson_rule_coeff[N_END-N_START+1];
 
         SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_END-N_START);
@@ -163,7 +163,7 @@ void CpuPseudoContinuous::find_phi(double *phi,
 {
     try
     {
-        const int  M        = sb->get_n_grid();
+        const int  M        = cb->get_n_grid();
         const int  N        = pc->get_n_segment_total();
         const int  N_B      = pc->get_n_block();
         const std::vector<int> N_SEG    = pc->get_n_segment();
@@ -218,12 +218,12 @@ void CpuPseudoContinuous::find_phi(double *phi,
         }
 
         // calculates the single chain partition function
-        single_partition = sb->inner_product(&q_1[N*M],&q_2[N*M]);
+        single_partition = cb->inner_product(&q_1[N*M],&q_2[N*M]);
 
         // normalize the concentration
         for(int b=0; b<N_B; b++)
             for(int i=0; i<M; i++)
-                phi[b*M+i] *= sb->get_volume()/single_partition/N;
+                phi[b*M+i] *= cb->get_volume()/single_partition/N;
     }
     catch(std::exception& exc)
     {
@@ -236,7 +236,7 @@ void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
 {
     try
     {
-        const int M = sb->get_n_grid();
+        const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
         double q_out1[M], q_out2[M];
         std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
@@ -301,7 +301,7 @@ void CpuPseudoContinuous::get_partition(double *q_1_out, int n1, double *q_2_out
     
     // Get partial partition functions
     // This is made for debugging and testing.
-    const int M = sb->get_n_grid();
+    const int M = cb->get_n_grid();
     const int N = pc->get_n_segment_total();
 
     if (n1 < 0 || n1 > N)

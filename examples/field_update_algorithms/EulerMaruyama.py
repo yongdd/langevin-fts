@@ -15,7 +15,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 verbose_level = 1  # 1 : print at each langevin step.
                    # 2 : print at each saddle point iteration.
 
-# Simulation Box
+# Simulation Grids and Lengths
 nx = [48, 48, 48]
 lx = [9, 9, 9]
 
@@ -42,7 +42,9 @@ langevin_max_step = 2000
 
 # -------------- initialize ------------
 # calculate chain parameters
-bond_length_sqr_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
+# a : statistical segment length, N: n_segment
+# a_sq_n = a^2 * N
+a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
                                  1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
@@ -52,30 +54,30 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-simulation = FieldTheoreticSimulation.create_simulation(platform, chain_model)
+computation = SingleChainStatistics.create_computation(platform, chain_model)
 
 # create instances
-pc     = simulation.create_polymer_chain(N_pc, bond_length_sqr_n)
-sb     = simulation.create_simulation_box(nx, lx)
-pseudo = simulation.create_pseudo(sb, pc)
-am     = simulation.create_anderson_mixing(am_n_var,
+pc     = computation.create_polymer_chain(N_pc, a_sq_n)
+cb     = computation.create_computation_box(nx, lx)
+pseudo = computation.create_pseudo(cb, pc)
+am     = computation.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise
-langevin_sigma = np.sqrt(2*langevin_dt*sb.get_n_grid()/ 
-    (sb.get_volume()*np.sqrt(langevin_nbar)))
+langevin_sigma = np.sqrt(2*langevin_dt*cb.get_n_grid()/ 
+    (cb.get_volume()*np.sqrt(langevin_nbar)))
     
 # random seed for MT19937
 np.random.seed(5489)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d"  % (sb.get_dim()) )
+print("Box Dimension: %d"  % (cb.get_dim()) )
 print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
 print("%s chain model" % (pc.get_model_name()) )
-print("Nx: %d, %d, %d" % (sb.get_nx(0), sb.get_nx(1), sb.get_nx(2)) )
-print("Lx: %f, %f, %f" % (sb.get_lx(0), sb.get_lx(1), sb.get_lx(2)) )
-print("dx: %f, %f, %f" % (sb.get_dx(0), sb.get_dx(1), sb.get_dx(2)) )
-print("Volume: %f" % (sb.get_volume()) )
+print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+print("Volume: %f" % (cb.get_volume()) )
 
 print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
@@ -84,18 +86,18 @@ print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-q1_init = np.ones(sb.get_n_grid(), dtype=np.float64)
-q2_init = np.ones(sb.get_n_grid(), dtype=np.float64)
+q1_init = np.ones(cb.get_n_grid(), dtype=np.float64)
+q2_init = np.ones(cb.get_n_grid(), dtype=np.float64)
 
 print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0, langevin_sigma, sb.get_n_grid())
-w_minus = np.random.normal(0, langevin_sigma, sb.get_n_grid())
+w_plus  = np.random.normal(0, langevin_sigma, cb.get_n_grid())
+w_minus = np.random.normal(0, langevin_sigma, cb.get_n_grid())
 
 # keep the level of field value
-sb.zero_mean(w_plus)
+cb.zero_mean(w_plus)
 
 # find saddle point of the pressure field
-phi, _, = find_saddle_point(pc, sb, pseudo, am, chi_n,
+phi, _, = find_saddle_point(pc, cb, pseudo, am, chi_n,
     q1_init, q2_init, w_plus, w_minus,
     saddle_max_iter, saddle_tolerance, verbose_level)
 #------------------ run ----------------------
@@ -108,13 +110,13 @@ for langevin_step in range(1, langevin_max_step+1):
     
     print("langevin step: ", langevin_step)
     # update w_minus
-    normal_noise = np.random.normal(0.0, langevin_sigma, sb.get_n_grid())
+    normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
     g_minus = phi[0]-phi[1] + 2*w_minus/chi_n
     w_minus += -g_minus*langevin_dt + normal_noise
-    phi, Q, = find_saddle_point(pc, sb, pseudo, am, chi_n,
+    phi, Q, = find_saddle_point(pc, cb, pseudo, am, chi_n,
         q1_init, q2_init, w_plus, w_minus, 
         saddle_max_iter, saddle_tolerance, verbose_level)
-    lnQ_list.append(-np.log(Q/sb.get_volume()))
+    lnQ_list.append(-np.log(Q/cb.get_volume()))
 
 print(langevin_dt, np.mean(lnQ_list[1000:]))
 

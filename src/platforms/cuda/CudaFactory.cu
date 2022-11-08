@@ -9,7 +9,7 @@
 #include <vector>
 #include <string>
 
-#include "CudaSimulationBox.h"
+#include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
 #include "CudaPseudoDiscrete.h"
 #include "CudaAndersonMixing.h"
@@ -22,19 +22,19 @@ PolymerChain* CudaFactory::create_polymer_chain(
 {
     return new PolymerChain(n_segment, bond_length, model_name);
 }
-SimulationBox* CudaFactory::create_simulation_box(
+ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)
 {
-    return new CudaSimulationBox(nx, lx);
+    return new CudaComputationBox(nx, lx);
 }
-Pseudo* CudaFactory::create_pseudo(SimulationBox *sb, PolymerChain *pc)
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
 
     if( model_name == "continuous" )
-        return new CudaPseudoContinuous(sb, pc);
+        return new CudaPseudoContinuous(cb, pc);
     else if ( model_name == "discrete" )
-        return new CudaPseudoDiscrete(sb, pc);
+        return new CudaPseudoDiscrete(cb, pc);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
