@@ -169,7 +169,7 @@ langevin_sigma = np.sqrt(2*langevin_dt*cb.get_n_grid()/
     (cb.get_volume()*np.sqrt(langevin_nbar)))
 
 ## random seed for MT19937
-#np.random.seed(5489)
+np.random.seed(5489)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d"  % (cb.get_dim()) )
@@ -263,3 +263,22 @@ for langevin_step in range(1, langevin_max_step+1):
 time_duration = time.time() - time_start
 print("total time: %f, time per step: %f" %
     (time_duration, time_duration/langevin_max_step) )
+
+# Recording first a few iteration results for debugging and refactoring
+
+# w_minus and w_plus are initialized to lamellar
+#        3   -1.180E-13   3.3215069E+02     3.753877750   1.3019734E-05
+# ---------- Run ----------
+# iteration, mass error, total_partition, energy_total, error_level
+# langevin step:  1
+#       32   -1.110E-15   3.8567942E+02     4.351649260   9.9454838E-05
+#       17    1.998E-15   3.8144721E+02     4.301192083   8.1994433E-05
+# new Lx: [4.46123986 4.4593802  4.4593802 ]
+# langevin step:  2
+#       33    6.883E-15   4.3751556E+02     4.806826643   9.2777865E-05
+#       17    1.332E-15   4.3319467E+02     4.760009298   8.6524667E-05
+# new Lx: [4.46245645 4.45877228 4.45877228]
+# langevin step:  3
+#       33   -8.660E-15   4.8375004E+02     5.203397403   8.9344207E-05
+#       17    1.776E-15   4.7939853E+02     5.159082640   8.7022224E-05
+# new Lx: [4.46367781 4.45816223 4.45816223]

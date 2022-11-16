@@ -75,3 +75,10 @@ mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params
         "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
         "w_a":w_A, "w_b":w_B, "phi_a":phi_A, "phi_b":phi_B}
 savemat("fields.mat", mdic)
+
+# Recording first a few iteration results for debugging and refactoring
+    #    1   -8.105E-15  [ 1.9678400E+02  ]    -0.001859583   1.9218001E+00  [  7.0000000, 7.0000000, 4.0000000 ]
+    #    2    4.885E-15  [ 1.9643500E+02  ]    -0.000570350   1.1295110E+00  [  7.0000203, 7.0000203, 4.0000299 ]
+    #    3   -6.550E-15  [ 1.9632596E+02  ]    -0.000238806   6.6238569E-01  [  7.0000294, 7.0000294, 4.0000421 ]
+    #    4   -8.882E-16  [ 1.9628576E+02  ]    -0.000146151   4.2742103E-01  [  7.0000346, 7.0000346, 4.0000485 ]
+    #    5    3.997E-15  [ 1.9626999E+02  ]    -0.000121015   3.3569119E-01  [  7.0000379, 7.0000379, 4.0000524 ]
