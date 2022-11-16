@@ -17,11 +17,12 @@ chi_n = 20               # Flory-Huggins Parameters * N
 epsilon = 2.0            # a_A/a_B, conformational asymmetry
 nx = [64,64,64]          # grids number
 lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+ds = 1/n_segment      # contour step interval
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
 # calculate chain parameters
 # a : statistical segment length, N: n_segment
-# a_sq_n = a^2 * N
+# a_sq_n = [a_A^2 * N, a_B^2 * N]
 a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
                                  1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
@@ -32,12 +33,12 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-computation = SingleChainStatistics.create_computation(platform, chain_model)
+factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = computation.create_polymer_chain(N_pc, a_sq_n)
-cb     = computation.create_computation_box(nx, lx)
-pseudo = computation.create_pseudo(cb, pc)
+pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+cb     = factory.create_computation_box(nx, lx)
+pseudo = factory.create_pseudo(cb, pc)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")

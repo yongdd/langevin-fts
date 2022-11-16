@@ -28,7 +28,7 @@ public:
     ~CpuAndersonMixing();
       
     void reset_count() override;
-    void caculate_new_fields(
+    void calculate_new_fields(
         double *w, double *w_out, double *w_deriv,
         double old_error_level, double error_level) override;
 };

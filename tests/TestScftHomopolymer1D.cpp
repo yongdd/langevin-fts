@@ -61,6 +61,7 @@ int main()
         std::vector<int> N_chain_a = {n_segment_a};
         std::vector<int> N_chain_b = {n_segment_b};
         std::vector<double> bond_length = {1.0};
+        double ds = 1.0/n_segment_a;
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist= 20;
@@ -71,13 +72,13 @@ int main()
         // choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms){
-            AbstractFactory *factory = PlatformSelector::create_factory(platform);
+            AbstractFactory *factory = PlatformSelector::create_factory(platform,chain_model);
             factory->display_info();
 
             // create instances and assign to the variables of base classs for the dynamic binding
             ComputationBox *cb  = factory->create_computation_box(nx, lx);
-            PolymerChain *pc_a = factory->create_polymer_chain(N_chain_a,bond_length,chain_model);
-            PolymerChain *pc_b = factory->create_polymer_chain(N_chain_b,bond_length,chain_model);
+            PolymerChain *pc_a = factory->create_polymer_chain(N_chain_a,bond_length,ds);
+            PolymerChain *pc_b = factory->create_polymer_chain(N_chain_b,bond_length,ds);
             Pseudo *pseudo_a   = factory->create_pseudo(cb, pc_a);
             Pseudo *pseudo_b   = factory->create_pseudo(cb, pc_b);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
@@ -209,7 +210,7 @@ int main()
                 // conditions to end the iteration
                 if(error_level < tolerance) break;
                 // calculte new fields using simple and Anderson mixing
-                am->caculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
+                am->calculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
             }
 
             // estimate execution time

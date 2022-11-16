@@ -75,7 +75,7 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
         const int N    = pc->get_n_segment_total();
-        const int N_B = pc->get_n_block();
+        const int N_B  = pc->get_n_block();
         const std::vector<int> N_SEG    = pc->get_n_segment();
         const int M_COMPLEX = this->n_complex_grid;
         const std::vector<int> seg_start= pc->get_block_start();
@@ -122,7 +122,7 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
         }
         
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
 
         return dq_dl;
     }
@@ -223,7 +223,7 @@ void CpuPseudoContinuous::compute_statistics(double *phi,
         // normalize the concentration
         for(int b=0; b<N_B; b++)
             for(int i=0; i<M; i++)
-                phi[b*M+i] *= cb->get_volume()/single_partition/N;
+                phi[b*M+i] *= cb->get_volume()*pc->get_ds()/single_partition;
     }
     catch(std::exception& exc)
     {

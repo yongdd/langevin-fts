@@ -8,9 +8,9 @@ from find_saddle_point import *
 
 # -------------- simulation parameters ------------
 # Cuda environment variables 
-#os.environ["CUDA_VISIBLE_DEVICES"]= "0"
-# OpenMP environment variables 
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+#os.environ["CUDA_VISIBLE_DEVICES"]= "1"
+# OpenMP environment variables
+os.environ["MKL_NUM_THREADS"] = "1"  # always 1 
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
@@ -27,6 +27,7 @@ f = 0.34
 chi_n = 10.0
 epsilon = 1.0            # a_A/a_B, conformational asymmetry
 chain_model = "Discrete" # choose among [Continuous, Discrete]
+ds = 1/n_segment         # contour step interval
 
 # Anderson Mixing 
 saddle_tolerance = 1e-4
@@ -45,9 +46,9 @@ langevin_max_step = 2000
 # -------------- initialize ------------
 # calculate chain parameters
 # a : statistical segment length, N: n_segment
-# a_sq_n = a^2 * N
+# a_sq_n = [a_A^2 * N, a_B^2 * N]
 a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-                                 1.0/(f*epsilon*epsilon + (1.0-f))]
+            1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
 
 # choose platform among [cuda, cpu-mkl]
@@ -56,13 +57,13 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-computation = SingleChainStatistics.create_computation(platform, chain_model)
+factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = computation.create_polymer_chain(N_pc, a_sq_n)
-cb     = computation.create_computation_box(nx, lx)
-pseudo = computation.create_pseudo(cb, pc)
-am     = computation.create_anderson_mixing(am_n_var,
+pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+cb     = factory.create_computation_box(nx, lx)
+pseudo = factory.create_pseudo(cb, pc)
+am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise
@@ -72,9 +73,22 @@ langevin_sigma = np.sqrt(2*langevin_dt*cb.get_n_grid()/
 # random seed for MT19937
 np.random.seed(5489)
 
-# arrays for semi implicit Seidel
-kernel_minus = langevin_dt/(1.0 + 2/chi_n*langevin_dt)
-kernel_noise = 1/(1.0 + 2/chi_n*langevin_dt)
+# arrays for exponential time differencing
+space_ky, space_kx, space_kz = np.meshgrid(
+    2*np.pi/cb.get_lx(1)*np.concatenate([np.arange((cb.get_nx(1)+1)//2), cb.get_nx(1)//2-np.arange(cb.get_nx(1)//2)]),
+    2*np.pi/cb.get_lx(0)*np.concatenate([np.arange((cb.get_nx(0)+1)//2), cb.get_nx(0)//2-np.arange(cb.get_nx(0)//2)]),
+    2*np.pi/cb.get_lx(2)*np.arange(cb.get_nx(2)//2+1))
+
+mag2_k = (space_kx**2 + space_ky**2 + space_kz**2)/6.0
+mag2_k[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
+
+g_k = 2*(mag2_k+np.exp(-mag2_k)-1.0)/mag2_k**2
+g_k[0,0,0] = 1.0
+
+kernel_minus = 2/chi_n
+exp_kernel_minus  =         (1.0 - np.exp(-kernel_minus*langevin_dt))/kernel_minus
+exp_kernel_noise  = np.sqrt((1.0 - np.exp(-2*kernel_minus*langevin_dt))/(2*kernel_minus*langevin_dt))
+exp_kernel_second = (kernel_minus*langevin_dt + np.exp(-kernel_minus*langevin_dt) - 1.0)/(kernel_minus**2*langevin_dt)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
@@ -117,9 +131,21 @@ for langevin_step in range(1, langevin_max_step+1):
     
     print("langevin step: ", langevin_step)
     # update w_minus
+    # Runge-Kuta step 1
     normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
     g_minus = phi[0]-phi[1] + 2*w_minus/chi_n
-    w_minus += -kernel_minus*g_minus + kernel_noise*normal_noise
+    w_minus_copy = w_minus.copy()
+    g_minus_copy = g_minus.copy()
+    w_minus += -exp_kernel_minus*g_minus + exp_kernel_noise*normal_noise
+    phi, _ = find_saddle_point(pc, cb, pseudo, am, chi_n,
+        q1_init, q2_init, w_plus, w_minus, 
+        saddle_max_iter, saddle_tolerance, verbose_level)
+
+    # Runge-Kuta step 2    
+    g_minus = phi[0]-phi[1] + 2*w_minus/chi_n
+    w_minus += exp_kernel_second*(
+         - g_minus      + kernel_minus*w_minus
+         + g_minus_copy - kernel_minus*w_minus_copy)
     phi, Q = find_saddle_point(pc, cb, pseudo, am, chi_n,
         q1_init, q2_init, w_plus, w_minus, 
         saddle_max_iter, saddle_tolerance, verbose_level)

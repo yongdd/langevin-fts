@@ -19,7 +19,6 @@ def find_saddle_point(pc, cb, pseudo, am, chi_n,
         phi, Q = pseudo.compute_statistics(
             q1_init, q2_init,
             np.stack((w_plus+w_minus,w_plus-w_minus), axis=0))
-        phi = phi.reshape(pc.get_n_block(),cb.get_n_grid())
         phi_plus = phi[0] + phi[1]
         
         # calculate output fields
@@ -52,5 +51,5 @@ def find_saddle_point(pc, cb, pseudo, am, chi_n,
             break
             
         # calculte new fields using simple and Anderson mixing
-        am.caculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
+        am.calculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
     return phi, Q

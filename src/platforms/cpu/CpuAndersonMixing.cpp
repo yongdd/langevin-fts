@@ -73,7 +73,7 @@ double CpuAndersonMixing::dot_product(double *a, double *b)
     return sum;
 }
 
-void CpuAndersonMixing::caculate_new_fields(
+void CpuAndersonMixing::calculate_new_fields(
     double *w,
     double *w_out,
     double *w_deriv,

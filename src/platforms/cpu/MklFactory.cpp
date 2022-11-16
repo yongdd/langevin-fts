@@ -15,11 +15,15 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
+MklFactory::MklFactory(std::string chain_model){
+    this->chain_model = chain_model;
+}
 PolymerChain* MklFactory::create_polymer_chain(
-    std::vector<int> n_segment, std::vector<double> bond_length,
-    std::string model_name)
+    std::vector<int> n_segment,
+    std::vector<double> bond_length,
+    double ds)
 {
-    return new PolymerChain(n_segment, bond_length, model_name);
+    return new PolymerChain(n_segment,bond_length,ds,chain_model);
 }
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)
@@ -28,8 +32,8 @@ ComputationBox* MklFactory::create_computation_box(
 }
 Pseudo* MklFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
 {
-    std::string model_name = pc->get_model_name();
-    if ( model_name == "continuous" )
+    std::string chain_model = pc->get_model_name();
+    if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
             return new CpuPseudoContinuous(cb, pc,
@@ -41,7 +45,7 @@ Pseudo* MklFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
             return new CpuPseudoContinuous(cb, pc,
                 new MklFFT1D(cb->get_nx(2)));
     }
-    else if ( model_name == "discrete" )
+    else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
             return new CpuPseudoDiscrete(cb, pc,

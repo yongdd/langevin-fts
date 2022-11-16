@@ -23,6 +23,7 @@ f = 0.3            # A-fraction, f
 n_segment = 50     # segment number, N
 chi_n = 20         # Flory-Huggins Parameters * N
 epsilon = 2.5      # a_A/a_B, conformational asymmetry
+ds = 1/n_segment   # contour step interval
 
 am_n_comp = 2         # w[0] and w[1]
 am_max_hist= 20       # maximum number of history
@@ -32,7 +33,7 @@ am_mix_init = 0.1     # initial mixing rate of simple mixing
 
 # calculate chain parameters
 # a : statistical segment length, N: n_segment
-# a_sq_n = a^2 * N
+# a_sq_n = [a_A^2 * N, a_B^2 * N]
 a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)), 
             1.0/(f*epsilon*epsilon + (1.0-f))]
 N_pc = [int(f*n_segment),int((1-f)*n_segment)]
@@ -61,14 +62,14 @@ for dim in [1,2,3]:
         test_dqdl = []
         for platform in PlatformSelector.avail_platforms():
 
-            computation = SingleChainStatistics.create_computation(platform, chain_model)
+            factory = PlatformSelector.create_factory(platform, chain_model)
             #computation.display_info()
 
             # create instances
-            pc     = computation.create_polymer_chain(N_pc, a_sq_n)
-            cb     = computation.create_computation_box(nx, lx)
-            pseudo = computation.create_pseudo(cb, pc)
-            am     = computation.create_anderson_mixing(am_n_comp*np.prod(nx),
+            pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+            cb     = factory.create_computation_box(nx, lx)
+            pseudo = factory.create_pseudo(cb, pc)
+            am     = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
                         am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
             # assign large initial value for the energy and error
@@ -102,7 +103,6 @@ for dim in [1,2,3]:
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
                 phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
-                phi = phi.reshape(2,cb.get_n_grid())
                 
                 # calculate the total energy
                 energy_old = energy_total
@@ -136,7 +136,7 @@ for dim in [1,2,3]:
                 if error_level < tolerance:
                     break
                 # calculte new fields using simple and Anderson mixing
-                am.caculate_new_fields(
+                am.calculate_new_fields(
                     np.reshape(w,      2*cb.get_n_grid()),
                     np.reshape(w_out,  2*cb.get_n_grid()),
                     np.reshape(w_diff, 2*cb.get_n_grid()),

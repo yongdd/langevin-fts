@@ -191,7 +191,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
                     bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
                     d_boltz_bond_now = d_boltz_bond_middle[b-1];
                 }
-                else if ( n < seg_start[b+1])
+                else if (n > seg_start[b] && n < seg_start[b+1])
                 {
                     bond_length_now = pc->get_bond_length(b);
                     d_boltz_bond_now = d_boltz_bond[b];
@@ -218,7 +218,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
             }
         }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
 
         cudaFree(d_fourier_basis_x);
         cudaFree(d_fourier_basis_y);
@@ -313,7 +313,7 @@ void CudaPseudoDiscrete::compute_statistics(double *phi, double *q_1_init, doubl
 
         // normalize the concentration
         for(int b=0; b<N_B; b++)
-            divide_real<<<N_BLOCKS, N_THREADS>>>(&d_phi[b*M], &d_phi[b*M], d_exp_dw[b], (cb->get_volume())/single_partition/N, M);
+            divide_real<<<N_BLOCKS, N_THREADS>>>(&d_phi[b*M], &d_phi[b*M], d_exp_dw[b], cb->get_volume()*pc->get_ds()/single_partition, M);
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*N_B*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)

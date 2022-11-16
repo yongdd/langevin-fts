@@ -14,10 +14,11 @@
 class MklFactory : public AbstractFactory
 {
 public :
+    MklFactory(std::string chain_model);
     PolymerChain* create_polymer_chain(
         std::vector<int> n_segment, 
         std::vector<double> bond_length,
-        std::string model_name) override;
+        double ds) override;
     ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx) override;

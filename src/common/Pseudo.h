@@ -80,7 +80,7 @@ public:
 
         try{
             double single_partition;
-            py::array_t<double> phi = py::array_t<double>(N_B*M);
+            py::array_t<double> phi = py::array_t<double>({N_B,M});
             py::buffer_info buf_phi = phi.request();
             
             compute_statistics((double*) buf_phi.ptr,

@@ -27,12 +27,12 @@ public:
     virtual ~AndersonMixing(){};
 
     virtual void reset_count(){};
-    virtual void caculate_new_fields(
+    virtual void calculate_new_fields(
         double *w, double *w_out, double *w_deriv,
         double old_error_level, double error_level)=0;
 
     // Methods for pybind11
-    void caculate_new_fields(py::array_t<double> w, py::array_t<double> w_out, py::array_t<double> w_deriv,
+    void calculate_new_fields(py::array_t<double> w, py::array_t<double> w_out, py::array_t<double> w_deriv,
                              double old_error_level, double error_level)
     {
         try{
@@ -47,7 +47,7 @@ public:
             if (buf_w_deriv.size != n_var)
                 throw_with_line_number("Size of input w_deriv (" + std::to_string(buf_w_deriv.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
 
-            caculate_new_fields((double *) buf_w.ptr, (double *) buf_w_out.ptr, (double *) buf_w_deriv.ptr, old_error_level, error_level);
+            calculate_new_fields((double *) buf_w.ptr, (double *) buf_w_out.ptr, (double *) buf_w_deriv.ptr, old_error_level, error_level);
         }
         catch(std::exception& exc)
         {

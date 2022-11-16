@@ -16,15 +16,18 @@
 
 class AbstractFactory
 {
+protected:
+    std::string chain_model;
 public :
     virtual ~AbstractFactory() {};
     virtual PolymerChain* create_polymer_chain(
         std::vector<int> n_segment, 
         std::vector<double> bond_length,
-        std::string model_name) = 0;
+        double ds) = 0;
     virtual ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx) = 0;
+    std::string get_model_name() {return chain_model;};
     virtual Pseudo* create_pseudo(
         ComputationBox *cb,
         PolymerChain *pc) = 0; 

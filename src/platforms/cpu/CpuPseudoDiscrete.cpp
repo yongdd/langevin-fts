@@ -83,7 +83,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
     {
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
-        const int N_B = pc->get_n_block();
+        const int N_B  = pc->get_n_block();
         const int N    = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
         const std::vector<int> seg_start= pc->get_block_start();
@@ -108,6 +108,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         {
             fft->forward(&q_1[(n-1)*M],k_q_1);
             fft->forward(&q_2[ n   *M],k_q_2);
+
             if ( n < seg_start[1])
             {
                 bond_length_now = pc->get_bond_length(0);
@@ -120,7 +121,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
                     bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
                     boltz_bond_now = boltz_bond_middle[b-1];
                 }
-                else if ( n < seg_start[b+1])
+                else if (n > seg_start[b] && n < seg_start[b+1])
                 {
                     bond_length_now = pc->get_bond_length(b);
                     boltz_bond_now = boltz_bond[b];
@@ -143,8 +144,48 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
                     dq_dl[2] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
             }
         }
+
+        // for(int n=1; n<N; n++)
+        // {
+        //     fft->forward(&q_1[(n-1)*M],k_q_1);
+        //     fft->forward(&q_2[ n   *M],k_q_2);
+        //     if ( n < seg_start[1])
+        //     {
+        //         bond_length_now = pc->get_bond_length(0);
+        //         boltz_bond_now = boltz_bond[0];
+        //     }
+        //     for(int b=1; b<N_B; b++)
+        //     {
+        //         if ( n == seg_start[b])
+        //         {
+        //             bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
+        //             boltz_bond_now = boltz_bond_middle[b-1];
+        //         }
+        //         else if ( n < seg_start[b+1])
+        //         {
+        //             bond_length_now = pc->get_bond_length(b);
+        //             boltz_bond_now = boltz_bond[b];
+        //         }
+        //     }
+
+        //     if ( DIM >= 3 )
+        //     {
+        //         for(int i=0; i<M_COMPLEX; i++)
+        //             dq_dl[0] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+        //     }
+        //     if ( DIM >= 2 )
+        //     {
+        //         for(int i=0; i<M_COMPLEX; i++)
+        //             dq_dl[1] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+        //     }
+        //     if ( DIM >= 1 )
+        //     {
+        //         for(int i=0; i<M_COMPLEX; i++)
+        //             dq_dl[2] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+        //     }
+        // }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M*N/cb->get_volume();
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
 
         return dq_dl;
     }
@@ -224,7 +265,7 @@ void CpuPseudoDiscrete::compute_statistics(double *phi, double *q_1_init, double
         // normalize the concentration
         for(int b=0; b<N_B; b++)
             for(int i=0; i<M; i++)
-                phi[b*M+i] *= cb->get_volume()/exp_dw[b][i]/single_partition/N;
+                phi[b*M+i] *= cb->get_volume()*pc->get_ds()/exp_dw[b][i]/single_partition;
     }
     catch(std::exception& exc)
     {
