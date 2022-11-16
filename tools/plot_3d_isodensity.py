@@ -8,7 +8,10 @@ import scipy.io as sio
 mdic = sio.loadmat("fields_002000.mat", squeeze_me=True)
 nx = mdic['nx']
 lx = mdic['lx']
-phi_a = mdic['phi_a']
+if 'phi_a' in mdic.keys():
+    phi_a = mdic['phi_a']
+elif 'phi_A' in mdic.keys():
+    phi_a = mdic['phi_A']
 
 X, Y, Z = np.mgrid[0:nx[0], 0:nx[1], 0:nx[2]]
 values = np.reshape(phi_a, nx)

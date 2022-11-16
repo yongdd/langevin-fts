@@ -2,7 +2,10 @@ clear all;
 
 %Load File
 load("fields.mat");
-
+if exist('phi_A','var')
+    phi_a = phi_A;
+end
+    
 %Plot
 h=figure;
 %data = wpd;
