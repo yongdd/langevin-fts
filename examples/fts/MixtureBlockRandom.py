@@ -90,3 +90,18 @@ simulation.run(w_minus=w_minus, w_plus=w_plus)
 time_duration = time.time() - time_start
 print("total time: %f, time per step: %f" %
     (time_duration, time_duration/params["langevin"]["max_step"]) )
+
+# Recording first a few iteration results for debugging and refactoring
+
+#       21   -2.220E-16  [ 5.3403777E+02  5.1204688E+02  ]     6.261653163   7.6180036E-05
+# iteration, mass error, total_partitions, energy_total, error_level
+# ---------- Run  ----------
+# Langevin step:  1
+#       14   -1.998E-15  [ 5.5627301E+02  5.1217781E+02  ]     6.272363707   9.3104738E-05
+#        4   -3.331E-16  [ 5.5608440E+02  5.1217731E+02  ]     6.271847736   8.3069653E-05
+# Langevin step:  2
+#       15   -1.554E-15  [ 5.7911662E+02  5.1239117E+02  ]     6.282408942   8.1379948E-05
+#        4    0.000E+00  [ 5.7890701E+02  5.1239004E+02  ]     6.281888837   9.1595030E-05
+# Langevin step:  3
+#       15    1.554E-15  [ 6.0136857E+02  5.1266494E+02  ]     6.291607328   9.5658255E-05
+#        5    2.220E-16  [ 6.0114725E+02  5.1266287E+02  ]     6.291103931   7.0976167E-05
