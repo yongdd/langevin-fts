@@ -15,9 +15,9 @@ PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_
     for(int i=0; i<n_block; i++)
     {
         if( n_segment[i] <= 0)
-            throw_with_line_number("The number of segments (" +std::to_string(n_segment[i]) + ") must be a postive number");
+            throw_with_line_number("The number of segments (" +std::to_string(n_segment[i]) + ") must be a positive number");
         if( bond_length[i] <= 0)
-            throw_with_line_number("The bond length (" +std::to_string(n_segment[i]) + ") must be a postive number");
+            throw_with_line_number("The bond length (" +std::to_string(n_segment[i]) + ") must be a positive number");
     }
 
     this->n_segment = n_segment;

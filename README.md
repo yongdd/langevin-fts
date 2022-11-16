@@ -6,7 +6,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * AB Copolymer Melt  
 * Distinct Polymer Mixture (**beta**)
 * Conformational Asymmetry   
-* Box Size Determination by Stress Calculation   
+* Box Size Determination by Stress Calculation (SCFT only)   
 * Chain Model: Continuous, Discrete   
 * Periodic Boundaries  
 * 3D, 2D and 1D

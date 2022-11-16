@@ -10,6 +10,8 @@ f2 = 0.4         # A-fraction of second BCP chain
 eps = 2.0        # a_A/a_B, conformational asymmetry
 
 params = {
+    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    
     "nx":[32,32,32],        # Simulation grid numbers
     "lx":[4.,4.,3.9],       # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                             # where "a_Ref" is reference statistical segment length
