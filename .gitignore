@@ -7,5 +7,6 @@ temp
 *.out
 *.png
 *.html
+data_simulation*
 fields*.mat
 structure_function*.mat

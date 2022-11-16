@@ -1,7 +1,7 @@
 import os
 import time
 import numpy as np
-from scipy.io import savemat
+from scipy.io import savemat, loadmat
 from scipy.ndimage.filters import gaussian_filter
 import scft
 
@@ -10,6 +10,8 @@ f = 0.36        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
+    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    
     "nx":[32,32,32],            # Simulation grid numbers
     "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length

@@ -41,6 +41,8 @@ class SCFT:
             A_fraction = 0.0
             alpha = 0.0  #total_relative_contour_length
             for block in polymer["blocks"]:
+                assert(np.isclose(round(block["length"]/params["ds"])*params["ds"], block["length"])), \
+                    'block["length"]/params["ds"] (%f) is not an integer' % (block["length"]/params["ds"])
                 block_length_list.append(round(block["length"]/params["ds"]))
                 type_list.append(block["type"])
                 alpha += block["length"]
@@ -109,6 +111,11 @@ class SCFT:
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
         print("Box Dimension: %d" % (cb.get_dim()))
+        print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
+        print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
+        print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
+        print("Volume: %f" % (cb.get_volume()) )
+        
         print("%s chain model" % (params["chain_model"]))
         print("chi_n: %f," % (params["chi_n"]))
         print("Conformational asymmetry (epsilon): %f" %
@@ -122,17 +129,10 @@ class SCFT:
             print("    total A fraction: %f, average statistical segment length: %f" % 
                 (polymer["total_A_fraction"], polymer["statistical_segment_length"]))
             idx += 1
-        print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
-        print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
-        print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
-        print("Volume: %f" % (cb.get_volume()) )
 
         #  Save Internal Variables
-        self.params = params
         self.distinct_polymers = distinct_polymers
         self.chi_n = params["chi_n"]
-        self.segment_lengths = params["segment_lengths"]
-        self.ds = params["ds"]
         self.box_is_altering = params["box_is_altering"]
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -248,8 +248,7 @@ class SCFT:
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()[-self.cb.get_dim():]]), "]")
             else:
-                print("%8d %12.3E " %
-                (scft_iter, mass_error), end=" [ ")
+                print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
                 for polymer in self.distinct_polymers:
                     print("%13.7E " % (polymer["Q"]), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
@@ -260,6 +259,7 @@ class SCFT:
 
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
+                # self.cb.get_lx()[-self.cb.get_dim():] == Lx, stress_array == dLx
                 am_new  = np.concatenate((np.reshape(w,      2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
                 am_out  = np.concatenate((np.reshape(w_out,  2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():] + stress_array))
                 am_diff = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), stress_array))
