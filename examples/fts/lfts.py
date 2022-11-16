@@ -131,7 +131,7 @@ class LFTS:
         self.chain_model = params["chain_model"]
         self.chi_n = params["chi_n"]
         self.ds = params["ds"]
-
+        self.epsilon = params["segment_lengths"]["A"]/params["segment_lengths"]["B"]
         self.langevin = params["langevin"]
         self.langevin.update({"sigma":langevin_sigma})
 
@@ -145,11 +145,11 @@ class LFTS:
 
     def save_simulation_data(self, path, w_plus, w_minus, phi_A, phi_B):
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-            "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds,
+            "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "params": self.params,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_A":phi_A, "phi_B":phi_B}
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_A, "phi_a":phi_B}
         savemat(path, mdic)
 
     def run(self, w_plus, w_minus):
@@ -209,7 +209,7 @@ class LFTS:
                         self.cb.get_volume()*np.sqrt(self.langevin["nbar"])/self.chi_n**2
                 sf_average -= 1.0/(2*self.chi_n)
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(), "params": self.params,
-                    "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds,
+                    "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
                     "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "structure_function":sf_average}
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
                 sf_average[:,:,:] = 0.0

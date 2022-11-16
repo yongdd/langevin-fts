@@ -1,5 +1,9 @@
 % Load Data
 load("fields_002000.mat");
+if exist('phi_A','var')
+    phi_a = phi_A;
+end
+
 v = reshape(phi_a,[nx(3), nx(2), nx(1)]);
 v = permute(v,[2 3 1]);
 
@@ -15,7 +19,7 @@ caxis([0.0 1])
 % Mesh
 [x,y,z] = meshgrid(dx(1):dx(1):lx(1),dx(2):dx(2):lx(2),dx(3):dx(3):lx(3));
 %v = smooth3(v);
-isovalue = f;
+isovalue = mean(phi_a);
 
 % Isosurface
 p1 = patch(isosurface(x,y,z,v,isovalue));

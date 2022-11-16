@@ -2,6 +2,9 @@ clear all;
 
 %Load File
 load("fields_002000.mat");
+if exist('phi_A','var')
+    phi_a = phi_A;
+end
 
 %Plot
 h=figure;

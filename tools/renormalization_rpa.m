@@ -1,6 +1,15 @@
 clear all;
 
 load("fields_000200.mat");
+if exist('ds','var')
+    N = 1.0/ds;
+end
+if exist('phi_a','var')
+    f = mean(phi_a);
+else
+    f = mean(phi_A);
+end
+
 dx = lx./double(nx);
 dv = dx(1)*dx(2)*dx(3);
 

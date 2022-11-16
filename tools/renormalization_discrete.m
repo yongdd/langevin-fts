@@ -1,6 +1,10 @@
 clear all;
 
 load("fields_000200.mat");
+if exist('ds','var')
+    N = 1.0/ds;
+end
+
 dx = lx./double(nx);
 dv = dx(1)*dx(2)*dx(3);
 bond_t = 100;
