@@ -15,12 +15,15 @@
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
+CudaFactory::CudaFactory(std::string chain_model){
+    this->chain_model = chain_model;
+}
 PolymerChain* CudaFactory::create_polymer_chain(
         std::vector<int> n_segment, 
         std::vector<double> bond_length,
-        std::string model_name)
+        double ds)
 {
-    return new PolymerChain(n_segment, bond_length, model_name);
+    return new PolymerChain(n_segment,bond_length,ds,chain_model);
 }
 ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)

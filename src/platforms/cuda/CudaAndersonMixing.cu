@@ -83,7 +83,7 @@ void CudaAndersonMixing::reset_count()
     }
 }
 
-void CudaAndersonMixing::caculate_new_fields(
+void CudaAndersonMixing::calculate_new_fields(
     double *w,
     double *w_out,
     double *w_deriv,

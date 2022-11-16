@@ -1,16 +1,12 @@
 import os
 import numpy as np
 import time
-from scipy.io import savemat
-import scipy.optimize
+from scipy.io import loadmat, savemat
+from scipy.ndimage.filters import gaussian_filter
 from langevinfts import *
 
-def find_saddle_point(lx):
-
-    # set box size
-    cb.set_lx(lx)
-    # update bond parameters using new lx
-    pseudo.update()
+def find_saddle_point(cb, pseudo, am, lx, chi_n,
+    q1_init, q2_init, w, max_iter, tolerance, is_box_altering=True):
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20
@@ -19,14 +15,19 @@ def find_saddle_point(lx):
     # reset Anderson mixing module
     am.reset_count()
 
+    # array for output fields
+    w_out = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
+
     # iteration begins here
-    print("iteration, mass error, total_partition, energy_total, error_level")
-    for scft_iter in range(1,max_scft_iter+1):
+    if (is_box_altering):
+        print("iteration, mass error, total_partition, energy_total, error_level, box size")
+    else:
+        print("iteration, mass error, total_partition, energy_total, error_level")
+    for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
         phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
 
         # calculate the total energy
-        energy_old = energy_total
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
@@ -48,28 +49,48 @@ def find_saddle_point(lx):
         w_diff = w_out - w
         multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
         multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
-        error_level = np.sqrt(multi_dot)
 
         # print iteration # and error levels and check the mass conservation
         mass_error = (cb.integral(phi[0]) + cb.integral(phi[1]))/cb.get_volume() - 1.0
-        print( "%8d %12.3E %15.7E %13.9f %15.11f" %
-            (scft_iter, mass_error, Q, energy_total, error_level) )
+        error_level = np.sqrt(multi_dot)
+        
+        if (is_box_altering):
+            # Calculate stress
+            stress_array = np.array(pseudo.dq_dl()[-cb.get_dim():])/Q
+            error_level += np.sqrt(np.sum(stress_array)**2)
+            print("%8d %12.3E %15.7E %15.9f %15.7E" %
+            (scft_iter, mass_error, Q, energy_total, error_level), end=" ")
+            print("\t[", ",".join(["%10.7f" % (x) for x in lx]), "]")
+        else:
+            print("%8d %12.3E %15.7E %15.9f %15.7E" %
+            (scft_iter, mass_error, Q, energy_total, error_level))
 
         # conditions to end the iteration
         if error_level < tolerance:
             break
+
         # calculte new fields using simple and Anderson mixing
-        am.calculate_new_fields(
+        if (is_box_altering):
+            am_new  = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
+            am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx + stress_array))
+            am_diff = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), stress_array))
+            am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
+
+            # set box size
+            w[0] = am_new[0:cb.get_n_grid()]
+            w[1] = am_new[cb.get_n_grid():2*cb.get_n_grid()]
+            lx = am_new[-cb.get_dim():]
+            cb.set_lx(lx)
+            # update bond parameters using new lx
+            pseudo.update()
+        else:
+            am.calculate_new_fields(
             np.reshape(w,      2*cb.get_n_grid()),
             np.reshape(w_out,  2*cb.get_n_grid()),
             np.reshape(w_diff, 2*cb.get_n_grid()),
             old_error_level, error_level)
-    
-    if use_stress:
-        stress_array = np.array(pseudo.dq_dl()[-cb.get_dim():])/Q
-        return stress_array
-    else:
-        return energy_total
+
+    return phi, Q, energy_total
 
 # -------------- initialize ------------
 
@@ -79,26 +100,24 @@ os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 max_scft_iter = 2000
-tolerance = 1e-11
+tolerance = 1e-8
 
 # Major Simulation Parameters
-f = 0.30              # A-fraction, f
-n_segment = 100       # segment number, N
-chi_n = 25            # Flory-Huggins Parameters * N
-epsilon = 2.0         # a_A/a_B, conformational asymmetry
-nx = [32]#,32,32]     # grids number
-lx = [3.4]#,3.5,3.7]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+f = 0.25          # A-fraction, f
+n_segment = 100   # segment number, N
+chi_n = 25        # Flory-Huggins Parameters * N
+epsilon = 2.0     # a_A/a_B, conformational asymmetry, default = 1.0
+nx = [64,64,32]   # grid numbers
+lx = [7.0,7.0,4.0]   # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
 ds = 1/n_segment      # contour step interval
-chain_model = "Continuous" # choose among [Continuous, Discrete]
+chain_model = "Continuous"    # choose among [Continuous, Discrete]
 
-am_n_var = 2*np.prod(nx) # w_a (w[0]) and w_b (w[1])
-am_max_hist= 20          # maximum number of history
-am_start_error = 1e-1    # when switch to AM from simple mixing
-am_mix_min = 0.1         # minimum mixing rate of simple mixing
-am_mix_init = 0.1        # initial mixing rate of simple mixing
-
-# use stress for finding unit cell
-use_stress = True
+# Anderson mixing
+am_n_var = 2*np.prod(nx)+len(lx)  # w_a (w[0]) and w_b (w[1]) + lx
+am_max_hist= 20                   # maximum number of history
+am_start_error = 1e-2             # when switch to AM from simple mixing
+am_mix_min = 0.1                  # minimum mixing rate of simple mixing
+am_mix_init = 0.1                 # initial mixing rate of simple mixing
 
 # calculate chain parameters
 # a : statistical segment length, N: n_segment
@@ -137,24 +156,25 @@ print("Volume: %f" % (cb.get_volume()) )
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
-w_out   = np.zeros([2, cb.get_n_grid()],  dtype=np.float64)
 q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 
-print("w_A and w_B are initialized to gyroid phase.")
-for i in range(0,cb.get_nx(0)):
-    xx = (i+1)*2*np.pi/cb.get_nx(0)
-    for j in range(0,cb.get_nx(1)):
-        yy = (j+1)*2*np.pi/cb.get_nx(1)
-        for k in range(0,cb.get_nx(2)):
-            zz = (k+1)*2*np.pi/cb.get_nx(2)
-            c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
-                np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
-            c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
-                np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
-            idx = i*cb.get_nx(1)*cb.get_nx(2) + j*cb.get_nx(2) + k
-            w[0,i,j,k] = -0.364*c1+0.133*c2
-            w[1,i,j,k] = 0.302*c1-0.106*c2
+# Initial Fields
+print("w_A and w_B are initialized to Sigma phase.")
+# [Ref: https://doi.org/10.3390/app2030654]
+sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
+[0.40,0.40,0.00],[0.60,0.60,0.00],[0.10,0.90,0.50],[0.90,0.10,0.50], #B
+[0.13,0.46,0.00],[0.46,0.13,0.00],[0.54,0.87,0.00],[0.87,0.54,0.00], #C
+[0.04,0.63,0.50],[0.63,0.04,0.50],[0.37,0.96,0.50],[0.96,0.37,0.50], #C
+[0.07,0.74,0.00],[0.74,0.07,0.00],[0.26,0.93,0.00],[0.93,0.26,0.00], #D
+[0.24,0.43,0.50],[0.43,0.24,0.50],[0.57,0.76,0.50],[0.77,0.56,0.50], #D
+[0.18,0.18,0.25],[0.82,0.82,0.25],[0.32,0.68,0.25],[0.68,0.32,0.25], #E
+[0.18,0.18,0.75],[0.82,0.82,0.75],[0.32,0.68,0.75],[0.68,0.32,0.75]] #E
+
+for x,y,z in sphere_positions:
+    mx, my, mz = np.round((np.array([x, y, z])*cb.get_nx())).astype(np.int32)
+    w[0,mx,my,mz] = -1/np.prod(cb.get_dx())
+w[0] = gaussian_filter(w[0], sigma=np.min(cb.get_nx())/15, mode='wrap')
 w = np.reshape(w, [2, cb.get_n_grid()])
 
 # keep the level of field value
@@ -165,16 +185,15 @@ cb.zero_mean(w[1])
 print("---------- Run ----------")
 time_start = time.time()
 
-# find the natural period of gyroid
-if (use_stress):
-    res = scipy.optimize.root(find_saddle_point, lx, tol=1e-6)
-    print('Unit cell that make the stress zero: ', res.x, '(aN^1/2)')
-    print('Stress in each direction: ', res.fun, )
-else:
-    res = scipy.optimize.minimize(find_saddle_point, lx, tol=1e-6, options={'disp':True})
-    print('Unit cell that minimizes the free energy: ', res.x, '(aN^1/2)')
-    print('Free energy per chain: ', res.fun, 'kT')
+phi, Q, energy_total = find_saddle_point(cb, pseudo, am, lx, chi_n,
+    q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
+
+# save final results
+mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
+        "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
+savemat("fields.mat", mdic)

@@ -5,11 +5,11 @@
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_length, std::string model_name)
+PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_length, double ds, std::string model_name)
 {
    
     if( n_segment.size() != bond_length.size())
-        throw_with_line_number("The number of blocks for n_segment (" +std::to_string(n_segment.size()) + ") and bond_length (" +std::to_string(bond_length.size()) + ")must be consistent");
+        throw_with_line_number("The number of blocks for n_segment (" +std::to_string(n_segment.size()) + ") and bond_length (" +std::to_string(bond_length.size()) + ") must be consistent");
     
     this->n_block = n_segment.size();
     for(int i=0; i<n_block; i++)
@@ -21,24 +21,19 @@ PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_
     }
 
     this->n_segment = n_segment;
-    
+    this->bond_length = bond_length;
+
     this->n_segment_total = 0;
     for(int i=0; i<n_block; i++)
     {
         this->n_segment_total += this->n_segment[i];
+        //bond length is stored as its as (a_A/a_Ref)^2.
+        this->bond_length[i] = this->bond_length[i]*this->bond_length[i];
     }
-    //bond length is stored as its square*N_total
-    this->bond_length = bond_length;
-
-    this->relative_length = 0;
-    for(int i=0; i<n_block; i++)
-    {
-        this->relative_length += bond_length[i]*n_segment[i];
-    }
-    this->relative_length /= this->n_segment_total;
 
     // segment step size
-    this->ds = this->relative_length/this->n_segment_total;
+    this->ds = ds;
+
     // chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
                    [](unsigned char c)
@@ -55,7 +50,7 @@ PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_
     for(int i=0; i<n_block; i++)
     {
         block_start.push_back(block_start.back() + n_segment[i]);
-    }  
+    }
 
 }
 int PolymerChain::get_n_block()
@@ -77,10 +72,6 @@ int PolymerChain::get_n_segment_total()
 double PolymerChain::get_ds()
 {
     return ds;
-}
-double PolymerChain::get_relative_length()
-{
-    return relative_length;
 }
 std::vector<double> PolymerChain::get_bond_length()
 {

@@ -23,7 +23,6 @@ def find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
         phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
-        phi = phi.reshape(2,cb.get_n_grid())
 
         # calculate the total energy
         w_minus = (w[0]-w[1])/2
@@ -72,7 +71,7 @@ def find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
             am_new  = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
             am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx + stress_array))
             am_diff = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), stress_array))
-            am.caculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
+            am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
             # set box size
             w[0] = am_new[0:cb.get_n_grid()]
@@ -82,7 +81,7 @@ def find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
             # update bond parameters using new lx
             pseudo.update()
         else:
-            am.caculate_new_fields(
+            am.calculate_new_fields(
             np.reshape(w,      2*cb.get_n_grid()),
             np.reshape(w_out,  2*cb.get_n_grid()),
             np.reshape(w_diff, 2*cb.get_n_grid()),

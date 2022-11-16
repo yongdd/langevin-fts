@@ -2,23 +2,22 @@ import os
 import time
 import numpy as np
 from scipy.io import savemat
-from scipy.ndimage.filters import gaussian_filter
 import scft
 
 # # Major Simulation params
-f = 0.25        # A-fraction of major BCP chain, f
-eps = 2.0       # a_A/a_B, conformational asymmetry
+f = 0.5         # A-fraction of major BCP chain, f
+eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    "nx":[64,64,32],            # Simulation grid numbers
-    "lx":[7.0,7.0,4.0],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
-                                # where "a_Ref" is reference statistical segment length
-                                # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+    "nx":[32,32,32],          # Simulation grid numbers
+    "lx":[4.36,4.36,4.36],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+                              # where "a_Ref" is reference statistical segment length
+                              # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": 25,                # Interaction parameter, Flory-Huggins params * N
+    "chain_model":"discrete",   # "discrete" or "continuous" chain model
+    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "chi_n": 13.27,             # Interaction parameter, Flory-Huggins params * N
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
@@ -30,7 +29,7 @@ params = {
             {"type":"A", "length":f, }, # A-block
             {"type":"B", "length":1-f}, # B-block
         ],},],
-    
+
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
@@ -38,21 +37,10 @@ params = {
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to Sigma phase.")
-# [Ref: https://doi.org/10.3390/app2030654]
-sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
-[0.40,0.40,0.00],[0.60,0.60,0.00],[0.10,0.90,0.50],[0.90,0.10,0.50], #B
-[0.13,0.46,0.00],[0.46,0.13,0.00],[0.54,0.87,0.00],[0.87,0.54,0.00], #C
-[0.04,0.63,0.50],[0.63,0.04,0.50],[0.37,0.96,0.50],[0.96,0.37,0.50], #C
-[0.07,0.74,0.00],[0.74,0.07,0.00],[0.26,0.93,0.00],[0.93,0.26,0.00], #D
-[0.24,0.43,0.50],[0.43,0.24,0.50],[0.57,0.76,0.50],[0.77,0.56,0.50], #D
-[0.18,0.18,0.25],[0.82,0.82,0.25],[0.32,0.68,0.25],[0.68,0.32,0.25], #E
-[0.18,0.18,0.75],[0.82,0.82,0.75],[0.32,0.68,0.75],[0.68,0.32,0.75]] #E
-
-for x,y,z in sphere_positions:
-    mx, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
-    w_A[mx,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
-w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
+print("w_A and w_B are initialized to lamellar phase.")
+for i in range(0,params["nx"][2]):
+    w_A[:,:,i] =  np.cos(3*2*np.pi*i/params["nx"][2])
+    w_B[:,:,i] = -np.cos(3*2*np.pi*i/params["nx"][2])
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)

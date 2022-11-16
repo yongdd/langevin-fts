@@ -1,8 +1,7 @@
 1. Parallel Tempering
 2. Neutral Boundary Condition
-4. Homopolymers
 5. Complex Chain Architecture
-6. Packaging with Conda
+6. Packaging with Conda, including scft.py,
 7. Multi GPU CUDA
 8. GPU bandwith test
 9. UnitTest: Anderson Mixing
@@ -13,3 +12,4 @@
 16. process bar
 19. User Interface layer?
 20. GUI?
+21. set initial condition, q(r,0)!=1
