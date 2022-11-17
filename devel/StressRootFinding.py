@@ -23,7 +23,7 @@ def find_saddle_point(lx):
     print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
+        phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
 
         # calculate the total energy
         energy_old = energy_total
@@ -83,12 +83,11 @@ tolerance = 1e-11
 
 # Major Simulation Parameters
 f = 0.30              # A-fraction, f
-n_segment = 100       # segment number, N
 chi_n = 25            # Flory-Huggins Parameters * N
 epsilon = 2.0         # a_A/a_B, conformational asymmetry
 nx = [32]#,32,32]     # grids number
 lx = [3.4]#,3.5,3.7]  # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-ds = 1/n_segment      # contour step interval
+ds = 1/100            # contour step interval
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
 am_n_var = 2*np.prod(nx) # w_a (w[0]) and w_b (w[1])
@@ -100,12 +99,9 @@ am_mix_init = 0.1        # initial mixing rate of simple mixing
 # use stress for finding unit cell
 use_stress = True
 
-# calculate chain parameters
-# a : statistical segment length, N: n_segment
-# a_sq_n = [a_A^2 * N, a_B^2 * N]
-a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-            1.0/(f*epsilon*epsilon + (1.0-f))]
-N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+# calculate chain parameters, dict_a_n = [a_A, a_B]
+dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
+            "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -116,7 +112,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
 pseudo = factory.create_pseudo(cb, pc)
 am     = factory.create_anderson_mixing(am_n_var,

@@ -20,10 +20,9 @@ max_scft_iter = 2
 tolerance = 1e-9
 
 f = 0.3            # A-fraction, f
-n_segment = 50     # segment number, N
 chi_n = 20         # Flory-Huggins Parameters * N
 epsilon = 2.5      # a_A/a_B, conformational asymmetry
-ds = 1/n_segment   # contour step interval
+ds = 1/50          # contour step interval
 
 am_n_comp = 2         # w[0] and w[1]
 am_max_hist= 20       # maximum number of history
@@ -31,12 +30,9 @@ am_start_error = 8e-1 # when switch to AM from simple mixing
 am_mix_min = 0.1      # minimum mixing rate of simple mixing
 am_mix_init = 0.1     # initial mixing rate of simple mixing
 
-# calculate chain parameters
-# a : statistical segment length, N: n_segment
-# a_sq_n = [a_A^2 * N, a_B^2 * N]
-a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)), 
-            1.0/(f*epsilon*epsilon + (1.0-f))]
-N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+# calculate chain parameters, dict_a_n = [a_A, a_B]
+dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
+            "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
 # choose platform among [cuda, cpu-mkl]
 print("Available Platforms: ", PlatformSelector.avail_platforms())
@@ -46,14 +42,20 @@ for dim in [1,2,3]:
     if (dim == 1):
         nx = [31]
         lx = [4.0]
+        block_lengths = [f, 1-f]
+        ds = 1/100
     ### for 2D
     elif (dim == 2): 
         nx = [31,49]
         lx = [4.0,3.0]
+        block_lengths = [2*f, 2*(1-f)]
+        ds = 1/90
     ### for 3D
     elif (dim == 3): 
         nx = [31,49,63]    # grids number
         lx = [4.0,3.0,2.0] # as aN^(1/2) unit
+        block_lengths = [f/2, (1-f)/2]
+        ds = 1/100
 
     for chain_model in ["Discrete", "Continuous"]:
         print("dimension: %d, chain_model: %s" % (dim, chain_model))
@@ -66,7 +68,7 @@ for dim in [1,2,3]:
             #computation.display_info()
 
             # create instances
-            pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+            pc     = factory.create_polymer_chain(["A","B"], block_lengths, dict_a_n, ds)
             cb     = factory.create_computation_box(nx, lx)
             pseudo = factory.create_pseudo(cb, pc)
             am     = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
@@ -102,7 +104,7 @@ for dim in [1,2,3]:
             # iteration begins here
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
+                phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
                 
                 # calculate the total energy
                 energy_old = energy_total
