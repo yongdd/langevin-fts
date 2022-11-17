@@ -20,7 +20,9 @@ class LFTS:
         avail_platforms = PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cuda" in avail_platforms:
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
+        elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:
             platform = avail_platforms[0]
@@ -78,7 +80,7 @@ class LFTS:
 
             distinct_polymers.append(
                 {"volume_fraction":polymer["volume_fraction"],
-                 "distinct_species":set(type_list),
+                 "block_types":type_list,
                  "total_A_fraction":total_A_fraction,
                  "statistical_segment_length":statistical_segment_length,
                  "alpha":alpha, "pc":pc, "pseudo":pseudo, })
@@ -115,7 +117,7 @@ class LFTS:
             print("distinct_polymers[%d]:" % (idx) )
             print("    volume fraction: %f, alpha: %f, N: %d" %
                 (polymer["volume_fraction"], polymer["alpha"], polymer["pc"].get_n_segment_total()), end=",")
-            print(" distinct_species:", polymer["distinct_species"])
+            print(" sequence of block types:", polymer["block_types"])
             print("    total A fraction: %f, average statistical segment length: %f" % 
                 (polymer["total_A_fraction"], polymer["statistical_segment_length"]))
             idx += 1
@@ -141,13 +143,13 @@ class LFTS:
         self.cb = cb
         self.am = am
 
-    def save_simulation_data(self, path, w_plus, w_minus, phi_A, phi_B):
+    def save_simulation_data(self, path, w_plus, w_minus, phi):
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "params": self.params,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_A, "phi_a":phi_B}
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_a":phi["B"]}
         savemat(path, mdic)
 
     def run(self, w_plus, w_minus):
@@ -166,7 +168,7 @@ class LFTS:
         self.q2_init = np.ones(self.cb.get_n_grid(), dtype=np.float64)
 
         # find saddle point 
-        phi_A, phi_B, _, _, = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
+        phi, _, _, = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
 
         # structure function
         sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx())),np.float64)
@@ -187,13 +189,13 @@ class LFTS:
                 if w_step == "predictor":
                     w_minus_copy = w_minus.copy()
                     normal_noise = np.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
-                    lambda1 = phi_A-phi_B + 2*w_minus/self.chi_n
+                    lambda1 = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
                     w_minus += -lambda1*self.langevin["dt"] + normal_noise
                 elif w_step == "corrector": 
-                    lambda2 = phi_A-phi_B + 2*w_minus/self.chi_n
+                    lambda2 = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
                     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*self.langevin["dt"] + normal_noise
                     
-                phi_A, phi_B, saddle_iter, error_level = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
+                phi, saddle_iter, error_level = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
                 total_saddle_iter += saddle_iter
                 total_error_level += error_level
 
@@ -216,7 +218,7 @@ class LFTS:
             if (langevin_step) % self.recording["sf_recording_period"] == 0:
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
-                    w_plus=w_plus, w_minus=w_minus, phi_A=phi_A, phi_B=phi_B)
+                    w_plus=w_plus, w_minus=w_minus, phi_A=phi["A"], phi_B=phi["B"])
 
         # estimate execution time
         time_duration = time.time() - time_start
@@ -232,36 +234,30 @@ class LFTS:
         self.am.reset_count()
 
         # array for concentrations
-        phi_A = np.zeros([self.cb.get_n_grid()], dtype=np.float64)
-        phi_B = np.zeros([self.cb.get_n_grid()], dtype=np.float64)
+        phi = {"A":np.zeros([self.cb.get_n_grid()], dtype=np.float64),
+               "B":np.zeros([self.cb.get_n_grid()], dtype=np.float64)}
 
         # saddle point iteration begins here
         for saddle_iter in range(1,self.saddle_max_iter+1):
             # for the given fields find the polymer statistics
-            phi_A[:] = 0.0
-            phi_B[:] = 0.0
+            phi["A"][:] = 0.0
+            phi["B"][:] = 0.0
             for polymer in self.distinct_polymers:
-                _frac= polymer["volume_fraction"]/polymer["alpha"]
-                if polymer["distinct_species"] == set(["A","B"]):
-                    _phi, _Q = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init,{"A":w_plus+w_minus,"B":w_plus-w_minus})
-                    phi_A += _frac * _phi[0]
-                    phi_B += _frac * _phi[1]
-                elif polymer["distinct_species"] == set("A"):
-                    _phi, _Q = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init,{"A":w_plus+w_minus})
-                    phi_A += _frac * _phi[0]
-                elif polymer["distinct_species"] == set("B"):
-                    _phi, _Q = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init,{"B":w_plus-w_minus})
-                    phi_B += _frac * _phi[0]
-                elif polymer["distinct_species"] == set(["random"]):
-                    _phi, _Q = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init,
-                        {"random":w_minus*(2*polymer["total_A_fraction"]-1)+w_plus}) # w[0]*A_fraction + w[1]*(1.0-A_fraction) 
-                    phi_A += _frac * _phi[0]*polymer["total_A_fraction"]
-                    phi_B += _frac * _phi[0]*(1.0-polymer["total_A_fraction"])
+                frac_ = polymer["volume_fraction"]/polymer["alpha"]
+                if not "random" in set(polymer["block_types"]):
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init, {"A":w[0],"B":w[1]})
+                    for i in range(len(polymer["block_types"])):
+                        phi[polymer["block_types"][i]] += frac_*phi_[i]
+                elif set(polymer["block_types"]) == set(["random"]):
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(self.q1_init,self.q2_init, {"random":w[0]*polymer["total_A_fraction"] + w[1]*(1.0-polymer["total_A_fraction"])})
+                    phi["A"] += frac_*phi_[0]*polymer["total_A_fraction"]
+                    phi["B"] += frac_*phi_[0]*(1.0-polymer["total_A_fraction"])
                 else:
-                    raise ValueError("Unknown species,", polymer["distinct_species"])
-                polymer.update({"phi":_phi})
-                polymer.update({"Q":_Q})
-            phi_plus = phi_A + phi_B
+                    raise ValueError("Unknown species,", set(polymer["block_types"]))
+                polymer.update({"phi":phi_})
+                polymer.update({"Q": Q_})
+
+            phi_plus = phi["A"] + phi["B"]
 
             # calculate output fields
             g_plus = phi_plus-1.0
@@ -298,4 +294,4 @@ class LFTS:
             self.am.calculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
 
         self.cb.zero_mean(w_plus)
-        return phi_A, phi_B, saddle_iter, error_level
+        return phi, saddle_iter, error_level

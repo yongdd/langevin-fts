@@ -14,7 +14,9 @@ class SCFT:
         avail_platforms = PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cuda" in avail_platforms:
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
+        elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:
             platform = avail_platforms[0]
@@ -72,7 +74,7 @@ class SCFT:
 
             distinct_polymers.append(
                 {"volume_fraction":polymer["volume_fraction"],
-                 "distinct_species":set(type_list),
+                 "block_types":type_list,
                  "total_A_fraction":total_A_fraction,
                  "statistical_segment_length":statistical_segment_length,
                  "alpha":alpha, "pc":pc, "pseudo":pseudo, })
@@ -123,7 +125,7 @@ class SCFT:
             print("distinct_polymers[%d]:" % (idx) )
             print("    volume fraction: %f, alpha: %f, N: %d" %
                 (polymer["volume_fraction"], polymer["alpha"], polymer["pc"].get_n_segment_total()), end=",")
-            print(" distinct_species:", polymer["distinct_species"])
+            print(" sequence of block types:", polymer["block_types"])
             print("    total A fraction: %f, average statistical segment length: %f" % 
                 (polymer["total_A_fraction"], polymer["statistical_segment_length"]))
             idx += 1
@@ -147,8 +149,8 @@ class SCFT:
         self.am.reset_count()
 
         # array for concentrations
-        phi_A = np.zeros([self.cb.get_n_grid()], dtype=np.float64)
-        phi_B = np.zeros([self.cb.get_n_grid()], dtype=np.float64)
+        phi = {"A":np.zeros([self.cb.get_n_grid()], dtype=np.float64),
+               "B":np.zeros([self.cb.get_n_grid()], dtype=np.float64)}
 
         # array for output fields
         w_out = np.zeros([2, self.cb.get_n_grid()], dtype=np.float64)
@@ -177,26 +179,20 @@ class SCFT:
 
         for scft_iter in range(1, self.max_iter+1):
             # for the given fields find the polymer statistics
-            phi_A[:] = 0.0
-            phi_B[:] = 0.0
+            phi["A"][:] = 0.0
+            phi["B"][:] = 0.0
             for polymer in self.distinct_polymers:
                 frac_ = polymer["volume_fraction"]/polymer["alpha"]
-                if polymer["distinct_species"] == set(["A","B"]):
+                if not "random" in set(polymer["block_types"]):
                     phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
-                    phi_A += frac_*phi_[0]
-                    phi_B += frac_*phi_[1]
-                elif polymer["distinct_species"] == set("A"):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"A":w[0]})
-                    phi_A += frac_*phi_[0]
-                elif polymer["distinct_species"] == set("B"):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"B":w[1]})
-                    phi_B += frac_*phi_[0]
-                elif polymer["distinct_species"] == set(["random"]):
+                    for i in range(len(polymer["block_types"])):
+                        phi[polymer["block_types"][i]] += frac_*phi_[i]
+                elif set(polymer["block_types"]) == set(["random"]):
                     phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"random":w[0]*polymer["total_A_fraction"] + w[1]*(1.0-polymer["total_A_fraction"])})
-                    phi_A += frac_*phi_[0]*polymer["total_A_fraction"]
-                    phi_B += frac_*phi_[0]*(1.0-polymer["total_A_fraction"])
+                    phi["A"] += frac_*phi_[0]*polymer["total_A_fraction"]
+                    phi["B"] += frac_*phi_[0]*(1.0-polymer["total_A_fraction"])
                 else:
-                    raise ValueError("Unknown species,", polymer["distinct_species"])
+                    raise ValueError("Unknown species,", set(polymer["block_types"]))
                 polymer.update({"phi":phi_})
                 polymer.update({"Q": Q_})
 
@@ -213,8 +209,8 @@ class SCFT:
             xi = 0.5*(w[0]+w[1]-self.chi_n)
 
             # calculate output fields
-            w_out[0] = self.chi_n*phi_B + xi
-            w_out[1] = self.chi_n*phi_A + xi
+            w_out[0] = self.chi_n*phi["B"] + xi
+            w_out[1] = self.chi_n*phi["A"] + xi
                 
             # keep the level of field value
             self.cb.zero_mean(w_out[0])
@@ -228,7 +224,7 @@ class SCFT:
             error_level = np.sqrt(multi_dot)
 
             # print iteration # and error levels and check the mass conservation
-            mass_error = self.cb.integral(phi_A + phi_B)/self.cb.get_volume() - 1.0
+            mass_error = self.cb.integral(phi["A"] + phi["B"])/self.cb.get_volume() - 1.0
             
             if (self.box_is_altering):
                 # Calculate stress
@@ -256,17 +252,22 @@ class SCFT:
 
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
-                # self.cb.get_lx()[-self.cb.get_dim():] == Lx, stress_array == dLx
+                dlx = stress_array
                 am_new  = np.concatenate((np.reshape(w,      2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
-                am_out  = np.concatenate((np.reshape(w_out,  2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():] + stress_array))
+                am_out  = np.concatenate((np.reshape(w_out,  2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():] + dlx))
                 am_diff = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), stress_array))
                 self.am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
                 # set box size
                 w[0] = am_new[0:self.cb.get_n_grid()]
                 w[1] = am_new[self.cb.get_n_grid():2*self.cb.get_n_grid()]
-                lx = am_new[-self.cb.get_dim():]
-                self.cb.set_lx(lx)
+
+                # restricting |dLx| to be less than 1 % of Lx
+                old_lx = np.array(self.cb.get_lx()[-self.cb.get_dim():])
+                new_lx = np.array(am_new[-self.cb.get_dim():])
+                new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.01, 0.01)
+                new_lx = (1 + new_dlx)*old_lx
+                self.cb.set_lx(new_lx)
                 # update bond parameters using new lx
                 for polymer in self.distinct_polymers:
                     polymer["pseudo"].update()
@@ -276,13 +277,12 @@ class SCFT:
                 np.reshape(w_out,  2*self.cb.get_n_grid()),
                 np.reshape(w_diff, 2*self.cb.get_n_grid()), old_error_level, error_level)
 
-        self.phi_A = phi_A
-        self.phi_B = phi_B
+        self.phi = phi
         self.w = w
         #return phi, Q, energy_total
 
     def get_concentrations(self,):
-        return self.phi_A, self.phi_B
+        return self.phi["A"], self.phi["B"]
     
     def get_fields(self,):
         return self.w[0], self.w[1]
