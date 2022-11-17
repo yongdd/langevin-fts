@@ -69,7 +69,7 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
         if error_level < tolerance:
             break
 
-        # calculte new fields using simple and Anderson mixing
+        # calculate new fields using simple and Anderson mixing
         if (is_box_altering):
             am_new  = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
             am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx + stress_array))
@@ -79,8 +79,14 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
             # set box size
             w[0] = am_new[0:cb.get_n_grid()]
             w[1] = am_new[cb.get_n_grid():2*cb.get_n_grid()]
-            lx = am_new[-cb.get_dim():]
+
+            # restricting |dLx| to be less than 1 % of Lx
+            old_lx = lx
+            new_lx = np.array(am_new[-cb.get_dim():])
+            new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.01, 0.01)
+            lx = (1 + new_dlx)*old_lx
             cb.set_lx(lx)
+
             # update bond parameters using new lx
             pseudo.update()
         else:
@@ -202,3 +208,4 @@ savemat("fields.mat", mdic)
     #    3    2.887E-15   1.9632596E+02    -0.000238806   6.6238569E-01   [  7.0000294, 7.0000294, 4.0000421 ]
     #    4   -5.551E-16   1.9628576E+02    -0.000146151   4.2742103E-01   [  7.0000346, 7.0000346, 4.0000485 ]
     #    5   -1.998E-15   1.9626999E+02    -0.000121015   3.3569119E-01   [  7.0000379, 7.0000379, 4.0000524 ]
+    

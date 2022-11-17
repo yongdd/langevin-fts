@@ -27,8 +27,8 @@ params = {
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer
-            {"type":"A", "length":f, }, # A-block
             {"type":"B", "length":1-f}, # B-block
+            {"type":"A", "length":f, }, # A-block
         ],},],
     
     "max_iter":2000,     # The maximum relaxation iterations
@@ -82,3 +82,4 @@ savemat("fields.mat", mdic)
     #    3   -6.550E-15  [ 1.9632596E+02  ]    -0.000238806   6.6238569E-01  [  7.0000294, 7.0000294, 4.0000421 ]
     #    4   -8.882E-16  [ 1.9628576E+02  ]    -0.000146151   4.2742103E-01  [  7.0000346, 7.0000346, 4.0000485 ]
     #    5    3.997E-15  [ 1.9626999E+02  ]    -0.000121015   3.3569119E-01  [  7.0000379, 7.0000379, 4.0000524 ]
+    
