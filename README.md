@@ -57,7 +57,7 @@ conda env remove -n lfts
 ```
 # User Guide
 + This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications.   
-+ To understand the entire process of simulations, please refer to the example files in `example/scft_single_file` and `example/fts_single_file`, and use the examples in the `example/scft` and `example/fts` to perform actual simulations.   
++ To understand the entire process of simulations, please refer to sample scripts in `example/scft_single_file` and `example/fts_single_file`, and use sample scripts in the `example/scft` and `example/fts` to perform actual simulations.   
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)  
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that the unit of length in this library is the end-to-end chain length *aN^(1/2)*, not the gyration of radius *a(N/6)^(1/2)*, where *a* is reference statistical segment length and *N* is reference polymerization index.  
