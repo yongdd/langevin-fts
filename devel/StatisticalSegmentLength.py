@@ -12,20 +12,16 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 # Major Simulation Parameters
 f = 0.3                  # A-fraction, f
-n_segment = 100           # segment number, N
 chi_n = 20               # Flory-Huggins Parameters * N
 epsilon = 2.0            # a_A/a_B, conformational asymmetry
 nx = [64,64,64]          # grids number
-lx = [18.,6.,12.]          # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-ds = 1/n_segment      # contour step interval
+lx = [18.,6.,12.]        # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
+ds = 1/100               # contour step interval
 chain_model = "Continuous" # choose among [Continuous, Discrete]
 
-# calculate chain parameters
-# a : statistical segment length, N: n_segment
-# a_sq_n = [a_A^2 * N, a_B^2 * N]
-a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-                                 1.0/(f*epsilon*epsilon + (1.0-f))]
-N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+# calculate chain parameters, dict_a_n = [a_A, a_B]
+dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
+            "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -36,7 +32,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
 pseudo = factory.create_pseudo(cb, pc)
 
@@ -71,7 +67,7 @@ norm_segment = (f*eps**2 + (1-f))
 
 print("---------- Statistical Segment Length <x^2> ----------")
 print("n'th segment, theory, caculation")
-phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
+phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
 pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "continuous"):
     for n in range(0, pc.get_n_segment_total()+1):
