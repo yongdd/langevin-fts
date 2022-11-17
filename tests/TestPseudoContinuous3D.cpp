@@ -2,6 +2,8 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <map>
+
 #include "Exception.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
@@ -196,9 +198,9 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
-        std::vector<int> N_chain = {int(std::round(f*NN)), int(std::round((1.0-f)*NN))};
-        std::vector<double> bond_length = {1.0, 1.0};
-        PolymerChain pc(N_chain, bond_length, 1.0/NN, "Continuous");
+        std::vector<double> block_lengths = {f, 1.0-f};
+        std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
+        PolymerChain pc({"A","B"}, block_lengths, bond_length, 1.0/NN, "Continuous");
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
@@ -219,7 +221,7 @@ int main()
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
             //pseudo->compute_statistics(phi_a, phi_b, q1_init, q2_init, w_a, w_b, QQ);
-            pseudo->compute_statistics(phi, q1_init, q2_init, w, QQ);
+            pseudo->compute_statistics(phi, q1_init, q2_init, {{"A",&w[0]},{"B",&w[MM]}}, QQ);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;

@@ -236,7 +236,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
 }
 
 void CudaPseudoDiscrete::compute_statistics(double *phi, double *q_1_init, double *q_2_init,
-                                  double *w_block, double &single_partition)
+                                std::map<std::string, double*> w_block, double &single_partition)
 {
     try
     {
@@ -252,11 +252,12 @@ void CudaPseudoDiscrete::compute_statistics(double *phi, double *q_1_init, doubl
 
         double exp_dw[N_B][M];
 
-        for(int b=0; b<N_B; b++)
-        {
+        for(int b=0; b<N_B; b++){
+            double *w_block_one = w_block[pc->get_type(b)];
             for(int i=0; i<M; i++)
-                exp_dw[b][i] = exp(-w_block[b*M+i]*ds);
+                exp_dw[b][i] = exp(-w_block_one[i]*ds);
         }
+
         // Copy array from host memory to device memory
         for(int b=0; b<N_B; b++)
             gpu_error_check(cudaMemcpy(d_exp_dw[b], exp_dw[b], sizeof(double)*M,cudaMemcpyHostToDevice));

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 #include "Exception.h"
 #include "PolymerChain.h"
@@ -198,9 +199,10 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
-        std::vector<int> N_chain = {int(std::round(f*NN)), int(std::round((1.0-f)*NN))};
-        std::vector<double> bond_length = {1.0, 1.0};
-        PolymerChain pc(N_chain, bond_length, 1.0/NN, "Discrete");
+        std::vector<double> block_lengths = {f, 1.0-f};
+        std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
+        PolymerChain pc({"A","B"}, block_lengths, bond_length, 1.0/NN, "Discrete");
+
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
@@ -219,7 +221,7 @@ int main()
             }
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->compute_statistics(phi, q1_init, q2_init, w, QQ);
+            pseudo->compute_statistics(phi, q1_init, q2_init, {{"A",&w[0]},{"B",&w[MM]}}, QQ);
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;

@@ -16,8 +16,9 @@ class MklFactory : public AbstractFactory
 public :
     MklFactory(std::string chain_model);
     PolymerChain* create_polymer_chain(
-        std::vector<int> n_segment, 
-        std::vector<double> bond_length,
+        std::vector<std::string> types,
+        std::vector<double> block_lengths,
+        std::map<std::string, double> dict_segment_lengths,
         double ds) override;
     ComputationBox* create_computation_box(
         std::vector<int> nx,

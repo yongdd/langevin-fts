@@ -157,9 +157,8 @@ void CpuPseudoContinuous::calculate_phi_one_type(
     }
 }
 
-void CpuPseudoContinuous::compute_statistics(double *phi,
-                                 double *q_1_init, double *q_2_init,
-                                 double *w_block, double &single_partition)
+void CpuPseudoContinuous::compute_statistics(double *phi, double *q_1_init, double *q_2_init,
+                                 std::map<std::string, double*> w_block, double &single_partition)
 {
     try
     {
@@ -175,10 +174,11 @@ void CpuPseudoContinuous::compute_statistics(double *phi,
 
         for(int b=0; b<N_B; b++)
         {
+            double *w_block_one = w_block[pc->get_type(b)];
             for(int i=0; i<M; i++)
             {
-                exp_dw     [b][i] = exp(-w_block[b*M+i]*ds*0.5);
-                exp_dw_half[b][i] = exp(-w_block[b*M+i]*ds*0.25);
+                exp_dw     [b][i] = exp(-w_block_one[i]*ds*0.5);
+                exp_dw_half[b][i] = exp(-w_block_one[i]*ds*0.25);
             }
         }
 

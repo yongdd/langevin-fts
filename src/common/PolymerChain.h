@@ -7,22 +7,27 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 class PolymerChain
 {
 private:
-    int n_block;
-    int n_segment_total; // number of segements, N
-    std::vector<int> n_segment;  // number of segements, [N_A, N_B, ...]
-    std::vector<double> bond_length;  // statistical_segment_length is stored as its square, [(a_A/a_Ref)^2, (a_A/a_Ref)^2, ...]
-    double ds;  // discrete step sizes
-    std::string model_name;   // "Continuous": continous standard Gaussian model
-                              // "Discrete": discrete bead-spring model
-    std::vector<int> block_start; // index of starting segment of each block
-                        // [0,N_A,N_A+N_B,...,N] (length = n_block+1)
-public:
+    int n_block;         // total number of blocks
+    int n_segment_total; // total number of segments, N_p
+    double ds;           // contour step interval
+    std::string model_name;         // "Continuous": continuous standard Gaussian model
+                                    // "Discrete": discrete bead-spring model
+    std::vector<std::string> types;         // sequence of block types, e.g., ["A","B",...]
+    std::vector<int> n_segments;            // sequence of block segments number, e.g., [N_A, N_B, ...]
+    std::vector<double> segment_lengths;    // sequence of statistical_segment_length is stored as its square, [(a_A/a_Ref)^2, (a_A/a_Ref)^2, ...]
 
-    PolymerChain(std::vector<int> n_segment, std::vector<double> bond_length, double ds, std::string model_name);
+    std::vector<int> block_start;   // index of starting segment of each block
+                                    // [0,N_A,N_A+N_B,...,N] (length = n_block+1)
+
+    //std::vector<int> block_lengths;     // sequence of block lengths, e.g., [0.3, 0.4, ...]
+public:
+    PolymerChain(std::vector<std::string> types, std::vector<double> block_lengths,
+        std::map<std::string, double> dict_segment_lengths, double ds, std::string model_name);
     ~PolymerChain() {};
 
     int get_n_block();
@@ -32,6 +37,8 @@ public:
     double get_ds();
     std::vector<double> get_bond_length();
     double get_bond_length(int block);
+    std::vector<std::string> get_type();
+    std::string get_type(int block);
     std::string get_model_name();
 
     std::vector<int> get_block_start();

@@ -41,9 +41,7 @@ class SCFT:
             A_fraction = 0.0
             alpha = 0.0  #total_relative_contour_length
             for block in polymer["blocks"]:
-                assert(np.isclose(round(block["length"]/params["ds"])*params["ds"], block["length"])), \
-                    'block["length"]/params["ds"] (%f) is not an integer' % (block["length"]/params["ds"])
-                block_length_list.append(round(block["length"]/params["ds"]))
+                block_length_list.append(block["length"])
                 type_list.append(block["type"])
                 alpha += block["length"]
                 if block["type"] == "A":
@@ -58,16 +56,16 @@ class SCFT:
                         params["segment_lengths"]["B"]**2*(1-total_A_fraction))
 
             if "random" in set(bt.lower() for bt in type_list):
-                assert(len(block_length_list) == 1), \
+                assert(len(type_list) == 1), \
                     "Currently, Only single block random copolymer is supported."
                 assert(np.isclose(polymer["blocks"][0]["fraction"]["A"]+polymer["blocks"][0]["fraction"]["B"],1.0)), \
                     "The sum of volume fraction of random copolymer must be equal to 1."
-                segment_length_list = [statistical_segment_length]
+                segment_length_list = {"random":statistical_segment_length}
             else:
-                segment_length_list = [params["segment_lengths"][type] for type in type_list]
+                segment_length_list = params["segment_lengths"]
             
             # (C++ class) Polymer chain
-            pc = factory.create_polymer_chain(block_length_list, segment_length_list, params["ds"])
+            pc = factory.create_polymer_chain(type_list, block_length_list, segment_length_list, params["ds"])
 
             # (C++ class) Solvers using Pseudo-spectral method
             pseudo = factory.create_pseudo(cb, pc)
@@ -184,18 +182,17 @@ class SCFT:
             for polymer in self.distinct_polymers:
                 frac_ = polymer["volume_fraction"]/polymer["alpha"]
                 if polymer["distinct_species"] == set(["A","B"]):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, w)
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
                     phi_A += frac_*phi_[0]
                     phi_B += frac_*phi_[1]
                 elif polymer["distinct_species"] == set("A"):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, w[0])
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"A":w[0]})
                     phi_A += frac_*phi_[0]
                 elif polymer["distinct_species"] == set("B"):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, w[1])
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"B":w[1]})
                     phi_B += frac_*phi_[0]
                 elif polymer["distinct_species"] == set(["random"]):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init,
-                        w[0]*polymer["total_A_fraction"] + w[1]*(1.0-polymer["total_A_fraction"]))
+                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"random":w[0]*polymer["total_A_fraction"] + w[1]*(1.0-polymer["total_A_fraction"])})
                     phi_A += frac_*phi_[0]*polymer["total_A_fraction"]
                     phi_B += frac_*phi_[0]*(1.0-polymer["total_A_fraction"])
                 else:

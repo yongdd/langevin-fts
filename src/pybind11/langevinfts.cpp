@@ -1,4 +1,5 @@
 #include <tuple>
+#include <map>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -20,7 +21,7 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 PYBIND11_MODULE(langevinfts, m)
 {
     py::class_<PolymerChain>(m, "PolymerChain")
-        .def(py::init<std::vector<int>, std::vector<double>, double, std::string>())
+        .def(py::init<std::vector<std::string>, std::vector<double>, std::map<std::string, double>, double, std::string>())
         .def("get_n_block", &PolymerChain::get_n_block)
         .def("get_n_segment", overload_cast_<>()(&PolymerChain::get_n_segment))
         .def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
@@ -51,7 +52,7 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
         .def("compute_statistics", overload_cast_<py::array_t<double>, py::array_t<double>,
-            py::array_t<double>>()(&Pseudo::compute_statistics), py::return_value_policy::move)
+            std::map<std::string,py::array_t<double>>>()(&Pseudo::compute_statistics), py::return_value_policy::move)
         .def("get_partition", overload_cast_<int, int>()(&Pseudo::get_partition), py::return_value_policy::move)
         .def("dq_dl", &Pseudo::dq_dl);
 

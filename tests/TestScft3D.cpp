@@ -60,8 +60,6 @@ int main()
         std::vector<int> nx = {31,49,23};
         std::vector<double> lx = {4.0,3.0,2.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
-        std::vector<int> N_chain = {int(std::round(f*n_segment)), int(std::round((1-f)*n_segment))};
-        std::vector<double> bond_length = {1.0,1.0};
         double ds = 1.0/n_segment;
 
         int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
@@ -76,9 +74,9 @@ int main()
             AbstractFactory *factory = PlatformSelector::create_factory(platform,chain_model);
             factory->display_info();
 
-            // create instances and assign to the variables of base classs for the dynamic binding
+            // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb  = factory->create_computation_box(nx, lx);
-            PolymerChain *pc    = factory->create_polymer_chain(N_chain,bond_length,ds);
+            PolymerChain *pc    = factory->create_polymer_chain({"A","B"},{f, 1.0-f},{{"A",1.0}, {"B",1.0}},ds);
             Pseudo *pseudo      = factory->create_pseudo(cb, pc);
             AndersonMixing *am  = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
@@ -158,7 +156,7 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->compute_statistics(phi,q1_init,q2_init,w,QQ);
+                pseudo->compute_statistics(phi,q1_init,q2_init,{{"A",&w[0]},{"B",&w[cb->get_n_grid()]}}, QQ);
 
                 // calculate the total energy
                 for(int i=0; i<cb->get_n_grid(); i++)
