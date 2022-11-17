@@ -45,7 +45,7 @@ void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
                 ktemp = k;
                 idx = i* nx[1]*(nx[2]/2+1) + j*(nx[2]/2+1) + k;
                 boltz_bond[idx] = exp(bond_length_variance*
-                                      (pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2]));
+                    (pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2]));
             }
         }
     }

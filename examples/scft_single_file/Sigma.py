@@ -25,7 +25,7 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
         print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.compute_statistics(q1_init,q2_init,w)
+        phi, Q = pseudo.compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
 
         # calculate the total energy
         w_minus = (w[0]-w[1])/2
@@ -119,12 +119,10 @@ am_start_error = 1e-2             # when switch to AM from simple mixing
 am_mix_min = 0.1                  # minimum mixing rate of simple mixing
 am_mix_init = 0.1                 # initial mixing rate of simple mixing
 
-# calculate chain parameters
-# a : statistical segment length, N: n_segment
-# a_sq_n = [a_A^2 * N, a_B^2 * N]
-a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-            1.0/(f*epsilon*epsilon + (1.0-f))]
-N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+# -------------- initialize ------------
+# calculate chain parameters, dict_a_n = [a_A, a_B]
+dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
+            "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -135,7 +133,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
 pseudo = factory.create_pseudo(cb, pc)
 am     = factory.create_anderson_mixing(am_n_var,

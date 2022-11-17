@@ -19,11 +19,12 @@ CudaFactory::CudaFactory(std::string chain_model){
     this->chain_model = chain_model;
 }
 PolymerChain* CudaFactory::create_polymer_chain(
-        std::vector<int> n_segment, 
-        std::vector<double> bond_length,
-        double ds)
+    std::vector<std::string> types,
+    std::vector<double> block_lengths,
+    std::map<std::string, double> dict_segment_lengths,
+    double ds)
 {
-    return new PolymerChain(n_segment,bond_length,ds,chain_model);
+    return new PolymerChain(types,block_lengths,dict_segment_lengths,ds,chain_model);
 }
 ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)

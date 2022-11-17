@@ -45,7 +45,7 @@ public:
     void update() override;
     std::array<double,3> dq_dl() override;
     void compute_statistics(double *phi, double *q_1_init, double *q_2_init,
-                  double *w_block, double &single_partition) override;
+                std::map<std::string, double*> w_block, double &single_partition) override;
     void get_partition(double *q_1_out, int n1, double *q_2_out, int n2) override;
 };
 

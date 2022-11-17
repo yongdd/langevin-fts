@@ -52,16 +52,12 @@ int main()
         double tolerance = 1e-9;
 
         double frac_a = 0.5;
-        int n_segment_a = 50;
-        int n_segment_b = 50;
+
         double chi_n = 3.0;
         std::vector<int> nx = {263};
         std::vector<double> lx = {5.0};
         std::string chain_model = "Discrete";  // choose among [Continuous, Discrete]
-        std::vector<int> N_chain_a = {n_segment_a};
-        std::vector<int> N_chain_b = {n_segment_b};
-        std::vector<double> bond_length = {1.0};
-        double ds = 1.0/n_segment_a;
+        double ds = 1.0/50;
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist= 20;
@@ -75,10 +71,10 @@ int main()
             AbstractFactory *factory = PlatformSelector::create_factory(platform,chain_model);
             factory->display_info();
 
-            // create instances and assign to the variables of base classs for the dynamic binding
+            // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb  = factory->create_computation_box(nx, lx);
-            PolymerChain *pc_a = factory->create_polymer_chain(N_chain_a,bond_length,ds);
-            PolymerChain *pc_b = factory->create_polymer_chain(N_chain_b,bond_length,ds);
+            PolymerChain *pc_a = factory->create_polymer_chain({"A"},{1.0},{{"A",1.0}},ds);
+            PolymerChain *pc_b = factory->create_polymer_chain({"B"},{1.0},{{"B",1.0}},ds);
             Pseudo *pseudo_a   = factory->create_pseudo(cb, pc_a);
             Pseudo *pseudo_b   = factory->create_pseudo(cb, pc_b);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
@@ -159,8 +155,8 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo_a->compute_statistics(phia,q1_init,q2_init,&w[0],QQ_a);
-                pseudo_b->compute_statistics(phib,q1_init,q2_init,&w[cb->get_n_grid()],QQ_b);
+                pseudo_a->compute_statistics(phia,q1_init,q2_init,{{"A",&w[0]               }},QQ_a);
+                pseudo_b->compute_statistics(phib,q1_init,q2_init,{{"B",&w[cb->get_n_grid()]}},QQ_b);
 
                 for(int i=0; i<cb->get_n_grid(); i++)
                 {

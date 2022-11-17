@@ -7,6 +7,7 @@
 
 #include <string>
 #include <array>
+
 #include "PolymerChain.h"
 #include "ComputationBox.h"
 #include "Pseudo.h"
@@ -21,8 +22,9 @@ protected:
 public :
     virtual ~AbstractFactory() {};
     virtual PolymerChain* create_polymer_chain(
-        std::vector<int> n_segment, 
-        std::vector<double> bond_length,
+        std::vector<std::string> types,
+        std::vector<double> block_lengths,
+        std::map<std::string, double> dict_segment_lengths,
         double ds) = 0;
     virtual ComputationBox* create_computation_box(
         std::vector<int> nx,

@@ -24,8 +24,7 @@ def find_saddle_point(cb, pseudo, am, chi_n,
         
         # for the given fields find the polymer statistics
         phi, Q = pseudo.compute_statistics(
-            q1_init, q2_init,
-            np.stack((w_plus+w_minus,w_plus-w_minus), axis=0))
+            q1_init, q2_init, {"A":w_plus+w_minus,"B":w_plus-w_minus})
         phi_plus = phi[0] + phi[1]
         
         # calculate output fields
@@ -97,12 +96,9 @@ langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 
 # -------------- initialize ------------
-# calculate chain parameters
-# a : statistical segment length, N: n_segment
-# a_sq_n = [a_A^2 * N, a_B^2 * N]
-a_sq_n = [epsilon*epsilon/(f*epsilon*epsilon + (1.0-f)),
-                                 1.0/(f*epsilon*epsilon + (1.0-f))]
-N_pc = [int(f*n_segment),int((1-f)*n_segment)]
+# calculate chain parameters, dict_a_n = [a_A, a_B]
+dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
+            "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
 # choose platform among [cuda, cpu-mkl]
 if "cuda" in PlatformSelector.avail_platforms():
@@ -113,7 +109,7 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(N_pc, np.sqrt(a_sq_n), ds)
+pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
 pseudo = factory.create_pseudo(cb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
