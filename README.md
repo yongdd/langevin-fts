@@ -29,6 +29,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * * *
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
+
 # Compiling
 ```Shell
 conda create -n lfts python=3.9 cmake=3.19 conda git \
@@ -50,6 +51,11 @@ git clone -b fftw https://github.com/yongdd/langevin-fts.git
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
 ```
+And please update the `conda`.   
+```Shell
+conda update conda  
+conda update --all  
+```
 *  If you want to remove all installations :cry:, type following commands.   
 ```Shell
 conda deactivate  
@@ -62,6 +68,7 @@ conda env remove -n lfts
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`.   
 + Be aware that the unit of length in this library is the end-to-end chain length *aN^(1/2)*, not the gyration of radius *a(N/6)^(1/2)*, where *a* is reference statistical segment length and *N* is reference polymerization index.  
 + The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field.
++ Please refer to [*J. Chem. Phys.* **2014**, 141, 174103] for how to perform polymer field theory simulations with polymer mixtures.
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
 + Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces reasonable results.  
 + Matlab and Python tools for visualization and renormalization are included in `tools` folder.   
@@ -78,7 +85,7 @@ conda env remove -n lfts
   https://pybind11.readthedocs.io/en/stable/index.html   
 
 # References
-#### Polymer Field Theory Simulations with Multi Species and Distinct Polymer Types
+#### Polymer Mixture
 + D. Düchs, K. T. Delaney and G. H. Fredrickson, A multi-species exchange model for fully fluctuating polymer field theory simulations. *J. Chem. Phys.* **2014**, 141, 174103
 #### CUDA Implementation
 + G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
