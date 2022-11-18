@@ -136,8 +136,7 @@ class LFTS:
         self.langevin.update({"sigma":langevin_sigma})
 
         self.verbose_level = params["verbose_level"]
-        self.saddle_max_iter = params["saddle"]["max_iter"]
-        self.saddle_tolerance = params["saddle"]["tolerance"]
+        self.saddle = params["saddle"]
         self.recording = params["recording"]
 
         self.cb = cb
@@ -161,7 +160,7 @@ class LFTS:
         w_plus  = np.reshape(w_plus,  self.cb.get_n_grid())
         w_minus = np.reshape(w_minus, self.cb.get_n_grid())
 
-        # array for the initial condition
+        # arrays for the initial condition
         # free end initial condition. q[0,:] is q and q[1,:] is qdagger.
         # q starts from one end and qdagger starts from the other end.
         self.q1_init = np.ones(self.cb.get_n_grid(), dtype=np.float64)
@@ -215,10 +214,10 @@ class LFTS:
                 sf_average[:,:,:] = 0.0
 
             # save simulation data
-            if (langevin_step) % self.recording["sf_recording_period"] == 0:
+            if (langevin_step) % self.recording["recording_period"] == 0:
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
-                    w_plus=w_plus, w_minus=w_minus, phi_A=phi["A"], phi_B=phi["B"])
+                    w_plus=w_plus, w_minus=w_minus, phi=phi)
 
         # estimate execution time
         time_duration = time.time() - time_start
@@ -238,7 +237,7 @@ class LFTS:
                "B":np.zeros([self.cb.get_n_grid()], dtype=np.float64)}
 
         # saddle point iteration begins here
-        for saddle_iter in range(1,self.saddle_max_iter+1):
+        for saddle_iter in range(1,self.saddle["max_iter"]+1):
             # for the given fields find the polymer statistics
             phi["A"][:] = 0.0
             phi["B"][:] = 0.0
@@ -272,7 +271,7 @@ class LFTS:
 
             # print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
-            (error_level < self.saddle_tolerance or saddle_iter == self.saddle_max_iter)):
+            (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
                 # calculate the total energy
                 energy_total = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
                 energy_total += self.chi_n/4
@@ -289,7 +288,7 @@ class LFTS:
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # conditions to end the iteration
-            if error_level < self.saddle_tolerance:
+            if error_level < self.saddle["tolerance"]:
                 break
                 
             # calculate new fields using simple and Anderson mixing
