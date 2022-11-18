@@ -33,7 +33,7 @@ params = {
         ],},],
         
     "langevin":{                # Langevin Dynamics
-        "max_step":2000,        # Langevin steps for simulation
+        "max_step":200000,      # Langevin steps for simulation
         "dt":0.8,               # Langevin step interval, delta tau*N
         "nbar":1024,            # invariant polymerization index, nbar
     },
