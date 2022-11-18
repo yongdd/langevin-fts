@@ -50,9 +50,7 @@ git clone -b fftw https://github.com/yongdd/langevin-fts.git
 ```Shell
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
-```
-And please update the `conda`.   
-```Shell
+# Update conda   
 conda update conda  
 conda update --all  
 ```
