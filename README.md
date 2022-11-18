@@ -33,7 +33,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Compiling
 ```Shell
 conda create -n lfts python=3.9 cmake=3.19 conda git \
-      pybind11 scipy openmpi pyyaml  
+      pybind11=2.9 scipy openmpi pyyaml  
 conda activate lfts  
 git clone https://github.com/yongdd/langevin-fts.git  
 cd langevin-fts && mkdir build && cd build  
@@ -50,9 +50,6 @@ git clone -b fftw https://github.com/yongdd/langevin-fts.git
 ```Shell
 ulimit -s unlimited  
 export OMP_STACKSIZE=1G  
-# Update conda   
-conda update conda  
-conda update --all  
 ```
 *  If you want to remove all installations :cry:, type following commands.   
 ```Shell
