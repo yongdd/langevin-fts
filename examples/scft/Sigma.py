@@ -5,7 +5,7 @@ from scipy.io import savemat
 from scipy.ndimage.filters import gaussian_filter
 import scft
 
-# # Major Simulation params
+# Major Simulation params
 f = 0.25        # A-fraction of major BCP chain, f
 eps = 2.0       # a_A/a_B, conformational asymmetry
 

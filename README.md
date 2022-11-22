@@ -3,15 +3,15 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
 * SCFT and L-FTS   
-* Linear AB Copolymer Melts  
-* Polymer Mixture (**beta**)  
-* Conformational Asymmetry   
-* Box Size Determination by Stress Calculation (SCFT only)   
-* Chain Model: Continuous, Discrete   
-* Periodic Boundaries  
-* 3D, 2D and 1D  
-* Pseudospectral Method, Anderson Mixing   
-* Platforms: MKL (CPU) and CUDA (GPU)  
+* AB Diblock Copolymer Melt
+* Arbitrary Mixtures of linear AB Block Copolymers, Homopolymers, Random Copolymers (**beta**)
+* Conformational Asymmetry
+* Box Size Determination by Stress Calculation (SCFT only)
+* Chain Model: Continuous, Discrete
+* Periodic Boundaries
+* 3D, 2D and 1D
+* Pseudospectral Method, Anderson Mixing
+* Platforms: MKL (CPU) and CUDA (GPU)
 
 # Dependencies
 #### Linux System

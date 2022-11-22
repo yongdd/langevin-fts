@@ -23,11 +23,12 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
         print("iteration, mass error, total_partition, energy_total, error_level, box size")
     else:
         print("iteration, mass error, total_partition, energy_total, error_level")
+    
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
         phi, Q = pseudo.compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
 
-        # calculate the total energy
+        # calculate the total energy, Hamiltonian
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
@@ -108,14 +109,13 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 max_scft_iter = 2000
 tolerance = 1e-8
 
-# Major Simulation Parameters
-f = 0.25          # A-fraction, f
-n_segment = 100   # segment number, N
-chi_n = 25        # Flory-Huggins Parameters * N
-epsilon = 2.0     # a_A/a_B, conformational asymmetry, default = 1.0
-nx = [64,64,32]   # grid numbers
-lx = [7.0,7.0,4.0]   # as aN^(1/2) unit, a = sqrt(f*a_A^2 + (1-f)*a_B^2)
-ds = 1/n_segment      # contour step interval
+# major Simulation Parameters
+f = 0.25            # A-fraction, f
+chi_n = 25           # Flory-Huggins Parameters * N
+epsilon = 2.0        # a_A/a_B, conformational asymmetry
+nx = [64,64,32]      # grid numbers
+lx = [7.0,7.0,4.0]   # as aN^(1/2) unit
+ds = 1/100           # contour step interval
 chain_model = "Continuous"    # choose among [Continuous, Discrete]
 
 # Anderson mixing
@@ -163,7 +163,7 @@ w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
 q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 
-# Initial Fields
+# initial fields
 print("w_A and w_B are initialized to Sigma phase.")
 # [Ref: https://doi.org/10.3390/app2030654]
 sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
