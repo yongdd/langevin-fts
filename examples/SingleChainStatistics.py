@@ -12,12 +12,12 @@ os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 
 # simulation parameters
-nx = [64,64,64]                         # grid number
-lx = [5.0, 5.0, 5.0]                    # box size
-ds = 0.01                               # contour step Interval
-stat_seg_length = {"A":1.0, "B":2.0}    # statistical segment lengths
-block_length = [0.5, 0.7, 0.3]          # contour length of each block (triblock)
-block_type = ["A","B","A"]             # type of each block (triblock)
+nx = [64,64,64]                      # grid number
+lx = [5.0, 5.0, 5.0]                 # box size
+ds = 0.01                            # contour step Interval
+stat_seg_length = {"A":1.0, "B":2.0} # statistical segment lengths
+block_length = [0.5, 0.7, 0.3]       # contour length of each block (triblock)
+block_type = ["A","B","A"]           # type of each block (triblock)
 
 # select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
 factory = PlatformSelector.create_factory("cuda", "continuous")
@@ -43,5 +43,5 @@ q2_init = np.ones (np.prod(nx), dtype=np.float64)
 phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w["A"],"B":w["B"]})
 
 # print
-print(phi[0],phi[1],phi[2])
+print(phi[0],phi[1],phi[2]) # concentration for each block
 print(Q)
