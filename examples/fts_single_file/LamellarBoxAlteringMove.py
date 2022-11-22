@@ -112,7 +112,7 @@ nx = [40, 40, 40]
 lx = [4.46,4.46,4.46]
 
 # Polymer Chain
-n_segment = 90
+n_segment = 90          # the number of segments
 f = 0.5
 effective_chi_n = 12.75
 epsilon = 1.0            # a_A/a_B, conformational asymmetry

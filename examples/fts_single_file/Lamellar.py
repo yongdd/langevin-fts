@@ -75,11 +75,10 @@ lx = [8.0, 8.0, 8.0]
 
 # Polymer Chain
 f = 0.5
-n_segment = 16
 chi_n = 20
 epsilon = 1.0                # a_A/a_B, conformational asymmetry
 chain_model = "Continuous"   # choose among [Continuous, Discrete]
-ds = 1/n_segment             # contour step interval
+ds = 1/16                    # contour step interval
 
 # Anderson Mixing
 saddle_tolerance = 1e-4
@@ -91,7 +90,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 0.8        # langevin step interval, delta tau*N
+langevin_dt = 0.8        # Langevin step interval, delta tau*N
 langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 
