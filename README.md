@@ -32,14 +32,20 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 
 # Compiling
 ```Shell
+# Create virtual environment 
 conda create -n lfts python=3.9 cmake=3.19 conda git \
       pybind11=2.9 scipy openmpi pyyaml  
+# Activate virtual environment  
 conda activate lfts  
+# Download L-FTS  
 git clone https://github.com/yongdd/langevin-fts.git  
+# Build  
 cd langevin-fts && mkdir build && cd build  
 cmake ../   
 make -j8  
+# Run Test  
 make test   
+# Install  
 make install   
 ```
 * If you want to use FFTW library, clone from `fftw` branch. That is distributed under GPL license.  
@@ -48,8 +54,8 @@ git clone -b fftw https://github.com/yongdd/langevin-fts.git
 ```
 * **If you encounter `segmentation fault`, type following commands.**     
 ```Shell
-ulimit -s unlimited  
-export OMP_STACKSIZE=1G  
+ulimit -s unlimited       # Add this command in ~/.bashrc
+export OMP_STACKSIZE=1G   # Stack size for OpenMP
 ```
 *  If you want to remove all installations :cry:, type following commands.   
 ```Shell

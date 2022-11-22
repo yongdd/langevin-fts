@@ -29,18 +29,15 @@ PolymerChain::PolymerChain(std::vector<std::string> types, std::vector<double> b
         throw_with_line_number("The sizes of types (" +std::to_string(types.size()) + 
             ") and block_lengths (" +std::to_string(block_lengths.size()) + ") must be consistent");
 
-    // check block lengths
+    // check block lengths, segments, types
     for(int i=0; i<block_lengths.size(); i++)
     {
         if( block_lengths[i] <= 0)
             throw_with_line_number("The block_length[" + std::to_string(i) + "] (" +std::to_string(block_lengths[i]) + ") must be a positive number");
-    }
-
-    // check block segments
-    for(int i=0; i<block_lengths.size(); i++)
-    {
         if( std::abs(std::lround(block_lengths[i]/ds)-block_lengths[i]/ds) > 1.e-6)
             throw_with_line_number("block_lengths[" + std::to_string(i) + "]/ds (" + std::to_string(block_lengths[i]) + "/" + std::to_string(ds) + ") is not an integer");
+        if( dict_segment_lengths.count(types[i]) == 0 )
+            throw_with_line_number("block types[" + std::to_string(i) + "] (\"" + types[i] + "\") is not in dict_segment_lengths");
     }
 
     // save variable

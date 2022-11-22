@@ -261,6 +261,8 @@ void CudaPseudoContinuous::compute_statistics(double *phi, double *q_1_init, dou
 
         for(int b=0; b<N_B; b++)
         {
+            if( w_block.count(pc->get_type(b)) == 0 )
+                throw_with_line_number("block types[" + std::to_string(b) + "] (\"" + pc->get_type(b) + "\") is not in w_block");
             double *w_block_one = w_block[pc->get_type(b)];
             for(int i=0; i<M; i++)
             {
