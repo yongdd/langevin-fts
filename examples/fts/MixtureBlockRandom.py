@@ -5,7 +5,6 @@ from scipy.io import savemat, loadmat
 from scipy.ndimage.filters import gaussian_filter
 import lfts
 
-# # Major Simulation params
 f = 0.5         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
@@ -69,13 +68,10 @@ params = {
 ## random seed for MT19937
 np.random.seed(5489)
 
-# standard deviation of normal noise
-langevin_sigma = lfts.calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
-
 # Set initial fields
 print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0.0, langevin_sigma, params["nx"])
-w_minus = np.random.normal(0.0, langevin_sigma, params["nx"])
+w_plus  = np.random.normal(0.0, 1.0, params["nx"])
+w_minus = np.random.normal(0.0, 1.0, params["nx"])
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params)
@@ -93,15 +89,21 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       21   -2.220E-16  [ 5.3403777E+02  5.1204688E+02  ]     6.261653163   7.6180036E-05
+#       21    4.441E-16  [ 5.3351383E+02  5.1204474E+02  ]     6.261376974   7.4857853E-05 
 # iteration, mass error, total_partitions, energy_total, error_level
 # ---------- Run  ----------
 # Langevin step:  1
-#       14   -1.998E-15  [ 5.5627301E+02  5.1217781E+02  ]     6.272363707   9.3104738E-05
-#        4   -3.331E-16  [ 5.5608440E+02  5.1217731E+02  ]     6.271847736   8.3069653E-05
+#       14   -4.885E-15  [ 5.5574282E+02  5.1217385E+02  ]     6.272106803   9.2404621E-05 
+#        4   -3.886E-15  [ 5.5555454E+02  5.1217336E+02  ]     6.271590552   8.2536230E-05 
 # Langevin step:  2
-#       15   -1.554E-15  [ 5.7911662E+02  5.1239117E+02  ]     6.282408942   8.1379948E-05
-#        4    0.000E+00  [ 5.7890701E+02  5.1239004E+02  ]     6.281888837   9.1595030E-05
+#       15    8.882E-16  [ 5.7858106E+02  5.1238556E+02  ]     6.282165497   8.1052449E-05 
+#        4   -1.332E-15  [ 5.7837184E+02  5.1238444E+02  ]     6.281645188   9.1256208E-05 
 # Langevin step:  3
-#       15    1.554E-15  [ 6.0136857E+02  5.1266494E+02  ]     6.291607328   9.5658255E-05
-#        5    2.220E-16  [ 6.0114725E+02  5.1266287E+02  ]     6.291103931   7.0976167E-05
+#       15   -4.441E-16  [ 6.0083026E+02  5.1265787E+02  ]     6.291378576   9.5364084E-05 
+#        5    1.998E-15  [ 6.0060929E+02  5.1265582E+02  ]     6.290874944   7.0780348E-05 
+# Langevin step:  4
+#       16    2.220E-15  [ 6.2419634E+02  5.1299139E+02  ]     6.299596453   7.3069145E-05 
+#        5    5.107E-15  [ 6.2397834E+02  5.1298871E+02  ]     6.299088761   7.1999445E-05 
+# Langevin step:  5
+#       16    3.553E-15  [ 6.4789656E+02  5.1336815E+02  ]     6.307651731   8.0408833E-05 
+#        5    6.661E-16  [ 6.4764190E+02  5.1336458E+02  ]     6.307160625   7.7852156E-05 

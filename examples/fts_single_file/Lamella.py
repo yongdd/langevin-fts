@@ -142,8 +142,8 @@ q1_init = np.ones(cb.get_n_grid(), dtype=np.float64)
 q2_init = np.ones(cb.get_n_grid(), dtype=np.float64)
 
 print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
-w_minus = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
+w_plus  = np.random.normal(0.0, 1.0, cb.get_n_grid())
+w_minus = np.random.normal(0.0, 1.0, cb.get_n_grid())
 
 # keep the level of field value
 cb.zero_mean(w_plus)
@@ -213,15 +213,21 @@ print("total time: %f, time per step: %f" %
 # Recording first a few iteration results for debugging and refactoring
 
 # w_minus and w_plus are initialized to random
-#       23   -2.220E-16   5.8293236E+02     5.031220086   9.5822227E-05
+#       21    2.442E-15   5.3349931E+02     5.009168908   9.3083443E-05
 # ---------- Run ----------
 # iteration, mass error, total_partition, energy_total, error_level
 # langevin step:  1
-#       19   -3.553E-15   6.5966016E+02     5.062036019   7.6462958E-05
-#        8   -2.998E-15   6.5907274E+02     5.059683923   7.3716113E-05
+#       18   -2.442E-15   6.0606825E+02     5.040091197   8.1538804E-05
+#        7    2.220E-16   6.0574572E+02     5.037712444   8.9411454E-05
 # langevin step:  2
-#       19   -2.220E-16   7.4356322E+02     5.092392378   8.9084460E-05
-#        8    4.441E-16   7.4257836E+02     5.089977265   9.0169219E-05
+#       19   -2.776E-15   6.8625017E+02     5.070141937   7.9617551E-05
+#        8   -1.110E-15   6.8551820E+02     5.067732088   8.0144714E-05
 # langevin step:  3
-#       20    2.665E-15   8.2950944E+02     5.121605195   7.2575434E-05
-#        9   -3.553E-15   8.2821693E+02     5.119221963   7.0321982E-05
+#       19   -1.443E-15   7.6914055E+02     5.099658828   9.5416355E-05
+#        8    0.000E+00   7.6807098E+02     5.097283111   9.5933782E-05
+# langevin step:  4
+#       20   -3.109E-15   8.5964523E+02     5.127049567   7.4926202E-05
+#        9   -2.665E-15   8.5832988E+02     5.124597150   7.2687167E-05
+# langevin step:  5
+#       20   -3.331E-15   9.5610439E+02     5.154916422   8.3472264E-05
+#        9   -3.775E-15   9.5435437E+02     5.152498970   7.9975233E-05
