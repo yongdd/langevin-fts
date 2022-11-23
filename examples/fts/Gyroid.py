@@ -5,7 +5,6 @@ from scipy.io import savemat, loadmat
 from scipy.ndimage.filters import gaussian_filter
 import lfts
 
-# # Major Simulation params
 f = 0.4        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
@@ -62,9 +61,6 @@ params = {
 }
 ## random seed for MT19937
 np.random.seed(5489)
-
-# standard deviation of normal noise
-langevin_sigma = lfts.calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
 # Set initial fields
 print("w_minus and w_plus are initialized to gyroid")
