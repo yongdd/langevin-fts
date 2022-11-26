@@ -20,7 +20,7 @@ block_length = [0.5, 0.7, 0.3]       # contour length of each block (triblock)
 block_type = ["A","B","A"]           # type of each block (triblock)
 
 # select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous")
+factory = PlatformSelector.create_factory("cpu-mkl", "continuous")
 factory.display_info()
 
 # create instances

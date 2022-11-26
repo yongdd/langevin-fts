@@ -92,4 +92,6 @@ void CudaFactory::display_info()
         throw_with_line_number("'threads_per_block' cannot be greater than 'Maximum threads per block'");
     if (N_BLOCKS > prop.maxGridSize[0])
         throw_with_line_number("The number of blocks cannot be greater than 'Max size of a grid size (x)'");
+
+    printf("================================================================\n");
 }
