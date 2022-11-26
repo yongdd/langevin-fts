@@ -7,6 +7,8 @@
 #include <vector>
 #include <string>
 
+#include "mkl.h"
+
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
@@ -69,5 +71,16 @@ AndersonMixing* MklFactory::create_anderson_mixing(
 }
 void MklFactory::display_info()
 {
-    std::cout << "cpu-mkl" << std::endl;
+    MKLVersion Version;
+ 
+    mkl_get_version(&Version);
+    std::cout<< "-------------------- MKL Version --------------------" << std::endl;
+    printf("Major version:           %d\n",Version.MajorVersion);
+    printf("Minor version:           %d\n",Version.MinorVersion);
+    printf("Update version:          %d\n",Version.UpdateVersion);
+    printf("Product status:          %s\n",Version.ProductStatus);
+    printf("Build:                   %s\n",Version.Build);
+    printf("Platform:                %s\n",Version.Platform);
+    printf("Processor optimization:  %s\n",Version.Processor);
+    printf("================================================================\n");
 }

@@ -41,7 +41,7 @@ params = {
         "dir":"data_simulation",        # Directory name
         "recording_period":1000,        # period for recording concentrations and fields
         "sf_computing_period":10,       # period for computing structure function
-        "sf_recording_period":1000,     # period for recording structure function
+        "sf_recording_period":10000,    # period for recording structure function
     },
 
     "saddle":{                # Iteration for the pressure field 
@@ -56,7 +56,7 @@ params = {
         "mix_init":0.1,             # Initial mixing rate of simple mixing
     },
 
-    "verbose_level":1,      # 1 : Print at each langevin step.
+    "verbose_level":1,      # 1 : Print at each Langevin step.
                             # 2 : Print at each saddle point iteration.
 }
 
