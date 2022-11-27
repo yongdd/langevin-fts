@@ -33,8 +33,8 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Compiling
 ```Shell
 # Create virtual environment 
-conda create -n lfts python=3.9 cmake=3.19 conda git \
-      pybind11=2.9 scipy openmpi pyyaml  
+conda create -n lfts python=3.9 cmake=3.19 make conda \
+      git pybind11=2.9 scipy openmpi pyyaml  
 # Activate virtual environment  
 conda activate lfts  
 # Download L-FTS  
