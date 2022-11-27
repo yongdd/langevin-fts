@@ -37,16 +37,16 @@ params = {
         ],}],
 
     "langevin":{                # Langevin Dynamics
-        "max_step":200,         # Langevin steps for simulation
+        "max_step":200000,      # Langevin steps for simulation
         "dt":0.8,               # Langevin step interval, delta tau*N
         "nbar":10000,           # invariant polymerization index, nbar
     },
     
     "recording":{                       # Recording Simulation Data
         "dir":"data_simulation",        # Directory name
-        "recording_period":100,         # period for recording concentrations and fields
+        "recording_period":1000,        # period for recording concentrations and fields
         "sf_computing_period":10,       # period for computing structure function
-        "sf_recording_period":100,      # period for recording structure function
+        "sf_recording_period":10000,    # period for recording structure function
     },
 
     "saddle":{                # Iteration for the pressure field 
