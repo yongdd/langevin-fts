@@ -19,7 +19,7 @@ private:
                                     // "Discrete": discrete bead-spring model
     std::vector<std::string> types;         // sequence of block types, e.g., ["A","B",...]
     std::vector<int> n_segments;            // sequence of block segments number, e.g., [N_A, N_B, ...]
-    std::vector<double> segment_lengths;    // sequence of statistical_segment_length is stored as its square, [(a_A/a_Ref)^2, (a_A/a_Ref)^2, ...]
+    std::vector<double> bond_length_sq;    // square of sequence of statistical_segment_length [(a_A/a_Ref)^2, (a_B/a_Ref)^2, ...]
 
     std::vector<int> block_start;   // index of starting segment of each block
                                     // [0,N_A,N_A+N_B,...,N] (length = n_block+1)
@@ -35,8 +35,8 @@ public:
     int get_n_segment(int block);
     int get_n_segment_total();
     double get_ds();
-    std::vector<double> get_bond_length();
-    double get_bond_length(int block);
+    std::vector<double> get_bond_length_sq();
+    double get_bond_length_sq(int block);
     std::vector<std::string> get_type();
     std::string get_type(int block);
     std::string get_model_name();

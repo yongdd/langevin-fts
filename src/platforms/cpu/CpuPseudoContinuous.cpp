@@ -53,8 +53,8 @@ void CpuPseudoContinuous::update()
 
         for (int b=0; b<N_B; b++)
         {
-        get_boltz_bond(boltz_bond[b],      pc->get_bond_length(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[b],      pc->get_bond_length_sq(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length_sq(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
         }
     }
     catch(std::exception& exc)
@@ -106,17 +106,17 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
                 if ( DIM >= 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                        dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
                 }
                 if ( DIM >= 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                        dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
                 }
                 if ( DIM >= 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                        dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
                 }
             }
         }

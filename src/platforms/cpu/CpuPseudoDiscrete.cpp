@@ -58,11 +58,11 @@ void CpuPseudoDiscrete::update()
         double bond_length_middle;
         const int N_B = pc->get_n_block();
 
-        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[0],  pc->get_bond_length_sq(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
         for (int b=0; b<N_B-1; b++)
         {
-            bond_length_middle = 0.5*pc->get_bond_length(b) + 0.5*pc->get_bond_length(b+1);
-            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+            bond_length_middle = 0.5*pc->get_bond_length_sq(b) + 0.5*pc->get_bond_length_sq(b+1);
+            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length_sq(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
             get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  cb->get_nx(), cb->get_dx(), pc->get_ds());
         }
 
@@ -111,19 +111,19 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
 
             if ( n < seg_start[1])
             {
-                bond_length_now = pc->get_bond_length(0);
+                bond_length_now = pc->get_bond_length_sq(0);
                 boltz_bond_now = boltz_bond[0];
             }
             for(int b=1; b<N_B; b++)
             {
                 if ( n == seg_start[b])
                 {
-                    bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
+                    bond_length_now = 0.5*pc->get_bond_length_sq(b-1) + 0.5*pc->get_bond_length_sq(b);
                     boltz_bond_now = boltz_bond_middle[b-1];
                 }
                 else if (n > seg_start[b] && n < seg_start[b+1])
                 {
-                    bond_length_now = pc->get_bond_length(b);
+                    bond_length_now = pc->get_bond_length_sq(b);
                     boltz_bond_now = boltz_bond[b];
                 }
             }

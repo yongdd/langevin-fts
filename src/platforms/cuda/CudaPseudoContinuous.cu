@@ -108,8 +108,8 @@ void CudaPseudoContinuous::update()
 
         for (int b=0; b<N_B; b++)
         {
-        get_boltz_bond(boltz_bond[b],      pc->get_bond_length(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[b],      pc->get_bond_length_sq(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length_sq(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
 
         gpu_error_check(cudaMemcpy(d_boltz_bond[b],      boltz_bond[b],      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_boltz_bond_half[b], boltz_bond_half[b], sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
@@ -182,17 +182,17 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
                 if ( DIM >= 3 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, pc->get_bond_length(b), M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, pc->get_bond_length_sq(b), M_COMPLEX);
                     dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 2 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, pc->get_bond_length(b), M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, pc->get_bond_length_sq(b), M_COMPLEX);
                     dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 1 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, pc->get_bond_length(b), M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, pc->get_bond_length_sq(b), M_COMPLEX);
                     dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
             }

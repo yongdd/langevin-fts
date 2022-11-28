@@ -47,7 +47,7 @@ PolymerChain::PolymerChain(std::vector<std::string> types, std::vector<double> b
         this->block_start = {0};
         for(int i=0; i<block_lengths.size(); i++)
         {
-            this->segment_lengths.push_back(dict_segment_lengths[types[i]]*dict_segment_lengths[types[i]]); //bond length is stored as its as (a_A/a_Ref)^2.
+            this->bond_length_sq.push_back(dict_segment_lengths[types[i]]*dict_segment_lengths[types[i]]);
             this->n_segments.push_back(std::lround(block_lengths[i]/ds));
             this->n_segment_total += std::lround(block_lengths[i]/ds);
             block_start.push_back(block_start.back() + n_segments[i]);
@@ -81,13 +81,13 @@ double PolymerChain::get_ds()
 {
     return ds;
 }
-std::vector<double> PolymerChain::get_bond_length()
+std::vector<double> PolymerChain::get_bond_length_sq()
 {
-    return segment_lengths;
+    return bond_length_sq;
 }
-double PolymerChain::get_bond_length(int block)
+double PolymerChain::get_bond_length_sq(int block)
 {
-    return segment_lengths[block];
+    return bond_length_sq[block];
 }
 
 std::vector<std::string> PolymerChain::get_type()
