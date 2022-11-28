@@ -105,12 +105,12 @@ void CudaPseudoDiscrete::update()
         const int M_COMPLEX = this->n_complex_grid;
         double boltz_bond[N_B][M_COMPLEX], boltz_bond_middle[N_B][M_COMPLEX];
 
-        get_boltz_bond(boltz_bond[0],  pc->get_bond_length(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+        get_boltz_bond(boltz_bond[0],  pc->get_bond_length_sq(0),  cb->get_nx(), cb->get_dx(), pc->get_ds());
         gpu_error_check(cudaMemcpy(d_boltz_bond[0],  boltz_bond[0],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         for (int b=0; b<N_B-1; b++)
         {
-            bond_length_middle = 0.5*pc->get_bond_length(b) + 0.5*pc->get_bond_length(b+1);
-            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
+            bond_length_middle = 0.5*pc->get_bond_length_sq(b) + 0.5*pc->get_bond_length_sq(b+1);
+            get_boltz_bond(boltz_bond[b+1],  pc->get_bond_length_sq(b+1),  cb->get_nx(), cb->get_dx(), pc->get_ds());
             get_boltz_bond(boltz_bond_middle[b],  bond_length_middle,  cb->get_nx(), cb->get_dx(), pc->get_ds());
             gpu_error_check(cudaMemcpy(d_boltz_bond[b+1],  boltz_bond[b+1],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_boltz_bond_middle[b],  boltz_bond_middle[b],  sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
@@ -181,19 +181,19 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
             cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
             if ( n < seg_start[1])
             {
-                bond_length_now = pc->get_bond_length(0);
+                bond_length_now = pc->get_bond_length_sq(0);
                 d_boltz_bond_now = d_boltz_bond[0];
             }
             for(int b=1; b<N_B; b++)
             {
                 if ( n == seg_start[b])
                 {
-                    bond_length_now = 0.5*pc->get_bond_length(b-1) + 0.5*pc->get_bond_length(b);
+                    bond_length_now = 0.5*pc->get_bond_length_sq(b-1) + 0.5*pc->get_bond_length_sq(b);
                     d_boltz_bond_now = d_boltz_bond_middle[b-1];
                 }
                 else if (n > seg_start[b] && n < seg_start[b+1])
                 {
-                    bond_length_now = pc->get_bond_length(b);
+                    bond_length_now = pc->get_bond_length_sq(b);
                     d_boltz_bond_now = d_boltz_bond[b];
                 }
             }

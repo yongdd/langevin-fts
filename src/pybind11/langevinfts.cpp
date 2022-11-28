@@ -27,8 +27,8 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
         .def("get_n_segment_total", &PolymerChain::get_n_segment_total)
         .def("get_ds", &PolymerChain::get_ds)
-        .def("get_bond_length", overload_cast_<>()(&PolymerChain::get_bond_length))
-        .def("get_bond_length", overload_cast_<int>()(&PolymerChain::get_bond_length))
+        .def("get_bond_length_sq", overload_cast_<>()(&PolymerChain::get_bond_length_sq))
+        .def("get_bond_length_sq", overload_cast_<int>()(&PolymerChain::get_bond_length_sq))
         .def("get_model_name", &PolymerChain::get_model_name);
 
     py::class_<ComputationBox>(m, "ComputationBox")
