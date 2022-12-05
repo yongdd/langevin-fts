@@ -64,14 +64,14 @@ BranchedPolymerChain::BranchedPolymerChain(
             throw_with_line_number("v[" + std::to_string(i) + "] and u[" + std::to_string(i) + "] must be different integers.");
     }
 
-    // print adjacent_nodes
-    for(const auto& node : adjacent_nodes){
-        std::cout << node.first << ": [";
-        for(int i=0; i<node.second.size()-1; i++){ 
-            std::cout << node.second[i] << ",";
-        }
-        std::cout << node.second[node.second.size()-1] << "]" << std::endl;
-    }
+    // // print adjacent_nodes
+    // for(const auto& node : adjacent_nodes){
+    //     std::cout << node.first << ": [";
+    //     for(int i=0; i<node.second.size()-1; i++){ 
+    //         std::cout << node.second[i] << ",";
+    //     }
+    //     std::cout << node.second[node.second.size()-1] << "]" << std::endl;
+    // }
 
     // detect a cycle and isolated nodes in the block copolymer graph using depth first search
     std::map<int, bool> is_visited;
@@ -101,8 +101,6 @@ BranchedPolymerChain::BranchedPolymerChain(
                 connected_nodes.push(std::make_pair(nodes[i], cur));
             }
         }
-
-
     }
     for (int i=0; i<block_lengths.size(); i++){
         if (!is_visited[v[i]])
@@ -112,53 +110,46 @@ BranchedPolymerChain::BranchedPolymerChain(
     // construct edge nodes
     for (int i=0; i<block_lengths.size(); i++){
         if( edges.count(std::make_pair(v[i], u[i])) > 0 ){
-            throw_with_line_number("There are duplicated edges. Please check edge : ("
+            throw_with_line_number("There are duplicated edges. Please check the edge between ("
                 + std::to_string(v[i]) + ", " + std::to_string(u[i]) + ").");
         }
         else{
-            edges[std::make_pair(v[i], u[i])] = std::make_pair(block_types[i], n_segments[i]);
-            edges[std::make_pair(u[i], v[i])] = std::make_pair(block_types[i], n_segments[i]);
+            edges[std::make_pair(v[i], u[i])].species = block_types[i];
+            edges[std::make_pair(v[i], u[i])].n_segment = n_segments[i];
+            edges[std::make_pair(u[i], v[i])].species = block_types[i];
+            edges[std::make_pair(u[i], v[i])].n_segment = n_segments[i];
         }
     }
 
     // find unique sub branches using `dynamic programming`
     for (int i=0; i<block_lengths.size(); i++){
-        get_text_of_ordered_branches(v[i], u[i]);
-        get_text_of_ordered_branches(u[i], v[i]);
+        edges[std::make_pair(v[i], u[i])].dependency = get_text_of_ordered_branches(v[i], u[i]).first;
+        edges[std::make_pair(u[i], v[i])].dependency = get_text_of_ordered_branches(u[i], v[i]).first;
     }
 
-    // print unique sub branches
-    for(const auto& item : dependencies){
-        std::cout << item.first << ":\n\t";
-        std::cout << "{max_segments: " << max_segments[item.first] << ",\n\tdependencies: [";
-        int count = item.second.size(); 
-        if(count > 0){
-            for(int i=0; i<count-1; i++){ 
-                std::cout << "[" << item.second[i].first << ", " <<  item.second[i].second << "], " ;
-            }
-            std::cout << "[" << item.second[count-1].first << ", " <<  item.second[count-1].second << "]" ;
-        }
-        std::cout << "]}" << std::endl;
-    }
+    // // print unique sub branches
+    // for(const auto& item : optimal_sub_branches){
+    //     std::cout << item.first << ":\n\t";
+    //     std::cout << "{max_segments: " << item.second.max_segment << ",\n\tdependencies: [";
+    //     int count = item.second.dependency.size(); 
+    //     if(count > 0){
+    //         for(int i=0; i<count-1; i++){ 
+    //             std::cout << "[" << item.second.dependency[i].first << ", " <<  item.second.dependency[i].second << "], " ;
+    //         }
+    //         std::cout << "[" << item.second.dependency[count-1].first << ", " <<  item.second.dependency[count-1].second << "]" ;
+    //     }
+    //     std::cout << "]}" << std::endl;
+    // }
 
     // save variable
     try
     {
-
-        //this->n_segment_total = 0;
-        //this->block_start = {0};
-        //for(int i=0; i<block_lengths.size(); i++)
-        //{
-            //this->n_segment_total += std::lround(block_lengths[i]/ds);
-            //block_start.push_back(block_start.back() + n_segments[i]);
-        //}
         this->block_types = block_types;
         this->ds = ds;
     }
     catch(std::exception& exc)
     {
-        std::cerr << "Exception caught : " << exc.what() << std::endl;
-        //throw_without_line_number(exc.what());
+        throw_without_line_number(exc.what());
     }
 }
 
@@ -233,21 +224,38 @@ std::pair<std::string, int> BranchedPolymerChain::get_text_of_ordered_branches(i
         }
         text += ")";
     }
-    text += edges[std::make_pair(in_node, out_node)].first;  // species;
-    if(dependencies.count(text) > 0){
-         if(max_segments[text] < edges[std::make_pair(in_node, out_node)].second){  // segments;
-             max_segments[text] = edges[std::make_pair(in_node, out_node)].second;
+    text += edges[std::make_pair(in_node, out_node)].species;
+    if(optimal_sub_branches.count(text) > 0){
+         if(optimal_sub_branches[text].max_segment < edges[std::make_pair(in_node, out_node)].n_segment){  
+             optimal_sub_branches[text].max_segment = edges[std::make_pair(in_node, out_node)].n_segment;
          }
     }
     else{
-        dependencies[text] = edge_dict;
-        max_segments[text] = edges[std::make_pair(in_node, out_node)].second;
-        //std::cout << edges[std::make_pair(in_node, out_node)].second << std::endl;
+        optimal_sub_branches[text].dependency = edge_dict;
+        optimal_sub_branches[text].max_segment = edges[std::make_pair(in_node, out_node)].n_segment;
+        //std::cout << edges[std::make_pair(in_node, out_node)].n_segments << std::endl;
     }
-    //std::cout << text << ", " << edges[std::make_pair(in_node, out_node)].second << std::endl;
-    return std::make_pair(text, edges[std::make_pair(in_node, out_node)].second);
+    //std::cout << text << ", " << edges[std::make_pair(in_node, out_node)].n_segments << std::endl;
+    return std::make_pair(text, edges[std::make_pair(in_node, out_node)].n_segment);
 }
 
+std::map<std::string, polymer_chain_optimal_sub_branches_data, std::greater<std::string>> BranchedPolymerChain::get_optimal_sub_branches()
+{
+    return optimal_sub_branches;
+}
+
+int BranchedPolymerChain::get_n_sub_graph()
+{
+    return optimal_sub_branches.size();
+}
+std::vector<std::pair<std::string, int>> BranchedPolymerChain::get_dependency(std::string key)
+{
+    return optimal_sub_branches[key].dependency;
+}
+int BranchedPolymerChain::get_max_segment(std::string key)
+{
+    return optimal_sub_branches[key].max_segment;
+}
 // std::vector<int> BranchedPolymerChain::get_block_start()
 // {
 //     return block_start;
