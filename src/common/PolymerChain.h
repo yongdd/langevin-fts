@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines polyer chain parameters
+* This class defines polymer chain parameters
 *-----------------------------------------------------------*/
 
 #ifndef POLYMER_CHAIN_H_
