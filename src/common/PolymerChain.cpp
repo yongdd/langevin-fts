@@ -6,7 +6,6 @@
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
-//PolymerChain::PolymerChain(std::vector<int> n_segment, std::vector<double> bond_length, double ds, std::string model_name)
 PolymerChain::PolymerChain(std::vector<std::string> types, std::vector<double> block_lengths,
     std::map<std::string, double> dict_segment_lengths, double ds, std::string model_name)
 

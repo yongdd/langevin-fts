@@ -36,6 +36,7 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 ADD_LIBRARY(common
     src/common/ParamParser.cpp
     src/common/PolymerChain.cpp
+    src/common/BranchedPolymerChain.cpp
     src/common/ComputationBox.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp

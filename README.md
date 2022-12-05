@@ -48,10 +48,6 @@ make test
 # Install  
 make install   
 ```
-* If you want to use FFTW library, clone from `fftw` branch. That is distributed under GPL license.  
-```Shell
-git clone -b fftw https://github.com/yongdd/langevin-fts.git  
-```
 * **If you encounter `segmentation fault`, type following commands.**     
 ```Shell
 ulimit -s unlimited       # Add this command in ~/.bashrc
