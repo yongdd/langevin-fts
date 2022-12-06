@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is an abstract CpuPseudoContinuous class
+* This is a derived CpuPseudoContinuous class
 *------------------------------------------------------------*/
 
 #ifndef CPU_PSEUDO_CONTINUOUS_H_

@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is an abstract CudaPseudoContinuous class
+* This is a derived CudaPseudoContinuous class
 *------------------------------------------------------------*/
 
 #ifndef CUDA_PSEUDO_CONTINUOUS_H_

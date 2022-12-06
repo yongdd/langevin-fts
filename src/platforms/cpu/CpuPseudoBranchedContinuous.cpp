@@ -4,26 +4,43 @@
 
 CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
     ComputationBox *cb,
+    BranchedPolymerChain *bpc,
     PolymerChain *pc, FFT *fft)
     : Pseudo(cb, pc)
 {
     try
     {
         const int M = cb->get_n_grid();
-        const int N_B = pc->get_n_block();
-        const int N = pc->get_n_segment_total();
-
-        this->n_block = N_B;
+        const int N_OPT_B = bpc->get_opt_n_branches();
         this->fft = fft;
-        this->boltz_bond = new double*[N_B];
-        this->boltz_bond_half = new double*[N_B];
-        for (int b=0; b<N_B; b++)
-        {
-            this->boltz_bond[b]= new double[n_complex_grid];
-            this->boltz_bond_half[b] = new double[n_complex_grid];
-        }
-        this->q_1 = new double[M*(N+1)];
-        this->q_2 = new double[M*(N+1)];
+        this->n_opt_block = N_OPT_B;
+
+        //const int N_B = bpc->get_opt_n_block();
+        //const int N = bpc->get_n_segment_total();
+        
+        //this->n_block = N_B;
+
+        // opt_blocks {}
+
+        // for(const auto& item : bpc->get_opt_branches()){
+        //     opt_blocks.push_back(
+        //         {item.first,
+        //          item.second.
+        //          }
+        //         )
+        // }
+        // for(int i=0; i<N_OPT_B; i++){
+        //     opt_blocks[i].key             = bpc->get_opt_branches;
+        //     opt_blocks[i].boltz_bond      = new double[n_complex_grid];
+        //     opt_blocks[i].boltz_bond_half = new double[n_complex_grid];
+        //     opt_blocks[i].phi             = new double[M];
+
+        //     //opt_blocks[i].n_segment       = max_segment
+        //     //opt_blocks[i].partition_v     = new double[M*(max_segment+1)];
+        //     //opt_blocks[i].partition_u     = new double[M*(max_segment+1)];
+        //     //opt_blocks[i].phi_v           = new double[M*(max_segment)];
+        // }
+
 
         update();
     }

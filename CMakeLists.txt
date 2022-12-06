@@ -55,6 +55,7 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT3D.cpp
         src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
+        src/platforms/cpu/CpuPseudoBranchedContinuous.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
