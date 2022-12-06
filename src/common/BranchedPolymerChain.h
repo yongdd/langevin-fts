@@ -9,15 +9,15 @@
 #include <vector>
 #include <map>
 
-struct polymer_chain_edge_data{
-    std::string species;        // block species
-    std::string dependency;     // prerequisite partial partition functions as a text
-    int n_segment;              // the number of segments
-};
-
-struct polymer_chain_optimal_sub_branches_data{
-    std::vector<std::pair<std::string, int>> dependency;  // prerequisite partial partition functions as texts
-    int max_segment;                                        // the maximum segment length for given branches
+struct polymer_chain_block{
+    std::string species;    // species of block, e.g., "A" or "B", ...
+    int n_segment;          // the number of segment, e.g. 20, or 30 ...
+    double bond_length_sq;  // square of relative statistical_segment_length (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...
+    double contour_length;  // relative length of each block, e.g., 1.0, 0.4, 0.3, ...
+    int v;                  // starting vertex (or node)
+    int u;                  // ending vertex (or node)
+    std::string dep_v;      // forward direction prerequisite partial partition functions as a text
+    std::string dep_u;      // backward direction prerequisite partial partition functions as a text
 };
 
 class BranchedPolymerChain
@@ -27,45 +27,45 @@ private:
                             // "Discrete": discrete bead-spring model
     double ds;              // contour step interval
 
-    // Lists of block edges,
+    // Lists of blocks,
     // <node, node2, species, block_length>
     // e.g., <0, 1, "A", 0.5>
-    //std::vector<std::map<int, int, std::string, double>> blocks;
-    std::vector<std::string> block_types;         // sequence of block types, e.g., ["A","B",...]
-    std::vector<int> n_segments;            // sequence of block segments number, e.g., [N_A, N_B, ...]
-    std::vector<double> bond_length_sq;     // square of sequence of statistical_segment_length [(a_A/a_Ref)^2, (a_B/a_Ref)^2, ...]
+    std::vector<polymer_chain_block> blocks;  // information of blocks, which contains 'species', 'n_segments', '
+                                              // bond_length_sq', 'contour_length', 'vertices', and 'dependencies'.
 
-    //std::vector<int> v_edges, u_edges;             // v and u of edge
-    std::map<int, std::vector<int>> adjacent_nodes;                     // 
-    std::map<std::pair<int, int>, polymer_chain_edge_data> edges;   // species, segments and dependency for each edge
+    std::map<int, std::vector<int>> adjacent_nodes;     // adjacent nodes
+    std::map<std::pair<int, int>, int> edge_to_array;   // array index for each edge
 
-    // non-duplicated optimal sub_branches
-    std::map<std::string, polymer_chain_optimal_sub_branches_data, std::greater<std::string>> optimal_sub_branches; 
+    // dictionary{key:non-duplicated optimal sub_branches, value:maximum segment number}
+    std::map<std::string, int, std::greater<std::string>> opt_max_segments; 
 
     // get sub-branch information as ordered texts
     std::pair<std::string, int> get_text_of_ordered_branches(int in_node, int out_node);
 public:
 
     BranchedPolymerChain(std::string model_name, double ds, std::map<std::string, double> dict_segment_lengths,
-        std::vector<std::string> block_types, std::vector<double> block_lengths, std::vector<int> v, std::vector<int> u);
+        std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u);
     ~BranchedPolymerChain() {};
 
     std::string get_model_name();
     double get_ds();
 
-    std::vector<double> get_bond_length_sq();
-    double get_bond_length_sq(int block);
     int get_n_block();
-    std::vector<int> get_n_segment();    // [N_A, N_B, ...]
-    int get_n_segment(int block);
+    std::string get_block_type(int idx);
+    int get_n_segment(int idx);
+    double get_bond_length_sq(int idx);
 
-    std::vector<std::string> get_block_type();
-    std::string get_block_type(int block_number);
+    //std::vector<std::string> get_block_type();
+    //std::vector<int> get_n_segment();    // [N_A, N_B, ...]
+    //std::vector<double> get_bond_length_sq();
+    //std::vector<std::pair<std::string, int>> get_opt_sub_deps(std::string key);
 
     // get information of optimal sub_graph
-    std::map<std::string, polymer_chain_optimal_sub_branches_data, std::greater<std::string>> get_optimal_sub_branches(); 
-    int get_n_sub_graph();
-    std::vector<std::pair<std::string, int>> get_dependency(std::string key);
-    int get_max_segment(std::string key);
+    int get_opt_n_block();
+    int get_opt_n_branches();
+    std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
+    std::string key_to_species(std::string key);
+    std::map<std::string, int, std::greater<std::string>> get_opt_max_segments(); 
+    int get_opt_max_segment(std::string key);
 };
 #endif

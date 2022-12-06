@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is an abstract CudaPseudoDiscrete class
+* This is a derived CudaPseudoDiscrete class
 *------------------------------------------------------------*/
 
 #ifndef CUDA_PSEUDO_DISCRETE_H_

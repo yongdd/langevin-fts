@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is an abstract CpuPseudoDiscrete class
+* This is a derived CpuPseudoDiscrete class
 *------------------------------------------------------------*/
 
 #ifndef CPU_PSEUDO_DISCRETE_H_

@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is an abstract CpuPseudoContinuous class
+* This is a derived CpuPseudoBranchedContinuous class
 *------------------------------------------------------------*/
 
 #ifndef CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
@@ -14,6 +14,9 @@ class CpuPseudoBranchedContinuous : public Pseudo
 {
 private:
     FFT *fft;
+
+    int n_opt_block;
+
     double *q_1, *q_2;
     double **boltz_bond;
     double **boltz_bond_half;
@@ -23,7 +26,7 @@ private:
     void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
-    CpuPseudoBranchedContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
+    CpuPseudoBranchedContinuous(ComputationBox *cb, BranchedPolymerChain *bpc, PolymerChain *pc, FFT *ff);
     ~CpuPseudoBranchedContinuous();
     
     void update() override;
