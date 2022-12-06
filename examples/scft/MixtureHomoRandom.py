@@ -4,6 +4,9 @@ import numpy as np
 from scipy.io import savemat
 import scft
 
+# OpenMP environment variables
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+
 # Major Simulation params
 eps = 3.0              # a_A/a_B, conformational asymmetry
 RCP_A_frac = 0.4       # fraction of A monomer in random copolymer

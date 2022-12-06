@@ -8,7 +8,6 @@ from langevinfts import *
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
-os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
         return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
