@@ -9,7 +9,7 @@
 
 //----------------- Constructor ----------------------------
 BranchedPolymerChain::BranchedPolymerChain(
-    std::string model_name, double ds, std::map<std::string, double> dict_segment_lengths,
+    std::string model_name, double ds, std::map<std::string, double> dict_bond_lengths,
     std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u)
 {
     // checking chain model
@@ -45,8 +45,8 @@ BranchedPolymerChain::BranchedPolymerChain(
             throw_with_line_number("contour_lengths[" + std::to_string(i) + "] (" +std::to_string(contour_lengths[i]) + ") must be a positive number.");
         if( std::abs(std::lround(contour_lengths[i]/ds)-contour_lengths[i]/ds) > 1.e-6)
             throw_with_line_number("contour_lengths[" + std::to_string(i) + "]/ds (" + std::to_string(contour_lengths[i]) + "/" + std::to_string(ds) + ") is not an integer.");
-        if( dict_segment_lengths.count(block_species[i]) == 0 )
-            throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in dict_segment_lengths.");
+        if( dict_bond_lengths.count(block_species[i]) == 0 )
+            throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in dict_bond_lengths.");
     }
 
     // construct adjacent_nodes
@@ -74,16 +74,13 @@ BranchedPolymerChain::BranchedPolymerChain(
     try
     {
         this->ds = ds;
+        this->dict_bond_lengths = dict_bond_lengths;
         for(int i=0; i<contour_lengths.size(); i++){
-            double bond_length_sq = dict_segment_lengths[block_species[i]]*dict_segment_lengths[block_species[i]];
-            
             blocks.push_back({
                 block_species[i],                         // species
                 (int) std::lround(contour_lengths[i]/ds),   // n_segment
-                bond_length_sq,                           // bond_length_sq
                 contour_lengths[i],                         // contour_length
-                v[i], u[i],                               // nodes
-                "", ""});                                 // update dependencies later.
+                v[i], u[i]});                               // nodes
         }
     }
     catch(std::exception& exc)
@@ -132,15 +129,15 @@ BranchedPolymerChain::BranchedPolymerChain(
                 + std::to_string(v[i]) + ", " + std::to_string(u[i]) + ").");
         }
         else{
-            edge_to_array[std::make_pair(v[i], u[i])] = i;
-            edge_to_array[std::make_pair(u[i], v[i])] = i;
+            edge_to_array[std::make_pair(v[i],u[i])] = i;
+            edge_to_array[std::make_pair(u[i],v[i])] = i;
         }
     }
 
     // find unique sub branches using `dynamic programming`
     for (int i=0; i<contour_lengths.size(); i++){
-        blocks[i].dep_v = get_text_of_ordered_branches(v[i], u[i]).first;
-        blocks[i].dep_u = get_text_of_ordered_branches(u[i], v[i]).first;
+        edge_to_deps[std::make_pair(v[i],u[i])] = get_text_of_ordered_branches(v[i],u[i]).first;
+        edge_to_deps[std::make_pair(u[i],v[i])] = get_text_of_ordered_branches(u[i],v[i]).first;
     }
 
     // // print unique sub branches
@@ -176,9 +173,25 @@ int BranchedPolymerChain::get_n_segment(int idx)
 {
     return blocks[idx].n_segment;
 }
-double BranchedPolymerChain::get_bond_length_sq(int idx)
+std::map<std::string, double>& BranchedPolymerChain::get_dict_bond_lengths()
 {
-    return blocks[idx].bond_length_sq;
+    return dict_bond_lengths;
+}
+struct polymer_chain_block& BranchedPolymerChain::get_block(int v, int u)
+{
+    if (edge_to_array.count(std::make_pair(v, u)) == 0)
+        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    return blocks[edge_to_array[std::make_pair(v, u)]];
+}
+
+std::vector<polymer_chain_block>& BranchedPolymerChain::get_blocks()
+{
+    return blocks;
+}
+std::string BranchedPolymerChain::get_dep(int v, int u){
+    if (edge_to_deps.count(std::make_pair(v, u)) == 0)
+        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    return edge_to_deps[std::make_pair(v,u)];
 }
 // std::vector<std::string> BranchedPolymerChain::get_block_type()
 // {
@@ -242,18 +255,10 @@ std::pair<std::string, int> BranchedPolymerChain::get_text_of_ordered_branches(i
     return std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
     // return std::make_pair("A", 10);
 }
-int BranchedPolymerChain::get_opt_n_block()
-{
-    return 0;
-}
 int BranchedPolymerChain::get_opt_n_branches()
 {
     return opt_max_segments.size();
 }
-// std::vector<std::pair<std::string, int>> BranchedPolymerChain::get_opt_sub_deps(std::string key)
-// {
-//     return opt_max_segments[key].sub_deps;
-// }
 std::vector<std::pair<std::string, int>> BranchedPolymerChain::key_to_deps(std::string key)
 {
     std::stack<int> s;
@@ -298,7 +303,7 @@ std::string BranchedPolymerChain::key_to_species(std::string key){
     //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
     return key.substr(key_start, key.size()-key_start);
 }
-std::map<std::string, int, std::greater<std::string>> BranchedPolymerChain::get_opt_max_segments()
+std::map<std::string, int, std::greater<std::string>>& BranchedPolymerChain::get_opt_max_segments()
 {
     return opt_max_segments;
 }
@@ -306,7 +311,3 @@ int BranchedPolymerChain::get_opt_max_segment(std::string key)
 {
     return opt_max_segments[key];
 }
-// std::vector<int> BranchedPolymerChain::get_block_start()
-// {
-//     return block_start;
-// }

@@ -5,6 +5,9 @@ from scipy.io import savemat
 from scipy.ndimage.filters import gaussian_filter
 import scft
 
+# OpenMP environment variables
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+
 # Major Simulation params
 f = 0.25        # A-fraction of major BCP chain, f
 eps = 2.0       # a_A/a_B, conformational asymmetry

@@ -5,21 +5,45 @@
 #ifndef CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
 #define CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
 
+#include <string>
+#include <vector>
+#include <map>
+
 #include "ComputationBox.h"
 #include "BranchedPolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
 
+struct branched_pseudo_opt_edge{
+    int max_n_segment;                              // the maximum segment number
+    double*  partition;                             // array for partition function
+    std::string species;                            // species
+    std::vector<std::pair<std::string, int>> deps;  // dependency pairs
+};
+
+struct branched_pseudo_opt_block{
+    int n_segment;               // segment number
+    std::string species;         // species
+    double* phi;                 // array for concentration
+};
+
 class CpuPseudoBranchedContinuous : public Pseudo
 {
 private:
     FFT *fft;
+    BranchedPolymerChain *bpc;
 
-    int n_opt_block;
+    // key: (dep) + species, value: branched_pseudo_opt_edge
+    std::map<std::string, branched_pseudo_opt_edge, std::greater<std::string>> opt_edges;
 
-    double *q_1, *q_2;
-    double **boltz_bond;
-    double **boltz_bond_half;
+    // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: branched_pseudo_opt_block
+    std::map<std::pair<std::string, std::string>, branched_pseudo_opt_block> opt_blocks; 
+
+    std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
+    std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond
+    std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
+    std::map<std::string, double*> exp_dw_half;       // boltzmann factor for the half segment
+
     void one_step(double *q_in, double *q_out, 
                   double *boltz_bond, double *boltz_bond_half,
                   double *exp_dw, double *exp_dw_half);
@@ -34,5 +58,6 @@ public:
     void compute_statistics(double *phi, double *q_1_init, double *q_2_init,
                     std::map<std::string, double*> w_block, double &single_partition) override;
     void get_partition(double *q_1_out, int n1, double *q_2_out, int n2) override;
+    void get_partition(double *q_out, int v, int u, int n);
 };
 #endif
