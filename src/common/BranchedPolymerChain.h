@@ -23,6 +23,7 @@ private:
     std::string model_name; // "Continuous": continuous standard Gaussian model
                             // "Discrete": discrete bead-spring model
     double ds;              // contour step interval
+    double alpha;           // sum of contour lengths
 
     // dictionary{key:species, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> dict_bond_lengths;
@@ -51,6 +52,7 @@ public:
     int get_n_block();
     std::string get_block_type(int idx);
     int get_n_segment(int idx);
+    double get_alpha();
     std::map<std::string, double>& get_dict_bond_lengths();
     struct polymer_chain_block& get_block(int v, int u);
     std::vector<polymer_chain_block>& get_blocks();

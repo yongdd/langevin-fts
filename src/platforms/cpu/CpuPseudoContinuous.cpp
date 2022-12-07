@@ -84,9 +84,6 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
         std::complex<double> k_q_1[M_COMPLEX];
         std::complex<double> k_q_2[M_COMPLEX];
 
-        //double simpson_rule_coeff_a[N_A+1];
-        //double simpson_rule_coeff_b[N-N_A+1];
-        double simpson_rule_coeff[N];
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -95,35 +92,37 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
 
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
+
         for(int b=0; b<N_B; b++)
         {
-            SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_SEG[b]);
+            std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N_SEG[b]);
             for(int n=seg_start[b]; n<=seg_start[b+1]; n++)
             {
+                double s_coeff = simpson_rule_coeff[n-seg_start[b]];
+
                 fft->forward(&q_1[n*M],k_q_1);
                 fft->forward(&q_2[n*M],k_q_2);
-
+                
                 if ( DIM >= 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                        dq_dl[0] += s_coeff*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
                 }
                 if ( DIM >= 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                        dq_dl[1] += s_coeff*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
                 }
                 if ( DIM >= 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
-                        dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                        dq_dl[2] += s_coeff*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
                 }
             }
         }
-        
         for(int d=0; d<3; d++)
             dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
-
+            
         return dq_dl;
     }
     catch(std::exception& exc)

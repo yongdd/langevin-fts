@@ -14,19 +14,6 @@
 #include "Pseudo.h"
 #include "FFT.h"
 
-struct branched_pseudo_opt_edge{
-    int max_n_segment;                              // the maximum segment number
-    double*  partition;                             // array for partition function
-    std::string species;                            // species
-    std::vector<std::pair<std::string, int>> deps;  // dependency pairs
-};
-
-struct branched_pseudo_opt_block{
-    int n_segment;               // segment number
-    std::string species;         // species
-    double* phi;                 // array for concentration
-};
-
 class CpuPseudoBranchedContinuous : public Pseudo
 {
 private:
@@ -47,7 +34,7 @@ private:
     void one_step(double *q_in, double *q_out, 
                   double *boltz_bond, double *boltz_bond_half,
                   double *exp_dw, double *exp_dw_half);
-    void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
+    void calculate_phi_one_type(double *phi, double *q_1, double *q_2, const int N);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
     CpuPseudoBranchedContinuous(ComputationBox *cb, BranchedPolymerChain *bpc, PolymerChain *pc, FFT *ff);

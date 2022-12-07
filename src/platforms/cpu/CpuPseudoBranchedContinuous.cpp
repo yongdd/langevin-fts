@@ -65,6 +65,9 @@ CpuPseudoBranchedContinuous::~CpuPseudoBranchedContinuous()
         delete[] item.second;
     for(const auto& item: opt_edges)
         delete[] item.second.partition;
+    for(const auto& item: opt_blocks){
+        delete[] item.second.phi;
+    }
 }
 void CpuPseudoBranchedContinuous::update()
 {
@@ -92,55 +95,69 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
     {
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
-        const int N    = pc->get_n_segment_total();
-        const int N_B  = pc->get_n_block();
-        const std::vector<int> N_SEG    = pc->get_n_segment();
         const int M_COMPLEX = this->n_complex_grid;
-        const std::vector<int> seg_start= pc->get_block_start();
 
         std::array<double,3> dq_dl;
         std::complex<double> k_q_1[M_COMPLEX];
         std::complex<double> k_q_2[M_COMPLEX];
 
-        // //double simpson_rule_coeff_a[N_A+1];
-        // //double simpson_rule_coeff_b[N-N_A+1];
-        // double simpson_rule_coeff[N];
-        // double fourier_basis_x[M_COMPLEX];
-        // double fourier_basis_y[M_COMPLEX];
-        // double fourier_basis_z[M_COMPLEX];
+        double fourier_basis_x[M_COMPLEX];
+        double fourier_basis_y[M_COMPLEX];
+        double fourier_basis_z[M_COMPLEX];
 
-        // get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+        std::map<std::string, double>& dict_bond_lengths = bpc->get_dict_bond_lengths();
+        std::map<std::pair<std::string, std::string>, std::array<double,3>> opt_dq_dl;
 
-        // for(int i=0; i<3; i++)
-        //     dq_dl[i] = 0.0;
-        // for(int b=0; b<N_B; b++)
-        // {
-        //     SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_SEG[b]);
-        //     for(int n=seg_start[b]; n<=seg_start[b+1]; n++)
-        //     {
-        //         fft->forward(&q_1[n*M],k_q_1);
-        //         fft->forward(&q_2[n*M],k_q_2);
+        // compute stress for optimal key pairs
+        for(const auto& item: opt_blocks){
+            const int N = item.second.n_segment;
+            std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
+            double bond_length_sq = dict_bond_lengths[item.second.species]*dict_bond_lengths[item.second.species];
+            double* q_1 = opt_edges[item.first.first].partition;    // dependency v
+            double* q_2 = opt_edges[item.first.second].partition;   // dependency u
 
-        //         if ( DIM >= 3 )
-        //         {
-        //             for(int i=0; i<M_COMPLEX; i++)
-        //                 dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
-        //         }
-        //         if ( DIM >= 2 )
-        //         {
-        //             for(int i=0; i<M_COMPLEX; i++)
-        //                 dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
-        //         }
-        //         if ( DIM >= 1 )
-        //         {
-        //             for(int i=0; i<M_COMPLEX; i++)
-        //                 dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*pc->get_bond_length_sq(b)*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
-        //         }
-        //     }
-        // }
-        
-        // for(int d=0; d<3; d++)
-        //     dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
+            for(int d=0; d<3; d++)
+                opt_dq_dl[item.first][d] = 0.0;
+
+            for(int n=0; n<=N; n++){
+                double coeff = simpson_rule_coeff[n]*bond_length_sq;
+
+                fft->forward(&q_1[n*M],    k_q_1);
+                fft->forward(&q_2[(N-n)*M],k_q_2);
+
+                if ( DIM >= 3 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        opt_dq_dl[item.first][0] += coeff*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                }
+                if ( DIM >= 2 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        opt_dq_dl[item.first][1] += coeff*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                }
+                if ( DIM >= 1 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        opt_dq_dl[item.first][2] += coeff*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                }
+            }
+        }
+
+        // compute total stress
+        std::vector<polymer_chain_block>& blocks = bpc->get_blocks();
+        for(int d=0; d<3; d++)
+            dq_dl[d] = 0.0;
+        for(int n=0; n<blocks.size(); n++){
+            std::string dep_v = bpc->get_dep(blocks[n].v, blocks[n].u);
+            std::string dep_u = bpc->get_dep(blocks[n].u, blocks[n].v);
+            if (dep_v > dep_u)
+                dep_v.swap(dep_u);
+            for(int d=0; d<3; d++)
+                dq_dl[d] += opt_dq_dl[std::make_pair(dep_v, dep_u)][d];
+        }
+        for(int d=0; d<3; d++)
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/pc->get_ds()/cb->get_volume();
 
         return dq_dl;
     }
@@ -151,23 +168,21 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
 }
 
 void CpuPseudoBranchedContinuous::calculate_phi_one_type(
-    double *phi, const int N_START, const int N_END)
+    double *phi, double *q_1, double *q_2, const int N)
 {
     try
     {
-        // const int M = cb->get_n_grid();
-        // double simpson_rule_coeff[N_END-N_START+1];
+        const int M = cb->get_n_grid();
+        std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
 
-        // SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_END-N_START);
-
-        // // Compute segment concentration
-        // for(int i=0; i<M; i++)
-        //     phi[i] = simpson_rule_coeff[0]*q_1[i+N_START*M]*q_2[i+N_START*M];
-        // for(int n=N_START+1; n<=N_END; n++)
-        // {
-        //     for(int i=0; i<M; i++)
-        //         phi[i] += simpson_rule_coeff[n-N_START]*q_1[i+n*M]*q_2[i+n*M];
-        // }
+        // Compute segment concentration
+        for(int i=0; i<M; i++)
+            phi[i] = simpson_rule_coeff[0]*q_1[i]*q_2[i+N*M];
+        for(int n=1; n<=N; n++)
+        {
+            for(int i=0; i<M; i++)
+                phi[i] += simpson_rule_coeff[n]*q_1[i+n*M]*q_2[i+(N-n)*M];
+        }
     }
     catch(std::exception& exc)
     {
@@ -180,12 +195,8 @@ void CpuPseudoBranchedContinuous::compute_statistics(double *phi, double *q_1_in
 {
     try
     {
-        const int  M        = cb->get_n_grid();
-        //const int  N        = pc->get_n_segment_total();
-        //const int  N_B      = pc->get_n_block();
-        //const std::vector<int> N_SEG    = pc->get_n_segment();
-        const double ds     = pc->get_ds();
-        //const std::vector<int> seg_start= pc->get_block_start();
+        const int  M    = cb->get_n_grid();
+        const double ds = pc->get_ds();
 
         for(const auto& item: opt_edges){
             if( w_block.count(item.second.species) == 0)
@@ -223,18 +234,38 @@ void CpuPseudoBranchedContinuous::compute_statistics(double *phi, double *q_1_in
         }
 
         // segment concentration.
-        for(int b=0; b<N_B; b++)
-        {
-            calculate_phi_one_type(&phi[b*M], seg_start[b], seg_start[b+1]);
+        for(const auto& item: opt_blocks){
+            calculate_phi_one_type(
+                item.second.phi,                          // phi
+                opt_edges[item.first.first].partition,    // dependency v
+                opt_edges[item.first.second].partition,   // dependency u
+                item.second.n_segment);                   // n_segment
         }
 
-        // // calculates the single chain partition function
-        // single_partition = cb->inner_product(&q_1[N*M],&q_2[N*M]);
+        // calculates the single chain partition function
+        std::string dep_v = opt_blocks.begin()->first.first;
+        std::string dep_u = opt_blocks.begin()->first.second;
+        int n_segment = opt_blocks.begin()->second.n_segment;
+        single_partition = cb->inner_product(
+            &opt_edges[dep_v].partition[n_segment*M],  // q
+             opt_edges[dep_u].partition);              // q^dagger
 
-        // // normalize the concentration
-        // for(int b=0; b<N_B; b++)
-        //     for(int i=0; i<M; i++)
-        //         phi[b*M+i] *= cb->get_volume()*pc->get_ds()/single_partition;
+        // normalize the concentration
+        for(const auto& item: opt_blocks){
+            for(int i=0; i<M; i++)
+                item.second.phi[i] *= cb->get_volume()*bpc->get_ds()/single_partition;
+        }
+
+        // copy phi
+        std::vector<polymer_chain_block>& blocks = bpc->get_blocks();
+        for(int n=0; n<blocks.size(); n++){
+            std::string dep_v = bpc->get_dep(blocks[n].v, blocks[n].u);
+            std::string dep_u = bpc->get_dep(blocks[n].u, blocks[n].v);
+            if (dep_v > dep_u)
+                dep_v.swap(dep_u);
+            for(int i=0; i<M; i++)
+                phi[i+n*M] = opt_blocks[std::make_pair(dep_v, dep_u)].phi[i];
+        }
     }
     catch(std::exception& exc)
     {
