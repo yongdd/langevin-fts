@@ -49,6 +49,13 @@ BranchedPolymerChain::BranchedPolymerChain(
             throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in dict_bond_lengths.");
     }
 
+    // compute alpha, sum of relative contour lengths
+    double alpha{0.0};
+    for(int i=0; i<blocks.size(); i++){
+        alpha += blocks[i].contour_length;
+    }
+    this->alpha = alpha;
+
     // construct adjacent_nodes
     for(int i=0; i<contour_lengths.size(); i++){
         adjacent_nodes[v[i]].push_back(u[i]);
@@ -173,6 +180,11 @@ int BranchedPolymerChain::get_n_segment(int idx)
 {
     return blocks[idx].n_segment;
 }
+double BranchedPolymerChain::get_alpha()
+{
+    return alpha;
+}
+
 std::map<std::string, double>& BranchedPolymerChain::get_dict_bond_lengths()
 {
     return dict_bond_lengths;

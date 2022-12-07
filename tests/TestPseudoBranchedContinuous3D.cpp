@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -115,9 +116,59 @@ int main()
             0.6727811693, 0.6382628733, 0.5693589452,
         };
 
+        double phi_a_ref[MM] =
+        {
+            0.577096734097, 0.489952282739, 0.490513598895,
+            0.426312959905, 0.444665900914, 0.546045882101,
+            0.472858946316, 0.541573681757, 0.478679103461,
+            0.53720684707, 0.572371519284, 0.508223652414,
+            0.432705599669, 0.459773457402, 0.520762438388,
+            0.48485501042, 0.517096333471, 0.492022692676,
+            0.544789626328, 0.540181720625, 0.606824131529,
+            0.488780655219, 0.607065958156, 0.526875535668,
+            0.454843422129, 0.560394922015, 0.454079406495,
+            0.517073718699, 0.527590694245, 0.565260798948,
+            0.427220409253, 0.558714203606, 0.487738505277,
+            0.441282446241, 0.547603292959, 0.518235355778,
+            0.460457975023, 0.428889434168, 0.417483731816,
+            0.464574552537, 0.482528463257, 0.429490977238,
+            0.530179350417, 0.502357551073, 0.514025080434,
+            0.451547841372, 0.473535335433, 0.589012354857,
+            0.474815404023, 0.406884615733, 0.480825737461,
+            0.525498071918, 0.400770791976, 0.452468099915,
+            0.539723071105, 0.581898962755, 0.483170042066,
+            0.564709948041, 0.525315372386, 0.452565790848,
+        };
+        double phi_b_ref[MM] =
+        {
+            0.587259375812, 0.509225909147, 0.526498792537,
+            0.444466746762, 0.510870361491, 0.488006589006,
+            0.439135218267, 0.544603462393, 0.439314941111,
+            0.481580040855, 0.515598168719, 0.460789219622,
+            0.448730454405, 0.509485172276, 0.537419812202,
+            0.525129975192, 0.466592523562, 0.548539111993,
+            0.56751901373, 0.587618686469, 0.586113627082,
+            0.493699662739, 0.617511357374, 0.522210303632,
+            0.441829836166, 0.544125212444, 0.487762111098,
+            0.475531740815, 0.568256863572, 0.50742326716,
+            0.415537136492, 0.57859270342, 0.505525775932,
+            0.421231055184, 0.508398145909, 0.496645616274,
+            0.431592185595, 0.414582093297, 0.406224633043,
+            0.46476248001, 0.540456959365, 0.412817898083,
+            0.541368736652, 0.533750126308, 0.495227292423,
+            0.458152342433, 0.470916675422, 0.594068728201,
+            0.447555771588, 0.41079646005, 0.42913821037,
+            0.541821551976, 0.400366410539, 0.442046008958,
+            0.535113022812, 0.529208554684, 0.522016615325,
+            0.590186520629, 0.562462774442, 0.516589956949,
+        };
+
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::vector<double> block_lengths = {f, 1.0-f};
+        double alpha{0.0};
+        for (auto& contour_length : block_lengths)
+            alpha += contour_length;
         std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
         PolymerChain pc({"A","B"}, block_lengths, bond_length, 1.0/NN, "Continuous");
         BranchedPolymerChain bpc("Continuous", 1.0/NN, {{"A",1.0}, {"B",1.0}},
@@ -134,7 +185,7 @@ int main()
         pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &bpc, &pc, new MklFFT3D({II,JJ,KK})));
         #endif
         // #ifdef USE_CUDA
-        // pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        // pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &bpc, &pc));
         // #endif
 
         // For each platform    
@@ -169,24 +220,48 @@ int main()
             std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
             if (std::isnan(error) || error > 1e-7)
                 return -1;
+
+            error = std::abs(QQ-14.899629822584);
+            std::cout<< "Total Partial Partition error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            for(int i=0; i<MM; i++)
+                diff_sq[i] = pow(phi[i] - phi_a_ref[i],2);
+            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            std::cout<< "Segment Concentration A error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            for(int i=0; i<MM; i++)
+                diff_sq[i] = pow(phi[i+MM] - phi_b_ref[i],2);
+            error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+            std::cout<< "Segment Concentration B error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            std::array<double,3> stress = pseudo->dq_dl();
+            for(int i=0; i<stress.size(); i++)
+                stress[i] *= Lx*Ly*Lz/alpha/QQ;
+            std::cout<< std::setw(20) << std::setprecision(15) << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
+
+            error = std::abs(stress[0]-0.0170073128729826);
+            std::cout<< "Stress[0] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            error = std::abs(stress[1]-0.0224543392780814);
+            std::cout<< "Stress[1] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            error = std::abs(stress[2]-0.0462962488330881);
+            std::cout<< "Stress[2] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            delete pseudo;
         }
-
-        //     for(int i=0; i<MM; i++)
-        //         diff_sq[i] = pow(phi[i] - phi_a_ref[i],2);
-        //     error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-        //     std::cout<< "Segment Concentration A error: "<< error << std::endl;
-        //     if (std::isnan(error) || error > 1e-7)
-        //         return -1;
-
-        //     for(int i=0; i<MM; i++)
-        //         diff_sq[i] = pow(phi[i+MM] - phi_b_ref[i],2);
-        //     error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-        //     std::cout<< "Segment Concentration B error: "<< error << std::endl;
-        //     if (std::isnan(error) || error > 1e-7)
-        //         return -1;
-            
-        //     delete pseudo;
-        // }
         return 0;
     }
     catch(std::exception& exc)

@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -200,6 +201,9 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::vector<double> block_lengths = {f, 1.0-f};
+        double alpha{0.0};
+        for (auto& contour_length : block_lengths)
+            alpha += contour_length;
         std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
         PolymerChain pc({"A","B"}, block_lengths, bond_length, 1.0/NN, "Discrete");
 
@@ -241,6 +245,10 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
+            error = std::abs(QQ-14.9276505263205);
+            std::cout<< "Total Partial Partition error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(phi[i] - phi_a_ref[i],2);
@@ -256,6 +264,26 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
             
+            std::array<double,3> stress = pseudo->dq_dl();
+            for(int i=0; i<stress.size(); i++)
+                stress[i] *= Lx*Ly*Lz/alpha/QQ;
+            // std::cout<< std::setw(20) << std::setprecision(15) << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
+
+            error = std::abs(stress[0]-0.01137033351560520);
+            std::cout<< "Stress[0] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            error = std::abs(stress[1]-0.0146040034393427);
+            std::cout<< "Stress[1] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
+            error = std::abs(stress[2]-0.035718163012313);
+            std::cout<< "Stress[2] error: "<< error << std::endl;
+            if (std::isnan(error) || error > 1e-7)
+                return -1;
+
             delete pseudo;
         }
         return 0;
