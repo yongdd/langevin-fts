@@ -104,29 +104,42 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
 
-        for(int n=1; n<N; n++)
-        {
+        // compute stress within the blocks
+        for(int b=0; b<N_B; b++){
+            for(int n=seg_start[b]+1; n<seg_start[b+1]; n++){
+                bond_length_now = pc->get_bond_length_sq(b);
+                boltz_bond_now = boltz_bond[b];
+
+                fft->forward(&q_1[(n-1)*M],k_q_1);
+                fft->forward(&q_2[ n   *M],k_q_2);
+
+                if ( DIM >= 3 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[0] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_x[i];
+                }
+                if ( DIM >= 2 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[1] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_y[i];
+                }
+                if ( DIM >= 1 )
+                {
+                    for(int i=0; i<M_COMPLEX; i++)
+                        dq_dl[2] += bond_length_now*boltz_bond_now[i]*(k_q_1[i]*std::conj(k_q_2[i])).real()*fourier_basis_z[i];
+                }
+            }
+        }
+
+        // compute stress between the blocks
+        for(int b=1; b<N_B; b++){
+
+            int n = seg_start[b];
+            bond_length_now = 0.5*pc->get_bond_length_sq(b-1) + 0.5*pc->get_bond_length_sq(b);
+            boltz_bond_now = boltz_bond_middle[b-1];
+
             fft->forward(&q_1[(n-1)*M],k_q_1);
             fft->forward(&q_2[ n   *M],k_q_2);
-
-            if ( n < seg_start[1])
-            {
-                bond_length_now = pc->get_bond_length_sq(0);
-                boltz_bond_now = boltz_bond[0];
-            }
-            for(int b=1; b<N_B; b++)
-            {
-                if ( n == seg_start[b])
-                {
-                    bond_length_now = 0.5*pc->get_bond_length_sq(b-1) + 0.5*pc->get_bond_length_sq(b);
-                    boltz_bond_now = boltz_bond_middle[b-1];
-                }
-                else if (n > seg_start[b] && n < seg_start[b+1])
-                {
-                    bond_length_now = pc->get_bond_length_sq(b);
-                    boltz_bond_now = boltz_bond[b];
-                }
-            }
 
             if ( DIM >= 3 )
             {
@@ -251,7 +264,7 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
         // multiply e^(-k^2 ds/6) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in[i] *= boltz_bond[i];
-        // 3D fourier discrete transform, backword and inplace
+        // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in,q_out);
         // normalization calculation and evaluate e^(-w*ds/2) in real space
         for(int i=0; i<M; i++)

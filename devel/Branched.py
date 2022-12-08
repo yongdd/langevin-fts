@@ -73,20 +73,20 @@ pprint.pprint(sorted_dict_sub_graphs)
 # for u,v,a in G.edges(data=True):
 #     print(a["weight"]/10)
 
-# # visualize
-# color_map = []
-# for node in G:
-#     if len(G.edges(node)) == 1:
-#         color_map.append('yellow')
-#     else: 
-#         color_map.append('gray')  
+# visualize
+color_map = []
+for node in G:
+    if len(G.edges(node)) == 1:
+        color_map.append('yellow')
+    else: 
+        color_map.append('gray')  
 
-# plt.figure(figsize=(8,8))
-# pos = graphviz_layout(G, prog="twopi")
-# labels = nx.get_edge_attributes(G,'weight')
-# edges = G.edges()
-# dict_color= {"A":"red", "B":"blue"}
-# colors = [dict_color[G[u][v]['species']] for u,v in edges]
-# nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True)
-# nx.draw_networkx_edge_labels(G,pos,edge_labels=labels)
-# plt.show()
+plt.figure(figsize=(8,8))
+pos = graphviz_layout(G, prog="twopi")
+labels = nx.get_edge_attributes(G,'weight')
+edges = G.edges()
+dict_color= {"A":"red", "B":"blue"}
+colors = [dict_color[G[u][v]['species']] for u,v in edges]
+nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True)
+nx.draw_networkx_edge_labels(G,pos,edge_labels=labels)
+plt.show()

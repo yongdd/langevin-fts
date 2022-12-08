@@ -62,6 +62,16 @@ double CudaComputationBox::inner_product_gpu(double *d_g, double *d_h)
     return CudaComputationBox::integral_gpu(d_multiple);
 }
 //-----------------------------------------------------------
+double CudaComputationBox::inner_product_inverse_weight_gpu(double *d_g, double *d_h, double *d_w)
+{
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+    multi_real <<<N_BLOCKS, N_THREADS>>>(d_multiple, d_g,        d_h, 1.0, n_grid);
+    divide_real<<<N_BLOCKS, N_THREADS>>>(d_multiple, d_multiple, d_w, 1.0, n_grid);
+    return CudaComputationBox::integral_gpu(d_multiple);
+}
+//-----------------------------------------------------------
 double CudaComputationBox::mutiple_inner_product_gpu(int n_comp, double *d_g, double *d_h)
 {
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();

@@ -6,7 +6,6 @@
 #include <map>
 
 #include "Exception.h"
-#include "PolymerChain.h"
 #include "BranchedPolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
@@ -29,7 +28,7 @@ int main()
         const int NN{4};
 
         double phi[MM*2];
-        double q1_init[MM] {0.0}, q2_init[MM] {0.0};
+        double q1_init[MM]{0.0}, q2_init[MM]{0.0};
         double q1_last[MM], q2_last[MM];
 
         std::array<double,MM> diff_sq;
@@ -170,26 +169,25 @@ int main()
         for (auto& contour_length : block_lengths)
             alpha += contour_length;
         std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
-        PolymerChain pc({"A","B"}, block_lengths, bond_length, 1.0/NN, "Continuous");
-        BranchedPolymerChain bpc("Continuous", 1.0/NN, {{"A",1.0}, {"B",1.0}},
-        {"A","B"}, block_lengths, {0,1}, {1,2});
+        BranchedPolymerChain pc("Continuous", 1.0/NN, {{"A",1.0}, {"B",1.0}},
+            {"A","B"}, block_lengths, {0,1}, {1,2}, {});
 
-        // BranchedPolymerChain bpc("Continuous", 0.1, {{"A",1.0}, {"B",1.0}},
+        // BranchedPolymerChain pc("Continuous", 0.1, {{"A",1.0}, {"B",1.0}},
         // {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"},
         // {0.4,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2},
         // {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13},
         // {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18});
 
-        std::vector<Pseudo*> pseudo_list;
+        std::vector<PseudoBranched*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &bpc, &pc, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
         // #ifdef USE_CUDA
-        // pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &bpc, &pc));
+        // pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
         // #endif
 
         // For each platform    
-        for(Pseudo* pseudo : pseudo_list){
+        for(PseudoBranched* pseudo : pseudo_list){
             for(int i=0; i<MM; i++){
                 phi[i] = 0.0;
                 phi[i+MM] = 0.0;
@@ -199,12 +197,12 @@ int main()
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->compute_statistics(phi, q1_init, q2_init, {{"A",w_a},{"B",w_b}}, QQ);
+            pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}}, phi, QQ);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-            ((CpuPseudoBranchedContinuous *)pseudo)->get_partition(q1_last, 1, 2, bpc.get_block(1,2).n_segment);
+            pseudo->get_partition(q1_last, 1, 2, pc.get_block(1,2).n_segment);
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
@@ -213,7 +211,7 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            ((CpuPseudoBranchedContinuous *)pseudo)->get_partition(q2_last, 1, 0, bpc.get_block(1,0).n_segment);
+            pseudo->get_partition(q2_last, 1, 0, pc.get_block(1,0).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -243,7 +241,7 @@ int main()
             std::array<double,3> stress = pseudo->dq_dl();
             for(int i=0; i<stress.size(); i++)
                 stress[i] *= Lx*Ly*Lz/alpha/QQ;
-            std::cout<< std::setw(20) << std::setprecision(15) << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
+            // std::cout<< std::setw(20) << std::setprecision(15) << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
             error = std::abs(stress[0]-0.0170073128729826);
             std::cout<< "Stress[0] error: "<< error << std::endl;

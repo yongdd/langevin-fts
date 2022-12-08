@@ -43,7 +43,8 @@ private:
 public:
 
     BranchedPolymerChain(std::string model_name, double ds, std::map<std::string, double> dict_segment_lengths,
-        std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u);
+        std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u,
+        std::map<int, int> v_to_grafting_index);
     ~BranchedPolymerChain() {};
 
     std::string get_model_name();
