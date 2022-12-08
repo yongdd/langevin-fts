@@ -22,6 +22,7 @@ public:
 
     double integral_gpu(double *d_g);
     double inner_product_gpu(double *d_g, double *d_h);
+    double inner_product_inverse_weight_gpu(double *d_g, double *d_h, double *d_w);
     double mutiple_inner_product_gpu(int n_comp, double *d_g, double *d_h);
     void set_lx(std::vector<double> new_lx) override;
 };

@@ -10,7 +10,8 @@
 //----------------- Constructor ----------------------------
 BranchedPolymerChain::BranchedPolymerChain(
     std::string model_name, double ds, std::map<std::string, double> dict_bond_lengths,
-    std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u)
+    std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u,
+    std::map<int, int> v_to_grafting_index)
 {
     // checking chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
@@ -114,12 +115,14 @@ BranchedPolymerChain::BranchedPolymerChain(
         // add adjacent_nodes at stack
         auto nodes = adjacent_nodes[cur];
         for(int i=0; i<nodes.size();i++){
-            if (is_visited[nodes[i]] && nodes[i] != parent){
+            if (is_visited[nodes[i]] && nodes[i] != parent)
+            {
                 throw_with_line_number("A cycle is detected, which contains nodes " 
                     + std::to_string(nodes[i]) + " and " + std::to_string(parent)
                     + ". Only acyclic block copolymer is allowed.");
             }
-            else if(! is_visited[nodes[i]]){
+            else if(! is_visited[nodes[i]])
+            {
                 connected_nodes.push(std::make_pair(nodes[i], cur));
             }
         }
@@ -131,11 +134,13 @@ BranchedPolymerChain::BranchedPolymerChain(
 
     // construct edge nodes
     for (int i=0; i<contour_lengths.size(); i++){
-        if( edge_to_array.count(std::make_pair(v[i], u[i])) > 0 ){
+        if (edge_to_array.count(std::make_pair(v[i], u[i])) > 0)
+        {
             throw_with_line_number("There are duplicated edges. Please check the edge between ("
                 + std::to_string(v[i]) + ", " + std::to_string(u[i]) + ").");
         }
-        else{
+        else
+        {
             edge_to_array[std::make_pair(v[i],u[i])] = i;
             edge_to_array[std::make_pair(u[i],v[i])] = i;
         }
@@ -157,6 +162,22 @@ BranchedPolymerChain::BranchedPolymerChain(
     //         std::cout << sub_deps[i].first << ":" << sub_deps[i].second << ", " ;
     //     }
     //     std::cout << "]}" << std::endl;
+    // }
+
+    // // find unique junctions
+    // for(const auto& item: adjacent_nodes){
+    //     std::vector<std::string> deps;
+    //     for(int i=0; i<item.second.size(); i++){
+    //         std::string sub_dep = edge_to_deps[std::make_pair(item.second[i], item.first)];
+    //         sub_dep += std::to_string(blocks[edge_to_array[std::make_pair(item.second[i], item.first)]].n_segment);
+    //         deps.push_back(sub_dep);
+    //     }
+
+    //     std::sort(deps.begin(), deps.end());
+    //     std::cout << item.first << ", " << std::endl;
+    //     for(int i=0; i<deps.size(); i++){
+    //         std::cout << deps[i] << std::endl;
+    //     }
     // }
 }
 
@@ -231,7 +252,8 @@ std::pair<std::string, int> BranchedPolymerChain::get_text_of_ordered_branches(i
     // explore child branches
     //std::cout << "[" + std::to_string(in_node) + ", " +  std::to_string(out_node) + "]:";
     for(int i=0; i<adjacent_nodes[in_node].size(); i++){
-        if (adjacent_nodes[in_node][i] != out_node){
+        if (adjacent_nodes[in_node][i] != out_node)
+        {
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             text_and_segments = get_text_of_ordered_branches(adjacent_nodes[in_node][i], in_node);
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
@@ -244,23 +266,24 @@ std::pair<std::string, int> BranchedPolymerChain::get_text_of_ordered_branches(i
     std::string text;
     if(edge_text.size() == 0)
         text = "";
-    else{
+    else
+    {
         std::sort (edge_text.begin(), edge_text.end());
         text += "(";
-        for(int i=0; i<edge_text.size(); i++){
+        for(int i=0; i<edge_text.size(); i++)
             text += edge_text[i];
-        }
         text += ")";
     }
 
     // update opt_sub_branches
     text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].species;
-    if(opt_max_segments.count(text) > 0){
-         if(opt_max_segments[text] < blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment){  
+    if(opt_max_segments.count(text) > 0)
+    {
+         if(opt_max_segments[text] < blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment)
              opt_max_segments[text] = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
-         }
     }
-    else{
+    else
+    {
         //opt_max_segments[text].sub_deps = edge_dict;
         opt_max_segments[text] = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
     }
@@ -282,13 +305,15 @@ std::vector<std::pair<std::string, int>> BranchedPolymerChain::key_to_deps(std::
     bool is_finding_key = true;
     int key_start = 1;
     for(int i=0; i<key.size();i++){
-        if( isdigit(key[i]) && is_finding_key && s.size() == 1 ){
+        if( isdigit(key[i]) && is_finding_key && s.size() == 1 )
+        {
             sub_key = key.substr(key_start, i-key_start);
             //std::cout << sub_key << ": " << key_start << ", " << i  << std::endl;
             is_finding_key = false;
             key_start = i;
         }
-        else if( !isdigit(key[i]) && !is_finding_key && s.size() == 1){
+        else if( !isdigit(key[i]) && !is_finding_key && s.size() == 1)
+        {
             sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
             //std::cout << sub_key << ": " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
             sub_deps.push_back(std::make_pair(sub_key, sub_n_segment));
@@ -307,7 +332,8 @@ std::string BranchedPolymerChain::key_to_species(std::string key){
     int key_start = 0;
     for(int i=key.size()-1; i>=0;i--){
         //std::cout << key[i] << std::endl;
-        if(key[i] == ')'){
+        if(key[i] == ')')
+        {
             key_start=i+1;
             break;
         }

@@ -12,4 +12,4 @@
 16. process bar
 19. User Interface layer?
 20. GUI?
-21. set initial condition, q(r,0)!=1
+21. set initial condition: v_to_grafting_index, q_init

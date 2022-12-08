@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CpuPseudoBranchedContinuous class
+* This is a derived CpuPseudoBranchedDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
-#define CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
+#ifndef CPU_PSEUDO_BRANCHED_DISCRETE_H_
+#define CPU_PSEUDO_BRANCHED_DISCRETE_H_
 
 #include <string>
 #include <vector>
@@ -14,7 +14,7 @@
 #include "PseudoBranched.h"
 #include "FFT.h"
 
-class CpuPseudoBranchedContinuous : public PseudoBranched
+class CpuPseudoBranchedDiscrete : public PseudoBranched
 {
 private:
     FFT *fft;
@@ -25,19 +25,21 @@ private:
     // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: branched_pseudo_opt_block
     std::map<std::pair<std::string, std::string>, branched_pseudo_opt_block> opt_blocks; 
 
+    // key: (dep), value: array pointer
+    std::map<std::string, double*> opt_q_junction;
+    
     std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond
     std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
     std::map<std::string, double*> exp_dw_half;       // boltzmann factor for the half segment
 
-    void one_step(double *q_in, double *q_out, 
-                  double *boltz_bond, double *boltz_bond_half,
-                  double *exp_dw, double *exp_dw_half);
-    void calculate_phi_one_type(double *phi, double *q_1, double *q_2, const int N);
+    void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
+    void half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
+    void calculate_phi_one_type(double *phi, double *q_1, double *q_2, double *exp_dw, const int N);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
-    CpuPseudoBranchedContinuous(ComputationBox *cb, BranchedPolymerChain *pc, FFT *ff);
-    ~CpuPseudoBranchedContinuous();
+    CpuPseudoBranchedDiscrete(ComputationBox *cb, BranchedPolymerChain *pc, FFT *ff);
+    ~CpuPseudoBranchedDiscrete();
     
     void update() override;
     

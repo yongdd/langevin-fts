@@ -40,6 +40,7 @@ ADD_LIBRARY(common
     src/common/ComputationBox.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
+    src/common/PseudoBranched.cpp
     src/common/AndersonMixing.cpp
 )
 
@@ -56,6 +57,7 @@ IF(MKL_FOUND)
         src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
         src/platforms/cpu/CpuPseudoBranchedContinuous.cpp
+        src/platforms/cpu/CpuPseudoBranchedDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )

@@ -47,6 +47,7 @@ public:
 
     double integral(double *g);
     double inner_product(double *g, double *h);
+    double inner_product_inverse_weight(double *g, double *h, double *w);
     double multi_inner_product(int n_comp, double *g, double *h);
     void zero_mean(double *g);
 
