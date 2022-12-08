@@ -7,11 +7,13 @@
 
 #include <array>
 #include <cufft.h>
+
 #include "ComputationBox.h"
-#include "Pseudo.h"
+#include "BranchedPolymerChain.h"
+#include "PseudoBranched.h"
 #include "CudaCommon.h"
 
-class CudaPseudoDiscrete : public Pseudo
+class CudaPseudoDiscrete : public PseudoBranched
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -28,25 +30,30 @@ private:
     // q^dagger(r,N-n) = q_d[(2*n-1)*MM] ~ q_d[(2*n  )*MM-1]
     // ......
     
-    double *d_q;
+    double *d_q, *d_phi;
     ftsComplex *d_k_q_in;
 
-    double **d_boltz_bond, **d_boltz_bond_middle;
-    double *d_phi, **d_exp_dw;
-                 
+    double **d_boltz_bond, **d_boltz_bond_middle;       // boltzmann factor for the segment bond
+
+    std::map<std::string, double*> d_exp_dw;            // boltzmann factor for the single segment
+    std::map<std::string, double*> d_exp_dw_half;       // boltzmann factor for the half segment
+
+    std::vector<int> get_block_start();
     void one_step(double *d_q_in,         double *d_q_out,
                   double *d_boltz_bond_1, double *d_boltz_bond_2,
                   double *d_exp_dw_1,     double *d_exp_dw_2);
 public:
 
-    CudaPseudoDiscrete(ComputationBox *cb, PolymerChain *pc);
+    CudaPseudoDiscrete(ComputationBox *cb, BranchedPolymerChain *pc);
     ~CudaPseudoDiscrete();
 
     void update() override;
+    void compute_statistics(
+        std::map<std::string, double*> q_init,
+        std::map<std::string, double*> w_block,
+        double *phi, double &single_partition) override;
     std::array<double,3> dq_dl() override;
-    void compute_statistics(double *phi, double *q_1_init, double *q_2_init,
-                std::map<std::string, double*> w_block, double &single_partition) override;
-    void get_partition(double *q_1_out, int n1, double *q_2_out, int n2) override;
+    void get_partition(double *q_out, int v, int u, int n) override;
 };
 
 #endif

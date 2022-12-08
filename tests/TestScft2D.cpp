@@ -8,9 +8,9 @@
 
 #include "Exception.h"
 #include "ParamParser.h"
-#include "PolymerChain.h"
+#include "BranchedPolymerChain.h"
 #include "ComputationBox.h"
-#include "Pseudo.h"
+#include "PseudoBranched.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -19,7 +19,7 @@ int main()
 {
     try
     {
-        // math constatns
+        // math constants
         const double PI = 3.14159265358979323846;
         // chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
@@ -73,8 +73,9 @@ int main()
 
             // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
-            PolymerChain *pc   = factory->create_polymer_chain({"A","B"},{f, 1.0-f},{{"A",1.0}, {"B",1.0}},ds);
-            Pseudo *pseudo     = factory->create_pseudo(cb, pc);
+            BranchedPolymerChain *pc  = factory->create_polymer_chain(
+                ds, {{"A",1.0}, {"B",1.0}}, {"A","B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
+            PseudoBranched *pseudo     = factory->create_pseudo(cb, pc);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -153,7 +154,7 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->compute_statistics(phi,q1_init,q2_init,{{"A",&w[0]},{"B",&w[cb->get_n_grid()]}}, QQ);
+                pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[cb->get_n_grid()]}}, phi, QQ);
 
                 // calculate the total energy
                 for(int i=0; i<cb->get_n_grid(); i++)

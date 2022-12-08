@@ -20,14 +20,14 @@
 
 namespace py = pybind11;
 
-struct branched_pseudo_opt_edge{
+struct branched_pseudo_edge{
     int max_n_segment;                              // the maximum segment number
     double*  partition;                             // array for partition function
     std::string species;                            // species
     std::vector<std::pair<std::string, int>> deps;  // dependency pairs
 };
 
-struct branched_pseudo_opt_block{
+struct branched_pseudo_block{
     int n_segment;               // segment number
     std::string species;         // species
     double* phi;                 // array for concentration
@@ -39,7 +39,6 @@ protected:
     ComputationBox *cb;
     BranchedPolymerChain *pc;
     int n_complex_grid;
-    int n_block;
 
     void get_boltz_bond(double *boltz_bond, double bond_length_variance,
         std::array<int,3> nx, std::array<double,3> dx, double ds);

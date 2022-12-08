@@ -6,27 +6,32 @@
 #define CPU_PSEUDO_DISCRETE_H_
 
 #include "ComputationBox.h"
-#include "PolymerChain.h"
-#include "Pseudo.h"
+#include "BranchedPolymerChain.h"
+#include "PseudoBranched.h"
 #include "FFT.h"
 
-class CpuPseudoDiscrete : public Pseudo
+class CpuPseudoDiscrete : public PseudoBranched
 {
 private:
     FFT *fft;
     double *q_1, *q_2;
-    //double *boltz_bond_a, *boltz_bond_b, *boltz_bond_ab;
+    std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
+
     double **boltz_bond;
     double **boltz_bond_middle;
+
+    std::vector<int> get_block_start();
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
 public:
-    CpuPseudoDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
+    CpuPseudoDiscrete(ComputationBox *cb, BranchedPolymerChain *pc, FFT *ff);
     ~CpuPseudoDiscrete();
 
     void update() override;
+    void compute_statistics(
+        std::map<std::string, double*> q_init,
+        std::map<std::string, double*> w_block,
+        double *phi, double &single_partition) override;
     std::array<double,3> dq_dl() override;
-    void compute_statistics(double *phi, double *q_1_init, double *q_2_init,
-        std::map<std::string, double*> w_block, double &single_partition) override;
-    void get_partition(double *q_1_out, int n1, double *q_2_out, int n2) override;
+    void get_partition(double *q_out, int v, int u, int n) override;
 };
 #endif
