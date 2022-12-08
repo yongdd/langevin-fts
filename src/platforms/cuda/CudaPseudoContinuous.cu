@@ -4,14 +4,15 @@
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
+
 #include "CudaPseudoContinuous.h"
 #include "CudaComputationBox.h"
 #include "SimpsonQuadrature.h"
 
 CudaPseudoContinuous::CudaPseudoContinuous(
     ComputationBox *cb,
-    PolymerChain *pc)
-    : Pseudo(cb, pc)
+    BranchedPolymerChain *pc)
+    : PseudoBranched(cb, pc)
 {
     try{
         const int M = cb->get_n_grid();
@@ -24,7 +25,6 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
 
-        this->n_block = N_B;
         if(cb->get_dim() == 3)
         {
             n_grid[0] = cb->get_nx(0);
@@ -44,11 +44,6 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
 
         // Memory allocation
-        this->d_exp_dw = new double*[N_B];
-        this->d_exp_dw_half = new double*[N_B];
-        this->d_boltz_bond = new double*[N_B];
-        this->d_boltz_bond_half = new double*[N_B];
-
         gpu_error_check(cudaMalloc((void**)&d_q_step1, sizeof(double)*2*M));
         gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*2*M));
         gpu_error_check(cudaMalloc((void**)&d_k_q_in,   sizeof(ftsComplex)*2*M_COMPLEX));
@@ -57,14 +52,20 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_2, sizeof(double)*M*(N+1)));
         gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M*N_B));
 
-        for (int b=0; b<N_B; b++)
-        {
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw[b],      sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half[b], sizeof(double)*M));
+        // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        for(const auto& item: pc->get_dict_bond_lengths()){
+            std::string species = item.first;
+            d_boltz_bond     [species] = nullptr;
+            d_boltz_bond_half[species] = nullptr;
+            d_exp_dw         [species] = nullptr;
+            d_exp_dw_half    [species] = nullptr;
 
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond[b],      sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[b], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw         [species], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half    [species], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [species], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[species], sizeof(double)*M_COMPLEX));
         }
+        
         update();
     }
     catch(std::exception& exc)
@@ -74,8 +75,6 @@ CudaPseudoContinuous::CudaPseudoContinuous(
 }
 CudaPseudoContinuous::~CudaPseudoContinuous()
 {
-    const int N_B = n_block;
-
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
 
@@ -86,34 +85,31 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     cudaFree(d_q_1);
     cudaFree(d_q_2);
     cudaFree(d_phi);
-    for (int b=0; b<N_B; b++)
-    {
-        cudaFree(d_exp_dw[b]);
-        cudaFree(d_exp_dw_half[b]);
 
-        cudaFree(d_boltz_bond[b]);
-        cudaFree(d_boltz_bond_half[b]);
-    }
-
-    delete[] d_exp_dw, d_exp_dw_half;  
-    delete[] d_boltz_bond, d_boltz_bond_half;
+    for(const auto& item: d_boltz_bond)
+        cudaFree(item.second);
+    for(const auto& item: d_boltz_bond_half)
+        cudaFree(item.second);
+    for(const auto& item: d_exp_dw)
+        cudaFree(item.second);
+    for(const auto& item: d_exp_dw_half)
+        cudaFree(item.second);
 }
 
 void CudaPseudoContinuous::update()
 {
     try{
         const int M_COMPLEX = this->n_complex_grid;
-        const int N_B = pc->get_n_block();
-        double boltz_bond[N_B][M_COMPLEX], boltz_bond_half[N_B][M_COMPLEX];
+        double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
-        for (int b=0; b<N_B; b++)
-        {
-        get_boltz_bond(boltz_bond[b],      pc->get_bond_length_sq(b),   cb->get_nx(), cb->get_dx(), pc->get_ds());
-        get_boltz_bond(boltz_bond_half[b], pc->get_bond_length_sq(b)/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
-
-        gpu_error_check(cudaMemcpy(d_boltz_bond[b],      boltz_bond[b],      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_boltz_bond_half[b], boltz_bond_half[b], sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
-
+        for(const auto& item: pc->get_dict_bond_lengths()){
+            std::string species = item.first;
+            double bond_length_sq = item.second*item.second;
+            get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), pc->get_ds());
+            get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), pc->get_ds());
+        
+            gpu_error_check(cudaMemcpy(d_boltz_bond[species],      boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_boltz_bond_half[species], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
     }
     catch(std::exception& exc)
@@ -121,7 +117,17 @@ void CudaPseudoContinuous::update()
         throw_with_line_number(exc.what());
     }
 }
-
+std::vector<int> CudaPseudoContinuous::get_block_start()
+{
+    std::vector<int> seg_start;
+    seg_start.push_back(0);
+    int seg_start_temp = 0;
+    for(int i=0; i<pc->get_n_block(); i++){
+        seg_start_temp += pc->get_n_segment(i);
+        seg_start.push_back(seg_start_temp);
+    }
+    return seg_start;
+}
 std::array<double,3> CudaPseudoContinuous::dq_dl()
 {
     // This method should be invoked after invoking compute_statistics().
@@ -136,14 +142,10 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
         const int N    = pc->get_n_segment_total();
-        const int N_B = pc->get_n_block();
-        const std::vector<int> N_SEG    = pc->get_n_segment();
+        const int N_B  = pc->get_n_block();
         const int M_COMPLEX = this->n_complex_grid;
-        const std::vector<int> seg_start= pc->get_block_start();
-
 
         std::array<double,3> dq_dl;
-        double simpson_rule_coeff[N];
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -168,13 +170,22 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
 
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
+        std::map<std::string, double>& dict_bond_lengths = pc->get_dict_bond_lengths();
+        auto seg_start = get_block_start();
+
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
+
         for(int b=0; b<N_B; b++)
         {
-            SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_SEG[b]);
+            std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(pc->get_n_segment(b));
+            std::string species = pc->get_block_species(b);
+            double bond_length_sq = dict_bond_lengths[species]*dict_bond_lengths[species];
+
             for(int n=seg_start[b]; n<=seg_start[b+1]; n++)
             {
+                double s_coeff = simpson_rule_coeff[n-seg_start[b]];
+
                 gpu_error_check(cudaMemcpy(&d_q_in_2m[0], &d_q_1[n*M],     sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 gpu_error_check(cudaMemcpy(&d_q_in_2m[M], &d_q_2[(N-n)*M], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
@@ -182,18 +193,18 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
                 if ( DIM >= 3 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, pc->get_bond_length_sq(b), M_COMPLEX);
-                    dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+                    dq_dl[0] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 2 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, pc->get_bond_length_sq(b), M_COMPLEX);
-                    dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                    dq_dl[1] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 1 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, pc->get_bond_length_sq(b), M_COMPLEX);
-                    dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+                    dq_dl[2] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
             }
         }
@@ -225,9 +236,7 @@ void CudaPseudoContinuous::calculate_phi_one_type(
 
         const int M = cb->get_n_grid();
         const int N = pc->get_n_segment_total();
-        double simpson_rule_coeff[N_END-N_START+1];
-
-        SimpsonQuadrature::init_coeff(simpson_rule_coeff, N_END-N_START);
+        auto simpson_rule_coeff = SimpsonQuadrature::get_coeff(N_END-N_START);
 
         // Compute segment concentration
         multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, &d_q_1[M*N_START], &d_q_2[M*(N-N_START)], simpson_rule_coeff[0], M);
@@ -242,46 +251,71 @@ void CudaPseudoContinuous::calculate_phi_one_type(
     }
 }
 
-void CudaPseudoContinuous::compute_statistics(double *phi, double *q_1_init, double *q_2_init,
-                                    std::map<std::string, double*> w_block, double &single_partition)
+void CudaPseudoContinuous::compute_statistics(
+    std::map<std::string, double*> q_init,
+    std::map<std::string, double*> w_block,
+    double *phi, double &single_partition)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int  M        = cb->get_n_grid();
-        const int  N        = pc->get_n_segment_total();
-        const int  N_B      = pc->get_n_block();
-        const std::vector<int> N_SEG    = pc->get_n_segment();
-        const double ds     = pc->get_ds();
-        const std::vector<int> seg_start= pc->get_block_start();                                 
+        const int M     = cb->get_n_grid();
+        const int N = pc->get_n_segment_total();
+        const int N_B = pc->get_n_block();
+        const double ds = pc->get_ds();
+        auto seg_start = get_block_start();
 
-        double exp_dw[N_B][M];
-        double exp_dw_half[N_B][M];
-
-        for(int b=0; b<N_B; b++)
+        for(int i=0; i<pc->get_n_block(); i++)
         {
-            if( w_block.count(pc->get_type(b)) == 0 )
-                throw_with_line_number("block types[" + std::to_string(b) + "] (\"" + pc->get_type(b) + "\") is not in w_block");
-            double *w_block_one = w_block[pc->get_type(b)];
+            if( w_block.count(pc->get_block_species(i)) == 0)
+                throw_with_line_number("\"" + pc->get_block_species(i) + "\" species is not in w_block.");
+        }
+
+        // exp_dw and exp_dw_half
+        double exp_dw[M];
+        double exp_dw_half[M];
+        for(const auto& item: w_block)
+        {
+            std::string species = item.first;
+            double *w = item.second;
             for(int i=0; i<M; i++)
-            {
-                exp_dw     [b][i] = exp(-w_block_one[i]*ds*0.5);
-                exp_dw_half[b][i] = exp(-w_block_one[i]*ds*0.25);
+            { 
+                exp_dw     [i] = exp(-w[i]*ds*0.5);
+                exp_dw_half[i] = exp(-w[i]*ds*0.25);
             }
+            gpu_error_check(cudaMemcpy(d_exp_dw[species],      exp_dw,      sizeof(double)*M,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_exp_dw_half[species], exp_dw_half, sizeof(double)*M,cudaMemcpyHostToDevice));
         }
 
-        // Copy array from host memory to device memory
-        for(int b=0; b<N_B; b++)
+        // initial conditions
+        if (q_init.count("1") == 0)
         {
-            gpu_error_check(cudaMemcpy(d_exp_dw[b], exp_dw[b], sizeof(double)*M,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_exp_dw_half[b], exp_dw_half[b], sizeof(double)*M,cudaMemcpyHostToDevice));
+            double q_1_init[M];
+            for(int i=0; i<M; i++)
+                q_1_init[i] = 1.0;
+            gpu_error_check(cudaMemcpy(&d_q_1[0], q_1_init, sizeof(double)*M,
+                cudaMemcpyHostToDevice));
+        }
+        else
+        {
+            gpu_error_check(cudaMemcpy(&d_q_1[0], q_init["1"], sizeof(double)*M,
+                cudaMemcpyHostToDevice));
         }
 
-        gpu_error_check(cudaMemcpy(&d_q_1[0], q_1_init, sizeof(double)*M,
+        if (q_init.count("2") == 0)
+        {     
+            double q_2_init[M];
+            for(int i=0; i<M; i++)
+                q_2_init[i] = 1.0;
+            gpu_error_check(cudaMemcpy(&d_q_2[0], q_2_init, sizeof(double)*M,
                 cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(&d_q_2[0], q_2_init, sizeof(double)*M,
-                cudaMemcpyHostToDevice));
+        }
+        else
+        {
+            gpu_error_check(cudaMemcpy(&d_q_2[0], q_init["1"], sizeof(double)*M,
+                    cudaMemcpyHostToDevice));
+        }
 
         int b_curr_1, b_curr_2; // current block of q1/q2
         for(int n=0; n<N; n++)
@@ -299,14 +333,16 @@ void CudaPseudoContinuous::compute_statistics(double *phi, double *q_1_init, dou
                 b_curr_2 = b_;
                 b_--;
             }
+            std::string species1 = pc->get_block_species(b_curr_1);
+            std::string species2 = pc->get_block_species(b_curr_2);
 
             one_step(
                     &d_q_1[M*n], &d_q_1[M*(n+1)],
                     &d_q_2[M*n], &d_q_2[M*(n+1)],
-                    d_boltz_bond[b_curr_1], d_boltz_bond_half[b_curr_1],
-                    d_boltz_bond[b_curr_2], d_boltz_bond_half[b_curr_2],
-                    d_exp_dw[b_curr_1], d_exp_dw_half[b_curr_1],
-                    d_exp_dw[b_curr_2], d_exp_dw_half[b_curr_2]);
+                    d_boltz_bond[species1], d_boltz_bond_half[species1],
+                    d_boltz_bond[species2], d_boltz_bond_half[species2],
+                    d_exp_dw[species1], d_exp_dw_half[species1],
+                    d_exp_dw[species2], d_exp_dw_half[species2]);
         }
 
         // calculates the total partition function
@@ -410,20 +446,24 @@ void CudaPseudoContinuous::one_step(double *d_q_in1,        double *d_q_out1,
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::get_partition(double *q_1_out, int n1, double *q_2_out, int n2)
+void CudaPseudoContinuous::get_partition(double *q_out, int v, int u, int n)
 {
-    // This method should be invoked after invoking compute_statistics().
-    
+    // This method should be invoked after invoking compute_statistics()
+
     // Get partial partition functions
-    // This is made for debugging and testing.
+    // This is made for debugging and testing
     const int M = cb->get_n_grid();
     const int N = pc->get_n_segment_total();
-        
-    if (n1 < 0 || n1 > N)
-        throw_with_line_number("n1 (" + std::to_string(n1) + ") must be in range [0, " + std::to_string(N) + "]");
-    if (n2 < 0 || n2 > N)
-        throw_with_line_number("n2 (" + std::to_string(n2) + ") must be in range [0, " + std::to_string(N) + "]");
 
-    gpu_error_check(cudaMemcpy(q_1_out, &d_q_1[n1*M], sizeof(double)*M,cudaMemcpyDeviceToHost));
-    gpu_error_check(cudaMemcpy(q_2_out, &d_q_2[(N-n2)*M], sizeof(double)*M,cudaMemcpyDeviceToHost));
+    if (n < 0 || n > N)
+        throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
+
+    if (v < u)
+    {
+        gpu_error_check(cudaMemcpy(q_out, &d_q_1[n*M], sizeof(double)*M,cudaMemcpyDeviceToHost));
+    }
+    else
+    {
+        gpu_error_check(cudaMemcpy(q_out, &d_q_2[n*M], sizeof(double)*M,cudaMemcpyDeviceToHost));
+    }
 }

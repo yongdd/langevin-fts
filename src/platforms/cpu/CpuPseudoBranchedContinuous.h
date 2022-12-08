@@ -19,11 +19,11 @@ class CpuPseudoBranchedContinuous : public PseudoBranched
 private:
     FFT *fft;
 
-    // key: (dep) + species, value: branched_pseudo_opt_edge
-    std::map<std::string, branched_pseudo_opt_edge, std::greater<std::string>> opt_edges;
+    // key: (dep) + species, value: branched_pseudo_edge
+    std::map<std::string, branched_pseudo_edge, std::greater<std::string>> reduced_edges;
 
-    // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: branched_pseudo_opt_block
-    std::map<std::pair<std::string, std::string>, branched_pseudo_opt_block> opt_blocks; 
+    // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: branched_pseudo_block
+    std::map<std::pair<std::string, std::string>, branched_pseudo_block> reduced_blocks; 
 
     std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond

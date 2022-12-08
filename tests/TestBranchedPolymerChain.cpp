@@ -54,14 +54,15 @@ int main()
             return -1;
         if(sub_deps[1].first != "(A12)B" || sub_deps[1].second != 12)
             return -1;
-       if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
+        if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
             return -1;
         if(pc.key_to_species(key) != "A")
             return -1;
 
         // print unique sub branches
-        std::map<std::string, int, std::greater<std::string>> opt_max_segments = pc.get_opt_max_segments();
-        for(const auto& item : opt_max_segments){
+        std::map<std::string, int, std::greater<std::string>> reduced_branches_max_segment = pc.get_reduced_branches_max_segment();
+        for(const auto& item : reduced_branches_max_segment)
+        {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_segments: " << item.second << ",\n\tsub_deps: [";
             sub_deps = pc.key_to_deps(item.first);
@@ -71,67 +72,67 @@ int main()
         }
 
         // check size of sub_deps dictionary
-        if(pc.get_opt_n_branches() != 29)
+        if(pc.get_reduced_n_branches() != 29)
             return -1;
 
         // check max_segments
-        if(pc.get_opt_max_segment("B") != 12)
+        if(pc.get_reduced_branch_max_segment("B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("A") != 12)
+        if(pc.get_reduced_branch_max_segment("A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(B12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(B12)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(B12)A") != 9)
+        if(pc.get_reduced_branch_max_segment("(B12)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("(A12B12)A") != 12)
+        if(pc.get_reduced_branch_max_segment("(A12B12)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(A12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(A12)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("((A12B12)A9)A") != 9)
+        if(pc.get_reduced_branch_max_segment("((A12B12)A9)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("((A12)B12(B12)A9(B12)B12)A") != 12)
+        if(pc.get_reduced_branch_max_segment("((A12)B12(B12)A9(B12)B12)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((A12B12)A9)A9(A12B12)A12)A") != 9)
+        if(pc.get_reduced_branch_max_segment("(((A12B12)A9)A9(A12B12)A12)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("(((A12)B12(B12)A9(B12)B12)A12B12B9)A") != 4)
+        if(pc.get_reduced_branch_max_segment("(((A12)B12(B12)A9(B12)B12)A12B12B9)A") != 4)
             return -1;
-        if(pc.get_opt_max_segment("((((A12B12)A9)A9(A12B12)A12)A9A12)A") != 4)
+        if(pc.get_reduced_branch_max_segment("((((A12B12)A9)A9(A12B12)A12)A9A12)A") != 4)
             return -1;
-        if(pc.get_opt_max_segment("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A") != 9)
+        if(pc.get_reduced_branch_max_segment("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A") != 12)
+        if(pc.get_reduced_branch_max_segment("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B") != 9)
+        if(pc.get_reduced_branch_max_segment("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B") != 9)
             return -1;
-        if(pc.get_opt_max_segment("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A") != 9)
+        if(pc.get_reduced_branch_max_segment("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A") != 9)
+        if(pc.get_reduced_branch_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B") != 12)
+        if(pc.get_reduced_branch_max_segment("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A") != 9)
+        if(pc.get_reduced_branch_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A") != 9)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A") != 12)
+        if(pc.get_reduced_branch_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A") != 12)
             return -1;
-        if(pc.get_opt_max_segment("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B") != 12)
+        if(pc.get_reduced_branch_max_segment("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B") != 12)
             return -1;
         return 0;
     }

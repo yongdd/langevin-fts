@@ -8,9 +8,9 @@
 
 #include "Exception.h"
 #include "ParamParser.h"
-#include "PolymerChain.h"
+#include "BranchedPolymerChain.h"
 #include "ComputationBox.h"
-#include "Pseudo.h"
+#include "PseudoBranched.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -19,7 +19,7 @@ int main()
 {
     try
     {
-        // math constatns
+        // math constants
         const double PI = 3.14159265358979323846;
         // chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
@@ -35,7 +35,7 @@ int main()
         // initial value of q, q_dagger
         double *q1_init, *q2_init;
         // segment concentration
-        double *phi, *phia, *phib, *phitot;
+        double *phi, *phi_a, *phi_b, *phitot;
 
         // string to output file and print stream
         std::ofstream print_stream;
@@ -73,10 +73,10 @@ int main()
 
             // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb  = factory->create_computation_box(nx, lx);
-            PolymerChain *pc_a = factory->create_polymer_chain({"A"},{1.0},{{"A",1.0}},ds);
-            PolymerChain *pc_b = factory->create_polymer_chain({"B"},{1.0},{{"B",1.0}},ds);
-            Pseudo *pseudo_a   = factory->create_pseudo(cb, pc_a);
-            Pseudo *pseudo_b   = factory->create_pseudo(cb, pc_b);
+            BranchedPolymerChain *pc_a = factory->create_polymer_chain(ds, {{"A",1.0}}, {"A"}, {1.0}, {0}, {1}, {});
+            BranchedPolymerChain *pc_b = factory->create_polymer_chain(ds, {{"B",1.0}}, {"B"}, {1.0}, {0}, {1}, {});
+            PseudoBranched *pseudo_a   = factory->create_pseudo(cb, pc_a);
+            PseudoBranched *pseudo_b   = factory->create_pseudo(cb, pc_b);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -104,14 +104,14 @@ int main()
             q1_init = new double[cb->get_n_grid()];
             q2_init = new double[cb->get_n_grid()];
 
-            phia = &phi[0];
-            phib = &phi[cb->get_n_grid()];
+            phi_a = &phi[0];
+            phi_b = &phi[cb->get_n_grid()];
             //-------------- setup fields ------------
-            //call random_number(phia)
-            //   phia = reshape( phia, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
-            //   call random_number(phia(:,:,z_lo))
+            //call random_number(phi_a)
+            //   phi_a = reshape( phi_a, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
+            //   call random_number(phi_a(:,:,z_lo))
             //   do k=z_lo,z_hi
-            //     phia(:,:,k) = phia(:,:,z_lo)
+            //     phi_a(:,:,k) = phi_a(:,:,z_lo)
             //   end do
 
             std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
@@ -120,14 +120,14 @@ int main()
                     for(int k=0; k<cb->get_nx(2); k++)
                     {
                         idx = i*cb->get_nx(1)*cb->get_nx(2) + j*cb->get_nx(2) + k;
-                        phia[idx]= cos(2*(cb->get_nx(2)-k)/cb->get_nx(2)*PI);
+                        phi_a[idx]= cos(2*(cb->get_nx(2)-k)/cb->get_nx(2)*PI);
                     }
 
             for(int i=0; i<cb->get_n_grid(); i++)
             {
-                phib[i] = 1.0 - phia[i];
-                w[i]                  = chi_n*phib[i];
-                w[i+cb->get_n_grid()] = chi_n*phia[i];
+                phi_b[i] = 1.0 - phi_a[i];
+                w[i]                  = chi_n*phi_b[i];
+                w[i+cb->get_n_grid()] = chi_n*phi_a[i];
             }
 
             // keep the level of field value
@@ -155,13 +155,13 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo_a->compute_statistics(phia,q1_init,q2_init,{{"A",&w[0]               }},QQ_a);
-                pseudo_b->compute_statistics(phib,q1_init,q2_init,{{"B",&w[cb->get_n_grid()]}},QQ_b);
+                pseudo_a->compute_statistics({}, {{"A",&w[0]}},                phi_a, QQ_a);
+                pseudo_b->compute_statistics({}, {{"B",&w[cb->get_n_grid()]}}, phi_b, QQ_b);
 
                 for(int i=0; i<cb->get_n_grid(); i++)
                 {
-                    phia[i] = phia[i]*frac_a;
-                    phib[i] = phib[i]*(1.0-frac_a);
+                    phi_a[i] = phi_a[i]*frac_a;
+                    phi_b[i] = phi_b[i]*(1.0-frac_a);
                 }
 
                 // calculate the total energy
@@ -181,8 +181,8 @@ int main()
                     // calculate pressure field for the new field calculation, the method is modified from Fredrickson's
                     xi[i] = 0.5*(w[i]+w[i+cb->get_n_grid()]-chi_n);
                     // calculate output fields
-                    w_out[i]                  = chi_n*phib[i] + xi[i];
-                    w_out[i+cb->get_n_grid()] = chi_n*phia[i] + xi[i];
+                    w_out[i]                  = chi_n*phi_b[i] + xi[i];
+                    w_out[i+cb->get_n_grid()] = chi_n*phi_a[i] + xi[i];
                 }
                 cb->zero_mean(&w_out[0]);
                 cb->zero_mean(&w_out[cb->get_n_grid()]);
@@ -195,7 +195,7 @@ int main()
                                 (cb->multi_inner_product(2,w,w)+1.0));
 
                 // print iteration # and error levels and check the mass conservation
-                sum = (cb->integral(phia) + cb->integral(phib))/cb->get_volume() - 1.0;
+                sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                 std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ_a;

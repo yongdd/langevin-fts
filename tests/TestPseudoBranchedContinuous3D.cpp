@@ -20,7 +20,8 @@
 
 int main()
 {
-    try{
+    try
+    {
         const int II{5};
         const int JJ{4};
         const int KK{3};
@@ -187,8 +188,10 @@ int main()
         // #endif
 
         // For each platform    
-        for(PseudoBranched* pseudo : pseudo_list){
-            for(int i=0; i<MM; i++){
+        for(PseudoBranched* pseudo : pseudo_list)
+        {
+            for(int i=0; i<MM; i++)
+            {
                 phi[i] = 0.0;
                 phi[i+MM] = 0.0;
                 q1_last[i] = 0.0;
@@ -202,8 +205,8 @@ int main()
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
+            
             pseudo->get_partition(q1_last, 1, 2, pc.get_block(1,2).n_segment);
-
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));

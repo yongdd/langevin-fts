@@ -35,8 +35,8 @@ private:
     std::map<std::pair<int, int>, int>         edge_to_array;   // array index for each edge
     std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite partial partition functions as a text
 
-    // dictionary{key:non-duplicated optimal sub_branches, value:maximum segment number}
-    std::map<std::string, int, std::greater<std::string>> opt_max_segments; 
+    // dictionary{key:non-duplicated reduced sub_branches, value:maximum segment number}
+    std::map<std::string, int, std::greater<std::string>> reduced_branches_max_segment; 
 
     // get sub-branch information as ordered texts
     std::pair<std::string, int> get_text_of_ordered_branches(int in_node, int out_node);
@@ -51,23 +51,24 @@ public:
     double get_ds();
 
     int get_n_block();
-    std::string get_block_type(int idx);
+    std::string get_block_species(int idx);
     int get_n_segment(int idx);
+    int get_n_segment_total();
     double get_alpha();
     std::map<std::string, double>& get_dict_bond_lengths();
     struct polymer_chain_block& get_block(int v, int u);
     std::vector<polymer_chain_block>& get_blocks();
     std::string get_dep(int v, int u);
 
-    //std::vector<std::string> get_block_type();
+    //std::vector<std::string> get_block_species();
     //std::vector<int> get_n_segment();    // [N_A, N_B, ...]
-    //std::vector<std::pair<std::string, int>> get_opt_sub_deps(std::string key);
+    //std::vector<std::pair<std::string, int>> get_reduced_sub_deps(std::string key);
 
-    // get information of optimal sub graphs
-    int get_opt_n_branches();
+    // get information of reduced sub graphs
+    int get_reduced_n_branches();
     std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
     std::string key_to_species(std::string key);
-    std::map<std::string, int, std::greater<std::string>>& get_opt_max_segments(); 
-    int get_opt_max_segment(std::string key);
+    std::map<std::string, int, std::greater<std::string>>& get_reduced_branches_max_segment(); 
+    int get_reduced_branch_max_segment(std::string key);
 };
 #endif
