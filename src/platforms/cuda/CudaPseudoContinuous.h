@@ -9,11 +9,11 @@
 #include <cufft.h>
 
 #include "ComputationBox.h"
-#include "BranchedPolymerChain.h"
-#include "PseudoBranched.h"
+#include "PolymerChain.h"
+#include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudoContinuous : public PseudoBranched
+class CudaPseudoContinuous : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -41,7 +41,7 @@ private:
     void calculate_phi_one_type(double *d_phi, const int N_START, const int N_END);
 public:
 
-    CudaPseudoContinuous(ComputationBox *cb, BranchedPolymerChain *pc);
+    CudaPseudoContinuous(ComputationBox *cb, PolymerChain *pc);
     ~CudaPseudoContinuous();
 
     void update() override;

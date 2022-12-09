@@ -20,7 +20,7 @@
 MklFactory::MklFactory(std::string chain_model){
     this->chain_model = chain_model;
 }
-BranchedPolymerChain* MklFactory::create_polymer_chain(
+PolymerChain* MklFactory::create_polymer_chain(
     double ds, 
     std::map<std::string, double> dict_segment_lengths,
     std::vector<std::string> block_species, 
@@ -28,7 +28,7 @@ BranchedPolymerChain* MklFactory::create_polymer_chain(
     std::vector<int> v, std::vector<int> u,
     std::map<int, int> v_to_grafting_index)
 {
-    return new BranchedPolymerChain(
+    return new PolymerChain(
         chain_model, ds, dict_segment_lengths,
         block_species, contour_lengths, v, u,
         v_to_grafting_index);
@@ -38,7 +38,7 @@ ComputationBox* MklFactory::create_computation_box(
 {
     return new ComputationBox(nx, lx);
 }
-PseudoBranched* MklFactory::create_pseudo(ComputationBox *cb, BranchedPolymerChain *pc)
+Pseudo* MklFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
 {
     std::string chain_model = pc->get_model_name();
     if ( chain_model == "continuous" )

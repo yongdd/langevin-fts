@@ -9,11 +9,11 @@
 #include <cufft.h>
 
 #include "ComputationBox.h"
-#include "BranchedPolymerChain.h"
-#include "PseudoBranched.h"
+#include "PolymerChain.h"
+#include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudoDiscrete : public PseudoBranched
+class CudaPseudoDiscrete : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -44,7 +44,7 @@ private:
                   double *d_exp_dw_1,     double *d_exp_dw_2);
 public:
 
-    CudaPseudoDiscrete(ComputationBox *cb, BranchedPolymerChain *pc);
+    CudaPseudoDiscrete(ComputationBox *cb, PolymerChain *pc);
     ~CudaPseudoDiscrete();
 
     void update() override;

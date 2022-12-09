@@ -4,9 +4,9 @@
 
 CpuPseudoBranchedDiscrete::CpuPseudoBranchedDiscrete(
     ComputationBox *cb,
-    BranchedPolymerChain *pc,
+    PolymerChain *pc,
     FFT *fft)
-    : PseudoBranched(cb, pc)
+    : Pseudo(cb, pc)
 {
     try
     {
@@ -461,13 +461,20 @@ void CpuPseudoBranchedDiscrete::get_partition(double *q_out, int v, int u, int n
 
     // Get partial partition functions
     // This is made for debugging and testing
-    const int M = cb->get_n_grid();
-    std::string dep = pc->get_dep(v,u);
-    const int N = reduced_edges[dep].max_n_segment;
-    if (n < 1 || n > N)
-        throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
+    try
+    {
+        const int M = cb->get_n_grid();
+        std::string dep = pc->get_dep(v,u);
+        const int N = reduced_edges[dep].max_n_segment;
+        if (n < 1 || n > N)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
-    double* partition = reduced_edges[dep].partition;
-    for(int i=0; i<M; i++)
-        q_out[i] = partition[(n-1)*M+i];
+        double* partition = reduced_edges[dep].partition;
+        for(int i=0; i<M; i++)
+            q_out[i] = partition[(n-1)*M+i];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }

@@ -10,8 +10,8 @@
 
 CudaPseudoDiscrete::CudaPseudoDiscrete(
     ComputationBox *cb,
-    BranchedPolymerChain *pc)
-    : PseudoBranched(cb, pc)
+    PolymerChain *pc)
+    : Pseudo(cb, pc)
 {
     try
     {
@@ -504,18 +504,27 @@ void CudaPseudoDiscrete::get_partition(double *q_out, int v, int u, int n)
 
     // Get partial partition functions
     // This is made for debugging and testing
-    const int M = cb->get_n_grid();
-    const int N = pc->get_n_segment_total();
-
-    if (n < 1 || n > N)
-        throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
-
-    if (v < u)
+    try
     {
-        gpu_error_check(cudaMemcpy(q_out, &d_q[M*(2*(n-1))], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        const int M = cb->get_n_grid();
+        const int b = pc->get_array_idx(v,u);
+        const int N = pc->get_n_segment(b);
+        auto block_start = get_block_start();
+
+        if (n < 1 || n > N)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
+
+        if (v < u)
+        {
+            gpu_error_check(cudaMemcpy(q_out, &d_q[M*(2*(block_start[b]+n-1))], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        }
+        else
+        {
+            gpu_error_check(cudaMemcpy(q_out, &d_q[M*(2*(N-block_start[b]+n-1)+1)], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        }
     }
-    else
+    catch(std::exception& exc)
     {
-        gpu_error_check(cudaMemcpy(q_out, &d_q[M*(2*(n-1)+1)], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        throw_without_line_number(exc.what());
     }
 }

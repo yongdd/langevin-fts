@@ -4,8 +4,8 @@
 
 CpuPseudoContinuous::CpuPseudoContinuous(
     ComputationBox *cb,
-    BranchedPolymerChain *pc, FFT *fft)
-    : PseudoBranched(cb, pc)
+    PolymerChain *pc, FFT *fft)
+    : Pseudo(cb, pc)
 {
     try
     {
@@ -337,20 +337,29 @@ void CpuPseudoContinuous::get_partition(double *q_out, int v, int u, int n)
 
     // Get partial partition functions
     // This is made for debugging and testing
-    const int M = cb->get_n_grid();
-    const int N = pc->get_n_segment_total();
-
-    if (n < 0 || n > N)
-        throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
-
-    if (v < u)
+    try
     {
-        for(int i=0; i<M; i++)
-            q_out[i] = q_1[n*M+i];
+        const int M = cb->get_n_grid();
+        const int b = pc->get_array_idx(v,u);
+        const int N = pc->get_n_segment(b);
+        auto block_start = get_block_start();
+
+        if (n < 0 || n > N)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
+
+        if (v < u)
+        {
+            for(int i=0; i<M; i++)
+                q_out[i] = q_1[(block_start[b]+n)*M+i];
+        }
+        else
+        {
+            for(int i=0; i<M; i++)
+                q_out[i] = q_2[(N-block_start[b]-n)*M+i];
+        }
     }
-    else
+    catch(std::exception& exc)
     {
-        for(int i=0; i<M; i++)
-            q_out[i] = q_2[(N-n)*M+i];
+        throw_without_line_number(exc.what());
     }
 }

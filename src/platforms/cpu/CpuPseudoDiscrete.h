@@ -6,11 +6,11 @@
 #define CPU_PSEUDO_DISCRETE_H_
 
 #include "ComputationBox.h"
-#include "BranchedPolymerChain.h"
-#include "PseudoBranched.h"
+#include "PolymerChain.h"
+#include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudoDiscrete : public PseudoBranched
+class CpuPseudoDiscrete : public Pseudo
 {
 private:
     FFT *fft;
@@ -23,7 +23,7 @@ private:
     std::vector<int> get_block_start();
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
 public:
-    CpuPseudoDiscrete(ComputationBox *cb, BranchedPolymerChain *pc, FFT *ff);
+    CpuPseudoDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoDiscrete();
 
     void update() override;

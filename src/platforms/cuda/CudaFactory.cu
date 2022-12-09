@@ -18,7 +18,7 @@
 CudaFactory::CudaFactory(std::string chain_model){
     this->chain_model = chain_model;
 }
-BranchedPolymerChain* CudaFactory::create_polymer_chain(
+PolymerChain* CudaFactory::create_polymer_chain(
     double ds, 
     std::map<std::string, double> dict_segment_lengths,
     std::vector<std::string> block_species, 
@@ -26,7 +26,7 @@ BranchedPolymerChain* CudaFactory::create_polymer_chain(
     std::vector<int> v, std::vector<int> u,
     std::map<int, int> v_to_grafting_index)
 {
-    return new BranchedPolymerChain(
+    return new PolymerChain(
         chain_model, ds, dict_segment_lengths,
         block_species, contour_lengths, v, u,
         v_to_grafting_index);
@@ -37,7 +37,7 @@ ComputationBox* CudaFactory::create_computation_box(
 {
     return new CudaComputationBox(nx, lx);
 }
-PseudoBranched* CudaFactory::create_pseudo(ComputationBox *cb, BranchedPolymerChain *pc)
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
 {
     std::string model_name = pc->get_model_name();
 
