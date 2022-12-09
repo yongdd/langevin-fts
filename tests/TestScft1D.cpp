@@ -8,9 +8,9 @@
 
 #include "Exception.h"
 #include "ParamParser.h"
-#include "BranchedPolymerChain.h"
+#include "PolymerChain.h"
 #include "ComputationBox.h"
-#include "PseudoBranched.h"
+#include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -73,9 +73,9 @@ int main()
 
             // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
-            BranchedPolymerChain *pc  = factory->create_polymer_chain(
+            PolymerChain *pc  = factory->create_polymer_chain(
                 ds, {{"A",1.0}, {"B",1.0}}, {"A","B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
-            PseudoBranched *pseudo   = factory->create_pseudo(cb, pc);
+            Pseudo *pseudo   = factory->create_pseudo(cb, pc);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

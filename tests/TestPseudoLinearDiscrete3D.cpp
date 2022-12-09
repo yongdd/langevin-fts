@@ -6,16 +6,18 @@
 #include <map>
 
 #include "Exception.h"
-#include "BranchedPolymerChain.h"
+#include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "ComputationBox.h"
 #include "CpuPseudoDiscrete.h"
+#include "CpuPseudoBranchedDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "ComputationBox.h"
 #include "CudaPseudoDiscrete.h"
+//#include "CudaPseudoBranchedDiscrete.h"
 #endif
 
 int main()
@@ -174,24 +176,26 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
-        std::vector<double> block_lengths = {f, 1.0-f};
+        std::vector<double> contour_lengths = {f, 1.0-f};
         double alpha{0.0};
-        for (auto& contour_length : block_lengths)
+        for (auto& contour_length : contour_lengths)
             alpha += contour_length;
-        std::map<std::string, double> bond_length = {{"A",1.0}, {"B",1.0}};
-        BranchedPolymerChain pc("Discrete", 1.0/NN, {{"A",1.0}, {"B",1.0}},
-            {"A","B"}, block_lengths, {0,1}, {1,2}, {});
+        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
+        PolymerChain pc("Discrete", 1.0/NN, bond_lengths, {"A","B"}, contour_lengths, {0,1}, {1,2}, {});
 
-        std::vector<PseudoBranched*> pseudo_list;
+        std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+        #endif
+        #ifdef USE_CPU_MKL
+        pseudo_list.push_back(new CpuPseudoBranchedDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
         #endif
 
         // For each platform    
-        for(PseudoBranched* pseudo : pseudo_list)
+        for(Pseudo* pseudo : pseudo_list)
         {
             for(int i=0; i<MM; i++)
             {
@@ -208,7 +212,7 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
-            pseudo->get_partition(q1_last, 1, 2, NN);
+            pseudo->get_partition(q1_last, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -216,7 +220,7 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            pseudo->get_partition(q2_last, 1, 0, NN);
+            pseudo->get_partition(q2_last, 1, 0, pc.get_block(1,0).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));

@@ -1,46 +1,75 @@
 /*----------------------------------------------------------
-* This class defines polymer chain parameters
+* This class defines branched polymer chain parameters
 *-----------------------------------------------------------*/
 
-#ifndef POLYMER_CHAIN_H_
-#define POLYMER_CHAIN_H_
+#ifndef BRANCHED_POLYMER_CHAIN_H_
+#define BRANCHED_POLYMER_CHAIN_H_
 
 #include <string>
 #include <vector>
 #include <map>
 
+struct polymer_chain_block{
+    std::string species;    // species of block, e.g., "A" or "B", ...
+    int n_segment;          // the number of segment, e.g. 20, or 30 ...
+    double contour_length;  // relative length of each block, e.g., 1.0, 0.4, 0.3, ...
+    int v;                  // starting vertex (or node)
+    int u;                  // ending vertex (or node)
+};
+
 class PolymerChain
 {
 private:
-    int n_block;         // total number of blocks
-    int n_segment_total; // total number of segments, N_p
-    double ds;           // contour step interval
-    std::string model_name;         // "Continuous": continuous standard Gaussian model
-                                    // "Discrete": discrete bead-spring model
-    std::vector<std::string> types;         // sequence of block types, e.g., ["A","B",...]
-    std::vector<int> n_segments;            // sequence of block segments number, e.g., [N_A, N_B, ...]
-    std::vector<double> bond_length_sq;    // square of sequence of statistical_segment_length [(a_A/a_Ref)^2, (a_B/a_Ref)^2, ...]
+    std::string model_name; // "Continuous": continuous standard Gaussian model
+                            // "Discrete": discrete bead-spring model
+    double ds;              // contour step interval
+    double alpha;           // sum of contour lengths
 
-    std::vector<int> block_start;   // index of starting segment of each block
-                                    // [0,N_A,N_A+N_B,...,N] (length = n_block+1)
+    // dictionary{key:species, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
+    std::map<std::string, double> dict_bond_lengths;
 
-    //std::vector<int> block_lengths;     // sequence of block lengths, e.g., [0.3, 0.4, ...]
+    std::vector<polymer_chain_block> blocks;  // information of blocks, which contains 'species', 'n_segments', '
+                                              // bond_length_sq', 'contour_length', 'vertices', and 'dependencies'.
+
+    std::map<int, std::vector<int>> adjacent_nodes;             // adjacent nodes
+    std::map<std::pair<int, int>, int>         edge_to_array;   // array index for each edge
+    std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite partial partition functions as a text
+
+    // dictionary{key:non-duplicated reduced sub_branches, value:maximum segment number}
+    std::map<std::string, int, std::greater<std::string>> reduced_branches_max_segment; 
+
+    // get sub-branch information as ordered texts
+    std::pair<std::string, int> get_text_of_ordered_branches(int in_node, int out_node);
 public:
-    PolymerChain(std::vector<std::string> types, std::vector<double> block_lengths,
-        std::map<std::string, double> dict_segment_lengths, double ds, std::string model_name);
+
+    PolymerChain(std::string model_name, double ds, std::map<std::string, double> dict_segment_lengths,
+        std::vector<std::string> block_species, std::vector<double> contour_lengths, std::vector<int> v, std::vector<int> u,
+        std::map<int, int> v_to_grafting_index);
     ~PolymerChain() {};
 
-    int get_n_block();
-    std::vector<int> get_n_segment();    // [N_A, N_B, ...]
-    int get_n_segment(int block);
-    int get_n_segment_total();
-    double get_ds();
-    std::vector<double> get_bond_length_sq();
-    double get_bond_length_sq(int block);
-    std::vector<std::string> get_type();
-    std::string get_type(int block);
     std::string get_model_name();
+    double get_ds();
 
-    std::vector<int> get_block_start();
+    int get_n_block();
+    std::string get_block_species(int idx);
+    int get_n_segment(int idx);
+    int get_n_segment_total();
+    double get_alpha();
+    std::map<std::string, double>& get_dict_bond_lengths();
+    int get_array_idx(int v, int u);
+    struct polymer_chain_block& get_block(int v, int u);
+    std::vector<polymer_chain_block>& get_blocks();
+    std::string get_dep(int v, int u);
+
+    //std::vector<std::string> get_block_species();
+    //std::vector<int> get_n_segment();    // [N_A, N_B, ...]
+    //std::vector<std::pair<std::string, int>> get_reduced_sub_deps(std::string key);
+
+    // get information of reduced sub graphs
+    int get_reduced_n_branches();
+    std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
+    std::string key_to_species(std::string key);
+    std::map<std::string, int, std::greater<std::string>>& get_reduced_branches_max_segment(); 
+    int get_reduced_branch_max_segment(std::string key);
 };
 #endif

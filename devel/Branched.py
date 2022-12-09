@@ -16,7 +16,7 @@ print(nx.__version__)
 
 random.seed(4)
 G = nx.Graph()
-G.add_edge(0,1, weight=4, species='A')
+G.add_edge(0,1, weight=6, species='A')
 for i in range(2,20):
    from_node = random.randint(0,i-1)
    weight = random.randint(3,4)*3

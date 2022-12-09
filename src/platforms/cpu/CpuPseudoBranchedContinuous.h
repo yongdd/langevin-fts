@@ -10,11 +10,11 @@
 #include <map>
 
 #include "ComputationBox.h"
-#include "BranchedPolymerChain.h"
-#include "PseudoBranched.h"
+#include "PolymerChain.h"
+#include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudoBranchedContinuous : public PseudoBranched
+class CpuPseudoBranchedContinuous : public Pseudo
 {
 private:
     FFT *fft;
@@ -36,7 +36,7 @@ private:
     void calculate_phi_one_type(double *phi, double *q_1, double *q_2, const int N);
     void init_simpson_rule_coeff(double *coeff, const int N);
 public:
-    CpuPseudoBranchedContinuous(ComputationBox *cb, BranchedPolymerChain *pc, FFT *ff);
+    CpuPseudoBranchedContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoBranchedContinuous();
     
     void update() override;
