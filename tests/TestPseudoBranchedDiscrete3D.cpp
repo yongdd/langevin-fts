@@ -6,17 +6,16 @@
 #include <map>
 
 #include "Exception.h"
+#include "ComputationBox.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "ComputationBox.h"
 #include "CpuPseudoBranchedDiscrete.h"
 #endif
-// #ifdef USE_CUDA
-// #include "CudaComputationBox.h"
-// #include "ComputationBox.h"
-// #include "CudaPseudoDiscrete.h"
-// #endif
+#ifdef USE_CUDA
+#include "CudaComputationBox.h"
+#include "CudaPseudoBranchedDiscrete.h"
+#endif
 
 int main()
 {
@@ -168,11 +167,6 @@ int main()
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
 
-        // std::vector<std::string> block_species = {"A","A","B"};
-        // std::vector<double> contour_lengths = {0.6,1.2,1.2};
-        // std::vector<int> v = {0,1,2};//,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
-        // std::vector<int> u = {1,2,3};//,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
-
         double phi[MM*block_species.size()]={0.0};
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
 
@@ -209,9 +203,9 @@ int main()
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoBranchedDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
-        // #ifdef USE_CUDA
-        // pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
-        // #endif
+        #ifdef USE_CUDA
+        pseudo_list.push_back(new CudaPseudoBranchedDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        #endif
 
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
@@ -223,6 +217,7 @@ int main()
                 q_1_4_last[i] = 0.0;
                 q_1_0_last[i] = 0.0;
             }
+            QQ = 0.0;
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;

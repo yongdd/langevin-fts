@@ -12,8 +12,8 @@
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
-#include "CpuPseudoContinuous.h"
-#include "CpuPseudoDiscrete.h"
+#include "CpuPseudoLinearContinuous.h"
+#include "CpuPseudoLinearDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -44,25 +44,25 @@ Pseudo* MklFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
     if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoContinuous(cb, pc,
+            return new CpuPseudoLinearContinuous(cb, pc,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoContinuous(cb, pc,
+            return new CpuPseudoLinearContinuous(cb, pc,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoContinuous(cb, pc,
+            return new CpuPseudoLinearContinuous(cb, pc,
                 new MklFFT1D(cb->get_nx(2)));
     }
     else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoDiscrete(cb, pc,
+            return new CpuPseudoLinearDiscrete(cb, pc,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoDiscrete(cb, pc,
+            return new CpuPseudoLinearDiscrete(cb, pc,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoDiscrete(cb, pc,
+            return new CpuPseudoLinearDiscrete(cb, pc,
                 new MklFFT1D(cb->get_nx(2)));
     }
     return NULL;

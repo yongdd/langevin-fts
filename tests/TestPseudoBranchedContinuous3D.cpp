@@ -6,17 +6,16 @@
 #include <map>
 
 #include "Exception.h"
+#include "ComputationBox.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "ComputationBox.h"
 #include "CpuPseudoBranchedContinuous.h"
 #endif
-// #ifdef USE_CUDA
-// #include "CudaComputationBox.h"
-// #include "ComputationBox.h"
-// #include "CudaPseudoContinuous.h"
-// #endif
+#ifdef USE_CUDA
+#include "CudaComputationBox.h"
+#include "CudaPseudoBranchedContinuous.h"
+#endif
 
 int main()
 {
@@ -204,9 +203,9 @@ int main()
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
         #endif
-        // #ifdef USE_CUDA
-        // pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
-        // #endif
+        #ifdef USE_CUDA
+        pseudo_list.push_back(new CudaPseudoBranchedContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        #endif
 
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
@@ -218,6 +217,7 @@ int main()
                 q_1_4_last[i] = 0.0;
                 q_1_0_last[i] = 0.0;
             }
+            QQ = 0.0;
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;

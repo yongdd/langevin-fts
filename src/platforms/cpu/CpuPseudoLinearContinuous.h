@@ -1,16 +1,16 @@
 /*-------------------------------------------------------------
-* This is a derived CpuPseudoContinuous class
+* This is a derived CpuPseudoLinearContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_CONTINUOUS_H_
-#define CPU_PSEUDO_CONTINUOUS_H_
+#ifndef CPU_PSEUDO_LINEAR_CONTINUOUS_H_
+#define CPU_PSEUDO_LINEAR_CONTINUOUS_H_
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudoContinuous : public Pseudo
+class CpuPseudoLinearContinuous : public Pseudo
 {
 private:
     FFT *fft;
@@ -27,8 +27,8 @@ private:
                   double *exp_dw, double *exp_dw_half);
     void calculate_phi_one_type(double *phi, const int N_START, const int N_END);
 public:
-    CpuPseudoContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
-    ~CpuPseudoContinuous();
+    CpuPseudoLinearContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
+    ~CpuPseudoLinearContinuous();
     
     void update() override;
     void compute_statistics(

@@ -1,16 +1,16 @@
 /*-------------------------------------------------------------
-* This is a derived CpuPseudoDiscrete class
+* This is a derived CpuPseudoLinearDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_DISCRETE_H_
-#define CPU_PSEUDO_DISCRETE_H_
+#ifndef CPU_PSEUDO_LINEAR_DISCRETE_H_
+#define CPU_PSEUDO_LINEAR_DISCRETE_H_
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudoDiscrete : public Pseudo
+class CpuPseudoLinearDiscrete : public Pseudo
 {
 private:
     FFT *fft;
@@ -23,8 +23,8 @@ private:
     std::vector<int> get_block_start();
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
 public:
-    CpuPseudoDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
-    ~CpuPseudoDiscrete();
+    CpuPseudoLinearDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
+    ~CpuPseudoLinearDiscrete();
 
     void update() override;
     void compute_statistics(

@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CudaPseudoContinuous class
+* This is a derived CudaPseudoLinearContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_CONTINUOUS_H_
-#define CUDA_PSEUDO_CONTINUOUS_H_
+#ifndef CUDA_PSEUDO_LINEAR_CONTINUOUS_H_
+#define CUDA_PSEUDO_LINEAR_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>
@@ -13,7 +13,7 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudoContinuous : public Pseudo
+class CudaPseudoLinearContinuous : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
@@ -22,7 +22,6 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_k_q_in;
 
-    //double *d_phi_a,  *d_phi_b;
     double *d_phi;
 
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
@@ -41,8 +40,8 @@ private:
     void calculate_phi_one_type(double *d_phi, const int N_START, const int N_END);
 public:
 
-    CudaPseudoContinuous(ComputationBox *cb, PolymerChain *pc);
-    ~CudaPseudoContinuous();
+    CudaPseudoLinearContinuous(ComputationBox *cb, PolymerChain *pc);
+    ~CudaPseudoLinearContinuous();
 
     void update() override;
     void compute_statistics(

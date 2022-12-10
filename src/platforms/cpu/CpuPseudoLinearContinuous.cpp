@@ -1,8 +1,8 @@
 #include <cmath>
-#include "CpuPseudoContinuous.h"
+#include "CpuPseudoLinearContinuous.h"
 #include "SimpsonQuadrature.h"
 
-CpuPseudoContinuous::CpuPseudoContinuous(
+CpuPseudoLinearContinuous::CpuPseudoLinearContinuous(
     ComputationBox *cb,
     PolymerChain *pc, FFT *fft)
     : Pseudo(cb, pc)
@@ -33,7 +33,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CpuPseudoContinuous::~CpuPseudoContinuous()
+CpuPseudoLinearContinuous::~CpuPseudoLinearContinuous()
 {
     delete fft;
     for(const auto& item: boltz_bond)
@@ -46,7 +46,7 @@ CpuPseudoContinuous::~CpuPseudoContinuous()
         delete[] item.second;
     delete[] q_1, q_2;
 }
-void CpuPseudoContinuous::update()
+void CpuPseudoLinearContinuous::update()
 {
     try
     {
@@ -62,7 +62,7 @@ void CpuPseudoContinuous::update()
         throw_without_line_number(exc.what());
     }
 }
-std::vector<int> CpuPseudoContinuous::get_block_start()
+std::vector<int> CpuPseudoLinearContinuous::get_block_start()
 {
     std::vector<int> seg_start;
     seg_start.push_back(0);
@@ -73,7 +73,7 @@ std::vector<int> CpuPseudoContinuous::get_block_start()
     }
     return seg_start;
 }
-std::array<double,3> CpuPseudoContinuous::dq_dl()
+std::array<double,3> CpuPseudoLinearContinuous::dq_dl()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -144,7 +144,7 @@ std::array<double,3> CpuPseudoContinuous::dq_dl()
     }
 }
 
-void CpuPseudoContinuous::calculate_phi_one_type(
+void CpuPseudoLinearContinuous::calculate_phi_one_type(
     double *phi, const int N_START, const int N_END)
 {
     try
@@ -167,7 +167,7 @@ void CpuPseudoContinuous::calculate_phi_one_type(
     }
 }
 
-void CpuPseudoContinuous::compute_statistics(
+void CpuPseudoLinearContinuous::compute_statistics(
     std::map<std::string, double*> q_init,
     std::map<std::string, double*> w_block,
     double *phi, double &single_partition)
@@ -266,7 +266,7 @@ void CpuPseudoContinuous::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
+void CpuPseudoLinearContinuous::one_step(double *q_in, double *q_out,
                                  double *boltz_bond, double *boltz_bond_half,
                                  double *exp_dw, double *exp_dw_half)
 {
@@ -331,7 +331,7 @@ void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoContinuous::get_partition(double *q_out, int v, int u, int n)
+void CpuPseudoLinearContinuous::get_partition(double *q_out, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 

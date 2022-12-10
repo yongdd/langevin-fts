@@ -2,8 +2,8 @@
 * This is a derived CpuPseudoBranchedDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_BRANCHED_DISCRETE_H_
-#define CPU_PSEUDO_BRANCHED_DISCRETE_H_
+#ifndef CPU_PSEUDO_BRANCHED_LINEAR_DISCRETE_H_
+#define CPU_PSEUDO_BRANCHED_LINEAR_DISCRETE_H_
 
 #include <string>
 #include <vector>
@@ -31,12 +31,10 @@ private:
     std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond
     std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
-    std::map<std::string, double*> exp_dw_half;       // boltzmann factor for the half segment
 
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
     void half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
-    void calculate_phi_one_type(double *phi, double *q_1, double *q_2, double *exp_dw, const int N);
-    void init_simpson_rule_coeff(double *coeff, const int N);
+    void calculate_phi_one_type(double *phi, double *q_1, double *q_2, const int N);
 public:
     CpuPseudoBranchedDiscrete(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoBranchedDiscrete();

@@ -10,8 +10,8 @@
 #include <string>
 
 #include "CudaComputationBox.h"
-#include "CudaPseudoContinuous.h"
-#include "CudaPseudoDiscrete.h"
+#include "CudaPseudoLinearContinuous.h"
+#include "CudaPseudoLinearDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
@@ -42,9 +42,9 @@ Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
     std::string model_name = pc->get_model_name();
 
     if( model_name == "continuous" )
-        return new CudaPseudoContinuous(cb, pc);
+        return new CudaPseudoLinearContinuous(cb, pc);
     else if ( model_name == "discrete" )
-        return new CudaPseudoDiscrete(cb, pc);
+        return new CudaPseudoLinearDiscrete(cb, pc);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
