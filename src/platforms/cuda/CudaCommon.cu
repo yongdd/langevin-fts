@@ -169,6 +169,19 @@ __global__ void multi_complex_real(ftsComplex* dst,
         i += blockDim.x * gridDim.x;
     }
 }
+
+__global__ void multi_complex_real(ftsComplex* dst,
+                                 double* src, double a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a * dst[i].x * src[i];
+        dst[i].y = a * dst[i].y * src[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void multi_complex_conjugate(double* dst,
                                  ftsComplex* src1,
                                  ftsComplex* src2, const int M)

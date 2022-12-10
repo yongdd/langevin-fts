@@ -46,6 +46,7 @@ CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
             exp_dw         [species] = new double[M];
             exp_dw_half    [species] = new double[M]; 
         }
+
         update();
     }
     catch(std::exception& exc)
@@ -73,7 +74,8 @@ void CpuPseudoBranchedContinuous::update()
 {
     try
     {
-        for(const auto& item: pc->get_dict_bond_lengths()){
+        for(const auto& item: pc->get_dict_bond_lengths())
+        {
             std::string species = item.first;
             double bond_length_sq = item.second*item.second;
             get_boltz_bond(boltz_bond     [species], bond_length_sq,   cb->get_nx(), cb->get_dx(), pc->get_ds());
@@ -151,7 +153,7 @@ void CpuPseudoBranchedContinuous::compute_statistics(
             }
         }
 
-        // calculates the single chain partition function
+        // calculate the single chain partition function
         std::string dep_v = reduced_blocks.begin()->first.first;
         std::string dep_u = reduced_blocks.begin()->first.second;
         int n_segment = reduced_blocks.begin()->second.n_segment;
@@ -159,14 +161,14 @@ void CpuPseudoBranchedContinuous::compute_statistics(
             &reduced_edges[dep_v].partition[n_segment*M],  // q
             &reduced_edges[dep_u].partition[0]);           // q^dagger
 
-        // segment concentration.
+        // calculate segment concentrations
         for(const auto& item: reduced_blocks)
         {
             calculate_phi_one_type(
-                item.second.phi,                          // phi
+                item.second.phi,                              // phi
                 reduced_edges[item.first.first].partition,    // dependency v
                 reduced_edges[item.first.second].partition,   // dependency u
-                item.second.n_segment);                   // n_segment
+                item.second.n_segment);                       // n_segment
         }
 
         // normalize the concentration
@@ -292,10 +294,11 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
+        double coeff;
 
         std::array<double,3> dq_dl;
-        std::complex<double> k_q_1[M_COMPLEX];
-        std::complex<double> k_q_2[M_COMPLEX];
+        std::complex<double> qk_1[M_COMPLEX];
+        std::complex<double> qk_2[M_COMPLEX];
 
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
@@ -305,7 +308,7 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
         std::map<std::string, double>& dict_bond_lengths = pc->get_dict_bond_lengths();
         std::map<std::pair<std::string, std::string>, std::array<double,3>> reduced_dq_dl;
 
-        // compute stress for optimal key pairs
+        // compute stress for reduced key pairs
         for(const auto& item: reduced_blocks)
         {
             const int N = item.second.n_segment;
@@ -314,10 +317,10 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
             std::string dep_u = key.second; 
             std::string species = item.second.species;
 
-            std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
+            std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
             double bond_length_sq = dict_bond_lengths[species]*dict_bond_lengths[species];
             double* q_1 = reduced_edges[dep_v].partition;    // dependency v
-            double* q_2 = reduced_edges[dep_u].partition;   // dependency u
+            double* q_2 = reduced_edges[dep_u].partition;    // dependency u
 
             // reset
             for(int d=0; d<3; d++)
@@ -326,15 +329,13 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
             // compute
             for(int n=0; n<=N; n++)
             {
-                double coeff;
-
-                fft->forward(&q_1[n*M],    k_q_1);
-                fft->forward(&q_2[(N-n)*M],k_q_2);
+                fft->forward(&q_1[n*M],     qk_1);
+                fft->forward(&q_2[(N-n)*M], qk_2);
 
                 if ( DIM == 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = simpson_rule_coeff[n]*bond_length_sq*(k_q_1[i]*std::conj(k_q_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                         reduced_dq_dl[key][0] += coeff*fourier_basis_x[i];
                         reduced_dq_dl[key][1] += coeff*fourier_basis_y[i];
                         reduced_dq_dl[key][2] += coeff*fourier_basis_z[i];
@@ -343,7 +344,7 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
                 if ( DIM == 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = simpson_rule_coeff[n]*bond_length_sq*(k_q_1[i]*std::conj(k_q_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                         reduced_dq_dl[key][1] += coeff*fourier_basis_y[i];
                         reduced_dq_dl[key][2] += coeff*fourier_basis_y[i];
                     }
@@ -351,7 +352,7 @@ std::array<double,3> CpuPseudoBranchedContinuous::dq_dl()
                 if ( DIM == 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = simpson_rule_coeff[n]*bond_length_sq*(k_q_1[i]*std::conj(k_q_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                         reduced_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
                 }

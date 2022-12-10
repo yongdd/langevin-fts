@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CudaPseudoDiscrete class
+* This is a derived CudaPseudoLinearDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_DISCRETE_H_
-#define CUDA_PSEUDO_DISCRETE_H_
+#ifndef CUDA_PSEUDO_LINEAR_DISCRETE_H_
+#define CUDA_PSEUDO_LINEAR_DISCRETE_H_
 
 #include <array>
 #include <cufft.h>
@@ -13,12 +13,12 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudoDiscrete : public Pseudo
+class CudaPseudoLinearDiscrete : public Pseudo
 {
 private:
     cufftHandle plan_for, plan_bak;
 
-    // partition function and complementry partition are 
+    // partition function and complementary partition are 
     // contiguously stored in q_d for every segment step.
     // In other words,
     // q       (r,1)   = q_d[0]          ~ q_d[MM-1]
@@ -44,8 +44,8 @@ private:
                   double *d_exp_dw_1,     double *d_exp_dw_2);
 public:
 
-    CudaPseudoDiscrete(ComputationBox *cb, PolymerChain *pc);
-    ~CudaPseudoDiscrete();
+    CudaPseudoLinearDiscrete(ComputationBox *cb, PolymerChain *pc);
+    ~CudaPseudoLinearDiscrete();
 
     void update() override;
     void compute_statistics(

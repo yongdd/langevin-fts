@@ -22,7 +22,7 @@ namespace py = pybind11;
 
 struct branched_pseudo_edge{
     int max_n_segment;                              // the maximum segment number
-    double*  partition;                             // array for partition function
+    double* partition;                              // array for partition function
     std::string species;                            // species
     std::vector<std::pair<std::string, int>> deps;  // dependency pairs
 };

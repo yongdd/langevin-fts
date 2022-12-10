@@ -1,7 +1,7 @@
 #include <cmath>
-#include "CpuPseudoDiscrete.h"
+#include "CpuPseudoLinearDiscrete.h"
 
-CpuPseudoDiscrete::CpuPseudoDiscrete(
+CpuPseudoLinearDiscrete::CpuPseudoLinearDiscrete(
     ComputationBox *cb,
     PolymerChain *pc, FFT *fft)
     : Pseudo(cb, pc)
@@ -43,7 +43,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         throw_without_line_number(exc.what());
     }
 }
-CpuPseudoDiscrete::~CpuPseudoDiscrete()
+CpuPseudoLinearDiscrete::~CpuPseudoLinearDiscrete()
 {
     const int N_B = pc->get_n_block();
     delete fft;
@@ -63,7 +63,7 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         
     delete[] q_1, q_2;
 }
-void CpuPseudoDiscrete::update()
+void CpuPseudoLinearDiscrete::update()
 {
     try
     {
@@ -93,7 +93,7 @@ void CpuPseudoDiscrete::update()
         throw_without_line_number(exc.what());
     }
 }
-std::vector<int> CpuPseudoDiscrete::get_block_start()
+std::vector<int> CpuPseudoLinearDiscrete::get_block_start()
 {
     std::vector<int> seg_start;
     seg_start.push_back(0);
@@ -105,7 +105,7 @@ std::vector<int> CpuPseudoDiscrete::get_block_start()
     }
     return seg_start;
 }
-std::array<double,3> CpuPseudoDiscrete::dq_dl()
+std::array<double,3> CpuPseudoLinearDiscrete::dq_dl()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -208,7 +208,7 @@ std::array<double,3> CpuPseudoDiscrete::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::compute_statistics(
+void CpuPseudoLinearDiscrete::compute_statistics(
     std::map<std::string, double*> q_init,
     std::map<std::string, double*> w_block,
     double *phi, double &single_partition)
@@ -328,7 +328,7 @@ void CpuPseudoDiscrete::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
+void CpuPseudoLinearDiscrete::one_step(double *q_in, double *q_out,
                                  double *boltz_bond, double *exp_dw)
 {
     try
@@ -353,7 +353,7 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::get_partition(double *q_out, int v, int u, int n)
+void CpuPseudoLinearDiscrete::get_partition(double *q_out, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 

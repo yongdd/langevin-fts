@@ -5,11 +5,11 @@
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
 
-#include "CudaPseudoContinuous.h"
+#include "CudaPseudoLinearContinuous.h"
 #include "CudaComputationBox.h"
 #include "SimpsonQuadrature.h"
 
-CudaPseudoContinuous::CudaPseudoContinuous(
+CudaPseudoLinearContinuous::CudaPseudoLinearContinuous(
     ComputationBox *cb,
     PolymerChain *pc)
     : Pseudo(cb, pc)
@@ -46,7 +46,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         // Memory allocation
         gpu_error_check(cudaMalloc((void**)&d_q_step1, sizeof(double)*2*M));
         gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*2*M));
-        gpu_error_check(cudaMalloc((void**)&d_k_q_in,   sizeof(ftsComplex)*2*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_k_q_in,  sizeof(ftsComplex)*2*M_COMPLEX));
 
         gpu_error_check(cudaMalloc((void**)&d_q_1, sizeof(double)*M*(N+1)));
         gpu_error_check(cudaMalloc((void**)&d_q_2, sizeof(double)*M*(N+1)));
@@ -73,7 +73,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoContinuous::~CudaPseudoContinuous()
+CudaPseudoLinearContinuous::~CudaPseudoLinearContinuous()
 {
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
@@ -96,7 +96,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(item.second);
 }
 
-void CudaPseudoContinuous::update()
+void CudaPseudoLinearContinuous::update()
 {
     try{
         const int M_COMPLEX = this->n_complex_grid;
@@ -117,7 +117,7 @@ void CudaPseudoContinuous::update()
         throw_with_line_number(exc.what());
     }
 }
-std::vector<int> CudaPseudoContinuous::get_block_start()
+std::vector<int> CudaPseudoLinearContinuous::get_block_start()
 {
     std::vector<int> seg_start;
     seg_start.push_back(0);
@@ -128,7 +128,7 @@ std::vector<int> CudaPseudoContinuous::get_block_start()
     }
     return seg_start;
 }
-std::array<double,3> CudaPseudoContinuous::dq_dl()
+std::array<double,3> CudaPseudoLinearContinuous::dq_dl()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -184,8 +184,6 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
 
             for(int n=seg_start[b]; n<=seg_start[b+1]; n++)
             {
-                double s_coeff = simpson_rule_coeff[n-seg_start[b]];
-
                 gpu_error_check(cudaMemcpy(&d_q_in_2m[0], &d_q_1[n*M],     sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 gpu_error_check(cudaMemcpy(&d_q_in_2m[M], &d_q_2[(N-n)*M], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
@@ -194,17 +192,17 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
                 if ( DIM >= 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    dq_dl[0] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    dq_dl[0] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    dq_dl[1] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    dq_dl[1] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    dq_dl[2] += s_coeff*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    dq_dl[2] += simpson_rule_coeff[n-seg_start[b]]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
             }
         }
@@ -226,7 +224,7 @@ std::array<double,3> CudaPseudoContinuous::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::calculate_phi_one_type(
+void CudaPseudoLinearContinuous::calculate_phi_one_type(
     double *d_phi, const int N_START, const int N_END)
 {
     try
@@ -251,7 +249,7 @@ void CudaPseudoContinuous::calculate_phi_one_type(
     }
 }
 
-void CudaPseudoContinuous::compute_statistics(
+void CudaPseudoLinearContinuous::compute_statistics(
     std::map<std::string, double*> q_init,
     std::map<std::string, double*> w_block,
     double *phi, double &single_partition)
@@ -352,9 +350,7 @@ void CudaPseudoContinuous::compute_statistics(
 
         // segment concentration.
         for(int b=0; b<N_B; b++)
-        {
             calculate_phi_one_type(&d_phi[b*M], seg_start[b], seg_start[b+1]);
-        }
 
         // normalize the concentration
         for(int b=0; b<N_B; b++)
@@ -372,7 +368,7 @@ void CudaPseudoContinuous::compute_statistics(
 // Advance two partial partition functions simultaneously using Richardson extrapolation.
 // Note that cufft doesn't fully utilize GPU cores unless n_grid is sufficiently large.
 // To increase GPU usage, FFT Batch is utilized.
-void CudaPseudoContinuous::one_step(double *d_q_in1,        double *d_q_out1,
+void CudaPseudoLinearContinuous::one_step(double *d_q_in1,        double *d_q_out1,
                                   double *d_q_in2,        double *d_q_out2,
                                   double *d_boltz_bond_1, double *d_boltz_bond_1_half,
                                   double *d_boltz_bond_2, double *d_boltz_bond_2_half,
@@ -446,7 +442,7 @@ void CudaPseudoContinuous::one_step(double *d_q_in1,        double *d_q_out1,
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::get_partition(double *q_out, int v, int u, int n)
+void CudaPseudoLinearContinuous::get_partition(double *q_out, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 

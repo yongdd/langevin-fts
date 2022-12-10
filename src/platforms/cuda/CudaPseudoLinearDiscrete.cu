@@ -5,10 +5,10 @@
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
 #include <iostream>
-#include "CudaPseudoDiscrete.h"
+#include "CudaPseudoLinearDiscrete.h"
 #include "CudaComputationBox.h"
 
-CudaPseudoDiscrete::CudaPseudoDiscrete(
+CudaPseudoLinearDiscrete::CudaPseudoLinearDiscrete(
     ComputationBox *cb,
     PolymerChain *pc)
     : Pseudo(cb, pc)
@@ -75,7 +75,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoDiscrete::~CudaPseudoDiscrete()
+CudaPseudoLinearDiscrete::~CudaPseudoLinearDiscrete()
 {
     const int N_B = pc->get_n_block();
     cufftDestroy(plan_for);
@@ -97,7 +97,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
         cudaFree(item.second);
 }
 
-void CudaPseudoDiscrete::update()
+void CudaPseudoLinearDiscrete::update()
 {
     try
     {
@@ -134,7 +134,7 @@ void CudaPseudoDiscrete::update()
         throw_without_line_number(exc.what());
     }
 }
-std::vector<int> CudaPseudoDiscrete::get_block_start()
+std::vector<int> CudaPseudoLinearDiscrete::get_block_start()
 {
     std::vector<int> seg_start;
     seg_start.push_back(0);
@@ -145,7 +145,7 @@ std::vector<int> CudaPseudoDiscrete::get_block_start()
     }
     return seg_start;
 }
-std::array<double,3> CudaPseudoDiscrete::dq_dl()
+std::array<double,3> CudaPseudoLinearDiscrete::dq_dl()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -162,9 +162,6 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         const int N    = pc->get_n_segment_total();
         const int M_COMPLEX = this->n_complex_grid;
 
-        // const double bond_length_a = eps*eps/(f*eps*eps + (1.0-f));
-        // const double bond_length_b = 1.0/(f*eps*eps + (1.0-f));
-        // const double bond_length_ab = 0.5*bond_length_a + 0.5*bond_length_b;
         double *d_boltz_bond_now;
 
         std::array<double,3> dq_dl;
@@ -198,51 +195,6 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         for(int i=0; i<3; i++)
             dq_dl[i] = 0.0;
 
-        // // Bond between A segments
-        // for(int n=1; n<N; n++)
-        // {
-        //     gpu_error_check(cudaMemcpy(&d_q_in_2m[0], &d_q[M*(2*n-2)],     sizeof(double)*M,cudaMemcpyDeviceToDevice));
-        //     gpu_error_check(cudaMemcpy(&d_q_in_2m[M], &d_q[M*(2*(N-n)-1)], sizeof(double)*M,cudaMemcpyDeviceToDevice));
-        //     cufftExecD2Z(plan_for, d_q_in_2m, d_k_q_in);
-        //     if ( n < seg_start[1])
-        //     {
-        //         bond_length_now = pc->get_bond_length_sq(0);
-        //         d_boltz_bond_now = d_boltz_bond[0];
-        //     }
-        //     for(int b=1; b<N_B; b++)
-        //     {
-        //         if ( n == seg_start[b])
-        //         {
-        //             bond_length_now = 0.5*pc->get_bond_length_sq(b-1) + 0.5*pc->get_bond_length_sq(b);
-        //             d_boltz_bond_now = d_boltz_bond_middle[b-1];
-        //         }
-        //         else if (n > seg_start[b] && n < seg_start[b+1])
-        //         {
-        //             bond_length_now = pc->get_bond_length_sq(b);
-        //             d_boltz_bond_now = d_boltz_bond[b];
-        //         }
-        //     }
-
-        //     multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_k_q_in[0], &d_k_q_in[M_COMPLEX], M_COMPLEX);
-        //     multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_multi, d_q_multi, d_boltz_bond_now, bond_length_now, M_COMPLEX);
-
-        //     if ( DIM >= 3 )
-        //     {
-        //         multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0,   M_COMPLEX);
-        //         dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-        //     }
-        //     if ( DIM >= 2 )
-        //     {
-        //         multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0,   M_COMPLEX);
-        //         dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-        //     }
-        //     if ( DIM >= 1 )
-        //     {
-        //         multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0,   M_COMPLEX);
-        //         dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
-        //     }
-        // }
-
         // compute stress within the blocks
         for(int b=0; b<N_B; b++)
         {
@@ -261,17 +213,17 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
 
                 if ( DIM >= 3 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0,   M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0, M_COMPLEX);
                     dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 2 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0,   M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
                     dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 1 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0,   M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
                     dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
             }
@@ -328,7 +280,7 @@ std::array<double,3> CudaPseudoDiscrete::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::compute_statistics(
+void CudaPseudoLinearDiscrete::compute_statistics(
     std::map<std::string, double*> q_init,
     std::map<std::string, double*> w_block,
     double *phi, double &single_partition)
@@ -465,7 +417,7 @@ void CudaPseudoDiscrete::compute_statistics(
     }
 }
 
-void CudaPseudoDiscrete::one_step(double *d_q_in,          double *d_q_out,
+void CudaPseudoLinearDiscrete::one_step(double *d_q_in,          double *d_q_out,
                                   double *d_boltz_bond_1, double *d_boltz_bond_2,
                                   double *d_exp_dw_1,      double *d_exp_dw_2)
 {
@@ -498,7 +450,7 @@ void CudaPseudoDiscrete::one_step(double *d_q_in,          double *d_q_out,
     }
 }
 
-void CudaPseudoDiscrete::get_partition(double *q_out, int v, int u, int n)
+void CudaPseudoLinearDiscrete::get_partition(double *q_out, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 

@@ -39,12 +39,6 @@ CpuPseudoBranchedDiscrete::CpuPseudoBranchedDiscrete(
             reduced_q_junctions[dep] = new double[M];
         }
 
-        for(const auto& item: reduced_blocks)
-        {
-            //std::cout << "reduced_blocks: " << dep_v << ", " << dep_u << std::endl;
-            reduced_blocks[item.first].phi = new double[M];
-        }
-
         // create reduced_blocks, which contains concentration
         std::vector<polymer_chain_block>& blocks = pc->get_blocks();
         for(int i=0; i<blocks.size(); i++)
@@ -63,15 +57,15 @@ CpuPseudoBranchedDiscrete::CpuPseudoBranchedDiscrete(
             reduced_blocks[item.first].phi = new double[M];
         }
 
-        // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // create boltz_bond, boltz_bond_half, and exp_dw
         for(const auto& item: pc->get_dict_bond_lengths())
         {
             std::string species = item.first;
             boltz_bond     [species] = new double[n_complex_grid];
             boltz_bond_half[species] = new double[n_complex_grid]; 
             exp_dw         [species] = new double[M];
-            exp_dw_half    [species] = new double[M]; 
         }
+
         update();
     }
     catch(std::exception& exc)
@@ -87,8 +81,6 @@ CpuPseudoBranchedDiscrete::~CpuPseudoBranchedDiscrete()
     for(const auto& item: boltz_bond_half)
         delete[] item.second;
     for(const auto& item: exp_dw)
-        delete[] item.second;
-    for(const auto& item: exp_dw_half)
         delete[] item.second;
     for(const auto& item: reduced_edges)
         delete[] item.second.partition;
@@ -139,10 +131,7 @@ void CpuPseudoBranchedDiscrete::compute_statistics(
             std::string species = item.first;
             double *w = item.second;
             for(int i=0; i<M; i++)
-            {
-                exp_dw     [species][i] = exp(-w[i]*ds);
-                exp_dw_half[species][i] = exp(-w[i]*ds*0.5);
-            }
+                exp_dw[species][i] = exp(-w[i]*ds);
         }
 
         for(const auto& item: reduced_edges)
@@ -209,7 +198,7 @@ void CpuPseudoBranchedDiscrete::compute_statistics(
             }
         }
 
-        // calculates the single chain partition function
+        // calculate the single chain partition function
         std::string dep_v = reduced_blocks.begin()->first.first;
         std::string dep_u = reduced_blocks.begin()->first.second;
         int n_segment = reduced_blocks.begin()->second.n_segment;
@@ -218,22 +207,21 @@ void CpuPseudoBranchedDiscrete::compute_statistics(
             &reduced_edges[dep_u].partition[0],                // q^dagger
             exp_dw[reduced_blocks.begin()->second.species]);
 
-        // segment concentration.
+        // calculate segment concentration
         for(const auto& item: reduced_blocks)
         {
             calculate_phi_one_type(
-                item.second.phi,                          // phi
+                item.second.phi,                              // phi
                 reduced_edges[item.first.first].partition,    // dependency v
                 reduced_edges[item.first.second].partition,   // dependency u
-                exp_dw[item.second.species],              // exp_dw to remove double counting
-                item.second.n_segment);                   // n_segment
+                item.second.n_segment);                       // n_segment
         }
 
         // normalize the concentration
         for(const auto& item: reduced_blocks)
         {
             for(int i=0; i<M; i++)
-                item.second.phi[i] *= cb->get_volume()*pc->get_ds()/single_partition;
+                item.second.phi[i] *= cb->get_volume()*pc->get_ds()/single_partition/exp_dw[item.second.species][i];
         }
 
         // copy phi
@@ -301,18 +289,18 @@ void CpuPseudoBranchedDiscrete::half_bond_step(double *q_in, double *q_out, doub
     }
 }
 void CpuPseudoBranchedDiscrete::calculate_phi_one_type(
-    double *phi, double *q_1, double *q_2, double *exp_dw, const int N)
+    double *phi, double *q_1, double *q_2, const int N)
 {
     try
     {
         const int M = cb->get_n_grid();
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = q_1[i]*q_2[i+(N-1)*M]/exp_dw[i];
+            phi[i] = q_1[i]*q_2[i+(N-1)*M];
         for(int n=1; n<N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += q_1[i+n*M]*q_2[i+(N-n-1)*M]/exp_dw[i];
+                phi[i] += q_1[i+n*M]*q_2[i+(N-n-1)*M];
         }
     }
     catch(std::exception& exc)
@@ -373,10 +361,9 @@ std::array<double,3> CpuPseudoBranchedDiscrete::dq_dl()
                 // at v
                 if (n == 0){
                     if (reduced_edges[dep_v].deps.size() == 0) // if v is leaf node, skip
-                        continue;        
+                        continue; 
                     fft->forward(reduced_q_junctions[dep_v], k_q_1);
                     fft->forward(&q_2[(N-1)*M], k_q_2);
-
                     bond_length_sq = 0.5*dict_bond_lengths[species]*dict_bond_lengths[species];
                     boltz_bond_now = boltz_bond_half[species];
                 }
@@ -387,7 +374,6 @@ std::array<double,3> CpuPseudoBranchedDiscrete::dq_dl()
                         continue; 
                     fft->forward(&q_1[(N-1)*M], k_q_1);
                     fft->forward(reduced_q_junctions[dep_u], k_q_2);
-
                     bond_length_sq = 0.5*dict_bond_lengths[species]*dict_bond_lengths[species];
                     boltz_bond_now = boltz_bond_half[species];
                 }
@@ -396,11 +382,9 @@ std::array<double,3> CpuPseudoBranchedDiscrete::dq_dl()
                 {
                     fft->forward(&q_1[(n-1)*M], k_q_1);
                     fft->forward(&q_2[(N-n-1)*M], k_q_2);
-
                     bond_length_sq = dict_bond_lengths[species]*dict_bond_lengths[species];
                     boltz_bond_now = boltz_bond[species];
                 }
-
                 // compute 
                 if ( DIM == 3 )
                 {

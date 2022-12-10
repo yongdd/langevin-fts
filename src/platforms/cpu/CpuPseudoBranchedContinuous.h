@@ -2,8 +2,8 @@
 * This is a derived CpuPseudoBranchedContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
-#define CPU_PSEUDO_BRANCHED_CONTINUOUS_H_
+#ifndef CPU_PSEUDO_BRANCHED_LINEAR_CONTINUOUS_H_
+#define CPU_PSEUDO_BRANCHED_LINEAR_CONTINUOUS_H_
 
 #include <string>
 #include <vector>
@@ -34,7 +34,6 @@ private:
                   double *boltz_bond, double *boltz_bond_half,
                   double *exp_dw, double *exp_dw_half);
     void calculate_phi_one_type(double *phi, double *q_1, double *q_2, const int N);
-    void init_simpson_rule_coeff(double *coeff, const int N);
 public:
     CpuPseudoBranchedContinuous(ComputationBox *cb, PolymerChain *pc, FFT *ff);
     ~CpuPseudoBranchedContinuous();
