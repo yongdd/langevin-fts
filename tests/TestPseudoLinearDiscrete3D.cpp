@@ -7,15 +7,14 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
+#include "Mixture.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "CpuPseudoLinearDiscrete.h"
 #include "CpuPseudoBranchedDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaPseudoLinearDiscrete.h"
 #include "CudaPseudoBranchedDiscrete.h"
 #endif
 
@@ -29,7 +28,7 @@ int main()
         const int MM{II*JJ*KK};
         const int NN{4};
 
-        double phi[MM*2];
+        std::vector<double *> phi;
         double q1_init[MM]{0.0}, q2_init[MM]{0.0};
         double q1_last[MM], q2_last[MM];
 
@@ -175,44 +174,53 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
+        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
+        std::vector<std::string> block_species = {"A","B"};
         std::vector<double> contour_lengths = {f, 1.0-f};
+        std::vector<int> v = {0,1};
+        std::vector<int> u = {1,2};
+
+        phi.push_back(new double[MM*block_species.size()]);
+        double phi_a[MM]={0.0}, phi_b[MM]={0.0};
+
         double alpha{0.0};
         for (auto& contour_length : contour_lengths)
             alpha += contour_length;
-        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
-        PolymerChain pc("Discrete", 1.0/NN, bond_lengths, {"A","B"}, contour_lengths, {0,1}, {1,2}, {});
+
+        Mixture mx("Discrete", 1.0/NN, bond_lengths);
+        mx.add_polymer_chain(1.0, block_species, contour_lengths, v, u, {});
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoLinearDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
-        pseudo_list.push_back(new CpuPseudoBranchedDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoBranchedDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &mx, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoLinearDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
-        pseudo_list.push_back(new CudaPseudoBranchedDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        pseudo_list.push_back(new CudaPseudoBranchedDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &mx));
         #endif
 
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
         {
+            const int p = 0;
+            PolymerChain *pc = mx.get_polymer_chain(p);
+
             for(int i=0; i<MM; i++)
             {
-                phi[i] = 0.0;
-                phi[i+MM] = 0.0;
+                phi[p][i] = 0.0;
+                phi[p][i+MM] = 0.0;
                 q1_last[i] = 0.0;
                 q2_last[i] = 0.0;
             }
-            QQ = 0.0;
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}}, phi, QQ);
+            std::vector<double> QQ = pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}}, phi);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
-            pseudo->get_partition(q1_last, 1, 2, pc.get_block(1,2).n_segment);
+            pseudo->get_partition(q1_last, p, 1, 2, pc->get_block(1,2).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -220,7 +228,7 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            pseudo->get_partition(q2_last, 1, 0, pc.get_block(1,0).n_segment);
+            pseudo->get_partition(q2_last, p, 1, 0, pc->get_block(1,0).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -228,47 +236,48 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(QQ-14.9276505263205);
+            error = std::abs(QQ[p]-14.9276505263205);
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
-                diff_sq[i] = pow(phi[i] - phi_a_ref[i],2);
+                diff_sq[i] = pow(phi[p][i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
-                diff_sq[i] = pow(phi[i+MM] - phi_b_ref[i],2);
+                diff_sq[i] = pow(phi[p][i+MM] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;
             if (std::isnan(error) || error > 1e-7)
                 return -1;
             
-            std::array<double,3> stress = pseudo->dq_dl();
-            for(int i=0; i<stress.size(); i++)
-                stress[i] *= Lx*Ly*Lz/alpha/QQ;
+            auto stress = pseudo->dq_dl();
+            for(int i=0; i<stress[p].size(); i++)
+                stress[p][i] *= Lx*Ly*Lz/alpha/QQ[p];
             // std::cout<< std::setw(20) << std::setprecision(15) << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
-            error = std::abs(stress[0]-0.01137033351560520);
+            error = std::abs(stress[p][0]-0.01137033351560520);
             std::cout<< "Stress[0] error: "<< error << std::endl;
             // if (std::isnan(error) || error > 1e-7)
             //     return -1;
 
-            error = std::abs(stress[1]-0.0146040034393427);
+            error = std::abs(stress[p][1]-0.0146040034393427);
             std::cout<< "Stress[1] error: "<< error << std::endl;
             // if (std::isnan(error) || error > 1e-7)
             //     return -1;
 
-            error = std::abs(stress[2]-0.035718163012313);
+            error = std::abs(stress[p][2]-0.035718163012313);
             std::cout<< "Stress[2] error: "<< error << std::endl;
             // if (std::isnan(error) || error > 1e-7)
             //     return -1;
-
             delete pseudo;
         }
+        delete[] phi[0];
+
         return 0;
     }
     catch(std::exception& exc)

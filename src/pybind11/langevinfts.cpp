@@ -20,28 +20,6 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 
 PYBIND11_MODULE(langevinfts, m)
 {
-    py::class_<PolymerChain>(m, "PolymerChain")
-        .def(py::init<std::string, double, std::map<std::string, double>,
-            std::vector<std::string>, std::vector<double>,
-            std::vector<int>, std::vector<int>, std::map<int, int>>())
-        .def("get_model_name", &PolymerChain::get_model_name)
-        .def("get_ds", &PolymerChain::get_ds)
-        .def("get_n_block", &PolymerChain::get_n_block)
-        .def("get_alpha", &PolymerChain::get_alpha)
-        //.def("get_blocks", &PolymerChain::get_blocks)
-        .def("get_block", &PolymerChain::get_block);
-        //.def("get_n_segment_total", &PolymerChain::get_n_segment_total)
-        //.def("get_dict_bond_lengths", &PolymerChain::get_dict_bond_lengths)
-        //.def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
-        //.def("get_block_species", &PolymerChain::get_block_species)
-        //.def("get_array_idx", &PolymerChain::get_array_idx)
-        //.def("get_dep", &PolymerChain::get_dep)
-        //.def("get_reduced_n_branches", &PolymerChain::get_reduced_n_branches)
-        //.def("key_to_deps", &PolymerChain::key_to_deps)
-        //.def("key_to_species", &PolymerChain::key_to_species)
-        //.def("get_reduced_branches_max_segment", &PolymerChain::get_reduced_branches_max_segment)
-        //.def("get_reduced_branch_max_segment", &PolymerChain::get_reduced_branch_max_segment);
-
     py::class_<ComputationBox>(m, "ComputationBox")
         .def(py::init<std::vector<int>, std::vector<double>>())
         .def("get_dim", &ComputationBox::get_dim)
@@ -60,6 +38,28 @@ PYBIND11_MODULE(langevinfts, m)
         .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
         .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
 
+    // py::class_<PolymerChain>(m, "PolymerChain")
+    //     .def(py::init<std::string, double, std::map<std::string, double>,
+    //         std::vector<std::string>, std::vector<double>,
+    //         std::vector<int>, std::vector<int>, std::map<int, int>>())
+    //     .def("get_model_name", &PolymerChain::get_model_name)
+    //     .def("get_ds", &PolymerChain::get_ds)
+    //     .def("get_n_block", &PolymerChain::get_n_block)
+    //     .def("get_alpha", &PolymerChain::get_alpha)
+    //     //.def("get_blocks", &PolymerChain::get_blocks)
+    //     .def("get_block", &PolymerChain::get_block);
+    //     //.def("get_n_segment_total", &PolymerChain::get_n_segment_total)
+    //     //.def("get_dict_bond_lengths", &PolymerChain::get_dict_bond_lengths)
+    //     //.def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
+    //     //.def("get_block_species", &PolymerChain::get_block_species)
+    //     //.def("get_array_idx", &PolymerChain::get_array_idx)
+    //     //.def("get_dep", &PolymerChain::get_dep)
+    //     //.def("get_reduced_n_branches", &PolymerChain::get_reduced_n_branches)
+    //     //.def("key_to_deps", &PolymerChain::key_to_deps)
+    //     //.def("key_to_species", &PolymerChain::key_to_species)
+    //     //.def("get_reduced_branches_max_segment", &PolymerChain::get_reduced_branches_max_segment)
+    //     //.def("get_reduced_branch_max_segment", &PolymerChain::get_reduced_branch_max_segment);
+
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
         .def("compute_statistics", overload_cast_<
@@ -75,8 +75,8 @@ PYBIND11_MODULE(langevinfts, m)
             py::array_t<double>, double, double>()(&AndersonMixing::calculate_new_fields));
 
     py::class_<AbstractFactory>(m, "AbstractFactory")
-        .def("create_polymer_chain", &AbstractFactory::create_polymer_chain)
         .def("create_computation_box", &AbstractFactory::create_computation_box)
+        .def("create_mixture", &AbstractFactory::create_mixture)
         .def("create_pseudo", &AbstractFactory::create_pseudo)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)

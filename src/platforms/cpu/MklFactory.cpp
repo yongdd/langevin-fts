@@ -12,57 +12,50 @@
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
-#include "CpuPseudoLinearContinuous.h"
-#include "CpuPseudoLinearDiscrete.h"
+#include "CpuPseudoBranchedContinuous.h"
+#include "CpuPseudoBranchedDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
 MklFactory::MklFactory(std::string chain_model){
     this->chain_model = chain_model;
 }
-PolymerChain* MklFactory::create_polymer_chain(
-    double ds, 
-    std::map<std::string, double> dict_segment_lengths,
-    std::vector<std::string> block_species, 
-    std::vector<double> contour_lengths,
-    std::vector<int> v, std::vector<int> u,
-    std::map<int, int> v_to_grafting_index)
-{
-    return new PolymerChain(
-        chain_model, ds, dict_segment_lengths,
-        block_species, contour_lengths, v, u,
-        v_to_grafting_index);
-}
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)
 {
     return new ComputationBox(nx, lx);
 }
-Pseudo* MklFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
+
+Mixture* MklFactory::create_mixture(
+    double ds, std::map<std::string, double> bond_lengths) 
 {
-    std::string chain_model = pc->get_model_name();
+    return new Mixture(chain_model, ds, bond_lengths);
+}
+Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+{
+    std::string chain_model = mx->get_model_name();
     if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoLinearContinuous(cb, pc,
+            return new CpuPseudoBranchedContinuous(cb, mx,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoLinearContinuous(cb, pc,
+            return new CpuPseudoBranchedContinuous(cb, mx,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoLinearContinuous(cb, pc,
+            return new CpuPseudoBranchedContinuous(cb, mx,
                 new MklFFT1D(cb->get_nx(2)));
     }
     else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoLinearDiscrete(cb, pc,
+            return new CpuPseudoBranchedDiscrete(cb, mx,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoLinearDiscrete(cb, pc,
+            return new CpuPseudoBranchedDiscrete(cb, mx,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoLinearDiscrete(cb, pc,
+            return new CpuPseudoBranchedDiscrete(cb, mx,
                 new MklFFT1D(cb->get_nx(2)));
     }
     return NULL;
