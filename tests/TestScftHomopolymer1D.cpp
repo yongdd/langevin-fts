@@ -8,8 +8,9 @@
 
 #include "Exception.h"
 #include "ParamParser.h"
-#include "PolymerChain.h"
 #include "ComputationBox.h"
+#include "PolymerChain.h"
+#include "Mixture.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -35,7 +36,8 @@ int main()
         // initial value of q, q_dagger
         double *q1_init, *q2_init;
         // segment concentration
-        double *phi, *phi_a, *phi_b, *phitot;
+        double *phi_a, *phi_b, *phi_tot;
+        std::vector<double *> phi;
 
         // string to output file and print stream
         std::ofstream print_stream;
@@ -72,18 +74,18 @@ int main()
             factory->display_info();
 
             // create instances and assign to the variables of base classes for the dynamic binding
-            ComputationBox *cb  = factory->create_computation_box(nx, lx);
-            PolymerChain *pc_a = factory->create_polymer_chain(ds, {{"A",1.0}}, {"A"}, {1.0}, {0}, {1}, {});
-            PolymerChain *pc_b = factory->create_polymer_chain(ds, {{"B",1.0}}, {"B"}, {1.0}, {0}, {1}, {});
-            Pseudo *pseudo_a   = factory->create_pseudo(cb, pc_a);
-            Pseudo *pseudo_b   = factory->create_pseudo(cb, pc_b);
+            ComputationBox *cb = factory->create_computation_box(nx, lx);
+            Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}});
+            mx->add_polymer_chain(frac_a,     {"A"}, {1.0}, {0}, {1}, {});
+            mx->add_polymer_chain(1.0-frac_a, {"B"}, {1.0}, {0}, {1}, {});
+            Pseudo *pseudo     = factory->create_pseudo(cb, mx);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
             // -------------- print simulation parameters ------------
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
-            std::cout << "chi_n, frac_a, N_a, N_b: " << chi_n << " " << frac_a << " " << pc_a->get_n_segment_total() << " " << pc_b->get_n_segment_total() << std::endl;
+            std::cout << "chi_n, frac_a: " << chi_n << " " << frac_a << " " << std::endl;
             std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
             std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
             std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
@@ -97,15 +99,16 @@ int main()
             w_out   = new double[cb->get_n_grid()*2];
             w_diff  = new double[cb->get_n_grid()*2];
             xi      = new double[cb->get_n_grid()];
-            phi     = new double[cb->get_n_grid()*2];
-            phitot  = new double[cb->get_n_grid()];
+            phi_a   = new double[cb->get_n_grid()];
+            phi_b   = new double[cb->get_n_grid()];
+            phi_tot = new double[cb->get_n_grid()];
             w_plus  = new double[cb->get_n_grid()];
             w_minus = new double[cb->get_n_grid()];
             q1_init = new double[cb->get_n_grid()];
             q2_init = new double[cb->get_n_grid()];
 
-            phi_a = &phi[0];
-            phi_b = &phi[cb->get_n_grid()];
+            phi.push_back(new double[cb->get_n_grid()]);
+            phi.push_back(new double[cb->get_n_grid()]);
             //-------------- setup fields ------------
             //call random_number(phi_a)
             //   phi_a = reshape( phi_a, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
@@ -134,7 +137,7 @@ int main()
             cb->zero_mean(&w[0]);
             cb->zero_mean(&w[cb->get_n_grid()]);
 
-            // free end initial condition. q1 is q and q2 is qdagger.
+            // free end initial condition. q1 is q and q2 is q^dagger.
             // q1 starts from A end and q2 starts from B end.
             for(int i=0; i<cb->get_n_grid(); i++)
             {
@@ -149,20 +152,13 @@ int main()
 
             //------------------ run ----------------------
             std::cout<< "---------- Run ----------" << std::endl;
-            std::cout<< "iteration, mass error, total_partition_a, _b, energy_total, error_level" << std::endl;
+            std::cout<< "iteration, mass error, total_partition, energy_total, error_level" << std::endl;
             chrono_start = std::chrono::system_clock::now();
             // iteration begins here
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo_a->compute_statistics({}, {{"A",&w[0]}},                phi_a, QQ_a);
-                pseudo_b->compute_statistics({}, {{"B",&w[cb->get_n_grid()]}}, phi_b, QQ_b);
-
-                for(int i=0; i<cb->get_n_grid(); i++)
-                {
-                    phi_a[i] = phi_a[i]*frac_a;
-                    phi_b[i] = phi_b[i]*(1.0-frac_a);
-                }
+                std::vector<double> QQ = pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[cb->get_n_grid()]}}, phi);
 
                 // calculate the total energy
                 for(int i=0; i<cb->get_n_grid(); i++)
@@ -170,11 +166,38 @@ int main()
                     w_minus[i] = (w[i]-w[i + cb->get_n_grid()])/2;
                     w_plus[i]  = (w[i]+w[i + cb->get_n_grid()])/2;
                 }
-                energy_total  = -frac_a*log(QQ_a/cb->get_volume());
-                energy_total -= (1.0-frac_a)*log(QQ_b/cb->get_volume());
-                energy_total += cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                energy_total += cb->integral(w_plus)/cb->get_volume();
+
+                for(int i=0; i<cb->get_n_grid(); i++)
+                {
+                    phi_a[i] = 0.0;
+                    phi_b[i] = 0.0;
+                }
+                for(int p=0; p<mx->get_n_distinct_polymers(); p++)
+                {
+                    PolymerChain *pc = mx->get_polymer_chain(p);
+                    std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+                    for(int b=0; b<blocks.size(); b++)
+                    {
+                        if (blocks[b].species == "A")
+                        {
+                            for(int i=0; i<cb->get_n_grid(); i++)
+                                phi_a[i] += phi[p][b*cb->get_n_grid()+i]*pc->get_volume_fraction()/pc->get_alpha();
+                        }
+                        if (blocks[b].species == "B")
+                        {
+                            for(int i=0; i<cb->get_n_grid(); i++)
+                                phi_b[i] += phi[p][b*cb->get_n_grid()+i]*pc->get_volume_fraction()/pc->get_alpha();
+                        }
+                    }
+                }
+
+                energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                energy_total -= cb->integral(w_plus)/cb->get_volume();
                 //energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
+                for(int p=0; p<mx->get_n_distinct_polymers(); p++){
+                    PolymerChain *pc = mx->get_polymer_chain(p);
+                    energy_total -= pc->get_volume_fraction()/pc->get_alpha()*log(QQ[p]/cb->get_volume());
+                }
 
                 for(int i=0; i<cb->get_n_grid(); i++)
                 {
@@ -198,8 +221,8 @@ int main()
                 sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ_a;
-                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ_b;
+                for(int p=0; p<mx->get_n_distinct_polymers(); p++)
+                    std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << QQ[p];
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
 
@@ -220,20 +243,25 @@ int main()
             delete[] w_out;
             delete[] w_diff;
             delete[] xi;
-            delete[] phi;
-            delete[] phitot;
+
+            for(int p=0; p<mx->get_n_distinct_polymers(); p++)
+                delete[] phi[p];
+            phi.clear();
+
+            delete[] phi_a;
+            delete[] phi_b;
+            delete[] phi_tot;
             delete[] w_plus;
             delete[] w_minus;
             delete[] q1_init;
             delete[] q2_init;
 
-            delete pc_a;
-            delete pc_b;
+            delete mx;
             delete cb;
-            delete pseudo_a;
-            delete pseudo_b;
+            delete pseudo;
             delete am;
             delete factory;
+            
             if (std::isnan(error_level) || std::abs(error_level-0.000823320) > 1e-7)
                 return -1;
         }

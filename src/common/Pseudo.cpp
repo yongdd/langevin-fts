@@ -5,15 +5,15 @@
 
 Pseudo::Pseudo(
     ComputationBox *cb,
-    PolymerChain *pc)
+    Mixture *mx)
 {
     if (cb == nullptr)
         throw_with_line_number("ComputationBox *cb is null pointer");
-    if (pc == nullptr)
-        throw_with_line_number("PolymerChain *pc is null pointer");
+    if (mx == nullptr)
+        throw_with_line_number("Mixture *mx is null pointer");
 
     this->cb = cb;
-    this->pc = pc;
+    this->mx = mx;
     this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
 }
 //----------------- get_boltz_bond -------------------

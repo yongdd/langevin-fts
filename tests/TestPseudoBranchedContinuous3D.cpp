@@ -14,6 +14,7 @@
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
+// #include "CudaPseudoLinearContinuous.h"
 #include "CudaPseudoBranchedContinuous.h"
 #endif
 
@@ -26,6 +27,7 @@ int main()
         const int KK{3};
         const int MM{II*JJ*KK};
 
+        std::vector<double *> phi;
         double q1_init[MM]={0.0}, q2_init[MM]={0.0};
         double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
 
@@ -162,19 +164,21 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
+        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
         std::vector<std::string> block_species = {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"};
         std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2};
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
 
-        double phi[MM*block_species.size()]={0.0};
+        phi.push_back(new double[MM*block_species.size()]);
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
 
         double alpha{0.0};
         for (auto& contour_length : contour_lengths)
             alpha += contour_length;
-        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
-        PolymerChain pc("Continuous", 0.15, bond_lengths, block_species, contour_lengths, v, u, {});
+
+        Mixture mx("Continuous", 0.15, bond_lengths);
+        mx.add_polymer_chain(1.0, block_species, contour_lengths, v, u, {});
 
         // std::cout << "block size: " << block_species.size() << std::endl;
         // for(int b=0; b<block_species.size(); b++)
@@ -201,10 +205,10 @@ int main()
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoBranchedContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &mx, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoBranchedContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &pc));
+        pseudo_list.push_back(new CudaPseudoBranchedContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), &mx));
         #endif
 
         // For each platform    
@@ -217,23 +221,26 @@ int main()
                 q_1_4_last[i] = 0.0;
                 q_1_0_last[i] = 0.0;
             }
-            QQ = 0.0;
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}}, phi, QQ);
+            std::vector<double> QQ = pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}}, phi);
 
-            for(int b=0; b<block_species.size(); b++)
+            for(int p=0; p<mx.get_n_distinct_polymers(); p++)
             {
-                if (block_species[b] == "A")
+                PolymerChain *pc = mx.get_polymer_chain(p);
+                for(int b=0; b<block_species.size(); b++)
                 {
-                    for(int i=0; i<II*JJ*KK; i++)
-                        phi_a[i] += phi[b*MM+i]/alpha;
-                }
-                if (block_species[b] == "B")
-                {
-                    for(int i=0; i<II*JJ*KK; i++)
-                        phi_b[i] += phi[b*MM+i]/alpha;
+                    if (block_species[b] == "A")
+                    {
+                        for(int i=0; i<II*JJ*KK; i++)
+                            phi_a[i] += phi[p][b*MM+i]*pc->get_volume_fraction()/pc->get_alpha();
+                    }
+                    if (block_species[b] == "B")
+                    {
+                        for(int i=0; i<II*JJ*KK; i++)
+                            phi_b[i] += phi[p][b*MM+i]*pc->get_volume_fraction()/pc->get_alpha();
+                    }
                 }
             }
 
@@ -241,7 +248,9 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
-            pseudo->get_partition(q_1_4_last, 1, 4, pc.get_block(1,4).n_segment);
+            const int p = 0;
+            PolymerChain *pc = mx.get_polymer_chain(p);
+            pseudo->get_partition(q_1_4_last, p, 1, 4, pc->get_block(1,4).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -249,7 +258,7 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            pseudo->get_partition(q_1_0_last, 1, 0, pc.get_block(1,0).n_segment);
+            pseudo->get_partition(q_1_0_last, p, 1, 0, pc->get_block(1,0).n_segment);
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -257,7 +266,7 @@ int main()
             if (std::isnan(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(QQ-1.5701353236e-03);
+            error = std::abs(QQ[p]-1.5701353236e-03);
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
             if (std::isnan(error) || error > 1e-7)
                 return -1;
@@ -305,6 +314,8 @@ int main()
 
             delete pseudo;
         }
+        delete[] phi[0];
+
         return 0;
     }
     catch(std::exception& exc)

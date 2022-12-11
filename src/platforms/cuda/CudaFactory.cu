@@ -10,41 +10,32 @@
 #include <string>
 
 #include "CudaComputationBox.h"
-#include "CudaPseudoLinearContinuous.h"
-#include "CudaPseudoLinearDiscrete.h"
+#include "CudaPseudoBranchedContinuous.h"
+#include "CudaPseudoBranchedDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
 CudaFactory::CudaFactory(std::string chain_model){
     this->chain_model = chain_model;
 }
-PolymerChain* CudaFactory::create_polymer_chain(
-    double ds, 
-    std::map<std::string, double> dict_segment_lengths,
-    std::vector<std::string> block_species, 
-    std::vector<double> contour_lengths,
-    std::vector<int> v, std::vector<int> u,
-    std::map<int, int> v_to_grafting_index)
-{
-    return new PolymerChain(
-        chain_model, ds, dict_segment_lengths,
-        block_species, contour_lengths, v, u,
-        v_to_grafting_index);
-}
-
 ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)
 {
     return new CudaComputationBox(nx, lx);
 }
-Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, PolymerChain *pc)
+Mixture* CudaFactory::create_mixture(
+    double ds, std::map<std::string, double> bond_lengths) 
 {
-    std::string model_name = pc->get_model_name();
+    return new Mixture(chain_model, ds, bond_lengths);
+}
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+{
+    std::string model_name = mx->get_model_name();
 
     if( model_name == "continuous" )
-        return new CudaPseudoLinearContinuous(cb, pc);
+        return new CudaPseudoBranchedContinuous(cb, mx);
     else if ( model_name == "discrete" )
-        return new CudaPseudoLinearDiscrete(cb, pc);
+        return new CudaPseudoBranchedDiscrete(cb, mx);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
