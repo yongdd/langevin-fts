@@ -107,7 +107,7 @@ for scft_iter in range(1,max_scft_iter+1):
 
     # for the given fields find the polymer statistics
     phi_bcp, Q_bcp = pseudo.compute_statistics(q1_init,q2_init,w)
-    phi_bcp = phi_bcp.reshape(pc.get_n_block(),cb.get_n_grid())
+    phi_bcp = phi_bcp.reshape(pc.get_n_blocks(),cb.get_n_grid())
     phi_homo, Q_homo = pseudo_homo_a.compute_statistics(q1_init,q2_init,w[0])
     phi[0] = phi_bcp[0]*frac_bcp + phi_homo*(1.0-frac_bcp)/n_segment_ratio
     phi[1] = phi_bcp[1]*frac_bcp

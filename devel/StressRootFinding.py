@@ -66,7 +66,7 @@ def find_saddle_point(lx):
             old_error_level, error_level)
     
     if use_stress:
-        stress_array = np.array(pseudo.dq_dl()[-cb.get_dim():])/Q
+        stress_array = np.array(pseudo.get_stress()[-cb.get_dim():])/Q
         return stress_array
     else:
         return energy_total

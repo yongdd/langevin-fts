@@ -4,11 +4,11 @@
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
-#include "CudaPseudoBranchedContinuous.h"
+#include "CudaPseudoContinuous.h"
 #include "CudaComputationBox.h"
 #include "SimpsonQuadrature.h"
 
-CudaPseudoBranchedContinuous::CudaPseudoBranchedContinuous(
+CudaPseudoContinuous::CudaPseudoContinuous(
     ComputationBox *cb,
     Mixture *mx)
     : Pseudo(cb, mx)
@@ -18,19 +18,23 @@ CudaPseudoBranchedContinuous::CudaPseudoBranchedContinuous(
         const int M_COMPLEX = this->n_complex_grid;
 
         // allocate memory for partition functions
-        for(const auto& item: mx->get_reduced_branches())
+        if( mx->get_unique_branches().size() == 0)
+            throw_with_line_number("There is no unique branch. Add polymers first.");
+        for(const auto& item: mx->get_unique_branches())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            d_reduced_partition[dep] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_reduced_partition[dep], sizeof(double)*M*(max_n_segment+1)));
+            d_unique_partition[dep] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_unique_partition[dep], sizeof(double)*M*(max_n_segment+1)));
         }
 
         // allocate memory for concentrations
-        for(const auto& item: mx->get_reduced_blocks())
+        if( mx->get_unique_blocks().size() == 0)
+            throw_with_line_number("There is no unique block. Add polymers first.");
+        for(const auto& item: mx->get_unique_blocks())
         {
-            d_reduced_phi[item.first] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_reduced_phi[item.first], sizeof(double)*M));
+            d_unique_phi[item.first] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_unique_phi[item.first], sizeof(double)*M));
         }
 
         // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
@@ -46,6 +50,9 @@ CudaPseudoBranchedContinuous::CudaPseudoBranchedContinuous(
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [species], sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[species], sizeof(double)*M_COMPLEX));
         }
+
+        // total partition functions for each polymer
+        single_partitions = new double[mx->get_n_polymers()];
 
         // create FFT plan
         const int BATCH{1};
@@ -70,12 +77,15 @@ CudaPseudoBranchedContinuous::CudaPseudoBranchedContinuous(
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
 
-        // allocate memory for pseudo-spectral: one-step()
+        // allocate memory for get_concentration
+        gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M));
+
+        // allocate memory for pseudo-spectral: one_step()
         gpu_error_check(cudaMalloc((void**)&d_q_step1, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_qk_in,  sizeof(ftsComplex)*M_COMPLEX));
         
-        // allocate memory for stress calculation: dq_dl()
+        // allocate memory for stress calculation: get_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));
@@ -91,10 +101,12 @@ CudaPseudoBranchedContinuous::CudaPseudoBranchedContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoBranchedContinuous::~CudaPseudoBranchedContinuous()
+CudaPseudoContinuous::~CudaPseudoContinuous()
 {
     cufftDestroy(plan_for);
     cufftDestroy(plan_bak);
+
+    delete[] single_partitions;
 
     for(const auto& item: d_boltz_bond)
         cudaFree(item.second);
@@ -104,17 +116,20 @@ CudaPseudoBranchedContinuous::~CudaPseudoBranchedContinuous()
         cudaFree(item.second);
     for(const auto& item: d_exp_dw_half)
         cudaFree(item.second);
-    for(const auto& item: d_reduced_partition)
+    for(const auto& item: d_unique_partition)
         cudaFree(item.second);
-    for(const auto& item: d_reduced_phi)
+    for(const auto& item: d_unique_phi)
         cudaFree(item.second);
 
-    // for pseudo-spectral: one-step()
+    // for get_concentration
+    cudaFree(d_phi);
+
+    // for pseudo-spectral: one_step()
     cudaFree(d_q_step1);
     cudaFree(d_q_step2);
     cudaFree(d_qk_in);
 
-    // for stress calculation: dq_dl()
+    // for stress calculation: get_stress()
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
@@ -124,10 +139,10 @@ CudaPseudoBranchedContinuous::~CudaPseudoBranchedContinuous()
     cudaFree(d_stress_sum);
 }
 
-void CudaPseudoBranchedContinuous::update()
+void CudaPseudoContinuous::update()
 {
     try{
-        // for pseudo-spectral: one-step()
+        // for pseudo-spectral: one_step()
         const int M_COMPLEX = this->n_complex_grid;
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
@@ -142,7 +157,7 @@ void CudaPseudoBranchedContinuous::update()
             gpu_error_check(cudaMemcpy(d_boltz_bond_half[species], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
 
-        // for stress calculation: dq_dl()
+        // for stress calculation: get_stress()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -156,10 +171,9 @@ void CudaPseudoBranchedContinuous::update()
         throw_with_line_number(exc.what());
     }
 }
-std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
+void CudaPseudoContinuous::compute_statistics(
     std::map<std::string, double*> q_init,
-    std::map<std::string, double*> w_block,
-    std::vector<double *> phi)
+    std::map<std::string, double*> w_block)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -168,14 +182,14 @@ std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
 
-        for(const auto& item: mx->get_reduced_branches())
+        for(const auto& item: mx->get_unique_branches())
         {
             if( w_block.count(item.second.species) == 0)
                 throw_with_line_number("\"" + item.second.species + "\" species is not in w_block.");
         }
 
         if( q_init.size() > 0)
-            throw_with_line_number("Currently, \'q_init\' is not supported for branched polymers.");
+            throw_with_line_number("Currently, \'q_init\' is not supported.");
 
         // exp_dw and exp_dw_half
         double exp_dw[M];
@@ -196,13 +210,13 @@ std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
         double q_uniform[M];
         for(int i=0; i<M; i++)
             q_uniform[i] = 1.0;
-        for(const auto& item: mx->get_reduced_branches())
+        for(const auto& item: mx->get_unique_branches())
         {
             auto& key = item.first;
             // calculate one block end
             if (item.second.deps.size() > 0) // if it is not leaf node
             {
-                gpu_error_check(cudaMemcpy(d_reduced_partition[key], q_uniform,
+                gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
                     sizeof(double)*M, cudaMemcpyHostToDevice));
 
                 for(int p=0; p<item.second.deps.size(); p++)
@@ -210,21 +224,21 @@ std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
                     std::string sub_dep = item.second.deps[p].first;
                     int sub_n_segment   = item.second.deps[p].second;
                     multi_real<<<N_BLOCKS, N_THREADS>>>(
-                        d_reduced_partition[key], d_reduced_partition[key],
-                        &d_reduced_partition[sub_dep][sub_n_segment*M], 1.0, M);
+                        d_unique_partition[key], d_unique_partition[key],
+                        &d_unique_partition[sub_dep][sub_n_segment*M], 1.0, M);
                 }
             }
             else // if it is leaf node
             {
-                gpu_error_check(cudaMemcpy(d_reduced_partition[key], q_uniform,
+                gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
                     sizeof(double)*M, cudaMemcpyHostToDevice)); //* q_init
             }
 
             // apply the propagator successively
             for(int n=1; n<=item.second.max_n_segment; n++)
             {
-                one_step(&d_reduced_partition[key][(n-1)*M],
-                         &d_reduced_partition[key][n*M],
+                one_step(&d_unique_partition[key][(n-1)*M],
+                         &d_unique_partition[key][n*M],
                          d_boltz_bond[item.second.species],
                          d_boltz_bond_half[item.second.species],
                          d_exp_dw[item.second.species],
@@ -233,50 +247,30 @@ std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
         }
 
         // calculate segment concentrations
-        for(const auto& item: mx->get_reduced_blocks())
+        for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
             calculate_phi_one_type(
-                d_reduced_phi[key],                     // phi
-                d_reduced_partition[std::get<0>(key)],  // dependency v
-                d_reduced_partition[std::get<1>(key)],  // dependency u
+                d_unique_phi[key],                     // phi
+                d_unique_partition[std::get<0>(key)],  // dependency v
+                d_unique_partition[std::get<1>(key)],  // dependency u
                 std::get<2>(key));                      // n_segment
         }
 
         // for each distinct polymers 
-        std::vector<double> single_partitions(mx->get_n_distinct_polymers());
-        for(int p=0; p<mx->get_n_distinct_polymers(); p++)
+        for(int p=0; p<mx->get_n_polymers(); p++)
         {
-            PolymerChain *pc = mx->get_polymer_chain(p);
-            std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
             // calculate the single chain partition function at block 0
-            std::string dep_v = pc->get_dep(blocks[0].v, blocks[0].u);
-            std::string dep_u = pc->get_dep(blocks[0].u, blocks[0].v);
+            std::string dep_v = pc.get_dep(blocks[0].v, blocks[0].u);
+            std::string dep_u = pc.get_dep(blocks[0].u, blocks[0].v);
             int n_segment = blocks[0].n_segment;
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
-                &d_reduced_partition[dep_v][n_segment*M],  // q
-                &d_reduced_partition[dep_u][0]);           // q^dagger
-
-            // copy phi
-            double* phi_p = phi[p];
-            for(int b=0; b<blocks.size(); b++)
-            {
-                std::string dep_v = pc->get_dep(blocks[b].v, blocks[b].u);
-                std::string dep_u = pc->get_dep(blocks[b].u, blocks[b].v);
-                if (dep_v > dep_u)
-                    dep_v.swap(dep_u);
-                gpu_error_check(cudaMemcpy(
-                    &phi_p[b*M], d_reduced_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)],
-                    sizeof(double)*M, cudaMemcpyDeviceToHost));
-
-                // normalize the concentration
-                double norm = cb->get_volume()*mx->get_ds()/single_partitions[p];
-                for(int i=0; i<M; i++)
-                    phi_p[i+b*M] = norm*phi_p[i+b*M]; 
-            }
+                &d_unique_partition[dep_v][n_segment*M],  // q
+                &d_unique_partition[dep_u][0]);           // q^dagger
         }
-        return single_partitions;
     }
     catch(std::exception& exc)
     {
@@ -285,7 +279,7 @@ std::vector<double> CudaPseudoBranchedContinuous::compute_statistics(
 }
 
 // Advance partial partition function using Richardson extrapolation.
-void CudaPseudoBranchedContinuous::one_step(
+void CudaPseudoContinuous::one_step(
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half)
@@ -348,7 +342,7 @@ void CudaPseudoBranchedContinuous::one_step(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoBranchedContinuous::calculate_phi_one_type(
+void CudaPseudoContinuous::calculate_phi_one_type(
     double *d_phi, double *d_q_1, double *d_q_2, const int N)
 {
     try
@@ -371,7 +365,90 @@ void CudaPseudoBranchedContinuous::calculate_phi_one_type(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<std::array<double,3>> CudaPseudoBranchedContinuous::dq_dl()
+double CudaPseudoContinuous::get_total_partition(int polymer)
+{
+    try
+    {
+        return single_partitions[polymer];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoContinuous::get_species_concentration(std::string species, double *phi)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        // initialize to zero
+        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 0.0, d_phi, M);
+
+        // for each distinct polymers 
+        for(int p=0; p<mx->get_n_polymers(); p++)
+        {
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+            for(int b=0; b<blocks.size(); b++)
+            {
+                if (blocks[b].species == species)
+                {
+                    std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+                    std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
+                    if (dep_v > dep_u)
+                        dep_v.swap(dep_u);
+                        
+                    // normalize the concentration
+                    double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, norm, d_unique_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)], M);
+                }
+            }
+        }
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoContinuous::get_polymer_concentration(int polymer, double *phi)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        const int P = mx->get_n_polymers();
+
+        if (polymer < 0 || polymer > P-1)
+            throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        PolymerChain& pc = mx->get_polymer(polymer);
+        std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+
+        for(int b=0; b<blocks.size(); b++)
+        {
+            std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+            std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
+            if (dep_v > dep_u)
+                dep_v.swap(dep_u);
+
+            // copy normalized concentration
+            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[polymer];
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, norm, d_unique_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)], M);
+            gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+std::array<double,3> CudaPseudoContinuous::get_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -387,12 +464,12 @@ std::vector<std::array<double,3>> CudaPseudoBranchedContinuous::dq_dl()
         const int M_COMPLEX = this->n_complex_grid;
 
         std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
-        std::vector<std::array<double,3>> dq_dl(mx->get_n_distinct_polymers());
-        std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> reduced_dq_dl;
+        std::array<double,3> dq_dl;
+        std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
-        // compute stress for reduced key pairs
-        for(const auto& item: mx->get_reduced_blocks())
+        // compute stress for Unique key pairs
+        for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
             std::string dep_v = std::get<0>(key);
@@ -402,12 +479,12 @@ std::vector<std::array<double,3>> CudaPseudoBranchedContinuous::dq_dl()
 
             std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
             double bond_length_sq = bond_lengths[species]*bond_lengths[species];
-            double* d_q_1 = d_reduced_partition[dep_v];    // dependency v
-            double* d_q_2 = d_reduced_partition[dep_u];    // dependency u
+            double* d_q_1 = d_unique_partition[dep_v];    // dependency v
+            double* d_q_2 = d_unique_partition[dep_u];    // dependency u
 
             // reset
             for(int d=0; d<3; d++)
-                reduced_dq_dl[key][d] = 0.0;
+                unique_dq_dl[key][d] = 0.0;
 
             // compute
             for(int n=0; n<=N; n++)
@@ -418,41 +495,41 @@ std::vector<std::array<double,3>> CudaPseudoBranchedContinuous::dq_dl()
                 if ( DIM >= 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    reduced_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    reduced_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
                 if ( DIM >= 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    reduced_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
                 }
             }
         }
 
-        // compute total stress for each distinct polymers 
-        for(int p=0; p < mx->get_n_distinct_polymers(); p++)
+        // compute total stress
+        for(int d=0; d<3; d++)
+            dq_dl[d] = 0.0;
+        for(int p=0; p < mx->get_n_polymers(); p++)
         {
-            for(int d=0; d<3; d++)
-                dq_dl[p][d] = 0.0;
-            PolymerChain *pc = mx->get_polymer_chain(p);
-            std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
             for(int b=0; b<blocks.size(); b++)
             {
-                std::string dep_v = pc->get_dep(blocks[b].v, blocks[b].u);
-                std::string dep_u = pc->get_dep(blocks[b].u, blocks[b].v);
+                std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+                std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
                 if (dep_v > dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    dq_dl[p][d] += reduced_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d];
+                    dq_dl[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
-            for(int d=0; d<3; d++)
-                dq_dl[p][d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
         }
-
+        for(int d=0; d<3; d++)
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume()/cb->get_volume();
+            
         return dq_dl;
     }
     catch(std::exception& exc)
@@ -460,7 +537,7 @@ std::vector<std::array<double,3>> CudaPseudoBranchedContinuous::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoBranchedContinuous::get_partition(double *q_out, int polymer, int v, int u, int n)
+void CudaPseudoContinuous::get_partial_partition(double *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 
@@ -469,13 +546,13 @@ void CudaPseudoBranchedContinuous::get_partition(double *q_out, int polymer, int
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain *pc = mx->get_polymer_chain(polymer);
-        std::string dep = pc->get_dep(v,u);
-        const int N = mx->get_reduced_branches()[dep].max_n_segment;
+        PolymerChain& pc = mx->get_polymer(polymer);
+        std::string dep = pc.get_dep(v,u);
+        const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        double* partition = d_reduced_partition[dep];
+        double* partition = d_unique_partition[dep];
         gpu_error_check(cudaMemcpy(q_out, &partition[n*M], sizeof(double)*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)

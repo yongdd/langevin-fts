@@ -53,8 +53,8 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT1D.cpp
         src/platforms/cpu/MklFFT2D.cpp
         src/platforms/cpu/MklFFT3D.cpp
-        src/platforms/cpu/CpuPseudoBranchedContinuous.cpp
-        src/platforms/cpu/CpuPseudoBranchedDiscrete.cpp
+        src/platforms/cpu/CpuPseudoContinuous.cpp
+        src/platforms/cpu/CpuPseudoDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
@@ -71,10 +71,8 @@ IF(CUDAToolkit_FOUND)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
         src/platforms/cuda/CudaComputationBox.cu
-        # src/platforms/cuda/CudaPseudoLinearContinuous.cu
-        # src/platforms/cuda/CudaPseudoLinearDiscrete.cu
-        src/platforms/cuda/CudaPseudoBranchedContinuous.cu
-        src/platforms/cuda/CudaPseudoBranchedDiscrete.cu
+        src/platforms/cuda/CudaPseudoContinuous.cu
+        src/platforms/cuda/CudaPseudoDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
         src/platforms/cuda/CudaFactory.cu

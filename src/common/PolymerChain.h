@@ -40,15 +40,17 @@ public:
         std::map<int, int> v_to_grafting_index);
     ~PolymerChain() {};
 
-    int get_n_block();
-    std::string get_block_species(int idx);
-    int get_n_segment(int idx);
-    int get_n_segment_total();
     double get_alpha();
     double get_volume_fraction();
-    int get_array_idx(int v, int u);
-    struct PolymerChainBlock& get_block(int v, int u);
+
+    int get_n_blocks();
     std::vector<PolymerChainBlock>& get_blocks();
+    struct PolymerChainBlock& get_block(int v, int u);
+
+    int get_n_segment_total();
+    int get_n_segment(int idx);
+
+    int get_array_idx(int v, int u);
     std::map<int, std::vector<int>>& get_adjacent_nodes();
     std::map<std::pair<int, int>, int>& get_edge_to_array();
     void set_edge_to_deps(int v, int u, std::string deps);

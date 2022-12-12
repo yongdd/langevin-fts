@@ -12,8 +12,8 @@
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
-#include "CpuPseudoBranchedContinuous.h"
-#include "CpuPseudoBranchedDiscrete.h"
+#include "CpuPseudoContinuous.h"
+#include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -37,25 +37,25 @@ Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
     if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoBranchedContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, mx,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoBranchedContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, mx,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoBranchedContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, mx,
                 new MklFFT1D(cb->get_nx(2)));
     }
     else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoBranchedDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, mx,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoBranchedDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, mx,
                 new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoBranchedDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, mx,
                 new MklFFT1D(cb->get_nx(2)));
     }
     return NULL;
@@ -72,7 +72,7 @@ void MklFactory::display_info()
     MKLVersion Version;
  
     mkl_get_version(&Version);
-    std::cout<< "-------------------- MKL Version --------------------" << std::endl;
+    std::cout<< "==================== MKL Version ====================" << std::endl;
     printf("Major version:           %d\n",Version.MajorVersion);
     printf("Minor version:           %d\n",Version.MinorVersion);
     printf("Update version:          %d\n",Version.UpdateVersion);

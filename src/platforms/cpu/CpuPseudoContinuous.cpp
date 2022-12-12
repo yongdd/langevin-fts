@@ -1,8 +1,8 @@
 #include <cmath>
-#include "CpuPseudoBranchedContinuous.h"
+#include "CpuPseudoContinuous.h"
 #include "SimpsonQuadrature.h"
 
-CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
+CpuPseudoContinuous::CpuPseudoContinuous(
     ComputationBox *cb,
     Mixture *mx,
     FFT *fft)
@@ -15,17 +15,21 @@ CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
         this->fft = fft;
 
         // allocate memory for partition functions
-        for(const auto& item: mx->get_reduced_branches())
+        if( mx->get_unique_branches().size() == 0)
+            throw_with_line_number("There is no unique branch. Add polymers first.");
+        for(const auto& item: mx->get_unique_branches())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            reduced_partition[dep] = new double[M*(max_n_segment+1)];
+            unique_partition[dep] = new double[M*(max_n_segment+1)];
         }
 
         // allocate memory for concentrations
-        for(const auto& item: mx->get_reduced_blocks())
+        if( mx->get_unique_blocks().size() == 0)
+            throw_with_line_number("There is no unique block. Add polymers first.");
+        for(const auto& item: mx->get_unique_blocks())
         {
-            reduced_phi[item.first] = new double[M];
+            unique_phi[item.first] = new double[M];
         }
 
         // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
@@ -38,10 +42,13 @@ CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
             exp_dw_half    [species] = new double[M]; 
         }
 
-        // allocate memory for stress calculation: dq_dl()
+        // allocate memory for stress calculation: get_stress()
         fourier_basis_x = new double[M_COMPLEX];
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
+
+        // total partition functions for each polymer
+        single_partitions = new double[mx->get_n_polymers()];
 
         update();
     }
@@ -50,13 +57,15 @@ CpuPseudoBranchedContinuous::CpuPseudoBranchedContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CpuPseudoBranchedContinuous::~CpuPseudoBranchedContinuous()
+CpuPseudoContinuous::~CpuPseudoContinuous()
 {
     delete fft;
 
-    delete fourier_basis_x;
-    delete fourier_basis_y;
-    delete fourier_basis_z;
+    delete[] fourier_basis_x;
+    delete[] fourier_basis_y;
+    delete[] fourier_basis_z;
+
+    delete[] single_partitions;
 
     for(const auto& item: boltz_bond)
         delete[] item.second;
@@ -66,12 +75,12 @@ CpuPseudoBranchedContinuous::~CpuPseudoBranchedContinuous()
         delete[] item.second;
     for(const auto& item: exp_dw_half)
         delete[] item.second;
-    for(const auto& item: reduced_partition)
+    for(const auto& item: unique_partition)
         delete[] item.second;
-    for(const auto& item: reduced_phi)
+    for(const auto& item: unique_phi)
         delete[] item.second;
 }
-void CpuPseudoBranchedContinuous::update()
+void CpuPseudoContinuous::update()
 {
     try
     {
@@ -82,7 +91,7 @@ void CpuPseudoBranchedContinuous::update()
             get_boltz_bond(boltz_bond     [species], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
             get_boltz_bond(boltz_bond_half[species], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
 
-            // for stress calculation: dq_dl()
+            // for stress calculation: get_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         }
     }
@@ -91,24 +100,23 @@ void CpuPseudoBranchedContinuous::update()
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuPseudoBranchedContinuous::compute_statistics(
+void CpuPseudoContinuous::compute_statistics(
     std::map<std::string, double*> q_init,
-    std::map<std::string, double*> w_block,
-    std::vector<double *> phi)
+    std::map<std::string, double*> w_block)
 {
     try
     {
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
 
-        for(const auto& item: mx->get_reduced_branches())
+        for(const auto& item: mx->get_unique_branches())
         {
             if( w_block.count(item.second.species) == 0)
                 throw_with_line_number("\"" + item.second.species + "\" species is not in w_block.");
         }
 
         if( q_init.size() > 0)
-            throw_with_line_number("Currently, \'q_init\' is not supported for branched polymers.");
+            throw_with_line_number("Currently, \'q_init\' is not supported.");
 
         for(const auto& item: w_block)
         {
@@ -121,33 +129,33 @@ std::vector<double> CpuPseudoBranchedContinuous::compute_statistics(
             }
         }
 
-        for(const auto& item: mx->get_reduced_branches())
+        for(const auto& item: mx->get_unique_branches())
         {
             auto& key = item.first;
             // calculate one block end
             if (item.second.deps.size() > 0) // if it is not leaf node
             {
                 for(int i=0; i<M; i++)
-                    reduced_partition[key][i] = 1.0;
+                    unique_partition[key][i] = 1.0;
                 for(int p=0; p<item.second.deps.size(); p++)
                 {
                     std::string sub_dep = item.second.deps[p].first;
                     int sub_n_segment   = item.second.deps[p].second;
                     for(int i=0; i<M; i++)
-                        reduced_partition[key][i] *= reduced_partition[sub_dep][sub_n_segment*M+i];
+                        unique_partition[key][i] *= unique_partition[sub_dep][sub_n_segment*M+i];
                 }
             }
             else // if it is leaf node
             {
                 for(int i=0; i<M; i++)
-                    reduced_partition[key][i] = 1.0; //* q_init
+                    unique_partition[key][i] = 1.0; //* q_init
             }
 
             // apply the propagator successively
             for(int n=1; n<=item.second.max_n_segment; n++)
             {
-                one_step(&reduced_partition[key][(n-1)*M],
-                         &reduced_partition[key][n*M],
+                one_step(&unique_partition[key][(n-1)*M],
+                         &unique_partition[key][n*M],
                          boltz_bond[item.second.species],
                          boltz_bond_half[item.second.species],
                          exp_dw[item.second.species],
@@ -156,54 +164,37 @@ std::vector<double> CpuPseudoBranchedContinuous::compute_statistics(
         }
 
         // calculate segment concentrations
-        for(const auto& item: mx->get_reduced_blocks())
+        for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
             calculate_phi_one_type(
-                reduced_phi[key],                     // phi
-                reduced_partition[std::get<0>(key)],  // dependency v
-                reduced_partition[std::get<1>(key)],  // dependency u
+                unique_phi[key],                     // phi
+                unique_partition[std::get<0>(key)],  // dependency v
+                unique_partition[std::get<1>(key)],  // dependency u
                 std::get<2>(key));                    // n_segment
         }
 
         // for each distinct polymers 
-        std::vector<double> single_partitions(mx->get_n_distinct_polymers());
-        for(int p=0; p<mx->get_n_distinct_polymers(); p++)
+        for(int p=0; p<mx->get_n_polymers(); p++)
         {
-            PolymerChain *pc = mx->get_polymer_chain(p);
-            std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
             // calculate the single chain partition function at block 0
-            std::string dep_v = pc->get_dep(blocks[0].v, blocks[0].u);
-            std::string dep_u = pc->get_dep(blocks[0].u, blocks[0].v);
+            std::string dep_v = pc.get_dep(blocks[0].v, blocks[0].u);
+            std::string dep_u = pc.get_dep(blocks[0].u, blocks[0].v);
             int n_segment = blocks[0].n_segment;
             single_partitions[p]= cb->inner_product(
-                &reduced_partition[dep_v][n_segment*M],  // q
-                &reduced_partition[dep_u][0]);           // q^dagger
-
-            // copy phi
-            double* phi_p = phi[p];
-            for(int b=0; b<blocks.size(); b++)
-            {
-                std::string dep_v = pc->get_dep(blocks[b].v, blocks[b].u);
-                std::string dep_u = pc->get_dep(blocks[b].u, blocks[b].v);
-                if (dep_v > dep_u)
-                    dep_v.swap(dep_u);
-                double* _reduced_phi = reduced_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)];
-                // normalize the concentration
-                double norm = cb->get_volume()*mx->get_ds()/single_partitions[p];
-                for(int i=0; i<M; i++)
-                    phi_p[i+b*M] = norm * _reduced_phi[i]; 
-            }
+                &unique_partition[dep_v][n_segment*M],  // q
+                &unique_partition[dep_u][0]);           // q^dagger
         }
-        return single_partitions;
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoBranchedContinuous::one_step(double *q_in, double *q_out,
+void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
                                  double *boltz_bond, double *boltz_bond_half,
                                  double *exp_dw, double *exp_dw_half)
 {
@@ -268,7 +259,7 @@ void CpuPseudoBranchedContinuous::one_step(double *q_in, double *q_out,
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoBranchedContinuous::calculate_phi_one_type(
+void CpuPseudoContinuous::calculate_phi_one_type(
     double *phi, double *q_1, double *q_2, const int N)
 {
     try
@@ -290,7 +281,88 @@ void CpuPseudoBranchedContinuous::calculate_phi_one_type(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<std::array<double,3>> CpuPseudoBranchedContinuous::dq_dl()
+double CpuPseudoContinuous::get_total_partition(int polymer)
+{
+    try
+    {
+        return single_partitions[polymer];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CpuPseudoContinuous::get_species_concentration(std::string species, double *phi)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        // initialize array
+        for(int i=0; i<M; i++)
+            phi[i] = 0.0;
+
+        // for each distinct polymers 
+        for(int p=0; p<mx->get_n_polymers(); p++)
+        {
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+
+            for(int b=0; b<blocks.size(); b++)
+            {
+                if (blocks[b].species == species)
+                {
+                    std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+                    std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
+                    if (dep_v > dep_u)
+                        dep_v.swap(dep_u);
+                    double* _unique_phi = unique_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)];
+
+                    // normalize the concentration
+                    double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    for(int i=0; i<M; i++)
+                        phi[i] += norm * _unique_phi[i]; 
+                }
+            }
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CpuPseudoContinuous::get_polymer_concentration(int polymer, double *phi)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        const int P = mx->get_n_polymers();
+
+        if (polymer < 0 || polymer > P-1)
+            throw_with_line_number("Index (" + std::to_string(polymer) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        PolymerChain& pc = mx->get_polymer(polymer);
+        std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+
+        for(int b=0; b<blocks.size(); b++)
+        {
+            std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+            std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
+            if (dep_v > dep_u)
+                dep_v.swap(dep_u);
+            double* _unique_phi = unique_phi[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)];
+
+            // normalize the concentration
+            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[polymer];
+            for(int i=0; i<M; i++)
+                phi[i+b*M] = norm * _unique_phi[i]; 
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+std::array<double,3> CpuPseudoContinuous::get_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -308,11 +380,11 @@ std::vector<std::array<double,3>> CpuPseudoBranchedContinuous::dq_dl()
         std::complex<double> qk_2[M_COMPLEX];
 
         std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
-        std::vector<std::array<double,3>> dq_dl(mx->get_n_distinct_polymers());
-        std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> reduced_dq_dl;
+        std::array<double,3> dq_dl;
+        std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
 
-        // compute stress for reduced key pairs
-        for(const auto& item: mx->get_reduced_blocks())
+        // compute stress for Unique key pairs
+        for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
             std::string dep_v = std::get<0>(key);
@@ -322,12 +394,12 @@ std::vector<std::array<double,3>> CpuPseudoBranchedContinuous::dq_dl()
 
             std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
             double bond_length_sq = bond_lengths[species]*bond_lengths[species];
-            double* q_1 = reduced_partition[dep_v];    // dependency v
-            double* q_2 = reduced_partition[dep_u];    // dependency u
+            double* q_1 = unique_partition[dep_v];    // dependency v
+            double* q_2 = unique_partition[dep_u];    // dependency u
 
             // reset
             for(int d=0; d<3; d++)
-                reduced_dq_dl[key][d] = 0.0;
+                unique_dq_dl[key][d] = 0.0;
 
             // compute
             for(int n=0; n<=N; n++)
@@ -339,48 +411,47 @@ std::vector<std::array<double,3>> CpuPseudoBranchedContinuous::dq_dl()
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-                        reduced_dq_dl[key][0] += coeff*fourier_basis_x[i];
-                        reduced_dq_dl[key][1] += coeff*fourier_basis_y[i];
-                        reduced_dq_dl[key][2] += coeff*fourier_basis_z[i];
+                        unique_dq_dl[key][0] += coeff*fourier_basis_x[i];
+                        unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
+                        unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
                 }
                 if ( DIM == 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-                        reduced_dq_dl[key][1] += coeff*fourier_basis_y[i];
-                        reduced_dq_dl[key][2] += coeff*fourier_basis_y[i];
+                        unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
+                        unique_dq_dl[key][2] += coeff*fourier_basis_y[i];
                     }
                 }
                 if ( DIM == 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-                        reduced_dq_dl[key][2] += coeff*fourier_basis_z[i];
+                        unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
                 }
             }
         }
-
-        // compute total stress for each distinct polymers 
-        for(int p=0; p < mx->get_n_distinct_polymers(); p++)
+        // compute total stress
+        for(int d=0; d<3; d++)
+            dq_dl[d] = 0.0;
+        for(int p=0; p < mx->get_n_polymers(); p++)
         {
-            for(int d=0; d<3; d++)
-                dq_dl[p][d] = 0.0;
-            PolymerChain *pc = mx->get_polymer_chain(p);
-            std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+            PolymerChain& pc = mx->get_polymer(p);
+            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
             for(int b=0; b<blocks.size(); b++)
             {
-                std::string dep_v = pc->get_dep(blocks[b].v, blocks[b].u);
-                std::string dep_u = pc->get_dep(blocks[b].u, blocks[b].v);
+                std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+                std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
                 if (dep_v > dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    dq_dl[p][d] += reduced_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d];
+                    dq_dl[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
-            for(int d=0; d<3; d++)
-                dq_dl[p][d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
         }
+        for(int d=0; d<3; d++)
+            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume()/cb->get_volume();
 
         return dq_dl;
     }
@@ -389,7 +460,7 @@ std::vector<std::array<double,3>> CpuPseudoBranchedContinuous::dq_dl()
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoBranchedContinuous::get_partition(double *q_out, int polymer, int v, int u, int n)
+void CpuPseudoContinuous::get_partial_partition(double *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 
@@ -398,13 +469,13 @@ void CpuPseudoBranchedContinuous::get_partition(double *q_out, int polymer, int 
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain *pc = mx->get_polymer_chain(polymer);
-        std::string dep = pc->get_dep(v,u);
-        const int N = mx->get_reduced_branches()[dep].max_n_segment;
+        PolymerChain& pc = mx->get_polymer(polymer);
+        std::string dep = pc.get_dep(v,u);
+        const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        double* partition = reduced_partition[dep];
+        double* partition = unique_partition[dep];
         for(int i=0; i<M; i++)
             q_out[i] = partition[n*M+i];
     }

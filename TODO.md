@@ -13,3 +13,5 @@
 19. User Interface layer?
 20. GUI?
 21. set initial condition: v_to_grafting_index, q_init
+22. CudaPseudoDiscrete only works for odd grid number
+23. scheduler for parallel computing

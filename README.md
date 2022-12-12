@@ -3,8 +3,8 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
 * SCFT and L-FTS   
-* AB Diblock Copolymer Melt
-* Arbitrary Mixtures of linear AB Block Copolymers, Homopolymers, Random Copolymers (**beta**)
+* Arbitrary Acyclic AB Block Copolymers (**beta**)
+* Arbitrary Mixtures of AB Block Copolymers, Homopolymers, Random Copolymers (**beta**)
 * Conformational Asymmetry
 * Box Size Determination by Stress Calculation (SCFT only)
 * Chain Model: Continuous, Discrete
