@@ -91,7 +91,7 @@ int main()
             }
             error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
             std::cout<< "FFT Forward Error: " << error << std::endl;
-            if(!std::isnormal(error) || error > 1e-7)
+            if(!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             //--------------- Backward --------------------
@@ -100,7 +100,7 @@ int main()
                 diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "FFT Backward Error: " << error << std::endl;
-            if(!std::isnormal(error) || error > 1e-7)
+            if(!std::isfinite(error) || error > 1e-7)
                 return -1;
             
             delete fft;

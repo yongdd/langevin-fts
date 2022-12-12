@@ -258,7 +258,7 @@ int main()
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             pseudo->get_partial_partition(q_1_0_last, p, 1, 0, pc.get_block(1,0).n_segment);
@@ -266,27 +266,27 @@ int main()
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             double QQ = pseudo->get_total_partition(p);
             error = std::abs(QQ-1.5701353236e-03);
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             // for(int i=0; i<II*JJ*KK; i++)

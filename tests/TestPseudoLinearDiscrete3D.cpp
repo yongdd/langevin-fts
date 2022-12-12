@@ -217,7 +217,7 @@ int main()
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             pseudo->get_partial_partition(q2_last, p, 1, 0, pc.get_block(1,0).n_segment);
@@ -225,27 +225,27 @@ int main()
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             double QQ = pseudo->get_total_partition(p);
             error = std::abs(QQ-14.9276505263205);
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             for(int i=0; i<MM; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
             
             std::array<double,3> stress = pseudo->get_stress();
@@ -253,17 +253,17 @@ int main()
 
             error = std::abs(stress[0]-0.01137033351560520);
             std::cout<< "Stress[0] error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             error = std::abs(stress[1]-0.0146040034393427);
             std::cout<< "Stress[1] error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             error = std::abs(stress[2]-0.035718163012313);
             std::cout<< "Stress[2] error: "<< error << std::endl;
-            if (!std::isnormal(error) || error > 1e-7)
+            if (!std::isfinite(error) || error > 1e-7)
                 return -1;
                 
             delete pseudo;
