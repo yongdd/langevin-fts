@@ -10,8 +10,8 @@
 #include <string>
 
 #include "CudaComputationBox.h"
-#include "CudaPseudoBranchedContinuous.h"
-#include "CudaPseudoBranchedDiscrete.h"
+#include "CudaPseudoContinuous.h"
+#include "CudaPseudoDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
@@ -33,9 +33,9 @@ Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
     std::string model_name = mx->get_model_name();
 
     if( model_name == "continuous" )
-        return new CudaPseudoBranchedContinuous(cb, mx);
+        return new CudaPseudoContinuous(cb, mx);
     else if ( model_name == "discrete" )
-        return new CudaPseudoBranchedDiscrete(cb, mx);
+        return new CudaPseudoDiscrete(cb, mx);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
@@ -59,7 +59,7 @@ void CudaFactory::display_info()
     gpu_error_check(cudaGetDevice(&device));
     gpu_error_check(cudaGetDeviceProperties(&prop, device));
 
-    std::cout<< "---------- CUDA Setting and Device Information ----------" << std::endl;
+    std::cout<< "========== CUDA Setting and Device Information ==========" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
 
     std::cout<< "DeviceCount: " << devices_count << std::endl;

@@ -40,6 +40,10 @@ PolymerChain::PolymerChain(
             throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in bond_lengths.");
     }
 
+    //  
+    if( v_to_grafting_index.size() > 0)
+        throw_with_line_number("Currently, \'v_to_grafting_index\' is not supported.");
+
     // save variables
     try
     {
@@ -140,13 +144,9 @@ PolymerChain::PolymerChain(
         }
     }
 }
-int PolymerChain::get_n_block()
+int PolymerChain::get_n_blocks()
 {
     return blocks.size();
-}
-std::string PolymerChain::get_block_species(int idx)
-{
-    return blocks[idx].species;
 }
 int PolymerChain::get_n_segment(int idx)
 {
@@ -197,6 +197,6 @@ void PolymerChain::set_edge_to_deps(int v, int u, std::string deps)
 }
 std::string PolymerChain::get_dep(int v, int u){
     if (edge_to_deps.count(std::make_pair(v, u)) == 0)
-        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+        throw_with_line_number("There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return edge_to_deps[std::make_pair(v,u)];
 }

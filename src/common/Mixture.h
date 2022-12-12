@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines branched polymer chain parameters
+* This class defines polymer mixture parameters
 *-----------------------------------------------------------*/
 
 #ifndef MIXTURE_H_
@@ -11,13 +11,13 @@
 
 #include "PolymerChain.h"
 
-struct ReducedEdge{
+struct UniqueEdge{
     int max_n_segment;                              // the maximum segment number
     std::string species;                            // species
     std::vector<std::pair<std::string, int>> deps;  // dependency pairs
 };
 
-struct ReducedBlock{
+struct UniqueBlock{
     std::string species;  // species
 };
 
@@ -32,13 +32,13 @@ private:
     std::map<std::string, double> bond_lengths;
 
     // distinct_polymers
-    std::vector<PolymerChain *> distinct_polymers;
+    std::vector<PolymerChain> distinct_polymers;
 
-    // dictionary{key:non-duplicated reduced sub_branches, value: ReducedEdge}
-    std::map<std::string, ReducedEdge, std::greater<std::string>> reduced_branches; 
+    // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
+    std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches; 
 
     // set{key: (dep_v, dep_u) (assert(dep_v <= dep_u))}
-    std::map<std::tuple<std::string, std::string, int>, ReducedBlock> reduced_blocks; 
+    std::map<std::tuple<std::string, std::string, int>, UniqueBlock> unique_blocks; 
 
     // get sub-branch information as ordered texts
     std::pair<std::string, int> get_text_of_ordered_branches(
@@ -49,29 +49,32 @@ private:
 public:
 
     Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
-    ~Mixture();
+    ~Mixture() {};
 
     std::string get_model_name();
     double get_ds();
     std::map<std::string, double>& get_bond_lengths();
 
     // distinct_polymers
-    void add_polymer_chain(
+    void add_polymer(
         double volume_fraction,
         std::vector<std::string> block_species,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
         std::map<int, int> v_to_grafting_index);
-    int get_n_distinct_polymers();
-    PolymerChain* get_polymer_chain(int p);
+    int get_n_polymers();
+    PolymerChain& get_polymer(int p);
 
-    // get information of reduced sub graphs
-    int get_reduced_n_branches();
+    // get information of Unique sub graphs
+    int get_unique_n_branches();
     std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
     std::string key_to_species(std::string key);
-    std::map<std::string, ReducedEdge, std::greater<std::string>>& get_reduced_branches(); 
-    ReducedEdge get_reduced_branch(std::string key);
-    std::map<std::tuple<std::string, std::string, int>, ReducedBlock>& get_reduced_blocks(); 
-    ReducedBlock get_reduced_block(std::tuple<std::string, std::string, int> key);
+    std::map<std::string, UniqueEdge, std::greater<std::string>>& get_unique_branches(); 
+    UniqueEdge get_unique_branch(std::string key);
+    std::map<std::tuple<std::string, std::string, int>, UniqueBlock>& get_unique_blocks(); 
+    UniqueBlock get_unique_block(std::tuple<std::string, std::string, int> key);
+
+    void display_unique_branches();
+    void display_unique_blocks();
 };
 #endif

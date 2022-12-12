@@ -144,7 +144,7 @@ for dim in [1,2,3]:
                     np.reshape(w_diff, 2*cb.get_n_grid()),
                     old_error_level, error_level)
             
-            dqdl = np.linalg.norm(np.array(pseudo.dq_dl()[-cb.get_dim():]))/Q
+            dqdl = np.linalg.norm(np.array(pseudo.get_stress()[-cb.get_dim():]))/Q
             test_output.append(error_level)
             test_dqdl.append(dqdl)
             

@@ -38,36 +38,55 @@ PYBIND11_MODULE(langevinfts, m)
         .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
         .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
 
-    // py::class_<PolymerChain>(m, "PolymerChain")
-    //     .def(py::init<std::string, double, std::map<std::string, double>,
-    //         std::vector<std::string>, std::vector<double>,
-    //         std::vector<int>, std::vector<int>, std::map<int, int>>())
-    //     .def("get_model_name", &PolymerChain::get_model_name)
-    //     .def("get_ds", &PolymerChain::get_ds)
-    //     .def("get_n_block", &PolymerChain::get_n_block)
-    //     .def("get_alpha", &PolymerChain::get_alpha)
-    //     //.def("get_blocks", &PolymerChain::get_blocks)
-    //     .def("get_block", &PolymerChain::get_block);
-    //     //.def("get_n_segment_total", &PolymerChain::get_n_segment_total)
-    //     //.def("get_dict_bond_lengths", &PolymerChain::get_dict_bond_lengths)
-    //     //.def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
-    //     //.def("get_block_species", &PolymerChain::get_block_species)
-    //     //.def("get_array_idx", &PolymerChain::get_array_idx)
-    //     //.def("get_dep", &PolymerChain::get_dep)
-    //     //.def("get_reduced_n_branches", &PolymerChain::get_reduced_n_branches)
-    //     //.def("key_to_deps", &PolymerChain::key_to_deps)
-    //     //.def("key_to_species", &PolymerChain::key_to_species)
-    //     //.def("get_reduced_branches_max_segment", &PolymerChain::get_reduced_branches_max_segment)
-    //     //.def("get_reduced_branch_max_segment", &PolymerChain::get_reduced_branch_max_segment);
+    py::class_<PolymerChain>(m, "PolymerChain")
+        .def(py::init<double, std::map<std::string, double>, double,
+            std::vector<std::string>, std::vector<double>,
+            std::vector<int>, std::vector<int>, std::map<int, int>>())
+        .def("get_alpha", &PolymerChain::get_alpha)
+        .def("get_volume_fraction", &PolymerChain::get_volume_fraction)
+        .def("get_n_blocks", &PolymerChain::get_n_blocks)
+        .def("get_blocks", &PolymerChain::get_blocks)
+        .def("get_block", &PolymerChain::get_block)
+        //.def("get_block_species", &PolymerChain::get_block_species)
+        .def("get_n_segment_total", &PolymerChain::get_n_segment_total)
+        .def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
+        .def("get_array_idx", &PolymerChain::get_array_idx)
+        .def("get_adjacent_nodes", &PolymerChain::get_adjacent_nodes)
+        .def("get_edge_to_array", &PolymerChain::get_edge_to_array)
+        //.def("set_edge_to_deps", &PolymerChain::set_edge_to_deps)
+        .def("get_dep", &PolymerChain::get_dep);
+
+    py::class_<Mixture>(m, "Mixture")
+        .def(py::init<std::string, double, std::map<std::string, double>>())
+        .def("get_model_name", &Mixture::get_model_name)
+        .def("get_ds", &Mixture::get_ds)
+        .def("get_bond_lengths", &Mixture::get_bond_lengths)
+        .def("get_n_polymers", &Mixture::get_n_polymers)
+        .def("add_polymer", &Mixture::add_polymer)
+        .def("get_polymer", &Mixture::get_polymer)
+        .def("key_to_deps", &Mixture::key_to_deps)
+        .def("key_to_species", &Mixture::key_to_species)
+        .def("get_unique_branches", &Mixture::get_unique_branches)
+        .def("get_unique_branch", &Mixture::get_unique_branch)
+        .def("get_unique_blocks", &Mixture::get_unique_blocks)
+        .def("get_unique_block", &Mixture::get_unique_block)
+        .def("display_unique_branches", &Mixture::display_unique_branches)
+        .def("display_unique_blocks", &Mixture::display_unique_blocks);
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>,
-            std::map<std::string,py::array_t<double>>
-            >()(&Pseudo::compute_statistics), py::return_value_policy::move)
-        .def("get_partition", overload_cast_<int, int, int>()(&Pseudo::get_partition), py::return_value_policy::move)
-        .def("dq_dl", &Pseudo::dq_dl);
+            std::map<std::string,py::array_t<double>>>
+            ()(&Pseudo::compute_statistics), py::return_value_policy::move)
+        .def("get_species_concentration", overload_cast_<std::string>
+            ()(&Pseudo::get_species_concentration), py::return_value_policy::move)
+        .def("get_polymer_concentration", overload_cast_<int>
+            ()(&Pseudo::get_polymer_concentration), py::return_value_policy::move)
+        .def("get_total_partition", &Pseudo::get_total_partition)
+        .def("get_partial_partition", overload_cast_<int, int, int, int>
+            ()(&Pseudo::get_partial_partition), py::return_value_policy::move)
+        .def("get_stress", &Pseudo::get_stress);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)

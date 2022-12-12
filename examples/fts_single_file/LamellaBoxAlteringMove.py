@@ -239,7 +239,7 @@ for langevin_step in range(1, langevin_max_step+1):
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
         
     # caculate stress
-    dlogQ_dl = np.array(pseudo.dq_dl())/Q
+    dlogQ_dl = np.array(pseudo.get_stress())/Q
     dfield_dchin = 1/4 - cb.inner_product(w_minus,w_minus)/chi_n**2/cb.get_volume()
     dfield_dl = -dfield_dchin*chi_n/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl

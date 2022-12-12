@@ -35,14 +35,7 @@ Mixture::Mixture(
         throw_without_line_number(exc.what());
     }
 }
-Mixture::~Mixture()
-{
-    for(int p=0; p<distinct_polymers.size(); p++)
-    {
-        delete distinct_polymers[p];
-    }
-}
-void Mixture::add_polymer_chain(
+void Mixture::add_polymer(
     double volume_fraction,
     std::vector<std::string> block_species,
     std::vector<double> contour_lengths,
@@ -50,68 +43,36 @@ void Mixture::add_polymer_chain(
     std::map<int, int> v_to_grafting_index)
 {
     std::string deps;
-    PolymerChain* pc = new PolymerChain(ds, bond_lengths, 
+    distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
         volume_fraction, block_species, contour_lengths,
-        v, u, v_to_grafting_index);
-    distinct_polymers.push_back(pc);
+        v, u, v_to_grafting_index));
+
+    PolymerChain& pc = distinct_polymers.back();
 
     // find unique sub branches
-    for (int i=0; i<pc->get_n_block(); i++)
+    for (int i=0; i<pc.get_n_blocks(); i++)
     {
         deps = get_text_of_ordered_branches(
-            pc->get_blocks(), pc->get_adjacent_nodes(),
-            pc->get_edge_to_array(), v[i], u[i]).first;
-        pc->set_edge_to_deps(v[i], u[i], deps);
+            pc.get_blocks(), pc.get_adjacent_nodes(),
+            pc.get_edge_to_array(), v[i], u[i]).first;
+        pc.set_edge_to_deps(v[i], u[i], deps);
 
         deps = get_text_of_ordered_branches(
-            pc->get_blocks(), pc->get_adjacent_nodes(),
-            pc->get_edge_to_array(), u[i], v[i]).first;
-        pc->set_edge_to_deps(u[i], v[i], deps);
+            pc.get_blocks(), pc.get_adjacent_nodes(),
+            pc.get_edge_to_array(), u[i], v[i]).first;
+        pc.set_edge_to_deps(u[i], v[i], deps);
     }
 
     // find unique blocks
-    std::vector<PolymerChainBlock>& blocks = pc->get_blocks();
+    std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
     for(int b=0; b<blocks.size(); b++){
-        std::string dep_v = pc->get_dep(blocks[b].v, blocks[b].u);
-        std::string dep_u = pc->get_dep(blocks[b].u, blocks[b].v);
+        std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
+        std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
         if (dep_v > dep_u)
             dep_v.swap(dep_u);
         auto key = std::make_tuple(dep_v, dep_u, blocks[b].n_segment);
-        reduced_blocks[key].species = blocks[b].species;
+        unique_blocks[key].species = blocks[b].species;
     }
-
-    // // print unique sub branches
-    // std::vector<std::pair<std::string, int>> sub_deps;
-    // for(const auto& item : reduced_branches_max_segment)
-    // {
-    //     std::cout << item.first << ":\n\t";
-    //     std::cout << "{max_segments: " << item.second << ",\n\tsub_deps: [";
-    //     sub_deps = key_to_deps(item.first);
-    //     for(int i=0; i<sub_deps.size(); i++)
-    //     {
-    //         std::cout << sub_deps[i].first << ":" << sub_deps[i].second << ", " ;
-    //     }
-    //     std::cout << "]}" << std::endl;
-    // }
-
-    // // find unique junctions
-    // for(const auto& item: adjacent_nodes)
-    // {
-    //     std::vector<std::string> deps;
-    //     for(int i=0; i<item.second.size(); i++)
-    //     {
-    //         std::string sub_dep = edge_to_deps[std::make_pair(item.second[i], item.first)];
-    //         sub_dep += std::to_string(blocks[edge_to_array[std::make_pair(item.second[i], item.first)]].n_segment);
-    //         deps.push_back(sub_dep);
-    //     }
-
-    //     std::sort(deps.begin(), deps.end());
-    //     std::cout << item.first << ", " << std::endl;
-    //     for(int i=0; i<deps.size(); i++)
-    //     {
-    //         std::cout << deps[i] << std::endl;
-    //     }
-    // }
 
 }
 std::string Mixture::get_model_name()
@@ -122,11 +83,11 @@ double Mixture::get_ds()
 {
     return ds;
 }
-int Mixture::get_n_distinct_polymers()
+int Mixture::get_n_polymers()
 {
     return distinct_polymers.size();
 }
-PolymerChain* Mixture::get_polymer_chain(int p)
+PolymerChain& Mixture::get_polymer(int p)
 {
     return distinct_polymers[p];
 }
@@ -174,25 +135,25 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
         text += ")";
     }
 
-    // update reduced_sub_branches
+    // update unique_sub_branches
     text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].species;
-    if(reduced_branches.count(text) > 0)
+    if(unique_branches.count(text) > 0)
     {
-         if(reduced_branches[text].max_n_segment < blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment)
-             reduced_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
+         if(unique_branches[text].max_n_segment < blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment)
+             unique_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
     }
     else
     {
-        reduced_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
-        reduced_branches[text].deps = key_to_deps(text);
-        reduced_branches[text].species = key_to_species(text);
+        unique_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
+        unique_branches[text].deps = key_to_deps(text);
+        unique_branches[text].species = key_to_species(text);
     }
     return std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
     // return std::make_pair("A", 10);
 }
-int Mixture::get_reduced_n_branches()
+int Mixture::get_unique_n_branches()
 {
-    return reduced_branches.size();
+    return unique_branches.size();
 }
 std::vector<std::pair<std::string, int>> Mixture::key_to_deps(std::string key)
 {
@@ -243,19 +204,71 @@ std::string Mixture::key_to_species(std::string key){
     //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
     return key.substr(key_start, key.size()-key_start);
 }
-std::map<std::string, ReducedEdge, std::greater<std::string>>& Mixture::get_reduced_branches()
+std::map<std::string, UniqueEdge, std::greater<std::string>>& Mixture::get_unique_branches()
 {
-    return reduced_branches;
+    return unique_branches;
 }
-ReducedEdge Mixture::get_reduced_branch(std::string key)
+UniqueEdge Mixture::get_unique_branch(std::string key)
 {
-    return reduced_branches[key];
+    if (unique_branches.count(key) == 0)
+        throw_with_line_number("There is no such key (" + key + ").");
+    return unique_branches[key];
 }
-std::map<std::tuple<std::string, std::string, int>, ReducedBlock>& Mixture::get_reduced_blocks()
+std::map<std::tuple<std::string, std::string, int>, UniqueBlock>& Mixture::get_unique_blocks()
 {
-    return reduced_blocks;
+    return unique_blocks;
 }
-ReducedBlock Mixture::get_reduced_block(std::tuple<std::string, std::string, int> key)
+UniqueBlock Mixture::get_unique_block(std::tuple<std::string, std::string, int> key)
 {
-    return reduced_blocks[key];
+    if (unique_blocks.count(key) == 0)
+        throw_with_line_number("There is no such key (" +
+            std::get<0>(key) + ", " + std::get<1>(key) + ", " + std::to_string(std::get<2>(key)) + ").");
+    return unique_blocks[key];
+}
+void Mixture::display_unique_branches()
+{
+    // print unique sub branches
+    std::vector<std::pair<std::string, int>> sub_deps;
+    std::cout << "--------- Unique Branches ---------" << std::endl;
+    for(const auto& item : unique_branches)
+    {
+        std::cout << item.first << ":\n\t";
+        std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
+        sub_deps = key_to_deps(item.first);
+        for(int i=0; i<sub_deps.size(); i++)
+        {
+            std::cout << sub_deps[i].first << ":" << sub_deps[i].second << ", " ;
+        }
+        std::cout << "]}" << std::endl;
+    }
+    std::cout << "------------------------------------" << std::endl;
+}
+void Mixture::display_unique_blocks()
+{
+    // print unique sub blocks
+    std::cout << "---------- Unique Blocks ----------" << std::endl;
+    for(const auto& item : unique_blocks)
+    {
+        const auto& key = item.first;
+        std::cout << std::get<0>(key) + ", " + std::get<1>(key) + ", " + std::to_string(std::get<2>(key)) << std::endl;
+    }
+    std::cout << "------------------------------------" << std::endl;
+    // // find unique junctions
+    // for(const auto& item: adjacent_nodes)
+    // {
+    //     std::vector<std::string> deps;
+    //     for(int i=0; i<item.second.size(); i++)
+    //     {
+    //         std::string sub_dep = edge_to_deps[std::make_pair(item.second[i], item.first)];
+    //         sub_dep += std::to_string(blocks[edge_to_array[std::make_pair(item.second[i], item.first)]].n_segment);
+    //         deps.push_back(sub_dep);
+    //     }
+
+    //     std::sort(deps.begin(), deps.end());
+    //     std::cout << item.first << ", " << std::endl;
+    //     for(int i=0; i<deps.size(); i++)
+    //     {
+    //         std::cout << deps[i] << std::endl;
+    //     }
+    // }
 }

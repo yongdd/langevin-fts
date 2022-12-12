@@ -5,8 +5,8 @@ from scipy.io import loadmat, savemat
 from scipy.ndimage.filters import gaussian_filter
 from langevinfts import *
 
-def find_saddle_point(cb, pseudo, am, lx, chi_n,
-    q1_init, q2_init, w, max_iter, tolerance, is_box_altering=True):
+
+def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_box_altering=True):
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20
@@ -26,22 +26,26 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
     
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
+        pseudo.compute_statistics({}, {"A":w[0],"B":w[1]})
+
+        phi_a = pseudo.get_species_concentration("A")
+        phi_b = pseudo.get_species_concentration("B")
 
         # calculate the total energy, Hamiltonian
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
-        energy_total  = -np.log(Q/cb.get_volume())
-        energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+        energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
         energy_total -= cb.integral(w_plus)/cb.get_volume()
+        for p in range(mx.get_n_polymers()):
+            energy_total  -= np.log(pseudo.get_total_partition(p)/cb.get_volume())
 
         # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
         xi = 0.5*(w[0]+w[1]-chi_n)
 
         # calculate output fields
-        w_out[0] = chi_n*phi[1] + xi
-        w_out[1] = chi_n*phi[0] + xi
+        w_out[0] = chi_n*phi_b + xi
+        w_out[1] = chi_n*phi_a + xi
         cb.zero_mean(w_out[0])
         cb.zero_mean(w_out[1])
 
@@ -52,19 +56,26 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
         multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
 
         # print iteration # and error levels and check the mass conservation
-        mass_error = (cb.integral(phi[0]) + cb.integral(phi[1]))/cb.get_volume() - 1.0
+        mass_error = (cb.integral(phi_a) + cb.integral(phi_b))/cb.get_volume() - 1.0
         error_level = np.sqrt(multi_dot)
         
         if (is_box_altering):
             # Calculate stress
-            stress_array = np.array(pseudo.dq_dl()[-cb.get_dim():])/Q
+            stress_array = np.array(pseudo.get_stress())/cb.get_volume()
             error_level += np.sqrt(np.sum(stress_array)**2)
-            print("%8d %12.3E %15.7E %15.9f %15.7E" %
-            (scft_iter, mass_error, Q, energy_total, error_level), end=" ")
-            print("\t[", ",".join(["%10.7f" % (x) for x in lx]), "]")
+            print("%8d %12.3E " %
+            (scft_iter, mass_error), end=" [ ")
+            for p in range(mx.get_n_polymers()):
+                print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
+            print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
+            print("[", ",".join(["%10.7f" % (x) for x in cb.get_lx()[-cb.get_dim():]]), "]")
+
         else:
-            print("%8d %12.3E %15.7E %15.9f %15.7E" %
-            (scft_iter, mass_error, Q, energy_total, error_level))
+            print("%8d %12.3E " %
+            (scft_iter, mass_error), end=" [ ")
+            for p in range(mx.get_n_polymers()):
+                print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
+            print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
 
         # conditions to end the iteration
         if error_level < tolerance:
@@ -97,7 +108,12 @@ def find_saddle_point(cb, pseudo, am, lx, chi_n,
             np.reshape(w_diff, 2*cb.get_n_grid()),
             old_error_level, error_level)
 
-    return phi, Q, energy_total
+    # get total partition functions
+    Q = []
+    for p in range(mx.get_n_polymers()):
+        Q.append(pseudo.get_total_partition(p))
+
+    return phi_a, phi_b, Q, energy_total
 
 # -------------- initialize ------------
 
@@ -139,17 +155,18 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
-pseudo = factory.create_pseudo(cb, pc)
+mx     = factory.create_mixture(ds, dict_a_n)
+mx.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2], {})
+pseudo = factory.create_pseudo(cb, mx)
 am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (cb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
-print("%s chain model" % (pc.get_model_name()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, mx.get_polymer(0).get_n_segment_total()) )
+print("%s chain model" % (mx.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
@@ -176,8 +193,8 @@ sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
 [0.18,0.18,0.75],[0.82,0.82,0.75],[0.32,0.68,0.75],[0.68,0.32,0.75]] #E
 
 for x,y,z in sphere_positions:
-    mx, my, mz = np.round((np.array([x, y, z])*cb.get_nx())).astype(np.int32)
-    w[0,mx,my,mz] = -1/np.prod(cb.get_dx())
+    _mx, _my, _mz = np.round((np.array([x, y, z])*cb.get_nx())).astype(np.int32)
+    w[0,_mx,_my,_mz] = -1/np.prod(cb.get_dx())
 w[0] = gaussian_filter(w[0], sigma=np.min(cb.get_nx())/15, mode='wrap')
 w = np.reshape(w, [2, cb.get_n_grid()])
 
@@ -189,8 +206,8 @@ cb.zero_mean(w[1])
 print("---------- Run ----------")
 time_start = time.time()
 
-phi, Q, energy_total = find_saddle_point(cb, pseudo, am, lx, chi_n,
-    q1_init, q2_init, w, max_scft_iter, tolerance, is_box_altering=True)
+phi_a, phi_b, Q, energy_total = find_saddle_point(cb, mx, pseudo, am, lx, chi_n,
+    w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
 time_duration = time.time() - time_start
@@ -198,8 +215,8 @@ print("total time: %f " % time_duration)
 
 # save final results
 mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
-        "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
-        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi[0], "phi_b":phi[1]}
+        "N":mx.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring

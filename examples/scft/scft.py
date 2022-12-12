@@ -230,7 +230,7 @@ class SCFT:
                 stress_array = np.zeros(self.cb.get_dim())
                 for polymer in self.distinct_polymers:
                     stress_array += polymer["volume_fraction"]/polymer["alpha"]/polymer["Q"] * \
-                        np.array(polymer["pseudo"].dq_dl()[-self.cb.get_dim():])
+                        np.array(polymer["pseudo"].get_stress()[-self.cb.get_dim():])
                 #print(stress_array)
                 error_level += np.sqrt(np.sum(stress_array)**2)
                 print("%8d %12.3E " %
