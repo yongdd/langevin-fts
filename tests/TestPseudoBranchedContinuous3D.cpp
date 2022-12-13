@@ -168,40 +168,12 @@ int main()
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
 
-        double phi[MM*block_species.size()];
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
-
-        double alpha{0.0};
-        for (auto& contour_length : contour_lengths)
-            alpha += contour_length;
 
         Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths);
         mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
         mx->display_unique_branches();
         mx->display_unique_blocks();
-
-        // std::cout << "block size: " << block_species.size() << std::endl;
-        // for(int b=0; b<block_species.size(); b++)
-        // {
-        //     int monomer_id;
-        //     if (block_species[b] == "A")
-        //         monomer_id = 0;
-        //     else{
-        //         monomer_id = 1;
-        //     }
-        //     std::cout << "\t\t" << monomer_id << "\t" << contour_lengths[b] << "\t" << v[b] << "\t" << u[b] << std::endl;
-        // }
-
-        // for(int k=0; k<KK; k++)
-        // {
-        //     for(int j=0; j<JJ; j++)
-        //     {
-        //         for(int i=0; i<II; i++)
-        //         {
-        //             std::cout << std::setprecision(8) << std::scientific << w_a[i*JJ*KK + j*KK + k] << "\t" << w_b[i*JJ*KK + j*KK + k] << std::endl; 
-        //         }
-        //     }
-        // }
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
@@ -228,24 +200,6 @@ int main()
             pseudo->get_species_concentration("A", phi_a);
             pseudo->get_species_concentration("B", phi_b);
             //pseudo->get_polymer_concentration(0, phi);
-
-            // for(int p=0; p<mx->get_n_polymers(); p++)
-            // {
-            //     PolymerChain& pc = mx->get_polymer(p);
-            //     for(int b=0; b<block_species.size(); b++)
-            //     {
-            //         if (block_species[b] == "A")
-            //         {
-            //             for(int i=0; i<II*JJ*KK; i++)
-            //                 phi_a[i] += phi[b*MM+i];
-            //         }
-            //         if (block_species[b] == "B")
-            //         {
-            //             for(int i=0; i<II*JJ*KK; i++)
-            //                 phi_b[i] += phi[b*MM+i];
-            //         }
-            //     }
-            // }
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
@@ -289,14 +243,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            // for(int i=0; i<II*JJ*KK; i++)
-            // {
-            //     std::cout<< std::setprecision(10) << std::scientific << phi_a[i] << ", ";
-            //     if (i % 3 == 2)
-            //         std::cout << std::endl;
-            // }
-
-            std::array<double,3> stress = pseudo->get_stress();
+            std::array<double,3> stress = pseudo->compute_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
             delete pseudo;

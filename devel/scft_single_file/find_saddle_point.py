@@ -53,7 +53,7 @@ def find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
         
         if (is_box_altering):
             # Calculate stress
-            stress_array = np.array(pseudo.get_stress()[-cb.get_dim():])/Q
+            stress_array = np.array(pseudo.compute_stress()[-cb.get_dim():])/Q
             error_level += np.sqrt(np.sum(stress_array)**2)
             print("%8d %12.3E %15.7E %15.9f %15.7E" %
             (scft_iter, mass_error, Q, energy_total, error_level), end=" ")

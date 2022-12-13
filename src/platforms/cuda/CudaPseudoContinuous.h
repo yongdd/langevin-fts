@@ -23,7 +23,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
 
-    // for stress calculation: get_stress()
+    // for stress calculation: compute_stress()
     double *d_fourier_basis_x;
     double *d_fourier_basis_y;
     double *d_fourier_basis_z;
@@ -63,7 +63,7 @@ public:
     double get_total_partition(int polymer) override;
     void get_species_concentration(std::string species, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
-    std::array<double,3> get_stress() override;
+    std::array<double,3> compute_stress() override;
     void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;
 };
 

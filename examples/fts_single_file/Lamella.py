@@ -8,9 +8,8 @@ import numpy as np
 from scipy.io import savemat
 from langevinfts import *
 
-def find_saddle_point(cb, pseudo, am, chi_n,
-    q1_init, q2_init, w_plus, w_minus, 
-    saddle_max_iter, saddle_tolerance, verbose_level):
+def find_saddle_point(cb, mixture, pseudo, am, chi_n,
+    w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level):
         
     # assign large initial value for the energy and error
     energy_total = 1e20
@@ -21,11 +20,12 @@ def find_saddle_point(cb, pseudo, am, chi_n,
 
     # saddle point iteration begins here
     for saddle_iter in range(1,saddle_max_iter+1):
-        
+
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.compute_statistics(
-            q1_init, q2_init, {"A":w_plus+w_minus,"B":w_plus-w_minus})
-        phi_plus = phi[0] + phi[1]
+        pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
+        phi_a = pseudo.get_species_concentration("A")
+        phi_b = pseudo.get_species_concentration("B")
+        phi_plus = phi_a + phi_b
         
         # calculate output fields
         g_plus = phi_plus-1.0
@@ -42,22 +42,31 @@ def find_saddle_point(cb, pseudo, am, chi_n,
          (error_level < saddle_tolerance or saddle_iter == saddle_max_iter)):
              
             # calculate the total energy
-            energy_total  = -np.log(Q/cb.get_volume())
-            energy_total += cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+            energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
             energy_total += chi_n/4
             energy_total -= cb.integral(w_plus)/cb.get_volume()
+            for p in range(mixture.get_n_polymers()):
+                energy_total  -= np.log(pseudo.get_total_partition(p)/cb.get_volume())
 
             # check the mass conservation
             mass_error = cb.integral(phi_plus)/cb.get_volume() - 1.0
-            print("%8d %12.3E %15.7E %15.9f %15.7E" %
-                (saddle_iter, mass_error, Q, energy_total, error_level))
+            print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
+            for p in range(mixture.get_n_polymers()):
+                print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
+            print("] %15.9f %15.7E " % (energy_total, error_level))
+
         # conditions to end the iteration
         if error_level < saddle_tolerance:
             break
             
         # calculate new fields using simple and Anderson mixing
         am.calculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
-    return phi, Q
+
+    Q = []
+    for p in range(mixture.get_n_polymers()):
+        Q.append(pseudo.get_total_partition(p))
+
+    return phi_a, phi_b, Q, energy_total
 
 # -------------- simulation parameters ------------
 
@@ -108,10 +117,11 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
-cb     = factory.create_computation_box(nx, lx)
-pseudo = factory.create_pseudo(cb, pc)
-am     = factory.create_anderson_mixing(am_n_var,
+cb = factory.create_computation_box(nx, lx)
+mixture = factory.create_mixture(ds, dict_a_n)
+mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
+pseudo = factory.create_pseudo(cb, mixture)
+am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # standard deviation of normal noise
@@ -122,9 +132,9 @@ langevin_sigma = np.sqrt(2*langevin_dt*cb.get_n_grid()/
 np.random.seed(5489)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
-print("Box Dimension: %d"  % (cb.get_dim()) )
-print("chi_n: %f, f: %f, N: %d" % (chi_n, f, pc.get_n_segment_total()) )
-print("%s chain model" % (pc.get_model_name()) )
+print("Box Dimension: %d" % (cb.get_dim()))
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, mixture.get_polymer(0).get_n_segment_total()) )
+print("%s chain model" % (mixture.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
@@ -135,12 +145,6 @@ print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
-#-------------- allocate array ------------
-# free end initial condition. q1 is q and q2 is qdagger.
-# q1 starts from A end and q2 starts from B end.
-q1_init = np.ones(cb.get_n_grid(), dtype=np.float64)
-q2_init = np.ones(cb.get_n_grid(), dtype=np.float64)
-
 print("w_minus and w_plus are initialized to random")
 w_plus  = np.random.normal(0.0, 1.0, cb.get_n_grid())
 w_minus = np.random.normal(0.0, 1.0, cb.get_n_grid())
@@ -148,9 +152,8 @@ w_minus = np.random.normal(0.0, 1.0, cb.get_n_grid())
 # keep the level of field value
 cb.zero_mean(w_plus)
 
-phi, _ = find_saddle_point(cb, pseudo, am, chi_n,
-    q1_init, q2_init, w_plus, w_minus,
-    saddle_max_iter, saddle_tolerance, verbose_level)
+phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+    w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
     
 # init structure function
 sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, cb.get_nx())),np.float64)
@@ -166,18 +169,16 @@ for langevin_step in range(1, langevin_max_step+1):
     # update w_minus: predict step
     w_minus_copy = w_minus.copy()
     normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
-    lambda1 = phi[0]-phi[1] + 2*w_minus/chi_n
+    lambda1 = phi_a-phi_b + 2*w_minus/chi_n
     w_minus += -lambda1*langevin_dt + normal_noise
-    phi, _ = find_saddle_point(cb, pseudo, am, chi_n,
-        q1_init, q2_init, w_plus, w_minus,
-        saddle_max_iter, saddle_tolerance, verbose_level)
+    phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+        w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
 
     # update w_minus: correct step
-    lambda2 = phi[0]-phi[1] + 2*w_minus/chi_n
+    lambda2 = phi_a-phi_b + 2*w_minus/chi_n
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    phi, _ = find_saddle_point(cb, pseudo, am, chi_n,
-        q1_init, q2_init, w_plus, w_minus,
-        saddle_max_iter, saddle_tolerance, verbose_level)
+    phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+        w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
         
     # calcaluate structure function
     if langevin_step % 10 == 0:
@@ -188,8 +189,8 @@ for langevin_step in range(1, langevin_max_step+1):
         sf_average *= 10/1000*cb.get_volume()*np.sqrt(langevin_nbar)/chi_n**2
         sf_average -= 1.0/(2*chi_n)
         mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
-        "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
-        "chain_model":pc.get_model_name(),
+        "N":mixture.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+        "chain_model":mixture.get_model_name(),
         "dt":langevin_dt, "nbar":langevin_nbar,
         "structure_function":sf_average}
         savemat( "structure_function_%06d.mat" % (langevin_step), mdic)
@@ -198,11 +199,11 @@ for langevin_step in range(1, langevin_max_step+1):
     # write density and field data
     if langevin_step % 1000 == 0:
         mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
-            "N":pc.get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
-            "chain_model":pc.get_model_name(), "nbar":langevin_nbar,
+            "N":mixture.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+            "chain_model":mixture.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi[0], "phi_b":phi[1]}
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
         savemat( "fields_%06d.mat" % (langevin_step), mdic)
 
 # estimate execution time

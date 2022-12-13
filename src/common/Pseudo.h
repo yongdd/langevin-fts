@@ -45,29 +45,30 @@ public:
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_species_concentration(std::string species, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
-    virtual std::array<double,3> get_stress() = 0;
+    virtual std::array<double,3> compute_stress() = 0;
     virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
-    void compute_statistics(std::map<std::string,py::array_t<double>> q_init, std::map<std::string,py::array_t<double>> w_block)
+    // void compute_statistics(std::map<std::string,py::array_t<double>> q_init, std::map<std::string,py::array_t<double>> w_block)
+    void compute_statistics(std::map<std::string,py::array_t<double>> w_block)
     {
         try{
             const int M = cb->get_n_grid();
-            std::map<std::string,double*> map_buf_q_init;
+            //std::map<std::string,double*> map_buf_q_init;
             std::map<std::string,double*> map_buf_w_block;
 
-            for (auto it=q_init.begin(); it!=q_init.end(); ++it)
-            {
-                //buf_q_init
-                py::buffer_info buf_q_init = it->second.request();
-                if (buf_q_init.shape[0] != M){
-                    throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
-                }
-                else
-                {
-                    map_buf_q_init.insert(std::pair<std::string,double*>(it->first,(double *)buf_q_init.ptr));
-                }
-            }
+            // for (auto it=q_init.begin(); it!=q_init.end(); ++it)
+            // {
+            //     //buf_q_init
+            //     py::buffer_info buf_q_init = it->second.request();
+            //     if (buf_q_init.shape[0] != M){
+            //         throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+            //     }
+            //     else
+            //     {
+            //         map_buf_q_init.insert(std::pair<std::string,double*>(it->first,(double *)buf_q_init.ptr));
+            //     }
+            // }
 
             for (auto it=w_block.begin(); it!=w_block.end(); ++it)
             {
@@ -81,7 +82,7 @@ public:
                     map_buf_w_block.insert(std::pair<std::string,double*>(it->first,(double *)buf_w_block.ptr));
                 }
             }
-            compute_statistics(map_buf_q_init, map_buf_w_block);
+            compute_statistics({}, map_buf_w_block);
         }
         catch(std::exception& exc)
         {

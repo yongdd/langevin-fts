@@ -62,7 +62,10 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_ds", &Mixture::get_ds)
         .def("get_bond_lengths", &Mixture::get_bond_lengths)
         .def("get_n_polymers", &Mixture::get_n_polymers)
-        .def("add_polymer", &Mixture::add_polymer)
+        .def("add_polymer", overload_cast_<
+            double, std::vector<std::string>,
+            std::vector<double>, std::vector<int>, std::vector<int>>
+            ()(&Mixture::add_polymer))
         .def("get_polymer", &Mixture::get_polymer)
         .def("key_to_deps", &Mixture::key_to_deps)
         .def("key_to_species", &Mixture::key_to_species)
@@ -76,7 +79,6 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<Pseudo>(m, "Pseudo")
         .def("update", &Pseudo::update)
         .def("compute_statistics", overload_cast_<
-            std::map<std::string,py::array_t<double>>,
             std::map<std::string,py::array_t<double>>>
             ()(&Pseudo::compute_statistics), py::return_value_policy::move)
         .def("get_species_concentration", overload_cast_<std::string>
@@ -86,7 +88,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_total_partition", &Pseudo::get_total_partition)
         .def("get_partial_partition", overload_cast_<int, int, int, int>
             ()(&Pseudo::get_partial_partition), py::return_value_policy::move)
-        .def("get_stress", &Pseudo::get_stress);
+        .def("compute_stress", &Pseudo::compute_stress);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)

@@ -14,14 +14,28 @@ print(nx.__version__)
 # G = nx.random_tree(n=20, seed=1)
 # G = nx.balanced_tree(2, 4)
 
-random.seed(4)
+random.seed(2)
 G = nx.Graph()
-G.add_edge(0,1, weight=6, species='A')
-for i in range(2,20):
+G.add_edge(0,1, weight=random.randint(3,4)*3, species=random.choice(['A','B','C']))
+for i in range(2,30):
    from_node = random.randint(0,i-1)
    weight = random.randint(3,4)*3
-   species = random.choice(['A','B'])
+   species = random.choice(['A','B','C'])
    G.add_edge(from_node, i, weight=weight, species=species)
+
+# G = nx.Graph()
+# for i in range(0,8):
+#     G.add_edge(i,i+1, weight=12, species="C")
+
+# k=9
+# for i in range(0,4):
+#     for j in range(0,5):
+#         G.add_edge(i,k, weight=9, species="A")
+#         k += 1
+# for i in range(4,8):
+#     for j in range(0,5):
+#         G.add_edge(i,k, weight=9, species="B")
+#         k += 1
 
 # G = nx.Graph()
 # G.add_edge(0, 1, weight=3,  species="B")
@@ -61,17 +75,63 @@ for u,v,a in G.edges(data=True):
 sorted_dict_sub_graphs = sorted(dict_sub_graphs.items(), key = lambda kv: kv[0], reverse=True)
 pprint.pprint(sorted_dict_sub_graphs)
 
+
+for u,v,a in G.edges(data=True):
+    if (a["species"] == "A"):
+        monomer_id = 0
+    elif(a["species"] == "B"):
+        monomer_id = 1
+    elif(a["species"] == "C"):
+        monomer_id = 2
+    print("\t\t%d\t%s\t%d\t%d" % (monomer_id, a["weight"]/10, u, v))
+
+
 # for u,v,a in G.edges(data=True):
 #     print(u, end=",")
+# print("")
 
 # for u,v,a in G.edges(data=True):
-#     print(v)
+#     print(v, end=",")
+# print("")
 
 # for u,v,a in G.edges(data=True):
-#     print(a["species"])
+#     print("\"" + a["species"] + "\"", end=",")
+# print("")
 
 # for u,v,a in G.edges(data=True):
-#     print(a["weight"]/10)
+#     print(a["weight"]/10, end=",")
+# print("")
+
+w_a = []
+w_b = []
+w_c = []
+
+for i in range(5*4*3):
+    temp = random.uniform(-1,1)
+    w_a.append(temp)
+    # print( "%17.10e" % (temp), end=",")
+    # if (i % 3 == 2):
+    #     print("")
+# print("")
+for i in range(5*4*3):
+    temp = random.uniform(-1,1)
+    w_b.append(temp)
+    # print( "%17.10e" % (temp), end=",")
+    # if (i % 3 == 2):
+    #     print("")
+# print("")
+for i in range(5*4*3):
+    temp = random.uniform(-1,1)
+    w_c.append(temp)
+    # print( "%17.10e" % (temp), end=",")
+    # if (i % 3 == 2):
+    #     print("")
+# print("")
+
+for k in range(3):
+    for j in range(4):
+        for i in range(5):
+            print( "%17.10e %17.10e %17.10e" % (w_a[i*4*3 + j*3 + k], w_b[i*4*3 + j*3 + k], w_c[i*4*3 + j*3 + k]))
 
 # visualize
 color_map = []
@@ -85,7 +145,7 @@ plt.figure(figsize=(8,8))
 pos = graphviz_layout(G, prog="twopi")
 labels = nx.get_edge_attributes(G,'weight')
 edges = G.edges()
-dict_color= {"A":"red", "B":"blue"}
+dict_color= {"A":"red", "B":"blue", "C":"green"}
 colors = [dict_color[G[u][v]['species']] for u,v in edges]
 nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True)
 nx.draw_networkx_edge_labels(G,pos,edge_labels=labels)

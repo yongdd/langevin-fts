@@ -56,7 +56,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             exp_dw         [species] = new double[M];
         }
 
-        // allocate memory for stress calculation: get_stress()
+        // allocate memory for stress calculation: compute_stress()
         fourier_basis_x = new double[M_COMPLEX];
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
@@ -105,7 +105,7 @@ void CpuPseudoDiscrete::update()
             get_boltz_bond(boltz_bond     [species], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
             get_boltz_bond(boltz_bond_half[species], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
 
-            // for stress calculation: get_stress()
+            // for stress calculation: compute_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         }
     }
@@ -388,7 +388,7 @@ void CpuPseudoDiscrete::get_polymer_concentration(int polymer, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::array<double,3> CpuPseudoDiscrete::get_stress()
+std::array<double,3> CpuPseudoDiscrete::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -405,7 +405,7 @@ std::array<double,3> CpuPseudoDiscrete::get_stress()
         std::complex<double> qk_2[M_COMPLEX];
 
         std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
-        std::array<double,3> dq_dl;
+        std::array<double,3> stress;
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for Unique key pairs
@@ -493,7 +493,7 @@ std::array<double,3> CpuPseudoDiscrete::get_stress()
         }
         // compute total stress
         for(int d=0; d<3; d++)
-            dq_dl[d] = 0.0;
+            stress[d] = 0.0;
         for(int p=0; p < mx->get_n_polymers(); p++)
         {
             PolymerChain& pc = mx->get_polymer(p);
@@ -505,13 +505,13 @@ std::array<double,3> CpuPseudoDiscrete::get_stress()
                 if (dep_v > dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    dq_dl[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    stress[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
         }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume()/cb->get_volume();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
 
-        return dq_dl;
+        return stress;
     }
     catch(std::exception& exc)
     {

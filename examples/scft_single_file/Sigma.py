@@ -6,7 +6,7 @@ from scipy.ndimage.filters import gaussian_filter
 from langevinfts import *
 
 
-def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_box_altering=True):
+def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_box_altering=True):
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20
@@ -26,7 +26,7 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
     
     for scft_iter in range(1,max_iter+1):
         # for the given fields find the polymer statistics
-        pseudo.compute_statistics({}, {"A":w[0],"B":w[1]})
+        pseudo.compute_statistics({"A":w[0],"B":w[1]})
 
         phi_a = pseudo.get_species_concentration("A")
         phi_b = pseudo.get_species_concentration("B")
@@ -37,7 +37,7 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
 
         energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
         energy_total -= cb.integral(w_plus)/cb.get_volume()
-        for p in range(mx.get_n_polymers()):
+        for p in range(mixture.get_n_polymers()):
             energy_total  -= np.log(pseudo.get_total_partition(p)/cb.get_volume())
 
         # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
@@ -61,11 +61,10 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
         
         if (is_box_altering):
             # Calculate stress
-            stress_array = np.array(pseudo.get_stress())/cb.get_volume()
-            error_level += np.sqrt(np.sum(stress_array)**2)
-            print("%8d %12.3E " %
-            (scft_iter, mass_error), end=" [ ")
-            for p in range(mx.get_n_polymers()):
+            stress_array = np.array(pseudo.compute_stress())
+            error_level += np.sqrt(np.sum(stress_array**2))
+            print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
+            for p in range(mixture.get_n_polymers()):
                 print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
             print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
             print("[", ",".join(["%10.7f" % (x) for x in cb.get_lx()[-cb.get_dim():]]), "]")
@@ -73,7 +72,7 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
         else:
             print("%8d %12.3E " %
             (scft_iter, mass_error), end=" [ ")
-            for p in range(mx.get_n_polymers()):
+            for p in range(mixture.get_n_polymers()):
                 print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
             print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
 
@@ -84,8 +83,8 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
         # calculate new fields using simple and Anderson mixing
         if (is_box_altering):
             am_new  = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
-            am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx + stress_array))
-            am_diff = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), stress_array))
+            am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx-stress_array))
+            am_diff = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), -stress_array))
             am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
             # set box size
@@ -110,7 +109,7 @@ def find_saddle_point(cb, mx, pseudo, am, lx, chi_n, w, max_iter, tolerance, is_
 
     # get total partition functions
     Q = []
-    for p in range(mx.get_n_polymers()):
+    for p in range(mixture.get_n_polymers()):
         Q.append(pseudo.get_total_partition(p))
 
     return phi_a, phi_b, Q, energy_total
@@ -155,18 +154,18 @@ print("platform :", platform)
 factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
-cb     = factory.create_computation_box(nx, lx)
-mx     = factory.create_mixture(ds, dict_a_n)
-mx.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2], {})
-pseudo = factory.create_pseudo(cb, mx)
-am     = factory.create_anderson_mixing(am_n_var,
+cb = factory.create_computation_box(nx, lx)
+mixture = factory.create_mixture(ds, dict_a_n)
+mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
+pseudo = factory.create_pseudo(cb, mixture)
+am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (cb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (chi_n, f, mx.get_polymer(0).get_n_segment_total()) )
-print("%s chain model" % (mx.get_model_name()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, mixture.get_polymer(0).get_n_segment_total()) )
+print("%s chain model" % (mixture.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
@@ -206,7 +205,7 @@ cb.zero_mean(w[1])
 print("---------- Run ----------")
 time_start = time.time()
 
-phi_a, phi_b, Q, energy_total = find_saddle_point(cb, mx, pseudo, am, lx, chi_n,
+phi_a, phi_b, Q, energy_total = find_saddle_point(cb, mixture, pseudo, am, lx, chi_n,
     w, max_scft_iter, tolerance, is_box_altering=True)
 
 # estimate execution time
@@ -215,14 +214,13 @@ print("total time: %f " % time_duration)
 
 # save final results
 mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
-        "N":mx.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+        "N":mixture.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
         "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1   -4.663E-15   1.9678400E+02    -0.001859583   1.9218001E+00   [  7.0000000, 7.0000000, 4.0000000 ]
-    #    2    8.882E-16   1.9643500E+02    -0.000570350   1.1295110E+00   [  7.0000203, 7.0000203, 4.0000299 ]
-    #    3    2.887E-15   1.9632596E+02    -0.000238806   6.6238569E-01   [  7.0000294, 7.0000294, 4.0000421 ]
-    #    4   -5.551E-16   1.9628576E+02    -0.000146151   4.2742103E-01   [  7.0000346, 7.0000346, 4.0000485 ]
-    #    5   -1.998E-15   1.9626999E+02    -0.000121015   3.3569119E-01   [  7.0000379, 7.0000379, 4.0000524 ]
-    
+    #    1   -4.663E-15  [ 1.9678400E+02  ]    -0.001859583   1.9215121E+00  [  7.0000000, 7.0000000, 4.0000000 ]
+    #    2    8.216E-15  [ 1.9643500E+02  ]    -0.000570350   1.1293870E+00  [  7.0000203, 7.0000203, 4.0000299 ]
+    #    3    6.661E-16  [ 1.9632596E+02  ]    -0.000238806   6.6231791E-01  [  7.0000294, 7.0000294, 4.0000421 ]
+    #    4   -5.107E-15  [ 1.9628576E+02  ]    -0.000146152   4.2737822E-01  [  7.0000346, 7.0000346, 4.0000485 ]
+    #    5    8.882E-16  [ 1.9626999E+02  ]    -0.000121015   3.3566219E-01  [  7.0000379, 7.0000379, 4.0000524 ]

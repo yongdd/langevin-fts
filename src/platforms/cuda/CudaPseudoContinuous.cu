@@ -85,7 +85,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_qk_in,  sizeof(ftsComplex)*M_COMPLEX));
         
-        // allocate memory for stress calculation: get_stress()
+        // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));
@@ -129,7 +129,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     cudaFree(d_q_step2);
     cudaFree(d_qk_in);
 
-    // for stress calculation: get_stress()
+    // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
@@ -157,7 +157,7 @@ void CudaPseudoContinuous::update()
             gpu_error_check(cudaMemcpy(d_boltz_bond_half[species], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
 
-        // for stress calculation: get_stress()
+        // for stress calculation: compute_stress()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -448,7 +448,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int polymer, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::array<double,3> CudaPseudoContinuous::get_stress()
+std::array<double,3> CudaPseudoContinuous::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -464,7 +464,7 @@ std::array<double,3> CudaPseudoContinuous::get_stress()
         const int M_COMPLEX = this->n_complex_grid;
 
         std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
-        std::array<double,3> dq_dl;
+        std::array<double,3> stress;
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
@@ -512,7 +512,7 @@ std::array<double,3> CudaPseudoContinuous::get_stress()
 
         // compute total stress
         for(int d=0; d<3; d++)
-            dq_dl[d] = 0.0;
+            stress[d] = 0.0;
         for(int p=0; p < mx->get_n_polymers(); p++)
         {
             PolymerChain& pc = mx->get_polymer(p);
@@ -524,13 +524,13 @@ std::array<double,3> CudaPseudoContinuous::get_stress()
                 if (dep_v > dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    dq_dl[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    stress[d] += unique_dq_dl[std::make_tuple(dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
         }
         for(int d=0; d<3; d++)
-            dq_dl[d] /= 3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume()/cb->get_volume();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
             
-        return dq_dl;
+        return stress;
     }
     catch(std::exception& exc)
     {
