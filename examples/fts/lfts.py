@@ -26,7 +26,6 @@ class LFTS:
         else:
             platform = avail_platforms[0]
 
-        distinct_polymers = []
         assert(len(params['segment_lengths']) == 2), \
             "Currently, only AB copolymers are supported."
         assert(len(set(["A","B"]).intersection(set(params['segment_lengths'].keys())))==2), \
@@ -297,8 +296,8 @@ class LFTS:
             # print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
+            
                 # calculate the total energy
-
                 energy_total = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
                 energy_total += self.chi_n/4
                 energy_total -= self.cb.integral(w_plus)/self.cb.get_volume()
