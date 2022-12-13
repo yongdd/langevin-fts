@@ -36,47 +36,81 @@ class SCFT:
 
         # Polymer chains
         total_volume_fraction = 0.0
+        random_count = 0
         for polymer in params["distinct_polymers"]:
             block_length_list = []
-            type_list = []
+            block_species_list = []
+            v_list = []
+            u_list = []
             A_fraction = 0.0
             alpha = 0.0  #total_relative_contour_length
+            block_count = 0
+            is_linear = not "v" in polymer["blocks"][0]
             for block in polymer["blocks"]:
                 block_length_list.append(block["length"])
-                type_list.append(block["type"])
+                block_species_list.append(block["type"])
+
+                if is_linear:
+                    assert(not "v" in block), \
+                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
+                    assert(not "u" in block), \
+                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
+
+                    v_list.append(block_count)
+                    u_list.append(block_count+1)
+                else:
+                    assert("v" in block), \
+                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
+                    assert("u" in block), \
+                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
+
+                    v_list.append(block["v"])
+                    u_list.append(block["u"])
+
                 alpha += block["length"]
                 if block["type"] == "A":
                     A_fraction += block["length"]
                 elif block["type"] == "random":
                     A_fraction += block["length"]*block["fraction"]["A"]
+                
+                block_count += 1
             total_volume_fraction += polymer["volume_fraction"]
-
             total_A_fraction = A_fraction/alpha
             statistical_segment_length = \
                 np.sqrt(params["segment_lengths"]["A"]**2*total_A_fraction + \
                         params["segment_lengths"]["B"]**2*(1-total_A_fraction))
 
-            if "random" in set(bt.lower() for bt in type_list):
-                assert(len(type_list) == 1), \
-                    "Currently, Only single block random copolymer is supported."
+            if "random" in set(bt.lower() for bt in block_species_list):
+                random_count +=1
+                assert(random_count == 1), \
+                    "Only one random copolymer is allowed." 
+                assert(len(block_species_list) == 1), \
+                    "Only single block random copolymer is allowed."
                 assert(np.isclose(polymer["blocks"][0]["fraction"]["A"]+polymer["blocks"][0]["fraction"]["B"],1.0)), \
                     "The sum of volume fraction of random copolymer must be equal to 1."
-                segment_length_list = {"random":statistical_segment_length}
+                params["segment_lengths"].update({"random":statistical_segment_length})
+                self.random_copolymer_exist = True
+                self.random_A_fraction = total_A_fraction
+
             else:
-                segment_length_list = params["segment_lengths"]
+                self.random_copolymer_exist = False
             
-            # (C++ class) Polymer chain
-            pc = factory.create_polymer_chain(type_list, block_length_list, segment_length_list, params["ds"])
+            polymer.update({"block_species":block_species_list})
+            polymer.update({"block_lengths":block_length_list})
+            polymer.update({"v":v_list})
+            polymer.update({"u":u_list})
 
-            # (C++ class) Solvers using Pseudo-spectral method
-            pseudo = factory.create_pseudo(cb, pc)
+        # (C++ class) Mixture box
+        print(params["segment_lengths"])
+        mixture = factory.create_mixture(params["ds"], params["segment_lengths"])
 
-            distinct_polymers.append(
-                {"volume_fraction":polymer["volume_fraction"],
-                 "block_types":type_list,
-                 "total_A_fraction":total_A_fraction,
-                 "statistical_segment_length":statistical_segment_length,
-                 "alpha":alpha, "pc":pc, "pseudo":pseudo, })
+        # Add polymer chains
+        for polymer in params["distinct_polymers"]:
+            # print(polymer["volume_fraction"], polymer["block_species"], polymer["block_lengths"], polymer["v"], polymer["u"])
+            mixture.add_polymer(polymer["volume_fraction"], polymer["block_species"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
+
+        # (C++ class) Solvers using Pseudo-spectral method
+        pseudo = factory.create_pseudo(cb, mixture)
 
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
 
@@ -119,23 +153,28 @@ class SCFT:
         print("chi_n: %f," % (params["chi_n"]))
         print("Conformational asymmetry (epsilon): %f" %
             (params["segment_lengths"]["A"]/params["segment_lengths"]["B"]))
-        idx = 0
-        for polymer in distinct_polymers:
-            print("distinct_polymers[%d]:" % (idx) )
+
+        for p in range(mixture.get_n_polymers()):
+            print("distinct_polymers[%d]:" % (p) )
             print("    volume fraction: %f, alpha: %f, N: %d" %
-                (polymer["volume_fraction"], polymer["alpha"], polymer["pc"].get_n_segment_total()), end=",")
-            print(" sequence of block types:", polymer["block_types"])
-            print("    total A fraction: %f, average statistical segment length: %f" % 
-                (polymer["total_A_fraction"], polymer["statistical_segment_length"]))
-            idx += 1
+                (mixture.get_polymer(p).get_volume_fraction(),
+                 mixture.get_polymer(p).get_alpha(),
+                 mixture.get_polymer(p).get_n_segment_total()))
+            # add display species and lengths
+
+        mixture.display_unique_branches()
+        mixture.display_unique_blocks()
 
         #  Save Internal Variables
-        self.distinct_polymers = distinct_polymers
         self.chi_n = params["chi_n"]
         self.box_is_altering = params["box_is_altering"]
+
         self.max_iter = max_iter
         self.tolerance = tolerance
+
         self.cb = cb
+        self.mixture = mixture
+        self.pseudo = pseudo
         self.am = am
 
     def run(self, initial_fields):
@@ -147,18 +186,11 @@ class SCFT:
         # reset Anderson mixing module
         self.am.reset_count()
 
-        # array for concentrations
-        phi = {"A":np.zeros([self.cb.get_n_grid()], dtype=np.float64),
-               "B":np.zeros([self.cb.get_n_grid()], dtype=np.float64)}
+        # concentration of each species
+        phi = {}
 
         # array for output fields
         w_out = np.zeros([2, self.cb.get_n_grid()], dtype=np.float64)
-
-        # array for the initial condition
-        # free end initial condition. q[0,:] is q and q[1,:] is qdagger.
-        # q starts from one end and qdagger starts from the other end.
-        q1_init = np.ones(self.cb.get_n_grid(), dtype=np.float64)
-        q2_init = np.ones(self.cb.get_n_grid(), dtype=np.float64)
 
         #------------------ run ----------------------
         print("---------- Run ----------")
@@ -178,31 +210,28 @@ class SCFT:
 
         for scft_iter in range(1, self.max_iter+1):
             # for the given fields find the polymer statistics
-            phi["A"][:] = 0.0
-            phi["B"][:] = 0.0
-            for polymer in self.distinct_polymers:
-                frac_ = polymer["volume_fraction"]/polymer["alpha"]
-                if not "random" in set(polymer["block_types"]):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"A":w[0],"B":w[1]})
-                    for i in range(len(polymer["block_types"])):
-                        phi[polymer["block_types"][i]] += frac_*phi_[i]
-                elif set(polymer["block_types"]) == set(["random"]):
-                    phi_, Q_ = polymer["pseudo"].compute_statistics(q1_init,q2_init, {"random":w[0]*polymer["total_A_fraction"] + w[1]*(1.0-polymer["total_A_fraction"])})
-                    phi["A"] += frac_*phi_[0]*polymer["total_A_fraction"]
-                    phi["B"] += frac_*phi_[0]*(1.0-polymer["total_A_fraction"])
-                else:
-                    raise ValueError("Unknown species,", set(polymer["block_types"]))
-                polymer.update({"phi":phi_})
-                polymer.update({"Q": Q_})
+            if self.random_copolymer_exist:
+                self.pseudo.compute_statistics({"A":w[0],"B":w[1],"random":w[0]*self.random_A_fraction + w[1]*(1.0-self.random_A_fraction)})
+            else:
+                self.pseudo.compute_statistics({"A":w[0],"B":w[1]})
+
+            phi["A"] = self.pseudo.get_species_concentration("A")
+            phi["B"] = self.pseudo.get_species_concentration("B")
+
+            if self.random_copolymer_exist:
+                phi["random"] = self.pseudo.get_species_concentration("random")
+                phi["A"] += phi["random"]*self.random_A_fraction
+                phi["B"] += phi["random"]*(1.0-self.random_A_fraction)
 
             # calculate the total energy
             w_minus = (w[0]-w[1])/2
             w_plus  = (w[0]+w[1])/2
             energy_total = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
             energy_total -= self.cb.integral(w_plus)/self.cb.get_volume()
-
-            for polymer in self.distinct_polymers:
-                energy_total -= polymer["volume_fraction"]/polymer["alpha"]*np.log(polymer["Q"]/self.cb.get_volume())
+            for p in range(self.mixture.get_n_polymers()):
+                energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
+                                self.mixture.get_polymer(p).get_alpha() * \
+                                np.log(self.pseudo.get_total_partition(p)/self.cb.get_volume())
                 
             # calculate pressure field for the new field calculation
             xi = 0.5*(w[0]+w[1]-self.chi_n)
@@ -226,23 +255,20 @@ class SCFT:
             mass_error = self.cb.integral(phi["A"] + phi["B"])/self.cb.get_volume() - 1.0
             
             if (self.box_is_altering):
-                # Calculate stress
-                stress_array = np.zeros(self.cb.get_dim())
-                for polymer in self.distinct_polymers:
-                    stress_array += polymer["volume_fraction"]/polymer["alpha"]/polymer["Q"] * \
-                        np.array(polymer["pseudo"].get_stress()[-self.cb.get_dim():])
-                #print(stress_array)
-                error_level += np.sqrt(np.sum(stress_array)**2)
+                # calculate stress
+                stress_array = np.array(self.pseudo.compute_stress())[-self.cb.get_dim():]
+                error_level += np.sqrt(np.sum(stress_array**2))
+
                 print("%8d %12.3E " %
                 (scft_iter, mass_error), end=" [ ")
-                for polymer in self.distinct_polymers:
-                    print("%13.7E " % (polymer["Q"]), end=" ")
+                for p in range(self.mixture.get_n_polymers()):
+                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()[-self.cb.get_dim():]]), "]")
             else:
                 print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
-                for polymer in self.distinct_polymers:
-                    print("%13.7E " % (polymer["Q"]), end=" ")
+                for p in range(self.mixture.get_n_polymers()):
+                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # conditions to end the iteration
@@ -251,10 +277,10 @@ class SCFT:
 
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
-                dlx = stress_array
+                dlx = -stress_array
                 am_new  = np.concatenate((np.reshape(w,      2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
                 am_out  = np.concatenate((np.reshape(w_out,  2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():] + dlx))
-                am_diff = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), stress_array))
+                am_diff = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), dlx))
                 self.am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
 
                 # set box size
@@ -267,9 +293,9 @@ class SCFT:
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.01, 0.01)
                 new_lx = (1 + new_dlx)*old_lx
                 self.cb.set_lx(new_lx)
+
                 # update bond parameters using new lx
-                for polymer in self.distinct_polymers:
-                    polymer["pseudo"].update()
+                self.pseudo.update()
             else:
                 self.am.calculate_new_fields(
                 np.reshape(w,      2*self.cb.get_n_grid()),
@@ -278,7 +304,6 @@ class SCFT:
 
         self.phi = phi
         self.w = w
-        #return phi, Q, energy_total
 
     def get_concentrations(self,):
         return self.phi["A"], self.phi["B"]

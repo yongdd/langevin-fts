@@ -169,12 +169,7 @@ int main()
         std::vector<int> v = {0,1};
         std::vector<int> u = {1,2};
 
-        double phi[MM*block_species.size()];
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
-
-        double alpha{0.0};
-        for (auto& contour_length : contour_lengths)
-            alpha += contour_length;
 
         Mixture* mx = new Mixture("Discrete", 1.0/NN, bond_lengths);
         mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
@@ -194,8 +189,8 @@ int main()
         {
             for(int i=0; i<MM; i++)
             {
-                phi[i] = 0.0;
-                phi[i+MM] = 0.0;
+                phi_a[i] = 0.0;
+                phi_b[i] = 0.0;
                 q1_last[i] = 0.0;
                 q2_last[i] = 0.0;
             }
@@ -248,20 +243,20 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
             
-            std::array<double,3> stress = pseudo->get_stress();
+            std::array<double,3> stress = pseudo->compute_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
-            error = std::abs(stress[0]-0.01137033351560520);
+            error = std::abs(stress[0] + 0.000473764);
             std::cout<< "Stress[0] error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(stress[1]-0.0146040034393427);
+            error = std::abs(stress[1] + 0.0006085);
             std::cout<< "Stress[1] error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(stress[2]-0.035718163012313);
+            error = std::abs(stress[2] + 0.00148826);
             std::cout<< "Stress[2] error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;

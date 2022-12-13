@@ -76,5 +76,14 @@ public:
 
     void display_unique_branches();
     void display_unique_blocks();
+
+    // Methods for pybind11
+    void add_polymer(double volume_fraction,
+                    std::vector<std::string> block_species,
+                    std::vector<double> contour_lengths,
+                    std::vector<int> v, std::vector<int> u)
+    {
+        add_polymer(volume_fraction, block_species, contour_lengths, v, u, {});
+    }
 };
 #endif

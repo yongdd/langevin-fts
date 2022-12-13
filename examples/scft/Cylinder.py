@@ -21,7 +21,7 @@ params = {
                                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"discrete", # "discrete" or "continuous" chain model
+    "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
     "chi_n": 15,                # Interaction parameter, Flory-Huggins params * N
 
@@ -77,9 +77,8 @@ mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1    2.707E-13  [ 2.8734784E+02  ]    -0.347066724   1.9030564E+00  [  6.4000000, 5.5200000, 4.7804602 ]
-    #    2    6.994E-14  [ 2.3659519E+02  ]    -0.167789774   1.3711348E+00  [  6.4000000, 5.5228865, 4.7847663 ]
-    #    3   -1.609E-13  [ 2.1835837E+02  ]    -0.093092899   9.9029875E-01  [  6.4000000, 5.5238851, 4.7865062 ]
-    #    4   -1.303E-13  [ 2.1083220E+02  ]    -0.059003091   7.1316836E-01  [  6.4000000, 5.5241884, 4.7872102 ]
-    #    5   -1.297E-13  [ 2.0773597E+02  ]    -0.042734208   5.1525212E-01  [  6.4000000, 5.5242091, 4.7874487 ]
-    
+    #    1    2.707E-13  [ 2.8734784E+02  ]    -0.347066724   1.8831697E+00  [  6.4000000, 5.5200000, 4.7804602 ]
+    #    2    6.994E-14  [ 2.3659519E+02  ]    -0.167789774   1.3639553E+00  [  6.4000000, 5.5228865, 4.7847663 ]
+    #    3   -1.611E-13  [ 2.1835837E+02  ]    -0.093092899   9.8796237E-01  [  6.4000000, 5.5238851, 4.7865062 ]
+    #    4   -1.308E-13  [ 2.1083220E+02  ]    -0.059003091   7.1297764E-01  [  6.4000000, 5.5241884, 4.7872102 ]
+    #    5   -1.301E-13  [ 2.0773597E+02  ]    -0.042734208   5.1541767E-01  [  6.4000000, 5.5242091, 4.7874487 ]
