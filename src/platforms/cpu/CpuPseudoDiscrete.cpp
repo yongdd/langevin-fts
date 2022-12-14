@@ -150,111 +150,111 @@ void CpuPseudoDiscrete::compute_statistics(
         }
 
         // parallel_job
-        #pragma omp parallel
+        auto& branch_schedule = sc->get_schedule();
+        for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            auto& branch_schedule = sc->get_schedule();
-            for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
+            #pragma omp parallel for
+            for(int job=0; job<parallel_job->size(); job++)
             {
-                // std::cout <<"parallel_job->size(): " << parallel_job->size() << std::endl;
-                #pragma omp for
-                for(int job=0; job<parallel_job->size(); job++)
+                auto& key = std::get<0>((*parallel_job)[job]);
+                int n_segment_from = std::get<1>((*parallel_job)[job]);
+                int n_segment_to = std::get<2>((*parallel_job)[job]);
+                auto& deps = mx->get_unique_branch(key).deps;
+                auto species = mx->get_unique_branch(key).species;
+
+                // calculate one block end
+                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                    auto& key = std::get<0>((*parallel_job)[job]);
-                    int n_segment_from = std::get<1>((*parallel_job)[job]);
-                    int n_segment_to = std::get<2>((*parallel_job)[job]);
-                    auto& deps = mx->get_unique_branch(key).deps;
-                    auto species = mx->get_unique_branch(key).species;
-                    // std::cout << key << ", " << mx->get_unique_branch(key).max_n_segment << ": " << n_segment_from << ", " << n_segment_to << std::endl;
+                    for(int i=0; i<M; i++)
+                        unique_partition[key][i] = exp_dw[species][i]; //* q_init
+                    unique_partition_finished[key][0] = true;
+                }
+                else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                {
+                    // Illustration (four branches)
+                    //     A
+                    //     |
+                    // O - . - B
+                    //     |
+                    //     C
 
-                    // calculate one block end
-                    if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                    // Legend)
+                    // .       : junction
+                    // O       : full segment
+                    // -, |    : half bonds
+                    // A, B, C : other full segments
+
+                    // combine branches
+                    double q_junction[M];
+                    for(int i=0; i<M; i++)
+                        q_junction[i] = 1.0;
+                    for(int d=0; d<deps.size(); d++)
                     {
+                        std::string sub_dep = deps[d].first;
+                        int sub_n_segment   = deps[d].second;
+                        double q_half_step[M];
+
+                        if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                            std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
+
+                        half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
+                            q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
+
                         for(int i=0; i<M; i++)
-                            unique_partition[key][i] = exp_dw[species][i]; //* q_init
-                        unique_partition_finished[key][0] = true;
-                        // std::cout << "leaf node" << std::endl;
+                            q_junction[i] *= q_half_step[i];
                     }
-                    else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
-                    {
-                        // Illustration (four branches)
-                        //     A
-                        //     |
-                        // O - . - B
-                        //     |
-                        //     C
+                    for(int i=0; i<M; i++)
+                        unique_q_junctions[key][i] = q_junction[i];
 
-                        // Legend)
-                        // .       : junction
-                        // O       : full segment
-                        // -, |    : half bonds
-                        // A, B, C : other full segments
+                    // add half bond
+                    half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[species]);
 
-                        // combine branches
-                        double q_junction[M];
-                        for(int i=0; i<M; i++)
-                            q_junction[i] = 1.0;
-                        for(int d=0; d<deps.size(); d++)
-                        {
-                            std::string sub_dep = deps[d].first;
-                            int sub_n_segment   = deps[d].second;
-                            double q_half_step[M];
+                    // add full segment
+                    for(int i=0; i<M; i++)
+                        unique_partition[key][i] *= exp_dw[species][i];
+                    unique_partition_finished[key][0] = true;
+                }
+                else
+                {
+                    n_segment_from--;
+                }
 
-                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
-                                std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
+                // diffusion of each blocks
+                for(int n=n_segment_from; n<n_segment_to; n++)
+                {
+                    if (!unique_partition_finished[key][n-1])
+                        std::cout << "unfinished, key: " << key << ", " << n << std::endl;
 
-                            half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
-                                q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
-
-                            for(int i=0; i<M; i++)
-                                q_junction[i] *= q_half_step[i];
-                        }
-                        // std::cout << "key (added): " << item.first << std::endl;
-                        for(int i=0; i<M; i++)
-                            unique_q_junctions[key][i] = q_junction[i];
-
-                        // add half bond
-                        half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[species]);
-
-                        // add full segment
-                        for(int i=0; i<M; i++)
-                            unique_partition[key][i] *= exp_dw[species][i];
-                        unique_partition_finished[key][0] = true;
-                        // std::cout << "not leaf node" << std::endl;
-                    }
-                    else
-                    {
-                        n_segment_from--;
-                    }
-
-                    // diffusion of each blocks
-                    for(int n=n_segment_from; n<n_segment_to; n++)
-                    {
-                        if (!unique_partition_finished[key][n-1])
-                            std::cout << "unfinished, key: " << key << ", " << n << std::endl;
-
-                        one_step(&unique_partition[key][(n-1)*M],
-                                &unique_partition[key][n*M],
-                                boltz_bond[species],
-                                exp_dw[species]);
-                        unique_partition_finished[key][n] = true;
-                    }
+                    one_step(&unique_partition[key][(n-1)*M],
+                            &unique_partition[key][n*M],
+                            boltz_bond[species],
+                            exp_dw[species]);
+                    unique_partition_finished[key][n] = true;
                 }
             }
         }
 
         // calculate segment concentrations
-        for(const auto& item: mx->get_unique_blocks())
+        // for(const auto& item: mx->get_unique_blocks())
+        // {
+        //     auto& key = item.first;
+        #pragma omp parallel for
+        for(int b=0; b<mx->get_unique_blocks().size();b++)
         {
-            auto& key = item.first;
+            auto item = mx->get_unique_blocks().begin();
+            advance(item, b);
+
+            auto& key = (*item).first;
             calculate_phi_one_type(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<0>(key)],  // dependency v
                 unique_partition[std::get<1>(key)],  // dependency u
-                exp_dw[item.second.species],          // exp_dw
-                std::get<2>(key));                    // n_segment
+                exp_dw[(*item).second.species],      // exp_dw
+                std::get<2>(key));                   // n_segment
         }
 
-        // for each distinct polymers 
+        // for each distinct polymers
+        #pragma omp parallel for
         for(int p=0; p<mx->get_n_polymers(); p++)
         {
             PolymerChain& pc = mx->get_polymer(p);
@@ -438,21 +438,32 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        std::complex<double> qk_1[M_COMPLEX];
-        std::complex<double> qk_2[M_COMPLEX];
-
         std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
         std::array<double,3> stress;
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for Unique key pairs
-        for(const auto& item: mx->get_unique_blocks())
+        // for(const auto& item: mx->get_unique_blocks())
+        // {
+        //     auto& key = item.first;
+        //     std::string dep_v = std::get<0>(key);
+        //     std::string dep_u = std::get<1>(key);
+        //     const int N       = std::get<2>(key);
+        //     std::string species = item.second.species;
+        // #pragma omp parallel for
+        for(int b=0; b<mx->get_unique_blocks().size();b++)
         {
-            auto& key = item.first;
+            auto item = mx->get_unique_blocks().begin();
+            advance(item, b);
+
+            auto& key = (*item).first;
             std::string dep_v = std::get<0>(key);
             std::string dep_u = std::get<1>(key);
             const int N       = std::get<2>(key);
-            std::string species = item.second.species;
+            std::string species = (*item).second.species;
+
+            std::complex<double> qk_1[M_COMPLEX];
+            std::complex<double> qk_2[M_COMPLEX];
 
             double* q_1 = unique_partition[dep_v];    // dependency v
             double* q_2 = unique_partition[dep_u];    // dependency u

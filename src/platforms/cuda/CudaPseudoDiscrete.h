@@ -13,6 +13,7 @@
 #include "Mixture.h"
 #include "Pseudo.h"
 #include "CudaCommon.h"
+#include "Scheduler.h"
 
 class CudaPseudoDiscrete : public Pseudo
 {
@@ -32,7 +33,7 @@ private:
     // ......
 
     // for pseudo-spectral: one_step()
-    ftsComplex *d_qk_in;
+    ftsComplex *d_qk_in_1;
     double *d_q_half_step, *d_q_junction;
 
     // for stress calculation: compute_stress()
@@ -47,6 +48,8 @@ private:
 
     // key: (dep) + species, value: partition functions
     std::map<std::string, double *> d_unique_partition;
+    Scheduler *sc;          // scheduler for partial partition function
+    const int N_STREAM = 2; // the number of job threads
 
     // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<std::string, std::string, int>, double *> d_unique_phi;
