@@ -1,7 +1,7 @@
 /*-----------------------------------------------------------------
 ! A circular buffer is a data structure that uses a single,
 ! fixed-size buffer as if it were connected end-to-end.
-! Each elements are 1-dmensional real array.
+! Each elements are 1-dimensional real array.
 !-----------------------------------------------------------------*/
 
 #ifndef CIRCULAR_BUFFER_H_

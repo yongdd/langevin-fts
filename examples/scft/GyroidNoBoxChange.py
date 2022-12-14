@@ -7,13 +7,14 @@ import scft
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
+os.environ["OMP_NUM_THREADS"] = "2"
 
 # Major Simulation params
 f = 0.36        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
     "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,

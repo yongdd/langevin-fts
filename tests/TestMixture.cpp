@@ -20,44 +20,44 @@ int main()
         std::vector<std::pair<std::string, int>> sub_deps;
         // sub_deps: []
         key = "B";
-        sub_deps = mx.key_to_deps(key);
+        sub_deps = Mixture::key_to_deps(key);
         if(sub_deps.size() != 0)
             return -1;
-        if(mx.key_to_species(key) != "B")
+        if(Mixture::key_to_species(key) != "B")
             return -1;
 
         // sub_deps: [A:12, B:12]
         key = "(A12B12)A";
-        sub_deps = mx.key_to_deps(key);
+        sub_deps = Mixture::key_to_deps(key);
         if(sub_deps[0].first != "A" || sub_deps[0].second != 12)
             return -1;
         if(sub_deps[1].first != "B" || sub_deps[1].second != 12)
             return -1;
-        if(mx.key_to_species(key) != "A")
+        if(Mixture::key_to_species(key) != "A")
             return -1;
 
         // sub_deps: [(A12)B:12, (B12)A:9, (B12)B:12]
         key = "((A12)B12(B12)A9(B12)B12)A";
-        sub_deps = mx.key_to_deps(key);
+        sub_deps = Mixture::key_to_deps(key);
         if(sub_deps[0].first != "(A12)B" || sub_deps[0].second != 12)
             return -1;
         if(sub_deps[1].first != "(B12)A" || sub_deps[1].second != 9)
             return -1;
        if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
             return -1;
-        if(mx.key_to_species(key) != "A")
+        if(Mixture::key_to_species(key) != "A")
             return -1;
 
         // sub_deps: [(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A:12, (A12)B:12, (B12)B:12]}
         key = "((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A";
-        sub_deps = mx.key_to_deps(key);
+        sub_deps = Mixture::key_to_deps(key);
         if(sub_deps[0].first != "(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A" || sub_deps[0].second != 12)
             return -1;
         if(sub_deps[1].first != "(A12)B" || sub_deps[1].second != 12)
             return -1;
         if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
             return -1;
-        if(mx.key_to_species(key) != "A")
+        if(Mixture::key_to_species(key) != "A")
             return -1;
 
         // print unique sub branches
@@ -66,7 +66,7 @@ int main()
         {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
-            sub_deps = mx.key_to_deps(item.first);
+            sub_deps = Mixture::key_to_deps(item.first);
             for(int i=0; i<sub_deps.size(); i++)
                 std::cout << sub_deps[i].first << ":" << sub_deps[i].second << ", " ;
             std::cout << "]}" << std::endl;

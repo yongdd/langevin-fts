@@ -14,6 +14,7 @@
 #include "Mixture.h"
 #include "Pseudo.h"
 #include "FFT.h"
+#include "Scheduler.h"
 
 class CpuPseudoContinuous : public Pseudo
 {
@@ -27,6 +28,9 @@ private:
 
     // key: (dep) + species, value: partition functions
     std::map<std::string, double *> unique_partition;
+    std::map<std::string, bool *> unique_partition_finished;
+    Scheduler *sc;          // scheduler for partial partition function
+    const int N_STREAM = 4; // the number of job threads
 
     // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<std::string, std::string, int>, double *> unique_phi;

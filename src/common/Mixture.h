@@ -15,8 +15,8 @@ struct UniqueEdge{
     int max_n_segment;                              // the maximum segment number
     std::string species;                            // species
     std::vector<std::pair<std::string, int>> deps;  // dependency pairs
+    int height;                                     // height of branch (height of tree data Structure)
 };
-
 struct UniqueBlock{
     std::string species;  // species
 };
@@ -67,12 +67,12 @@ public:
 
     // get information of Unique sub graphs
     int get_unique_n_branches();
-    std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
-    std::string key_to_species(std::string key);
+    static std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
+    static std::string key_to_species(std::string key);
     std::map<std::string, UniqueEdge, std::greater<std::string>>& get_unique_branches(); 
-    UniqueEdge get_unique_branch(std::string key);
+    UniqueEdge& get_unique_branch(std::string key);
     std::map<std::tuple<std::string, std::string, int>, UniqueBlock>& get_unique_blocks(); 
-    UniqueBlock get_unique_block(std::tuple<std::string, std::string, int> key);
+    UniqueBlock& get_unique_block(std::tuple<std::string, std::string, int> key);
 
     void display_unique_branches();
     void display_unique_blocks();
