@@ -1,4 +1,5 @@
 #include <cmath>
+
 #include "CpuPseudoContinuous.h"
 #include "SimpsonQuadrature.h"
 
@@ -22,6 +23,9 @@ CpuPseudoContinuous::CpuPseudoContinuous(
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
             unique_partition[dep] = new double[M*(max_n_segment+1)];
+            unique_partition_finished[dep] = new bool[max_n_segment+1];
+            for(int i=0; i<=max_n_segment;i++)
+                unique_partition_finished[dep][i] = false;
         }
 
         // allocate memory for concentrations
@@ -50,6 +54,9 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
+        // create scheduler for computation of partial partition function
+        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+
         update();
     }
     catch(std::exception& exc)
@@ -60,6 +67,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
 CpuPseudoContinuous::~CpuPseudoContinuous()
 {
     delete fft;
+    delete sc;
 
     delete[] fourier_basis_x;
     delete[] fourier_basis_y;
@@ -78,6 +86,8 @@ CpuPseudoContinuous::~CpuPseudoContinuous()
     for(const auto& item: unique_partition)
         delete[] item.second;
     for(const auto& item: unique_phi)
+        delete[] item.second;
+    for(const auto& item: unique_partition_finished)
         delete[] item.second;
 }
 void CpuPseudoContinuous::update()
@@ -129,39 +139,101 @@ void CpuPseudoContinuous::compute_statistics(
             }
         }
 
-        for(const auto& item: mx->get_unique_branches())
+        // parallel_job
+        #pragma omp parallel
         {
-            auto& key = item.first;
-            // calculate one block end
-            if (item.second.deps.size() > 0) // if it is not leaf node
+            auto& branch_schedule = sc->get_schedule();
+            for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
             {
-                for(int i=0; i<M; i++)
-                    unique_partition[key][i] = 1.0;
-                for(int p=0; p<item.second.deps.size(); p++)
+                // std::cout <<"parallel_job->size(): " << parallel_job->size() << std::endl;
+                #pragma omp for
+                for(int job=0; job<parallel_job->size(); job++)
                 {
-                    std::string sub_dep = item.second.deps[p].first;
-                    int sub_n_segment   = item.second.deps[p].second;
-                    for(int i=0; i<M; i++)
-                        unique_partition[key][i] *= unique_partition[sub_dep][sub_n_segment*M+i];
+                    auto& key = std::get<0>((*parallel_job)[job]);
+                    int n_segment_from = std::get<1>((*parallel_job)[job]);
+                    int n_segment_to = std::get<2>((*parallel_job)[job]);
+                    auto& deps = mx->get_unique_branch(key).deps;
+                    auto species = mx->get_unique_branch(key).species;
+                    // std::cout << key << ", " << mx->get_unique_branch(key).max_n_segment << ": " << n_segment_from << ", " << n_segment_to << std::endl;
+
+                    // calculate one block end
+                    if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                    {
+                        for(int i=0; i<M; i++)
+                            unique_partition[key][i] = 1.0; //* q_init
+                        // std::cout << "leaf node" << std::endl;
+                        unique_partition_finished[key][0] = true;
+                    }
+                    else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                    {
+                        for(int i=0; i<M; i++)
+                            unique_partition[key][i] = 1.0;
+                        for(int p=0; p<deps.size(); p++)
+                        {
+                            std::string sub_dep = deps[p].first;
+                            int sub_n_segment   = deps[p].second;
+
+                            if (!unique_partition_finished[sub_dep][sub_n_segment])
+                                std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
+
+                            for(int i=0; i<M; i++)
+                                unique_partition[key][i] *= unique_partition[sub_dep][sub_n_segment*M+i];
+                            unique_partition_finished[key][0] = true;
+                        }
+                        // std::cout << "not leaf node" << std::endl;
+                    }
+            
+                    // apply the propagator successively
+                    for(int n=n_segment_from; n<=n_segment_to; n++)
+                    {
+                        if (!unique_partition_finished[key][n-1])
+                            std::cout << "unfinished, key: " << key << ", " << n << std::endl;
+
+                        one_step(&unique_partition[key][(n-1)*M],
+                                &unique_partition[key][n*M],
+                                boltz_bond[species],
+                                boltz_bond_half[species],
+                                exp_dw[species],
+                                exp_dw_half[species]);
+                        unique_partition_finished[key][n] = true;
+                    }
                 }
             }
-            else // if it is leaf node
-            {
-                for(int i=0; i<M; i++)
-                    unique_partition[key][i] = 1.0; //* q_init
-            }
-
-            // apply the propagator successively
-            for(int n=1; n<=item.second.max_n_segment; n++)
-            {
-                one_step(&unique_partition[key][(n-1)*M],
-                         &unique_partition[key][n*M],
-                         boltz_bond[item.second.species],
-                         boltz_bond_half[item.second.species],
-                         exp_dw[item.second.species],
-                         exp_dw_half[item.second.species]);
-            }
         }
+
+        // for(const auto& item: mx->get_unique_branches())
+        // {
+        //     auto& key = item.first;
+        //     // calculate one block end
+        //     if (item.second.deps.size() > 0) // if it is not leaf node
+        //     {
+        //         for(int i=0; i<M; i++)
+        //             unique_partition[key][i] = 1.0;
+        //         for(int p=0; p<item.second.deps.size(); p++)
+        //         {
+        //             std::string sub_dep = item.second.deps[p].first;
+        //             int sub_n_segment   = item.second.deps[p].second;
+        //             for(int i=0; i<M; i++)
+        //                 unique_partition[key][i] *= unique_partition[sub_dep][sub_n_segment*M+i];
+        //         }
+        //     }
+        //     else // if it is leaf node
+        //     {
+        //         for(int i=0; i<M; i++)
+        //             unique_partition[key][i] = 1.0; //* q_init
+        //     }
+
+        //     // apply the propagator successively
+        //     for(int n=1; n<=item.second.max_n_segment; n++)
+        //     {
+        //         one_step(&unique_partition[key][(n-1)*M],
+        //                  &unique_partition[key][n*M],
+        //                  boltz_bond[item.second.species],
+        //                  boltz_bond_half[item.second.species],
+        //                  exp_dw[item.second.species],
+        //                  exp_dw_half[item.second.species]);
+        //     }
+        // }
 
         // calculate segment concentrations
         for(const auto& item: mx->get_unique_blocks())

@@ -26,6 +26,7 @@ class Pseudo
 protected:
     ComputationBox *cb;
     Mixture *mx;
+
     int n_complex_grid;
 
     void get_boltz_bond(double *boltz_bond, double bond_length_variance,

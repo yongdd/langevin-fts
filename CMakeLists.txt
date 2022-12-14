@@ -41,6 +41,7 @@ ADD_LIBRARY(common
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
     src/common/AndersonMixing.cpp
+    src/common/Scheduler.cpp
 )
 
 # Intel MKL

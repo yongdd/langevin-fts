@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cctype>
 #include <cmath>
+#include <cassert>
 #include <algorithm>
 #include <stack>
 
@@ -147,6 +148,14 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
         unique_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
         unique_branches[text].deps = key_to_deps(text);
         unique_branches[text].species = key_to_species(text);
+        for(int i=0; i<text.size();i++)
+        {
+            if (text[i] != '(')
+            {
+                unique_branches[text].height = i;
+                break;
+            }
+        }
     }
     return std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
     // return std::make_pair("A", 10);
@@ -208,7 +217,7 @@ std::map<std::string, UniqueEdge, std::greater<std::string>>& Mixture::get_uniqu
 {
     return unique_branches;
 }
-UniqueEdge Mixture::get_unique_branch(std::string key)
+UniqueEdge& Mixture::get_unique_branch(std::string key)
 {
     if (unique_branches.count(key) == 0)
         throw_with_line_number("There is no such key (" + key + ").");
@@ -218,10 +227,9 @@ std::map<std::tuple<std::string, std::string, int>, UniqueBlock>& Mixture::get_u
 {
     return unique_blocks;
 }
-UniqueBlock Mixture::get_unique_block(std::tuple<std::string, std::string, int> key)
+UniqueBlock& Mixture::get_unique_block(std::tuple<std::string, std::string, int> key)
 {
-    if (unique_blocks.count(key) == 0)
-        throw_with_line_number("There is no such key (" +
+    assert(unique_blocks.count(key) == 0 && "There is no such key (" +
             std::get<0>(key) + ", " + std::get<1>(key) + ", " + std::to_string(std::get<2>(key)) + ").");
     return unique_blocks[key];
 }
@@ -232,8 +240,10 @@ void Mixture::display_unique_branches()
     std::cout << "--------- Unique Branches ---------" << std::endl;
     for(const auto& item : unique_branches)
     {
-        std::cout << item.first << ":\n\t";
-        std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
+        std::cout << item.first;
+        std::cout << ":\n\t{max_n_segment: " << item.second.max_n_segment;
+        std::cout << ", height: " << item.second.height;
+        std::cout << ",\n\tsub_deps: [";
         sub_deps = key_to_deps(item.first);
         for(int i=0; i<sub_deps.size(); i++)
         {

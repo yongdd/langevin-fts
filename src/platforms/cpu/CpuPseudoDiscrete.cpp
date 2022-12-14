@@ -22,7 +22,9 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
             unique_partition[dep] = new double[M*max_n_segment];
-
+            unique_partition_finished[dep] = new bool[max_n_segment];
+            for(int i=0; i<max_n_segment;i++)
+                unique_partition_finished[dep][i] = false;
              // There are N segments
              // Illustration (N==5)
              // O--O--O--O--O
@@ -64,6 +66,9 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
+        // create scheduler for computation of partial partition function
+        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+
         update();
     }
     catch(std::exception& exc)
@@ -74,6 +79,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
 CpuPseudoDiscrete::~CpuPseudoDiscrete()
 {
     delete fft;
+    delete sc;
 
     delete[] fourier_basis_x;
     delete[] fourier_basis_y;
@@ -92,6 +98,8 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
     for(const auto& item: unique_phi)
         delete[] item.second;
     for(const auto& item: unique_q_junctions)
+        delete[] item.second;
+    for(const auto& item: unique_partition_finished)
         delete[] item.second;
 }
 void CpuPseudoDiscrete::update()
@@ -141,67 +149,96 @@ void CpuPseudoDiscrete::compute_statistics(
                 exp_dw[species][i] = exp(-w[i]*ds);
         }
 
-        for(const auto& item: mx->get_unique_branches())
+        // parallel_job
+        #pragma omp parallel
         {
-            auto& key = item.first;
-            //std::cout << "key: " << key << std::endl;
-
-            // calculate one block end
-            if (item.second.deps.size() > 0) // if it is not leaf node
-            { 
-                // Illustration (four branches)
-                //     A
-                //     |
-                // O - . - B
-                //     |
-                //     C
-
-                // Legend)
-                // .       : junction
-                // O       : full segment
-                // -, |    : half bonds
-                // A, B, C : other full segments
-
-                // combine branches
-                double q_junction[M];
-                for(int i=0; i<M; i++)
-                    q_junction[i] = 1.0;
-                for(int d=0; d<item.second.deps.size(); d++)
+            auto& branch_schedule = sc->get_schedule();
+            for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
+            {
+                // std::cout <<"parallel_job->size(): " << parallel_job->size() << std::endl;
+                #pragma omp for
+                for(int job=0; job<parallel_job->size(); job++)
                 {
-                    std::string sub_dep = item.second.deps[d].first;
-                    int sub_n_segment   = item.second.deps[d].second;
-                    double q_half_step[M];
+                    auto& key = std::get<0>((*parallel_job)[job]);
+                    int n_segment_from = std::get<1>((*parallel_job)[job]);
+                    int n_segment_to = std::get<2>((*parallel_job)[job]);
+                    auto& deps = mx->get_unique_branch(key).deps;
+                    auto species = mx->get_unique_branch(key).species;
+                    // std::cout << key << ", " << mx->get_unique_branch(key).max_n_segment << ": " << n_segment_from << ", " << n_segment_to << std::endl;
 
-                    half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
-                        q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
+                    // calculate one block end
+                    if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                    {
+                        for(int i=0; i<M; i++)
+                            unique_partition[key][i] = exp_dw[species][i]; //* q_init
+                        unique_partition_finished[key][0] = true;
+                        // std::cout << "leaf node" << std::endl;
+                    }
+                    else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                    {
+                        // Illustration (four branches)
+                        //     A
+                        //     |
+                        // O - . - B
+                        //     |
+                        //     C
 
-                    for(int i=0; i<M; i++)
-                        q_junction[i] *= q_half_step[i];
+                        // Legend)
+                        // .       : junction
+                        // O       : full segment
+                        // -, |    : half bonds
+                        // A, B, C : other full segments
+
+                        // combine branches
+                        double q_junction[M];
+                        for(int i=0; i<M; i++)
+                            q_junction[i] = 1.0;
+                        for(int d=0; d<deps.size(); d++)
+                        {
+                            std::string sub_dep = deps[d].first;
+                            int sub_n_segment   = deps[d].second;
+                            double q_half_step[M];
+
+                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                                std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
+
+                            half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
+                                q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
+
+                            for(int i=0; i<M; i++)
+                                q_junction[i] *= q_half_step[i];
+                        }
+                        // std::cout << "key (added): " << item.first << std::endl;
+                        for(int i=0; i<M; i++)
+                            unique_q_junctions[key][i] = q_junction[i];
+
+                        // add half bond
+                        half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[species]);
+
+                        // add full segment
+                        for(int i=0; i<M; i++)
+                            unique_partition[key][i] *= exp_dw[species][i];
+                        unique_partition_finished[key][0] = true;
+                        // std::cout << "not leaf node" << std::endl;
+                    }
+                    else
+                    {
+                        n_segment_from--;
+                    }
+
+                    // diffusion of each blocks
+                    for(int n=n_segment_from; n<n_segment_to; n++)
+                    {
+                        if (!unique_partition_finished[key][n-1])
+                            std::cout << "unfinished, key: " << key << ", " << n << std::endl;
+
+                        one_step(&unique_partition[key][(n-1)*M],
+                                &unique_partition[key][n*M],
+                                boltz_bond[species],
+                                exp_dw[species]);
+                        unique_partition_finished[key][n] = true;
+                    }
                 }
-                // std::cout << "key (added): " << item.first << std::endl;
-                for(int i=0; i<M; i++)
-                    unique_q_junctions[item.first][i] = q_junction[i];
-
-                // add half bond
-                half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[item.second.species]);
-
-                // add full segment
-                for(int i=0; i<M; i++)
-                    unique_partition[key][i] *= exp_dw[item.second.species][i];
-            }
-            else  // if it is leaf node
-            {
-                for(int i=0; i<M; i++)
-                    unique_partition[key][i] = exp_dw[item.second.species][i]; //* q_init
-            }
-
-            // diffusion of each blocks
-            for(int n=1; n<item.second.max_n_segment; n++)
-            {
-                one_step(&unique_partition[key][(n-1)*M],
-                         &unique_partition[key][n*M],
-                         boltz_bond[item.second.species],
-                         exp_dw[item.second.species]);
             }
         }
 

@@ -1,6 +1,5 @@
-
 #include <iostream>
-#include "cmath"
+#include <cmath>
 #include "Pseudo.h"
 
 Pseudo::Pseudo(
@@ -94,6 +93,4 @@ void Pseudo::get_weighted_fourier_basis(
             }
         }
     }
-    
-    
 }

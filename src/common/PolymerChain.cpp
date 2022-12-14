@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cctype>
 #include <cmath>
+#include <cassert>
 #include <algorithm>
 #include <stack>
 
@@ -40,7 +41,7 @@ PolymerChain::PolymerChain(
             throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in bond_lengths.");
     }
 
-    //  
+    // check v_to_grafting_index
     if( v_to_grafting_index.size() > 0)
         throw_with_line_number("Currently, \'v_to_grafting_index\' is not supported.");
 
@@ -169,14 +170,14 @@ double PolymerChain::get_volume_fraction()
 }
 int PolymerChain::get_array_idx(int v, int u)
 {
-    if (edge_to_array.count(std::make_pair(v, u)) == 0)
-        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
+        "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return edge_to_array[std::make_pair(v, u)];
 }
 struct PolymerChainBlock& PolymerChain::get_block(int v, int u)
 {
-    if (edge_to_array.count(std::make_pair(v, u)) == 0)
-        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
+        "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return blocks[edge_to_array[std::make_pair(v, u)]];
 }
 std::vector<PolymerChainBlock>& PolymerChain::get_blocks()
@@ -196,7 +197,7 @@ void PolymerChain::set_edge_to_deps(int v, int u, std::string deps)
     edge_to_deps[std::make_pair(v, u)] = deps;
 }
 std::string PolymerChain::get_dep(int v, int u){
-    if (edge_to_deps.count(std::make_pair(v, u)) == 0)
-        throw_with_line_number("There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    assert(edge_to_deps.count(std::make_pair(v, u)) == 0 &&
+        "There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return edge_to_deps[std::make_pair(v,u)];
 }
