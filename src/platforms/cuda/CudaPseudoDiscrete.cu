@@ -101,7 +101,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M));
 
         // allocate memory for pseudo-spectral: one_step()
-        gpu_error_check(cudaMalloc((void**)&d_qk_in, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_qk_in_1, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(ftsComplex)*M_COMPLEX));
         
@@ -145,7 +145,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     cudaFree(d_phi);
 
     // for pseudo-spectral: one_step()
-    cudaFree(d_qk_in);
+    cudaFree(d_qk_in_1);
     cudaFree(d_q_half_step);
     cudaFree(d_q_junction);
 
@@ -331,13 +331,13 @@ void CudaPseudoDiscrete::one_step(
 
         //-------------- step 1 ----------
         // Execute a Forward FFT
-        cufftExecD2Z(plan_for, d_q_in, d_qk_in);
+        cufftExecD2Z(plan_for, d_q_in, d_qk_in_1);
 
         // Multiply e^(-k^2 ds/6) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in, d_boltz_bond, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in_1, d_boltz_bond, M_COMPLEX);
 
         // Execute a backward FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
+        cufftExecZ2D(plan_bak, d_qk_in_1, d_q_out);
 
         // Evaluate e^(-w*ds) in real space
         multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_out, d_q_out, d_exp_dw, 1.0/((double)M), M);
@@ -358,11 +358,11 @@ void CudaPseudoDiscrete::half_bond_step(double *d_q_in, double *d_q_out, double 
         const int M_COMPLEX = this->n_complex_grid;
 
         // 3D fourier discrete transform, forward and inplace
-        cufftExecD2Z(plan_for, d_q_in, d_qk_in);
+        cufftExecD2Z(plan_for, d_q_in, d_qk_in_1);
         // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
-        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in, d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in_1, d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
         // 3D fourier discrete transform, backward and inplace
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
+        cufftExecZ2D(plan_bak, d_qk_in_1, d_q_out);
     }
     catch(std::exception& exc)
     {

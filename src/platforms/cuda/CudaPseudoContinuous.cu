@@ -26,6 +26,9 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             int max_n_segment = item.second.max_n_segment;
             d_unique_partition[dep] = nullptr;
             gpu_error_check(cudaMalloc((void**)&d_unique_partition[dep], sizeof(double)*M*(max_n_segment+1)));
+            // unique_partition_finished[dep] = new bool[max_n_segment+1];
+            // for(int i=0; i<=max_n_segment;i++)
+            //     unique_partition_finished[dep][i] = false;
         }
 
         // allocate memory for concentrations
@@ -55,7 +58,6 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create FFT plan
-        const int BATCH{1};
         const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
 
@@ -74,17 +76,24 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         {
             n_grid[0] = cb->get_nx(2);
         }
-        cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,BATCH);
-        cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,BATCH);
+
+        cufftPlanMany(&plan_for_1, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
+        cufftPlanMany(&plan_bak_1, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
+        cufftPlanMany(&plan_for_2, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
+        cufftPlanMany(&plan_bak_2, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,2);
 
         // allocate memory for get_concentration
         gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M));
 
         // allocate memory for pseudo-spectral: one_step()
-        gpu_error_check(cudaMalloc((void**)&d_q_step1, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_qk_in,  sizeof(ftsComplex)*M_COMPLEX));
-        
+        gpu_error_check(cudaMalloc((void**)&d_q_step1_1, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_step2_1, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_qk_in_1,  sizeof(ftsComplex)*M_COMPLEX));
+
+        gpu_error_check(cudaMalloc((void**)&d_q_step1_2, sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_step2_2, sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_qk_in_2,  sizeof(ftsComplex)*2*M_COMPLEX));
+
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
@@ -93,6 +102,9 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_qk_2,        sizeof(ftsComplex)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX));
+
+        // create scheduler for computation of partial partition function
+        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
 
         update();
     }
@@ -103,8 +115,12 @@ CudaPseudoContinuous::CudaPseudoContinuous(
 }
 CudaPseudoContinuous::~CudaPseudoContinuous()
 {
-    cufftDestroy(plan_for);
-    cufftDestroy(plan_bak);
+    cufftDestroy(plan_for_1);
+    cufftDestroy(plan_bak_1);
+    cufftDestroy(plan_for_2);
+    cufftDestroy(plan_bak_2);
+
+    delete sc;
 
     delete[] single_partitions;
 
@@ -120,14 +136,16 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(item.second);
     for(const auto& item: d_unique_phi)
         cudaFree(item.second);
+    // for(const auto& item: unique_partition_finished)
+    //     delete[] item.second;
 
     // for get_concentration
     cudaFree(d_phi);
 
     // for pseudo-spectral: one_step()
-    cudaFree(d_q_step1);
-    cudaFree(d_q_step2);
-    cudaFree(d_qk_in);
+    cudaFree(d_q_step1_1);
+    cudaFree(d_q_step2_1);
+    cudaFree(d_qk_in_1);
 
     // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);
@@ -210,39 +228,88 @@ void CudaPseudoContinuous::compute_statistics(
         double q_uniform[M];
         for(int i=0; i<M; i++)
             q_uniform[i] = 1.0;
-        for(const auto& item: mx->get_unique_branches())
-        {
-            auto& key = item.first;
-            // calculate one block end
-            if (item.second.deps.size() > 0) // if it is not leaf node
-            {
-                gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
-                    sizeof(double)*M, cudaMemcpyHostToDevice));
 
-                for(int p=0; p<item.second.deps.size(); p++)
+        // parallel_job
+        auto& branch_schedule = sc->get_schedule();
+        for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
+        {
+            for(int job=0; job<parallel_job->size(); job++)
+            {
+                auto& key = std::get<0>((*parallel_job)[job]);
+                int n_segment_from = std::get<1>((*parallel_job)[job]);
+                int n_segment_to = std::get<2>((*parallel_job)[job]);
+                auto& deps = mx->get_unique_branch(key).deps;
+                auto species = mx->get_unique_branch(key).species;
+
+                // calculate one block end
+                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                    std::string sub_dep = item.second.deps[p].first;
-                    int sub_n_segment   = item.second.deps[p].second;
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(
-                        d_unique_partition[key], d_unique_partition[key],
-                        &d_unique_partition[sub_dep][sub_n_segment*M], 1.0, M);
+                    gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
+                        sizeof(double)*M, cudaMemcpyHostToDevice)); //* q_init
+                    // unique_partition_finished[key][0] = true;
+                }
+                else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                {
+                    gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
+                        sizeof(double)*M, cudaMemcpyHostToDevice));
+
+                    for(int p=0; p<deps.size(); p++)
+                    {
+                        std::string sub_dep = deps[p].first;
+                        int sub_n_segment   = deps[p].second;
+
+                        // if (!unique_partition_finished[sub_dep][sub_n_segment])
+                        //     std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
+
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(
+                            d_unique_partition[key], d_unique_partition[key],
+                            &d_unique_partition[sub_dep][sub_n_segment*M], 1.0, M);
+
+                        // unique_partition_finished[key][0] = true;
+                    }
                 }
             }
-            else // if it is leaf node
+        
+            if(parallel_job->size()==1)
             {
-                gpu_error_check(cudaMemcpy(d_unique_partition[key], q_uniform,
-                    sizeof(double)*M, cudaMemcpyHostToDevice)); //* q_init
-            }
+                auto& key = std::get<0>((*parallel_job)[0]);
+                int n_segment_from = std::get<1>((*parallel_job)[0]);
+                int n_segment_to = std::get<2>((*parallel_job)[0]);
+                auto species = mx->get_unique_branch(key).species;
 
-            // apply the propagator successively
-            for(int n=1; n<=item.second.max_n_segment; n++)
+                // apply the propagator successively
+                for(int n=n_segment_from; n<=n_segment_to; n++)
+                {
+                    one_step_1(&d_unique_partition[key][(n-1)*M],
+                            &d_unique_partition[key][n*M],
+                            d_boltz_bond[species],
+                            d_boltz_bond_half[species],
+                            d_exp_dw[species],
+                            d_exp_dw_half[species]);
+                }
+            }
+            else if(parallel_job->size()==2)
             {
-                one_step(&d_unique_partition[key][(n-1)*M],
-                         &d_unique_partition[key][n*M],
-                         d_boltz_bond[item.second.species],
-                         d_boltz_bond_half[item.second.species],
-                         d_exp_dw[item.second.species],
-                         d_exp_dw_half[item.second.species]);
+                auto& key_1 = std::get<0>((*parallel_job)[0]);
+                int n_segment_from_1 = std::get<1>((*parallel_job)[0]);
+                int n_segment_to_1 = std::get<2>((*parallel_job)[0]);
+                auto species_1 = mx->get_unique_branch(key_1).species;
+
+                auto& key_2 = std::get<0>((*parallel_job)[1]);
+                int n_segment_from_2 = std::get<1>((*parallel_job)[1]);
+                int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
+                auto species_2 = mx->get_unique_branch(key_2).species;
+
+                // apply the propagator successively
+                for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
+                {
+                    one_step_2(&d_unique_partition[key_1][(n-1+n_segment_from_1)*M], &d_unique_partition[key_2][(n-1+n_segment_from_2)*M],
+                            &d_unique_partition[key_1][(n+n_segment_from_1)*M], &d_unique_partition[key_2][(n+n_segment_from_2)*M],
+                            d_boltz_bond[species_1], d_boltz_bond[species_2],
+                            d_boltz_bond_half[species_1], d_boltz_bond_half[species_2],
+                            d_exp_dw[species_1], d_exp_dw[species_2],
+                            d_exp_dw_half[species_1], d_exp_dw_half[species_2]);
+                }
             }
         }
 
@@ -254,7 +321,7 @@ void CudaPseudoContinuous::compute_statistics(
                 d_unique_phi[key],                     // phi
                 d_unique_partition[std::get<0>(key)],  // dependency v
                 d_unique_partition[std::get<1>(key)],  // dependency u
-                std::get<2>(key));                      // n_segment
+                std::get<2>(key));                     // n_segment
         }
 
         // for each distinct polymers 
@@ -279,7 +346,7 @@ void CudaPseudoContinuous::compute_statistics(
 }
 
 // Advance partial partition function using Richardson extrapolation.
-void CudaPseudoContinuous::one_step(
+void CudaPseudoContinuous::one_step_1(
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half)
@@ -294,48 +361,125 @@ void CudaPseudoContinuous::one_step(
 
         //-------------- step 1 ----------
         // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step1, d_q_in, d_exp_dw, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step1_1, d_q_in, d_exp_dw, 1.0, M);
 
         // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step1, d_qk_in);
+        cufftExecD2Z(plan_for_1, d_q_step1_1, d_qk_in_1);
 
         // Multiply e^(-k^2 ds/6) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in, d_boltz_bond, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in_1, d_boltz_bond, M_COMPLEX);
 
         // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step1);
+        cufftExecZ2D(plan_bak_1, d_qk_in_1, d_q_step1_1);
 
         // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step1, d_q_step1, d_exp_dw, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step1_1, d_q_step1_1, d_exp_dw, 1.0/((double)M), M);
 
         //-------------- step 2 ----------
         // Evaluate e^(-w*ds/4) in real space
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2, d_q_in, d_exp_dw_half, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2_1, d_q_in, d_exp_dw_half, 1.0, M);
 
         // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step2, d_qk_in);
+        cufftExecD2Z(plan_for_1, d_q_step2_1, d_qk_in_1);
 
         // Multiply e^(-k^2 ds/12) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in, d_boltz_bond_half, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in_1, d_boltz_bond_half, M_COMPLEX);
 
         // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step2);
+        cufftExecZ2D(plan_bak_1, d_qk_in_1, d_q_step2_1);
 
         // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2, d_q_step2, d_exp_dw, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2_1, d_q_step2_1, d_exp_dw, 1.0/((double)M), M);
         // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step2, d_qk_in);
+        cufftExecD2Z(plan_for_1, d_q_step2_1, d_qk_in_1);
 
         // Multiply e^(-k^2 ds/12) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in, d_boltz_bond_half, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_qk_in_1, d_boltz_bond_half, M_COMPLEX);
 
         // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step2);
+        cufftExecZ2D(plan_bak_1, d_qk_in_1, d_q_step2_1);
 
         // Evaluate e^(-w*ds/4) in real space.
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2, d_q_step2, d_exp_dw_half, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_step2_1, d_q_step2_1, d_exp_dw_half, 1.0/((double)M), M);
         //-------------- step 3 ----------
-        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out, 4.0/3.0, d_q_step2, -1.0/3.0, d_q_step1, M);
+        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out, 4.0/3.0, d_q_step2_1, -1.0/3.0, d_q_step1_1, M);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoContinuous::one_step_2(
+    double *d_q_in_1, double *d_q_in_2,
+    double *d_q_out_1, double *d_q_out_2,
+    double *d_boltz_bond_1, double *d_boltz_bond_2, 
+    double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
+    double *d_exp_dw_1, double *d_exp_dw_2,
+    double *d_exp_dw_half_1, double *d_exp_dw_half_2)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        const int M_COMPLEX = this->n_complex_grid;
+
+        //-------------- step 1 ----------
+        // Evaluate e^(-w*ds/2) in real space
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1_2[0], d_q_in_1, d_exp_dw_1, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1_2[M], d_q_in_2, d_exp_dw_2, 1.0, M);
+
+        // Execute a Forw_ard FFT
+        cufftExecD2Z(plan_for_2, d_q_step1_2, d_qk_in_2);
+
+        // Multiply e^(-k^2 ds/6) in fourier space
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[0],         d_boltz_bond_1, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[M_COMPLEX], d_boltz_bond_2, M_COMPLEX);
+
+        // Execute a backw_ard FFT
+        cufftExecZ2D(plan_bak_2, d_qk_in_2, d_q_step1_2);
+
+        // Evaluate e^(-w*ds/2) in real space
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1_2[0], &d_q_step1_2[0], d_exp_dw_1, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step1_2[M], &d_q_step1_2[M], d_exp_dw_2, 1.0/((double)M), M);
+
+        //-------------- step 2 ----------
+        // Evaluate e^(-w*ds/4) in real space
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[0], d_q_in_1, d_exp_dw_half_1, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[M], d_q_in_2, d_exp_dw_half_2, 1.0, M);
+
+        // Execute a Forw_ard FFT
+        cufftExecD2Z(plan_for_2, d_q_step2_2, d_qk_in_2);
+
+        // Multiply e^(-k^2 ds/12) in fourier space
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[0],         d_boltz_bond_half_1, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[M_COMPLEX], d_boltz_bond_half_2, M_COMPLEX);
+
+        // Execute a backw_ard FFT
+        cufftExecZ2D(plan_bak_2, d_qk_in_2, d_q_step2_2);
+
+        // Evaluate e^(-w*ds/2) in real space
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[0], &d_q_step2_2[0], d_exp_dw_1, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[M], &d_q_step2_2[M], d_exp_dw_2, 1.0/((double)M), M);
+
+        // Execute a Forw_ard FFT
+        cufftExecD2Z(plan_for_2, d_q_step2_2, d_qk_in_2);
+
+        // Multiply e^(-k^2 ds/12) in fourier space
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[0],         d_boltz_bond_half_1, M_COMPLEX);
+        multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_2[M_COMPLEX], d_boltz_bond_half_2, M_COMPLEX);
+
+        // Execute a backw_ard FFT
+        cufftExecZ2D(plan_bak_2, d_qk_in_2, d_q_step2_2);
+
+        // Evaluate e^(-w*ds/4) in real space.
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[0], &d_q_step2_2[0], d_exp_dw_half_1, 1.0/((double)M), M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(&d_q_step2_2[M], &d_q_step2_2[M], d_exp_dw_half_2, 1.0/((double)M), M);
+
+        //-------------- step 3 ----------
+        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out_1, 4.0/3.0, &d_q_step2_2[0], -1.0/3.0, &d_q_step1_2[0], M);
+        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_q_out_2, 4.0/3.0, &d_q_step2_2[M], -1.0/3.0, &d_q_step1_2[M], M);
     }
     catch(std::exception& exc)
     {
@@ -489,8 +633,8 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
             // compute
             for(int n=0; n<=N; n++)
             {
-                cufftExecD2Z(plan_for, &d_q_1[n*M],     d_qk_1);
-                cufftExecD2Z(plan_for, &d_q_2[(N-n)*M], d_qk_2);
+                cufftExecD2Z(plan_for_1, &d_q_1[n*M],     d_qk_1);
+                cufftExecD2Z(plan_for_1, &d_q_2[(N-n)*M], d_qk_2);
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, d_qk_1, d_qk_2, M_COMPLEX);
                 if ( DIM >= 3 )
                 {
