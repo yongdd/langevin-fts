@@ -57,6 +57,9 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
+        // create scheduler for computation of partial partition function
+        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+
         // create FFT plan
         const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
@@ -103,9 +106,6 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX));
 
-        // create scheduler for computation of partial partition function
-        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
-
         update();
     }
     catch(std::exception& exc)
@@ -145,7 +145,10 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     // for pseudo-spectral: one_step()
     cudaFree(d_q_step1_1);
     cudaFree(d_q_step2_1);
+    cudaFree(d_q_step1_2);
+    cudaFree(d_q_step2_2);
     cudaFree(d_qk_in_1);
+    cudaFree(d_qk_in_2);
 
     // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);

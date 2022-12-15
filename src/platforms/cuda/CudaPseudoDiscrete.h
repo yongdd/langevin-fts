@@ -18,7 +18,8 @@
 class CudaPseudoDiscrete : public Pseudo
 {
 private:
-    cufftHandle plan_for, plan_bak;
+    cufftHandle plan_for_1, plan_bak_1;
+    cufftHandle plan_for_2, plan_bak_2;
 
     // partition function and complementary partition are 
     // contiguously stored in q_d for every segment step.
@@ -34,6 +35,10 @@ private:
 
     // for pseudo-spectral: one_step()
     ftsComplex *d_qk_in_1;
+    ftsComplex *d_qk_in_2;
+
+    double *d_q_in_temp_2, *d_q_out_temp_2;
+
     double *d_q_half_step, *d_q_junction;
 
     // for stress calculation: compute_stress()
@@ -64,7 +69,12 @@ private:
     // total partition functions for each polymer
     double* single_partitions;
 
-    void one_step(double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw);
+    void one_step_1(double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw);
+    void one_step_2(double *d_q_in_1, double *d_q_in_2,
+                   double *d_q_out_1, double *d_q_out_2,
+                   double *d_boltz_bond_1, double *d_boltz_bond_2,  
+                   double *d_exp_dw_1, double *d_exp_dw_2);
+
     void half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
     void calculate_phi_one_type(double *d_phi, double *d_q_1, double *d_q_2, double *d_exp_dw, const int N);
 
