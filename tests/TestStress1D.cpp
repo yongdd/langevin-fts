@@ -54,16 +54,34 @@ int main()
         double tolerance = 1e-9;
 
         double f = 0.5;
-        double chi_n = 13.27;
+        double chi_n = 10.0;
         std::vector<int> nx = {256};
         std::vector<double> lx = {1.5};
         double ds = 1.0/100;
+
+        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
+        std::vector<std::string> block_species = {"A","A","B","B","A","A"};
+        std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2};
+        std::vector<int> v = {0,0,0,0,1,1};
+        std::vector<int> u = {1,2,5,6,4,15};
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist = 20;
         double am_start_error = 8e-1;
         double am_mix_min = 0.1;
         double am_mix_init = 0.1;
+
+        const int M = nx[0];
+        //-------------- allocate array ------------
+        w       = new double[2*M];
+        w_out   = new double[2*M];
+        w_diff  = new double[2*M];
+        xi      = new double[M];
+        phi_a   = new double[M];
+        phi_b   = new double[M];
+        phi_tot = new double[M];
+        w_plus  = new double[M];
+        w_minus = new double[M];
 
         // choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
@@ -77,8 +95,8 @@ int main()
 
                 // create instances and assign to the variables of base classes for the dynamic binding
                 ComputationBox *cb = factory->create_computation_box(nx, lx);
-                Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}});
-                mx->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
+                Mixture* mx        = factory->create_mixture(ds, bond_lengths);
+                mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
                 Pseudo *pseudo     = factory->create_pseudo(cb, mx);
                 AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                     am_max_hist, am_start_error, am_mix_min, am_mix_init);
@@ -92,27 +110,6 @@ int main()
                 // std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
                 // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
                 // std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
-
-                const int M = cb->get_n_grid();
-
-                // sum = 0.0;
-                // for(int i=0; i<M; i++)
-                //     sum += cb->get_dv(i);
-                // std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
-
-                // //mx->display_unique_branches();
-                // mx->display_unique_blocks();
-
-                //-------------- allocate array ------------
-                w       = new double[2*M];
-                w_out   = new double[2*M];
-                w_diff  = new double[2*M];
-                xi      = new double[M];
-                phi_a   = new double[M];
-                phi_b   = new double[M];
-                phi_tot = new double[M];
-                w_plus  = new double[M];
-                w_minus = new double[M];
 
                 // std::cout<< "w_a and w_b are initialized to a lamellar." << std::endl;
                 for(int i=0; i<cb->get_nx(0); i++)
@@ -185,12 +182,10 @@ int main()
                     am->calculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
                 }
 
+                double dL = 0.0000001;
+                double old_lx = lx[0];
                 //----------- compute derivate of H: lx + delta ----------------
-                old_lx = lx[0];
-
-                double dlx = 0.0000001;
-
-                lx[0] = old_lx + dlx/2;
+                lx[0] = old_lx + dL/2;
                 cb->set_lx(lx);
                 pseudo->update();
 
@@ -215,7 +210,7 @@ int main()
 
 
                 //----------- compute derivate of H: lx - delta ----------------
-                lx[0] = old_lx - dlx/2;
+                lx[0] = old_lx - dL/2;
                 cb->set_lx(lx);
                 pseudo->update();
 
@@ -239,27 +234,16 @@ int main()
                 }
 
                 // compute stress
-                double dh_dl = (energy_total_1-energy_total_2)/dlx;
+                double dh_dl = (energy_total_1-energy_total_2)/dL;
                 auto stress = pseudo->compute_stress();
                 std:: cout << "dH/dL : " << dh_dl << std::endl;
                 std:: cout << "Stress : " << stress[2] << std::endl;
                 double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);
                 std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
-                if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-4)
+                if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                     return -1;
 
                 //------------- finalize -------------
-                delete[] w;
-                delete[] w_out;
-                delete[] w_diff;
-                delete[] xi;
-
-                delete[] phi_a;
-                delete[] phi_b;
-                delete[] phi_tot;
-                delete[] w_plus;
-                delete[] w_minus;
-
                 delete mx;
                 delete cb;
                 delete pseudo;
@@ -267,6 +251,17 @@ int main()
                 delete factory;
             }
         }
+        delete[] w;
+        delete[] w_out;
+        delete[] w_diff;
+        delete[] xi;
+
+        delete[] phi_a;
+        delete[] phi_b;
+        delete[] phi_tot;
+        delete[] w_plus;
+        delete[] w_minus;
+
         return 0;
     }
     catch(std::exception& exc)

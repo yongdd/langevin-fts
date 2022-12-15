@@ -18,6 +18,9 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
+        if( M % 2 == 1)
+            throw_with_line_number("CudaPseudo only works for even grid number.");
+
         // allocate memory for partition functions
         if( mx->get_unique_branches().size() == 0)
             throw_with_line_number("There is no unique branch. Add polymers first.");

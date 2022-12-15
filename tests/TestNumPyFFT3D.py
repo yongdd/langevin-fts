@@ -48,14 +48,14 @@ data_k = np.fft.rfftn(data_init)
 error = np.max(np.absolute(data_k - data_k_answer))
 print("FFT Forward Error: ", error)
 if(np.isnan(error) or error > 1e-7):
-    sys.exit(-1);
+    sys.exit(-1)
 
 #--------------- Backward --------------------
 data_r = np.fft.irfftn(data_k_answer, (5,4,3))
 error = np.max(np.absolute(data_r - data_init))
 print("FFT Backward Error: ", error)
 if(np.isnan(error) or error > 1e-7):
-    sys.exit(-1);
+    sys.exit(-1)
 
 """
 #--------------- Test with large array --------------------
@@ -65,5 +65,5 @@ data_r = np.fft.irfftn(data_k, (data_init.shape))
 error = np.max(np.absolute(data_r - data_init))
 print("Test with lage array, Error: ", error)
 if(np.isnan(error) or error > 1e-7):
-    sys.exit(-1);
+    sys.exit(-1)
 """
