@@ -10,4 +10,5 @@
 16. process bar
 20. GUI?
 21. Set initial condition: v_to_grafting_index, q_init
+22. Find out why cuFFT only works for even grid number
 24. Draw network graph image for given polymer architecture
