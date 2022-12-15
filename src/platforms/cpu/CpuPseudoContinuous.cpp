@@ -471,7 +471,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                         unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
-                        unique_dq_dl[key][2] += coeff*fourier_basis_y[i];
+                        unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
                 }
                 if ( DIM == 1 )
