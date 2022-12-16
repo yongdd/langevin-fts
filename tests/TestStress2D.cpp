@@ -5,6 +5,7 @@
 #include <string>
 #include <array>
 #include <chrono>
+#include <fstream>
 
 #include "Exception.h"
 #include "ParamParser.h"
@@ -50,19 +51,19 @@ int main()
         int max_scft_iter = 500;
         double tolerance = 1e-9;
 
-        double f = 0.36;
-        double chi_n = 20.0;
-        std::vector<int> nx = {23,27,28};
-        std::vector<double> lx = {3.2,3.3,3.4};
+        double f = 0.3;
+        double chi_n = 24.0;
+        std::vector<int> nx = {33,29};
+        std::vector<double> lx = {1.5,1.7};
         double ds = 1.0/100;
 
-        int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
+        int am_n_var = 2*nx[0]*nx[1];  // A and B
         int am_max_hist = 20;
         double am_start_error = 1e-1;
         double am_mix_min = 0.1;
         double am_mix_init = 0.1;
 
-        const int M = nx[0]*nx[1]*nx[2];
+        const int M = nx[0]*nx[1];
 
         //-------------- allocate array ------------
         w       = new double[2*M];
@@ -75,25 +76,22 @@ int main()
         w_plus  = new double[M];
         w_minus = new double[M];
 
-        // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
-        double xx, yy, zz, c1, c2;
+        // std::cout<< "w_a and w_b are initialized to a cylinder." << std::endl;
+        double xx, yy, c1, c2;
         for(int i=0; i<nx[0]; i++)
         {
-            xx = (i+1)*2*PI/nx[0];
+            xx = float(i+1)/float(nx[0]);
             for(int j=0; j<nx[1]; j++)
             {
-                yy = (j+1)*2*PI/nx[1];
-                for(int k=0; k<nx[2]; k++)
-                {
-                        zz = (k+1)*2*PI/nx[2];
-                        c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
-                            cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
-                        c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
-                            cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
-                        idx = i*nx[1]*nx[2] + j*nx[2] + k;
-                        w[idx] = -0.3164*c1 +0.1074*c2;
-                        w[idx+M] = 0.3164*c1 -0.1074*c2;
-                }
+                yy = float(j+1)/float(nx[1]);
+                c1  = std::min(xx,1-xx)*std::min(xx,1-xx);
+                c1 += std::min(yy,1-yy)*std::min(yy,1-yy);
+
+                //std::cout << i << ", " << j << ", " << c1 << std::endl;
+                c2 = cos(2*PI*c1);
+                idx = i*nx[1] + j;
+                w[idx]  = -c2;
+                w[idx+M] = c2;
             }
         }
 
@@ -139,6 +137,29 @@ int main()
 
                 //mx->display_unique_branches();
                 // mx->display_unique_blocks();
+
+                std::string line;
+                std::ifstream input_field_file;
+                if(mx->get_model_name() == "continuous")
+                    input_field_file.open("Stress2D_ContinuousInput.txt");
+                else if(mx->get_model_name() == "discrete")
+                    input_field_file.open("Stress2D_DiscreteInput.txt");
+
+                if (input_field_file.is_open())
+                {
+                    std::cout << "input_field_file" << std::endl;
+                    for(int i=0; i<2*M ; i++)
+                    {
+                        std::getline(input_field_file, line);
+                        w[i] = std::stod(line);
+                        std::cout << line << " " << w[i] << std::endl;
+                    }
+                    input_field_file.close();
+                }
+                else
+                {
+                    std::cout << "Could not open input file." << std::endl;
+                }
 
                 // keep the level of field value
                 cb->zero_mean(&w[0]);
@@ -210,10 +231,32 @@ int main()
                     am->calculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
                 }
 
+                // if(mx->get_model_name() == "continuous")
+                // {
+                //     std::ofstream output_field_file("Stress2D_ContinuousInput.txt");
+                //     if (output_field_file.is_open())
+                //     {
+                //         for(int i=0; i<2*M ; i++){
+                //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                //         }
+                //         output_field_file.close();
+                //     }
+                // }
+                // else if(mx->get_model_name() == "discrete")
+                // {
+                //     std::ofstream output_field_file("Stress2D_DiscreteInput.txt");
+                //     if (output_field_file.is_open())
+                //     {
+                //         for(int i=0; i<2*M ; i++){
+                //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                //         }
+                //         output_field_file.close();
+                //     }
+                // }
+
                 double dL = 0.0000001;
                 double old_lx = lx[0];
                 double old_ly = lx[1];
-                double old_lz = lx[2];
                 {
                     //----------- compute derivate of H: lx + delta ----------------
                     lx[0] = old_lx + dL/2;
@@ -267,11 +310,13 @@ int main()
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
                     auto stress = pseudo->compute_stress();
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
-                    std:: cout << "Stress : " << stress[0] << std::endl;
-                    double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
+                    std:: cout << "Stress : " << stress[1] << std::endl;
+                    double relative_stress_error = std::abs(dh_dl-stress[1])/std::abs(stress[1]);
                     std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                     if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                         return -1;
+
+                    
                 }
                 {
                     //----------- compute derivate of H: ly + delta ----------------
@@ -326,73 +371,12 @@ int main()
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
                     auto stress = pseudo->compute_stress();
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
-                    std:: cout << "Stress : " << stress[1] << std::endl;
-                    double relative_stress_error = std::abs(dh_dl-stress[1])/std::abs(stress[1]);
-                    std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
-                    if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
-                        return -1;
-                }
-
-                {
-                    //----------- compute derivate of H: lz + delta ----------------
-                    lx[2] = old_lz + dL/2;
-                    cb->set_lx(lx);
-                    pseudo->update();
-
-                    // for the given fields find the polymer statistics
-                    pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
-
-                    // calculate the total energy
-                    for(int i=0; i<M; i++)
-                    {
-                        w_minus[i] = (w[i]-w[i+M])/2;
-                        w_plus[i]  = (w[i]+w[i+M])/2;
-                    }
-
-                    double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                    energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
-                    for(int p=0; p<mx->get_n_polymers(); p++){
-                        PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
-                    }
-
-                    //----------- compute derivate of H: ly - delta ----------------
-                    lx[2] = old_lz - dL/2;
-                    cb->set_lx(lx);
-                    pseudo->update();
-
-                    // for the given fields find the polymer statistics
-                    pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
-
-                    // calculate the total energy
-                    for(int i=0; i<M; i++)
-                    {
-                        w_minus[i] = (w[i]-w[i+M])/2;
-                        w_plus[i]  = (w[i]+w[i+M])/2;
-                    }
-
-                    double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                    energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
-                    for(int p=0; p<mx->get_n_polymers(); p++){
-                        PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
-                    }
-
-                    // compute stress
-                    double dh_dl = (energy_total_1-energy_total_2)/dL;
-                    auto stress = pseudo->compute_stress();
-                    std:: cout << "dH/dL : " << dh_dl << std::endl;
                     std:: cout << "Stress : " << stress[2] << std::endl;
                     double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);
                     std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                     if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                         return -1;
                 }
-
                 delete mx;
                 delete cb;
                 delete pseudo;

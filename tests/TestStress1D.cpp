@@ -55,15 +55,20 @@ int main()
 
         double f = 0.5;
         double chi_n = 10.0;
-        std::vector<int> nx = {256};
+        std::vector<int> nx = {255};
         std::vector<double> lx = {1.5};
         double ds = 1.0/100;
 
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
-        std::vector<std::string> block_species = {"A","A","B","B","A","A"};
-        std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2};
-        std::vector<int> v = {0,0,0,0,1,1};
-        std::vector<int> u = {1,2,5,6,4,15};
+        std::vector<std::string> block_species_1 = {"A","A","B","B","A","A"};
+        std::vector<double> contour_lengths_1 = {0.6,1.2,1.2,0.9,0.9,1.2};
+        std::vector<int> v_1 = {0,0,0,0,1,1};
+        std::vector<int> u_1 = {1,2,5,6,4,15};
+
+        std::vector<std::string> block_species_2 = {"A","B"};
+        std::vector<double> contour_lengths_2 = {0.4,0.6};
+        std::vector<int> v_2 = {0,1};
+        std::vector<int> u_2 = {1,2};
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist = 20;
@@ -96,7 +101,8 @@ int main()
                 // create instances and assign to the variables of base classes for the dynamic binding
                 ComputationBox *cb = factory->create_computation_box(nx, lx);
                 Mixture* mx        = factory->create_mixture(ds, bond_lengths);
-                mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
+                mx->add_polymer(0.7, block_species_1, contour_lengths_1, v_1, u_1, {});
+                mx->add_polymer(0.3, block_species_2, contour_lengths_2, v_2, u_2, {});
                 Pseudo *pseudo     = factory->create_pseudo(cb, mx);
                 AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                     am_max_hist, am_start_error, am_mix_min, am_mix_init);
@@ -111,14 +117,37 @@ int main()
                 // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
                 // std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
 
-                // std::cout<< "w_a and w_b are initialized to a lamellar." << std::endl;
-                for(int i=0; i<cb->get_nx(0); i++)
-                    for(int j=0; j<cb->get_nx(1); j++)
-                        for(int k=0; k<cb->get_nx(2); k++)
-                        {
-                            w[k]   =  cos(2.0*PI*k/cb->get_nx(2))*10;
-                            w[k+M] = -cos(2.0*PI*k/cb->get_nx(2))*10;
-                        }
+                // // std::cout<< "w_a and w_b are initialized to a lamellar." << std::endl;
+                // for(int i=0; i<cb->get_nx(0); i++)
+                //     for(int j=0; j<cb->get_nx(1); j++)
+                //         for(int k=0; k<cb->get_nx(2); k++)
+                //         {
+                //             w[k]   =  cos(2.0*PI*k/cb->get_nx(2))*10;
+                //             w[k+M] = -cos(2.0*PI*k/cb->get_nx(2))*10;
+                //         }
+
+                std::string line;
+                std::ifstream input_field_file;
+                if(mx->get_model_name() == "continuous")
+                    input_field_file.open("Stress1D_ContinuousInput.txt");
+                else if(mx->get_model_name() == "discrete")
+                    input_field_file.open("Stress1D_DiscreteInput.txt");
+
+                if (input_field_file.is_open())
+                {
+                    std::cout << "input_field_file" << std::endl;
+                    for(int i=0; i<2*M ; i++)
+                    {
+                        std::getline(input_field_file, line);
+                        w[i] = std::stod(line);
+                        std::cout << line << " " << w[i] << std::endl;
+                    }
+                    input_field_file.close();
+                }
+                else
+                {
+                    std::cout << "Could not open input file." << std::endl;
+                }
 
                 // keep the level of field value
                 cb->zero_mean(&w[0]);
@@ -181,6 +210,29 @@ int main()
                     // calculate new fields using simple and Anderson mixing
                     am->calculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
                 }
+
+                // if(mx->get_model_name() == "continuous")
+                // {
+                //     std::ofstream output_field_file("Stress1D_ContinuousInput.txt");
+                //     if (output_field_file.is_open())
+                //     {
+                //         for(int i=0; i<2*M ; i++){
+                //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                //         }
+                //         output_field_file.close();
+                //     }
+                // }
+                // else if(mx->get_model_name() == "discrete")
+                // {
+                //     std::ofstream output_field_file("Stress1D_DiscreteInput.txt");
+                //     if (output_field_file.is_open())
+                //     {
+                //         for(int i=0; i<2*M ; i++){
+                //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                //         }
+                //         output_field_file.close();
+                //     }
+                // }
 
                 double dL = 0.0000001;
                 double old_lx = lx[0];

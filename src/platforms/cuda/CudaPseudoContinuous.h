@@ -39,7 +39,8 @@ private:
     double *d_phi;
 
     // key: (dep) + species, value: partition function
-    std::map<std::string, double *> d_unique_partition;
+    std::map<std::string, double **> d_unique_partition;
+    std::map<std::string, int> d_unique_partition_size; // for deallocation
     // std::map<std::string, bool *> unique_partition_finished;
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 2; // the number of job threads
@@ -66,7 +67,7 @@ private:
                   double *d_exp_dw_1, double *d_exp_dw_2,
                   double *d_exp_dw_half_1, double *d_exp_dw_half_2);
 
-    void calculate_phi_one_type(double *d_phi, double *d_q_1, double *d_q_2, const int N);
+    void calculate_phi_one_type(double *d_phi, double **d_q_1, double **d_q_2, const int N);
 public:
 
     CudaPseudoContinuous(ComputationBox *cb, Mixture *pc);
