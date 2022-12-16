@@ -52,7 +52,7 @@ int main()
 
         double f = 2.0/7.0;
         double chi_n = 25.0;
-        std::vector<int> nx = {49, 64};
+        std::vector<int> nx = {49, 63};
         std::vector<double> lx = {4.0,3.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
         double ds = 1.0/49;
@@ -222,7 +222,7 @@ int main()
             delete am;
             delete factory;
 
-            if (!std::isfinite(error_level) || std::abs(error_level-0.028754757) > 1e-7)
+            if (!std::isfinite(error_level) || std::abs(error_level-0.007266211) > 1e-7)
                 return -1;
         }
         return 0;

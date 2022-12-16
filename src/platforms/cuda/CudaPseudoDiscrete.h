@@ -52,12 +52,14 @@ private:
     double *d_phi;
 
     // key: (dep) + species, value: partition functions
-    std::map<std::string, double *> d_unique_partition;
+    std::map<std::string, double **> d_unique_partition;
+    std::map<std::string, int> d_unique_partition_size; // for deallocation
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 2; // the number of job threads
 
     // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<std::string, std::string, int>, double *> d_unique_phi;
+
 
     // key: (dep), value: array pointer
     std::map<std::string, double*> d_unique_q_junctions;
@@ -76,7 +78,7 @@ private:
                    double *d_exp_dw_1, double *d_exp_dw_2);
 
     void half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
-    void calculate_phi_one_type(double *d_phi, double *d_q_1, double *d_q_2, double *d_exp_dw, const int N);
+    void calculate_phi_one_type(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N);
 
 public:
     CudaPseudoDiscrete(ComputationBox *cb, Mixture *mx);
