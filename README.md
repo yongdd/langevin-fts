@@ -2,10 +2,10 @@
 Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
-* SCFT and L-FTS (AB Copolymers only)
+* SCFT and L-FTS
 * Arbitrary Acyclic Polymers (**beta**)
 * Arbitrary Mixtures of Block Copolymers, Homopolymers and Random Copolymers (**beta**)
-* Any number of Species (Chain Statistics only) (**beta**)
+* Any Number of Species (**beta**) (**But, currently only A- and B-type species are implemented in the SCFT and L-FTS example scripts**)
 * Conformational Asymmetry
 * Box Size Determination by Stress Calculation (SCFT only)
 * Chain Model: Continuous, Discrete
@@ -59,25 +59,24 @@ conda deactivate
 conda env remove -n lfts  
 ```
 # User Guide
-+ This is not an application but a library for SCFT and L-FTS, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To know how to use this library, please see `examples/ChainStatisticsInFields.py`. This library can calculate the statistics of any mixtures of any acyclic copolymers composed of multiple species in given external fields.  
-+ The SCFT and L-FTS are implemented on top of library as Python scripts. Currently, only `A` and `B` species are supported. To understand the entire process of simulations, please refer to sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations. If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)   
-+ Be aware that the unit of length in this library is the end-to-end chain length *aN^(1/2)*, not the gyration of radius *a(N/6)^(1/2)*, where *a* is reference statistical segment length and *N* is reference polymerization index.  
-+ The fields acting on chain are described using `per chain` language instead of `per segment` language for both SCFT and L-FTS. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *1/N* to each field. 
++ This is not an application but a library for polymer field theory simulations, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To know how to use this library, please see `examples/ChainStatisticsInFields.py`. This library can calculate the partition functions and concentrations for any mixtures of any acyclic branched polymers composed of multiple species in given external fields.  
++ The SCFT and L-FTS are implemented on top of library as Python scripts. Currently, only `A`- and `B`-type species are implemented. To understand the entire process of simulations, please see sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations. If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)   
++ Be aware that the unit of length in this library is the end-to-end chain length *aN^(1/2)*, not the gyration of radius *a(N/6)^(1/2)*, where *a* is reference statistical segment length and *N* is reference polymerization index.  The fields acting on chain are fined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. 
 + Please refer to [*J. Chem. Phys.* **2014**, 141, 174103] for how to perform polymer field theory simulations with polymer mixtures.
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
-+ To run simulation using only 1 cpu, set `os.environ["OMP_MAX_ACTIVE_LEVELS"] = "0"` in the python script. see `examples/scft/Gyroid.py`.
-+ Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces reasonable results. For acyclic polymers adopting the `Continuous` model with an even number of contour steps, the results should be equivalent to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results should be equivalent to those of code in *Polymers* **2021**, 13, 2437.
++ To run simulation using only 1 cpu, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. Please see `examples/scft/Gyroid.py`.
++ Open-source has no warranty. Make sure that this program reproduces the results of previous FTS studies, and also produces reasonable results. For acyclic polymers adopting the `Continuous` model with an even number of contour steps, the results should be equivalent to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results should be equivalent to those of code in [*Polymers* **2021**, 13, 2437].
 + Matlab and Python tools for visualization and renormalization are included in `tools` folder.   
 
 # Developer Guide
 #### Platforms  
   This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
 
-#### Branched Polymers 
-  1. First of all, the library performs the depth first search to check whether a given polymer graph contains a cycle or has no isolated points.
-  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, the dynamic programming approach of the computer science is adopted. The computation of partial partition functions at each branch can be recursively broken down into partition function computations of sub branches in a bottom-up fashion. The partial partition functions of simplest side chains are first solved. Using this solutions, then the partial partition functions of more complex branches are calculated. 
-  3. The library avoids redundant calculation of the sub branches permutations by representing the branches as a string key. Branches connected in each block are expressed as recursively sorted a string key.
-  4. Internally, all polymer chains including linear diblock polymers are treated as branched polymers.
+#### General Branched Polymers 
+  1. When you add a new polymer molecule, `depth first search` is performed to check whether a given polymer graph contains a cycle or isolated points.
+  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, the `dynamic programming` approach of the computer science is adopted. The computation of partial partition functions at each branch can be recursively broken down into partition function computations of sub branches in a bottom-up fashion. The partial partition functions of simplest side chains are first solved. Using this solutions, then the partial partition functions of more complex branches are calculated. 
+  3. The library avoids redundant calculation of the sub branches by uniquely representing the branches as a unique string key. Branches connected in each block are expressed as a recursively sorted string key.
+  4. Internally, all polymers including linear polymers are treated as general branched polymers in the Python library.
 
 #### Anderson Mixing  
   It is necessary to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copies.
