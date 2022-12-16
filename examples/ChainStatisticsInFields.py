@@ -1,4 +1,4 @@
-# This example script computes statistics of polymer chains for given fields.
+# This example script computes partition functions and concentration of polymer chains for given fields.
 # This script does not perform SCFT iteration.
 
 import os
@@ -17,7 +17,7 @@ os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 
 # simulation parameters
 nx = [64,64,64]                                   # grid number
-lx = [5.0, 5.0, 5.0]                              # box size
+lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step Interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 
@@ -57,8 +57,8 @@ cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, stat_seg_length)
 for p in range(len(block_lengths)):
      mixture.add_polymer(
-     volume_faction[p], block_species[p],
-     block_lengths[p],v[p], u[p])
+     volume_faction[p],block_species[p],
+     block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture)
 mixture.display_unique_branches()
 mixture.display_unique_blocks()
