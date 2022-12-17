@@ -73,7 +73,7 @@ conda env remove -n lfts
 
 #### General Branched Polymers 
   1. Whenever you add a new polymer molecule, `depth first search` is performed to check whether a given polymer graph contains a cycle or isolated points.
-  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, the `dynamic programming` approach of the computer science is adopted. The partial partition functions of simplest side chains are first solved. Using this solutions, then the partial partition functions of more complex branches are calculated. These steps are repeated up to the most complex branches in a bottom-up fashion.
+  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, the `dynamic programming` approach of the computer science is adopted. The partial partition functions of simplest side chains are first solved. Using these solutions, then the partial partition functions of more complex branches are calculated. The second step is repeated up to the most complex branches in a bottom-up fashion.
   3. The redundant calculations of the sub branches are avoided by uniquely representing the branches as a unique string key. Branches connected in each block are expressed as a recursively sorted string key.
   4. In the Python library, all polymers including linear polymers are considered as general branched polymers.
 
