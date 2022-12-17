@@ -1,4 +1,4 @@
-# This example script computes partition functions and concentration of polymer chains for given fields.
+# This example script computes partition functions and concentrations of polymer chains for given fields.
 # This script does not perform SCFT iteration.
 
 import os
