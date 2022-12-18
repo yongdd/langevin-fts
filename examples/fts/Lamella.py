@@ -7,7 +7,7 @@ import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
-os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 f = 0.5         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry

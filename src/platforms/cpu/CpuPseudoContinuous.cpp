@@ -203,7 +203,7 @@ void CpuPseudoContinuous::compute_statistics(
             auto item = mx->get_unique_blocks().begin();
             advance(item, b);
 
-            auto& key = (*item).first;
+            auto& key = item->first;
             calculate_phi_one_type(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<0>(key)],  // dependency v
@@ -413,7 +413,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
+        auto bond_lengths = mx->get_bond_lengths();
         std::array<double,3> stress;
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
 
@@ -431,11 +431,11 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
             auto item = mx->get_unique_blocks().begin();
             advance(item, b);
 
-            auto& key = (*item).first;
+            auto& key = item->first;
             std::string dep_v = std::get<0>(key);
             std::string dep_u = std::get<1>(key);
             const int N       = std::get<2>(key);
-            std::string species = (*item).second.species;
+            std::string species = item->second.species;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];

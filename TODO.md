@@ -6,7 +6,6 @@
 9. UnitTest: Anderson Mixing
 10. Validation Check for Pseudo Parameters
 11. UnitTest: example/miscellaneous
-13. Separate AndersonMixing Output
 16. process bar
 20. GUI?
 21. Set initial condition: v_to_grafting_index, q_init

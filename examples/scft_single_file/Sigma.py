@@ -46,12 +46,15 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         # calculate output fields
         w_out[0] = chi_n*phi_b + xi
         w_out[1] = chi_n*phi_a + xi
-        cb.zero_mean(w_out[0])
-        cb.zero_mean(w_out[1])
 
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
         w_diff = w_out - w
+
+        # keep the level of field value
+        cb.zero_mean(w_diff[0])
+        cb.zero_mean(w_diff[1])
+
         multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
         multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
 
@@ -82,15 +85,14 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
 
         # calculate new fields using simple and Anderson mixing
         if (is_box_altering):
-            am_new  = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
-            am_out  = np.concatenate((np.reshape(w_out,  2*cb.get_n_grid()), lx-stress_array))
-            am_diff = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), -stress_array))
-            am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
+            am_current = np.concatenate((np.reshape(w,      2*cb.get_n_grid()), lx))
+            am_diff    = np.concatenate((np.reshape(w_diff, 2*cb.get_n_grid()), -stress_array))
+            am_new = am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
+
+            # copy fields
+            w = np.reshape(am_new[0:2*cb.get_n_grid()], (2, cb.get_n_grid()))
 
             # set box size
-            w[0] = am_new[0:cb.get_n_grid()]
-            w[1] = am_new[cb.get_n_grid():2*cb.get_n_grid()]
-
             # restricting |dLx| to be less than 1 % of Lx
             old_lx = lx
             new_lx = np.array(am_new[-cb.get_dim():])
@@ -101,11 +103,10 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
             # update bond parameters using new lx
             pseudo.update()
         else:
-            am.calculate_new_fields(
+            w = am.calculate_new_fields(
             np.reshape(w,      2*cb.get_n_grid()),
-            np.reshape(w_out,  2*cb.get_n_grid()),
-            np.reshape(w_diff, 2*cb.get_n_grid()),
-            old_error_level, error_level)
+            np.reshape(w_diff, 2*cb.get_n_grid()), old_error_level, error_level)
+            w = np.reshape(w, (2, cb.get_n_grid()))
 
     # get total partition functions
     Q = []
@@ -120,7 +121,7 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
-os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 max_scft_iter = 2000
 tolerance = 1e-8

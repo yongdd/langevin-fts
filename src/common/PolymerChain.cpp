@@ -145,36 +145,36 @@ PolymerChain::PolymerChain(
         }
     }
 }
-int PolymerChain::get_n_blocks()
+int PolymerChain::get_n_blocks() const
 {
     return blocks.size();
 }
-int PolymerChain::get_n_segment(int idx)
+int PolymerChain::get_n_segment(const int idx) const
 {
     return blocks[idx].n_segment;
 }
-int PolymerChain::get_n_segment_total()
+int PolymerChain::get_n_segment_total() const
 {
     int total_n{0};
     for(int i=0; i<blocks.size(); i++)
         total_n += blocks[i].n_segment;
     return total_n;
 }
-double PolymerChain::get_alpha()
+double PolymerChain::get_alpha() const
 {
     return alpha;
 }
-double PolymerChain::get_volume_fraction()
+double PolymerChain::get_volume_fraction() const
 {
     return volume_fraction;
 }
-int PolymerChain::get_array_idx(int v, int u)
+int PolymerChain::get_array_idx(const int v, const int u)
 {
     assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
         "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return edge_to_array[std::make_pair(v, u)];
 }
-struct PolymerChainBlock& PolymerChain::get_block(int v, int u)
+struct PolymerChainBlock& PolymerChain::get_block(const int v, const int u)
 {
     assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
         "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
@@ -192,11 +192,11 @@ std::map<std::pair<int, int>, int>& PolymerChain::get_edge_to_array()
 {
     return edge_to_array;
 }
-void PolymerChain::set_edge_to_deps(int v, int u, std::string deps)
+void PolymerChain::set_edge_to_deps(const int v, const int u, const std::string deps)
 {
     edge_to_deps[std::make_pair(v, u)] = deps;
 }
-std::string PolymerChain::get_dep(int v, int u){
+std::string PolymerChain::get_dep(const int v, const int u) {
     assert(edge_to_deps.count(std::make_pair(v, u)) == 0 &&
         "There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").");
     return edge_to_deps[std::make_pair(v,u)];

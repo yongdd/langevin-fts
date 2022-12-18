@@ -19,11 +19,11 @@ CudaAndersonMixing::CudaAndersonMixing(
     {
         // number of anderson mixing steps, increases from 0 to max_hist
         n_anderson = -1;
-        // record hisotry of w_out in GPU device memory
-        d_cb_w_out_hist = new CudaCircularBuffer(max_hist+1, n_var);
-        // record hisotry of w_deriv in GPU device memory
+        // record history of w in GPU device memory
+        d_cb_w_hist = new CudaCircularBuffer(max_hist+1, n_var);
+        // record history of w_deriv in GPU device memory
         d_cb_w_deriv_hist = new CudaCircularBuffer(max_hist+1, n_var);
-        // record hisotry of inner_product product of w_deriv in CPU host memory
+        // record history of inner_product product of w_deriv in CPU host memory
         cb_w_deriv_dots = new CircularBuffer(max_hist+1, max_hist+1);
 
         // define arrays for anderson mixing
@@ -35,8 +35,8 @@ CudaAndersonMixing::CudaAndersonMixing(
         this->w_deriv_dots = new double[max_hist+1];
 
         // fields arrays
+        gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(double)*n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w,       sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*n_var));
 
         // reset_count
@@ -49,7 +49,7 @@ CudaAndersonMixing::CudaAndersonMixing(
 }
 CudaAndersonMixing::~CudaAndersonMixing()
 {
-    delete d_cb_w_out_hist;
+    delete d_cb_w_hist;
     delete d_cb_w_deriv_hist;
     delete cb_w_deriv_dots;
 
@@ -61,7 +61,7 @@ CudaAndersonMixing::~CudaAndersonMixing()
     delete[] w_deriv_dots;
     
     cudaFree(d_w_deriv);
-    cudaFree(d_w);
+    cudaFree(d_w_new);
     cudaFree(d_sum);
 }
 void CudaAndersonMixing::reset_count()
@@ -73,7 +73,7 @@ void CudaAndersonMixing::reset_count()
         /* number of anderson mixing steps, increases from 0 to max_hist */
         n_anderson = -1;
 
-        d_cb_w_out_hist->reset();
+        d_cb_w_hist->reset();
         d_cb_w_deriv_hist->reset();
         cb_w_deriv_dots->reset();
     }
@@ -84,8 +84,8 @@ void CudaAndersonMixing::reset_count()
 }
 
 void CudaAndersonMixing::calculate_new_fields(
-    double *w,
-    double *w_out,
+    double *w_new,
+    double *w_current,
     double *w_deriv,
     double old_error_level,
     double error_level)
@@ -95,8 +95,10 @@ void CudaAndersonMixing::calculate_new_fields(
         const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         
-        double *d_w_out_hist1;
-        double *d_w_out_hist2;
+        double *d_w_hist1;
+        double *d_w_hist2;
+        double *d_w_deriv_hist1;
+        double *d_w_deriv_hist2;
 
         gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv, sizeof(double)*n_var, cudaMemcpyHostToDevice));
 
@@ -111,7 +113,7 @@ void CudaAndersonMixing::calculate_new_fields(
             n_anderson = std::min(max_hist, n_anderson);
             
             // store the input and output field (the memory is used in a periodic way)
-            d_cb_w_out_hist->insert(w_out);
+            d_cb_w_hist->insert(w_current);
             d_cb_w_deriv_hist->insert(w_deriv);
 
             // evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
@@ -135,7 +137,7 @@ void CudaAndersonMixing::calculate_new_fields(
 
             // make a simple mixing of input and output fields for the next iteration
             for(int i=0; i<n_var; i++)
-                w[i] = (1.0-mix)*w[i] + mix*w_out[i];
+                w_new[i] = w_current[i] + mix*w_deriv[i];
         }
         else
         {
@@ -159,14 +161,19 @@ void CudaAndersonMixing::calculate_new_fields(
             find_an(u_nm, v_n, a_n, n_anderson);
 
             // calculate the new field
-            d_w_out_hist1 = d_cb_w_out_hist->get_array(0);
-            gpu_error_check(cudaMemcpy(d_w, d_w_out_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
+            d_w_hist1 = d_cb_w_hist->get_array(0);
+            d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
+            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
+            gpu_error_check(cudaMemcpy(d_w_deriv, d_w_deriv_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
             for(int i=0; i<n_anderson; i++)
             {
-                d_w_out_hist2 = d_cb_w_out_hist->get_array(i+1);
-                add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w, a_n[i], d_w_out_hist2, -a_n[i], d_w_out_hist1, n_var);
+                d_w_hist2 = d_cb_w_hist->get_array(i+1);
+                d_w_deriv_hist2 = d_cb_w_deriv_hist->get_array(i+1);
+                add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
+                add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
             }
-            gpu_error_check(cudaMemcpy(w, d_w, sizeof(double)*n_var,cudaMemcpyDeviceToHost));
+            gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var,cudaMemcpyDeviceToHost));
         }
     }
     catch(std::exception& exc)

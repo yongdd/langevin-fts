@@ -13,7 +13,7 @@ class CpuAndersonMixing : public AndersonMixing
 {
 private:
     // a few previous field values are stored
-    CircularBuffer *cb_w_out_hist, *cb_w_deriv_hist;
+    CircularBuffer *cb_w_hist, *cb_w_deriv_hist;
     CircularBuffer *cb_w_deriv_dots;
     double *w_deriv_dots;
     // a matrix and arrays for determining coefficients
@@ -29,7 +29,7 @@ public:
       
     void reset_count() override;
     void calculate_new_fields(
-        double *w, double *w_out, double *w_deriv,
+        double *w_new, double *w_current, double *w_deriv,
         double old_error_level, double error_level) override;
 };
 #endif

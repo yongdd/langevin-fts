@@ -195,7 +195,8 @@ int main()
                 // conditions to end the iteration
                 if(error_level < tolerance) break;
                 // calculate new fields using simple and Anderson mixing
-                am->calculate_new_fields(w, w_out, w_diff, old_error_level, error_level);
+                                //w_new, w_current, w_diff
+                am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
             }
 
             // estimate execution time

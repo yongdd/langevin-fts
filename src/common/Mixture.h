@@ -51,9 +51,9 @@ public:
     Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
     ~Mixture() {};
 
-    std::string get_model_name();
-    double get_ds();
-    std::map<std::string, double>& get_bond_lengths();
+    std::string get_model_name() const;
+    double get_ds() const;
+    const std::map<std::string, double>& get_bond_lengths() const;
 
     // distinct_polymers
     void add_polymer(
@@ -62,11 +62,11 @@ public:
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
         std::map<int, int> v_to_grafting_index);
-    int get_n_polymers();
-    PolymerChain& get_polymer(int p);
+    int get_n_polymers() const;
+    PolymerChain& get_polymer(const int p);
 
     // get information of Unique sub graphs
-    int get_unique_n_branches();
+    int get_unique_n_branches() const;
     static std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
     static std::string key_to_species(std::string key);
     std::map<std::string, UniqueEdge, std::greater<std::string>>& get_unique_branches(); 
@@ -74,8 +74,8 @@ public:
     std::map<std::tuple<std::string, std::string, int>, UniqueBlock>& get_unique_blocks(); 
     UniqueBlock& get_unique_block(std::tuple<std::string, std::string, int> key);
 
-    void display_unique_branches();
-    void display_unique_blocks();
+    void display_unique_branches() const;
+    void display_unique_blocks() const;
 
     // Methods for pybind11
     void add_polymer(double volume_fraction,
