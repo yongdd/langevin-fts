@@ -29,12 +29,10 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
         
         # calculate output fields
         g_plus = phi_plus-1.0
-        w_plus_out = w_plus + g_plus 
-        cb.zero_mean(w_plus_out)
 
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
-        error_level = np.sqrt(cb.inner_product(phi_plus-1.0,phi_plus-1.0)/cb.get_volume())
+        error_level = np.sqrt(cb.inner_product(g_plus, g_plus)/cb.get_volume())
 
         # print iteration # and error levels
         if(verbose_level == 2 or
@@ -60,8 +58,9 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
             break
             
         # calculate new fields using simple and Anderson mixing
-        am.calculate_new_fields(w_plus, w_plus_out, g_plus, old_error_level, error_level)
+        w_plus[:] = am.calculate_new_fields(w_plus, g_plus, old_error_level, error_level)
 
+    cb.zero_mean(w_plus)
     Q = []
     for p in range(mixture.get_n_polymers()):
         Q.append(pseudo.get_total_partition(p))

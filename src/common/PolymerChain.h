@@ -37,23 +37,23 @@ public:
         std::vector<std::string> block_species,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, int> v_to_grafting_index);
+        std::map<int, int> v_to_grafting_index={});
     ~PolymerChain() {};
 
-    double get_alpha();
-    double get_volume_fraction();
+    double get_alpha() const;
+    double get_volume_fraction() const;
 
-    int get_n_blocks();
+    int get_n_blocks() const;
     std::vector<PolymerChainBlock>& get_blocks();
-    struct PolymerChainBlock& get_block(int v, int u);
+    struct PolymerChainBlock& get_block(const int v, const int u);
 
-    int get_n_segment_total();
-    int get_n_segment(int idx);
+    int get_n_segment_total() const;
+    int get_n_segment(const int idx) const;
 
-    int get_array_idx(int v, int u);
+    int get_array_idx(const int v, const int u);
     std::map<int, std::vector<int>>& get_adjacent_nodes();
     std::map<std::pair<int, int>, int>& get_edge_to_array();
-    void set_edge_to_deps(int v, int u, std::string deps);
-    std::string get_dep(int v, int u);
+    void set_edge_to_deps(const int v, const int u, const std::string deps);
+    std::string get_dep(const int v, const int u);
 };
 #endif

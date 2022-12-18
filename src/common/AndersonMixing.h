@@ -28,26 +28,30 @@ public:
 
     virtual void reset_count(){};
     virtual void calculate_new_fields(
-        double *w, double *w_out, double *w_deriv,
+        double *w_new, double *w_current, double *w_deriv,
         double old_error_level, double error_level)=0;
 
     // Methods for pybind11
-    void calculate_new_fields(py::array_t<double> w, py::array_t<double> w_out, py::array_t<double> w_deriv,
+    py::array_t<double> calculate_new_fields(py::array_t<double> w_current, py::array_t<double> w_deriv,
                              double old_error_level, double error_level)
     {
         try{
-            py::buffer_info buf_w = w.request();
-            py::buffer_info buf_w_out = w_out.request();
+
+            py::array_t<double> w_new = py::array_t<double>(n_var);
+
+            py::buffer_info buf_w_new = w_new.request();
+            py::buffer_info buf_w_current = w_current.request();
             py::buffer_info buf_w_deriv = w_deriv.request();
 
-            if (buf_w.size != n_var)
-                throw_with_line_number("Size of input w ("       + std::to_string(buf_w.size)       + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
-            if (buf_w_out.size != n_var)
-                throw_with_line_number("Size of input w_out ("   + std::to_string(buf_w_out.size)   + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
+            if (buf_w_new.size != n_var)
+                throw_with_line_number("Size of input w_new (" + std::to_string(buf_w_new.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
+            if (buf_w_current.size != n_var)
+                throw_with_line_number("Size of input w_current (" + std::to_string(buf_w_current.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
             if (buf_w_deriv.size != n_var)
                 throw_with_line_number("Size of input w_deriv (" + std::to_string(buf_w_deriv.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
 
-            calculate_new_fields((double *) buf_w.ptr, (double *) buf_w_out.ptr, (double *) buf_w_deriv.ptr, old_error_level, error_level);
+            calculate_new_fields((double *) buf_w_new.ptr, (double *) buf_w_current.ptr, (double *) buf_w_deriv.ptr, old_error_level, error_level);
+            return std::move(w_new);
         }
         catch(std::exception& exc)
         {

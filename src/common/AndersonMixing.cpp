@@ -19,7 +19,7 @@ AndersonMixing::AndersonMixing(int n_var, int max_hist,
 void AndersonMixing::find_an(double **u, double *v, double *a, int n)
 {
     int i,j,k;
-    double factor, tempsum;
+    double factor, temp_sum;
     // elimination process
     for(i=0; i<n; i++)
     {
@@ -37,11 +37,11 @@ void AndersonMixing::find_an(double **u, double *v, double *a, int n)
     a[n-1] = v[n-1]/u[n-1][n-1];
     for(i=n-2; i>=0; i--)
     {
-        tempsum = 0.0;
+        temp_sum = 0.0;
         for(j=i+1; j<n; j++)
         {
-            tempsum = tempsum + u[i][j]*a[j];
+            temp_sum = temp_sum + u[i][j]*a[j];
         }
-        a[i] = (v[i] - tempsum)/u[i][i];
+        a[i] = (v[i] - temp_sum)/u[i][i];
     }
 }

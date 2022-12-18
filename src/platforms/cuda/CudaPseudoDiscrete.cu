@@ -602,7 +602,7 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        std::map<std::string, double>& bond_lengths = mx->get_bond_lengths();
+        auto bond_lengths = mx->get_bond_lengths();
         std::array<double,3> stress;
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);

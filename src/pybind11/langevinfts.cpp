@@ -49,7 +49,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_block", &PolymerChain::get_block)
         //.def("get_block_species", &PolymerChain::get_block_species)
         .def("get_n_segment_total", &PolymerChain::get_n_segment_total)
-        .def("get_n_segment", overload_cast_<int>()(&PolymerChain::get_n_segment))
+        .def("get_n_segment", &PolymerChain::get_n_segment)
         .def("get_array_idx", &PolymerChain::get_array_idx)
         .def("get_adjacent_nodes", &PolymerChain::get_adjacent_nodes)
         .def("get_edge_to_array", &PolymerChain::get_edge_to_array)
@@ -92,7 +92,7 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)
-        .def("calculate_new_fields",overload_cast_<py::array_t<double>, py::array_t<double>,
+        .def("calculate_new_fields",overload_cast_<py::array_t<double>,
             py::array_t<double>, double, double>()(&AndersonMixing::calculate_new_fields));
 
     py::class_<AbstractFactory>(m, "AbstractFactory")

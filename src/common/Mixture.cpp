@@ -65,7 +65,7 @@ void Mixture::add_polymer(
     }
 
     // find unique blocks
-    std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+    std::vector<PolymerChainBlock> blocks = pc.get_blocks();
     for(int b=0; b<blocks.size(); b++){
         std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
         std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -76,24 +76,23 @@ void Mixture::add_polymer(
     }
 
 }
-std::string Mixture::get_model_name()
+std::string Mixture::get_model_name() const
 {
     return model_name;
 }
-double Mixture::get_ds()
+double Mixture::get_ds() const
 {
     return ds;
 }
-int Mixture::get_n_polymers()
+int Mixture::get_n_polymers() const
 {
     return distinct_polymers.size();
 }
-PolymerChain& Mixture::get_polymer(int p)
+PolymerChain& Mixture::get_polymer(const int p)
 {
     return distinct_polymers[p];
 }
-
-std::map<std::string, double>& Mixture::get_bond_lengths()
+const std::map<std::string, double>& Mixture::get_bond_lengths() const
 {
     return bond_lengths;
 }
@@ -160,7 +159,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     return std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
     // return std::make_pair("A", 10);
 }
-int Mixture::get_unique_n_branches()
+int Mixture::get_unique_n_branches() const
 {
     return unique_branches.size();
 }
@@ -233,7 +232,7 @@ UniqueBlock& Mixture::get_unique_block(std::tuple<std::string, std::string, int>
             std::get<0>(key) + ", " + std::get<1>(key) + ", " + std::to_string(std::get<2>(key)) + ").");
     return unique_blocks[key];
 }
-void Mixture::display_unique_branches()
+void Mixture::display_unique_branches() const
 {
     // print unique sub branches
     std::vector<std::pair<std::string, int>> sub_deps;
@@ -253,7 +252,7 @@ void Mixture::display_unique_branches()
     }
     std::cout << "------------------------------------" << std::endl;
 }
-void Mixture::display_unique_blocks()
+void Mixture::display_unique_blocks() const
 {
     // print unique sub blocks
     std::cout << "---------- Unique Blocks ----------" << std::endl;

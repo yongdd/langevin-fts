@@ -24,12 +24,12 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
             // find dependencies resolved time
             for(int i=0; i<same_height_branches.size(); i++)
             {
-                auto& key = same_height_branches[i];
+                const auto& key = same_height_branches[i];
                 int max_resolved_time = 0;
                 for(int j=0; j<unique_branches[key].deps.size(); j++)
                 {
-                    auto& sub_key = unique_branches[key].deps[j].first;
-                    auto& sub_n_segment = unique_branches[key].deps[j].second;
+                    const auto& sub_key = unique_branches[key].deps[j].first;
+                    const auto& sub_n_segment = unique_branches[key].deps[j].second;
                     assert(stream_start_finish.count(sub_key) == 0 && "Could not find [" + sub_key + "] in stream_start_finish.");
                     int sub_resolved_time = std::get<1>(stream_start_finish[sub_key]) + sub_n_segment;
                     if (max_resolved_time == 0 || max_resolved_time < sub_resolved_time)
@@ -46,7 +46,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
 
             // for(int i=0; i<Key_resolved_time.size(); i++)
             // {
-            //     auto& key = std::get<0>(Key_resolved_time[i]);
+            //     const auto& key = std::get<0>(Key_resolved_time[i]);
             //     std::cout << key << ":\n\t";
             //     std::cout << "max_n_segment: " << unique_branches[key].max_n_segment;
             //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
@@ -67,7 +67,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
                     }
                 }
                 // add job at stream[min_stream]
-                auto& key = std::get<0>(Key_resolved_time[i]);
+                const auto& key = std::get<0>(Key_resolved_time[i]);
                 int max_n_segment = unique_branches[key].max_n_segment;
                 int job_start_time = std::max(job_finish_time[min_stream], resolved_time[key]);
                 // std::cout << key << ", " << min_stream << ", " << job_start_time << ", " << job_start_time+max_n_segment << std::endl;

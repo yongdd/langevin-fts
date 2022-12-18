@@ -239,14 +239,15 @@ class SCFT:
             # calculate output fields
             w_out[0] = self.chi_n*phi["B"] + xi
             w_out[1] = self.chi_n*phi["A"] + xi
-                
-            # keep the level of field value
-            self.cb.zero_mean(w_out[0])
-            self.cb.zero_mean(w_out[1])
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             w_diff = w_out - w
+
+            # keep the level of field value
+            self.cb.zero_mean(w_diff[0])
+            self.cb.zero_mean(w_diff[1])
+
             multi_dot = self.cb.inner_product(w_diff[0],w_diff[0]) + self.cb.inner_product(w_diff[1],w_diff[1])
             multi_dot /= self.cb.inner_product(w[0],w[0]) + self.cb.inner_product(w[1],w[1]) + 1.0
             error_level = np.sqrt(multi_dot)
@@ -278,15 +279,14 @@ class SCFT:
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_new  = np.concatenate((np.reshape(w,      2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
-                am_out  = np.concatenate((np.reshape(w_out,  2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():] + dlx))
-                am_diff = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), dlx))
-                self.am.calculate_new_fields(am_new, am_out, am_diff, old_error_level, error_level)
+                am_current  = np.concatenate((np.reshape(w,      2*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
+                am_diff     = np.concatenate((np.reshape(w_diff, 2*self.cb.get_n_grid()), dlx))
+                am_new = self.am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
+
+                # copy fields
+                w = np.reshape(am_new[0:2*self.cb.get_n_grid()], (2, self.cb.get_n_grid()))
 
                 # set box size
-                w[0] = am_new[0:self.cb.get_n_grid()]
-                w[1] = am_new[self.cb.get_n_grid():2*self.cb.get_n_grid()]
-
                 # restricting |dLx| to be less than 1 % of Lx
                 old_lx = np.array(self.cb.get_lx()[-self.cb.get_dim():])
                 new_lx = np.array(am_new[-self.cb.get_dim():])
@@ -297,10 +297,10 @@ class SCFT:
                 # update bond parameters using new lx
                 self.pseudo.update()
             else:
-                self.am.calculate_new_fields(
+                w = self.am.calculate_new_fields(
                 np.reshape(w,      2*self.cb.get_n_grid()),
-                np.reshape(w_out,  2*self.cb.get_n_grid()),
                 np.reshape(w_diff, 2*self.cb.get_n_grid()), old_error_level, error_level)
+                w = np.reshape(w, (2, self.cb.get_n_grid()))
 
         self.phi = phi
         self.w = w

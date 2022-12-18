@@ -9,7 +9,7 @@ from langevinfts import *
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
-os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # GPU environment variables
 os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
