@@ -139,10 +139,11 @@ void CpuPseudoContinuous::compute_statistics(
             }
         }
 
-        // parallel_job
+        // for each time span
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
+            // for each job
             #pragma omp parallel for
             for(int job=0; job<parallel_job->size(); job++)
             {

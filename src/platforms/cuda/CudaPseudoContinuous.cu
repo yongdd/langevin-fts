@@ -240,10 +240,12 @@ void CudaPseudoContinuous::compute_statistics(
         for(int i=0; i<M; i++)
             q_uniform[i] = 1.0;
 
-        // parallel_job
+        // for each time span
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
+
+            // multiplay all partition functions at junctions if necessary 
             for(int job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
@@ -281,6 +283,7 @@ void CudaPseudoContinuous::compute_statistics(
                 }
             }
         
+            // apply the propagator successively
             if(parallel_job->size()==1)
             {
                 auto& key = std::get<0>((*parallel_job)[0]);
@@ -288,7 +291,7 @@ void CudaPseudoContinuous::compute_statistics(
                 int n_segment_to = std::get<2>((*parallel_job)[0]);
                 auto species = mx->get_unique_branch(key).species;
 
-                // apply the propagator successively
+                
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
                     one_step_1(
@@ -312,7 +315,6 @@ void CudaPseudoContinuous::compute_statistics(
                 int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
                 auto species_2 = mx->get_unique_branch(key_2).species;
 
-                // apply the propagator successively
                 for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
                 {
                     one_step_2(
@@ -625,7 +627,7 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
         std::map<std::tuple<std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
-        // compute stress for Unique key pairs
+        // compute stress for unique key pairs
         for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
@@ -646,9 +648,13 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
             // compute
             for(int n=0; n<=N; n++)
             {
-                cufftExecD2Z(plan_for_1, d_q_1[n],     d_qk_1);
-                cufftExecD2Z(plan_for_1, d_q_2[N-n], d_qk_2);
-                multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, d_qk_1, d_qk_2, M_COMPLEX);
+                // execute a Forward FFT
+                gpu_error_check(cudaMemcpy(&d_q_step1_2[0], d_q_1[n],   sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                gpu_error_check(cudaMemcpy(&d_q_step1_2[M], d_q_2[N-n], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                cufftExecD2Z(plan_for_2, d_q_step1_2, d_qk_in_2);
+
+                // multiplay two partial partition functions in the fourier spaces
+                multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
                 if ( DIM >= 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
