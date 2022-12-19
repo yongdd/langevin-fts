@@ -287,10 +287,10 @@ class SCFT:
                 w = np.reshape(am_new[0:2*self.cb.get_n_grid()], (2, self.cb.get_n_grid()))
 
                 # set box size
-                # restricting |dLx| to be less than 1 % of Lx
+                # restricting |dLx| to be less than 10 % of Lx
                 old_lx = np.array(self.cb.get_lx()[-self.cb.get_dim():])
                 new_lx = np.array(am_new[-self.cb.get_dim():])
-                new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.01, 0.01)
+                new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
                 self.cb.set_lx(new_lx)
 

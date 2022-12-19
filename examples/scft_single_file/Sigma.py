@@ -93,10 +93,10 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
             w = np.reshape(am_new[0:2*cb.get_n_grid()], (2, cb.get_n_grid()))
 
             # set box size
-            # restricting |dLx| to be less than 1 % of Lx
+            # restricting |dLx| to be less than 10 % of Lx
             old_lx = lx
             new_lx = np.array(am_new[-cb.get_dim():])
-            new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.01, 0.01)
+            new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
             lx = (1 + new_dlx)*old_lx
             cb.set_lx(lx)
 
