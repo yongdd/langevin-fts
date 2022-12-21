@@ -30,6 +30,16 @@ PolymerChain::PolymerChain(
         throw_with_line_number("The sizes of block_species (" + std::to_string(block_species.size()) + 
             ") and edges u (" +std::to_string(v.size()) + ") must be consistent.");
 
+    // check the name of species. Only uppercase alphabetic strings are allowed.
+    for(const auto& item : bond_lengths)
+    {
+        if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isupper(c); }))
+            throw_with_line_number("\"" + item.first + "\" is an invalid species name. Only uppercase alphabetic strings are allowed.");
+        
+        if (item.second <= 0)
+            throw_with_line_number("bond_lengths[\"" + item.first + "\"] must be a positive number.");
+    }
+
     // check block lengths, segments, types
     for(int i=0; i<contour_lengths.size(); i++)
     {
