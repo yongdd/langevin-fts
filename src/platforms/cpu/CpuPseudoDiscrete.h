@@ -26,7 +26,7 @@ private:
     double *fourier_basis_y;
     double *fourier_basis_z;
 
-    // key: (dep) + species, value: partition functions
+    // key: (dep) + monomer_type, value: partition functions
     std::map<std::string, double *> unique_partition;
     std::map<std::string, bool *> unique_partition_finished;
     Scheduler *sc;          // scheduler for partial partition function
@@ -57,7 +57,7 @@ public:
         std::map<std::string, double*> q_init,
         std::map<std::string, double*> w_block) override;
     double get_total_partition(int polymer) override;
-    void get_species_concentration(std::string species, double *phi) override;
+    void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
     std::array<double,3> compute_stress() override;
     void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;

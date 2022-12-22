@@ -163,7 +163,7 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
-        std::vector<std::string> block_species = {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"};
+        std::vector<std::string> block_monomer_types = {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"};
         std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2};
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
@@ -171,7 +171,7 @@ int main()
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
 
         Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths);
-        mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
+        mx->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
         mx->display_unique_branches();
         mx->display_unique_blocks();
 
@@ -197,8 +197,8 @@ int main()
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
             pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}});
-            pseudo->get_species_concentration("A", phi_a);
-            pseudo->get_species_concentration("B", phi_b);
+            pseudo->get_monomer_concentration("A", phi_a);
+            pseudo->get_monomer_concentration("B", phi_b);
             //pseudo->get_polymer_concentration(0, phi);
 
             //--------------- check --------------------

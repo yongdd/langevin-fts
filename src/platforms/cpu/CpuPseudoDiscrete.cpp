@@ -52,10 +52,10 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         // create boltz_bond, boltz_bond_half, and exp_dw
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
-            boltz_bond     [species] = new double[M_COMPLEX];
-            boltz_bond_half[species] = new double[M_COMPLEX]; 
-            exp_dw         [species] = new double[M];
+            std::string monomer_type = item.first;
+            boltz_bond     [monomer_type] = new double[M_COMPLEX];
+            boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
+            exp_dw         [monomer_type] = new double[M];
         }
 
         // allocate memory for stress calculation: compute_stress()
@@ -108,10 +108,10 @@ void CpuPseudoDiscrete::update()
     {
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            get_boltz_bond(boltz_bond     [species], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
-            get_boltz_bond(boltz_bond_half[species], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
 
             // for stress calculation: compute_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
@@ -134,8 +134,8 @@ void CpuPseudoDiscrete::compute_statistics(
 
         for(const auto& item: mx->get_unique_branches())
         {
-            if( w_block.count(item.second.species) == 0)
-                throw_with_line_number("\"" + item.second.species + "\" species is not in w_block.");
+            if( w_block.count(item.second.monomer_type) == 0)
+                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_block.");
         }
 
         if( q_init.size() > 0)
@@ -143,10 +143,10 @@ void CpuPseudoDiscrete::compute_statistics(
 
         for(const auto& item: w_block)
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double *w = item.second;
             for(int i=0; i<M; i++)
-                exp_dw[species][i] = exp(-w[i]*ds);
+                exp_dw[monomer_type][i] = exp(-w[i]*ds);
         }
 
         // for each time span
@@ -161,13 +161,13 @@ void CpuPseudoDiscrete::compute_statistics(
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
                 auto& deps = mx->get_unique_branch(key).deps;
-                auto species = mx->get_unique_branch(key).species;
+                auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
                     for(int i=0; i<M; i++)
-                        unique_partition[key][i] = exp_dw[species][i]; //* q_init
+                        unique_partition[key][i] = exp_dw[monomer_type][i]; //* q_init
                     unique_partition_finished[key][0] = true;
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
@@ -199,7 +199,7 @@ void CpuPseudoDiscrete::compute_statistics(
                             std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
 
                         half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
-                            q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
+                            q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
 
                         for(int i=0; i<M; i++)
                             q_junction[i] *= q_half_step[i];
@@ -208,11 +208,11 @@ void CpuPseudoDiscrete::compute_statistics(
                         unique_q_junctions[key][i] = q_junction[i];
 
                     // add half bond
-                    half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[species]);
+                    half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[monomer_type]);
 
                     // add full segment
                     for(int i=0; i<M; i++)
-                        unique_partition[key][i] *= exp_dw[species][i];
+                        unique_partition[key][i] *= exp_dw[monomer_type][i];
                     unique_partition_finished[key][0] = true;
                 }
                 else
@@ -228,8 +228,8 @@ void CpuPseudoDiscrete::compute_statistics(
 
                     one_step(&unique_partition[key][(n-1)*M],
                             &unique_partition[key][n*M],
-                            boltz_bond[species],
-                            exp_dw[species]);
+                            boltz_bond[monomer_type],
+                            exp_dw[monomer_type]);
                     unique_partition_finished[key][n] = true;
                 }
             }
@@ -250,7 +250,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<0>(key)],  // dependency v
                 unique_partition[std::get<1>(key)],  // dependency u
-                exp_dw[item->second.species],      // exp_dw
+                exp_dw[item->second.monomer_type],      // exp_dw
                 std::get<2>(key));                   // n_segment
         }
 
@@ -268,7 +268,7 @@ void CpuPseudoDiscrete::compute_statistics(
             single_partitions[p]= cb->inner_product_inverse_weight(
                 &unique_partition[dep_v][(n_segment-1)*M],  // q
                 &unique_partition[dep_u][0],                // q^dagger
-                exp_dw[blocks[0].species]);
+                exp_dw[blocks[0].monomer_type]);
         }
     }
     catch(std::exception& exc)
@@ -356,7 +356,7 @@ double CpuPseudoDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::get_species_concentration(std::string species, double *phi)
+void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -373,7 +373,7 @@ void CpuPseudoDiscrete::get_species_concentration(std::string species, double *p
             
             for(int b=0; b<blocks.size(); b++)
             {
-                if (blocks[b].species == species)
+                if (blocks[b].monomer_type == monomer_type)
                 {
                     std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
                     std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -450,7 +450,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
         //     std::string dep_v = std::get<0>(key);
         //     std::string dep_u = std::get<1>(key);
         //     const int N       = std::get<2>(key);
-        //     std::string species = item.second.species;
+        //     std::string monomer_type = item.second.monomer_type;
         // #pragma omp parallel for
         for(int b=0; b<mx->get_unique_blocks().size();b++)
         {
@@ -461,7 +461,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
             std::string dep_v = std::get<0>(key);
             std::string dep_u = std::get<1>(key);
             const int N       = std::get<2>(key);
-            std::string species = item->second.species;
+            std::string monomer_type = item->second.monomer_type;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
@@ -489,8 +489,8 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
                         continue; 
                     fft->forward(unique_q_junctions[dep_v], qk_1);
                     fft->forward(&q_2[(N-1)*M], qk_2);
-                    bond_length_sq = 0.5*bond_lengths[species]*bond_lengths[species];
-                    boltz_bond_now = boltz_bond_half[species];
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    boltz_bond_now = boltz_bond_half[monomer_type];
                 }
                 // at u  
                 else if (n == N)
@@ -499,16 +499,16 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
                         continue; 
                     fft->forward(&q_1[(N-1)*M], qk_1);
                     fft->forward(unique_q_junctions[dep_u], qk_2);
-                    bond_length_sq = 0.5*bond_lengths[species]*bond_lengths[species];
-                    boltz_bond_now = boltz_bond_half[species];
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    boltz_bond_now = boltz_bond_half[monomer_type];
                 }
                 // within the blocks
                 else
                 {
                     fft->forward(&q_1[(n-1)*M], qk_1);
                     fft->forward(&q_2[(N-n-1)*M], qk_2);
-                    bond_length_sq = bond_lengths[species]*bond_lengths[species];
-                    boltz_bond_now = boltz_bond[species];
+                    bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    boltz_bond_now = boltz_bond[monomer_type];
                 }
                 // compute 
                 if ( DIM == 3 )

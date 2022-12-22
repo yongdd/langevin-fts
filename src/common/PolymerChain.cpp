@@ -12,29 +12,29 @@
 PolymerChain::PolymerChain(
     double ds, std::map<std::string, double> bond_lengths, 
     double volume_fraction, 
-    std::vector<std::string> block_species,
+    std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
     std::map<int, int> v_to_grafting_index)
 {
     // check block size
-    if( block_species.size() != contour_lengths.size())
-        throw_with_line_number("The sizes of block_species (" + std::to_string(block_species.size()) + 
+    if( block_monomer_types.size() != contour_lengths.size())
+        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
             ") and contour_lengths (" +std::to_string(contour_lengths.size()) + ") must be consistent.");
 
-    if( block_species.size() != v.size())
-        throw_with_line_number("The sizes of block_species (" + std::to_string(block_species.size()) + 
+    if( block_monomer_types.size() != v.size())
+        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
             ") and edges v (" +std::to_string(v.size()) + ") must be consistent.");
 
-    if( block_species.size() != u.size())
-        throw_with_line_number("The sizes of block_species (" + std::to_string(block_species.size()) + 
+    if( block_monomer_types.size() != u.size())
+        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
             ") and edges u (" +std::to_string(v.size()) + ") must be consistent.");
 
-    // check the name of species. Only uppercase alphabetic strings are allowed.
+    // check the name of monomer_type. Only uppercase alphabetic strings are allowed.
     for(const auto& item : bond_lengths)
     {
         if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isupper(c); }))
-            throw_with_line_number("\"" + item.first + "\" is an invalid species name. Only uppercase alphabetic strings are allowed.");
+            throw_with_line_number("\"" + item.first + "\" is an invalid monomer_type name. Only uppercase alphabetic strings are allowed.");
         
         if (item.second <= 0)
             throw_with_line_number("bond_lengths[\"" + item.first + "\"] must be a positive number.");
@@ -47,8 +47,8 @@ PolymerChain::PolymerChain(
             throw_with_line_number("contour_lengths[" + std::to_string(i) + "] (" +std::to_string(contour_lengths[i]) + ") must be a positive number.");
         if( std::abs(std::lround(contour_lengths[i]/ds)-contour_lengths[i]/ds) > 1.e-6)
             throw_with_line_number("contour_lengths[" + std::to_string(i) + "]/ds (" + std::to_string(contour_lengths[i]) + "/" + std::to_string(ds) + ") is not an integer.");
-        if( bond_lengths.count(block_species[i]) == 0 )
-            throw_with_line_number("block_species[" + std::to_string(i) + "] (\"" + block_species[i] + "\") is not in bond_lengths.");
+        if( bond_lengths.count(block_monomer_types[i]) == 0 )
+            throw_with_line_number("block_monomer_types[" + std::to_string(i) + "] (\"" + block_monomer_types[i] + "\") is not in bond_lengths.");
     }
 
     // check v_to_grafting_index
@@ -61,7 +61,7 @@ PolymerChain::PolymerChain(
         this->volume_fraction = volume_fraction;
         for(int i=0; i<contour_lengths.size(); i++){
             blocks.push_back({
-                block_species[i],                         // species
+                block_monomer_types[i],                     // monomer_type
                 (int) std::lround(contour_lengths[i]/ds),   // n_segment
                 contour_lengths[i],                         // contour_length
                 v[i], u[i]});                               // nodes

@@ -180,34 +180,34 @@ int main()
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",2.0}, {"C",1.5}};
 
         std::vector<double> volume_fraction;
-        std::vector<std::vector<std::string>> block_species;
+        std::vector<std::vector<std::string>> block_monomer_types;
         std::vector<std::vector<double>> contour_lengths;
         std::vector<std::vector<int>> v;
         std::vector<std::vector<int>> u;
 
         volume_fraction.push_back(0.5);
-        block_species.push_back({"C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B"});
+        block_monomer_types.push_back({"C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B"});
         contour_lengths.push_back({1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9});
         v.push_back({0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7});
         u.push_back({1,9,10,11,12,13,2,14,15,16,17,18,3,19,20,21,22,23,4,24,25,26,27,28,5,29,30,31,32,33,6,34,35,36,37,38,7,39,40,41,42,43,8,44,45,46,47,48});
 
         volume_fraction.push_back(0.3);
-        block_species.push_back({"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"});
+        block_monomer_types.push_back({"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"});
         contour_lengths.push_back({0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2});
         v.push_back({0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13});
         u.push_back({1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18});
 
         volume_fraction.push_back(0.2);
-        block_species.push_back({"A","A","B","B","C","C","B","A","C","C","A","B","C","C","C","C","B","B","B","B","C","B","B","C","C","B","B","C","B"});
+        block_monomer_types.push_back({"A","A","B","B","C","C","B","A","C","C","A","B","C","C","C","C","B","B","B","B","C","B","B","C","C","B","B","C","B"});
         contour_lengths.push_back({0.9,1.2,1.2,0.9,0.9,1.2,1.2,0.9,0.9,1.2,1.2,1.2,1.2,0.9,1.2,1.2,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,0.9,0.9,0.9});
         v.push_back({0,0,0,0,1,1,2,2,2,3,3,5,5,8,8,8,8,9,10,11,13,14,14,16,16,18,21,22,23});
         u.push_back({1,2,8,12,4,5,3,11,13,6,7,9,18,10,14,20,26,27,15,17,16,19,22,21,29,23,24,25,28});
 
         double phi_a[MM]={0.0}, phi_b[MM]={0.0}, phi_c[MM]={0.0};
         Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths);
-        for(int p=0; p<block_species.size(); p++){
-            mx->add_polymer(volume_fraction[p], block_species[p], contour_lengths[p], v[p], u[p], {});
-            std::cout << "block size: " << block_species[p].size() << std::endl;
+        for(int p=0; p<block_monomer_types.size(); p++){
+            mx->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
+            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
 
         mx->display_unique_branches();
@@ -247,9 +247,9 @@ int main()
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
             pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}, {"C",w_c}});
-            pseudo->get_species_concentration("A", phi_a);
-            pseudo->get_species_concentration("B", phi_b);
-            pseudo->get_species_concentration("C", phi_c);
+            pseudo->get_monomer_concentration("A", phi_a);
+            pseudo->get_monomer_concentration("B", phi_b);
+            pseudo->get_monomer_concentration("C", phi_c);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;

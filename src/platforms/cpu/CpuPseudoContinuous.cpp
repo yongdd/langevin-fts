@@ -39,11 +39,11 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
-            boltz_bond     [species] = new double[M_COMPLEX];
-            boltz_bond_half[species] = new double[M_COMPLEX]; 
-            exp_dw         [species] = new double[M];
-            exp_dw_half    [species] = new double[M]; 
+            std::string monomer_type = item.first;
+            boltz_bond     [monomer_type] = new double[M_COMPLEX];
+            boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
+            exp_dw         [monomer_type] = new double[M];
+            exp_dw_half    [monomer_type] = new double[M]; 
         }
 
         // allocate memory for stress calculation: compute_stress()
@@ -96,10 +96,10 @@ void CpuPseudoContinuous::update()
     {
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            get_boltz_bond(boltz_bond     [species], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
-            get_boltz_bond(boltz_bond_half[species], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
 
             // for stress calculation: compute_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
@@ -121,8 +121,8 @@ void CpuPseudoContinuous::compute_statistics(
 
         for(const auto& item: mx->get_unique_branches())
         {
-            if( w_block.count(item.second.species) == 0)
-                throw_with_line_number("\"" + item.second.species + "\" species is not in w_block.");
+            if( w_block.count(item.second.monomer_type) == 0)
+                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_block.");
         }
 
         if( q_init.size() > 0)
@@ -130,12 +130,12 @@ void CpuPseudoContinuous::compute_statistics(
 
         for(const auto& item: w_block)
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double *w = item.second;
             for(int i=0; i<M; i++)
             { 
-                exp_dw     [species][i] = exp(-w[i]*ds*0.5);
-                exp_dw_half[species][i] = exp(-w[i]*ds*0.25);
+                exp_dw     [monomer_type][i] = exp(-w[i]*ds*0.5);
+                exp_dw_half[monomer_type][i] = exp(-w[i]*ds*0.25);
             }
         }
 
@@ -151,7 +151,7 @@ void CpuPseudoContinuous::compute_statistics(
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
                 auto& deps = mx->get_unique_branch(key).deps;
-                auto species = mx->get_unique_branch(key).species;
+                auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
@@ -186,10 +186,10 @@ void CpuPseudoContinuous::compute_statistics(
 
                     one_step(&unique_partition[key][(n-1)*M],
                             &unique_partition[key][n*M],
-                            boltz_bond[species],
-                            boltz_bond_half[species],
-                            exp_dw[species],
-                            exp_dw_half[species]);
+                            boltz_bond[monomer_type],
+                            boltz_bond_half[monomer_type],
+                            exp_dw[monomer_type],
+                            exp_dw_half[monomer_type]);
                     unique_partition_finished[key][n] = true;
                 }
             }
@@ -331,7 +331,7 @@ double CpuPseudoContinuous::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoContinuous::get_species_concentration(std::string species, double *phi)
+void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -348,7 +348,7 @@ void CpuPseudoContinuous::get_species_concentration(std::string species, double 
 
             for(int b=0; b<blocks.size(); b++)
             {
-                if (blocks[b].species == species)
+                if (blocks[b].monomer_type == monomer_type)
                 {
                     std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
                     std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -425,7 +425,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
         //     std::string dep_v = std::get<0>(key);
         //     std::string dep_u = std::get<1>(key);
         //     const int N       = std::get<2>(key);
-        //     std::string species = item.second.species;
+        //     std::string monomer_type = item.second.monomer_type;
         // #pragma omp parallel for
         for(int b=0; b<mx->get_unique_blocks().size();b++)
         {
@@ -436,7 +436,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
             std::string dep_v = std::get<0>(key);
             std::string dep_u = std::get<1>(key);
             const int N       = std::get<2>(key);
-            std::string species = item->second.species;
+            std::string monomer_type = item->second.monomer_type;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
@@ -446,7 +446,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
 
             double coeff;
             std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
-            double bond_length_sq = bond_lengths[species]*bond_lengths[species];
+            double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
     
             // reset
             for(int d=0; d<3; d++)

@@ -180,8 +180,8 @@ int main()
                 {
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -269,8 +269,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -293,8 +293,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -328,8 +328,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -352,8 +352,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -388,8 +388,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)
@@ -412,8 +412,8 @@ int main()
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                    pseudo->get_species_concentration("A", phi_a);
-                    pseudo->get_species_concentration("B", phi_b);
+                    pseudo->get_monomer_concentration("A", phi_a);
+                    pseudo->get_monomer_concentration("B", phi_b);
 
                     // calculate the total energy
                     for(int i=0; i<M; i++)

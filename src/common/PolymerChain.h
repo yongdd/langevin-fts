@@ -10,11 +10,11 @@
 #include <map>
 
 struct PolymerChainBlock{
-    std::string species;    // species of block, e.g., "A" or "B", ...
-    int n_segment;          // the number of segment, e.g. 20, or 30 ...
-    double contour_length;  // relative length of each block, e.g., 1.0, 0.4, 0.3, ...
-    int v;                  // starting vertex (or node)
-    int u;                  // ending vertex (or node)
+    std::string monomer_type;   // monomer_type of block, e.g., "A" or "B", ...
+    int n_segment;              // the number of segment, e.g. 20, or 30 ...
+    double contour_length;      // relative length of each block, e.g., 1.0, 0.4, 0.3, ...
+    int v;                      // starting vertex (or node)
+    int u;                      // ending vertex (or node)
 };
 
 class PolymerChain
@@ -23,7 +23,7 @@ private:
     double alpha;            // sum of contour lengths
     double volume_fraction;  // volume_fraction
 
-    std::vector<PolymerChainBlock> blocks;  // information of blocks, which contains 'species', 'n_segments', '
+    std::vector<PolymerChainBlock> blocks;  // information of blocks, which contains 'monomer_type', 'n_segments', '
                                             // bond_length_sq', 'contour_length', and 'vertices'.
 
     std::map<int, std::vector<int>> adjacent_nodes;             // adjacent nodes
@@ -34,7 +34,7 @@ public:
     PolymerChain(
         double ds, std::map<std::string, double> bond_lengths, 
         double volume_fraction, 
-        std::vector<std::string> block_species,
+        std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
         std::map<int, int> v_to_grafting_index={});

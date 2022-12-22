@@ -38,14 +38,14 @@ Mixture::Mixture(
 }
 void Mixture::add_polymer(
     double volume_fraction,
-    std::vector<std::string> block_species,
+    std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
     std::map<int, int> v_to_grafting_index)
 {
     std::string deps;
     distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
-        volume_fraction, block_species, contour_lengths,
+        volume_fraction, block_monomer_types, contour_lengths,
         v, u, v_to_grafting_index));
 
     PolymerChain& pc = distinct_polymers.back();
@@ -72,7 +72,7 @@ void Mixture::add_polymer(
         if (dep_v > dep_u)
             dep_v.swap(dep_u);
         auto key = std::make_tuple(dep_v, dep_u, blocks[b].n_segment);
-        unique_blocks[key].species = blocks[b].species;
+        unique_blocks[key].monomer_type = blocks[b].monomer_type;
     }
 
 }
@@ -136,7 +136,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     }
 
     // update unique_sub_branches
-    text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].species;
+    text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].monomer_type;
     if(unique_branches.count(text) > 0)
     {
          if(unique_branches[text].max_n_segment < blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment)
@@ -146,7 +146,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     {
         unique_branches[text].max_n_segment = blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment;
         unique_branches[text].deps = key_to_deps(text);
-        unique_branches[text].species = key_to_species(text);
+        unique_branches[text].monomer_type = key_to_species(text);
         for(int i=0; i<text.size();i++)
         {
             if (text[i] != '(')

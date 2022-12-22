@@ -13,12 +13,12 @@
 
 struct UniqueEdge{
     int max_n_segment;                              // the maximum segment number
-    std::string species;                            // species
+    std::string monomer_type;                       // monomer_type
     std::vector<std::pair<std::string, int>> deps;  // dependency pairs
     int height;                                     // height of branch (height of tree data Structure)
 };
 struct UniqueBlock{
-    std::string species;  // species
+    std::string monomer_type;  // monomer_type
 };
 
 class Mixture
@@ -28,7 +28,7 @@ private:
                             // "Discrete": discrete bead-spring model
     double ds;              // contour step interval
 
-    // dictionary{key:species, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
+    // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
 
     // distinct_polymers
@@ -58,7 +58,7 @@ public:
     // distinct_polymers
     void add_polymer(
         double volume_fraction,
-        std::vector<std::string> block_species,
+        std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
         std::map<int, int> v_to_grafting_index);
@@ -79,11 +79,11 @@ public:
 
     // Methods for pybind11
     void add_polymer(double volume_fraction,
-                    std::vector<std::string> block_species,
+                    std::vector<std::string> block_monomer_types,
                     std::vector<double> contour_lengths,
                     std::vector<int> v, std::vector<int> u)
     {
-        add_polymer(volume_fraction, block_species, contour_lengths, v, u, {});
+        add_polymer(volume_fraction, block_monomer_types, contour_lengths, v, u, {});
     }
 };
 #endif

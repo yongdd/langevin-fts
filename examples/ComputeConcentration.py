@@ -22,7 +22,7 @@ ds = 0.01                                         # contour step Interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 
 block_lengths = []
-block_species = []
+block_monomer_types = []
 volume_faction = []
 v = []
 u = []
@@ -30,21 +30,21 @@ u = []
 # First Polymer
 volume_faction.append(0.5)              # volume faction
 block_lengths.append([0.5, 0.7, 0.3])   # contour length of each block (triblock)
-block_species.append(["A","B","A"])     # type of each block (triblock)
+block_monomer_types.append(["A","B","A"])     # type of each block (triblock)
 v.append([0,1,2])                       # vertices v (triblock)
 u.append([1,2,3])                       # vertices u (triblock)
 
 # Second Polymer
 volume_faction.append(0.3)            # volume faction
 block_lengths.append([0.4, 0.5])      # contour length of each block (diblock)
-block_species.append(["A","C"])       # type of each block (diblock)
+block_monomer_types.append(["A","C"])       # type of each block (diblock)
 v.append([0,1])                       # vertices v (diblock)
 u.append([1,2])                       # vertices u (diblock)
 
 # Third Polymer
 volume_faction.append(0.2)        # volume faction
 block_lengths.append([1.0])       # contour length of each block (homo)
-block_species.append(["B"])       # type of each block (homo)
+block_monomer_types.append(["B"])       # type of each block (homo)
 v.append([0])                     # vertices v (homo)
 u.append([1])                     # vertices u (homo)
 
@@ -57,7 +57,7 @@ cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, stat_seg_length)
 for p in range(len(block_lengths)):
      mixture.add_polymer(
-     volume_faction[p],block_species[p],
+     volume_faction[p],block_monomer_types[p],
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture)
 mixture.display_unique_branches()
@@ -73,9 +73,9 @@ w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
 # compute ensemble average concentration (phi) and total partition function (Q)
 pseudo.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
 
-phi_a = pseudo.get_species_concentration("A")
-phi_b = pseudo.get_species_concentration("B")
-phi_c = pseudo.get_species_concentration("C")
+phi_a = pseudo.get_monomer_concentration("A")
+phi_b = pseudo.get_monomer_concentration("B")
+phi_c = pseudo.get_monomer_concentration("C")
 
 print(phi_a, phi_b, phi_c)
 print(np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
