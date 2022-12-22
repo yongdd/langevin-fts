@@ -79,12 +79,12 @@ conda env remove -n lfts
         ```Python
         ["A":6]  # from q["A0"](r) to q["A6"](r) (continuous chain)
         ```
-     + Example 2: 3-arm star A homopolymer. Each arm is composed of 4 A segments. It is only necessary to compute the partial partition functions for one arm. Braces `( )` indicates the dependencies. 
+     + Example 2: 3-arm star A homopolymer. Each arm is composed of 4 A segments. It is only necessary to compute the partial partition functions for one arm. Braces `(` `)` indicates the dependencies. 
         ```Python
         ["A":4]        # from q["A0"](r) to q["A6"](r)
         ["(A4A4)A":4]  # from q["(A4A4)A0"](r) to q["(A4A4)A4"](r)
         ```
-     + Example 3: Mixture of A homopolymers and symmetric ABA triblock copolymers. The A homopolymer is composed of 6 A segments. In the ABA triblock, 4 A, 5 B and 4 A segments are linearly connected.
+     + Example 3: Mixture of A homopolymers and symmetric ABA triblock copolymers. The A homopolymer is composed of 6 A segments. For the ABA triblock, 4 A, 5 B and 4 A segments are linearly connected.
         ```Python
         ["A":6]    
         ["(A4)B":5]    
@@ -92,9 +92,9 @@ conda env remove -n lfts
         ```
   5. In the Python library, all polymers including linear polymers are considered as general branched polymers.
 
-#### Scheduling Tasks for the Parallel Computations 
-  1. If one partial partition function is independent of the other partial partition function. They can be computed in parallel. For instance, the partial partition function and the complementary partial partition function of AB diblock copolymers can be computed in parallel. However, the scheduling for a mixture of arbitrary acyclic branched polymers is a complex problem. This library uses a simple `greedy algorithm`. Among the unique keys, find one whose dependencies will be resolved first and put it into a stream (CPU core for CPU version or cuFFT batch for CUDA version) scheduler that will finish the previous computations first. Repeat this process until there are no unique keys left.
-  2. Whenever partial partition function computations of one unique key is finished or new key is inserted, it is necessary to pause the computation, and redistribute the jobs to the streams. The number of active streams can be varying during the computations.
+#### Scheduling for the Parallel Computations
+  1. If one partial partition function is independent of the other partial partition function. They can be computed in parallel. For instance, the partial partition function and the complementary partial partition function of AB diblock copolymers can be computed in parallel. However, scheduling partial partition function computations for a mixture of arbitrary acyclic branched polymers is a complex problem. This library uses a simple `greedy algorithm`. Among the unique keys, find one whose dependencies will be resolved first and put it into a stream (CPU core for CPU version or cuFFT batch for CUDA version) schedule whose previous computations will be finished the first. Repeat this process until there are no unique keys left.
+  2. Whenever partial partition function computations of one unique key is finished or new key is inserted, computations are paused, and redistribute the jobs to the streams. The number of active streams can be varying during the computations.
   3. This approach is heuristic and is not guaranteed to minimize the makespan. As far as I know, scheduling tasks to minimize the makespan is an NP-hard problem.
   4. The CPU version uses up to 8 and 4 CPUs for the continuous and discrete chain models, respectively. The CUDA version uses batched cuFFT with a maximum batch size of 2.
 
