@@ -79,7 +79,7 @@ conda env remove -n lfts
         ```Python
         ["A":6]  # from q["A0"](r) to q["A6"](r) (continuous chain)
         ```
-     + Example 2: 3-arm star A homopolymer. Each arm is composed of 4 A segments. It is only necessary to compute the partial partition functions for one arm. Braces `(` `)` indicates the dependencies. 
+     + Example 2: 3-arm star A homopolymer. Each arm is composed of 4 A segments. It is only necessary to compute the partial partition functions for one arm. Dependencies are recursively indicates within the braces `(` `)`.
         ```Python
         ["A":4]        # from q["A0"](r) to q["A6"](r)
         ["(A4A4)A":4]  # from q["(A4A4)A0"](r) to q["(A4A4)A4"](r)
