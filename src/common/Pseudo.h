@@ -44,7 +44,7 @@ public:
         std::map<std::string, double*> q_init,
         std::map<std::string, double*> w_block) = 0;
     virtual double get_total_partition(int polymer) = 0;
-    virtual void get_species_concentration(std::string species, double *phi) = 0;
+    virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
     virtual std::array<double,3> compute_stress() = 0;
     virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
@@ -90,13 +90,13 @@ public:
             throw_without_line_number(exc.what());
         }
     }
-    py::array_t<double> get_species_concentration(std::string species)
+    py::array_t<double> get_monomer_concentration(std::string monomer_type)
     {
         try{
             const int M = cb->get_n_grid();
             py::array_t<double> phi = py::array_t<double>(M);
             py::buffer_info buf_phi = phi.request();
-            get_species_concentration(species, (double*) buf_phi.ptr);
+            get_monomer_concentration(monomer_type, (double*) buf_phi.ptr);
             return std::move(phi);
         }
         catch(std::exception& exc)

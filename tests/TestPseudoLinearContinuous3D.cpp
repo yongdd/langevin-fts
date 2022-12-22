@@ -164,7 +164,7 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
-        std::vector<std::string> block_species = {"A","B"};
+        std::vector<std::string> block_monomer_types = {"A","B"};
         std::vector<double> contour_lengths = {f, 1.0-f};
         std::vector<int> v = {0,1};
         std::vector<int> u = {1,2};
@@ -172,7 +172,7 @@ int main()
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
 
         Mixture* mx = new Mixture("Discrete", 1.0/NN, bond_lengths);
-        mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
+        mx->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
         mx->display_unique_branches();
         mx->display_unique_blocks();
 
@@ -198,8 +198,8 @@ int main()
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
             pseudo->compute_statistics({}, {{"A",w_a},{"B",w_b}});
-            pseudo->get_species_concentration("A", phi_a);
-            pseudo->get_species_concentration("B", phi_b);
+            pseudo->get_monomer_concentration("A", phi_a);
+            pseudo->get_monomer_concentration("B", phi_b);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;

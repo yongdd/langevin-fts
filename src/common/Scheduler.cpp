@@ -168,7 +168,7 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
             auto& key = item.first;
 
             int max_n_segment = item.second.max_n_segment;
-            //int species = item.second.species;
+            //int monomer_type = item.second.monomer_type;
             int height = item.second.height;
             auto& deps = item.second.deps;
 

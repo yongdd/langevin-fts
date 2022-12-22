@@ -28,8 +28,8 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         # for the given fields find the polymer statistics
         pseudo.compute_statistics({"A":w[0],"B":w[1]})
 
-        phi_a = pseudo.get_species_concentration("A")
-        phi_b = pseudo.get_species_concentration("B")
+        phi_a = pseudo.get_monomer_concentration("A")
+        phi_b = pseudo.get_monomer_concentration("B")
 
         # calculate the total energy, Hamiltonian
         w_minus = (w[0]-w[1])/2

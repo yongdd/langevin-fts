@@ -16,31 +16,31 @@ print(nx.__version__)
 
 random.seed(2)
 G = nx.Graph()
-G.add_edge(0,1, weight=random.randint(3,4)*3, species=random.choice(['A','B','C']))
+G.add_edge(0,1, weight=random.randint(3,4)*3, monomer_type=random.choice(['A','B','C']))
 for i in range(2,30):
    from_node = random.randint(0,i-1)
    weight = random.randint(3,4)*3
-   species = random.choice(['A','B','C'])
-   G.add_edge(from_node, i, weight=weight, species=species)
+   monomer_type = random.choice(['A','B','C'])
+   G.add_edge(from_node, i, weight=weight, monomer_type=monomer_type)
 
 # G = nx.Graph()
 # for i in range(0,8):
-#     G.add_edge(i,i+1, weight=12, species="C")
+#     G.add_edge(i,i+1, weight=12, monomer_type="C")
 
 # k=9
 # for i in range(0,4):
 #     for j in range(0,5):
-#         G.add_edge(i,k, weight=9, species="A")
+#         G.add_edge(i,k, weight=9, monomer_type="A")
 #         k += 1
 # for i in range(4,8):
 #     for j in range(0,5):
-#         G.add_edge(i,k, weight=9, species="B")
+#         G.add_edge(i,k, weight=9, monomer_type="B")
 #         k += 1
 
 # G = nx.Graph()
-# G.add_edge(0, 1, weight=3,  species="B")
-# G.add_edge(1, 2, weight=14, species="A")
-# G.add_edge(2, 3, weight=3,  species="B")
+# G.add_edge(0, 1, weight=3,  monomer_type="B")
+# G.add_edge(1, 2, weight=14, monomer_type="A")
+# G.add_edge(2, 3, weight=3,  monomer_type="B")
 
 #sub_graphs = set()
 dict_sub_graphs = {}
@@ -60,7 +60,7 @@ def get_ordered_tree_branches_text(G, in_node, out_node):
         text = ""
     else:
         text = "(" + "".join(sorted(edge_text))  + ")"
-    text += G[in_node][out_node]['species'] 
+    text += G[in_node][out_node]['monomer_type'] 
     if text in dict_sub_graphs:
         if dict_sub_graphs[text]['max_weight'] < G[in_node][out_node]['weight']:
             dict_sub_graphs[text]['max_weight'] = G[in_node][out_node]['weight']
@@ -77,11 +77,11 @@ pprint.pprint(sorted_dict_sub_graphs)
 
 
 for u,v,a in G.edges(data=True):
-    if (a["species"] == "A"):
+    if (a["monomer_type"] == "A"):
         monomer_id = 0
-    elif(a["species"] == "B"):
+    elif(a["monomer_type"] == "B"):
         monomer_id = 1
-    elif(a["species"] == "C"):
+    elif(a["monomer_type"] == "C"):
         monomer_id = 2
     print("\t\t%d\t%s\t%d\t%d" % (monomer_id, a["weight"]/10, u, v))
 
@@ -95,7 +95,7 @@ for u,v,a in G.edges(data=True):
 # print("")
 
 # for u,v,a in G.edges(data=True):
-#     print("\"" + a["species"] + "\"", end=",")
+#     print("\"" + a["monomer_type"] + "\"", end=",")
 # print("")
 
 # for u,v,a in G.edges(data=True):
@@ -146,7 +146,7 @@ pos = graphviz_layout(G, prog="twopi")
 labels = nx.get_edge_attributes(G,'weight')
 edges = G.edges()
 dict_color= {"A":"red", "B":"blue", "C":"green"}
-colors = [dict_color[G[u][v]['species']] for u,v in edges]
+colors = [dict_color[G[u][v]['monomer_type']] for u,v in edges]
 nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True)
 nx.draw_networkx_edge_labels(G,pos,edge_labels=labels)
 plt.show()

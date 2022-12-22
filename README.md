@@ -5,7 +5,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * SCFT and L-FTS
 * Arbitrary Acyclic Branched Polymers (**beta**)
 * Arbitrary Mixtures of Block Copolymers, Homopolymers and Random Copolymers (**beta**)
-* AB-Type Polymer Melts (**The Python library itself can compute concentrations of polymers composed of any number of species**)
+* AB-Type Polymer Melts (**The Python library itself can compute concentrations of polymers composed of any number of monomer types**)
 * Conformational Asymmetry
 * Box Size Determination by Stress Calculation (SCFT only)
 * Chain Model: Continuous, Discrete
@@ -59,7 +59,7 @@ conda deactivate
 conda env remove -n lfts  
 ```
 # User Guide
-+ This is not an application but a library for polymer field theory simulations, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. This library can calculate the partition functions and concentrations of any mixtures of any acyclic branched polymers composed of multiple species in given external fields. To learn how to use it, please see `examples/ComputeConcentration.py`. 
++ This is not an application but a library for polymer field theory simulations, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. This library can calculate the partition functions and concentrations of any mixtures of any acyclic branched polymers composed of multiple monomer types in given external fields. To learn how to use it, please see `examples/ComputeConcentration.py`. 
 + The SCFT and L-FTS are implemented on the top of this Python library as Python scripts. Currently, only `AB`-type polymers are supported. To understand the entire process of simulations, please see sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations. If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)
 + Be aware that the unit of length in this library is *aN^(1/2)* for both `Continuous` and `Discrete` chain models, where *a* is a reference statistical segment length and *N* is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. Please refer to [*J. Chem. Phys.* **2014**, 141, 174103]  to learn how to formulate polymer mixtures composed of multiple distinct polymers in the reference polymer length unit.
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.

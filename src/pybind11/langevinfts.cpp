@@ -81,8 +81,8 @@ PYBIND11_MODULE(langevinfts, m)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>>
             ()(&Pseudo::compute_statistics), py::return_value_policy::move)
-        .def("get_species_concentration", overload_cast_<std::string>
-            ()(&Pseudo::get_species_concentration), py::return_value_policy::move)
+        .def("get_monomer_concentration", overload_cast_<std::string>
+            ()(&Pseudo::get_monomer_concentration), py::return_value_policy::move)
         .def("get_polymer_concentration", overload_cast_<int>
             ()(&Pseudo::get_polymer_concentration), py::return_value_policy::move)
         .def("get_total_partition", &Pseudo::get_total_partition)

@@ -60,14 +60,14 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         // create boltz_bond, boltz_bond_half, and exp_dw
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
-            d_boltz_bond     [species] = nullptr;
-            d_boltz_bond_half[species] = nullptr;
-            d_exp_dw         [species] = nullptr;
+            std::string monomer_type = item.first;
+            d_boltz_bond     [monomer_type] = nullptr;
+            d_boltz_bond_half[monomer_type] = nullptr;
+            d_exp_dw         [monomer_type] = nullptr;
 
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [species], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[species], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw         [species], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw         [monomer_type], sizeof(double)*M));
         }
 
         // total partition functions for each polymer
@@ -191,14 +191,14 @@ void CudaPseudoDiscrete::update()
         
         for(const auto& item: mx->get_bond_lengths())
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
 
             get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
             get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
 
-            gpu_error_check(cudaMemcpy(d_boltz_bond     [species], boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_boltz_bond_half[species], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
 
         // for stress calculation: compute_stress()
@@ -229,8 +229,8 @@ void CudaPseudoDiscrete::compute_statistics(
 
         for(const auto& item: mx->get_unique_branches())
         {
-            if( w_block.count(item.second.species) == 0)
-                throw_with_line_number("\"" + item.second.species + "\" species is not in w_block.");
+            if( w_block.count(item.second.monomer_type) == 0)
+                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_block.");
         }
 
         if( q_init.size() > 0)
@@ -240,11 +240,11 @@ void CudaPseudoDiscrete::compute_statistics(
         double exp_dw[M];
         for(const auto& item: w_block)
         {
-            std::string species = item.first;
+            std::string monomer_type = item.first;
             double *w = item.second;
             for(int i=0; i<M; i++)
                 exp_dw[i] = exp(-w[i]*ds);
-            gpu_error_check(cudaMemcpy(d_exp_dw[species], exp_dw, sizeof(double)*M,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_exp_dw[monomer_type], exp_dw, sizeof(double)*M,cudaMemcpyHostToDevice));
         }
 
         double q_uniform[M];
@@ -262,13 +262,13 @@ void CudaPseudoDiscrete::compute_statistics(
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
                 auto& deps = mx->get_unique_branch(key).deps;
-                auto species = mx->get_unique_branch(key).species;
+                auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
                     //* q_init
-                    gpu_error_check(cudaMemcpy(d_unique_partition[key][0], d_exp_dw[species], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(d_unique_partition[key][0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
@@ -294,25 +294,25 @@ void CudaPseudoDiscrete::compute_statistics(
                         int sub_n_segment   = deps[p].second;
 
                         half_bond_step(d_unique_partition[sub_dep][sub_n_segment-1],
-                            d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).species]);
+                            d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
 
                         multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                     }
                     gpu_error_check(cudaMemcpy(d_unique_q_junctions[key], d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
 
                     // add half bond
-                    half_bond_step(d_unique_q_junctions[key], d_unique_partition[key][0], d_boltz_bond_half[species]);
+                    half_bond_step(d_unique_q_junctions[key], d_unique_partition[key][0], d_boltz_bond_half[monomer_type]);
 
                     // add full segment
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_unique_partition[key][0], d_unique_partition[key][0], d_exp_dw[species], 1.0, M);
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_unique_partition[key][0], d_unique_partition[key][0], d_exp_dw[monomer_type], 1.0, M);
                 }
                 else
                 {
                     int n = n_segment_from-1;
                     one_step_1(d_unique_partition[key][n-1],
                                d_unique_partition[key][n],
-                               d_boltz_bond[species],
-                               d_exp_dw[species]);      
+                               d_boltz_bond[monomer_type],
+                               d_exp_dw[monomer_type]);      
 
                 }
             }
@@ -323,14 +323,14 @@ void CudaPseudoDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[0]);
                 int n_segment_from = std::get<1>((*parallel_job)[0]);
                 int n_segment_to = std::get<2>((*parallel_job)[0]);
-                auto species = mx->get_unique_branch(key).species;
+                auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     one_step_1(d_unique_partition[key][n-1],
                             d_unique_partition[key][n],
-                            d_boltz_bond[species],
-                            d_exp_dw[species]);
+                            d_boltz_bond[monomer_type],
+                            d_exp_dw[monomer_type]);
                 }
             }
             else if(parallel_job->size()==2)
@@ -338,12 +338,12 @@ void CudaPseudoDiscrete::compute_statistics(
                 auto& key_1 = std::get<0>((*parallel_job)[0]);
                 int n_segment_from_1 = std::get<1>((*parallel_job)[0]);
                 int n_segment_to_1 = std::get<2>((*parallel_job)[0]);
-                auto species_1 = mx->get_unique_branch(key_1).species;
+                auto species_1 = mx->get_unique_branch(key_1).monomer_type;
 
                 auto& key_2 = std::get<0>((*parallel_job)[1]);
                 int n_segment_from_2 = std::get<1>((*parallel_job)[1]);
                 int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
-                auto species_2 = mx->get_unique_branch(key_2).species;
+                auto species_2 = mx->get_unique_branch(key_2).monomer_type;
 
                 for(int n=0; n<n_segment_to_1-n_segment_from_1; n++)
                 {
@@ -366,8 +366,8 @@ void CudaPseudoDiscrete::compute_statistics(
                 d_unique_phi[key],                     // phi
                 d_unique_partition[std::get<0>(key)],  // dependency v
                 d_unique_partition[std::get<1>(key)],  // dependency u
-                d_exp_dw[item.second.species],          // d_exp_dw
-                std::get<2>(key));                      // n_segment
+                d_exp_dw[item.second.monomer_type],    // d_exp_dw
+                std::get<2>(key));                     // n_segment
         }
 
         // for each distinct polymers 
@@ -383,7 +383,7 @@ void CudaPseudoDiscrete::compute_statistics(
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
                 d_unique_partition[dep_v][n_segment-1],  // q
                 d_unique_partition[dep_u][0],                // q^dagger
-                d_exp_dw[blocks[0].species]);        
+                d_exp_dw[blocks[0].monomer_type]);        
         }
     }
     catch(std::exception& exc)
@@ -514,7 +514,7 @@ double CudaPseudoDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_species_concentration(std::string species, double *phi)
+void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -532,7 +532,7 @@ void CudaPseudoDiscrete::get_species_concentration(std::string species, double *
             std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
             for(int b=0; b<blocks.size(); b++)
             {
-                if (blocks[b].species == species)
+                if (blocks[b].monomer_type == monomer_type)
                 {
                     std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
                     std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -613,7 +613,7 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
             std::string dep_v = std::get<0>(key);
             std::string dep_u = std::get<1>(key);
             const int N       = std::get<2>(key);
-            std::string species = item.second.species;
+            std::string monomer_type = item.second.monomer_type;
 
             double **d_q_1 = d_unique_partition[dep_v];    // dependency v
             double **d_q_2 = d_unique_partition[dep_u];    // dependency u
@@ -637,8 +637,8 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
                         continue;
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_unique_q_junctions[dep_v], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-1],                  sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    bond_length_sq = 0.5*bond_lengths[species]*bond_lengths[species];
-                    d_boltz_bond_now = d_boltz_bond_half[species];
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
                 }
                 // at u  
                 else if (n == N)
@@ -647,16 +647,16 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
                         continue; 
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N-1],                  sizeof(double)*M,cudaMemcpyDeviceToDevice));
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_unique_q_junctions[dep_u], sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    bond_length_sq = 0.5*bond_lengths[species]*bond_lengths[species];
-                    d_boltz_bond_now = d_boltz_bond_half[species];
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
                 }
                 // within the blocks
                 else
                 {
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[n-1],   sizeof(double)*M,cudaMemcpyDeviceToDevice));
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-n-1], sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    bond_length_sq = bond_lengths[species]*bond_lengths[species];
-                    d_boltz_bond_now = d_boltz_bond[species];
+                    bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond[monomer_type];
                 }
 
                 // execute a Forward FFT

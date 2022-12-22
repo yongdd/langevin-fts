@@ -27,9 +27,9 @@ class LFTS:
             platform = avail_platforms[0]
 
         assert(len(params['segment_lengths']) == 2), \
-            "Currently, only AB copolymers are supported."
+            "Currently, only AB-type polymers are supported."
         assert(len(set(["A","B"]).intersection(set(params['segment_lengths'].keys())))==2), \
-            "Use letters 'A' and 'B' for two species."
+            "Use letters 'A' and 'B' for monomer types."
         assert(len(params["distinct_polymers"]) >= 1), \
             "There is no polymer chain."
 
@@ -45,7 +45,7 @@ class LFTS:
         random_count = 0
         for polymer in params["distinct_polymers"]:
             block_length_list = []
-            block_species_list = []
+            block_monomer_type_list = []
             v_list = []
             u_list = []
             A_fraction = 0.0
@@ -54,7 +54,7 @@ class LFTS:
             is_linear = not "v" in polymer["blocks"][0]
             for block in polymer["blocks"]:
                 block_length_list.append(block["length"])
-                block_species_list.append(block["type"])
+                block_monomer_type_list.append(block["type"])
 
                 if is_linear:
                     assert(not "v" in block), \
@@ -86,11 +86,11 @@ class LFTS:
                 np.sqrt(params["segment_lengths"]["A"]**2*total_A_fraction + \
                         params["segment_lengths"]["B"]**2*(1-total_A_fraction))
 
-            if "random" in set(bt.lower() for bt in block_species_list):
+            if "random" in set(bt.lower() for bt in block_monomer_type_list):
                 random_count +=1
                 assert(random_count == 1), \
                     "Only one random copolymer is allowed." 
-                assert(len(block_species_list) == 1), \
+                assert(len(block_monomer_type_list) == 1), \
                     "Only single block random copolymer is allowed."
                 assert(np.isclose(polymer["blocks"][0]["fraction"]["A"]+polymer["blocks"][0]["fraction"]["B"],1.0)), \
                     "The sum of volume fraction of random copolymer must be equal to 1."
@@ -101,7 +101,7 @@ class LFTS:
             else:
                 self.random_copolymer_exist = False
             
-            polymer.update({"block_species":block_species_list})
+            polymer.update({"block_monomer_types":block_monomer_type_list})
             polymer.update({"block_lengths":block_length_list})
             polymer.update({"v":v_list})
             polymer.update({"u":u_list})
@@ -112,8 +112,8 @@ class LFTS:
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
-            # print(polymer["volume_fraction"], polymer["block_species"], polymer["block_lengths"], polymer["v"], polymer["u"])
-            mixture.add_polymer(polymer["volume_fraction"], polymer["block_species"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
+            # print(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"], polymer["u"])
+            mixture.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solvers using Pseudo-spectral method
         pseudo = factory.create_pseudo(cb, mixture)
@@ -152,7 +152,7 @@ class LFTS:
                 (mixture.get_polymer(p).get_volume_fraction(),
                  mixture.get_polymer(p).get_alpha(),
                  mixture.get_polymer(p).get_n_segment_total()))
-            # add display species and lengths
+            # add display monomer types and lengths
 
         print("Invariant Polymerization Index: %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
@@ -263,7 +263,7 @@ class LFTS:
         # reset Anderson mixing module
         self.am.reset_count()
 
-        # concentration of each species
+        # concentration of each monomer
         phi = {}
 
         # saddle point iteration begins here
@@ -274,11 +274,11 @@ class LFTS:
             else:
                 self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
 
-            phi["A"] = self.pseudo.get_species_concentration("A")
-            phi["B"] = self.pseudo.get_species_concentration("B")
+            phi["A"] = self.pseudo.get_monomer_concentration("A")
+            phi["B"] = self.pseudo.get_monomer_concentration("B")
 
             if self.random_copolymer_exist:
-                phi["random"] = self.pseudo.get_species_concentration("random")
+                phi["random"] = self.pseudo.get_monomer_concentration("random")
                 phi["A"] += phi["random"]*self.random_A_fraction
                 phi["B"] += phi["random"]*(1.0-self.random_A_fraction)
 
