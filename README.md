@@ -59,7 +59,7 @@ conda deactivate
 conda env remove -n lfts  
 ```
 # User Guide
-+ This is not an application but a library for polymer field theory simulations, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. This library can calculate the partition functions and concentrations of any mixtures of any acyclic branched polymers composed of multiple monomer types in given external fields. To learn how to use it, please see `examples/ComputeConcentration.py`. 
++ This is not an application but a library for polymer field theory simulations, and you need to write your own program using Python language. It requires a little programming, but this approach provides flexibility and you can easily customize your applications. To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. This library itself can calculate the partition functions and concentrations of any mixtures of any acyclic branched polymers composed of multiple monomer types. To learn how to use it, please see `examples/ComputeConcentration.py`. 
 + The SCFT and L-FTS are implemented on the top of this Python library as Python scripts. Currently, only `AB`-type polymers are supported. To understand the entire process of simulations, please see sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations. If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (One can easily turn on/off deep learning from the scripts.)
 + Be aware that the unit of length in this library is *aN^(1/2)* for both `Continuous` and `Discrete` chain models, where *a* is a reference statistical segment length and *N* is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. Please refer to [*J. Chem. Phys.* **2014**, 141, 174103]  to learn how to formulate polymer mixtures composed of multiple distinct polymers in the reference polymer length unit.
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
@@ -73,9 +73,30 @@ conda env remove -n lfts
 
 #### General Branched Polymers 
   1. Whenever you add a new polymer molecule, `depth first search` is performed to check whether a given polymer graph contains a cycle or isolated points.
-  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, the `dynamic programming` approach of the computer science is adopted. The partial partition functions of simplest side chains are first solved. Using these solutions, then the partial partition functions of more complex branches are calculated. The second step is repeated up to the most complex branches in a bottom-up fashion.
-  3. The duplicated calculations of the sub branches are avoided by uniquely representing the same branches as a unique string key. Branches connected in each block are expressed as a recursively sorted string key.
-  4. In the Python library, all polymers including linear polymers are considered as general branched polymers.
+  2. In order to avoid redundant calculation of the partial partition functions of side chains and branches, a bottom-up `dynamic programming` approach is adopted. The partial partition functions of simplest side chains are first computed. Then, using these solutions, the partial partition functions of more complex branches are calculated. The second step is repeated up to the most complex branches.
+  3. The duplicated calculations of the branches are avoided by uniquely representing the same branches as a unique string key. Sub branches connected in each block are expressed as a recursively sorted string key.  
+     + Example 1: Mixture of short and long A homopolymers with segment numbers of 4 and 6, respectively. It is not necessary to separately compute the partial partition functions of shorter A homopolymer. Thus, the unique keys and corresponding the maximum segment numbers are: 
+        ```Python
+        ["A":6]  # from q["A0"](r) to q["A6"](r) (continuous chain)
+        ```
+     + Example 2: 3-arm star A homopolymer. Each arm is composed of 4 A segments. It is only necessary to compute the partial partition functions for one arm. Braces `( )` indicates the dependencies. 
+        ```Python
+        ["A":4]        # from q["A0"](r) to q["A6"](r)
+        ["(A4A4)A":4]  # from q["(A4A4)A0"](r) to q["(A4A4)A4"](r)
+        ```
+     + Example 3: Mixture of A homopolymers and symmetric ABA triblock copolymers. The A homopolymer is composed of 6 A segments. In the ABA triblock, 4 A, 5 B and 4 A segments are linearly connected.
+        ```Python
+        ["A":6]    
+        ["(A4)B":5]    
+        ["((A4)B5)A":4]  
+        ```
+  5. In the Python library, all polymers including linear polymers are considered as general branched polymers.
+
+#### Scheduling Tasks for the Parallel Computations 
+  1. If one partial partition function is independent of the other partial partition function. They can be computed in parallel. For instance, the partial partition function and the complementary partial partition function of AB diblock copolymers can be computed in parallel. However, the scheduling for a mixture of arbitrary acyclic branched polymers is a complex problem. This library uses a simple `greedy algorithm`. Among the unique keys, find one whose dependencies will be resolved first and put it into a stream (CPU core for CPU version or cuFFT batch for CUDA version) scheduler that will finish the previous computations first. Repeat this process until there are no unique keys left.
+  2. Whenever partial partition function computations of one unique key is finished or new key is inserted, it is necessary to pause the computation, and redistribute the jobs to the streams. The number of active streams can be varying during the computations.
+  3. This approach is heuristic and is not guaranteed to minimize the makespan. As far as I know, scheduling tasks to minimize the makespan is an NP-hard problem.
+  4. The CPU version uses up to 8 and 4 CPUs for the continuous and discrete chain models, respectively. The CUDA version uses batched cuFFT with a maximum batch size of 2.
 
 #### Anderson Mixing  
   It is necessary to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copies.
