@@ -14,7 +14,7 @@ f = 0.36        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
     "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
@@ -29,18 +29,32 @@ params = {
         "A":1.0, 
         "B":1.0,},
 
-    "chi_n": {frozenset(["A","B"]):10},   # Interaction parameter, Flory-Huggins params * N
+    "chi_n": [["A","B",20]],   # Interaction parameter, Flory-Huggins params * N
 
-    "distinct_polymers":[{      # Distinct Polymers
-        "volume_fraction":1.0,  # volume fraction of polymer chain
-        "blocks":[              # AB diBlock Copolymer
+    "distinct_polymers":[
+        {                               # Distinct Polymers
+        "volume_fraction":1.0,          # volume fraction of polymer chain
+        "blocks":[                      # AB diBlock Copolymer
             {"type":"A", "length":f, }, # A-block
             {"type":"B", "length":1-f}, # B-block
-        ],},],
+        ],},
+        {
+        "volume_fraction":0.0,  
+        "blocks":[              # Random Copolymer. Currently, Only single block random copolymer is supported.
+            {"type":"random", "length":0.4, "fraction":{"A":0.4, "B":0.6},},
+        ],},
+        {
+        "volume_fraction":0.0,  
+        "blocks":[              # Random Copolymer.
+            {"type":"random", "length":0.4, "fraction":{"A":0.6, "B":0.4},},
+        ],},
+        ],
         
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
+# Initialize calculation
+calculation = scft.SCFT(params=params)
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
@@ -61,9 +75,6 @@ for i in range(0,params["nx"][0]):
             w_A[i,j,k] = -0.3164*c1 +0.1074*c2
             w_B[i,j,k] =  0.3164*c1 -0.1074*c2
 
-# Initialize calculation
-calculation = scft.SCFT(params=params)
-
 # Set a timer
 time_start = time.time()
 
@@ -75,12 +86,12 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-phi_A, phi_B = calculation.get_concentrations()
-w_A, w_B = calculation.get_fields()
+phi = calculation.get_concentrations()
+w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
         "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w_A, "w_b":w_B, "phi_a":phi_A, "phi_b":phi_B}
+        "w_a":w["A"], "w_b":w["B"], "phi_a":phi["A"], "phi_b":phi["B"]}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring
