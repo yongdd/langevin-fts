@@ -9,8 +9,10 @@ import scft
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
+chi_n = 21
+f = 0.25
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
     "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
@@ -22,25 +24,29 @@ params = {
     "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref. 
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":1.0, 
-        "B":1.5, 
-        "C":1.2, },
+        "A":1.0,
+        "B":1.1,
+        "C":1.2},
 
-    "chi_n": {frozenset(["A","B"]):10,   # Interaction parameter, Flory-Huggins params * N
-              frozenset(["A","C"]):10,     
-              frozenset(["B","C"]):10},     
+    "chi_n": [["A","B",chi_n],   # Interaction parameter, Flory-Huggins params * N
+              ["A","C",chi_n],
+              ["B","C",chi_n],
+             ],
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
-        "blocks":[              # AB diBlock Copolymer
-            {"type":"A", "length":0.4, }, # A-block
-            {"type":"B", "length":0.3}, # B-block
-            {"type":"C", "length":0.2}, # B-block
+        "blocks":[              # ABC triblock Copolymer
+            {"type":"A", "length":f, },     # A-block
+            {"type":"B", "length":1-2*f},   # B-block
+            {"type":"C", "length":f},       # C-block
         ],},],
         
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
+
+# Initialize calculation
+calculation = scft.SCFT(params=params)
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
@@ -60,10 +66,11 @@ for i in range(0,params["nx"][0]):
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
             idx = i*params["nx"][1]*params["nx"][2] + j*params["nx"][2] + k
             w_A[i,j,k] = -0.3164*c1 +0.1074*c2
-            w_B[i,j,k] =  0.3164*c1 -0.1074*c2
+            w_C[i,j,k] =  0.3164*c1 -0.1074*c2
 
-# Initialize calculation
-calculation = scft.SCFT(params=params)
+# w_A = np.zeros(list(params["nx"]), dtype=np.float64)
+# w_B = np.zeros(list(params["nx"]), dtype=np.float64)
+# w_C = np.zeros(list(params["nx"]), dtype=np.float64)
 
 # Set a timer
 time_start = time.time()
@@ -80,14 +87,15 @@ phi = calculation.get_concentrations()
 w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
-        "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w_A, "w_b":w_B, "w_c":w_C, "phi_a":phi["A"], "phi_b":phi["B"], "phi_c":phi["C"]}
+        "chi_n":params["chi_n"], "chain_model":params["chain_model"],
+        "w_a":w["A"], "w_b":w["B"], "w_c":w["C"], "phi_a":phi["A"], "phi_b":phi["B"], "phi_c":phi["C"]}
 savemat("fields.mat", mdic)
 
+print(phi["A"])
+
 # Recording first a few iteration results for debugging and refactoring
-    #    1   -1.221E-14  [ 3.6339314E+01  ]    -0.005550595   1.4461834E+00  [  3.3000000, 3.3000000, 3.3000000 ]
-    #    2   -4.996E-15  [ 3.6372091E+01  ]    -0.005274676   1.0820525E+00  [  3.3000217, 3.3000217, 3.3000217 ]
-    #    3   -4.108E-15  [ 3.6428830E+01  ]    -0.005598893   8.8631868E-01  [  3.3000287, 3.3000287, 3.3000287 ]
-    #    4   -9.659E-15  [ 3.6501158E+01  ]    -0.006242039   7.8458220E-01  [  3.3000282, 3.3000282, 3.3000282 ]
-    #    5   -1.221E-15  [ 3.6586928E+01  ]    -0.007097169   7.3186726E-01  [  3.3000234, 3.3000234, 3.3000234 ]
-    
+    #    1    5.551E-17  [ 3.6174136E+01  ]     6.573449234   4.1304847E+00  [  3.3000000, 3.3000000, 3.3000000 ]
+    #    2   -5.107E-15  [ 3.6096529E+01  ]     6.563719988   3.2789176E-01  [  3.3000012, 3.3000012, 3.3000012 ]
+    #    3    4.940E-15  [ 3.6089226E+01  ]     6.564058652   2.7369175E-01  [  3.2999732, 3.2999732, 3.2999732 ]
+    #    4    1.615E-14  [ 3.6080571E+01  ]     6.564000530   2.7421913E-01  [  3.2999472, 3.2999472, 3.2999472 ]
+    #    5    7.772E-15  [ 3.6072521E+01  ]     6.563917607   2.7325569E-01  [  3.2999237, 3.2999237, 3.2999237 ]

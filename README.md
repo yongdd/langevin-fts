@@ -30,7 +30,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * * *
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
-# Compiling
+# Installation
 ```Shell
 # Create virtual environment 
 conda create -n lfts python=3.9 cmake=3.19 make conda \

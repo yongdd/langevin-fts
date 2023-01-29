@@ -10,3 +10,5 @@ temp
 data_simulation*
 fields*.mat
 structure_function*.mat
+examples/scft/*.m
+examples/fts/*.m

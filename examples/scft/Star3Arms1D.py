@@ -31,7 +31,7 @@ params = {
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
-        "blocks":[              # AB diBlock Copolymer
+        "blocks":[              # 3-arm star-shaped AB Copolymer
             {"type":"A", "length":f,   "v":0, "u":1},    # A-block
             {"type":"A", "length":f,   "v":0, "u":2},    # A-block
             {"type":"A", "length":f,   "v":0, "u":3},    # A-block

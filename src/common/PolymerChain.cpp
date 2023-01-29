@@ -30,11 +30,11 @@ PolymerChain::PolymerChain(
         throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
             ") and edges u (" +std::to_string(v.size()) + ") must be consistent.");
 
-    // check the name of monomer_type. Only alphabetic strings are allowed.
+    // check the name of monomer_type. Only alphabets and underscore(_) are allowed.
     for(const auto& item : bond_lengths)
     {
-        if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isalpha(c); }))
-            throw_with_line_number("\"" + item.first + "\" is an invalid monomer_type name. Only alphabetic strings are allowed.");
+        if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isalpha(c) || c=='_' ; }))
+            throw_with_line_number("\"" + item.first + "\" is an invalid monomer_type name. Only alphabets and underscore(_) are allowed.");
         
         if (item.second <= 0)
             throw_with_line_number("bond_lengths[\"" + item.first + "\"] must be a positive number.");
