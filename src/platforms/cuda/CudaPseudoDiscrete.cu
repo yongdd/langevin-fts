@@ -285,7 +285,7 @@ void CudaPseudoDiscrete::compute_statistics(
                     // -, |    : half bonds
                     // A, B, C : other full segments
 
-                                        // combine branches
+                    // combine branches
                     gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M,cudaMemcpyHostToDevice));
 
                     for(int p=0; p<deps.size(); p++)
@@ -523,7 +523,7 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
 
         const int M = cb->get_n_grid();
         // initialize to zero
-        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 0.0, d_phi, M);
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         // for each distinct polymers 
         for(int p=0; p<mx->get_n_polymers(); p++)

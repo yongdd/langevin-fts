@@ -544,7 +544,7 @@ void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, d
 
         const int M = cb->get_n_grid();
         // initialize to zero
-        lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 0.0, d_phi, M);
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         // for each distinct polymers 
         for(int p=0; p<mx->get_n_polymers(); p++)
