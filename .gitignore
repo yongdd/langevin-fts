@@ -12,3 +12,5 @@ fields*.mat
 structure_function*.mat
 examples/scft/*.m
 examples/fts/*.m
+examples/scft/Test*
+examples/fts/Test*
