@@ -156,7 +156,7 @@ class SCFT:
 
         for p in range(mixture.get_n_polymers()):
             print("distinct_polymers[%d]:" % (p) )
-            print("    volume fraction: %f, alpha: %f, N: %d" %
+            print("\tvolume fraction: %f, alpha: %f, N_total: %d" %
                 (mixture.get_polymer(p).get_volume_fraction(),
                  mixture.get_polymer(p).get_alpha(),
                  mixture.get_polymer(p).get_n_segment_total()))
