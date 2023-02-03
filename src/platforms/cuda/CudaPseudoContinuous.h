@@ -45,8 +45,8 @@ private:
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 2; // the number of job threads
 
-    // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
-    std::map<std::tuple<std::string, std::string, int>, double *> d_unique_phi;
+    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
+    std::map<std::tuple<int, std::string, std::string, int>, double *> d_unique_phi;
 
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond

@@ -57,8 +57,8 @@ private:
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 2; // the number of job threads
 
-    // key: (dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<std::string, std::string, int>, double *> d_unique_phi;
+    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
+    std::map<std::tuple<int, std::string, std::string, int>, double *> d_unique_phi;
 
 
     // key: (dep), value: array pointer

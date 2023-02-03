@@ -17,7 +17,7 @@ params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[3.8891334,,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
