@@ -9,21 +9,21 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.36       # A-fraction of major BCP chain, f
+f = 0.2         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
+    "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[64,64,64],        # Simulation grid numbers
-    "lx":[7.15,7.15,7.15],  # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "nx":[32,32,32],        # Simulation grid numbers
+    "lx":[2.9,2.9,2.9],     # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                             # where "a_Ref" is reference statistical segment length
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": 10.0,                # Interaction parameter, Flory-Huggins params * N
+    "ds":1/10,                   # Contour step interval, which is equal to 1/N_Ref.
+    "chi_n": 15.0,                # Interaction parameter, Flory-Huggins params * N
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
@@ -33,33 +33,31 @@ params = {
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # 9-arm star-shaped AB Copolymer
             {"type":"A", "length":f,   "v":0, "u":1},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":2},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":3},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":4},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":5},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":6},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":7},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":8},    # A-block
-            {"type":"A", "length":f,   "v":0, "u":9},    # A-block
-            {"type":"B", "length":1-f, "v":1, "u":10},    # B-block
-            {"type":"B", "length":1-f, "v":2, "u":11},    # B-block
-            {"type":"B", "length":1-f, "v":3, "u":12},    # B-block
-            {"type":"B", "length":1-f, "v":4, "u":13},    # B-block
-            {"type":"B", "length":1-f, "v":5, "u":14},    # B-block
-            {"type":"B", "length":1-f, "v":6, "u":15},    # B-block
-            {"type":"B", "length":1-f, "v":7, "u":16},    # B-block
-            {"type":"B", "length":1-f, "v":8, "u":17},    # B-block
-            {"type":"B", "length":1-f, "v":9, "u":18},    # B-block
+            {"type":"A", "length":f,   "v":1, "u":2},    # A-block
+            {"type":"A", "length":f,   "v":2, "u":3},    # A-block
+            {"type":"A", "length":f,   "v":3, "u":4},    # A-block
+            {"type":"A", "length":f,   "v":4, "u":5},    # A-block
+
+            {"type":"B", "length":(1-f)/2, "v":1, "u":6},    # B-block
+            {"type":"B", "length":1-f, "v":2, "u":7},    # B-block
+            {"type":"B", "length":(1-f)/2, "v":3, "u":8},    # B-block
+            {"type":"B", "length":(1-f)/4, "v":4, "u":9},    # B-block
+
+            {"type":"B", "length":1-f, "v":6, "u":10},    # B-block
+            {"type":"B", "length":1-f, "v":7, "u":12},    # B-block
+
+            {"type":"A", "length":f, "v":6, "u":11},    # B-block
+            {"type":"A", "length":f, "v":7, "u":13},    # B-block
         ],},],
 
     "max_iter":2000,      # The maximum relaxation iterations
     "tolerance":1e-8,     # Terminate iteration if the self-consistency error is less than tolerance
 
     "am":{
-        "max_hist":60,            # Maximum number of history
-        "start_error":1e-2,       # When switch to AM from simple mixing
-        "mix_min":0.02,           # Minimum mixing rate of simple mixing
-        "mix_init":0.02,          # Initial mixing rate of simple mixing
+        "max_hist":60,           # Maximum number of history
+        "start_error":1e-2,      # When switch to AM from simple mixing
+        "mix_min":0.02,          # Minimum mixing rate of simple mixing
+        "mix_init":0.02,         # Initial mixing rate of simple mixing
     },
 }
 
@@ -69,11 +67,11 @@ w_B = np.zeros(list(params["nx"]), dtype=np.float64)
 print("w_A and w_B are initialized to Gyroid phase.")
 # [Ref: https://pubs.acs.org/doi/pdf/10.1021/ma951138i]
 for i in range(0,params["nx"][0]):
-    xx = 2*(i+1)*2*np.pi/params["nx"][0]
+    xx = (i+1)*2*np.pi/params["nx"][0]
     for j in range(0,params["nx"][1]):
-        yy = 2*(j+1)*2*np.pi/params["nx"][1]
+        yy = (j+1)*2*np.pi/params["nx"][1]
         for k in range(0,params["nx"][2]):
-            zz = 2*(k+1)*2*np.pi/params["nx"][2]
+            zz = (k+1)*2*np.pi/params["nx"][2]
             c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
                 np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
@@ -105,9 +103,9 @@ mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring
-    # 1   -4.785E-14  [ 4.3410478E+02  ]    -0.007941056   1.2529953E+00  [  7.1500000, 7.1500000, 7.1500000 ]
-    # 2    1.181E-13  [ 4.3461046E+02  ]    -0.007739723   1.1394238E+00  [  7.1499870, 7.1499870, 7.1499870 ]
-    # 3   -2.365E-14  [ 4.3545002E+02  ]    -0.007620777   1.0431815E+00  [  7.1499733, 7.1499733, 7.1499733 ]
-    # 4   -1.384E-13  [ 4.3656219E+02  ]    -0.007567283   9.6203651E-01  [  7.1499591, 7.1499591, 7.1499591 ]
-    # 5    7.438E-14  [ 4.3790021E+02  ]    -0.007566018   8.9394663E-01  [  7.1499446, 7.1499446, 7.1499446 ]
-    # 6    2.487E-14  [ 4.3942870E+02  ]    -0.007606686   8.3706206E-01  [  7.1499296, 7.1499296, 7.1499296 ]
+    # 1    3.553E-15  [ 2.5612154E+01  ]    -0.002751834   1.1477009E+00  [  2.9000000, 2.9000000, 2.9000000 ]
+    # 2   -1.199E-14  [ 2.5579319E+01  ]    -0.002374078   1.0665875E+00  [  2.9000198, 2.9000198, 2.9000198 ]
+    # 3    7.327E-15  [ 2.5551103E+01  ]    -0.002039748   9.9023430E-01  [  2.9000380, 2.9000380, 2.9000380 ]
+    # 4    2.132E-14  [ 2.5526964E+01  ]    -0.001744373   9.1850175E-01  [  2.9000550, 2.9000550, 2.9000550 ]
+    # 5    3.109E-15  [ 2.5506412E+01  ]    -0.001483872   8.5122439E-01  [  2.9000707, 2.9000707, 2.9000707 ]
+    # 6    6.217E-15  [ 2.5489005E+01  ]    -0.001254531   7.8821910E-01  [  2.9000854, 2.9000854, 2.9000854 ]

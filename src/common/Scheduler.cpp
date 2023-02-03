@@ -39,7 +39,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
                 Key_resolved_time.push_back(std::make_tuple(key, max_resolved_time));
             }
 
-            // sort branches with dependencies resolved time
+            // sort branches on the basis of resolved time
             std::sort(Key_resolved_time.begin(), Key_resolved_time.end(),
                 [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
             );
