@@ -162,8 +162,8 @@ class SCFT:
                  mixture.get_polymer(p).get_n_segment_total()))
             # add display monomer types and lengths
 
-        mixture.display_unique_branches()
         mixture.display_unique_blocks()
+        mixture.display_unique_branches()
 
         #  Save Internal Variables
         self.chi_n = params["chi_n"]

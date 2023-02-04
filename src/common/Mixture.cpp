@@ -98,28 +98,14 @@ void Mixture::add_polymer(
         else
         {
             unique_blocks_one_polymer[key].v_u.push_back(std::make_tuple(v,u));
-            
             unique_blocks[key].v_u.push_back(std::make_tuple(v,u));
         }
-    }
 
-    // insert to unique_block_count_one_polymer
-    for(auto& item : unique_blocks_one_polymer)
-    {
-        std::string dep_v = std::get<1>(item.first);
-        std::string dep_u = std::get<2>(item.first);
-        // if (dep_v < dep_u)
-        //     dep_v.swap(dep_u);
-        
-        // auto block_key = std::make_tuple(distinct_polymers.size()-1, dep_v, dep_u, item.second.monomer_type);
         auto key1 = std::make_tuple(distinct_polymers.size()-1, dep_v);
-        auto key2 = std::make_tuple(std::get<3>(item.first), dep_u);
-        // unique_block_count_one_polymer[key].push_back(std::make_tuple(std::get<3>(item.first), dep_u, item.second.v_u));
-
-        unique_block_count_one_polymer[key1][key2] = item.second.v_u;
-        unique_block_superposition_one_polymer[key1] = {};
+        auto key2 = std::make_tuple(blocks[b].n_segment, dep_u);
+        unique_block_count_one_polymer[key1][key2].push_back(std::make_tuple(v,u));
     }
-
+    
     // // sort vectors with n_segment (descending) and keys (ascending)
     // for(auto& item : unique_block_count_one_polymer)
     // {
@@ -533,11 +519,11 @@ int Mixture::get_unique_n_branches() const
 {
     return unique_branches.size();
 }
-std::vector<std::pair<std::string, int>> Mixture::key_to_deps(std::string key)
+std::vector<std::tuple<std::string, int, int>> Mixture::key_to_deps(std::string key)
 {
     std::stack<int> s;
 
-    std::vector<std::pair<std::string, int>> sub_deps;
+    std::vector<std::tuple<std::string, int, int>> sub_deps;
     int sub_n_segment;
     std::string sub_key;
 
@@ -556,7 +542,7 @@ std::vector<std::pair<std::string, int>> Mixture::key_to_deps(std::string key)
         {
             sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
             //std::cout << sub_key << ": " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-            sub_deps.push_back(std::make_pair(sub_key, sub_n_segment));
+            sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
             is_finding_key = true;
             key_start = i;
         }

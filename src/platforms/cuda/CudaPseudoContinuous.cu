@@ -266,10 +266,10 @@ void CudaPseudoContinuous::compute_statistics(
                     gpu_error_check(cudaMemcpy(d_unique_partition[key][0], q_uniform,
                         sizeof(double)*M, cudaMemcpyHostToDevice));
 
-                    for(int p=0; p<deps.size(); p++)
+                    for(int d=0; d<deps.size(); d++)
                     {
-                        std::string sub_dep = deps[p].first;
-                        int sub_n_segment   = deps[p].second;
+                        std::string sub_dep = std::get<0>(deps[d]);
+                        int sub_n_segment   = std::get<1>(deps[d]);
 
                         // if (!unique_partition_finished[sub_dep][sub_n_segment])
                         //     std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
@@ -583,7 +583,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
         const int M = cb->get_n_grid();
         const int P = mx->get_n_polymers();
 
-        if (p < 0 || P > P-1)
+        if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
         PolymerChain& pc = mx->get_polymer(p);

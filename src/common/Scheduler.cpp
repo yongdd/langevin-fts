@@ -28,8 +28,8 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
                 int max_resolved_time = 0;
                 for(int j=0; j<unique_branches[key].deps.size(); j++)
                 {
-                    const auto& sub_key = unique_branches[key].deps[j].first;
-                    const auto& sub_n_segment = unique_branches[key].deps[j].second;
+                    const auto& sub_key = std::get<0>(unique_branches[key].deps[j]);
+                    const auto& sub_n_segment = std::get<1>(unique_branches[key].deps[j]);
                     assert(stream_start_finish.count(sub_key) == 0 && "Could not find [" + sub_key + "] in stream_start_finish.");
                     int sub_resolved_time = std::get<1>(stream_start_finish[sub_key]) + sub_n_segment;
                     if (max_resolved_time == 0 || max_resolved_time < sub_resolved_time)

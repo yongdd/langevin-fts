@@ -85,14 +85,14 @@ int main()
                 yy = (j+1)*2*PI/nx[1];
                 for(int k=0; k<nx[2]; k++)
                 {
-                        zz = (k+1)*2*PI/nx[2];
-                        c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
-                            cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
-                        c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
-                            cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
-                        idx = i*nx[1]*nx[2] + j*nx[2] + k;
-                        w[idx] = -0.3164*c1 +0.1074*c2;
-                        w[idx+M] = 0.3164*c1 -0.1074*c2;
+                    zz = (k+1)*2*PI/nx[2];
+                    c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
+                        cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
+                    c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
+                        cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
+                    idx = i*nx[1]*nx[2] + j*nx[2] + k;
+                    w[idx] = -0.3164*c1 +0.1074*c2;
+                    w[idx+M] = 0.3164*c1 -0.1074*c2;
                 }
             }
         }

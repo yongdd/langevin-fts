@@ -173,8 +173,8 @@ int main()
 
         Mixture* mx = new Mixture("Discrete", 1.0/NN, bond_lengths);
         mx->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx->display_unique_branches();
         mx->display_unique_blocks();
+        mx->display_unique_branches();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL

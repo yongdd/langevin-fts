@@ -191,8 +191,8 @@ void CpuPseudoDiscrete::compute_statistics(
                         q_junction[i] = 1.0;
                     for(int d=0; d<deps.size(); d++)
                     {
-                        std::string sub_dep = deps[d].first;
-                        int sub_n_segment   = deps[d].second;
+                        std::string sub_dep = std::get<0>(deps[d]);
+                        int sub_n_segment   = std::get<1>(deps[d]);
                         double q_half_step[M];
 
                         if (!unique_partition_finished[sub_dep][sub_n_segment-1])
@@ -250,7 +250,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<1>(key)],  // dependency v
                 unique_partition[std::get<2>(key)],  // dependency u
-                exp_dw[item->second.monomer_type],      // exp_dw
+                exp_dw[item->second.monomer_type],   // exp_dw
                 std::get<3>(key));                   // n_segment
         }
 

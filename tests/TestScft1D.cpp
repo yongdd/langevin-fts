@@ -91,8 +91,8 @@ int main()
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-            mx->display_unique_branches();
             mx->display_unique_blocks();
+            mx->display_unique_branches();
 
             //-------------- allocate array ------------
             w       = new double[cb->get_n_grid()*2];
@@ -223,7 +223,7 @@ int main()
             delete am;
             delete factory;
 
-            if (!std::isfinite(error_level) || std::abs(error_level-0.018598348) > 1e-7)
+            if (!std::isfinite(error_level) || std::abs(error_level-0.018584567) > 1e-7)
                 return -1;
         }
         return 0;

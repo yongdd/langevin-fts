@@ -158,8 +158,8 @@ class LFTS:
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
-        mixture.display_unique_branches()
         mixture.display_unique_blocks()
+        mixture.display_unique_branches()
 
         #  Save Internal Variables
         self.params = params

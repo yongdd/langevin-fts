@@ -164,10 +164,10 @@ void CpuPseudoContinuous::compute_statistics(
                 {
                     for(int i=0; i<M; i++)
                         unique_partition[key][i] = 1.0;
-                    for(int p=0; p<deps.size(); p++)
+                    for(int d=0; d<deps.size(); d++)
                     {
-                        std::string sub_dep = deps[p].first;
-                        int sub_n_segment   = deps[p].second;
+                        std::string sub_dep = std::get<0>(deps[d]);
+                        int sub_n_segment   = std::get<1>(deps[d]);
 
                         if (!unique_partition_finished[sub_dep][sub_n_segment])
                             std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
@@ -209,7 +209,7 @@ void CpuPseudoContinuous::compute_statistics(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<1>(key)],  // dependency v
                 unique_partition[std::get<2>(key)],  // dependency u
-                std::get<3>(key));                   // n_segment
+                std::get<3>(key));                    // n_segment
         }
 
         // for each distinct polymers
