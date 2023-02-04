@@ -210,8 +210,8 @@ int main()
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
 
-        mx->display_unique_branches();
         mx->display_unique_blocks();
+        mx->display_unique_branches();
 
         // for(int k=0; k<KK; k++)
         // {

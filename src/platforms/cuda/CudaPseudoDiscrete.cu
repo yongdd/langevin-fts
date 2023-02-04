@@ -288,10 +288,10 @@ void CudaPseudoDiscrete::compute_statistics(
                     // combine branches
                     gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M,cudaMemcpyHostToDevice));
 
-                    for(int p=0; p<deps.size(); p++)
+                    for(int d=0; d<deps.size(); d++)
                     {
-                        std::string sub_dep = deps[p].first;
-                        int sub_n_segment   = deps[p].second;
+                        std::string sub_dep = std::get<0>(deps[d]);
+                        int sub_n_segment   = std::get<1>(deps[d]);
 
                         half_bond_step(d_unique_partition[sub_dep][sub_n_segment-1],
                             d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);

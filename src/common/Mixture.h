@@ -12,10 +12,10 @@
 #include "PolymerChain.h"
 
 struct UniqueEdge{
-    int max_n_segment;                                  // the maximum segment number
-    std::string monomer_type;                           // monomer_type
-    std::vector<std::pair<std::string, int>> deps;      // dependency pairs
-    int height;                                         // height of branch (height of tree data Structure)
+    int max_n_segment;                                    // the maximum segment number
+    std::string monomer_type;                             // monomer_type
+    std::vector<std::tuple<std::string, int, int>> deps;  // tuple <key, n_segment, n_repeated>
+    int height;                                           // height of branch (height of tree data Structure)
 };
 struct UniqueBlock{
     std::string monomer_type;  // monomer_type
@@ -45,8 +45,6 @@ private:
     // set{key: (polymer id, dep_v), std::vector(dep_v, n_segment, n_repeated)}
     std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>>> unique_block_superposition;
 
-    // std::map<std::tuple<int, std::string>, std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>>> unique_block_superposition2;
-
     // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
     std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches_superposition; 
 
@@ -62,12 +60,6 @@ private:
     // superpose branches
     std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
 
-    // find superposition dependency and replace it
-    // For instance)
-    // if '[(((A2B4)A2B8)A2((A2B8)B4A2)A2)B4:1,(((A2B4)A2B8)A2(A2B8)B8)A2A2:1]B, 4' exists in unique_branches_superposition
-    // and  'dep_u_superposition' is '[((((A2B4)A2B8)A2(A2B8)B8)A2A2)B4B8:1,((((A2B8)B4A2)A2(A2B8)B8)A2B8)A2B4:1,(((A2B4)A2B8)A2((A2B8)B4A2)A2)B8B8:1,(((A2B4)A2B8)A2(A2B8)B8)A2(A2B8)B4:1]A, 2',
-    // then 'dep_u_superposition' is replaced by '[[(((A2B4)A2B8)A2((A2B8)B4A2)A2)B4:1,(((A2B4)A2B8)A2(A2B8)B8)A2A2:1]B4B8:1,((((A2B8)B4A2)A2(A2B8)B8)A2B8)A2B4:1,(((A2B4)A2B8)A2(A2B8)B8)A2(A2B8)B4:1]A, 2'
-    // std::string find_superposition_dependency_and_replace(std::map<std::string, UniqueEdge, std::greater<std::string>>& unique_branches_superposition, std::string dep_u_superposition);
 public:
 
     Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
@@ -89,7 +81,7 @@ public:
 
     // get information of Unique sub graphs
     int get_unique_n_branches() const;
-    static std::vector<std::pair<std::string, int>> key_to_deps(std::string key);
+    static std::vector<std::tuple<std::string, int, int>> key_to_deps(std::string key);
     static std::string key_minus_species(std::string key);
     static std::string key_to_species(std::string key);
     static int key_to_height(std::string key);

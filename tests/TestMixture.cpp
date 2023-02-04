@@ -15,9 +15,13 @@ int main()
             {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13},
             {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18}, {});
 
+        // display all blocks and branches
+        mx.display_unique_blocks();
+        mx.display_unique_branches();
+
         // test key_to_deps
         std::string key;
-        std::vector<std::pair<std::string, int>> sub_deps;
+        std::vector<std::tuple<std::string, int, int>> sub_deps;
         // sub_deps: []
         key = "B";
         sub_deps = Mixture::key_to_deps(key);
@@ -29,9 +33,9 @@ int main()
         // sub_deps: [A:12, B:12]
         key = "(A12B12)A";
         sub_deps = Mixture::key_to_deps(key);
-        if(sub_deps[0].first != "A" || sub_deps[0].second != 12)
+        if(std::get<0>(sub_deps[0]) != "A" || std::get<1>(sub_deps[0]) != 12)
             return -1;
-        if(sub_deps[1].first != "B" || sub_deps[1].second != 12)
+        if(std::get<0>(sub_deps[1]) != "B" || std::get<1>(sub_deps[1]) != 12)
             return -1;
         if(Mixture::key_to_species(key) != "A")
             return -1;
@@ -39,11 +43,11 @@ int main()
         // sub_deps: [(A12)B:12, (B12)A:9, (B12)B:12]
         key = "((A12)B12(B12)A9(B12)B12)A";
         sub_deps = Mixture::key_to_deps(key);
-        if(sub_deps[0].first != "(A12)B" || sub_deps[0].second != 12)
+        if(std::get<0>(sub_deps[0]) != "(A12)B" || std::get<1>(sub_deps[0]) != 12)
             return -1;
-        if(sub_deps[1].first != "(B12)A" || sub_deps[1].second != 9)
+        if(std::get<0>(sub_deps[1]) != "(B12)A" || std::get<1>(sub_deps[1]) != 9)
             return -1;
-       if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
+       if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
         if(Mixture::key_to_species(key) != "A")
             return -1;
@@ -51,11 +55,11 @@ int main()
         // sub_deps: [(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A:12, (A12)B:12, (B12)B:12]}
         key = "((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A";
         sub_deps = Mixture::key_to_deps(key);
-        if(sub_deps[0].first != "(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A" || sub_deps[0].second != 12)
+        if(std::get<0>(sub_deps[0]) != "(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A" || std::get<1>(sub_deps[0]) != 12)
             return -1;
-        if(sub_deps[1].first != "(A12)B" || sub_deps[1].second != 12)
+        if(std::get<0>(sub_deps[1]) != "(A12)B" || std::get<1>(sub_deps[1]) != 12)
             return -1;
-        if(sub_deps[2].first != "(B12)B" || sub_deps[2].second != 12)
+        if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
         if(Mixture::key_to_species(key) != "A")
             return -1;
@@ -68,7 +72,7 @@ int main()
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
             sub_deps = Mixture::key_to_deps(item.first);
             for(int i=0; i<sub_deps.size(); i++)
-                std::cout << sub_deps[i].first << ":" << sub_deps[i].second << ", " ;
+                std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
             std::cout << "]}" << std::endl;
         }
 

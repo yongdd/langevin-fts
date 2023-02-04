@@ -14,3 +14,4 @@
 25. Save the intermediate partial partition functions for Stress calculation in PseudoDiscrete: unique_q_junction
 26. Cleanup class Mixture
 27. Syntax check of Keys in Mixture 
+28. Simplify Syntax for superposition key

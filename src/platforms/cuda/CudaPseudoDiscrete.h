@@ -60,7 +60,6 @@ private:
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string, int>, double *> d_unique_phi;
 
-
     // key: (dep), value: array pointer
     std::map<std::string, double*> d_unique_q_junctions;
     
