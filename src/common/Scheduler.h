@@ -17,7 +17,7 @@ class Scheduler
 private:
 
     // variables
-    std::map<std::string, std::tuple<int, int, int>, std::greater<std::string>> stream_start_finish; //stream_number, starting time, finishing time
+    std::map<std::string, std::tuple<int, int, int>, CompareBranchKey> stream_start_finish; //stream_number, starting time, finishing time
     std::map<std::string, int> resolved_time; // when dependencies are resolved
     std::vector<std::tuple<std::string, int>> sorted_branch_start_time;  // start time for each branch
     std::vector<int> time_stamp; // times that new jobs are joined or jobs are finished.
@@ -25,12 +25,12 @@ private:
 
     // methods
     std::vector<std::vector<std::string>> make_branch_hierarchies(
-        std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches);
+        std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches);
 public:
 
-    Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches, const int N_STREAM);
+    Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches, const int N_STREAM);
     ~Scheduler() {};
     std::vector<std::vector<std::tuple<std::string, int, int>>>& get_schedule();
-    void display(std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches);
+    void display(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches);
 };
 #endif

@@ -65,7 +65,7 @@ int main()
             return -1;
 
         // print unique sub branches
-        std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches = mx.get_unique_branches();
+        std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches = mx.get_unique_branches();
         for(const auto& item : unique_branches)
         {
             std::cout << item.first << ":\n\t";

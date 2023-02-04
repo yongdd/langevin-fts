@@ -8,7 +8,7 @@
 
 #include "Scheduler.h"
 
-Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches, const int N_STREAM)
+Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches, const int N_STREAM)
 {
     try
     {
@@ -156,7 +156,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, std::greater<std::string>
     }
 }
 std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
-    std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches)
+    std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches)
 {
     try
     {
@@ -193,7 +193,7 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 {
     return schedule;
 }
-void Scheduler::display(std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches)
+void Scheduler::display(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches)
 {
     for(int i=0; i<sorted_branch_start_time.size(); i++)
     {
