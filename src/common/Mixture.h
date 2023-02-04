@@ -10,6 +10,7 @@
 #include <map>
 
 #include "PolymerChain.h"
+#include "CompareBranchKey.h"
 
 struct UniqueEdge{
     int max_n_segment;                                    // the maximum segment number
@@ -29,6 +30,7 @@ private:
     std::string model_name; // "Continuous": continuous standard Gaussian model
                             // "Discrete": discrete bead-spring model
     double ds;              // contour step interval
+    bool using_superposition; // compute multiple partial partition functions using proporty of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
@@ -36,17 +38,17 @@ private:
     // distinct_polymers
     std::vector<PolymerChain> distinct_polymers;
 
-    // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
-    std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches; 
-
     // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
     std::map<std::tuple<int, std::string, std::string, int>, UniqueBlock> unique_blocks; 
 
-    // set{key: (polymer id, dep_v), std::vector(dep_v, n_segment, n_repeated)}
-    std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>>> unique_block_superposition;
+    // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
+    std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches; 
+
+    // set{key: (polymer id, dep_v), std::map((dep_v, n_segment), v_u)}
+    std::map<std::tuple<int, std::string>, std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>> >> unique_blocks_superposition;
 
     // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
-    std::map<std::string, UniqueEdge, std::greater<std::string>> unique_branches_superposition; 
+    std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches_superposition; 
 
     // get sub-branch information as ordered texts
     std::pair<std::string, int> get_text_of_ordered_branches(
@@ -54,8 +56,9 @@ private:
         std::map<int, std::vector<int>> adjacent_nodes,
         std::map<std::pair<int, int>, int> edge_to_array,
         int in_node, int out_node);
+
     // add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
-    void add_unique_branch(std::map<std::string, UniqueEdge, std::greater<std::string>>& unique_branches_superposition, std::string key, int new_n_segment);
+    void add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment);
 
     // superpose branches
     std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
@@ -86,7 +89,7 @@ public:
     static std::string key_to_species(std::string key);
     static int key_to_height(std::string key);
 
-    std::map<std::string, UniqueEdge, std::greater<std::string>>& get_unique_branches(); 
+    std::map<std::string, UniqueEdge, CompareBranchKey>& get_unique_branches(); 
     UniqueEdge& get_unique_branch(std::string key);
     std::map<std::tuple<int, std::string, std::string, int>, UniqueBlock>& get_unique_blocks(); 
     UniqueBlock& get_unique_block(std::tuple<int, std::string, std::string, int> key);
