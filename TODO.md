@@ -15,3 +15,4 @@
 26. Cleanup class Mixture
 27. Syntax check of Keys in Mixture 
 28. Simplify Syntax for superposition key
+29. Superposition for the continous chain

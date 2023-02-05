@@ -86,7 +86,7 @@ public:
     void update() override;
     void compute_statistics(
         std::map<std::string, double*> q_init,
-        std::map<std::string, double*> w_block) override;
+        std::map<std::string, double*> w_input) override;
     double get_total_partition(int polymer) override;
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;

@@ -202,7 +202,7 @@ void CudaPseudoContinuous::update()
 }
 void CudaPseudoContinuous::compute_statistics(
     std::map<std::string, double*> q_init,
-    std::map<std::string, double*> w_block)
+    std::map<std::string, double*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -213,8 +213,8 @@ void CudaPseudoContinuous::compute_statistics(
 
         for(const auto& item: mx->get_unique_branches())
         {
-            if( w_block.count(item.second.monomer_type) == 0)
-                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_block.");
+            if( w_input.count(item.second.monomer_type) == 0)
+                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_input.");
         }
 
         if( q_init.size() > 0)
@@ -223,7 +223,7 @@ void CudaPseudoContinuous::compute_statistics(
         // exp_dw and exp_dw_half
         double exp_dw[M];
         double exp_dw_half[M];
-        for(const auto& item: w_block)
+        for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
             double *w = item.second;

@@ -40,7 +40,7 @@ params = {
 
             {"type":"B", "length":(1-f)/2, "v":1, "u":6},    # B-block
             {"type":"B", "length":1-f, "v":2, "u":7},    # B-block
-            {"type":"B", "length":(1-f)/2, "v":3, "u":8},    # B-block
+            {"type":"B", "length":(1-f)/8*7, "v":3, "u":8},    # B-block
             {"type":"B", "length":(1-f)/4, "v":4, "u":9},    # B-block
 
             {"type":"B", "length":1-f, "v":6, "u":10},    # B-block

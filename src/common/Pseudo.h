@@ -42,7 +42,7 @@ public:
     virtual void update() = 0;
     virtual void compute_statistics(
         std::map<std::string, double*> q_init,
-        std::map<std::string, double*> w_block) = 0;
+        std::map<std::string, double*> w_input) = 0;
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
@@ -50,8 +50,8 @@ public:
     virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
-    // void compute_statistics(std::map<std::string,py::array_t<double>> q_init, std::map<std::string,py::array_t<double>> w_block)
-    void compute_statistics(std::map<std::string,py::array_t<double>> w_block)
+    // void compute_statistics(std::map<std::string,py::array_t<double>> q_init, std::map<std::string,py::array_t<double>> w_input)
+    void compute_statistics(std::map<std::string,py::array_t<double>> w_input)
     {
         try{
             const int M = cb->get_n_grid();
@@ -71,7 +71,7 @@ public:
             //     }
             // }
 
-            for (auto it=w_block.begin(); it!=w_block.end(); ++it)
+            for (auto it=w_input.begin(); it!=w_input.end(); ++it)
             {
                 //buf_w_block
                 py::buffer_info buf_w_block = it->second.request();
