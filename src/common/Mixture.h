@@ -27,8 +27,9 @@ struct UniqueBlock{
 class Mixture
 {
 private:
-    std::string model_name; // "Continuous": continuous standard Gaussian model
-                            // "Discrete": discrete bead-spring model
+    std::string model_name; // "continuous": continuous standard Gaussian model
+                            // "discrete": discrete bead-spring model
+                            
     double ds;              // contour step interval
     bool using_superposition; // compute multiple partial partition functions using proporty of linearity of the diffusion equation.
 
@@ -38,17 +39,11 @@ private:
     // distinct_polymers
     std::vector<PolymerChain> distinct_polymers;
 
-    // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
+    // set{key: (polymer id, dep_v, dep_u, n_segment) (assert(dep_v <= dep_u))}
     std::map<std::tuple<int, std::string, std::string, int>, UniqueBlock> unique_blocks; 
 
     // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
     std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches; 
-
-    // set{key: (polymer id, dep_v), std::map((dep_v, n_segment), v_u)}
-    std::map<std::tuple<int, std::string>, std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>> >> unique_blocks_superposition;
-
-    // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
-    std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches_superposition; 
 
     // get sub-branch information as ordered texts
     std::pair<std::string, int> get_text_of_ordered_branches(
