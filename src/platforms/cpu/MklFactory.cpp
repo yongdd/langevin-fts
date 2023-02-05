@@ -27,9 +27,9 @@ ComputationBox* MklFactory::create_computation_box(
 }
 
 Mixture* MklFactory::create_mixture(
-    double ds, std::map<std::string, double> bond_lengths) 
+    double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 
 {
-    return new Mixture(chain_model, ds, bond_lengths);
+    return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
 Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
 {

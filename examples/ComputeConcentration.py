@@ -54,7 +54,7 @@ factory.display_info()
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, stat_seg_length)
+mixture = factory.create_mixture(ds, stat_seg_length, False)
 for p in range(len(block_lengths)):
      mixture.add_polymer(
      volume_faction[p],block_monomer_types[p],

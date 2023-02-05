@@ -31,7 +31,7 @@ private:
                             // "discrete": discrete bead-spring model
                             
     double ds;              // contour step interval
-    bool using_superposition; // compute multiple partial partition functions using proporty of linearity of the diffusion equation.
+    bool use_superposition; // compute multiple partial partition functions using proporty of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
@@ -56,12 +56,12 @@ private:
     void add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment);
 
     // superpose branches
-    std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches_discrete(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
     std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches_continuous(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
+    std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches_discrete(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
 
 public:
 
-    Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
+    Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool use_superposition);
     ~Mixture() {};
 
     std::string get_model_name() const;

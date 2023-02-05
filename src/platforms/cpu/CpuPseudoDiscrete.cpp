@@ -163,6 +163,10 @@ void CpuPseudoDiscrete::compute_statistics(
                 auto& deps = mx->get_unique_branch(key).deps;
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
+                // check key
+                if (unique_partition.count(key) == 0)
+                    std::cout << "Could not find key '" << key << "'. " << std::endl;
+
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
@@ -195,6 +199,9 @@ void CpuPseudoDiscrete::compute_statistics(
                         int sub_n_segment   = std::get<1>(deps[d]);
                         double q_half_step[M];
 
+                        // check sub key
+                        if (unique_partition.count(sub_dep) == 0)
+                            std::cout << "Could not find sub key '" << sub_dep << "'. " << std::endl;
                         if (!unique_partition_finished[sub_dep][sub_n_segment-1])
                             std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
 
@@ -244,8 +251,14 @@ void CpuPseudoDiscrete::compute_statistics(
         {
             auto item = mx->get_unique_blocks().begin();
             advance(item, b);
-
             auto& key = item->first;
+
+            // check keys
+            if (unique_partition.count(std::get<1>(key)) == 0)
+                std::cout << "Could not find key 1'" << std::get<1>(key) << "'. " << std::endl;
+            if (unique_partition.count(std::get<2>(key)) == 0)
+                std::cout << "Could not find key 2'" << std::get<2>(key) << "'. " << std::endl;
+
             calculate_phi_one_type(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<1>(key)],  // dependency v
@@ -265,6 +278,13 @@ void CpuPseudoDiscrete::compute_statistics(
             std::string dep_v = pc.get_dep(blocks[0].v, blocks[0].u);
             std::string dep_u = pc.get_dep(blocks[0].u, blocks[0].v);
             int n_segment = blocks[0].n_segment;
+
+            // check keys
+            if (unique_partition.count(dep_v) == 0)
+                std::cout << "Could not find dep_v key'" << dep_v << "'. " << std::endl;
+            if (unique_partition.count(dep_u) == 0)
+                std::cout << "Could not find dep_u key'" << dep_u << "'. " << std::endl;
+
             single_partitions[p]= cb->inner_product_inverse_weight(
                 &unique_partition[dep_v][(n_segment-1)*M],  // q
                 &unique_partition[dep_u][0],                // q^dagger
@@ -379,6 +399,14 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
                     std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
                     if (dep_v < dep_u)
                         dep_v.swap(dep_u);
+
+                    // check key
+                    if (unique_phi.count(std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)) == 0)
+                    {
+                        std::cout << "Could not find unique_phi key (" << p << ", " << dep_v << ", " << dep_u << ", " << blocks[b].n_segment << "). " << std::endl;
+                        break;
+                    }
+
                     double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)];
 
                     // normalize the concentration

@@ -171,7 +171,7 @@ int main()
 
         double phi_a[MM]={0.0}, phi_b[MM]={0.0};
 
-        Mixture* mx = new Mixture("Discrete", 1.0/NN, bond_lengths);
+        Mixture* mx = new Mixture("Discrete", 1.0/NN, bond_lengths, false);
         mx->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
         mx->display_unique_blocks();
         mx->display_unique_branches();

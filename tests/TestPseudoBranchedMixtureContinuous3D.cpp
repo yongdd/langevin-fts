@@ -204,7 +204,7 @@ int main()
         u.push_back({1,2,8,12,4,5,3,11,13,6,7,9,18,10,14,20,26,27,15,17,16,19,22,21,29,23,24,25,28});
 
         double phi_a[MM]={0.0}, phi_b[MM]={0.0}, phi_c[MM]={0.0};
-        Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths);
+        Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths, false);
         for(int p=0; p<block_monomer_types.size(); p++){
             mx->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;

@@ -163,25 +163,55 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
         std::vector<std::vector<std::string>> branch_hierarchies;
         int current_height = 0;
         std::vector<std::string> same_height_branches; // key
-        for(const auto& item: unique_branches)
+        std::vector<std::string> remaining_branches;
+
+        for(const auto& item : unique_branches)
+            remaining_branches.push_back(item.first);
+
+        while(!remaining_branches.empty())
         {
-            auto& key = item.first;
-
-            int max_n_segment = item.second.max_n_segment;
-            //int monomer_type = item.second.monomer_type;
-            int height = item.second.height;
-            auto& deps = item.second.deps;
-
-            if (current_height < height)
+            same_height_branches.clear();
+            for(int i=0; i<remaining_branches.size(); i++)
             {
-                branch_hierarchies.push_back(same_height_branches);
-                same_height_branches.clear();
-                current_height = height;
+                if (current_height == Mixture::key_to_height(remaining_branches[i]))
+                    same_height_branches.push_back(remaining_branches[i]);
             }
-            same_height_branches.push_back(key);
+            if (!same_height_branches.empty())
+            {
+                for(int i=0; i<same_height_branches.size(); i++)
+                    remaining_branches.erase(std::remove(remaining_branches.begin(), remaining_branches.end(), same_height_branches[i]), remaining_branches.end());
+                branch_hierarchies.push_back(same_height_branches);
+            }
+            current_height++;
         }
-        branch_hierarchies.push_back(same_height_branches);
-        same_height_branches.clear();
+
+        for(int i=0; i<branch_hierarchies.size(); i++)
+        {
+            std::cout << "Height:" << i << std::endl;
+            for(const auto &item: branch_hierarchies[i])
+                std::cout << item << ": " << Mixture::key_to_height(item) << std::endl;
+        }
+
+        // for(const auto& item: unique_branches)
+        // {
+        //     auto& key = item.first;
+
+        //     int max_n_segment = item.second.max_n_segment;
+        //     //int monomer_type = item.second.monomer_type;
+        //     int height = item.second.height;
+        //     auto& deps = item.second.deps;
+
+        //     if (current_height < height)
+        //     {
+        //         branch_hierarchies.push_back(same_height_branches);
+        //         same_height_branches.clear();
+        //         current_height = height;
+        //     }
+        //     same_height_branches.push_back(key);
+        // }
+
+        // branch_hierarchies.push_back(same_height_branches);
+        // same_height_branches.clear();
         return branch_hierarchies;
     }
     catch(std::exception& exc)

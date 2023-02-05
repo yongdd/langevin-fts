@@ -118,7 +118,7 @@ factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, dict_a_n)
+mixture = factory.create_mixture(ds, dict_a_n, False)
 mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
 pseudo = factory.create_pseudo(cb, mixture)
 am = factory.create_anderson_mixing(am_n_var,
