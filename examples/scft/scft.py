@@ -102,7 +102,10 @@ class SCFT:
 
         # (C++ class) Mixture box
         print(params["segment_lengths"])
-        mixture = factory.create_mixture(params["ds"], params["segment_lengths"])
+        if "use_superposition" in params:
+            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
+        else:
+            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], False)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:

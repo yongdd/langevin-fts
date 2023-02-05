@@ -24,9 +24,9 @@ ComputationBox* CudaFactory::create_computation_box(
     return new CudaComputationBox(nx, lx);
 }
 Mixture* CudaFactory::create_mixture(
-    double ds, std::map<std::string, double> bond_lengths) 
+    double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 
 {
-    return new Mixture(chain_model, ds, bond_lengths);
+    return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
 Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
 {

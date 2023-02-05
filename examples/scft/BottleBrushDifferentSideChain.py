@@ -20,8 +20,11 @@ params = {
                             # where "a_Ref" is reference statistical segment length
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
+    "use_superposition":True,   # Superpose multiple partial partition functions when solving diffusion equations for speedup.
+                                 # To obtain concentraions of each block, disable this option.
+
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/10,                   # Contour step interval, which is equal to 1/N_Ref.
     "chi_n": 15.0,                # Interaction parameter, Flory-Huggins params * N
 
@@ -38,9 +41,9 @@ params = {
             {"type":"A", "length":f,   "v":3, "u":4},    # A-block
             {"type":"A", "length":f,   "v":4, "u":5},    # A-block
 
-            {"type":"B", "length":(1-f)/2, "v":1, "u":6},    # B-block
+            {"type":"B", "length":(1-f)/1, "v":1, "u":6},    # B-block
             {"type":"B", "length":1-f, "v":2, "u":7},    # B-block
-            {"type":"B", "length":(1-f)/8*7, "v":3, "u":8},    # B-block
+            {"type":"B", "length":(1-f)/2, "v":3, "u":8},    # B-block
             {"type":"B", "length":(1-f)/4, "v":4, "u":9},    # B-block
 
             {"type":"B", "length":1-f, "v":6, "u":10},    # B-block

@@ -57,7 +57,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_dep", &PolymerChain::get_dep);
 
     py::class_<Mixture>(m, "Mixture")
-        .def(py::init<std::string, double, std::map<std::string, double>>())
+        .def(py::init<std::string, double, std::map<std::string, double>, bool>())
         .def("get_model_name", &Mixture::get_model_name)
         .def("get_ds", &Mixture::get_ds)
         .def("get_bond_lengths", &Mixture::get_bond_lengths)

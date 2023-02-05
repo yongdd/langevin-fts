@@ -20,7 +20,7 @@ public :
         std::vector<double> lx) override;
 
     Mixture* create_mixture(
-        double ds, std::map<std::string, double> bond_lengths) override;
+        double ds, std::map<std::string, double> bond_lengths, bool use_superposition) override;
 
     Pseudo* create_pseudo(
         ComputationBox *cb, Mixture *mx) override;

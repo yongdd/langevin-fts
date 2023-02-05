@@ -100,7 +100,7 @@ int main()
 
                 // create instances and assign to the variables of base classes for the dynamic binding
                 ComputationBox *cb = factory->create_computation_box(nx, lx);
-                Mixture* mx        = factory->create_mixture(ds, bond_lengths);
+                Mixture* mx        = factory->create_mixture(ds, bond_lengths, false);
                 mx->add_polymer(0.7, block_species_1, contour_lengths_1, v_1, u_1, {});
                 mx->add_polymer(0.3, block_species_2, contour_lengths_2, v_2, u_2, {});
                 Pseudo *pseudo     = factory->create_pseudo(cb, mx);

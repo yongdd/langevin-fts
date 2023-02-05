@@ -28,7 +28,7 @@ public :
         std::vector<double> lx) = 0;
 
     virtual Mixture* create_mixture(
-        double ds, std::map<std::string, double> bond_lengths) = 0;
+        double ds, std::map<std::string, double> bond_lengths, bool use_superposition) = 0;
 
     virtual Pseudo* create_pseudo(
         ComputationBox *cb, Mixture *mx) = 0; 
