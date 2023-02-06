@@ -143,6 +143,7 @@ void CpuPseudoContinuous::compute_statistics(
         // // display all jobs
         // for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         // {
+        //     std::cout << "jobs:" << std::endl;
         //     for(int job=0; job<parallel_job->size(); job++)
         //     {
         //         auto& key = std::get<0>((*parallel_job)[job]);
@@ -166,7 +167,7 @@ void CpuPseudoContinuous::compute_statistics(
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // check key
-                if (unique_partition.count(key) == 0)
+                if (unique_partition.find(key) == unique_partition.end())
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
 
                 // calculate one block end
@@ -190,17 +191,16 @@ void CpuPseudoContinuous::compute_statistics(
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // check sub key
-                            if (unique_partition.count(sub_dep) == 0)
+                            if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
-                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + "[" + std::to_string(sub_n_segment) + "]' is not prepared." << std::endl;
+                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
 
                             for(int i=0; i<M; i++)
                                 unique_partition[key][i] += unique_partition[sub_dep][sub_n_segment*M+i]*sub_n_repeated;
-                            unique_partition_finished[key][0] = true;
-
-                            // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                         }
+                        unique_partition_finished[key][0] = true;
+                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else
                     { 
@@ -212,17 +212,16 @@ void CpuPseudoContinuous::compute_statistics(
                             int sub_n_segment   = std::get<1>(deps[d]);
 
                             // check sub key
-                            if (unique_partition.count(sub_dep) == 0)
+                            if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
-                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + "[" + std::to_string(sub_n_segment) + "]' is not prepared." << std::endl;
+                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
 
                             for(int i=0; i<M; i++)
                                 unique_partition[key][i] *= unique_partition[sub_dep][sub_n_segment*M+i];
-                            unique_partition_finished[key][0] = true;
-
-                            // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                         }
+                        unique_partition_finished[key][0] = true;
+                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                 }
         
@@ -230,7 +229,7 @@ void CpuPseudoContinuous::compute_statistics(
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
                     if (!unique_partition_finished[key][n-1])
-                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
 
                     one_step(&unique_partition[key][(n-1)*M],
                             &unique_partition[key][n*M],
@@ -245,32 +244,32 @@ void CpuPseudoContinuous::compute_statistics(
             }
         }
 
-        for(const auto& block: unique_phi)
-        {
-            int p                = std::get<0>(block.first);
-            std::string dep_v    = std::get<1>(block.first);
-            std::string dep_u    = std::get<2>(block.first);
-            int n_segment        = std::get<3>(block.first);
-            int n_segment_offset = std::get<4>(block.first);
+        // for(const auto& block: unique_phi)
+        // {
+        //     int p                = std::get<0>(block.first);
+        //     std::string dep_v    = std::get<1>(block.first);
+        //     std::string dep_u    = std::get<2>(block.first);
+        //     int n_segment        = std::get<3>(block.first);
+        //     int n_segment_offset = std::get<4>(block.first);
 
-            // check keys
-            if (unique_partition.count(dep_v) == 0)
-                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (unique_partition.count(dep_u) == 0)
-                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+        //     // check keys
+        //     if (unique_partition.find(dep_v) == unique_partition.end())
+        //         throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
+        //     if (unique_partition.find(dep_u) == unique_partition.end())
+        //         throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
-            for(int i=0; i<=n_segment+n_segment_offset; i++)
-            {
-                if (!unique_partition_finished[dep_v][i])
-                    throw_with_line_number("unfinished, dep_v, n'" + dep_v + ", " + std::to_string(i) + "'. ");
-            }
+        //     for(int i=0; i<=n_segment+n_segment_offset; i++)
+        //     {
+        //         if (!unique_partition_finished[dep_v][i])
+        //             throw_with_line_number("unfinished, dep_v, n'" + dep_v + ", " + std::to_string(i) + "'. ");
+        //     }
 
-            for(int i=0; i<=n_segment; i++)
-            {
-                if (!unique_partition_finished[dep_u][i])
-                    throw_with_line_number("unfinished, dep_u, n'" + dep_u + ", " + std::to_string(i) + "'. ");
-            }
-        }
+        //     for(int i=0; i<=n_segment; i++)
+        //     {
+        //         if (!unique_partition_finished[dep_u][i])
+        //             throw_with_line_number("unfinished, dep_u, n'" + dep_u + ", " + std::to_string(i) + "'. ");
+        //     }
+        // }
 
         // compute total partition function of each distinct polymers
         int current_p = 0;
@@ -284,19 +283,25 @@ void CpuPseudoContinuous::compute_statistics(
             if (p != current_p)
                 continue;
 
-            int n_segment        = std::get<3>(block.first);
-            int n_repeated = mx->get_unique_block(block.first).v_u.size();
+            int n_superposed;
+            int n_segment          = std::get<3>(block.first);
             int original_n_segment = mx->get_unique_block(block.first).n_segment;
 
+            // contains no '['
+            if (dep_u.find('[') == std::string::npos)
+                n_superposed = 1;
+            else
+                n_superposed = mx->get_unique_block(block.first).v_u.size();
+
             // check keys
-            if (unique_partition.count(dep_v) == 0)
+            if (unique_partition.find(dep_v) == unique_partition.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (unique_partition.count(dep_u) == 0)
+            if (unique_partition.find(dep_u) == unique_partition.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p]= cb->inner_product(
                 &unique_partition[dep_v][original_n_segment*M],      // q
-                &unique_partition[dep_u][0])/n_repeated;    // q^dagger
+                &unique_partition[dep_u][0])/n_superposed;    // q^dagger
             
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
@@ -313,18 +318,24 @@ void CpuPseudoContinuous::compute_statistics(
             std::string dep_v    = std::get<1>(block.first);
             std::string dep_u    = std::get<2>(block.first);
 
-            int n_segment        = std::get<3>(block.first);
-            int n_repeated = mx->get_unique_block(block.first).v_u.size();
+            int n_repeated;
+            int n_segment          = std::get<3>(block.first);
             int original_n_segment = mx->get_unique_block(block.first).n_segment;
 
             // if there is no segment
             if(n_segment == 0)
                 continue;
 
+            // contains no '['
+            if (dep_u.find('[') == std::string::npos)
+                n_repeated = mx->get_unique_block(block.first).v_u.size();
+            else
+                n_repeated = 1;
+
             // check keys
-            if (unique_partition.count(dep_v) == 0)
+            if (unique_partition.find(dep_v) == unique_partition.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (unique_partition.count(dep_u) == 0)
+            if (unique_partition.find(dep_u) == unique_partition.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
@@ -336,7 +347,7 @@ void CpuPseudoContinuous::compute_statistics(
 
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
-            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             for(int i=0; i<M; i++)
                 block.second[i] *= norm;
         }
@@ -453,6 +464,7 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
+        // for each block
         for(const auto& block: unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
@@ -518,7 +530,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
         std::array<double,3> stress;
         std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
 
-        // compute stress for Unique key pairs
+        // compute stress for unique block
         for(const auto& block: unique_phi)
         {
             const auto& key      = block.first;
@@ -621,7 +633,7 @@ void CpuPseudoContinuous::get_partial_partition(double *q_out, int polymer, int 
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'use_superposition' to obtain partial partition function.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'use_superposition' to obtain partial partition functions.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)

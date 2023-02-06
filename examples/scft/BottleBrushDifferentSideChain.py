@@ -13,18 +13,18 @@ f = 0.2         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],        # Simulation grid numbers
     "lx":[2.9,2.9,2.9],     # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                             # where "a_Ref" is reference statistical segment length
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
-    "use_superposition":True,   # Superpose multiple partial partition functions when solving diffusion equations for speedup.
+    "use_superposition":True,   # Superpose multiple partial partition functions when solving diffusion equations for speedup using superposition principle. 
                                 # To obtain concentraions of each block, disable this option.
 
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/10,                    # Contour step interval, which is equal to 1/N_Ref.
     "chi_n": 15.0,                # Interaction parameter, Flory-Huggins params * N
 
@@ -53,7 +53,7 @@ params = {
             {"type":"A", "length":f, "v":7, "u":13},    # B-block
         ],},],
 
-    "max_iter":2000,      # The maximum relaxation iterations
+    "max_iter":1,      # The maximum relaxation iterations
     "tolerance":1e-8,     # Terminate iteration if the self-consistency error is less than tolerance
 
     "am":{

@@ -140,7 +140,7 @@ int main()
                     {
                         std::getline(input_field_file, line);
                         w[i] = std::stod(line);
-                        std::cout << line << " " << w[i] << std::endl;
+                        // std::cout << line << " " << w[i] << std::endl;
                     }
                     input_field_file.close();
                 }

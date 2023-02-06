@@ -204,14 +204,6 @@ int main()
         u.push_back({1,2,8,12,4,5,3,11,13,6,7,9,18,10,14,20,26,27,15,17,16,19,22,21,29,23,24,25,28});
 
         double phi_a[MM]={0.0}, phi_b[MM]={0.0}, phi_c[MM]={0.0};
-        Mixture* mx = new Mixture("Continuous", 0.15, bond_lengths, false);
-        for(int p=0; p<block_monomer_types.size(); p++){
-            mx->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
-            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
-        }
-
-        mx->display_unique_blocks();
-        mx->display_unique_branches();
 
         // for(int k=0; k<KK; k++)
         // {
@@ -224,12 +216,30 @@ int main()
         //     }
         // }
 
+        Mixture* mx1 = new Mixture("Discrete", 0.15, bond_lengths, false);
+        for(int p=0; p<block_monomer_types.size(); p++){
+            mx1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
+            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
+        }
+        mx1->display_unique_blocks();
+        mx1->display_unique_branches();
+
+        Mixture* mx2 = new Mixture("Discrete", 0.15, bond_lengths, true);
+        for(int p=0; p<block_monomer_types.size(); p++){
+            mx2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
+            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
+        }
+        mx2->display_unique_blocks();
+        mx2->display_unique_branches();
+
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoDiscrete(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
+        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
+        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
         #endif
 
         // For each platform    
@@ -255,7 +265,7 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
 
-            for(int p=0; p<mx->get_n_polymers();p++)
+            for(int p=0; p<mx1->get_n_polymers();p++)
                 std::cout<< std::setprecision(10) << std::scientific << "Total Partial Partition (" + std::to_string(p) + "): " << pseudo->get_total_partition(p) << std::endl;
 
             error = std::abs(pseudo->get_total_partition(0)-1.3999194661e+05)/std::abs(pseudo->get_total_partition(0));

@@ -38,6 +38,10 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             d_unique_partition_size[dep] = max_n_segment;
             for(int i=0; i<d_unique_partition_size[dep]; i++)
                 gpu_error_check(cudaMalloc((void**)&d_unique_partition[dep][i], sizeof(double)*M));
+
+            unique_partition_finished[dep] = new bool[max_n_segment];
+            for(int i=0; i<max_n_segment;i++)
+                unique_partition_finished[dep][i] = false;
         }
 
         // allocate memory for unique_q_junctions, which contain partition function at junction of discrete chain
@@ -158,6 +162,9 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     for(const auto& item: d_unique_q_junctions)
         cudaFree(item.second);
 
+    for(const auto& item: unique_partition_finished)
+        delete[] item.second;
+
     // for get_concentration
     cudaFree(d_phi);
 
@@ -264,56 +271,106 @@ void CudaPseudoDiscrete::compute_statistics(
                 auto& deps = mx->get_unique_branch(key).deps;
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
+                // check key
+                if (d_unique_partition.find(key) == d_unique_partition.end())
+                    throw_with_line_number("Could not find key '" + key + "'. ");
+
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
                     //* q_init
                     gpu_error_check(cudaMemcpy(d_unique_partition[key][0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    unique_partition_finished[key][0] = true;
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
-                    // Illustration (four branches)
-                    //     A
-                    //     |
-                    // O - . - B
-                    //     |
-                    //     C
-
-                    // Legend)
-                    // .       : junction
-                    // O       : full segment
-                    // -, |    : half bonds
-                    // A, B, C : other full segments
-
-                    // combine branches
-                    gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M,cudaMemcpyHostToDevice));
-
-                    for(int d=0; d<deps.size(); d++)
+                    // if it is superposition
+                    if (key[0] == '[')
                     {
-                        std::string sub_dep = std::get<0>(deps[d]);
-                        int sub_n_segment   = std::get<1>(deps[d]);
+                        // initialize to zero
+                        gpu_error_check(cudaMemset(d_unique_partition[key][0], 0, sizeof(double)*M));
 
-                        half_bond_step(d_unique_partition[sub_dep][sub_n_segment-1],
-                            d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
+                        for(int d=0; d<deps.size(); d++)
+                        {
+                            std::string sub_dep = std::get<0>(deps[d]);
+                            int sub_n_segment   = std::get<1>(deps[d]);
+                            int sub_n_repeated  = std::get<2>(deps[d]);
 
-                        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
+                            // check sub key
+                            if (d_unique_partition.find(sub_dep) == d_unique_partition.end())
+                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+
+                            lin_comb<<<N_BLOCKS, N_THREADS>>>(
+                                d_unique_partition[key][0],
+                                1.0,            d_unique_partition[key][0],
+                                sub_n_repeated, d_unique_partition[sub_dep][sub_n_segment-1], M);
+                        }
+                        one_step_1(d_unique_partition[key][0],
+                               d_unique_partition[key][0],
+                               d_boltz_bond[monomer_type],
+                               d_exp_dw[monomer_type]);   
+
+                        unique_partition_finished[key][0] = true;
                     }
-                    gpu_error_check(cudaMemcpy(d_unique_q_junctions[key], d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    else
+                    {
+                        // Illustration (four branches)
+                        //     A
+                        //     |
+                        // O - . - B
+                        //     |
+                        //     C
 
-                    // add half bond
-                    half_bond_step(d_unique_q_junctions[key], d_unique_partition[key][0], d_boltz_bond_half[monomer_type]);
+                        // Legend)
+                        // .       : junction
+                        // O       : full segment
+                        // -, |    : half bonds
+                        // A, B, C : other full segments
 
-                    // add full segment
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_unique_partition[key][0], d_unique_partition[key][0], d_exp_dw[monomer_type], 1.0, M);
+                        // combine branches
+                        gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M,cudaMemcpyHostToDevice));
+
+                        for(int d=0; d<deps.size(); d++)
+                        {
+                            std::string sub_dep = std::get<0>(deps[d]);
+                            int sub_n_segment   = std::get<1>(deps[d]);
+
+                            // check sub key
+                            if (d_unique_partition.find(sub_dep) == d_unique_partition.end())
+                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+
+                            half_bond_step(d_unique_partition[sub_dep][sub_n_segment-1],
+                                d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
+
+                            multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
+                        }
+                        gpu_error_check(cudaMemcpy(d_unique_q_junctions[key], d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
+
+                        // add half bond
+                        half_bond_step(d_unique_q_junctions[key], d_unique_partition[key][0], d_boltz_bond_half[monomer_type]);
+
+                        // add full segment
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(d_unique_partition[key][0], d_unique_partition[key][0], d_exp_dw[monomer_type], 1.0, M);
+                        unique_partition_finished[key][0] = true;
+                    }
                 }
                 else
                 {
                     int n = n_segment_from-1;
+
+                    if (!unique_partition_finished[key][n-1])
+                        throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+
                     one_step_1(d_unique_partition[key][n-1],
                                d_unique_partition[key][n],
                                d_boltz_bond[monomer_type],
-                               d_exp_dw[monomer_type]);      
+                               d_exp_dw[monomer_type]);
 
+                    unique_partition_finished[key][n] = true;
                 }
             }
                 
@@ -327,10 +384,15 @@ void CudaPseudoDiscrete::compute_statistics(
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
+                    if (!unique_partition_finished[key][n-1])
+                        throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+
                     one_step_1(d_unique_partition[key][n-1],
                             d_unique_partition[key][n],
                             d_boltz_bond[monomer_type],
                             d_exp_dw[monomer_type]);
+
+                    unique_partition_finished[key][n] = true;
                 }
             }
             else if(parallel_job->size()==2)
@@ -345,45 +407,151 @@ void CudaPseudoDiscrete::compute_statistics(
                 int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
                 auto species_2 = mx->get_unique_branch(key_2).monomer_type;
 
-                for(int n=0; n<n_segment_to_1-n_segment_from_1; n++)
+                // there is no zero n_segment
+                if(n_segment_to_1-n_segment_from_1 >= 0 && n_segment_to_2-n_segment_from_2 >=0)
                 {
-                    one_step_2(
-                        d_unique_partition[key_1][n-1+n_segment_from_1],
-                        d_unique_partition[key_2][n-1+n_segment_from_2],
-                        d_unique_partition[key_1][n  +n_segment_from_1],
-                        d_unique_partition[key_2][n  +n_segment_from_2],
-                        d_boltz_bond[species_1], d_boltz_bond[species_2],
-                        d_exp_dw[species_1], d_exp_dw[species_2]);
+                    for(int n=0; n<n_segment_to_1-n_segment_from_1; n++)
+                    {
+                        if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
+                            throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-n_segment_from_1));
+                        if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
+                            throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-n_segment_from_2));
+
+                        one_step_2(
+                            d_unique_partition[key_1][n-1+n_segment_from_1],
+                            d_unique_partition[key_2][n-1+n_segment_from_2],
+                            d_unique_partition[key_1][n+n_segment_from_1],
+                            d_unique_partition[key_2][n+n_segment_from_2],
+                            d_boltz_bond[species_1],
+                            d_boltz_bond[species_2],
+                            d_exp_dw[species_1],
+                            d_exp_dw[species_2]);
+
+                        unique_partition_finished[key_1][n+n_segment_from_1] = true;
+                        unique_partition_finished[key_2][n+n_segment_from_2] = true;
+
+                        // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
+                        // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
+                    }
+                }
+                // if key2 has zero n_segment
+                else if(n_segment_to_1-n_segment_from_1 >= 0 && n_segment_to_2-n_segment_from_2 < 0)
+                {
+                    for(int n=0; n<n_segment_to_1-n_segment_from_1; n++)
+                    {
+                        if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
+                            throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-n_segment_from_1));
+
+                        one_step_1(
+                            d_unique_partition[key_1][n-1+n_segment_from_1],
+                            d_unique_partition[key_1][n+n_segment_from_1],
+                            d_boltz_bond[species_1],
+                            d_exp_dw[species_1]);
+
+                        unique_partition_finished[key_1][n+n_segment_from_1] = true;
+                        // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
+                    }
+                }
+                // if key1 has zero n_segment
+                else if(n_segment_to_1-n_segment_from_1 < 0 && n_segment_to_2-n_segment_from_2 >= 0)
+                {
+                    for(int n=0; n<n_segment_to_2-n_segment_from_2; n++)
+                    {
+                        if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
+                            throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-n_segment_from_2));
+
+                        one_step_1(
+                            d_unique_partition[key_2][n-1+n_segment_from_2],
+                            d_unique_partition[key_2][n+n_segment_from_2],
+                            d_boltz_bond[species_2],
+                            d_exp_dw[species_2]);
+
+                        unique_partition_finished[key_2][n+n_segment_from_2] = true;
+                        // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
+                    }
                 }
             }
         }
 
-        // calculate segment concentrations
-        for(const auto& item: mx->get_unique_blocks())
+        // compute total partition function of each distinct polymers
+        int current_p = 0;
+        for(const auto& block: d_unique_phi)
         {
-            auto& key = item.first;
-            calculate_phi_one_block(
-                d_unique_phi[key],                     // phi
-                d_unique_partition[std::get<1>(key)],  // dependency v
-                d_unique_partition[std::get<2>(key)],  // dependency u
-                d_exp_dw[item.second.monomer_type],    // d_exp_dw
-                std::get<3>(key));                     // n_segment
+            int p                = std::get<0>(block.first);
+            std::string dep_v    = std::get<1>(block.first);
+            std::string dep_u    = std::get<2>(block.first);
+
+            // already computed
+            if (p != current_p)
+                continue;
+
+            int n_superposed;
+            int n_segment            = std::get<3>(block.first);
+            int n_segment_offset     = std::get<4>(block.first);
+            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
+
+            // contains no '['
+            if (dep_u.find('[') == std::string::npos)
+                n_superposed = 1;
+            else
+                n_superposed = mx->get_unique_block(block.first).v_u.size();
+
+            // check keys
+            if (d_unique_partition.find(dep_v) == d_unique_partition.end())
+                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
+            if (d_unique_partition.find(dep_u) == d_unique_partition.end())
+                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+
+            single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
+                d_unique_partition[dep_v][original_n_segment-n_segment_offset-1],  // q
+                d_unique_partition[dep_u][0],                                      // q^dagger
+                d_exp_dw[monomer_type])/n_superposed;        
+
+            // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
+            // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
+            current_p++;
         }
 
-        // for each distinct polymers 
-        for(int p=0; p<mx->get_n_polymers(); p++)
+        // calculate segment concentrations
+        for(const auto& block: d_unique_phi)
         {
-            PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+            int p                = std::get<0>(block.first);
+            std::string dep_v    = std::get<1>(block.first);
+            std::string dep_u    = std::get<2>(block.first);
 
-            // calculate the single chain partition function at block 0
-            std::string dep_v = pc.get_dep(blocks[0].v, blocks[0].u);
-            std::string dep_u = pc.get_dep(blocks[0].u, blocks[0].v);
-            int n_segment = blocks[0].n_segment;
-            single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
-                d_unique_partition[dep_v][n_segment-1],  // q
-                d_unique_partition[dep_u][0],                // q^dagger
-                d_exp_dw[blocks[0].monomer_type]);        
+            int n_repeated;
+            int n_segment            = std::get<3>(block.first);
+            int n_segment_offset     = std::get<4>(block.first);
+            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
+
+            // contains no '['
+            if (dep_u.find('[') == std::string::npos)
+                n_repeated = mx->get_unique_block(block.first).v_u.size();
+            else
+                n_repeated = 1;
+
+            // check keys
+            if (d_unique_partition.find(dep_v) == d_unique_partition.end())
+                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
+            if (d_unique_partition.find(dep_u) == d_unique_partition.end())
+                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+
+            // calculate phi of one block (possibly multiple blocks when using superposition)
+            calculate_phi_one_block(
+                block.second,             // phi
+                d_unique_partition[dep_v],  // dependency v
+                d_unique_partition[dep_u],  // dependency u
+                d_exp_dw[monomer_type],     // exp_dw
+                n_segment,
+                n_segment_offset,
+                original_n_segment);
+            
+            // normalize concentration
+            PolymerChain& pc = mx->get_polymer(p);
+            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
         }
     }
     catch(std::exception& exc)
@@ -482,7 +650,7 @@ void CudaPseudoDiscrete::half_bond_step(double *d_q_in, double *d_q_out, double 
     }
 }
 void CudaPseudoDiscrete::calculate_phi_one_block(
-    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N)
+    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL)
 {
     try
     {
@@ -491,10 +659,10 @@ void CudaPseudoDiscrete::calculate_phi_one_block(
 
         const int M = cb->get_n_grid();
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[0], d_q_2[N-1], 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_ORIGINAL-N_OFFSET-1], d_q_2[0], 1.0, M);
         for(int n=1; n<N; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[n], d_q_2[N-n-1], 1.0, M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET-n-1], d_q_2[n], 1.0, M);
         }
         divide_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
     }
@@ -525,25 +693,12 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
         // initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        // for each distinct polymers 
-        for(int p=0; p<mx->get_n_polymers(); p++)
+        // for each block
+        for(const auto& block: d_unique_phi)
         {
-            PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
-            for(int b=0; b<blocks.size(); b++)
-            {
-                if (blocks[b].monomer_type == monomer_type)
-                {
-                    std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
-                    std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
-                    if (dep_v < dep_u)
-                        dep_v.swap(dep_u);
-                        
-                    // normalize the concentration
-                    double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-                    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)], M);
-                }
-            }
+            std::string dep_v = std::get<1>(block.first);
+            if (Mixture::key_to_species(dep_v) == monomer_type)
+                lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
     }
@@ -564,6 +719,9 @@ void CudaPseudoDiscrete::get_polymer_concentration(int p, double *phi)
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        if (mx->is_using_superposition())
+            throw_with_line_number("Disable 'use_superposition' to obtain concentration of each block.");
 
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
@@ -606,14 +764,15 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
         std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
         
-        // compute stress for unique key pairs
-        for(const auto& item: mx->get_unique_blocks())
+        // compute stress for unique block
+        for(const auto& block: d_unique_phi)
         {
-            auto& key = item.first;
-            std::string dep_v = std::get<1>(key);
-            std::string dep_u = std::get<2>(key);
-            const int N       = std::get<3>(key);
-            std::string monomer_type = item.second.monomer_type;
+            const auto& key      = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
+            const int N          = std::get<3>(key);
+            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             double **d_q_1 = d_unique_partition[dep_v];    // dependency v
             double **d_q_2 = d_unique_partition[dep_u];    // dependency u
@@ -687,19 +846,20 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
         // compute total stress
         for(int d=0; d<3; d++)
             stress[d] = 0.0;
-        for(int p=0; p < mx->get_n_polymers(); p++)
+        for(const auto& block: d_unique_phi)
         {
+            const auto& key      = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
+            const int N          = std::get<3>(key);
+            std::string monomer_type = mx->get_unique_block(key).monomer_type;
+
             PolymerChain& pc = mx->get_polymer(p);
             std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
-            for(int b=0; b<blocks.size(); b++)
-            {
-                std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
-                std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
-                if (dep_v < dep_u)
-                    dep_v.swap(dep_u);
-                for(int d=0; d<3; d++)
-                    stress[d] += unique_dq_dl[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-            }
+
+            for(int d=0; d<3; d++)
+                stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<3; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
@@ -722,6 +882,10 @@ void CudaPseudoDiscrete::get_partial_partition(double *q_out, int polymer, int v
         const int M = cb->get_n_grid();
         PolymerChain& pc = mx->get_polymer(polymer);
         std::string dep = pc.get_dep(v,u);
+
+        if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'use_superposition' to obtain partial partition functions.");
+
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
