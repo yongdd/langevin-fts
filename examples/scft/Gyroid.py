@@ -21,6 +21,9 @@ params = {
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
+    "use_superposition":False,   # Superpose multiple partial partition functions when solving diffusion equations for speedup.
+                                 # To obtain concentraions of each block, disable this option.
+
     "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
@@ -88,4 +91,3 @@ savemat("fields.mat", mdic)
     #    3   -4.108E-15  [ 3.6428830E+01  ]    -0.005598893   8.8631868E-01  [  3.3000287, 3.3000287, 3.3000287 ]
     #    4   -9.659E-15  [ 3.6501158E+01  ]    -0.006242039   7.8458220E-01  [  3.3000282, 3.3000282, 3.3000282 ]
     #    5   -1.221E-15  [ 3.6586928E+01  ]    -0.007097169   7.3186726E-01  [  3.3000234, 3.3000234, 3.3000234 ]
-    
