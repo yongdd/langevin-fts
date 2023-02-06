@@ -54,6 +54,7 @@ private:
     // key: (dep) + monomer_type, value: partition functions
     std::map<std::string, double **> d_unique_partition;
     std::map<std::string, int> d_unique_partition_size; // for deallocation
+    std::map<std::string, bool *> unique_partition_finished;
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 1; // the number of job threads
 
@@ -77,7 +78,7 @@ private:
                    double *d_exp_dw_1, double *d_exp_dw_2);
 
     void half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
-    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N);
+    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 
 public:
     CudaPseudoDiscrete(ComputationBox *cb, Mixture *mx);

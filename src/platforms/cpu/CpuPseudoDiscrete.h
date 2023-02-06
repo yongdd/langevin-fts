@@ -30,7 +30,7 @@ private:
     std::map<std::string, double *> unique_partition;
     std::map<std::string, bool *> unique_partition_finished;
     Scheduler *sc;          // scheduler for partial partition function
-    const int N_STREAM = 1; // the number of job threads
+    const int N_STREAM = 4; // the number of job threads
 
     // key: (polymer id, dep_v, dep_u, n_segment, n_segment_offset) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string, int, int>, double *> unique_phi;
@@ -47,7 +47,7 @@ private:
 
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
     void half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
-    void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N);
+    void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
     CpuPseudoDiscrete(ComputationBox *cb, Mixture *mx, FFT *fft);
     ~CpuPseudoDiscrete();
