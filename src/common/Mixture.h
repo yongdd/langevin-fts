@@ -39,8 +39,8 @@ private:
     // distinct_polymers
     std::vector<PolymerChain> distinct_polymers;
 
-    // set{key: (polymer id, dep_v, dep_u, n_segment) (assert(dep_v <= dep_u))}
-    std::map<std::tuple<int, std::string, std::string, int>, UniqueBlock> unique_blocks; 
+    // set{key: (polymer id, dep_v, dep_u, n_segment, n_segment_offset) (assert(dep_v <= dep_u))}
+    std::map<std::tuple<int, std::string, std::string, int, int>, UniqueBlock> unique_blocks;
 
     // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
     std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches; 
@@ -56,8 +56,8 @@ private:
     void add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment);
 
     // superpose branches
-    std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches_continuous(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
-    std::vector<std::tuple<int, std::string, std::vector<std::tuple<int ,int>>>> superpose_branches_discrete(std::map<std::tuple<int, std::string>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> superpose_branches_continuous(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> superpose_branches_discrete  (std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<void>> map_u_list);
 
 public:
 
@@ -67,6 +67,7 @@ public:
     std::string get_model_name() const;
     double get_ds() const;
     const std::map<std::string, double>& get_bond_lengths() const;
+    bool is_using_superposition() const;
 
     // distinct_polymers
     void add_polymer(
@@ -87,8 +88,8 @@ public:
 
     std::map<std::string, UniqueEdge, CompareBranchKey>& get_unique_branches(); 
     UniqueEdge& get_unique_branch(std::string key);
-    std::map<std::tuple<int, std::string, std::string, int>, UniqueBlock>& get_unique_blocks(); 
-    UniqueBlock& get_unique_block(std::tuple<int, std::string, std::string, int> key);
+    std::map<std::tuple<int, std::string, std::string, int, int>, UniqueBlock>& get_unique_blocks(); 
+    UniqueBlock& get_unique_block(std::tuple<int, std::string, std::string, int, int> key);
 
     void display_unique_branches() const;
     void display_unique_blocks() const;

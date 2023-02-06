@@ -21,11 +21,11 @@ params = {
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "use_superposition":True,   # Superpose multiple partial partition functions when solving diffusion equations for speedup.
-                                 # To obtain concentraions of each block, disable this option.
+                                # To obtain concentraions of each block, disable this option.
 
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"discrete",   # "discrete" or "continuous" chain model
-    "ds":1/10,                   # Contour step interval, which is equal to 1/N_Ref.
+    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "ds":1/10,                    # Contour step interval, which is equal to 1/N_Ref.
     "chi_n": 15.0,                # Interaction parameter, Flory-Huggins params * N
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.

@@ -362,7 +362,7 @@ void CudaPseudoDiscrete::compute_statistics(
         for(const auto& item: mx->get_unique_blocks())
         {
             auto& key = item.first;
-            calculate_phi_one_type(
+            calculate_phi_one_block(
                 d_unique_phi[key],                     // phi
                 d_unique_partition[std::get<1>(key)],  // dependency v
                 d_unique_partition[std::get<2>(key)],  // dependency u
@@ -481,7 +481,7 @@ void CudaPseudoDiscrete::half_bond_step(double *d_q_in, double *d_q_out, double 
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::calculate_phi_one_type(
+void CudaPseudoDiscrete::calculate_phi_one_block(
     double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N)
 {
     try
@@ -541,7 +541,7 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
                         
                     // normalize the concentration
                     double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-                    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)], M);
+                    lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)], M);
                 }
             }
         }
@@ -577,7 +577,7 @@ void CudaPseudoDiscrete::get_polymer_concentration(int p, double *phi)
 
             // copy normalized concentration
             double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)], M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)], M);
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -603,7 +603,7 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::array<double,3> stress;
-        std::map<std::tuple<int, std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
         
         // compute stress for unique key pairs
@@ -698,7 +698,7 @@ std::array<double,3> CudaPseudoDiscrete::compute_stress()
                 if (dep_v < dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    stress[d] += unique_dq_dl[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    stress[d] += unique_dq_dl[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
         }
         for(int d=0; d<3; d++)

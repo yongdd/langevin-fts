@@ -167,77 +167,87 @@ void CpuPseudoDiscrete::compute_statistics(
                 if (unique_partition.count(key) == 0)
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
 
-                // calculate one block end
-                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
-                {
-                    for(int i=0; i<M; i++)
-                        unique_partition[key][i] = exp_dw[monomer_type][i]; //* q_init
-                    unique_partition_finished[key][0] = true;
-                }
-                else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
-                {
-                    // Illustration (four branches)
-                    //     A
-                    //     |
-                    // O - . - B
-                    //     |
-                    //     C
+                // // if it is superposition
+                // if (key[0] == '[')
+                // {
 
-                    // Legend)
-                    // .       : junction
-                    // O       : full segment
-                    // -, |    : half bonds
-                    // A, B, C : other full segments
-
-                    // combine branches
-                    double q_junction[M];
-                    for(int i=0; i<M; i++)
-                        q_junction[i] = 1.0;
-                    for(int d=0; d<deps.size(); d++)
+                // }
+                // else
+                {
+                    // calculate one block end
+                    if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                     {
-                        std::string sub_dep = std::get<0>(deps[d]);
-                        int sub_n_segment   = std::get<1>(deps[d]);
-                        double q_half_step[M];
-
-                        // check sub key
-                        if (unique_partition.count(sub_dep) == 0)
-                            std::cout << "Could not find sub key '" << sub_dep << "'. " << std::endl;
-                        if (!unique_partition_finished[sub_dep][sub_n_segment-1])
-                            std::cout << "unfinished, sub_dep: " << sub_dep << ", " << sub_n_segment << std::endl;
-
-                        half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
-                            q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
-
                         for(int i=0; i<M; i++)
-                            q_junction[i] *= q_half_step[i];
+                            unique_partition[key][i] = exp_dw[monomer_type][i]; //* q_init
+                        unique_partition_finished[key][0] = true;
                     }
-                    for(int i=0; i<M; i++)
-                        unique_q_junctions[key][i] = q_junction[i];
+                    else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                    {
+                        // Illustration (four branches)
+                        //     A
+                        //     |
+                        // O - . - B
+                        //     |
+                        //     C
 
-                    // add half bond
-                    half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[monomer_type]);
+                        // Legend)
+                        // .       : junction
+                        // O       : full segment
+                        // -, |    : half bonds
+                        // A, B, C : other full segments
 
-                    // add full segment
-                    for(int i=0; i<M; i++)
-                        unique_partition[key][i] *= exp_dw[monomer_type][i];
-                    unique_partition_finished[key][0] = true;
-                }
-                else
-                {
-                    n_segment_from--;
-                }
+                        // combine branches
+                        double q_junction[M];
+                        for(int i=0; i<M; i++)
+                            q_junction[i] = 1.0;
+                        for(int d=0; d<deps.size(); d++)
+                        {
+                            std::string sub_dep = std::get<0>(deps[d]);
+                            int sub_n_segment   = std::get<1>(deps[d]);
+                            double q_half_step[M];
 
-                // apply the propagator successively
-                for(int n=n_segment_from; n<n_segment_to; n++)
-                {
-                    if (!unique_partition_finished[key][n-1])
-                        std::cout << "unfinished, key: " << key << ", " << n << std::endl;
+                            // check sub key
+                            if (unique_partition.count(sub_dep) == 0)
+                            {
+                                std::cout << "Could not find sub key '" + sub_dep + "'. ";
+                            }
+                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                                std::cout << "cannot compute '" + key +  "', since '"+ sub_dep + "[" + std::to_string(sub_n_segment) + "]' is not prepared.";
 
-                    one_step(&unique_partition[key][(n-1)*M],
-                            &unique_partition[key][n*M],
-                            boltz_bond[monomer_type],
-                            exp_dw[monomer_type]);
-                    unique_partition_finished[key][n] = true;
+                            half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
+                                q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
+
+                            for(int i=0; i<M; i++)
+                                q_junction[i] *= q_half_step[i];
+                        }
+                        for(int i=0; i<M; i++)
+                            unique_q_junctions[key][i] = q_junction[i];
+
+                        // add half bond
+                        half_bond_step(q_junction, &unique_partition[key][0], boltz_bond_half[monomer_type]);
+
+                        // add full segment
+                        for(int i=0; i<M; i++)
+                            unique_partition[key][i] *= exp_dw[monomer_type][i];
+                        unique_partition_finished[key][0] = true;
+                    }
+                    else
+                    {
+                        n_segment_from--;
+                    }
+
+                    // apply the propagator successively
+                    for(int n=n_segment_from; n<n_segment_to; n++)
+                    {
+                        if (!unique_partition_finished[key][n-1])
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
+
+                        one_step(&unique_partition[key][(n-1)*M],
+                                &unique_partition[key][n*M],
+                                boltz_bond[monomer_type],
+                                exp_dw[monomer_type]);
+                        unique_partition_finished[key][n] = true;
+                    }
                 }
             }
         }
@@ -255,11 +265,11 @@ void CpuPseudoDiscrete::compute_statistics(
 
             // check keys
             if (unique_partition.count(std::get<1>(key)) == 0)
-                std::cout << "Could not find key 1'" << std::get<1>(key) << "'. " << std::endl;
+                std::cout <<"Could not find key 1'" + std::get<1>(key) + "'. ";
             if (unique_partition.count(std::get<2>(key)) == 0)
-                std::cout << "Could not find key 2'" << std::get<2>(key) << "'. " << std::endl;
+                std::cout <<"Could not find key 2'" + std::get<2>(key) + "'. ";
 
-            calculate_phi_one_type(
+            calculate_phi_one_block(
                 unique_phi[key],                     // phi
                 unique_partition[std::get<1>(key)],  // dependency v
                 unique_partition[std::get<2>(key)],  // dependency u
@@ -281,9 +291,9 @@ void CpuPseudoDiscrete::compute_statistics(
 
             // check keys
             if (unique_partition.count(dep_v) == 0)
-                std::cout << "Could not find dep_v key'" << dep_v << "'. " << std::endl;
+                std::cout <<"Could not find dep_v key'" + dep_v + "'. ";
             if (unique_partition.count(dep_u) == 0)
-                std::cout << "Could not find dep_u key'" << dep_u << "'. " << std::endl;
+                std::cout <<"Could not find dep_u key'" + dep_u + "'. ";
 
             single_partitions[p]= cb->inner_product_inverse_weight(
                 &unique_partition[dep_v][(n_segment-1)*M],  // q
@@ -343,7 +353,7 @@ void CpuPseudoDiscrete::half_bond_step(double *q_in, double *q_out, double *bolt
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::calculate_phi_one_type(
+void CpuPseudoDiscrete::calculate_phi_one_block(
     double *phi, double *q_1, double *q_2, double *exp_dw, const int N)
 {
     try
@@ -385,35 +395,23 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // for each distinct polymers 
-        for(int p=0; p<mx->get_n_polymers(); p++)
+        for(const auto& block: unique_phi)
         {
-            PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
-            
-            for(int b=0; b<blocks.size(); b++)
+            // unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)]
+
+            std::string dep_v = std::get<1>(block.first);
+            std::string dep_u = std::get<2>(block.first);
+
+            if (Mixture::key_to_species(dep_v) == monomer_type)
             {
-                if (blocks[b].monomer_type == monomer_type)
-                {
-                    std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
-                    std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
-                    if (dep_v < dep_u)
-                        dep_v.swap(dep_u);
+                int p = std::get<0>(block.first);
+                PolymerChain& pc = mx->get_polymer(p);
 
-                    // check key
-                    if (unique_phi.count(std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)) == 0)
-                    {
-                        std::cout << "Could not find unique_phi key (" << p << ", " << dep_v << ", " << dep_u << ", " << blocks[b].n_segment << "). " << std::endl;
-                        break;
-                    }
+                // normalize the concentration
+                double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                for(int i=0; i<M; i++)
+                    phi[i] += norm * block.second[i]; 
 
-                    double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)];
-
-                    // normalize the concentration
-                    double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-                    for(int i=0; i<M; i++)
-                        phi[i] += norm * _unique_phi[i]; 
-                }
             }
         }
     }
@@ -432,6 +430,9 @@ void CpuPseudoDiscrete::get_polymer_concentration(int p, double *phi)
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
+        if (mx->is_using_superposition())
+            throw_with_line_number("Disable 'use_superposition' to obtain concentration of each block.");
+
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
@@ -441,7 +442,7 @@ void CpuPseudoDiscrete::get_polymer_concentration(int p, double *phi)
             std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
-            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)];
+            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)];
 
             // normalize the concentration
             double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
@@ -469,7 +470,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::array<double,3> stress;
-        std::map<std::tuple<int, std::string, std::string, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for Unique key pairs
         // for(const auto& item: mx->get_unique_blocks())
@@ -582,7 +583,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
                 if (dep_v < dep_u)
                     dep_v.swap(dep_u);
                 for(int d=0; d<3; d++)
-                    stress[d] += unique_dq_dl[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    stress[d] += unique_dq_dl[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
             }
         }
         for(int d=0; d<3; d++)

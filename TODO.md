@@ -6,12 +6,12 @@
 9. UnitTest: Anderson Mixing
 10. Validation Check for Pseudo Parameters
 11. UnitTest: example/miscellaneous
-16. process bar
-20. GUI?
+16. Process Bar
+20. Graphic User Interface
 21. Set initial condition: v_to_grafting_index, q_init
-22. Find out why cuFFT only works for even grid number
 24. Draw network graph image for given polymer architecture
 25. Save the intermediate partial partition functions for Stress calculation in PseudoDiscrete: unique_q_junction
 26. Cleanup class Mixture
 27. Syntax check of Keys in Mixture 
 29. Tighten Bound of Superposition
+31. Throws Exception in openMP block
