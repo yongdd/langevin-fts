@@ -56,7 +56,7 @@ private:
     std::map<std::string, int> d_unique_partition_size; // for deallocation
     std::map<std::string, bool *> unique_partition_finished;
     Scheduler *sc;          // scheduler for partial partition function
-    const int N_STREAM = 1; // the number of job threads
+    const int N_STREAM = 2; // the number of job threads
 
     // key: (polymer id, dep_v, dep_u, n_segment, n_segment_offset) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string, int, int>, double *> d_unique_phi;

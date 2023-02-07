@@ -81,7 +81,7 @@ params = {
         "blocks": blocks,
         },],
 
-    "max_iter":30,      # The maximum relaxation iterations
+    "max_iter":2000,      # The maximum relaxation iterations
     "tolerance":1e-8,     # Terminate iteration if the self-consistency error is less than tolerance
 
     "am":{

@@ -1,5 +1,7 @@
 /* this module defines parameters and subroutines to conduct fast
 * Fourier transform (FFT) using math kernel library(MKL). */
+#include <iostream>
+
 #include "MklFFT3D.h"
 
 MklFFT3D::MklFFT3D(std::array<int,3> nx)
@@ -30,6 +32,9 @@ MklFFT3D::MklFFT3D(std::array<int,3> nx)
         status = DftiSetValue(hand_backward, DFTI_OUTPUT_STRIDES, rs);
         status = DftiCommitDescriptor(hand_backward);
 
+        if (status !=0)
+            std::cout << "MKL status: " << status << std::endl;
+
         // compute a normalization factor
         this->fft_normal_factor = nx[0]*nx[1]*nx[2];
     }
@@ -43,16 +48,26 @@ MklFFT3D::~MklFFT3D()
     int status;
     status = DftiFreeDescriptor(&hand_forward);
     status = DftiFreeDescriptor(&hand_backward);
+
+    if (status !=0)
+        std::cout << "MKL status: " << status << std::endl;
 }
 void MklFFT3D::forward(double *rdata, std::complex<double> *cdata)
 {
     int status;
     status = DftiComputeForward(hand_forward, rdata, cdata);
+
+    if (status !=0)
+        std::cout << "MKL status: " << status << std::endl;
 }
 void MklFFT3D::backward(std::complex<double> *cdata, double *rdata)
 {
     int status;
     status = DftiComputeBackward(hand_backward, cdata, rdata);
+    
+    if (status !=0)
+        std::cout << "MKL status: " << status << std::endl;
+
     for(int i=0; i<n_grid; i++)
         rdata[i] /= fft_normal_factor;
 }

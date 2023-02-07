@@ -17,20 +17,21 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
 
         std::vector<std::string> job_queue[N_STREAM];
         auto branch_hierarchies = make_branch_hierarchies(unique_branches);
-        for(int current_height=0; current_height<branch_hierarchies.size(); current_height++)
+        for(size_t current_height=0; current_height<branch_hierarchies.size(); current_height++)
         {
             auto& same_height_branches = branch_hierarchies[current_height];
             std::vector<std::tuple<std::string, int>> Key_resolved_time;
             // find dependencies resolved time
-            for(int i=0; i<same_height_branches.size(); i++)
+            for(size_t i=0; i<same_height_branches.size(); i++)
             {
                 const auto& key = same_height_branches[i];
                 int max_resolved_time = 0;
-                for(int j=0; j<unique_branches[key].deps.size(); j++)
+                for(size_t j=0; j<unique_branches[key].deps.size(); j++)
                 {
                     const auto& sub_key = std::get<0>(unique_branches[key].deps[j]);
                     const auto& sub_n_segment = std::max(std::get<1>(unique_branches[key].deps[j]),1); // add 1, if it is 0
-                    assert(stream_start_finish.count(sub_key) == 0 && "Could not find [" + sub_key + "] in stream_start_finish.");
+                    // assert(("Could not find [" + sub_key + "] in stream_start_finish.", stream_start_finish.find(sub_key) == stream_start_finish.end()));
+                    assert(stream_start_finish.find(sub_key) != stream_start_finish.end() && "Could not find in stream_start_finish.");
                     int sub_resolved_time = std::get<1>(stream_start_finish[sub_key]) + sub_n_segment; 
                     if (max_resolved_time == 0 || max_resolved_time < sub_resolved_time)
                         max_resolved_time = sub_resolved_time;
@@ -53,7 +54,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
             // }
 
             // add jobs 
-            for(int i=0; i<Key_resolved_time.size(); i++)
+            for(size_t i=0; i<Key_resolved_time.size(); i++)
             {
                 // find index of stream that has minimum job_finish_time
                 min_stream = 0;
@@ -93,7 +94,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
 
         // collect time stamp
         std::set<int, std::less<int>> time_stamp_set;
-        for(int i=0; i<sorted_branch_start_time.size(); i++)
+        for(size_t i=0; i<sorted_branch_start_time.size(); i++)
         {
             auto& key = std::get<0>(sorted_branch_start_time[i]);
             int start_time = std::get<1>(sorted_branch_start_time[i]);
@@ -126,7 +127,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
         for(int s=0; s<N_STREAM; s++)
             iters[s] = job_queue[s].begin();
 
-        for(int i=0; i<time_stamp.size()-1; i++)
+        for(size_t i=0; i<time_stamp.size()-1; i++)
         {
             // std::cout << time_stamp[i]+1 << ", " << time_stamp[i+1] << std::endl;
             std::vector<std::tuple<std::string, int, int>> parallel_job;
@@ -188,14 +189,14 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
         while(!remaining_branches.empty())
         {
             same_height_branches.clear();
-            for(int i=0; i<remaining_branches.size(); i++)
+            for(size_t i=0; i<remaining_branches.size(); i++)
             {
                 if (current_height == Mixture::key_to_height(remaining_branches[i]))
                     same_height_branches.push_back(remaining_branches[i]);
             }
             if (!same_height_branches.empty())
             {
-                for(int i=0; i<same_height_branches.size(); i++)
+                for(size_t i=0; i<same_height_branches.size(); i++)
                     remaining_branches.erase(std::remove(remaining_branches.begin(), remaining_branches.end(), same_height_branches[i]), remaining_branches.end());
                 branch_hierarchies.push_back(same_height_branches);
             }
@@ -242,7 +243,7 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 }
 void Scheduler::display(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches)
 {
-    for(int i=0; i<sorted_branch_start_time.size(); i++)
+    for(size_t i=0; i<sorted_branch_start_time.size(); i++)
     {
         auto& key = std::get<0>(sorted_branch_start_time[i]);
         int start_time = std::get<1>(sorted_branch_start_time[i]);
@@ -253,11 +254,11 @@ void Scheduler::display(std::map<std::string, UniqueEdge, CompareBranchKey> uniq
         std::cout << ", finish_time: " << finish_time << std::endl;
     }
 
-    for(int i=0; i<schedule.size(); i++)
+    for(size_t i=0; i<schedule.size(); i++)
     {
         std::cout << "time: " << time_stamp[i]+1 << "-" << time_stamp[i+1] << std::endl;
         auto& parallel_job = schedule[i];
-        for(int j=0; j<parallel_job.size(); j++)
+        for(size_t j=0; j<parallel_job.size(); j++)
             std::cout << "\t" << std::get<0>(parallel_job[j]) << ": " <<  std::get<1>(parallel_job[j]) << ", " <<  std::get<2>(parallel_job[j]) << std::endl;
     }
 }

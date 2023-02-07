@@ -72,7 +72,7 @@ conda env remove -n lfts
 #### Platforms  
   This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
 
-#### Optimal Computation of Partial Partition Functions
+#### Efficient Computation of Partial Partition Functions
   1. In the Python library, all polymers including linear polymers are considered as branched polymers.
   2. Whenever you add a new polymer, `depth first search` is performed to check whether a given polymer graph contains a cycle or isolated points.
   3. In order to avoid redundant calculation of the partial partition functions of side chains and branches, a bottom-up `dynamic programming` approach is adopted. The partial partition functions of simplest side chains are first computed. Then, using these solutions, the partial partition functions of more complex branches are calculated. The last step is repeated up to the most complex branches.
@@ -92,6 +92,7 @@ conda env remove -n lfts
         "(A4)B":5
         "((A4)B5)A":4
         ```
+  5. When 'use_superposition' is set to 'True', the modified diffusion equation to compute partital partition functions faster by it exploiting the superposition principle. This approach was first introduced in [*Macromolecules* **2019**, 52, 1794] for bottle-brushs (see appendix) and it is generalized in this library. Me and their implemention are almost optimal for bottle-brushs.  
 
 #### Scheduling for the Parallel Computations
   1. If one partial partition function is independent of the other partial partition function. They can be computed in parallel. For instance, the partial partition function and the complementary partial partition function of AB diblock copolymers can be computed in parallel. However, scheduling partial partition function computations for a mixture of arbitrary acyclic branched polymers is a complex problem. This library uses a simple `greedy algorithm`. Among the unique keys, find one whose dependencies will be resolved first and put it into a stream (one of the CPUs for CPU version or one of the cuFFT batches for CUDA version) whose scheduled computations will be completed first. Repeat this process until every unique keys are scheduled. This approach is heuristic and is not guaranteed to minimize the makespan. As far as I know, scheduling tasks to minimize the makespan is an NP-hard problem.
