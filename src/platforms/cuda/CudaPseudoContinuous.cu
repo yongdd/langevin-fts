@@ -240,7 +240,6 @@ void CudaPseudoContinuous::compute_statistics(
         for(int i=0; i<M; i++)
             q_uniform[i] = 1.0;
 
-        // for each time span
         auto& branch_schedule = sc->get_schedule();
 
         // // display all jobs
@@ -257,8 +256,9 @@ void CudaPseudoContinuous::compute_statistics(
         //     }
         //     time_span_count++;
         // }
-
         // time_span_count=0;
+
+        // for each time span
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // multiplay all partition functions at junctions if necessary 
@@ -338,6 +338,17 @@ void CudaPseudoContinuous::compute_statistics(
                 }
             }
         
+            // eliminate jobs with no segments, which have nothing to compute.
+            for (auto it = parallel_job->begin(); it != parallel_job->end();)
+            {
+                int n_segment_from = std::get<1>(*it);
+                int n_segment_to = std::get<2>(*it);
+                if(n_segment_to-n_segment_from < 0)
+                    parallel_job->erase(it);
+                else
+                    it++;
+            }
+
             // apply the propagator successively
             if(parallel_job->size()==1)
             {
@@ -375,82 +386,34 @@ void CudaPseudoContinuous::compute_statistics(
                 int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
                 auto species_2 = mx->get_unique_branch(key_2).monomer_type;
 
-                // there is no zero n_segment
-                if(n_segment_to_1-n_segment_from_1 >= 0 && n_segment_to_2-n_segment_from_2 >=0)
+                for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
                 {
-                    for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
-                    {
-                        if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
-                            throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-1+n_segment_from_1));
-                        if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
-                            throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-1+n_segment_from_2));
+                    if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
+                        throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-1+n_segment_from_1));
+                    if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
+                        throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-1+n_segment_from_2));
 
-                        one_step_2(
-                            d_unique_partition[key_1][n-1+n_segment_from_1],
-                            d_unique_partition[key_2][n-1+n_segment_from_2],
-                            d_unique_partition[key_1][n+n_segment_from_1],
-                            d_unique_partition[key_2][n+n_segment_from_2],
-                            d_boltz_bond[species_1],
-                            d_boltz_bond[species_2],
-                            d_boltz_bond_half[species_1],
-                            d_boltz_bond_half[species_2],
-                            d_exp_dw[species_1],
-                            d_exp_dw[species_2],
-                            d_exp_dw_half[species_1],
-                            d_exp_dw_half[species_2]);
+                    one_step_2(
+                        d_unique_partition[key_1][n-1+n_segment_from_1],
+                        d_unique_partition[key_2][n-1+n_segment_from_2],
+                        d_unique_partition[key_1][n+n_segment_from_1],
+                        d_unique_partition[key_2][n+n_segment_from_2],
+                        d_boltz_bond[species_1],
+                        d_boltz_bond[species_2],
+                        d_boltz_bond_half[species_1],
+                        d_boltz_bond_half[species_2],
+                        d_exp_dw[species_1],
+                        d_exp_dw[species_2],
+                        d_exp_dw_half[species_1],
+                        d_exp_dw_half[species_2]);
 
-                        unique_partition_finished[key_1][n+n_segment_from_1] = true;
-                        unique_partition_finished[key_2][n+n_segment_from_2] = true;
+                    unique_partition_finished[key_1][n+n_segment_from_1] = true;
+                    unique_partition_finished[key_2][n+n_segment_from_2] = true;
 
-                        // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
-                        // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
-                    }
-                }
-                // if key2 has zero n_segment
-                else if(n_segment_to_1-n_segment_from_1 >= 0 && n_segment_to_2-n_segment_from_2 < 0)
-                {
-                    for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
-                    {
-                        if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
-                            throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-1+n_segment_from_1));
-
-                        one_step_1(
-                            d_unique_partition[key_1][n-1+n_segment_from_1],
-                            d_unique_partition[key_1][n+n_segment_from_1],
-                            d_boltz_bond[species_1],
-                            d_boltz_bond_half[species_1],
-                            d_exp_dw[species_1],
-                            d_exp_dw_half[species_1]);
-
-                        unique_partition_finished[key_1][n+n_segment_from_1] = true;
-                        // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
-                    }
-                }
-                // if key1 has zero n_segment
-                else if(n_segment_to_1-n_segment_from_1 < 0 && n_segment_to_2-n_segment_from_2 >= 0)
-                {
-                    for(int n=0; n<=n_segment_to_2-n_segment_from_2; n++)
-                    {
-                        if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
-                            throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-1+n_segment_from_2));
-
-                        one_step_1(
-                            d_unique_partition[key_2][n-1+n_segment_from_2],
-                            d_unique_partition[key_2][n+n_segment_from_2],
-                            d_boltz_bond[species_2],
-                            d_boltz_bond_half[species_2],
-                            d_exp_dw[species_2],
-                            d_exp_dw_half[species_2]);
-
-                        unique_partition_finished[key_2][n+n_segment_from_2] = true;
-                        // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
-                    }
+                    // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
+                    // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
                 }
             }
-            // else
-            // {
-            //     throw_with_line_number("Should not reach here. parallel_job->size(): " + std::to_string(parallel_job->size()));
-            // }
             // time_span_count++;
         }
 

@@ -507,14 +507,25 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
             std::get<2>(item.first), std::get<3>(item.first), item.second));
 
     current_n_segment = std::get<0>(remaining_keys[0]);
+    // int count = 0;
     while(!remaining_keys.empty())
     {
+        // count ++;
+        // if (count == 6)
+        //     break;
+        // std::cout << "remaining_keys" << std::endl;
+        // for(size_t i=0; i<remaining_keys.size(); i++)
+        // {
+        //     std::cout << std::get<1>(remaining_keys[i]) << std::endl;
+        // }
+        // std::cout << "-------------" << std::endl;
+
         for(size_t i=0; i<remaining_keys.size(); i++)
         {
             if (std::get<0>(remaining_keys[i]) == 1)
             {
                 dep_u_superposition_list.push_back(remaining_keys[i]);
-                remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[i]), remaining_keys.end());
+                remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), remaining_keys[i]), remaining_keys.end());
             }
             else if (current_n_segment == std::get<0>(remaining_keys[i]))
             {
@@ -529,8 +540,8 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         }
         else
         {
-            // for(int i=0; i<level_superposition_list.size(); i++)
-            //     std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
+            for(int i=0; i<level_superposition_list.size(); i++)
+                std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
 
             // if there is only one element and it is not superposed
             if (level_superposition_list.size() == 1)
