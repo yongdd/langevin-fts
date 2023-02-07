@@ -41,7 +41,7 @@ PolymerChain::PolymerChain(
     }
 
     // check block lengths, segments, types
-    for(int i=0; i<contour_lengths.size(); i++)
+    for(size_t i=0; i<contour_lengths.size(); i++)
     {
         if( contour_lengths[i] <= 0)
             throw_with_line_number("contour_lengths[" + std::to_string(i) + "] (" +std::to_string(contour_lengths[i]) + ") must be a positive number.");
@@ -59,7 +59,7 @@ PolymerChain::PolymerChain(
     try
     {
         this->volume_fraction = volume_fraction;
-        for(int i=0; i<contour_lengths.size(); i++){
+        for(size_t i=0; i<contour_lengths.size(); i++){
             blocks.push_back({
                 block_monomer_types[i],                     // monomer_type
                 (int) std::lround(contour_lengths[i]/ds),   // n_segment
@@ -74,13 +74,13 @@ PolymerChain::PolymerChain(
 
     // compute alpha, sum of relative contour lengths
     double alpha{0.0};
-    for(int i=0; i<blocks.size(); i++){
+    for(size_t i=0; i<blocks.size(); i++){
         alpha += blocks[i].contour_length;
     }
     this->alpha = alpha;
 
     // construct adjacent_nodes
-    for(int i=0; i<contour_lengths.size(); i++)
+    for(size_t i=0; i<contour_lengths.size(); i++)
     {
         adjacent_nodes[v[i]].push_back(u[i]);
         adjacent_nodes[u[i]].push_back(v[i]);
@@ -103,7 +103,7 @@ PolymerChain::PolymerChain(
 
     // detect a cycle and isolated nodes in the block copolymer graph using depth first search
     std::map<int, bool> is_visited;
-    for (int i = 0; i < contour_lengths.size(); i++)
+    for (size_t i = 0; i < contour_lengths.size(); i++)
         is_visited[v[i]] = false;
 
     std::stack<std::pair<int,int>> connected_nodes;
@@ -120,7 +120,7 @@ PolymerChain::PolymerChain(
 
         // add adjacent_nodes at stack
         auto nodes = adjacent_nodes[cur];
-        for(int i=0; i<nodes.size();i++)
+        for(size_t i=0; i<nodes.size();i++)
         {
             if (is_visited[nodes[i]] && nodes[i] != parent)
             {
@@ -134,14 +134,14 @@ PolymerChain::PolymerChain(
             }
         }
     }
-    for (int i=0; i<contour_lengths.size(); i++)
+    for (size_t i=0; i<contour_lengths.size(); i++)
     {
         if (!is_visited[v[i]])
             throw_with_line_number("There are disconnected nodes. Please check node number: " + std::to_string(v[i]) + ".");
     }
 
     // construct edge nodes
-    for (int i=0; i<contour_lengths.size(); i++)
+    for (size_t i=0; i<contour_lengths.size(); i++)
     {
         if (edge_to_array.count(std::make_pair(v[i], u[i])) > 0)
         {
@@ -166,7 +166,7 @@ int PolymerChain::get_n_segment(const int idx) const
 int PolymerChain::get_n_segment_total() const
 {
     int total_n{0};
-    for(int i=0; i<blocks.size(); i++)
+    for(size_t i=0; i<blocks.size(); i++)
         total_n += blocks[i].n_segment;
     return total_n;
 }
@@ -180,14 +180,14 @@ double PolymerChain::get_volume_fraction() const
 }
 int PolymerChain::get_array_idx(const int v, const int u)
 {
-    assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
-        "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    // assert(("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_array.count(std::make_pair(v, u)) != 0));
+    assert(edge_to_array.count(std::make_pair(v, u)) != 0 && "There is no such edge.");
     return edge_to_array[std::make_pair(v, u)];
 }
 struct PolymerChainBlock& PolymerChain::get_block(const int v, const int u)
 {
-    assert(edge_to_array.count(std::make_pair(v, u)) == 0 &&
-        "There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    // assert(("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_array.count(std::make_pair(v, u)) != 0));
+    assert(edge_to_array.count(std::make_pair(v, u)) != 0 && "There is no such edge.");
     return blocks[edge_to_array[std::make_pair(v, u)]];
 }
 std::vector<PolymerChainBlock>& PolymerChain::get_blocks()
@@ -207,7 +207,7 @@ void PolymerChain::set_edge_to_deps(const int v, const int u, const std::string 
     edge_to_deps[std::make_pair(v, u)] = deps;
 }
 std::string PolymerChain::get_dep(const int v, const int u) {
-    assert(edge_to_deps.count(std::make_pair(v, u)) == 0 &&
-        "There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").");
+    // assert(("There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_deps.count(std::make_pair(v, u)) != 0));
+    assert(edge_to_deps.count(std::make_pair(v, u)) != 0 && "There is no such block.");
     return edge_to_deps[std::make_pair(v,u)];
 }

@@ -71,7 +71,7 @@ int main()
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
             sub_deps = Mixture::key_to_deps(item.first);
-            for(int i=0; i<sub_deps.size(); i++)
+            for(size_t i=0; i<sub_deps.size(); i++)
                 std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
             std::cout << "]}" << std::endl;
         }

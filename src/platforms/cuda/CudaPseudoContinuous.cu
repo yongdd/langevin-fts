@@ -262,7 +262,7 @@ void CudaPseudoContinuous::compute_statistics(
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // multiplay all partition functions at junctions if necessary 
-            for(int job=0; job<parallel_job->size(); job++)
+            for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
@@ -291,7 +291,7 @@ void CudaPseudoContinuous::compute_statistics(
                         // initialize to zero
                         gpu_error_check(cudaMemset(d_unique_partition[key][0], 0, sizeof(double)*M));
 
-                        for(int d=0; d<deps.size(); d++)
+                        for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
@@ -317,7 +317,7 @@ void CudaPseudoContinuous::compute_statistics(
                         gpu_error_check(cudaMemcpy(d_unique_partition[key][0], q_uniform,
                             sizeof(double)*M, cudaMemcpyHostToDevice));
 
-                        for(int d=0; d<deps.size(); d++)
+                        for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
@@ -755,7 +755,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
-        for(int b=0; b<blocks.size(); b++)
+        for(size_t b=0; b<blocks.size(); b++)
         {
             std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
             std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -805,6 +805,13 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
             if(N == 0)
                 continue;
 
+            // contains no '['
+            int n_repeated;
+            if (dep_u.find('[') == std::string::npos)
+                n_repeated = mx->get_unique_block(block.first).v_u.size();
+            else
+                n_repeated = 1;
+
             std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
             double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
             double** d_q_1 = d_unique_partition[dep_v];    // dependency v
@@ -827,17 +834,17 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
                 if ( DIM >= 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM >= 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM >= 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX);
+                    unique_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
             }
         }

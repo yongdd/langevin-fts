@@ -158,7 +158,7 @@ void CpuPseudoContinuous::compute_statistics(
         {
             // for each job
             #pragma omp parallel for
-            for(int job=0; job<parallel_job->size(); job++)
+            for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
@@ -184,7 +184,7 @@ void CpuPseudoContinuous::compute_statistics(
                     {
                         for(int i=0; i<M; i++)
                             unique_partition[key][i] = 0.0;
-                        for(int d=0; d<deps.size(); d++)
+                        for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
@@ -206,7 +206,7 @@ void CpuPseudoContinuous::compute_statistics(
                     { 
                         for(int i=0; i<M; i++)
                             unique_partition[key][i] = 1.0;
-                        for(int d=0; d<deps.size(); d++)
+                        for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
@@ -284,7 +284,7 @@ void CpuPseudoContinuous::compute_statistics(
                 continue;
 
             int n_superposed;
-            int n_segment          = std::get<3>(block.first);
+            // int n_segment          = std::get<3>(block.first);
             int original_n_segment = mx->get_unique_block(block.first).n_segment;
 
             // contains no '['
@@ -320,7 +320,7 @@ void CpuPseudoContinuous::compute_statistics(
 
             int n_repeated;
             int n_segment          = std::get<3>(block.first);
-            int original_n_segment = mx->get_unique_block(block.first).n_segment;
+            // int original_n_segment = mx->get_unique_block(block.first).n_segment;
 
             // if there is no segment
             if(n_segment == 0)
@@ -496,7 +496,7 @@ void CpuPseudoContinuous::get_polymer_concentration(int p, double *phi)
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
-        for(int b=0; b<blocks.size(); b++)
+        for(size_t b=0; b<blocks.size(); b++)
         {
             std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
             std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
@@ -534,7 +534,6 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
         for(const auto& block: unique_phi)
         {
             const auto& key      = block.first;
-            int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
             const int N          = std::get<3>(key);
@@ -543,6 +542,13 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
             // if there is no segment
             if(N == 0)
                 continue;
+
+            // contains no '['
+            int n_repeated;
+            if (dep_u.find('[') == std::string::npos)
+                n_repeated = mx->get_unique_block(block.first).v_u.size();
+            else
+                n_repeated = 1;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
@@ -567,7 +573,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][0] += coeff*fourier_basis_x[i];
                         unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
                         unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
@@ -576,7 +582,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
                         unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
@@ -584,7 +590,7 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
                     }
                 }
@@ -600,11 +606,8 @@ std::array<double,3> CpuPseudoContinuous::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
             std::string monomer_type = mx->get_unique_block(key).monomer_type;
-
             PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
             for(int d=0; d<3; d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
