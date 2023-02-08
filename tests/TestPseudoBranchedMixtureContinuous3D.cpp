@@ -26,7 +26,6 @@ int main()
         const int KK{3};
         const int MM{II*JJ*KK};
 
-        double q1_init[MM]={0.0}, q2_init[MM]={0.0};
         double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
 
         std::array<double,MM> diff_sq;
@@ -217,7 +216,7 @@ int main()
         // }
 
         Mixture* mx1 = new Mixture("Continuous", 0.15, bond_lengths, false);
-        for(int p=0; p<block_monomer_types.size(); p++){
+        for(size_t p=0; p<block_monomer_types.size(); p++){
             mx1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
@@ -225,7 +224,7 @@ int main()
         mx1->display_unique_branches();
 
         Mixture* mx2 = new Mixture("Continuous", 0.15, bond_lengths, true);
-        for(int p=0; p<block_monomer_types.size(); p++){
+        for(size_t p=0; p<block_monomer_types.size(); p++){
             mx2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }

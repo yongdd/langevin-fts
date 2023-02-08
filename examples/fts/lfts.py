@@ -111,7 +111,7 @@ class LFTS:
         if "use_superposition" in params:
             mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
         else:
-            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], False)
+            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:

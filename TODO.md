@@ -15,4 +15,4 @@
 27. Syntax check of Keys in Mixture 
 29. Tighten Bound of Superposition
 31. Throws Exception in openMP block
-32. Figure out why TestStressLinear1D fails. Perhaps Memory error?
+33. Figure out why substr() fails in GCC 8.4.1

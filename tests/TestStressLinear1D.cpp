@@ -301,12 +301,12 @@ int main()
                     if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                         return -1;
 
-                    // //------------- finalize -------------
-                    // delete mx;
-                    // delete cb;
-                    // delete pseudo;
-                    // delete am;
-                    // delete factory;
+                    //------------- finalize -------------
+                    delete mx;
+                    delete cb;
+                    delete pseudo;
+                    delete am;
+                    delete factory;
                 }
             }
         }

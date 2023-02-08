@@ -324,7 +324,11 @@ void CpuPseudoContinuous::compute_statistics(
 
             // if there is no segment
             if(n_segment == 0)
+            {
+                for(int i=0; i<M;i++)
+                    block.second[i] = 0.0;
                 continue;
+            }
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -468,7 +472,8 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         for(const auto& block: unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type)
+            int n_segment     = std::get<3>(block.first);
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
