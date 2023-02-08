@@ -454,7 +454,8 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
         for(const auto& block: unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type)
+            int n_segment     = std::get<3>(block.first);
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 

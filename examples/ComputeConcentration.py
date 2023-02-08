@@ -60,6 +60,7 @@ for p in range(len(block_lengths)):
      volume_faction[p],block_monomer_types[p],
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture)
+
 mixture.display_unique_branches()
 mixture.display_unique_blocks()
 

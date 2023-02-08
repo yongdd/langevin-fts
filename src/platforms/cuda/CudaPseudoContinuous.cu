@@ -466,7 +466,10 @@ void CudaPseudoContinuous::compute_statistics(
 
             // if there is no segment
             if(n_segment == 0)
+            {
+                gpu_error_check(cudaMemset(block.second, 0, sizeof(double)*M));
                 continue;
+            }
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -689,7 +692,8 @@ void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, d
         for(const auto& block: d_unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type)
+            int n_segment     = std::get<3>(block.first);
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
