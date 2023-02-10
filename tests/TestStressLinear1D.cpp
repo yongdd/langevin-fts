@@ -20,11 +20,8 @@ int main()
 {
     try
     {
-        // math constants
-        const double PI = 3.14159265358979323846;
         // chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
-        std::chrono::duration<double> time_duration;
 
         double energy_total;
         // error_level = variable to check convergence of the iteration
@@ -40,20 +37,13 @@ int main()
         std::ofstream print_stream;
         std::stringstream ss;
         std::string print_file_name;
-        // temp
-        int idx;
-        double sum;
 
-        double old_lx;
-        // double new_lx;
-        // double new_dlx;
         // -------------- initialize ------------
         // platform type, [cuda, cpu-mkl]
         
         int max_scft_iter = 200;
         double tolerance = 1e-9;
 
-        double f = 0.5;
         double chi_n = 10.0;
         std::vector<int> nx = {255};
         std::vector<double> lx = {1.5};
@@ -184,7 +174,7 @@ int main()
                         energy_total -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<mx->get_n_polymers(); p++){
                             PolymerChain& pc = mx->get_polymer(p);
-                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
                         }
 
                         for(int i=0; i<M; i++)
@@ -206,8 +196,8 @@ int main()
                                         (cb->multi_inner_product(2,w,w)+1.0));
                         std::cout << "error_level: " << error_level << std::endl;
 
-                        // print iteration # and error levels and check the mass conservation
-                        sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                        // // print iteration # and error levels and check the mass conservation
+                        // sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
 
                         // conditions to end the iteration
                         if(error_level < tolerance) break;
@@ -263,7 +253,7 @@ int main()
                     energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<mx->get_n_polymers(); p++){
                         PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
                     }
 
 
@@ -288,7 +278,7 @@ int main()
                     energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<mx->get_n_polymers(); p++){
                         PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
                     }
 
                     // compute stress

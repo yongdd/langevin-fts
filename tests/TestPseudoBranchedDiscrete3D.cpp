@@ -26,14 +26,12 @@ int main()
         const int KK{3};
         const int MM{II*JJ*KK};
 
-        double q1_init[MM]={0.0}, q2_init[MM]={0.0};
         double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
 
         std::array<double,MM> diff_sq;
         double error;
-        double Lx, Ly, Lz, f;
+        double Lx, Ly, Lz;
 
-        f = 0.5;
         Lx = 4.0;
         Ly = 3.0;
         Lz = 2.0;

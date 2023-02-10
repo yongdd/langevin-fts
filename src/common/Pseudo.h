@@ -83,7 +83,7 @@ public:
             py::array_t<double> phi = py::array_t<double>(M);
             py::buffer_info buf_phi = phi.request();
             get_monomer_concentration(monomer_type, (double*) buf_phi.ptr);
-            return std::move(phi);
+            return phi;
         }
         catch(std::exception& exc)
         {
@@ -101,7 +101,7 @@ public:
             py::array_t<double> phi = py::array_t<double>({N_B,M});
             py::buffer_info buf_phi = phi.request();
             get_polymer_concentration(polymer, (double*) buf_phi.ptr);
-            return std::move(phi);
+            return phi;
         }
         catch(std::exception& exc)
         {
@@ -115,7 +115,7 @@ public:
             py::array_t<double> q1 = py::array_t<double>(M);
             py::buffer_info buf_q1 = q1.request();
             get_partial_partition((double*) buf_q1.ptr, polymer, v, u, n);
-            return std::move(q1);
+            return q1;
         }
         catch(std::exception& exc)
         {

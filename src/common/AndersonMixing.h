@@ -51,7 +51,7 @@ public:
                 throw_with_line_number("Size of input w_deriv (" + std::to_string(buf_w_deriv.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
 
             calculate_new_fields((double *) buf_w_new.ptr, (double *) buf_w_current.ptr, (double *) buf_w_deriv.ptr, old_error_level, error_level);
-            return std::move(w_new);
+            return w_new;
         }
         catch(std::exception& exc)
         {
