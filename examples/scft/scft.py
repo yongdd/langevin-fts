@@ -234,7 +234,7 @@ class SCFT:
             for p in range(self.mixture.get_n_polymers()):
                 energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                 self.mixture.get_polymer(p).get_alpha() * \
-                                np.log(self.pseudo.get_total_partition(p)/self.cb.get_volume())
+                                np.log(self.pseudo.get_total_partition(p))
                 
             # calculate pressure field for the new field calculation
             xi = 0.5*(w[0]+w[1]-self.chi_n)

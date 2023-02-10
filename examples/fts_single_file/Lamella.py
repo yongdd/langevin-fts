@@ -44,7 +44,7 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
             energy_total += chi_n/4
             energy_total -= cb.integral(w_plus)/cb.get_volume()
             for p in range(mixture.get_n_polymers()):
-                energy_total  -= np.log(pseudo.get_total_partition(p)/cb.get_volume())
+                energy_total  -= np.log(pseudo.get_total_partition(p))
 
             # check the mass conservation
             mass_error = cb.integral(phi_plus)/cb.get_volume() - 1.0
@@ -214,21 +214,21 @@ print("total time: %f, time per step: %f" %
 # Recording first a few iteration results for debugging and refactoring
 
 # w_minus and w_plus are initialized to random
-#       21    2.442E-15   5.3349931E+02     5.009168908   9.3083443E-05
+#       21    8.882E-16  [ 1.0419908E+00  ]     5.009168908   9.3083443E-05 
 # ---------- Run ----------
 # iteration, mass error, total_partition, energy_total, error_level
 # langevin step:  1
-#       18   -2.442E-15   6.0606825E+02     5.040091197   8.1538804E-05
-#        7    2.220E-16   6.0574572E+02     5.037712444   8.9411454E-05
+#       18   -2.887E-15  [ 1.1837270E+00  ]     5.040091197   8.1538804E-05 
+#        7    1.110E-15  [ 1.1830971E+00  ]     5.037712444   8.9411454E-05 
 # langevin step:  2
-#       19   -2.776E-15   6.8625017E+02     5.070141937   7.9617551E-05
-#        8   -1.110E-15   6.8551820E+02     5.067732088   8.0144714E-05
+#       19   -2.442E-15  [ 1.3403324E+00  ]     5.070141937   7.9617551E-05 
+#        8    4.441E-16  [ 1.3389027E+00  ]     5.067732088   8.0144714E-05 
 # langevin step:  3
-#       19   -1.443E-15   7.6914055E+02     5.099658828   9.5416355E-05
-#        8    0.000E+00   7.6807098E+02     5.097283111   9.5933782E-05
+#       19   -2.887E-15  [ 1.5022276E+00  ]     5.099658828   9.5416355E-05 
+#        8    2.220E-16  [ 1.5001386E+00  ]     5.097283111   9.5933782E-05 
 # langevin step:  4
-#       20   -3.109E-15   8.5964523E+02     5.127049567   7.4926202E-05
-#        9   -2.665E-15   8.5832988E+02     5.124597150   7.2687167E-05
+#       20   -3.331E-15  [ 1.6789946E+00  ]     5.127049567   7.4926202E-05 
+#        9   -3.442E-15  [ 1.6764255E+00  ]     5.124597150   7.2687167E-05 
 # langevin step:  5
-#       20   -3.331E-15   9.5610439E+02     5.154916422   8.3472264E-05
-#        9   -3.775E-15   9.5435437E+02     5.152498970   7.9975233E-05
+#       20   -3.109E-15  [ 1.8673914E+00  ]     5.154916422   8.3472264E-05 
+#        9   -1.998E-15  [ 1.8639734E+00  ]     5.152498970   7.9975233E-05 

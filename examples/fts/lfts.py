@@ -305,7 +305,7 @@ class LFTS:
                 for p in range(self.mixture.get_n_polymers()):
                     energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                     self.mixture.get_polymer(p).get_alpha() * \
-                                    np.log(self.pseudo.get_total_partition(p)/self.cb.get_volume())
+                                    np.log(self.pseudo.get_total_partition(p))
 
                 # check the mass conservation
                 mass_error = self.cb.integral(phi_plus)/self.cb.get_volume() - 1.0

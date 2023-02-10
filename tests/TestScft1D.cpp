@@ -158,7 +158,7 @@ int main()
                 //energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
                 for(int p=0; p<mx->get_n_polymers(); p++){
                     PolymerChain& pc = mx->get_polymer(p);
-                    energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                    energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                 }
 
                 for(int i=0; i<cb->get_n_grid(); i++)

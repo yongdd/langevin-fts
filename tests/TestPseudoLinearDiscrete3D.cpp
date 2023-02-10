@@ -224,7 +224,7 @@ int main()
                 return -1;
 
             double QQ = pseudo->get_total_partition(p);
-            error = std::abs(QQ-14.9276505263205);
+            error = std::abs(QQ-14.9276505263205/(Lx*Ly*Lz));
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;

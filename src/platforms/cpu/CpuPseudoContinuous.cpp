@@ -300,8 +300,8 @@ void CpuPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p]= cb->inner_product(
-                &unique_partition[dep_v][original_n_segment*M],      // q
-                &unique_partition[dep_u][0])/n_superposed;    // q^dagger
+                &unique_partition[dep_v][original_n_segment*M],             // q
+                &unique_partition[dep_u][0])/n_superposed/cb->get_volume(); // q^dagger
             
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
@@ -351,7 +351,7 @@ void CpuPseudoContinuous::compute_statistics(
 
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
-            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             for(int i=0; i<M; i++)
                 block.second[i] *= norm;
         }
@@ -619,7 +619,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
         }
 
         for(int d=0; d<cb->get_dim(); d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
 
         return stress;
     }

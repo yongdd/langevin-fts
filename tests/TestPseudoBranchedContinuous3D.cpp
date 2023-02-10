@@ -235,7 +235,7 @@ int main()
                 return -1;
 
             double QQ = pseudo->get_total_partition(p);
-            error = std::abs(QQ-1.5701353236e-03);
+            error = std::abs(QQ-1.5701353236e-03/(Lx*Ly*Lz));
             std::cout<< "Total Partial Partition error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
@@ -265,8 +265,8 @@ int main()
         {
             double mean = std::accumulate(stress_hist[i].begin(), stress_hist[i].end(), 0.0)/stress_hist[i].size();
             double sq_sum = std::inner_product(stress_hist[i].begin(), stress_hist[i].end(), stress_hist[i].begin(), 0.0);
-            double stdev = std::sqrt(sq_sum / stress_hist[i].size() - mean * mean);
-            std::cout << "Std. of Stress[" + std::to_string(i) + "] :" << stdev << std::endl;
+            double stddev = std::sqrt(sq_sum / stress_hist[i].size() - mean * mean);
+            std::cout << "Std. of Stress[" + std::to_string(i) + "]: " << stddev << std::endl;
             if (error > 1e-7)
                 return -1;
         }
