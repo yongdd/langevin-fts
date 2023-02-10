@@ -24,7 +24,6 @@ int main()
         const double PI = 3.14159265358979323846;
         // chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
-        std::chrono::duration<double> time_duration;
 
         double energy_total;
         // error_level = variable to check convergence of the iteration
@@ -42,7 +41,6 @@ int main()
         std::string print_file_name;
         // temp
         int idx;
-        double sum;
 
         // -------------- initialize ------------
         // platform type, [cuda, cpu-mkl]

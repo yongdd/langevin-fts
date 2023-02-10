@@ -31,7 +31,7 @@ int main()
         double q1_last[MM], q2_last[MM];
 
         std::array<double,MM> diff_sq;
-        double QQ, error;
+        double error;
         double Lx, Ly, Lz, f;
 
         f = 0.5;

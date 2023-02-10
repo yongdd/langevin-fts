@@ -421,7 +421,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         }
         else
         {
-            // for(int i=0; i<level_superposition_list.size(); i++)
+            // for(size_t i=0; i<level_superposition_list.size(); i++)
             //     std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
 
             // if there is only one element and it is not superposed
@@ -540,7 +540,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         }
         else
         {
-            for(int i=0; i<level_superposition_list.size(); i++)
+            for(size_t i=0; i<level_superposition_list.size(); i++)
                 std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
 
             // if there is only one element and it is not superposed
@@ -660,12 +660,12 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     //     }
     //     else
     //     {
-    //         // for(int i=0; i<level_superposition_list.size(); i++)
+    //         // for(size_t i=0; i<level_superposition_list.size(); i++)
     //         //     std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
 
     //         // find min_n_segment
     //         int min_n_segment = std::get<0>(level_superposition_list[0]);
-    //         for(int i=0; i<level_superposition_list.size(); i++)
+    //         for(size_t i=0; i<level_superposition_list.size(); i++)
     //         {
     //             if (min_n_segment < std::get<0>(level_superposition_list[i]))
     //                 min_n_segment = std::get<0>(level_superposition_list[i]);
@@ -764,7 +764,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
             
 
     //         // erase elements
-    //         for(int i=0; i<level_superposition_list.size(); i++)
+    //         for(size_t i=0; i<level_superposition_list.size(); i++)
     //             remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[i]), remaining_keys.end());
 
     //         level_superposition_list.clear();

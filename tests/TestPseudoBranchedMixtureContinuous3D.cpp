@@ -26,13 +26,10 @@ int main()
         const int KK{3};
         const int MM{II*JJ*KK};
 
-        double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
-
         std::array<double,MM> diff_sq;
         double error;
-        double Lx, Ly, Lz, f;
+        double Lx, Ly, Lz;
 
-        f = 0.5;
         Lx = 4.0;
         Ly = 3.0;
         Lz = 2.0;
@@ -251,8 +248,6 @@ int main()
                 phi_a[i] = 0.0;
                 phi_b[i] = 0.0;
                 phi_c[i] = 0.0;
-                q_1_4_last[i] = 0.0;
-                q_1_0_last[i] = 0.0;
             }
 
             //---------------- run --------------------
