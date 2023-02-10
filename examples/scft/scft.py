@@ -30,7 +30,8 @@ class SCFT:
 
         # (c++ class) Create a factory for given platform and chain_model
         factory = PlatformSelector.create_factory(platform, params["chain_model"])
-
+        factory.display_info()
+        
         # (C++ class) Computation box
         cb = factory.create_computation_box(params["nx"], params["lx"])
 
