@@ -28,36 +28,31 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
     try
     {
         this->dim = new_nx.size();
-        for(int i=0; i<dim; i++)
-        {
-            nx[i+3-dim] = new_nx[i];
-            lx[i+3-dim] = new_lx[i];
-            dx[i+3-dim] = new_lx[i]/new_nx[i];
-        }
-        if (dim == 2 )
-        {
-            nx[0] = 1;
-            lx[0] = 1.0;
-            dx[0] = 1.0;
-        }
-        else if (dim == 1 )
-        {
-            nx[0] = 1;
-            lx[0] = 1.0;
-            dx[0] = 1.0;
+        nx = new_nx;
+        lx = new_lx;
 
-            nx[1] = 1;
-            lx[1] = 1.0;
-            dx[1] = 1.0;
-        }
+        // grid interval
+        for(int d=0; d<dim; d++)
+            dx.push_back(lx[d]/nx[d]);
+
         // the number of grids
-        n_grid = nx[0]*nx[1]*nx[2];
+        n_grid = 1;
+        for(int d=0; d<dim; d++)
+            n_grid *= nx[d];
+
         // weight factor for integral
         dv = new double[n_grid];
         for(int i=0; i<n_grid; i++)
-            dv[i] = dx[0]*dx[1]*dx[2];
-        // system polymer
-        volume = lx[0]*lx[1]*lx[2];
+        {
+            dv[i] = 1.0;
+            for(int d=0; d<dim; d++)
+                dv[i] *= dx[d];
+        }
+
+        // volume of simulation box
+        volume = 1.0;
+        for(int d=0; d<dim; d++)
+            volume *= lx[d];
     }
     catch(std::exception& exc)
     {
@@ -88,17 +83,17 @@ double ComputationBox::get_dx(int i)
 {
     return dx[i];
 }
-std::array<int,3> ComputationBox::get_nx()
+std::vector<int> ComputationBox::get_nx()
 {
-    return {nx[0],nx[1],nx[2]};
+    return nx;
 }
-std::array<double,3> ComputationBox::get_lx()
+std::vector<double> ComputationBox::get_lx()
 {
-    return {lx[0],lx[1],lx[2]};
+    return lx;
 }
-std::array<double,3> ComputationBox::get_dx()
+std::vector<double> ComputationBox::get_dx()
 {
-    return {dx[0],dx[1],dx[2]};
+    return dx;
 }
 double ComputationBox::get_dv(int i)
 {
@@ -126,28 +121,25 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
         throw_with_line_number("new lx (" + str_lx + ") must be positive numbers");
     }
 
-    for(int i=0; i<dim; i++)
-    {
-        lx[i+3-dim] = new_lx[i];
-        dx[i+3-dim] = new_lx[i]/nx[i+3-dim];
-    }
-    if (dim == 2 )
-    {
-        lx[0] = 1.0;
-        dx[0] = 1.0;
-    }
-    else if (dim == 1 )
-    {
-        lx[0] = 1.0;
-        dx[0] = 1.0;
+    lx = new_lx;
 
-        lx[1] = 1.0;
-        dx[1] = 1.0;
-    }
+    // grid interval
+    for(int d=0; d<dim; d++)
+        dx[d] = lx[d]/nx[d];
+
     // weight factor for integral
+    dv = new double[n_grid];
     for(int i=0; i<n_grid; i++)
-        dv[i] = dx[0]*dx[1]*dx[2];
-    volume = lx[0]*lx[1]*lx[2];
+    {
+        dv[i] = 1.0;
+        for(int d=0; d<dim; d++)
+            dv[i] *= dx[d];
+    }
+
+    // volume of simulation box
+    volume = 1.0;
+    for(int d=0; d<dim; d++)
+        volume *= lx[d];
 }
 //-----------------------------------------------------------
 // This method calculates integral of g

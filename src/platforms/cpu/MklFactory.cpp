@@ -41,10 +41,10 @@ Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
             return new CpuPseudoContinuous(cb, mx,
-                new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
+                new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
             return new CpuPseudoContinuous(cb, mx,
-                new MklFFT1D(cb->get_nx(2)));
+                new MklFFT1D(cb->get_nx(0)));
     }
     else if ( chain_model == "discrete" )
     {
@@ -53,10 +53,10 @@ Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
             return new CpuPseudoDiscrete(cb, mx,
-                new MklFFT2D({cb->get_nx(1),cb->get_nx(2)}));
+                new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
             return new CpuPseudoDiscrete(cb, mx,
-                new MklFFT1D(cb->get_nx(2)));
+                new MklFFT1D(cb->get_nx(0)));
     }
     return NULL;
 }

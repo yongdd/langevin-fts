@@ -83,9 +83,9 @@ int main()
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
             std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
             std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
-            std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
-            std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
-            std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
+            std::cout << "Nx: " << cb->get_nx(0) << std::endl;
+            std::cout << "Lx: " << cb->get_lx(0) << std::endl;
+            std::cout << "dx: " << cb->get_dx(0) << std::endl;
             sum = 0.0;
             for(int i=0; i<cb->get_n_grid(); i++)
                 sum += cb->get_dv(i);
@@ -113,13 +113,11 @@ int main()
             //   end do
 
             std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
-            for(int i=0; i<cb->get_nx(0); i++)
-                for(int j=0; j<cb->get_nx(1); j++)
-                    for(int k=0; k<cb->get_nx(2); k++)
-                    {
-                        idx = i*cb->get_nx(1)*cb->get_nx(2) + j*cb->get_nx(2) + k;
-                        phi_a[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
-                    }
+            for(int k=0; k<cb->get_nx(0); k++)
+            {
+                idx = k;
+                phi_a[idx]= cos(2.0*PI*0/4.68)*cos(2.0*PI*0/3.48)*cos(2.0*PI*k/2.74)*0.1;
+            }
 
             for(int i=0; i<cb->get_n_grid(); i++)
             {

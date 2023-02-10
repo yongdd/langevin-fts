@@ -69,7 +69,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         // create scheduler for computation of partial partition function
         sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
 
-        update();
+        update_bond_function();
     }
     catch(std::exception& exc)
     {
@@ -102,7 +102,7 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
 }
-void CpuPseudoDiscrete::update()
+void CpuPseudoDiscrete::update_bond_function()
 {
     try
     {
@@ -500,7 +500,7 @@ void CpuPseudoDiscrete::get_polymer_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::array<double,3> CpuPseudoDiscrete::compute_stress()
+std::vector<double> CpuPseudoDiscrete::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -515,7 +515,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
         const int M_COMPLEX = this->n_complex_grid;
 
         auto bond_lengths = mx->get_bond_lengths();
-        std::array<double,3> stress;
+        std::vector<double> stress(cb->get_dim());
         std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for unique block
@@ -623,8 +623,8 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++)
                     {
                         coeff = bond_length_sq*boltz_bond_now[i]*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
-                        unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
+                        unique_dq_dl[key][0] += coeff*fourier_basis_y[i];
+                        unique_dq_dl[key][1] += coeff*fourier_basis_z[i];
                     }
                 }
                 else if ( DIM == 1 )
@@ -632,7 +632,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++)
                     {
                         coeff = bond_length_sq*boltz_bond_now[i]*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
+                        unique_dq_dl[key][0] += coeff*fourier_basis_z[i];
                     }
                 }
                 // std::cout << "n: " << n << ", " << unique_dq_dl[key][0] << std::endl;
@@ -640,7 +640,7 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
         }
 
         // compute total stress
-        for(int d=0; d<3; d++)
+        for(int d=0; d<cb->get_dim(); d++)
             stress[d] = 0.0;
         for(const auto& block: unique_phi)
         {
@@ -651,10 +651,10 @@ std::array<double,3> CpuPseudoDiscrete::compute_stress()
             std::string monomer_type = mx->get_unique_block(key).monomer_type;
             PolymerChain& pc = mx->get_polymer(p);
 
-            for(int d=0; d<3; d++)
+            for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
-        for(int d=0; d<3; d++)
+        for(int d=0; d<cb->get_dim(); d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
 
         return stress;

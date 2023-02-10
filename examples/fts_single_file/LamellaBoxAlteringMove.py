@@ -253,7 +253,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # change box size
     cb.set_lx(new_lx)
     # update bond parameters using new lx
-    pseudo.update()
+    pseudo.update_bond_function()
 
 # estimate execution time
 time_duration = time.time() - time_start

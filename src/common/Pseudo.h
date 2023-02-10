@@ -30,46 +30,32 @@ protected:
     int n_complex_grid;
 
     void get_boltz_bond(double *boltz_bond, double bond_length_variance,
-        std::array<int,3> nx, std::array<double,3> dx, double ds);
+        std::vector<int> nx, std::vector<double> dx, double ds);
 
     void get_weighted_fourier_basis(
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
-        std::array<int,3> nx, std::array<double,3> dx);
+        std::vector<int> nx, std::vector<double> dx);
 public:
     Pseudo(ComputationBox *cb, Mixture *mx);
     virtual ~Pseudo() {};
 
-    virtual void update() = 0;
+    virtual void update_bond_function() = 0;
     virtual void compute_statistics(
         std::map<std::string, double*> q_init,
         std::map<std::string, double*> w_input) = 0;
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
-    virtual std::array<double,3> compute_stress() = 0;
+    virtual std::vector<double> compute_stress() = 0;
     virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
-    // void compute_statistics(std::map<std::string,py::array_t<double>> q_init, std::map<std::string,py::array_t<double>> w_input)
     void compute_statistics(std::map<std::string,py::array_t<double>> w_input)
     {
         try{
             const int M = cb->get_n_grid();
             //std::map<std::string,double*> map_buf_q_init;
             std::map<std::string,double*> map_buf_w_block;
-
-            // for (auto it=q_init.begin(); it!=q_init.end(); ++it)
-            // {
-            //     //buf_q_init
-            //     py::buffer_info buf_q_init = it->second.request();
-            //     if (buf_q_init.shape[0] != M){
-            //         throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
-            //     }
-            //     else
-            //     {
-            //         map_buf_q_init.insert(std::pair<std::string,double*>(it->first,(double *)buf_q_init.ptr));
-            //     }
-            // }
 
             for (auto it=w_input.begin(); it!=w_input.end(); ++it)
             {
