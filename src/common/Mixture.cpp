@@ -540,8 +540,8 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         }
         else
         {
-            for(size_t i=0; i<level_superposition_list.size(); i++)
-                std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
+            // for(size_t i=0; i<level_superposition_list.size(); i++)
+            //     std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
 
             // if there is only one element and it is not superposed
             if (level_superposition_list.size() == 1)
