@@ -241,7 +241,6 @@ void CudaPseudoContinuous::compute_statistics(
             q_uniform[i] = 1.0;
 
         auto& branch_schedule = sc->get_schedule();
-
         // // display all jobs
         // int time_span_count=0;
         // for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
@@ -337,29 +336,26 @@ void CudaPseudoContinuous::compute_statistics(
                     }
                 }
             }
-        
-            // eliminate jobs with no segments, which have nothing to compute.
-            for (auto it = parallel_job->begin(); it != parallel_job->end();)
+            // copy jobs tha have non-zero segments
+            std::vector<std::tuple<std::string, int, int>> parallel_job_copied;
+            for (auto it = parallel_job->begin(); it != parallel_job->end(); it++)
             {
                 int n_segment_from = std::get<1>(*it);
                 int n_segment_to = std::get<2>(*it);
-                if(n_segment_to-n_segment_from < 0)
-                    parallel_job->erase(it);
-                else
-                    it++;
+                if(n_segment_to-n_segment_from >= 0)
+                    parallel_job_copied.push_back(*it);
             }
 
             // apply the propagator successively
-            if(parallel_job->size()==1)
+            if(parallel_job_copied.size()==1)
             {
-                auto& key = std::get<0>((*parallel_job)[0]);
-                int n_segment_from = std::get<1>((*parallel_job)[0]);
-                int n_segment_to = std::get<2>((*parallel_job)[0]);
+                auto& key = std::get<0>(parallel_job_copied[0]);
+                int n_segment_from = std::get<1>(parallel_job_copied[0]);
+                int n_segment_to = std::get<2>(parallel_job_copied[0]);
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
-
                     if (!unique_partition_finished[key][n-1])
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
 
@@ -374,16 +370,16 @@ void CudaPseudoContinuous::compute_statistics(
                     unique_partition_finished[key][n] = true;
                 }
             }
-            else if(parallel_job->size()==2)
+            else if(parallel_job_copied.size()==2)
             {
-                auto& key_1 = std::get<0>((*parallel_job)[0]);
-                int n_segment_from_1 = std::get<1>((*parallel_job)[0]);
-                int n_segment_to_1 = std::get<2>((*parallel_job)[0]);
+                auto& key_1 = std::get<0>(parallel_job_copied[0]);
+                int n_segment_from_1 = std::get<1>(parallel_job_copied[0]);
+                int n_segment_to_1 = std::get<2>(parallel_job_copied[0]);
                 auto species_1 = mx->get_unique_branch(key_1).monomer_type;
 
-                auto& key_2 = std::get<0>((*parallel_job)[1]);
-                int n_segment_from_2 = std::get<1>((*parallel_job)[1]);
-                int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
+                auto& key_2 = std::get<0>(parallel_job_copied[1]);
+                int n_segment_from_2 = std::get<1>(parallel_job_copied[1]);
+                int n_segment_to_2 = std::get<2>(parallel_job_copied[1]);
                 auto species_2 = mx->get_unique_branch(key_2).monomer_type;
 
                 for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
