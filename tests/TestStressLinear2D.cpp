@@ -266,7 +266,7 @@ int main()
                         //----------- compute derivate of H: lx + delta ----------------
                         lx[0] = old_lx + dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -290,7 +290,68 @@ int main()
                         //----------- compute derivate of H: lx - delta ----------------
                         lx[0] = old_lx - dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
+
+                        // for the given fields find the polymer statistics
+                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->get_monomer_concentration("A", phi_a);
+                        pseudo->get_monomer_concentration("B", phi_b);
+
+                        // calculate the total energy
+                        for(int i=0; i<M; i++)
+                        {
+                            w_minus[i] = (w[i]-w[i+M])/2;
+                            w_plus[i]  = (w[i]+w[i+M])/2;
+                        }
+
+                        double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
+                        for(int p=0; p<mx->get_n_polymers(); p++){
+                            PolymerChain& pc = mx->get_polymer(p);
+                            energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                        }
+
+                        // compute stress
+                        double dh_dl = (energy_total_1-energy_total_2)/dL;
+                        auto stress = pseudo->compute_stress();
+                        std:: cout << "dH/dL : " << dh_dl << std::endl;
+                        std:: cout << "Stress : " << stress[0] << std::endl;
+                        double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
+                        std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
+                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                            return -1;
+
+                        
+                    }
+                    {
+                        //----------- compute derivate of H: ly + delta ----------------
+                        lx[1] = old_ly + dL/2;
+                        cb->set_lx(lx);
+                        pseudo->update_bond_function();
+
+                        // for the given fields find the polymer statistics
+                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->get_monomer_concentration("A", phi_a);
+                        pseudo->get_monomer_concentration("B", phi_b);
+
+                        // calculate the total energy
+                        for(int i=0; i<M; i++)
+                        {
+                            w_minus[i] = (w[i]-w[i+M])/2;
+                            w_plus[i]  = (w[i]+w[i+M])/2;
+                        }
+
+                        double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
+                        for(int p=0; p<mx->get_n_polymers(); p++){
+                            PolymerChain& pc = mx->get_polymer(p);
+                            energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                        }
+
+                        //----------- compute derivate of H: ly - delta ----------------
+                        lx[1] = old_ly - dL/2;
+                        cb->set_lx(lx);
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -317,67 +378,6 @@ int main()
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
                         std:: cout << "Stress : " << stress[1] << std::endl;
                         double relative_stress_error = std::abs(dh_dl-stress[1])/std::abs(stress[1]);
-                        std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
-                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
-                            return -1;
-
-                        
-                    }
-                    {
-                        //----------- compute derivate of H: ly + delta ----------------
-                        lx[1] = old_ly + dL/2;
-                        cb->set_lx(lx);
-                        pseudo->update();
-
-                        // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                        pseudo->get_monomer_concentration("A", phi_a);
-                        pseudo->get_monomer_concentration("B", phi_b);
-
-                        // calculate the total energy
-                        for(int i=0; i<M; i++)
-                        {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
-                        }
-
-                        double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                        energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
-                            energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
-                        }
-
-                        //----------- compute derivate of H: ly - delta ----------------
-                        lx[1] = old_ly - dL/2;
-                        cb->set_lx(lx);
-                        pseudo->update();
-
-                        // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
-                        pseudo->get_monomer_concentration("A", phi_a);
-                        pseudo->get_monomer_concentration("B", phi_b);
-
-                        // calculate the total energy
-                        for(int i=0; i<M; i++)
-                        {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
-                        }
-
-                        double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                        energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
-                            energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
-                        }
-
-                        // compute stress
-                        double dh_dl = (energy_total_1-energy_total_2)/dL;
-                        auto stress = pseudo->compute_stress();
-                        std:: cout << "dH/dL : " << dh_dl << std::endl;
-                        std:: cout << "Stress : " << stress[2] << std::endl;
-                        double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);
                         std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;

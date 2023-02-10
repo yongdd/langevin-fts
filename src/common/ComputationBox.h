@@ -21,9 +21,9 @@ class ComputationBox
 {
 protected:
     int dim;        // the dimension of Computation Grids and Lengths
-    std::array<int,3> nx;  // the number of grid in each direction
-    std::array<double,3> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
-    std::array<double,3> dx;  // grid interval in each direction
+    std::vector<int> nx;  // the number of grid in each direction
+    std::vector<double> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
+    std::vector<double> dx;  // grid interval in each direction
     int n_grid;  // the number of grid
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
@@ -33,11 +33,11 @@ public:
     virtual ~ComputationBox();
 
     int get_dim();
-    std::array<int,3> get_nx();
+    std::vector<int> get_nx();
     int get_nx(int i);
-    std::array<double,3> get_lx();
+    std::vector<double> get_lx();
     double get_lx(int i);
-    std::array<double,3> get_dx();
+    std::vector<double> get_dx();
     double get_dx(int i);
     double get_dv(int i);
     int get_n_grid();

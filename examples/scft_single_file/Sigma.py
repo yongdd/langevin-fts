@@ -101,7 +101,7 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
             cb.set_lx(lx)
 
             # update bond parameters using new lx
-            pseudo.update()
+            pseudo.update_bond_function()
         else:
             w = am.calculate_new_fields(
             np.reshape(w,      2*cb.get_n_grid()),

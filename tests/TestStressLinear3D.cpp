@@ -269,7 +269,7 @@ int main()
                         //----------- compute derivate of H: lx + delta ----------------
                         lx[0] = old_lx + dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -293,7 +293,7 @@ int main()
                         //----------- compute derivate of H: lx - delta ----------------
                         lx[0] = old_lx - dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -328,7 +328,7 @@ int main()
                         //----------- compute derivate of H: ly + delta ----------------
                         lx[1] = old_ly + dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -352,7 +352,7 @@ int main()
                         //----------- compute derivate of H: ly - delta ----------------
                         lx[1] = old_ly - dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -388,7 +388,7 @@ int main()
                         //----------- compute derivate of H: lz + delta ----------------
                         lx[2] = old_lz + dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -412,7 +412,7 @@ int main()
                         //----------- compute derivate of H: ly - delta ----------------
                         lx[2] = old_lz - dL/2;
                         cb->set_lx(lx);
-                        pseudo->update();
+                        pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
                         pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});

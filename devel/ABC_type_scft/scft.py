@@ -380,7 +380,7 @@ class SCFT:
             
             if (self.box_is_altering):
                 # calculate stress
-                stress_array = np.array(self.pseudo.compute_stress())[-self.cb.get_dim():]
+                stress_array = np.array(self.pseudo.compute_stress())
                 error_level += np.sqrt(np.sum(stress_array**2))
 
                 print("%8d %12.3E " %
@@ -388,7 +388,7 @@ class SCFT:
                 for p in range(self.mixture.get_n_polymers()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()[-self.cb.get_dim():]]), "]")
+                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
             else:
                 print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
                 for p in range(self.mixture.get_n_polymers()):
@@ -402,7 +402,7 @@ class SCFT:
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w_exchange,      S*self.cb.get_n_grid()), self.cb.get_lx()[-self.cb.get_dim():]))
+                am_current  = np.concatenate((np.reshape(w_exchange,      S*self.cb.get_n_grid()), self.cb.get_lx()))
                 am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), dlx))
                 am_new = self.am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
@@ -411,14 +411,14 @@ class SCFT:
 
                 # set box size
                 # restricting |dLx| to be less than 10 % of Lx
-                old_lx = np.array(self.cb.get_lx()[-self.cb.get_dim():])
-                new_lx = np.array(am_new[-self.cb.get_dim():])
+                old_lx = np.array(self.cb.get_lx())
+                new_lx = np.array(am_new)
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
                 self.cb.set_lx(new_lx)
 
                 # update bond parameters using new lx
-                self.pseudo.update()
+                self.pseudo.update_bond_function()
             else:
                 w_exchange = self.am.calculate_new_fields(
                 np.reshape(w_exchange,      S*self.cb.get_n_grid()),

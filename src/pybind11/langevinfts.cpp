@@ -77,7 +77,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("display_unique_blocks", &Mixture::display_unique_blocks);
 
     py::class_<Pseudo>(m, "Pseudo")
-        .def("update", &Pseudo::update)
+        .def("update_bond_function", &Pseudo::update_bond_function)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>>
             ()(&Pseudo::compute_statistics), py::return_value_policy::move)

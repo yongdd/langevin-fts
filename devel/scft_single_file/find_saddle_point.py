@@ -79,7 +79,7 @@ def find_saddle_point(pc, cb, pseudo, am, lx, chi_n,
             lx = am_new[-cb.get_dim():]
             cb.set_lx(lx)
             # update bond parameters using new lx
-            pseudo.update()
+            pseudo.update_bond_function()
         else:
             am.calculate_new_fields(
             np.reshape(w,      2*cb.get_n_grid()),

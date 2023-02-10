@@ -965,12 +965,12 @@ void Mixture::display_unique_blocks() const
     if (use_superposition)
     {
         std::cout << "--------- Unique Blocks (Superposed) ---------" << std::endl;
-        std::cout << "Polymer id, original_n_segment, n_segment_offset, n_segment_part, key1, key2, : (v, u)" << std::endl;
+        std::cout << "Polymer id, key1:\n\tn_segment (original, offset, allocated), key2, (v, u)" << std::endl;
     }
     else
     {
         std::cout << "--------- Unique Blocks ---------" << std::endl;
-        std::cout << "Polymer id, n_segment, key1, key2, : (v, u)" << std::endl;
+        std::cout << "Polymer id, key1:\n\tn_segment, key2, (v, u)" << std::endl;
     }
 
     std::tuple<int, std::string> v_string = std::make_tuple(-1, "");
@@ -989,7 +989,7 @@ void Mixture::display_unique_blocks() const
         }
 
         if (use_superposition)
-            std::cout << "\t" + std::to_string(item.second.n_segment) + ", " + std::to_string(std::get<4>(v_key)) + ", " + std::to_string(std::get<3>(v_key)) + ", " + std::get<2>(v_key) +  ", ";
+            std::cout << "\t(" + std::to_string(item.second.n_segment) + ", " + std::to_string(std::get<4>(v_key)) + ", " + std::to_string(std::get<3>(v_key)) + "), " + std::get<2>(v_key) +  ", ";
         else
             std::cout << "\t" + std::to_string(std::get<3>(v_key)) + ", " + std::get<2>(v_key) +  ", ";
 
@@ -1017,9 +1017,9 @@ void Mixture::display_unique_branches() const
         total_segments += item.second.max_n_segment;
 
         std::cout << item.first;
-        std::cout << ":\n\t{max_n_segment: " << item.second.max_n_segment;
+        std::cout << ":\n\tmax_n_segment: " << item.second.max_n_segment;
         std::cout << ", height: " << item.second.height;
-        std::cout << ",\n\tsub_deps: ";
+        std::cout << ",\n\tsub_deps:{ ";
         sub_deps = key_to_deps(item.first);
         for(size_t i=0; i<sub_deps.size(); i++)
         {

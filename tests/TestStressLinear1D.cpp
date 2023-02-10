@@ -245,7 +245,7 @@ int main()
                     //----------- compute derivate of H: lx + delta ----------------
                     lx[0] = old_lx + dL/2;
                     cb->set_lx(lx);
-                    pseudo->update();
+                    pseudo->update_bond_function();
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -270,7 +270,7 @@ int main()
                     //----------- compute derivate of H: lx - delta ----------------
                     lx[0] = old_lx - dL/2;
                     cb->set_lx(lx);
-                    pseudo->update();
+                    pseudo->update_bond_function();
 
                     // for the given fields find the polymer statistics
                     pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
@@ -295,8 +295,8 @@ int main()
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
                     auto stress = pseudo->compute_stress();
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
-                    std:: cout << "Stress : " << stress[2] << std::endl;
-                    double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);
+                    std:: cout << "Stress : " << stress[0] << std::endl;
+                    double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
                     std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                     if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                         return -1;

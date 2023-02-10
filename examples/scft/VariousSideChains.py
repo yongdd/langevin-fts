@@ -21,7 +21,7 @@ params = {
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "use_superposition":True,   # Superpose multiple partial partition functions when solving diffusion equations for speedup using superposition principle. 
-                                # To obtain concentraions of each block, disable this option.
+                                # To obtain concentration of each block, disable this option.
 
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"discrete",   # "discrete" or "continuous" chain model

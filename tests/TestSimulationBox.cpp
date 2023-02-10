@@ -23,9 +23,9 @@ int main()
         for(int i=0; i<cb.get_n_grid(); i++)
             sum_w += w[i];
         
-        //std::cout<< "Nx: "  << cb.nx[0] <<" "<< cb.nx[1] <<" "<< cb.nx[2] << std::endl;
-        //std::cout<< "Lx: " << cb.lx[0] <<" "<< cb.lx[1] <<" "<< cb.lx[2] << std::endl;
-        //std::cout<< "dx: " << cb.dx[0] <<" "<< cb.dx[1] <<" "<< cb.dx[2] << std::endl;
+        std::cout<< "nx: " << cb.get_nx(0) <<" "<< cb.get_nx(1) <<" "<< cb.get_nx(2) << std::endl;
+        std::cout<< "lx: " << cb.get_lx(0) <<" "<< cb.get_lx(1) <<" "<< cb.get_lx(2) << std::endl;
+        std::cout<< "dx: " << cb.get_dx(0) <<" "<< cb.get_dx(1) <<" "<< cb.get_dx(2) << std::endl;
 
         //std::cout<< "sum(dV), Volume: " << volume <<" "<< cb.volume << std::endl;
         std::cout<< "inner product: "<< cb.inner_product(g,h) << std::endl;

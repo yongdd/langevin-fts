@@ -52,14 +52,14 @@ public:
     CpuPseudoDiscrete(ComputationBox *cb, Mixture *mx, FFT *fft);
     ~CpuPseudoDiscrete();
     
-    void update() override;
+    void update_bond_function() override;
     void compute_statistics(
         std::map<std::string, double*> q_init,
         std::map<std::string, double*> w_block) override;
     double get_total_partition(int polymer) override;
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
-    std::array<double,3> compute_stress() override;
+    std::vector<double> compute_stress() override;
     void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;
 };
 #endif

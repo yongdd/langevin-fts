@@ -252,7 +252,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            std::array<double,3> stress = pseudo->compute_stress();
+            std::vector<double> stress = pseudo->compute_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
             for(int i=0;i<3;i++)
                 stress_hist[i].push_back(stress[i]);

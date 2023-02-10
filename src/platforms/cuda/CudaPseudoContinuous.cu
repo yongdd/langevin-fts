@@ -75,12 +75,12 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         }
         else if(cb->get_dim() == 2)
         {
-            n_grid[0] = cb->get_nx(1);
-            n_grid[1] = cb->get_nx(2);
+            n_grid[0] = cb->get_nx(0);
+            n_grid[1] = cb->get_nx(1);
         }
         else if(cb->get_dim() == 1)
         {
-            n_grid[0] = cb->get_nx(2);
+            n_grid[0] = cb->get_nx(0);
         }
 
         cufftPlanMany(&plan_for_1, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
@@ -109,7 +109,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX));
 
-        update();
+        update_bond_function();
     }
     catch(std::exception& exc)
     {
@@ -168,7 +168,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     cudaFree(d_stress_sum);
 }
 
-void CudaPseudoContinuous::update()
+void CudaPseudoContinuous::update_bond_function()
 {
     try{
         // for pseudo-spectral: one_step()
@@ -738,7 +738,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::array<double,3> CudaPseudoContinuous::compute_stress()
+std::vector<double> CudaPseudoContinuous::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -754,7 +754,7 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
         const int M_COMPLEX = this->n_complex_grid;
 
         auto bond_lengths = mx->get_bond_lengths();
-        std::array<double,3> stress;
+        std::vector<double> stress(cb->get_dim());
         std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
@@ -798,26 +798,36 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
 
                 // multiplay two partial partition functions in the fourier spaces
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
-                if ( DIM >= 3 )
+                if ( DIM == 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
                     unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-                }
-                if ( DIM >= 2 )
-                {
+
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
                     unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-                }
-                if ( DIM >= 1 )
-                {
+
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
                     unique_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+
+                }
+                if ( DIM == 2 )
+                {
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                }
+                if ( DIM == 1 )
+                {
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
             }
         }
 
         // compute total stress
-        for(int d=0; d<3; d++)
+        for(int d=0; d<cb->get_dim(); d++)
             stress[d] = 0.0;
         for(const auto& block: d_unique_phi)
         {
@@ -831,10 +841,10 @@ std::array<double,3> CudaPseudoContinuous::compute_stress()
             PolymerChain& pc = mx->get_polymer(p);
             std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
-            for(int d=0; d<3; d++)
+            for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
-        for(int d=0; d<3; d++)
+        for(int d=0; d<cb->get_dim(); d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
             
         return stress;
