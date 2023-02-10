@@ -79,14 +79,14 @@ phi_b = pseudo.get_monomer_concentration("B")
 phi_c = pseudo.get_monomer_concentration("C")
 
 print(phi_a, phi_b, phi_c)
-print(np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
+print("Total phi:", np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
 
 # for each polymer chain
 for p in range(mixture.get_n_polymers()):
      phi = pseudo.get_polymer_concentration(p)
      Q = pseudo.get_total_partition(p)
 
-     print(Q)           # total partition function
-     print(np.mean(np.sum(phi, axis=0)))
+     print(f"Q({p}):", Q)           # total partition function
+     print(f"Total phi({p}):", np.mean(np.sum(phi, axis=0)))
      for b in range(mixture.get_polymer(p).get_n_blocks()):
           print(phi[b]) # concentration for each block

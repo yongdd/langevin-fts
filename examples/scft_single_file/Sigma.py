@@ -38,9 +38,9 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
         energy_total -= cb.integral(w_plus)/cb.get_volume()
         for p in range(mixture.get_n_polymers()):
-            energy_total  -= np.log(pseudo.get_total_partition(p)/cb.get_volume())
+            energy_total  -= np.log(pseudo.get_total_partition(p))
 
-        # calculate pressure field for the new field calculation, the method is modified from Fredrickson's
+        # calculate pressure field for the new field calculation.
         xi = 0.5*(w[0]+w[1]-chi_n)
 
         # calculate output fields
@@ -221,8 +221,9 @@ mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1   -4.663E-15  [ 1.9678400E+02  ]    -0.001859583   1.9215121E+00  [  7.0000000, 7.0000000, 4.0000000 ]
-    #    2    8.216E-15  [ 1.9643500E+02  ]    -0.000570350   1.1293870E+00  [  7.0000203, 7.0000203, 4.0000299 ]
-    #    3    6.661E-16  [ 1.9632596E+02  ]    -0.000238806   6.6231791E-01  [  7.0000294, 7.0000294, 4.0000421 ]
-    #    4   -5.107E-15  [ 1.9628576E+02  ]    -0.000146152   4.2737822E-01  [  7.0000346, 7.0000346, 4.0000485 ]
-    #    5    8.882E-16  [ 1.9626999E+02  ]    -0.000121015   3.3566219E-01  [  7.0000379, 7.0000379, 4.0000524 ]
+    #    1   -1.077E-14  [ 1.0040000E+00  ]    -0.001859583   1.9215121E+00  [  7.0000000, 7.0000000, 4.0000000 ]
+    #    2    7.327E-15  [ 1.0022061E+00  ]    -0.000570350   1.1293870E+00  [  7.0000203, 7.0000203, 4.0000299 ]
+    #    3    2.665E-15  [ 1.0016441E+00  ]    -0.000238806   6.6231790E-01  [  7.0000294, 7.0000294, 4.0000421 ]
+    #    4   -6.772E-15  [ 1.0014360E+00  ]    -0.000146151   4.2737821E-01  [  7.0000346, 7.0000346, 4.0000485 ]
+    #    5    2.220E-16  [ 1.0013535E+00  ]    -0.000121015   3.3566217E-01  [  7.0000379, 7.0000379, 4.0000524 ]
+    #    6   -3.886E-15  [ 1.0013261E+00  ]    -0.000117149   3.0917077E-01  [  7.0000403, 7.0000403, 4.0000549 ]

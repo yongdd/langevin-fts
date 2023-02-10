@@ -446,8 +446,8 @@ void CudaPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
-                d_unique_partition[dep_v][original_n_segment],  // q
-                d_unique_partition[dep_u][0])/n_superposed;       // q^dagger
+                d_unique_partition[dep_v][original_n_segment],               // q
+                d_unique_partition[dep_u][0])/n_superposed/cb->get_volume(); // q^dagger
 
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             current_p++;
@@ -492,7 +492,7 @@ void CudaPseudoContinuous::compute_statistics(
 
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
-            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
         }
     }
@@ -845,7 +845,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<cb->get_dim(); d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
             
         return stress;
     }

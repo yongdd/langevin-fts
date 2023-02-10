@@ -184,7 +184,7 @@ int main()
                         energy_total -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<mx->get_n_polymers(); p++){
                             PolymerChain& pc = mx->get_polymer(p);
-                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
                         for(int i=0; i<M; i++)
@@ -263,7 +263,7 @@ int main()
                     energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<mx->get_n_polymers(); p++){
                         PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                     }
 
 
@@ -288,7 +288,7 @@ int main()
                     energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<mx->get_n_polymers(); p++){
                         PolymerChain& pc = mx->get_polymer(p);
-                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p)/cb->get_volume());
+                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                     }
 
                     // compute stress

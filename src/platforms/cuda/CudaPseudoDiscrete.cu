@@ -478,7 +478,7 @@ void CudaPseudoDiscrete::compute_statistics(
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
                 d_unique_partition[dep_v][original_n_segment-n_segment_offset-1],  // q
                 d_unique_partition[dep_u][0],                                      // q^dagger
-                d_exp_dw[monomer_type])/n_superposed;        
+                d_exp_dw[monomer_type])/n_superposed/cb->get_volume();        
 
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
@@ -522,7 +522,7 @@ void CudaPseudoDiscrete::compute_statistics(
             
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
-            double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
         }
     }
@@ -797,7 +797,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond_half[monomer_type];
                 }
-                // at superposion
+                // at superposition junction
                 else if (n == 0)
                 {
                     // std::cout << "case 4" << std::endl;
@@ -865,7 +865,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<cb->get_dim(); d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds()/cb->get_volume();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
             
         return stress;
     }

@@ -269,17 +269,17 @@ int main()
             for(int p=0; p<mx1->get_n_polymers();p++)
                 std::cout<< std::setprecision(10) << std::scientific << "Total Partial Partition (" + std::to_string(p) + "): " << pseudo->get_total_partition(p) << std::endl;
 
-            error = std::abs(pseudo->get_total_partition(0)-1.3999194661e+05)/std::abs(pseudo->get_total_partition(0));
+            error = std::abs(pseudo->get_total_partition(0)-1.3999194661e+05/(Lx*Ly*Lz))/std::abs(pseudo->get_total_partition(0));
             std::cout<< "Total Partial Partition (0) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(pseudo->get_total_partition(1)-1.5625863384e+03)/std::abs(pseudo->get_total_partition(1));
+            error = std::abs(pseudo->get_total_partition(1)-1.5625863384e+03/(Lx*Ly*Lz))/std::abs(pseudo->get_total_partition(1));
             std::cout<< "Total Partial Partition (1) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(pseudo->get_total_partition(2)-1.6167175694e+03)/std::abs(pseudo->get_total_partition(2));
+            error = std::abs(pseudo->get_total_partition(2)-1.6167175694e+03/(Lx*Ly*Lz))/std::abs(pseudo->get_total_partition(2));
             std::cout<< "Total Partial Partition (2) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
@@ -335,8 +335,8 @@ int main()
         {
             double mean = std::accumulate(stress_hist[i].begin(), stress_hist[i].end(), 0.0)/stress_hist[i].size();
             double sq_sum = std::inner_product(stress_hist[i].begin(), stress_hist[i].end(), stress_hist[i].begin(), 0.0);
-            double stdev = std::sqrt(sq_sum / stress_hist[i].size() - mean * mean);
-            std::cout << "Std. of Stress[" + std::to_string(i) + "] :" << stdev << std::endl;
+            double stddev = std::sqrt(sq_sum / stress_hist[i].size() - mean * mean);
+            std::cout << "Std. of Stress[" + std::to_string(i) + "]: " << stddev << std::endl;
             if (error > 1e-7)
                 return -1;
         }
