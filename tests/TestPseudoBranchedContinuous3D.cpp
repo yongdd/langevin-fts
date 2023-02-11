@@ -263,7 +263,7 @@ int main()
         {
             double mean = std::accumulate(stress_list[i].begin(), stress_list[i].end(), 0.0)/stress_list[i].size();
             double sq_sum = std::inner_product(stress_list[i].begin(), stress_list[i].end(), stress_list[i].begin(), 0.0);
-            double stddev = std::sqrt(sq_sum / stress_list[i].size() - mean * mean);
+            double stddev = std::sqrt(std::abs(sq_sum / stress_list[i].size() - mean * mean));
             std::cout << "Std. of Stress[" + std::to_string(i) + "]: " << stddev << std::endl;
             if (stddev > 1e-7)
                 return -1;

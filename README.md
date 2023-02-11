@@ -6,7 +6,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
 * Arbitrary Acyclic Branched Polymers (**beta**)
 * Arbitrary Mixtures of Block Copolymers and Homopolymers (+ 1 Random Copolymer) (**beta**)
 * AB-Type Polymer Melts (**The Python library itself can compute concentrations of polymers composed of any number of monomer types**)
-* Automatic Optimization of Partition Function Computation of Arbitrary Acyclic Branched Polymer Mixture
+* Automatic Optimization of Partition Function Computation of Arbitrary Acyclic Branched Polymer Mixture (**beta**)
 * Conformational Asymmetry
 * Box Size Determination by Stress Calculation (SCFT only)
 * Chain Model: Continuous, Discrete
