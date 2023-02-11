@@ -94,7 +94,8 @@ class LFTS:
                     "Only single block random copolymer is allowed."
                 assert(np.isclose(polymer["blocks"][0]["fraction"]["A"]+polymer["blocks"][0]["fraction"]["B"],1.0)), \
                     "The sum of volume fraction of random copolymer must be equal to 1."
-                params["segment_lengths"].update({"random":statistical_segment_length})
+                params["segment_lengths"].update({"R":statistical_segment_length})
+                block_monomer_type_list = ["R"]
                 self.random_copolymer_exist = True
                 self.random_A_fraction = total_A_fraction
 
@@ -273,7 +274,7 @@ class LFTS:
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             # for the given fields find the polymer statistics
             if self.random_copolymer_exist:
-                self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus,"random":w_minus*(2*self.random_A_fraction-1)+w_plus})
+                self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus,"R":w_minus*(2*self.random_A_fraction-1)+w_plus})
             else:
                 self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
 
@@ -281,9 +282,9 @@ class LFTS:
             phi["B"] = self.pseudo.get_monomer_concentration("B")
 
             if self.random_copolymer_exist:
-                phi["random"] = self.pseudo.get_monomer_concentration("random")
-                phi["A"] += phi["random"]*self.random_A_fraction
-                phi["B"] += phi["random"]*(1.0-self.random_A_fraction)
+                phi["R"] = self.pseudo.get_monomer_concentration("R")
+                phi["A"] += phi["R"]*self.random_A_fraction
+                phi["B"] += phi["R"]*(1.0-self.random_A_fraction)
 
             phi_plus = phi["A"] + phi["B"]
 
