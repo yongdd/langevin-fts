@@ -190,7 +190,7 @@ int main()
         pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
         #endif
 
-        std::vector<std::vector<int>> stress_hist {{},{},{}};
+        std::vector<std::vector<int>> stress_list {{},{},{}};
 
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
@@ -255,17 +255,17 @@ int main()
             std::vector<double> stress = pseudo->compute_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
             for(int i=0;i<3;i++)
-                stress_hist[i].push_back(stress[i]);
+                stress_list[i].push_back(stress[i]);
 
             delete pseudo;
         }
         for(int i=0;i<3;i++)
         {
-            double mean = std::accumulate(stress_hist[i].begin(), stress_hist[i].end(), 0.0)/stress_hist[i].size();
-            double sq_sum = std::inner_product(stress_hist[i].begin(), stress_hist[i].end(), stress_hist[i].begin(), 0.0);
-            double stddev = std::sqrt(sq_sum / stress_hist[i].size() - mean * mean);
+            double mean = std::accumulate(stress_list[i].begin(), stress_list[i].end(), 0.0)/stress_list[i].size();
+            double sq_sum = std::inner_product(stress_list[i].begin(), stress_list[i].end(), stress_list[i].begin(), 0.0);
+            double stddev = std::sqrt(sq_sum / stress_list[i].size() - mean * mean);
             std::cout << "Std. of Stress[" + std::to_string(i) + "]: " << stddev << std::endl;
-            if (error > 1e-7)
+            if (stddev > 1e-7)
                 return -1;
         }
         return 0;
