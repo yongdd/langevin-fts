@@ -94,14 +94,7 @@ int main()
         }
 
         // choose platform
-        std::vector<std::string> avail_platforms = {};
-        #ifdef USE_CUDA
-        avail_platforms.push_back("cuda");
-        #endif
-        #ifdef USE_CPU_MKL
-        avail_platforms.push_back("cpu-mkl");
-        #endif
-
+        std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
         std::vector<bool> use_superpositions = {false, true};
         for(std::string platform : avail_platforms)
