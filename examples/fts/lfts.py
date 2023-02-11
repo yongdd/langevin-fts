@@ -188,7 +188,7 @@ class LFTS:
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "params": self.params,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_a":phi["B"]}
+            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_b":phi["B"]}
         savemat(path, mdic)
 
     def run(self, w_plus, w_minus):
