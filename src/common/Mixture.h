@@ -31,7 +31,7 @@ private:
                             // "discrete": discrete bead-spring model
                             
     double ds;              // contour step interval
-    bool use_superposition; // compute multiple partial partition functions using proporty of linearity of the diffusion equation.
+    bool use_superposition; // compute multiple partial partition functions using property of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
