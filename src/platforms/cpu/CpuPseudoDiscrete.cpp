@@ -507,7 +507,6 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // We only need the real part of stress calculation.
 
-
     try
     {
         const int DIM  = cb->get_dim();
@@ -541,12 +540,12 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
 
-            double* q_1 = unique_partition[dep_v];    // dependency v
-            double* q_2 = unique_partition[dep_u];    // dependency u
+            double *q_1 = unique_partition[dep_v];    // dependency v
+            double *q_2 = unique_partition[dep_u];    // dependency u
 
             double coeff;
             double bond_length_sq;
-            double * boltz_bond_now;
+            double *boltz_bond_now;
 
             // reset
             for(int d=0; d<3; d++)
