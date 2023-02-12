@@ -558,8 +558,8 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
 
-            double* q_1 = unique_partition[dep_v];    // dependency v
-            double* q_2 = unique_partition[dep_u];    // dependency u
+            double *q_1 = unique_partition[dep_v];    // dependency v
+            double *q_2 = unique_partition[dep_u];    // dependency u
 
             double coeff;
             std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);

@@ -48,8 +48,9 @@ int main()
         double ds = 1.0/10;
 
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
+
         std::vector<std::string> block_species = {"A","A","A","A","A","A","A","A", "B","B","B", "B","B","B","B", "B","B","B", "A","A","A"};
-        std::vector<double> contour_lengths    = {  f,  f,  f,  f,  f,  f,  f,  f, 0.8,0.8,0.4, 0.4,0.3,0.2,0.1, 0.8,0.8,0.8,   f,  f,  f};
+        std::vector<double> contour_lengths    = {  f,  f,  f,  f,  f,  f,  f,  f, 0.8,0.6,0.8, 0.3,0.4,0.1,0.2, 0.8,0.8,0.8,   f,  f,  f};
         std::vector<int> v                     = {  0,  1,  2,  3,  4,  5,  6,  7,   1,  2,  3,   4,  5,  6,  7,   9, 10, 11,   9, 10, 11};
         std::vector<int> u                     = {  1,  2,  3,  4,  5,  6,  7,  8,   9, 10, 11,  12, 13, 14, 15,  16, 17, 18,  19, 20, 21};
 
@@ -57,6 +58,11 @@ int main()
         // std::vector<double> contour_lengths = {f,f,f,f,f, 1-f,1-f,(1-f)/2,(1-f)/4, 1-f,1-f, f,f};
         // std::vector<int> v = {0,1,2,3,4, 1,2,3,4, 6,7, 6,7};
         // std::vector<int> u = {1,2,3,4,5, 6,7,8,9, 10,12, 11,13};
+
+        // std::vector<std::string> block_species = {"A","A","A","A","A", "B","B", "B","B", "A","A"};
+        // std::vector<double> contour_lengths = {f,f,f,f,f, 0.8,0.4, 1-f,1-f, f,f};
+        // std::vector<int> v = {0,1,2,3,4, 1,2, 6,7, 6,7};
+        // std::vector<int> u = {1,2,3,4,5, 6,7, 10,12, 11,13};
 
         const int M = nx[0]*nx[1]*nx[2];
 

@@ -68,7 +68,7 @@ params = {
                                 # To obtain concentration of each block, disable this option.
 
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
     "chi_n": chi_n/total_alpha,   # Interaction parameter, Flory-Huggins params * N
 
