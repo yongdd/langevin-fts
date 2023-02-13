@@ -119,7 +119,7 @@ int main()
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                     std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
-                    std::cout << "Using Superpositions: " << use_superposition << std::endl;
+                    std::cout << "Using Superposition: " << use_superposition << std::endl;
                     // std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
                     // std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
                     // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;

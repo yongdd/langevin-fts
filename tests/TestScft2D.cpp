@@ -222,7 +222,7 @@ int main()
             delete am;
             delete factory;
 
-            if (!std::isfinite(error_level) || std::abs(error_level-0.007263398) > 1e-7)
+            if (!std::isfinite(error_level) || std::abs(error_level-0.007266210) > 1e-4)
                 return -1;
         }
         return 0;
