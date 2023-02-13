@@ -1,13 +1,15 @@
 clear all;
 
-load('structure_function_002000.mat');
+file_path = 'structure_function';
+
+load(strcat(file_path,'_002000.mat'));
 
 % Calculate k (Fourier mode) sqaure 
-k2         = zeros(nx(1),nx(2),nx(3)/2+1);
-k2_mapping = zeros(nx(1),nx(2),nx(3)/2+1);
+k2         = zeros(nx(1),nx(2),floor(double(nx(3))/2)+1);
+k2_mapping = zeros(nx(1),nx(2),floor(double(nx(3))/2)+1);
 for i = 0:nx(1)-1
     for j = 0:nx(2)-1
-        for k = 0:nx(3)/2
+        for k = 0:floor(double(nx(3))/2)
             k2(i+1,j+1,k+1) = round((double(i)/lx(1))^2 + (double(j)/lx(2))^2 + (double(k)/lx(3))^2,7);
         end
     end
@@ -17,7 +19,7 @@ end
 k2_unique = unique(k2);
 for i = 0:nx(1)-1
     for j = 0:nx(2)-1
-        for k = 0:nx(3)/2
+        for k = 0:floor(double(nx(3))/2)
             idx = find(k2_unique == round((double(i)/lx(1))^2 + (double(j)/lx(2))^2 + (double(k)/lx(3))^2,7));
             k2_mapping(i+1,j+1,k+1) = idx;
         end
@@ -28,13 +30,13 @@ end
 sf_mag   = zeros(size(k2_unique));
 sf_count = zeros(size(k2_unique));
 for langevin_iter = 1000:1000:2000
-    file_name = sprintf('structure_function_%06d.mat', langevin_iter);
+    file_name = strcat(file_path,sprintf('_%06d.mat', langevin_iter));
     fprintf('%s\n', file_name);
     load(file_name);
     v = structure_function;
     for i = 0:nx(1)-1
         for j = 0:nx(2)-1
-            for k = 0:nx(3)/2
+            for k = 0:floor(double(nx(3))/2)
                 idx = k2_mapping(i+1,j+1,k+1);
                 sf_mag(idx) = sf_mag(idx) + structure_function(i+1,j+1,k+1);
                 sf_count(idx) = sf_count(idx) + 1;
