@@ -15,4 +15,3 @@
 27. Syntax check of Keys in Mixture 
 31. Throws Exception in openMP block
 33. Figure out why substr() fails in GCC 8.4.1
-34. Tighten Bound of Superposition of Continuous Chain

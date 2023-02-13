@@ -45,8 +45,8 @@ private:
     Scheduler *sc;          // scheduler for partial partition function
     const int N_STREAM = 2; // the number of job threads
 
-    // key: (polymer id, dep_v, dep_u, n_segment, n_segment_offset) (assert(dep_v <= dep_u)), value: concentration
-    std::map<std::tuple<int, std::string, std::string, int, int>, double *> d_unique_phi;
+    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
+    std::map<std::tuple<int, std::string, std::string>, double *> d_unique_phi;
 
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond
@@ -67,7 +67,7 @@ private:
                   double *d_exp_dw_1, double *d_exp_dw_2,
                   double *d_exp_dw_half_1, double *d_exp_dw_half_2);
 
-    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N);
+    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
 
     CudaPseudoContinuous(ComputationBox *cb, Mixture *pc);

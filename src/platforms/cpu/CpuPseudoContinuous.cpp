@@ -284,8 +284,9 @@ void CpuPseudoContinuous::compute_statistics(
                 continue;
 
             int n_superposed;
-            // int n_segment          = std::get<3>(block.first);
-            int original_n_segment = mx->get_unique_block(block.first).n_segment;
+            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -300,7 +301,7 @@ void CpuPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p]= cb->inner_product(
-                &unique_partition[dep_v][original_n_segment*M],             // q
+                &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M],             // q
                 &unique_partition[dep_u][0])/n_superposed/cb->get_volume(); // q^dagger
             
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
@@ -319,11 +320,12 @@ void CpuPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(block.first);
 
             int n_repeated;
-            int n_segment          = std::get<3>(block.first);
-            // int original_n_segment = mx->get_unique_block(block.first).n_segment;
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
 
             // if there is no segment
-            if(n_segment == 0)
+            if(n_segment_allocated == 0)
             {
                 for(int i=0; i<M;i++)
                     block.second[i] = 0.0;
@@ -347,7 +349,9 @@ void CpuPseudoContinuous::compute_statistics(
                 block.second,             // phi
                 unique_partition[dep_v],  // dependency v
                 unique_partition[dep_u],  // dependency u
-                n_segment);               // n_segment
+                n_segment_allocated,
+                n_segment_offset,
+                n_segment_original);
 
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
@@ -427,7 +431,7 @@ void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
     }
 }
 void CpuPseudoContinuous::calculate_phi_one_block(
-    double *phi, double *q_1, double *q_2, const int N)
+    double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL)
 {
     try
     {
@@ -436,11 +440,11 @@ void CpuPseudoContinuous::calculate_phi_one_block(
 
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = simpson_rule_coeff[0]*q_1[i]*q_2[i+N*M];
+            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_ORIGINAL-N_OFFSET)*M]*q_2[i];
         for(int n=1; n<=N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[n]*q_1[i+n*M]*q_2[i+(N-n)*M];
+                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_ORIGINAL-N_OFFSET-n)*M]*q_2[i+n*M];
         }
     }
     catch(std::exception& exc)
@@ -472,8 +476,8 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         for(const auto& block: unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment     = std::get<3>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -507,7 +511,7 @@ void CpuPseudoContinuous::get_polymer_concentration(int p, double *phi)
             std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
-            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)];
+            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u)];
 
             for(int i=0; i<M; i++)
                 phi[i+b*M] = _unique_phi[i]; 
@@ -533,7 +537,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for unique block
         for(const auto& block: unique_phi)
@@ -541,7 +545,10 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             const auto& key      = block.first;
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
+
+            const int N           = mx->get_unique_block(block.first).n_segment_allocated;
+            const int N_OFFSET    = mx->get_unique_block(block.first).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             // if there is no segment
@@ -572,8 +579,8 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             // compute
             for(int n=0; n<=N; n++)
             {
-                fft->forward(&q_1[n*M],     qk_1);
-                fft->forward(&q_2[(N-n)*M], qk_2);
+                fft->forward(&q_1[(N_ORIGINAL-N_OFFSET-n)*M], qk_1);
+                fft->forward(&q_2[n*M], qk_2);
 
                 if ( DIM == 3 )
                 {
@@ -607,12 +614,11 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             stress[d] = 0.0;
         for(const auto& block: unique_phi)
         {
-            const auto& key      = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
-            PolymerChain& pc = mx->get_polymer(p);
+            const auto& key   = block.first;
+            int p             = std::get<0>(key);
+            std::string dep_v = std::get<1>(key);
+            std::string dep_u = std::get<2>(key);
+            PolymerChain& pc  = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];

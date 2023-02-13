@@ -426,8 +426,9 @@ void CudaPseudoContinuous::compute_statistics(
                 continue;
 
             int n_superposed;
-            int n_segment          = std::get<3>(block.first);
-            int original_n_segment = mx->get_unique_block(block.first).n_segment;
+            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -442,8 +443,8 @@ void CudaPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
-                d_unique_partition[dep_v][original_n_segment],               // q
-                d_unique_partition[dep_u][0])/n_superposed/cb->get_volume(); // q^dagger
+                d_unique_partition[dep_v][n_segment_original-n_segment_offset], // q
+                d_unique_partition[dep_u][0])/n_superposed/cb->get_volume();    // q^dagger
 
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             current_p++;
@@ -457,11 +458,12 @@ void CudaPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(block.first);
 
             int n_repeated;
-            int n_segment          = std::get<3>(block.first);
-            int original_n_segment = mx->get_unique_block(block.first).n_segment;
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
 
             // if there is no segment
-            if(n_segment == 0)
+            if(n_segment_allocated == 0)
             {
                 gpu_error_check(cudaMemset(block.second, 0, sizeof(double)*M));
                 continue;
@@ -484,7 +486,9 @@ void CudaPseudoContinuous::compute_statistics(
                 block.second,             // phi
                 d_unique_partition[dep_v],  // dependency v
                 d_unique_partition[dep_u],  // dependency u
-                n_segment);               // n_segment
+                n_segment_allocated,
+                n_segment_offset,
+                n_segment_original);
 
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
@@ -640,7 +644,7 @@ void CudaPseudoContinuous::one_step_2(
     }
 }
 void CudaPseudoContinuous::calculate_phi_one_block(
-    double *d_phi, double **d_q_1, double **d_q_2, const int N)
+    double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL)
 {
     try
     {
@@ -651,10 +655,10 @@ void CudaPseudoContinuous::calculate_phi_one_block(
         std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
 
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[0], d_q_2[N], simpson_rule_coeff[0], M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET], d_q_2[0], simpson_rule_coeff[0], M);
         for(int n=1; n<=N; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[n], d_q_2[N-n], simpson_rule_coeff[n], M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET-n], d_q_2[n], simpson_rule_coeff[n], M);
         }
     }
     catch(std::exception& exc)
@@ -688,8 +692,8 @@ void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, d
         for(const auto& block: d_unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment     = std::get<3>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -725,7 +729,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
 
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)], M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_unique_phi[std::make_tuple(p, dep_v, dep_u)], M);
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -751,7 +755,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
         // compute stress for unique block
@@ -761,7 +765,10 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
+
+            const int N           = mx->get_unique_block(block.first).n_segment_allocated;
+            const int N_OFFSET    = mx->get_unique_block(block.first).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             // if there is no segment
@@ -788,8 +795,8 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             for(int n=0; n<=N; n++)
             {
                 // execute a Forward FFT
-                gpu_error_check(cudaMemcpy(&d_q_step1_2[0], d_q_1[n],   sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                gpu_error_check(cudaMemcpy(&d_q_step1_2[M], d_q_2[N-n], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                gpu_error_check(cudaMemcpy(&d_q_step1_2[0], d_q_1[N_ORIGINAL-N_OFFSET-n], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                gpu_error_check(cudaMemcpy(&d_q_step1_2[M], d_q_2[n], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 cufftExecD2Z(plan_for_2, d_q_step1_2, d_qk_in_2);
 
                 // multiplay two partial partition functions in the fourier spaces
@@ -827,15 +834,11 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             stress[d] = 0.0;
         for(const auto& block: d_unique_phi)
         {
-            const auto& key      = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
-
-            PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+            const auto& key   = block.first;
+            int p             = std::get<0>(key);
+            std::string dep_v = std::get<1>(key);
+            std::string dep_u = std::get<2>(key);
+            PolymerChain& pc  = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];

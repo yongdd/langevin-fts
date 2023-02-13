@@ -176,7 +176,6 @@ void CpuPseudoDiscrete::compute_statistics(
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
-
                     // if it is superposition
                     if (key[0] == '[')
                     {
@@ -287,9 +286,9 @@ void CpuPseudoDiscrete::compute_statistics(
                 continue;
 
             int n_superposed;
-            // int n_segment            = std::get<3>(block.first);
-            int n_segment_offset     = std::get<4>(block.first);
-            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
 
             // contains no '['
@@ -305,7 +304,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p]= cb->inner_product_inverse_weight(
-                &unique_partition[dep_v][(original_n_segment-n_segment_offset-1)*M],  // q
+                &unique_partition[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
                 &unique_partition[dep_u][0],                                          // q^dagger
                 exp_dw[monomer_type])/n_superposed/cb->get_volume();
 
@@ -322,9 +321,9 @@ void CpuPseudoDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(block.first);
 
             int n_repeated;
-            int n_segment            = std::get<3>(block.first);
-            int n_segment_offset     = std::get<4>(block.first);
-            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
 
             // contains no '['
@@ -345,9 +344,9 @@ void CpuPseudoDiscrete::compute_statistics(
                 unique_partition[dep_v],  // dependency v
                 unique_partition[dep_u],  // dependency u
                 exp_dw[monomer_type],     // exp_dw
-                n_segment,
+                n_segment_allocated,
                 n_segment_offset,
-                original_n_segment);
+                n_segment_original);
             
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
@@ -454,8 +453,8 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
         for(const auto& block: unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment     = std::get<3>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -489,7 +488,7 @@ void CpuPseudoDiscrete::get_polymer_concentration(int p, double *phi)
             std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
-            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)];
+            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u)];
 
             for(int i=0; i<M; i++)
                 phi[i+b*M] = _unique_phi[i]; 
@@ -515,7 +514,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
 
         // compute stress for unique block
         for(const auto& block: unique_phi)
@@ -524,11 +523,11 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             // int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
-            const int N_OFFSET   = std::get<4>(key);
-            const int N_ORIGINAL = mx->get_unique_block(key).n_segment;
+            const int N           = mx->get_unique_block(block.first).n_segment_allocated;
+            const int N_OFFSET    = mx->get_unique_block(block.first).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
+            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             // contains no '['
             int n_repeated;
@@ -647,7 +646,6 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
             PolymerChain& pc = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)

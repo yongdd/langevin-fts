@@ -221,11 +221,12 @@ void Mixture::add_polymer(
             int n_segment_offset = std::get<2>(u_item.first);
 
             // add blocks
-            auto key = std::make_tuple(
-                polymer_id, key_v, key_u, n_segment_allocated, n_segment_offset);
+            auto key = std::make_tuple(polymer_id, key_v, key_u);
 
             unique_blocks[key].monomer_type = Mixture::key_to_species(key_v);
-            unique_blocks[key].n_segment = n_segment_original;
+            unique_blocks[key].n_segment_allocated = n_segment_allocated;
+            unique_blocks[key].n_segment_offset    = n_segment_offset;
+            unique_blocks[key].n_segment_original  = n_segment_original;
             unique_blocks[key].v_u = u_item.second;
 
             // add branches
@@ -318,137 +319,8 @@ void Mixture::add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchK
     }
 }
 std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
-    Mixture::superpose_branches_continuous(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<>> map_u_list)
+    Mixture::superpose_branches_continuous(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<>> u_map)
 {
-    // Example)
-    // 0, B:
-    //   6, 0, 6, (C)B, 1, 
-    //   6, 0, 6, (D)B, 3, 
-    //   6, 0, 6, (E)B, 2, 
-    //   4, 0, 4, (F)B, 1, 
-    //
-    //      ↓   Superposition
-    //  
-    //   6, 0, 0, (C)B, 1, 
-    //   6, 0, 0, (D)B, 3, 
-    //   6, 0, 0, (E)B, 2, 
-    //   4, 0, 4, (F)B, 1
-    //   6, 0, 6, [(C)B0:1,(D)B0:3,(E)B0:2]B
-
-    int current_n_segment = std::get<0>(map_u_list.begin()->first);
-    int n_segment_allocated;
-    std::string dep_u_superposition;
-    std::vector<std::tuple<int ,int>> v_u_total;
-
-    // tuple <n_segment_allocated, key, n_segment_offset, n_segment, v_u_list>
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> dep_u_superposition_list;
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> sample_n_segment_superposition_list;
-
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> level_superposition_list;
-
-    // std::cout << "---------map------------" << std::endl;
-    // for(const auto& item : map_u_list)
-    // {
-    //     std::cout << std::get<0>(item.first) << ", " <<
-    //                  std::get<1>(item.first) << ", " <<
-    //                  std::get<2>(item.first) << ", " <<
-    //                  std::get<3>(item.first) << ", ";
-    //     for(const auto& v_u : item.second)
-    //     {
-    //         std::cout << "("
-    //         + std::to_string(std::get<0>(v_u)) + ","
-    //         + std::to_string(std::get<1>(v_u)) + ")" + ", ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // std::cout << "-----------------------" << std::endl;
-
-    for(const auto& item : map_u_list)
-        remaining_keys.push_back(std::make_tuple(
-            std::get<0>(item.first), std::get<1>(item.first),
-            std::get<2>(item.first), std::get<3>(item.first), item.second));
-
-    current_n_segment = std::get<0>(remaining_keys[0]);
-    while(!remaining_keys.empty())
-    {
-        for(size_t i=0; i<remaining_keys.size(); i++)
-        {
-            if (current_n_segment == std::get<0>(remaining_keys[i]))
-            {
-                level_superposition_list.push_back(remaining_keys[i]);
-            }
-        }
-
-        // if it empty, decrease current_n_segment.
-        if (level_superposition_list.empty())
-        {
-            // std::cout << "new current_n_segment" << std::endl;
-            current_n_segment = std::get<0>(remaining_keys[0]);
-        }
-        else
-        {
-            // std::cout << current_n_segment << "-----------------------" << std::endl;
-            // for(size_t i=0; i<level_superposition_list.size(); i++)
-            //     std::cout << std::get<0>(level_superposition_list[i]) << ", " << std::get<1>(level_superposition_list[i]) << std::endl;
-
-            // if there is only one element and it is not superposed
-            if (level_superposition_list.size() == 1)
-            {
-                // add to vectors
-                dep_u_superposition_list.push_back(level_superposition_list[0]);
-            }
-            else
-            {
-                // sort level_superposition_list with second element
-                std::sort(level_superposition_list.begin(), level_superposition_list.end(),
-                    [](auto const &t1, auto const &t2)
-                        {
-                            return Mixture::key_to_height(std::get<1>(t1)) > Mixture::key_to_height(std::get<1>(t2));
-                        }
-                );
-
-                // add one by one
-                n_segment_allocated = std::get<0>(level_superposition_list[0]);
-                std::string dep_key = std::get<1>(level_superposition_list[0]);
-                int n_segment_original = std::get<3>(level_superposition_list[0]);
-                std::vector<std::tuple<int ,int>> dep_v_u = std::get<4>(level_superposition_list[0]);
-                v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
-
-                dep_u_superposition = "[" + dep_key + std::to_string(0);
-                if (Mixture::key_minus_species(dep_key)[0] != '[')
-                    dep_u_superposition += ":" + std::to_string(dep_v_u.size());
-
-                // add to vector
-                dep_u_superposition_list.push_back(std::make_tuple(0, dep_key, 0, n_segment_original, dep_v_u));
-
-                for(size_t i=1; i<level_superposition_list.size(); i++)
-                {
-                    dep_key = std::get<1>(level_superposition_list[i]);
-                    dep_v_u = std::get<4>(level_superposition_list[i]);
-                    v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
-
-                    dep_u_superposition += "," + dep_key + std::to_string(0);
-                    if (Mixture::key_minus_species(dep_key)[0] != '[')
-                        dep_u_superposition += ":" + std::to_string(dep_v_u.size());
-
-                    // add to vector
-                    dep_u_superposition_list.push_back(std::make_tuple(0, dep_key, 0, n_segment_original, dep_v_u));
-                }
-                dep_u_superposition += "]" + Mixture::key_to_species(std::get<1>(level_superposition_list[0]));
-
-                // add to vector
-                dep_u_superposition_list.push_back(std::make_tuple(n_segment_allocated, dep_u_superposition, 0, n_segment_original, v_u_total));
-            }
-            // erase elements
-            for(size_t i=0; i<level_superposition_list.size(); i++)
-                remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[i]), remaining_keys.end());
-            level_superposition_list.clear();
-        }
-    }
-    return dep_u_superposition_list;
-
-        // Todo
     // Example)
     // 0, B:
     //   6, 0, 6, (C)B, 1,       6
@@ -483,9 +355,46 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     //   6, 2, 0, ([(C)B0:1,(D)B0:3,(E)B0:2]B2)B,           6
     //   6, 2, 4, [([(C)B0:1,(D)B0:3,(E)B0:2]B2)B0,(F)B0],  4
 
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> dep_u_superposition_list;
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> dep_u_superposition_total;
+
+    // Because of our SimpsonQuadrature implementation, whose weights of odd number n_segments and even number n_segments are slightly different,
+    // superpositions for blocks of odd number and of even number are separately performed.
+
+    // for even number
+    for(const auto& item : u_map)
+    {
+        if (std::get<0>(item.first) % 2 == 0)
+        {
+            remaining_keys.push_back(std::make_tuple(
+                std::get<0>(item.first), std::get<1>(item.first),
+                std::get<2>(item.first), std::get<3>(item.first), item.second));
+        }
+    }
+    dep_u_superposition_total = superpose_branches_common(remaining_keys, 0);
+
+    // for odd number
+    remaining_keys.clear();
+    for(const auto& item : u_map)
+    {
+        if (std::get<0>(item.first) % 2 == 1)
+        {
+            remaining_keys.push_back(std::make_tuple(
+                std::get<0>(item.first), std::get<1>(item.first),
+                std::get<2>(item.first), std::get<3>(item.first), item.second));
+        }
+    }
+    dep_u_superposition_list = superpose_branches_common(remaining_keys, 0);
+
+    // merge vectors
+    dep_u_superposition_total.insert(std::end(dep_u_superposition_total), std::begin(dep_u_superposition_list), std::end(dep_u_superposition_list));
+
+    return dep_u_superposition_total;
+
 }
 std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
-    Mixture::superpose_branches_discrete(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<>> map_u_list)
+    Mixture::superpose_branches_discrete(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<>> u_map)
 {
 
     // Example)
@@ -522,7 +431,21 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     //   4, 0, 1, (F)B, 1
     //   7, 4, 3, [([(C)B1:1,(D)B1:3,(E)B1:2]B2)B1,:(F)B1:1]B
 
-    int current_n_segment = std::get<0>(map_u_list.begin()->first);
+    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
+
+    for(const auto& item : u_map)
+        remaining_keys.push_back(std::make_tuple(
+            std::get<0>(item.first), std::get<1>(item.first),
+            std::get<2>(item.first), std::get<3>(item.first), item.second));
+
+    return superpose_branches_common(remaining_keys, 1);
+}
+
+
+std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
+    Mixture::superpose_branches_common(std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys, int minimum_n_segment)
+{
+    int current_n_segment = std::get<0>(remaining_keys[0]);
     int n_segment_allocated;
     int n_segment_offset;
     int n_segment_original;
@@ -530,26 +453,18 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     std::string dep_u_superposition;
     std::vector<std::tuple<int ,int>> v_u_total;
 
-    // tuple <n_segment_allocated, key, n_segment_offset, n_segment, v_u_list>
+    // tuple <n_segment_allocated, key, n_segment_offset, n_segment_original, v_u_list>
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> dep_u_superposition_list;
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> sample_n_segment_superposition_list;
-
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> level_superposition_list;
 
-    for(const auto& item : map_u_list)
-        remaining_keys.push_back(std::make_tuple(
-            std::get<0>(item.first), std::get<1>(item.first),
-            std::get<2>(item.first), std::get<3>(item.first), item.second));
-
     // std::cout << "---------map------------" << std::endl;
-    // for(const auto& item : map_u_list)
+    // for(const auto& item : remaining_keys)
     // {
-    //     std::cout << std::get<0>(item.first) << ", " <<
-    //                  std::get<1>(item.first) << ", " <<
-    //                  std::get<2>(item.first) << ", " <<
-    //                  std::get<3>(item.first) << ", ";
-    //     for(const auto& v_u : item.second)
+    //     std::cout << std::get<0>(item) << ", " <<
+    //                  std::get<1>(item) << ", " <<
+    //                  std::get<2>(item) << ", " <<
+    //                  std::get<3>(item) << ", ";
+    //     for(const auto& v_u : std::get<4>(item))
     //     {
     //         std::cout << "("
     //         + std::to_string(std::get<0>(v_u)) + ","
@@ -559,8 +474,9 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     // }
     // std::cout << "-----------------------" << std::endl;
 
-    current_n_segment = std::get<0>(remaining_keys[0]);
     // int count = 0;
+    if (!remaining_keys.empty())
+        current_n_segment = std::get<0>(remaining_keys[0]);
     while(!remaining_keys.empty())
     {
         // count ++;
@@ -579,7 +495,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         std::set<int, std::greater<int>> n_segment_set;
         for(size_t i=0; i<remaining_keys.size(); i++)
         {
-            if (std::get<0>(remaining_keys[i]) == 1)
+            if (std::get<0>(remaining_keys[i]) <= 1)
             {
                 dep_u_superposition_list.push_back(remaining_keys[i]);
                 remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), remaining_keys[i]), remaining_keys.end());
@@ -647,7 +563,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
 
                 // add one by one
                 if (n_segment_set.size() == 1)
-                    n_segment_allocated = 1;
+                    n_segment_allocated = minimum_n_segment;
                 else
                     n_segment_allocated = std::get<0>(level_superposition_list[0])-*std::next(n_segment_set.begin(), 1);
 
@@ -704,6 +620,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
     }
     return dep_u_superposition_list;
 }
+
 int Mixture::get_unique_n_branches() const
 {
     return unique_branches.size();
@@ -876,11 +793,11 @@ UniqueEdge& Mixture::get_unique_branch(std::string key)
         throw_with_line_number("There is no such key (" + key + ").");
     return unique_branches[key];
 }
-std::map<std::tuple<int, std::string, std::string, int, int>, UniqueBlock>& Mixture::get_unique_blocks()
+std::map<std::tuple<int, std::string, std::string>, UniqueBlock>& Mixture::get_unique_blocks()
 {
     return unique_blocks;
 }
-UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string, int, int> key)
+UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string> key)
 {
     // assert(("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
     //     std::get<1>(key) + ", " + std::get<2>(key) + ", " + std::to_string(std::get<3>(key)) + ").", unique_blocks.count(key) != 0));
@@ -917,9 +834,9 @@ void Mixture::display_unique_blocks() const
         }
 
         if (use_superposition)
-            std::cout << "\t(" + std::to_string(item.second.n_segment) + ", " + std::to_string(std::get<4>(v_key)) + ", " + std::to_string(std::get<3>(v_key)) + "), " + std::get<2>(v_key) +  ", ";
+            std::cout << "\t(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), " + std::get<2>(v_key) +  ", ";
         else
-            std::cout << "\t" + std::to_string(std::get<3>(v_key)) + ", " + std::get<2>(v_key) +  ", ";
+            std::cout << "\t" + std::to_string(item.second.n_segment_allocated) + ", " + std::get<2>(v_key) +  ", ";
 
         for(const auto& v_u : item.second.v_u)
         {

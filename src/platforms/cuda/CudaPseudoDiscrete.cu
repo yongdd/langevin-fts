@@ -458,9 +458,9 @@ void CudaPseudoDiscrete::compute_statistics(
                 continue;
 
             int n_superposed;
-            int n_segment            = std::get<3>(block.first);
-            int n_segment_offset     = std::get<4>(block.first);
-            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
 
             // contains no '['
@@ -476,7 +476,7 @@ void CudaPseudoDiscrete::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
-                d_unique_partition[dep_v][original_n_segment-n_segment_offset-1],  // q
+                d_unique_partition[dep_v][n_segment_original-n_segment_offset-1],  // q
                 d_unique_partition[dep_u][0],                                      // q^dagger
                 d_exp_dw[monomer_type])/n_superposed/cb->get_volume();        
 
@@ -493,9 +493,9 @@ void CudaPseudoDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(block.first);
 
             int n_repeated;
-            int n_segment            = std::get<3>(block.first);
-            int n_segment_offset     = std::get<4>(block.first);
-            int original_n_segment   = mx->get_unique_block(block.first).n_segment;
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
 
             // contains no '['
@@ -516,9 +516,9 @@ void CudaPseudoDiscrete::compute_statistics(
                 d_unique_partition[dep_v],  // dependency v
                 d_unique_partition[dep_u],  // dependency u
                 d_exp_dw[monomer_type],     // exp_dw
-                n_segment,
+                n_segment_allocated,
                 n_segment_offset,
-                original_n_segment);
+                n_segment_original);
             
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
@@ -669,8 +669,8 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
         for(const auto& block: d_unique_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment     = std::get<3>(block.first);
-            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment != 0)
+            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -708,7 +708,7 @@ void CudaPseudoDiscrete::get_polymer_concentration(int p, double *phi)
 
             // copy normalized concentration
             double norm = cb->get_volume()*mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u, blocks[b].n_segment, 0)], M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, norm, d_unique_phi[std::make_tuple(p, dep_v, dep_u)], M);
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -734,7 +734,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string, int, int>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
         
         // compute stress for unique block
@@ -744,11 +744,11 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
-            const int N_OFFSET   = std::get<4>(key);
-            const int N_ORIGINAL = mx->get_unique_block(key).n_segment;
+            const int N           = mx->get_unique_block(block.first).n_segment_allocated;
+            const int N_OFFSET    = mx->get_unique_block(block.first).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
+            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             // contains no '['
             int n_repeated;
@@ -855,11 +855,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            const int N          = std::get<3>(key);
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
-
             PolymerChain& pc = mx->get_polymer(p);
-            std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
             for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
