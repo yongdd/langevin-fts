@@ -655,10 +655,10 @@ void CudaPseudoContinuous::calculate_phi_one_block(
         std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
 
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET], d_q_2[0], simpson_rule_coeff[0], M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET], d_q_2[0], simpson_rule_coeff[N], M);
         for(int n=1; n<=N; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET-n], d_q_2[n], simpson_rule_coeff[n], M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-N_OFFSET-n], d_q_2[n], simpson_rule_coeff[N-n], M);
         }
     }
     catch(std::exception& exc)
@@ -804,27 +804,27 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 if ( DIM == 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][0] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][1] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][2] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                 }
                 if ( DIM == 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][0] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][1] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    unique_dq_dl[key][0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    unique_dq_dl[key][0] += s_coeff[N-n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
             }
         }
