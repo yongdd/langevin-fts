@@ -301,8 +301,8 @@ void CpuPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             single_partitions[p]= cb->inner_product(
-                &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M],             // q
-                &unique_partition[dep_u][0])/n_superposed/cb->get_volume(); // q^dagger
+                &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M], // q
+                &unique_partition[dep_u][0])/n_superposed/cb->get_volume();        // q^dagger
             
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
@@ -440,11 +440,11 @@ void CpuPseudoContinuous::calculate_phi_one_block(
 
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = simpson_rule_coeff[N]*q_1[i+(N_ORIGINAL-N_OFFSET)*M]*q_2[i];
+            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_ORIGINAL-N_OFFSET)*M]*q_2[i];
         for(int n=1; n<=N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[N-n]*q_1[i+(N_ORIGINAL-N_OFFSET-n)*M]*q_2[i+n*M];
+                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_ORIGINAL-N_OFFSET-n)*M]*q_2[i+n*M];
         }
     }
     catch(std::exception& exc)
@@ -585,7 +585,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[N-n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][0] += coeff*fourier_basis_x[i];
                         unique_dq_dl[key][1] += coeff*fourier_basis_y[i];
                         unique_dq_dl[key][2] += coeff*fourier_basis_z[i];
@@ -594,7 +594,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[N-n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][0] += coeff*fourier_basis_y[i];
                         unique_dq_dl[key][1] += coeff*fourier_basis_z[i];
                     }
@@ -602,7 +602,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
                 if ( DIM == 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[N-n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
+                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
                         unique_dq_dl[key][0] += coeff*fourier_basis_z[i];
                     }
                 }
