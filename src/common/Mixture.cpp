@@ -323,37 +323,27 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
 {
     // Example)
     // 0, B:
-    //   6, 0, 6, (C)B, 1,       6
-    //   6, 0, 6, (D)B, 3,       6
-    //   6, 0, 6, (E)B, 2,       6
-    //   4, 0, 4, (F)B, 1,       4
+    //   6, 0, 6, (C)B, 1,
+    //   4, 0, 4, (D)B, 3,
+    //   4, 0, 4, (E)B, 2,
+    //   2, 0, 2, (F)B, 1,
     //
     //      ↓   Superposition
     //  
-    //   6, 0, 0, (C)B, 1,                      6
-    //   6, 0, 0, (D)B, 3,                      6
-    //   6, 0, 0, (E)B, 2,                      6
-    //   4, 0, 4, (F)B, 1,                      4
-    //   6, 0, 6, [(C)B0:1,(D)B0:3,(E)B0:2]B,   6
-    //
-    //      ↓   Forward up to the second largest n_segment
-    //  
-    //   6, 0, 0, (C)B, 1,                               6
-    //   6, 0, 0, (D)B, 3,                               6 
-    //   6, 0, 0, (E)B, 2,                               6 
-    //   4, 0, 4, (F)B, 1,                               4
-    //   6, 0, 2, [(C)B0:1,(D)B0:3,(E)B0:2]B,            6
-    //   6, 2, 4, ([(C)B0:1,(D)B0:3,(E)B0:2]B2)B,        6
+    //   6, 0, 2, (C)B, 1,  // done
+    //   4, 0, 0, (D)B, 3,  // done
+    //   4, 0, 0, (E)B, 2,  // done
+    //   2, 0, 2, (F)B, 1,
+    //   6, 2, 4, [(C)B2:1,(D)B0:3,(E)B0:2]B,
     //
     //      ↓   Superposition
     //  
-    //   6, 0, 0, (C)B, 1,                                  6
-    //   6, 0, 0, (D)B, 3,                                  6 
-    //   6, 0, 0, (E)B, 2,                                  6 
-    //   4, 0, 0, (F)B, 1,                                  4
-    //   6, 0, 2, [(C)B0:1,(D)B0:3,(E)B0:2]B,               6
-    //   6, 2, 0, ([(C)B0:1,(D)B0:3,(E)B0:2]B2)B,           6
-    //   6, 2, 4, [([(C)B0:1,(D)B0:3,(E)B0:2]B2)B0,(F)B0],  4
+    //   6, 0, 2, (C)B, 1,  // done
+    //   4, 0, 0, (D)B, 3,  // done
+    //   4, 0, 0, (E)B, 2,  // done
+    //   2, 0, 0, (F)B, 1,  // done
+    //   6, 2, 2, [(C)B2:1,(D)B0:3,(E)B0:2]B,             // done
+    //   6, 4, 2, [[(C)B2:1,(D)B0:3,(E)B0:2]B2,(F)B2:1]B  // done
 
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> dep_u_superposition_list;
@@ -399,37 +389,27 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
 
     // Example)
     // 0, B:
-    //   7, 0, 7, (C)B, 1,
-    //   7, 0, 7, (D)B, 3,
-    //   7, 0, 7, (E)B, 2,
-    //   4, 0, 4, (F)B, 1,
+    //   6, 0, 6, (C)B, 1,
+    //   4, 0, 4, (D)B, 3,
+    //   4, 0, 4, (E)B, 2,
+    //   2, 0, 2, (F)B, 1,
     //
     //      ↓   Superposition
     //  
-    //   7, 0, 1, (C)B, 1,
-    //   7, 0, 1, (D)B, 3,
-    //   7, 0, 1, (E)B, 2,
-    //   7, 1, 6, [(C)B1:1,(D)B1:3,(E)B1:2]B
-    //   4, 0, 4, (F)B, 1
-    //
-    //      ↓  Forward up to the second largest n_segment
-    //  
-    //   7, 0, 1, (C)B, 1,
-    //   7, 0, 1, (D)B, 3,
-    //   7, 0, 1, (E)B, 2,
-    //   7, 1, 1, [(C)B1:1,(D)B1:3,(E)B1:2]B
-    //   7, 3, 4, ([(C)B1:1,(D)B1:3,(E)B1:2]B2)B
-    //   4, 0, 4, (F)B, 1
+    //   6, 0, 3, (C)B, 1,  // done
+    //   4, 0, 1, (D)B, 3,  // done
+    //   4, 0, 1, (E)B, 2,  // done
+    //   2, 0, 2, (F)B, 1,
+    //   6, 3, 3, [(C)B3:1,(D)B1:3,(E)B1:2]B,
     //
     //      ↓   Superposition
     //  
-    //   7, 0, 1, (C)B, 1,
-    //   7, 0, 1, (D)B, 3,
-    //   7, 0, 1, (E)B, 2,
-    //   7, 1, 1, [(C)B1:1,(D)B1:3,(E)B1:2]B
-    //   7, 3, 1, ([(C)B1:1,(D)B1:3,(E)B1:2]B2)B
-    //   4, 0, 1, (F)B, 1
-    //   7, 4, 3, [([(C)B1:1,(D)B1:3,(E)B1:2]B2)B1,:(F)B1:1]B
+    //   6, 0, 3, (C)B, 1,  // done
+    //   4, 0, 1, (D)B, 3,  // done
+    //   4, 0, 1, (E)B, 2,  // done
+    //   2, 0, 1, (F)B, 1,  // done
+    //   6, 3, 2, [(C)B3:1,(D)B1:3,(E)B1:2]B,             // done
+    //   6, 5, 1, [[(C)B3:1,(D)B1:3,(E)B1:2]B2,(F)B1:1]B  // done
 
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys;
 
@@ -492,7 +472,7 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
         // }
         // std::cout << "-------------" << std::endl;
 
-        std::set<int, std::greater<int>> n_segment_set;
+        std::set<int, std::greater<int>> n_segment_set; // for finding the largest n_segment that is not in level_superposition_list.
         for(size_t i=0; i<remaining_keys.size(); i++)
         {
             if (std::get<0>(remaining_keys[i]) <= 1)
@@ -501,9 +481,10 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
                 remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), remaining_keys[i]), remaining_keys.end());
                 continue;
             }
-            if (current_n_segment == std::get<0>(remaining_keys[i]))
+            if (current_n_segment <= std::get<0>(remaining_keys[i]))
                 level_superposition_list.push_back(remaining_keys[i]);
-            n_segment_set.insert(std::get<0>(remaining_keys[i]));
+            else
+                n_segment_set.insert(std::get<0>(remaining_keys[i]));
         }
 
         // if it empty, decrease current_n_segment.
@@ -519,36 +500,17 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
             if (level_superposition_list.size() == 1)
             {
                 //  No the second largest key
-                if (n_segment_set.size() == 1)
+                if (n_segment_set.size() == 0)
                 {
                     // add to vectors
                     dep_u_superposition_list.push_back(level_superposition_list[0]);
+
+                    // erase element
+                    remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[0]), remaining_keys.end());
                 }
-                // Forward up to the second largest n_segment
+                // Lower 'current_n_segment' to the next level and repeat
                 else
-                {
-                    int second_largest_n_segments = *std::next(n_segment_set.begin(), 1);
-
-                    std::string dep_key = std::get<1>(level_superposition_list[0]);
-                    n_segment_offset = std::get<2>(level_superposition_list[0]);
-                    n_segment_original = std::get<3>(level_superposition_list[0]);
-                    n_segment_allocated = n_segment_original-second_largest_n_segments;
-
-                    std::vector<std::tuple<int ,int>> dep_v_u = std::get<4>(level_superposition_list[0]);
-                    v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
-
-                    dep_u_superposition = "(" + dep_key + std::to_string(n_segment_allocated);
-                    if (dep_key.find(')') == std::string::npos)
-                        dep_u_superposition += ":" + std::to_string(dep_v_u.size());
-                    dep_u_superposition += ")" + Mixture::key_to_species(dep_key);
-                    
-                    // add to vector
-                    dep_u_superposition_list.push_back(std::make_tuple(
-                        n_segment_allocated, dep_key, n_segment_offset, n_segment_original, dep_v_u));
-                    remaining_keys.insert(remaining_keys.begin(),std::make_tuple(
-                        second_largest_n_segments, dep_u_superposition,
-                        n_segment_allocated, n_segment_original, dep_v_u));
-                }
+                    current_n_segment = *std::next(n_segment_set.begin(), 0);
             }
             // Superposition
             else
@@ -562,17 +524,14 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
                 );
 
                 // add one by one
-                if (n_segment_set.size() == 1)
-                    n_segment_allocated = minimum_n_segment;
-                else
-                    n_segment_allocated = std::get<0>(level_superposition_list[0])-*std::next(n_segment_set.begin(), 1);
+                n_segment_allocated = std::get<0>(level_superposition_list[0]) - current_n_segment + minimum_n_segment;
 
                 std::string dep_key = std::get<1>(level_superposition_list[0]);
                 n_segment_offset = std::get<2>(level_superposition_list[0]);
                 n_segment_original = std::get<3>(level_superposition_list[0]);
                 std::vector<std::tuple<int ,int>> dep_v_u = std::get<4>(level_superposition_list[0]);
 
-                int n_segment_offset_max = n_segment_offset;
+                int n_segment_offset_max = n_segment_offset + n_segment_allocated;
                 int n_segment_original_max = n_segment_original;
 
                 v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
@@ -586,12 +545,15 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
 
                 for(size_t i=1; i<level_superposition_list.size(); i++)
                 {
+                    // add one by one
+                    n_segment_allocated = std::get<0>(level_superposition_list[i]) - current_n_segment + minimum_n_segment;
+
                     dep_key = std::get<1>(level_superposition_list[i]);
                     n_segment_offset = std::get<2>(level_superposition_list[i]);
                     n_segment_original = std::get<3>(level_superposition_list[i]);
                     dep_v_u = std::get<4>(level_superposition_list[i]);
 
-                    n_segment_offset_max = std::max(n_segment_offset_max, n_segment_offset);
+                    n_segment_offset_max = std::max(n_segment_offset_max, n_segment_offset + n_segment_allocated);
                     n_segment_original_max = std::max(n_segment_original_max, n_segment_original);
 
                     v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
@@ -606,15 +568,15 @@ std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,i
                 dep_u_superposition += "]" + Mixture::key_to_species(dep_key);
 
                 // add one by one
-                n_segment_offset_max += n_segment_allocated;
-                n_segment_allocated = std::get<0>(level_superposition_list[0])-n_segment_allocated;
+                n_segment_allocated = current_n_segment - minimum_n_segment;
 
                 // add to vector
                 remaining_keys.insert(remaining_keys.begin(), std::make_tuple(n_segment_allocated, dep_u_superposition, n_segment_offset_max, n_segment_original_max, v_u_total));
+
+                // erase elements
+                for(size_t i=0; i<level_superposition_list.size(); i++)
+                    remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[i]), remaining_keys.end());
             }
-            // erase elements
-            for(size_t i=0; i<level_superposition_list.size(); i++)
-                remaining_keys.erase(std::remove(remaining_keys.begin(), remaining_keys.end(), level_superposition_list[i]), remaining_keys.end());
             level_superposition_list.clear();
         }
     }
