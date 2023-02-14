@@ -67,12 +67,9 @@ private:
     void add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment);
 
     // superpose branches
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
-        superpose_branches_common(std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> remaining_keys, int minimum_n_segment);
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
-        superpose_branches_continuous(std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<void>> u_map);
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>>
-        superpose_branches_discrete  (std::map<std::tuple<int, std::string, int, int>, std::vector<std::tuple<int, int>>, std::greater<void>> u_map);
+    std::map<std::string, UniqueBlock> superpose_branches_common    (std::map<std::string, UniqueBlock> remaining_keys, int minimum_n_segment);
+    std::map<std::string, UniqueBlock> superpose_branches_continuous(std::map<std::string, UniqueBlock> u_map);
+    std::map<std::string, UniqueBlock> superpose_branches_discrete  (std::map<std::string, UniqueBlock> u_map);
 
 public:
 
