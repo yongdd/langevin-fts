@@ -286,7 +286,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 continue;
 
             int n_superposed;
-            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
             int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
             int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
