@@ -103,9 +103,10 @@ INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
-PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp)
-SET_TARGET_PROPERTIES(langevinfts PROPERTIES SUFFIX ".so")
-TARGET_LINK_LIBRARIES(langevinfts PRIVATE 
+# PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp) // new find python mode can cause segfault error depending on compile environment
+ADD_LIBRARY(langevinfts MODULE src/pybind11/langevinfts.cpp) 
+SET_TARGET_PROPERTIES(langevinfts PROPERTIES PREFIX "" SUFFIX ".so")
+TARGET_LINK_LIBRARIES(langevinfts PUBLIC pybind11::module PRIVATE 
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
