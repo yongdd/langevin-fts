@@ -274,12 +274,13 @@ void CudaPseudoDiscrete::compute_statistics(
                 // check key
                 if (d_unique_partition.find(key) == d_unique_partition.end())
                     throw_with_line_number("Could not find key '" + key + "'. ");
+                double **_d_unique_partition = d_unique_partition[key];
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
                     //* q_init
-                    gpu_error_check(cudaMemcpy(d_unique_partition[key][0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(_d_unique_partition[0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                     unique_partition_finished[key][0] = true;
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
@@ -288,7 +289,7 @@ void CudaPseudoDiscrete::compute_statistics(
                     if (key[0] == '[')
                     {
                         // initialize to zero
-                        gpu_error_check(cudaMemset(d_unique_partition[key][0], 0, sizeof(double)*M));
+                        gpu_error_check(cudaMemset(_d_unique_partition[0], 0, sizeof(double)*M));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -303,12 +304,11 @@ void CudaPseudoDiscrete::compute_statistics(
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
 
                             lin_comb<<<N_BLOCKS, N_THREADS>>>(
-                                d_unique_partition[key][0],
-                                1.0,            d_unique_partition[key][0],
+                                _d_unique_partition[0], 1.0, _d_unique_partition[0],
                                 sub_n_repeated, d_unique_partition[sub_dep][sub_n_segment-1], M);
                         }
-                        one_step_1(d_unique_partition[key][0],
-                               d_unique_partition[key][0],
+                        one_step_1(_d_unique_partition[0],
+                               _d_unique_partition[0],
                                d_boltz_bond[monomer_type],
                                d_exp_dw[monomer_type]);   
 
@@ -348,13 +348,14 @@ void CudaPseudoDiscrete::compute_statistics(
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                         }
-                        gpu_error_check(cudaMemcpy(d_unique_q_junctions[key], d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                        double *_d_unique_q_junctions = d_unique_q_junctions[key];
+                        gpu_error_check(cudaMemcpy(_d_unique_q_junctions, d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
 
                         // add half bond
-                        half_bond_step(d_unique_q_junctions[key], d_unique_partition[key][0], d_boltz_bond_half[monomer_type]);
+                        half_bond_step(_d_unique_q_junctions, _d_unique_partition[0], d_boltz_bond_half[monomer_type]);
 
                         // add full segment
-                        multi_real<<<N_BLOCKS, N_THREADS>>>(d_unique_partition[key][0], d_unique_partition[key][0], d_exp_dw[monomer_type], 1.0, M);
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(_d_unique_partition[0], _d_unique_partition[0], d_exp_dw[monomer_type], 1.0, M);
                         unique_partition_finished[key][0] = true;
                     }
                 }
@@ -365,8 +366,8 @@ void CudaPseudoDiscrete::compute_statistics(
                     if (!unique_partition_finished[key][n-1])
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
 
-                    one_step_1(d_unique_partition[key][n-1],
-                               d_unique_partition[key][n],
+                    one_step_1(_d_unique_partition[n-1],
+                               _d_unique_partition[n],
                                d_boltz_bond[monomer_type],
                                d_exp_dw[monomer_type]);
 
@@ -392,14 +393,15 @@ void CudaPseudoDiscrete::compute_statistics(
                 int n_segment_from = std::get<1>((*parallel_job)[0]);
                 int n_segment_to = std::get<2>((*parallel_job)[0]);
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
+                double **_d_unique_partition_key = d_unique_partition[key];
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     if (!unique_partition_finished[key][n-1])
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
 
-                    one_step_1(d_unique_partition[key][n-1],
-                            d_unique_partition[key][n],
+                    one_step_1(_d_unique_partition_key[n-1],
+                            _d_unique_partition_key[n],
                             d_boltz_bond[monomer_type],
                             d_exp_dw[monomer_type]);
 
@@ -418,6 +420,8 @@ void CudaPseudoDiscrete::compute_statistics(
                 int n_segment_to_2 = std::get<2>((*parallel_job)[1]);
                 auto species_2 = mx->get_unique_branch(key_2).monomer_type;
 
+                double **_d_unique_partition_key_1 = d_unique_partition[key_1];
+                double **_d_unique_partition_key_2 = d_unique_partition[key_2];
 
                 for(int n=0; n<n_segment_to_1-n_segment_from_1; n++)
                 {
@@ -427,10 +431,10 @@ void CudaPseudoDiscrete::compute_statistics(
                         throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-n_segment_from_2));
 
                     one_step_2(
-                        d_unique_partition[key_1][n-1+n_segment_from_1],
-                        d_unique_partition[key_2][n-1+n_segment_from_2],
-                        d_unique_partition[key_1][n+n_segment_from_1],
-                        d_unique_partition[key_2][n+n_segment_from_2],
+                        _d_unique_partition_key_1[n-1+n_segment_from_1],
+                        _d_unique_partition_key_2[n-1+n_segment_from_2],
+                        _d_unique_partition_key_1[n+n_segment_from_1],
+                        _d_unique_partition_key_2[n+n_segment_from_2],
                         d_boltz_bond[species_1],
                         d_boltz_bond[species_2],
                         d_exp_dw[species_1],
@@ -736,7 +740,14 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         std::vector<double> stress(cb->get_dim());
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
-        
+
+        // reset stress map
+        for(const auto& item: d_unique_phi)
+        {
+            for(int d=0; d<3; d++)
+                unique_dq_dl[item.first][d] = 0.0;
+        }
+
         // compute stress for unique block
         for(const auto& block: d_unique_phi)
         {
@@ -763,9 +774,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             double bond_length_sq;
             double *d_boltz_bond_now;
 
-            // reset
-            for(int d=0; d<3; d++)
-                unique_dq_dl[key][d] = 0.0;
+            std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
 
             // std::cout << "dep_v: " << dep_v << std::endl;
             // std::cout << "dep_u: " << dep_u << std::endl;
@@ -822,28 +831,29 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                 if ( DIM == 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    unique_dq_dl[key][0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
             }
+            unique_dq_dl[key] = _unique_dq_dl;
         }
 
         // compute total stress
@@ -889,8 +899,7 @@ void CudaPseudoDiscrete::get_partial_partition(double *q_out, int polymer, int v
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
-        double** d_partition = d_unique_partition[dep];
-        gpu_error_check(cudaMemcpy(q_out, d_partition[n-1], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(q_out, d_unique_partition[dep][n-1], sizeof(double)*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
