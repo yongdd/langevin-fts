@@ -822,6 +822,6 @@ void Mixture::display_unique_branches() const
         }
         std::cout << "}" << std::endl;
     }
-    std::cout << "The number of total segments to be computed: " << total_segments << std::endl;
+    std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
 }
