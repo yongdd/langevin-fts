@@ -73,14 +73,20 @@ int ComputationBox::get_dim()
 }
 int ComputationBox::get_nx(int i)
 {
+    if (i < 0 or i >= dim)
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return nx[i];
 }
 double ComputationBox::get_lx(int i)
 {
+    if (i < 0 or i >= dim)
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return lx[i];
 }
 double ComputationBox::get_dx(int i)
 {
+    if (i < 0 or i >= dim)
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return dx[i];
 }
 std::vector<int> ComputationBox::get_nx()

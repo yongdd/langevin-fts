@@ -99,7 +99,7 @@ am_mix_min = 0.1
 am_mix_init = 0.1
 
 # Langevin Dynamics
-langevin_dt = 0.8        # Langevin step interval, delta tau*N
+langevin_dt = 0.8        # Langevin step interval, delta tau*N_Ref
 langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 

@@ -29,7 +29,7 @@ params = {
         "A":1.0, 
         "B":1.0,},
 
-    "chi_n": [["A","B",20]],   # Interaction parameter, Flory-Huggins params * N
+    "chi_n": [["A","B",20]],   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[
         {                               # Distinct Polymers

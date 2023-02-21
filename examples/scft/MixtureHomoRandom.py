@@ -23,7 +23,7 @@ params = {
     "box_is_altering":False,    # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/50,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": 12,                # Interaction parameter, Flory-Huggins params * N
+    "chi_n": 12,                # Interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":eps,

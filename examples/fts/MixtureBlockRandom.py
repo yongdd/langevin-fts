@@ -39,7 +39,7 @@ params = {
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
         "dt":0.8,               # Langevin step interval, delta tau*N_ref
-        "nbar":10000,           # invariant polymerization index, nbar
+        "nbar":10000,           # invariant polymerization index, nbar of N_Ref
     },
     
     "recording":{                       # Recording Simulation Data
