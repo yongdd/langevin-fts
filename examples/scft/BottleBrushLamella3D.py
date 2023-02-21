@@ -54,7 +54,7 @@ blocks = create_bottle_brush(sc_alpha, n_sc, f)
 total_alpha = 1 + n_sc*sc_alpha
 
 print("Blocks:", *blocks, sep = "\n")
-print(total_alpha)
+print("Total alpha", total_alpha)
 
 params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
@@ -70,7 +70,7 @@ params = {
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": chi_n/total_alpha,   # Interaction parameter, Flory-Huggins params * N
+    "chi_n": chi_n/total_alpha,   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 

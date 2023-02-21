@@ -28,7 +28,7 @@ params = {
         "B":1.1,
         "C":1.2},
 
-    "chi_n": [["A","B",chi_n],   # Interaction parameter, Flory-Huggins params * N
+    "chi_n": [["A","B",chi_n],   # Interaction parameter, Flory-Huggins params * N_Ref
               ["A","C",chi_n],
               ["B","C",chi_n],
              ],

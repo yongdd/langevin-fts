@@ -760,39 +760,47 @@ void Mixture::display_unique_blocks() const
     if (use_superposition)
     {
         std::cout << "--------- Unique Blocks (Superposed) ---------" << std::endl;
-        std::cout << "Polymer id, key1:\n\tn_segment (original, offset, allocated), key2, (v, u)" << std::endl;
+        std::cout << "Polymer id, key1:\n\tn_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
     }
     else
     {
         std::cout << "--------- Unique Blocks ---------" << std::endl;
-        std::cout << "Polymer id, key1:\n\tn_segment, key2, (v, u)" << std::endl;
+        std::cout << "Polymer id, key1:\n\tn_segment, key2, {v, u} list" << std::endl;
     }
 
-    std::tuple<int, std::string> v_string = std::make_tuple(-1, "");
+    const int MAX_PRINT_LENGTH = 500;
+    std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
 
     for(const auto& item : unique_blocks)
     {
-        const auto& v_key = item.first;
-
-        if (v_string != std::make_tuple(std::get<0>(v_key),std::get<1>(v_key)))
+        const std::string v_string = std::get<1>(item.first);
+        if (v_tuple != std::make_tuple(std::get<0>(item.first), v_string))
         {
-            std::cout <<
-                std::to_string(std::get<0>(v_key)) + ", " +
-                std::get<1>(v_key) + ":" << std::endl;
-
-            v_string = std::make_tuple(std::get<0>(v_key),std::get<1>(v_key));
+            std::cout << std::endl << std::to_string(std::get<0>(item.first)) + ", ";
+            if (v_string.size() <= MAX_PRINT_LENGTH)
+                std::cout << v_string;
+            else
+                std::cout << v_string.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted>, " ;
+            std::cout << ":" << std::endl;
+            v_tuple = std::make_tuple(std::get<0>(item.first), v_string);
         }
 
         if (use_superposition)
-            std::cout << "\t(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), " + std::get<2>(v_key) +  ", ";
+            std::cout << "\t(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
         else
-            std::cout << "\t" + std::to_string(item.second.n_segment_allocated) + ", " + std::get<2>(v_key) +  ", ";
+            std::cout << "\t" + std::to_string(item.second.n_segment_allocated) + ", ";
+
+        const std::string u_string = std::get<2>(item.first);
+        if (u_string.size() <= MAX_PRINT_LENGTH)
+            std::cout << u_string;
+        else
+            std::cout << u_string.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted>" ;
 
         for(const auto& v_u : item.second.v_u)
         {
-            std::cout << "("
+            std::cout << ", {"
             + std::to_string(std::get<0>(v_u)) + ","
-            + std::to_string(std::get<1>(v_u)) + ")" + ", ";
+            + std::to_string(std::get<1>(v_u)) + "}";
         }
         std::cout << std::endl;
     }
@@ -807,20 +815,27 @@ void Mixture::display_unique_branches() const
         std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
     else
         std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "Key: max_n_segment, height" << std::endl;
+    
     for(const auto& item : unique_branches)
     {
         total_segments += item.second.max_n_segment;
 
-        std::cout << item.first;
-        std::cout << ":\n\tmax_n_segment: " << item.second.max_n_segment;
-        std::cout << ", height: " << item.second.height;
-        std::cout << ",\n\tsub_deps:{ ";
-        sub_deps = key_to_deps(item.first);
-        for(size_t i=0; i<sub_deps.size(); i++)
-        {
-            std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
-        }
-        std::cout << "}" << std::endl;
+        const int MAX_PRINT_LENGTH = 500;
+
+        if (item.first.size() <= MAX_PRINT_LENGTH)
+            std::cout << item.first;
+        else
+            std::cout << item.first.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted> " ;
+        std::cout << ":\n\t " << item.second.max_n_segment << ", " << item.second.height;
+        // std::cout << ",\n\tsub_deps:{ ";
+        // sub_deps = key_to_deps(item.first);
+        // for(size_t i=0; i<sub_deps.size(); i++)
+        // {
+        //     std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
+        // }
+        // std::cout << "}";
+        std::cout << std::endl;
     }
     std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
