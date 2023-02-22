@@ -43,25 +43,31 @@ void Mixture::add_polymer(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> v_to_grafting_index)
+    std::map<int, int> vertex_to_grafting_index)
 {
     std::string deps;
     distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
         volume_fraction, block_monomer_types, contour_lengths,
-        v, u, v_to_grafting_index));
+        v, u, vertex_to_grafting_index));
 
     PolymerChain& pc = distinct_polymers.back();
     // find unique sub branches
     for (int i=0; i<pc.get_n_blocks(); i++)
     {
         deps = get_text_of_ordered_branches(
-            pc.get_blocks(), pc.get_adjacent_nodes(),
-            pc.get_edge_to_array(), v[i], u[i]).first;
+            pc.get_blocks(),
+            pc.get_adjacent_nodes(),
+            pc.get_edge_to_array(),
+            vertex_to_grafting_index,
+            v[i], u[i]).first;
         pc.set_edge_to_deps(v[i], u[i], deps);
 
         deps = get_text_of_ordered_branches(
-            pc.get_blocks(), pc.get_adjacent_nodes(),
-            pc.get_edge_to_array(), u[i], v[i]).first;
+            pc.get_blocks(),
+            pc.get_adjacent_nodes(),
+            pc.get_edge_to_array(),
+            vertex_to_grafting_index,
+            u[i], v[i]).first;
         pc.set_edge_to_deps(u[i], v[i], deps);
     }
 
@@ -253,6 +259,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     std::vector<PolymerChainBlock> blocks,
     std::map<int, std::vector<int>> adjacent_nodes,
     std::map<std::pair<int, int>, int> edge_to_array,
+    std::map<int, int> vertex_to_grafting_index,
     int in_node, int out_node)
 {
     std::vector<std::string> edge_text;
@@ -268,6 +275,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             text_and_segments = get_text_of_ordered_branches(
                 blocks, adjacent_nodes, edge_to_array,
+                vertex_to_grafting_index,
                 adjacent_nodes[in_node][i], in_node);
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
             edge_dict.push_back(text_and_segments);
@@ -815,7 +823,7 @@ void Mixture::display_unique_branches() const
         std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
     else
         std::cout << "--------- Unique Branches ---------" << std::endl;
-    std::cout << "Key: max_n_segment, height" << std::endl;
+    std::cout << "Key:\n\tmax_n_segment, height" << std::endl;
     
     for(const auto& item : unique_branches)
     {

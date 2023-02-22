@@ -15,7 +15,7 @@ PolymerChain::PolymerChain(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> v_to_grafting_index)
+    std::map<int, int> vertex_to_grafting_index)
 {
     // check block size
     if( block_monomer_types.size() != contour_lengths.size())
@@ -51,9 +51,9 @@ PolymerChain::PolymerChain(
             throw_with_line_number("block_monomer_types[" + std::to_string(i) + "] (\"" + block_monomer_types[i] + "\") is not in bond_lengths.");
     }
 
-    // check v_to_grafting_index
-    if( v_to_grafting_index.size() > 0)
-        throw_with_line_number("Currently, \'v_to_grafting_index\' is not supported.");
+    // check vertex_to_grafting_index
+    if( vertex_to_grafting_index.size() > 0)
+        throw_with_line_number("Currently, \'vertex_to_grafting_index\' is not supported.");
 
     // save variables
     try
