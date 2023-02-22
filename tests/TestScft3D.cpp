@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 #include <cmath>
 #include <string>
@@ -7,7 +8,6 @@
 #include <chrono>
 
 #include "Exception.h"
-#include "ParamParser.h"
 #include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Mixture.h"

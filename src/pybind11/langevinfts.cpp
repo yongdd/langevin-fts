@@ -63,9 +63,11 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_bond_lengths", &Mixture::get_bond_lengths)
         .def("get_n_polymers", &Mixture::get_n_polymers)
         .def("add_polymer", overload_cast_<
-            double, std::vector<std::string>,
-            std::vector<double>, std::vector<int>, std::vector<int>>
-            ()(&Mixture::add_polymer))
+            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>, std::map<int, int>
+            >()(&Mixture::add_polymer))
+        .def("add_polymer", overload_cast_<
+            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>
+            >()(&Mixture::add_polymer))
         .def("get_polymer", &Mixture::get_polymer)
         .def("key_to_deps", &Mixture::key_to_deps)
         .def("key_to_species", &Mixture::key_to_species)

@@ -37,7 +37,7 @@ public:
         std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, int> v_to_grafting_index={});
+        std::map<int, int> vertex_to_grafting_index={});
     ~PolymerChain() {};
 
     double get_alpha() const;

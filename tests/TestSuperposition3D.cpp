@@ -7,7 +7,6 @@
 #include <chrono>
 
 #include "Exception.h"
-#include "ParamParser.h"
 #include "ComputationBox.h"
 #include "PolymerChain.h"
 #include "Mixture.h"

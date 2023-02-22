@@ -37,7 +37,6 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
 # Common Files
 ADD_LIBRARY(common
-    src/common/ParamParser.cpp
     src/common/ComputationBox.cpp
     src/common/PolymerChain.cpp
     src/common/Mixture.cpp
