@@ -41,7 +41,7 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<PolymerChain>(m, "PolymerChain")
         .def(py::init<double, std::map<std::string, double>, double,
             std::vector<std::string>, std::vector<double>,
-            std::vector<int>, std::vector<int>, std::map<int, int>>())
+            std::vector<int>, std::vector<int>, std::map<int, std::string>>())
         .def("get_alpha", &PolymerChain::get_alpha)
         .def("get_volume_fraction", &PolymerChain::get_volume_fraction)
         .def("get_n_blocks", &PolymerChain::get_n_blocks)
@@ -63,7 +63,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_bond_lengths", &Mixture::get_bond_lengths)
         .def("get_n_polymers", &Mixture::get_n_polymers)
         .def("add_polymer", overload_cast_<
-            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>, std::map<int, int>
+            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>, std::map<int, std::string>
             >()(&Mixture::add_polymer))
         .def("add_polymer", overload_cast_<
             double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>
@@ -82,11 +82,11 @@ PYBIND11_MODULE(langevinfts, m)
         .def("update_bond_function", &Pseudo::update_bond_function)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>,
-            std::map<int,py::array_t<double>>>
-            ()(&Pseudo::compute_statistics), py::return_value_policy::move)
+            std::map<std::string,py::array_t<double>>>
+            ()(&Pseudo::compute_statistics_pybind11), py::return_value_policy::move)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>>
-            ()(&Pseudo::compute_statistics), py::return_value_policy::move)
+            ()(&Pseudo::compute_statistics_pybind11), py::return_value_policy::move)
         .def("get_monomer_concentration", overload_cast_<std::string>
             ()(&Pseudo::get_monomer_concentration), py::return_value_policy::move)
         .def("get_polymer_concentration", overload_cast_<int>

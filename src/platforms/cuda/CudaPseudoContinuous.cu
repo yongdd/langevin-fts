@@ -202,7 +202,7 @@ void CudaPseudoContinuous::update_bond_function()
 }
 void CudaPseudoContinuous::compute_statistics(
     std::map<std::string, double*> w_input,
-    std::map<int, double*> q_init)
+    std::map<std::string, double*> q_init)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -288,9 +288,9 @@ void CudaPseudoContinuous::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        int g = Mixture::key_to_initial_condition(key);
+                        std::string g = Mixture::key_to_initial_condition(key);
                         if (q_init.find(g) == q_init.end())
-                            throw_with_line_number("Could not find q_init[" + std::to_string(g) + "].");
+                            throw_with_line_number("Could not find q_init[\"" + g + "\"].");
                         gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_init[g],
                             sizeof(double)*M, cudaMemcpyHostToDevice));
                     }

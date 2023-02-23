@@ -42,7 +42,7 @@ public:
     virtual void update_bond_function() = 0;
     virtual void compute_statistics(
         std::map<std::string, double*> w_input,
-        std::map<int, double*> q_init) = 0;
+        std::map<std::string, double*> q_init) = 0;
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
@@ -50,12 +50,12 @@ public:
     virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
-    void compute_statistics(std::map<std::string,py::array_t<double>> w_input, std::map<int,py::array_t<double>> q_init)
+    void compute_statistics_pybind11(std::map<std::string,py::array_t<double>> w_input, std::map<std::string,py::array_t<double>> q_init)
     {
         try{
             const int M = cb->get_n_grid();
             std::map<std::string,double*> map_buf_w_input;
-            std::map<int,double*> map_buf_q_init;
+            std::map<std::string,double*> map_buf_q_init;
 
             for (auto it=w_input.begin(); it!=w_input.end(); ++it)
             {
@@ -75,11 +75,11 @@ public:
                 //buf_q_init
                 py::buffer_info buf_q_init = it->second.request();
                 if (buf_q_init.shape[0] != M){
-                    throw_with_line_number("Size of input q[" + std::to_string(it->first) + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                    throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                 }
                 else
                 {
-                    map_buf_q_init.insert(std::pair<int, double*>(it->first,(double *)buf_q_init.ptr));
+                    map_buf_q_init.insert(std::pair<std::string, double*>(it->first,(double *)buf_q_init.ptr));
                 }
             }
             compute_statistics(map_buf_w_input, map_buf_q_init);
@@ -89,9 +89,9 @@ public:
             throw_without_line_number(exc.what());
         }
     }
-    void compute_statistics(std::map<std::string,py::array_t<double>> w_input)
+    void compute_statistics_pybind11(std::map<std::string,py::array_t<double>> w_input)
     {
-        compute_statistics(w_input, {});
+        compute_statistics_pybind11(w_input, {});
     }
 
     py::array_t<double> get_monomer_concentration(std::string monomer_type)

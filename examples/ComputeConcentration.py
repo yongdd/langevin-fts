@@ -20,6 +20,7 @@ nx = [64,64,64]                                   # grid number
 lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step Interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
+use_superposition = False
 
 block_lengths = []
 block_monomer_types = []
@@ -54,15 +55,15 @@ factory.display_info()
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, stat_seg_length, False)
+mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
 for p in range(len(block_lengths)):
      mixture.add_polymer(
      volume_faction[p],block_monomer_types[p],
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture)
 
-mixture.display_unique_branches()
 mixture.display_unique_blocks()
+mixture.display_unique_branches()
 
 print(type(pseudo))
 

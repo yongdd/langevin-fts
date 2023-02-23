@@ -39,7 +39,7 @@ int main()
 
         // from a vertex index to a grafting point
         // following map means that vertex 
-        std::map<int, int> chain_end_to_initial_condition = {{0,0}};
+        std::map<int, std::string> chain_end_to_initial_condition = {{0,"G"}};
         const int M = nx[0]*nx[1]*nx[2];
 
         //-------------- allocate array ------------
@@ -50,7 +50,7 @@ int main()
         // choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        std::vector<bool> use_superpositions = {false};
+        std::vector<bool> use_superpositions = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> x_square_total_list;
@@ -88,7 +88,7 @@ int main()
                     cb->zero_mean(w);
 
                     // for the given fields find the polymer statistics
-                    pseudo->compute_statistics({{"A",w}},{{0, q_init}});
+                    pseudo->compute_statistics({{"A",w}},{{"G", q_init}});
 
                     for(int n=20; n<=N; n+=20)
                     {   
