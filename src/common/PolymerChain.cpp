@@ -181,14 +181,14 @@ double PolymerChain::get_volume_fraction() const
 }
 int PolymerChain::get_array_idx(const int v, const int u)
 {
-    // assert(("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_array.count(std::make_pair(v, u)) != 0));
-    assert(edge_to_array.count(std::make_pair(v, u)) != 0 && "There is no such edge.");
+    if (edge_to_array.find(std::make_pair(v,u)) == edge_to_array.end())
+        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return edge_to_array[std::make_pair(v, u)];
 }
 struct PolymerChainBlock& PolymerChain::get_block(const int v, const int u)
 {
-    // assert(("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_array.count(std::make_pair(v, u)) != 0));
-    assert(edge_to_array.count(std::make_pair(v, u)) != 0 && "There is no such edge.");
+    if (edge_to_array.find(std::make_pair(v,u)) == edge_to_array.end())
+        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return blocks[edge_to_array[std::make_pair(v, u)]];
 }
 std::vector<PolymerChainBlock>& PolymerChain::get_blocks()
@@ -208,7 +208,7 @@ void PolymerChain::set_deps_from_edge(const std::string deps, const int v, const
     edge_to_deps[std::make_pair(v, u)] = deps;
 }
 std::string PolymerChain::get_dep(const int v, const int u) {
-    // assert(("There is no such block (" + std::to_string(v) + ", " + std::to_string(u) + ").", edge_to_deps.count(std::make_pair(v, u)) != 0));
-    assert(edge_to_deps.count(std::make_pair(v, u)) != 0 && "There is no such block.");
+    if (edge_to_deps.find(std::make_pair(v,u)) == edge_to_deps.end())
+        throw_with_line_number("There is no such block (v, u): (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return edge_to_deps[std::make_pair(v,u)];
 }
