@@ -61,7 +61,7 @@ private:
         std::vector<PolymerChainBlock> blocks,
         std::map<int, std::vector<int>> adjacent_nodes,
         std::map<std::pair<int, int>, int> edge_to_array,
-        std::map<int, int> vertex_to_grafting_index,
+        std::map<int, int> chain_end_to_initial_condition,
         int in_node, int out_node);
 
     // add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
@@ -82,14 +82,18 @@ public:
     const std::map<std::string, double>& get_bond_lengths() const;
     bool is_using_superposition() const;
 
-    // add new polymer (Mark some chain ends to choose initial conditions of partial partition functions.
-    // The initial conditions will be given as an argument of pseudo.compute_statistics())
-    void add_polymer(
+    // add new polymer
+
+    // Mark some chain ends to choose initial conditions of partial partition functions later.
+    // The initial conditions will be given as an argument of pseudo.compute_statistics().
+    // For instance, if chain_end_to_initial_condition[a] is set to b, 
+    // initial[b] will be used as an initial condition of chain end vertex 'a' when pseudo.compute_statistics is invoked.
+        void add_polymer(
         double volume_fraction,
         std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, int> vertex_to_grafting_index);
+        std::map<int, int> chain_end_to_initial_condition);
 
     // add new polymer (All chain ends are free ends, e.g, q(r,0) = 1)
     void add_polymer(
@@ -109,6 +113,7 @@ public:
     static std::vector<std::tuple<std::string, int, int>> key_to_deps(std::string key);
     static std::string key_minus_species(std::string key);
     static std::string key_to_species(std::string key);
+    static int key_to_initial_condition(std::string key);
     static int key_to_height(std::string key);
 
     std::map<std::string, UniqueEdge, CompareBranchKey>& get_unique_branches(); 
@@ -118,6 +123,8 @@ public:
 
     void display_unique_branches() const;
     void display_unique_blocks() const;
-    
+
+    void display_unique_branch_deps() const;
+
 };
 #endif

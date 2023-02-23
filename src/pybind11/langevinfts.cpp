@@ -52,8 +52,8 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_n_segment", &PolymerChain::get_n_segment)
         .def("get_array_idx", &PolymerChain::get_array_idx)
         .def("get_adjacent_nodes", &PolymerChain::get_adjacent_nodes)
-        .def("get_edge_to_array", &PolymerChain::get_edge_to_array)
-        //.def("set_edge_to_deps", &PolymerChain::set_edge_to_deps)
+        .def("get_array_from_edge", &PolymerChain::get_array_from_edge)
+        //.def("set_deps_from_edge", &PolymerChain::set_deps_from_edge)
         .def("get_dep", &PolymerChain::get_dep);
 
     py::class_<Mixture>(m, "Mixture")
@@ -80,6 +80,10 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update_bond_function", &Pseudo::update_bond_function)
+        .def("compute_statistics", overload_cast_<
+            std::map<std::string,py::array_t<double>>,
+            std::map<int,py::array_t<double>>>
+            ()(&Pseudo::compute_statistics), py::return_value_policy::move)
         .def("compute_statistics", overload_cast_<
             std::map<std::string,py::array_t<double>>>
             ()(&Pseudo::compute_statistics), py::return_value_policy::move)

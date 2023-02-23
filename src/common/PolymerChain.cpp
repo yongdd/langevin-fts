@@ -15,7 +15,7 @@ PolymerChain::PolymerChain(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> vertex_to_grafting_index)
+    std::map<int, int> chain_end_to_initial_condition)
 {
     // check block size
     if( block_monomer_types.size() != contour_lengths.size())
@@ -51,9 +51,10 @@ PolymerChain::PolymerChain(
             throw_with_line_number("block_monomer_types[" + std::to_string(i) + "] (\"" + block_monomer_types[i] + "\") is not in bond_lengths.");
     }
 
-    // check vertex_to_grafting_index
-    if( vertex_to_grafting_index.size() > 0)
-        throw_with_line_number("Currently, \'vertex_to_grafting_index\' is not supported.");
+    // // check chain_end_to_initial_condition
+    // if( chain_end_to_initial_condition.size() > 0)
+    //     throw_with_line_number("Currently, \'chain_end_to_initial_condition\' is not supported.");
+    this->chain_end_to_initial_condition = chain_end_to_initial_condition;
 
     // save variables
     try
@@ -198,11 +199,11 @@ std::map<int, std::vector<int>>& PolymerChain::get_adjacent_nodes()
 {
     return adjacent_nodes;
 }
-std::map<std::pair<int, int>, int>& PolymerChain::get_edge_to_array()
+std::map<std::pair<int, int>, int>& PolymerChain::get_array_from_edge()
 {
     return edge_to_array;
 }
-void PolymerChain::set_edge_to_deps(const int v, const int u, const std::string deps)
+void PolymerChain::set_deps_from_edge(const std::string deps, const int v, const int u)
 {
     edge_to_deps[std::make_pair(v, u)] = deps;
 }

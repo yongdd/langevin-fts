@@ -77,6 +77,8 @@ int main()
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
+            const int M = cb->get_n_grid();
+
             // -------------- print simulation parameters ------------
             std::cout << std::setprecision(default_precision);
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
@@ -87,7 +89,7 @@ int main()
             std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << std::endl;
             std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << std::endl;
             sum = 0.0;
-            for(int i=0; i<cb->get_n_grid(); i++)
+            for(int i=0; i<M; i++)
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
@@ -95,15 +97,15 @@ int main()
             mx->display_unique_branches();
 
             //-------------- allocate array ------------
-            w       = new double[cb->get_n_grid()*2];
-            w_out   = new double[cb->get_n_grid()*2];
-            w_diff  = new double[cb->get_n_grid()*2];
-            xi      = new double[cb->get_n_grid()];
-            phi_a   = new double[cb->get_n_grid()];
-            phi_b   = new double[cb->get_n_grid()];
-            phi_tot = new double[cb->get_n_grid()];
-            w_plus  = new double[cb->get_n_grid()];
-            w_minus = new double[cb->get_n_grid()];
+            w       = new double[M*2];
+            w_out   = new double[M*2];
+            w_diff  = new double[M*2];
+            xi      = new double[M];
+            phi_a   = new double[M];
+            phi_b   = new double[M];
+            phi_tot = new double[M];
+            w_plus  = new double[M];
+            w_minus = new double[M];
             //-------------- setup fields ------------
             //call random_number(phi_a)
             //   phi_a = reshape( phi_a, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
@@ -120,16 +122,16 @@ int main()
                     phi_a[idx]= cos(2.0*PI*0/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
                 }
 
-            for(int i=0; i<cb->get_n_grid(); i++)
+            for(int i=0; i<M; i++)
             {
                 phi_b[i] = 1.0 - phi_a[i];
                 w[i]                  = chi_n*phi_b[i];
-                w[i+cb->get_n_grid()] = chi_n*phi_a[i];
+                w[i+M] = chi_n*phi_a[i];
             }
 
             // keep the level of field value
             cb->zero_mean(&w[0]);
-            cb->zero_mean(&w[cb->get_n_grid()]);
+            cb->zero_mean(&w[M]);
 
             // assign large initial value for the energy and error
             energy_total = 1.0e20;
@@ -143,15 +145,15 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // for the given fields find the polymer statistics
-                pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[cb->get_n_grid()]}});
+                pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                 pseudo->get_monomer_concentration("A", phi_a);
                 pseudo->get_monomer_concentration("B", phi_b);
 
                 // calculate the total energy
-                for(int i=0; i<cb->get_n_grid(); i++)
+                for(int i=0; i<M; i++)
                 {
-                    w_minus[i] = (w[i]-w[i + cb->get_n_grid()])/2;
-                    w_plus[i]  = (w[i]+w[i + cb->get_n_grid()])/2;
+                    w_minus[i] = (w[i]-w[i + M])/2;
+                    w_plus[i]  = (w[i]+w[i + M])/2;
                 }
 
                 energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
@@ -162,20 +164,20 @@ int main()
                     energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                 }
 
-                for(int i=0; i<cb->get_n_grid(); i++)
+                for(int i=0; i<M; i++)
                 {
                     // calculate pressure field for the new field calculation
-                    xi[i] = 0.5*(w[i]+w[i+cb->get_n_grid()]-chi_n);
+                    xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
                     // calculate output fields
                     w_out[i]                  = chi_n*phi_b[i] + xi[i];
-                    w_out[i+cb->get_n_grid()] = chi_n*phi_a[i] + xi[i];
+                    w_out[i+M] = chi_n*phi_a[i] + xi[i];
                 }
                 cb->zero_mean(&w_out[0]);
-                cb->zero_mean(&w_out[cb->get_n_grid()]);
+                cb->zero_mean(&w_out[M]);
 
                 // error_level measures the "relative distance" between the input and output fields
                 old_error_level = error_level;
-                for(int i=0; i<2*cb->get_n_grid(); i++)
+                for(int i=0; i<2*M; i++)
                     w_diff[i] = w_out[i]- w[i];
                 error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
                                 (cb->multi_inner_product(2,w,w)+1.0));

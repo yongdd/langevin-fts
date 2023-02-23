@@ -30,6 +30,11 @@ private:
     std::map<std::pair<int, int>, int>         edge_to_array;   // array index for each edge
     std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite partial partition functions as a text
 
+    // grafting point.
+    // For instance, 'chain_end_to_initial_condition[a] = b' means that
+    // the initial condition of chain end vertex 'a' will be given as 'initial[b]' in pseudo.compute_statistics()
+    std::map<int, int> chain_end_to_initial_condition;
+
 public:
     PolymerChain(
         double ds, std::map<std::string, double> bond_lengths, 
@@ -37,7 +42,7 @@ public:
         std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, int> vertex_to_grafting_index={});
+        std::map<int, int> chain_end_to_initial_condition={});
     ~PolymerChain() {};
 
     double get_alpha() const;
@@ -52,8 +57,8 @@ public:
 
     int get_array_idx(const int v, const int u);
     std::map<int, std::vector<int>>& get_adjacent_nodes();
-    std::map<std::pair<int, int>, int>& get_edge_to_array();
-    void set_edge_to_deps(const int v, const int u, const std::string deps);
+    std::map<std::pair<int, int>, int>& get_array_from_edge();
+    void set_deps_from_edge(const std::string deps, const int v, const int u);
     std::string get_dep(const int v, const int u);
 };
 #endif
