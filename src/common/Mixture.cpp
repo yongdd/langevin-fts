@@ -43,7 +43,7 @@ void Mixture::add_polymer(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> chain_end_to_initial_condition)
+    std::map<int, std::string> chain_end_to_initial_condition)
 {
     std::string deps;
     distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
@@ -259,7 +259,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     std::vector<PolymerChainBlock> blocks,
     std::map<int, std::vector<int>> adjacent_nodes,
     std::map<std::pair<int, int>, int> edge_to_array,
-    std::map<int, int> chain_end_to_initial_condition,
+    std::map<int, std::string> chain_end_to_initial_condition,
     int in_node, int out_node)
 {
     std::vector<std::string> edge_text;
@@ -293,7 +293,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
         // if initial conditions 
         else
         {
-            text = "{" + std::to_string(chain_end_to_initial_condition[in_node]) + "}";
+            text = "{" + chain_end_to_initial_condition[in_node] + "}";
         }
     }
     else
@@ -738,7 +738,7 @@ std::string Mixture::key_to_species(std::string key)
     //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
     return key.substr(key_start, key.size()-key_start);
 }
-int Mixture::key_to_initial_condition(std::string key)
+std::string Mixture::key_to_initial_condition(std::string key)
 {
     if (key[0] != '{')
     {
@@ -754,7 +754,7 @@ int Mixture::key_to_initial_condition(std::string key)
         }
     }
     // std::cout << key.substr(1, key_start-1) << std::endl;
-    return std::stoi(key.substr(1, key_start-1));
+    return key.substr(1, key_start-1);
 }
 int Mixture::key_to_height(std::string key)
 {

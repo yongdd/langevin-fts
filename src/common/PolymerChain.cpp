@@ -15,7 +15,7 @@ PolymerChain::PolymerChain(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> chain_end_to_initial_condition)
+    std::map<int, std::string> chain_end_to_initial_condition)
 {
     // check block size
     if( block_monomer_types.size() != contour_lengths.size())

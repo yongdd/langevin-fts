@@ -112,7 +112,7 @@ void CpuPseudoContinuous::update_bond_function()
 }
 void CpuPseudoContinuous::compute_statistics(
     std::map<std::string, double*> w_input,
-    std::map<int, double*> q_init)
+    std::map<std::string, double*> q_init)
 {
     try
     {
@@ -183,9 +183,9 @@ void CpuPseudoContinuous::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        int g = Mixture::key_to_initial_condition(key);
+                        std::string g = Mixture::key_to_initial_condition(key);
                         if (q_init.find(g) == q_init.end())
-                            std::cout << "Could not find q_init[" + std::to_string(g) + "]." << std::endl;
+                            std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
                             _unique_partition[i] = q_init[g][i];
                     }

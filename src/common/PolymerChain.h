@@ -33,7 +33,7 @@ private:
     // grafting point.
     // For instance, 'chain_end_to_initial_condition[a] = b' means that
     // the initial condition of chain end vertex 'a' will be given as 'initial[b]' in pseudo.compute_statistics()
-    std::map<int, int> chain_end_to_initial_condition;
+    std::map<int, std::string> chain_end_to_initial_condition;
 
 public:
     PolymerChain(
@@ -42,7 +42,7 @@ public:
         std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, int> chain_end_to_initial_condition={});
+        std::map<int, std::string> chain_end_to_initial_condition={});
     ~PolymerChain() {};
 
     double get_alpha() const;
