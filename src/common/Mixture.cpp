@@ -43,12 +43,12 @@ void Mixture::add_polymer(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, int> vertex_to_grafting_index)
+    std::map<int, int> chain_end_to_initial_condition)
 {
     std::string deps;
     distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
         volume_fraction, block_monomer_types, contour_lengths,
-        v, u, vertex_to_grafting_index));
+        v, u, chain_end_to_initial_condition));
 
     PolymerChain& pc = distinct_polymers.back();
     // find unique sub branches
@@ -57,18 +57,18 @@ void Mixture::add_polymer(
         deps = get_text_of_ordered_branches(
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
-            pc.get_edge_to_array(),
-            vertex_to_grafting_index,
+            pc.get_array_from_edge(),
+            chain_end_to_initial_condition,
             v[i], u[i]).first;
-        pc.set_edge_to_deps(v[i], u[i], deps);
+        pc.set_deps_from_edge(deps, v[i], u[i]);
 
         deps = get_text_of_ordered_branches(
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
-            pc.get_edge_to_array(),
-            vertex_to_grafting_index,
+            pc.get_array_from_edge(),
+            chain_end_to_initial_condition,
             u[i], v[i]).first;
-        pc.set_edge_to_deps(u[i], v[i], deps);
+        pc.set_deps_from_edge(deps, u[i], v[i]);
     }
 
     // temporary maps for the new polymer
@@ -259,7 +259,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     std::vector<PolymerChainBlock> blocks,
     std::map<int, std::vector<int>> adjacent_nodes,
     std::map<std::pair<int, int>, int> edge_to_array,
-    std::map<int, int> vertex_to_grafting_index,
+    std::map<int, int> chain_end_to_initial_condition,
     int in_node, int out_node)
 {
     std::vector<std::string> edge_text;
@@ -275,7 +275,7 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             text_and_segments = get_text_of_ordered_branches(
                 blocks, adjacent_nodes, edge_to_array,
-                vertex_to_grafting_index,
+                chain_end_to_initial_condition,
                 adjacent_nodes[in_node][i], in_node);
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
             edge_dict.push_back(text_and_segments);
@@ -286,7 +286,16 @@ std::pair<std::string, int> Mixture::get_text_of_ordered_branches(
     // merge text of child branches
     std::string text;
     if(edge_text.size() == 0)
-        text = "";
+    {
+        // 
+        if (chain_end_to_initial_condition.find(in_node) == chain_end_to_initial_condition.end())
+            text = "";
+        // if initial conditions 
+        else
+        {
+            text = "{" + std::to_string(chain_end_to_initial_condition[in_node]) + "}";
+        }
+    }
     else
     {
         std::sort(edge_text.begin(), edge_text.end());
@@ -649,7 +658,7 @@ std::vector<std::tuple<std::string, int, int>> Mixture::key_to_deps(std::string 
 
             key_start = i+1;
         }
-        // it was reading n_repeated and found a non-digt
+        // it was reading n_repeated and found a non-digit
         else if( !isdigit(key[i]) && is_reading_n_repeated && brace_count == 1)
         {
             // std::cout << "key_to_deps5" << std::endl;
@@ -662,7 +671,7 @@ std::vector<std::tuple<std::string, int, int>> Mixture::key_to_deps(std::string 
 
             key_start = i;
         }
-        // it was reading n_segment and found a non-digt
+        // it was reading n_segment and found a non-digit
         else if( !isdigit(key[i]) && is_reading_n_segment && brace_count == 1)
         {
             // std::cout << "key_to_deps6" << std::endl;
@@ -685,7 +694,7 @@ std::vector<std::tuple<std::string, int, int>> Mixture::key_to_deps(std::string 
 
 std::string Mixture::key_minus_species(std::string key)
 {
-    if (key[0] != '[' && key[0] != '(')
+    if (key[0] != '[' && key[0] != '(' && key[0] != '{')
     {
         return "";
     }
@@ -695,11 +704,11 @@ std::string Mixture::key_minus_species(std::string key)
         int species_idx = 0;
         for(size_t i=0; i<key.size();i++)
         {
-            if (key[i] == '[' || key[i] == '(')
+            if (key[i] == '[' || key[i] == '(' || key[i] == '{')
             {
                 brace_count++;
             }
-            else if (key[i] == ']' || key[i] == ')')
+            else if (key[i] == ']' || key[i] == ')' || key[i] == '}')
             {
                 brace_count--;
                 if (brace_count == 0)
@@ -720,7 +729,7 @@ std::string Mixture::key_to_species(std::string key)
     for(int i=key.size()-1; i>=0;i--)
     {
         //std::cout << key[i] << std::endl;
-        if(key[i] == ')' || key[i] == ']')
+        if(key[i] == ')' || key[i] == ']' || key[i] == '}')
         {
             key_start=i+1;
             break;
@@ -728,6 +737,24 @@ std::string Mixture::key_to_species(std::string key)
     }
     //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
     return key.substr(key_start, key.size()-key_start);
+}
+int Mixture::key_to_initial_condition(std::string key)
+{
+    if (key[0] != '{')
+    {
+        throw_with_line_number("There is no related initial condition in key (" + key + ").");
+    }
+    int key_start = 0;
+    for(int i=key.size()-1; i>=0;i--)
+    {
+        if(key[i] == '}')
+        {
+            key_start=i;
+            break;
+        }
+    }
+    // std::cout << key.substr(1, key_start-1) << std::endl;
+    return std::stoi(key.substr(1, key_start-1));
 }
 int Mixture::key_to_height(std::string key)
 {
@@ -835,14 +862,34 @@ void Mixture::display_unique_branches() const
             std::cout << item.first;
         else
             std::cout << item.first.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted> " ;
+        std::cout << ":\n\t " << item.second.max_n_segment << ", " << item.second.height << std::endl;
+    }
+    std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
+    std::cout << "------------------------------------" << std::endl;
+}
+
+void Mixture::display_unique_branch_deps() const
+{
+    // print unique sub branches
+    std::vector<std::tuple<std::string, int, int>> sub_deps;
+    int total_segments = 0;
+    if (use_superposition)
+        std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
+    else
+        std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "Key:\n\tmax_n_segment, height, deps" << std::endl;
+    
+    for(const auto& item : unique_branches)
+    {
+        total_segments += item.second.max_n_segment;
+
+        std::cout << item.first;
         std::cout << ":\n\t " << item.second.max_n_segment << ", " << item.second.height;
-        // std::cout << ",\n\tsub_deps:{ ";
-        // sub_deps = key_to_deps(item.first);
-        // for(size_t i=0; i<sub_deps.size(); i++)
-        // {
-        //     std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
-        // }
-        // std::cout << "}";
+        sub_deps = key_to_deps(item.first);
+        for(size_t i=0; i<sub_deps.size(); i++)
+        {
+            std::cout << ", "  << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]);
+        }
         std::cout << std::endl;
     }
     std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;

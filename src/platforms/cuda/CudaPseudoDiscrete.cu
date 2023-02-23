@@ -223,8 +223,8 @@ void CudaPseudoDiscrete::update_bond_function()
     }
 }
 void CudaPseudoDiscrete::compute_statistics(
-    std::map<std::string, double*> q_init,
-    std::map<std::string, double*> w_input)
+    std::map<std::string, double*> w_input,
+    std::map<int, double*> q_init)
 {
     try
     {
@@ -236,12 +236,18 @@ void CudaPseudoDiscrete::compute_statistics(
 
         for(const auto& item: mx->get_unique_branches())
         {
-            if( w_input.count(item.second.monomer_type) == 0)
-                throw_with_line_number("\"" + item.second.monomer_type + "\" monomer_type is not in w_input.");
+            if( w_input.find(item.second.monomer_type) == w_input.end())
+                throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        if( q_init.size() > 0)
-            throw_with_line_number("Currently, \'q_init\' is not supported.");
+        for(const auto& item: w_input)
+        {
+            if( d_exp_dw.find(item.first) == d_exp_dw.end())
+                throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
+        }
+
+        // if( q_init.size() > 0)
+        //     throw_with_line_number("Currently, \'q_init\' is not supported.");
 
         // exp_dw
         double exp_dw[M];
@@ -279,8 +285,19 @@ void CudaPseudoDiscrete::compute_statistics(
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                    //* q_init
-                    gpu_error_check(cudaMemcpy(_d_unique_partition[0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                     // q_init
+                    if (key[0] == '{')
+                    {
+                        int g = Mixture::key_to_initial_condition(key);
+                        if (q_init.find(g) == q_init.end())
+                            throw_with_line_number("Could not find q_init[" + std::to_string(g) + "].");
+                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_init[g], sizeof(double)*M,cudaMemcpyHostToDevice));
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(_d_unique_partition[0], _d_unique_partition[0], d_exp_dw[monomer_type], 1.0, M);
+                    }
+                    else
+                    {
+                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    }
                     unique_partition_finished[key][0] = true;
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node

@@ -172,7 +172,7 @@ int main()
                     for(int iter=0; iter<max_scft_iter; iter++)
                     {
                         // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_monomer_concentration("A", phi_a);
                         pseudo->get_monomer_concentration("B", phi_b);
 
@@ -260,7 +260,7 @@ int main()
                         pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_monomer_concentration("A", phi_a);
                         pseudo->get_monomer_concentration("B", phi_b);
 
@@ -284,7 +284,7 @@ int main()
                         pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_monomer_concentration("A", phi_a);
                         pseudo->get_monomer_concentration("B", phi_b);
 
@@ -321,7 +321,7 @@ int main()
                         pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_monomer_concentration("A", phi_a);
                         pseudo->get_monomer_concentration("B", phi_b);
 
@@ -345,7 +345,7 @@ int main()
                         pseudo->update_bond_function();
 
                         // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({}, {{"A",&w[0]},{"B",&w[M]}});
+                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_monomer_concentration("A", phi_a);
                         pseudo->get_monomer_concentration("B", phi_b);
 
