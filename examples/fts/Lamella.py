@@ -89,7 +89,7 @@ print("total time: %f, time per step: %f" %
 # Recording first a few iteration results for debugging and refactoring
 
 #       21    4.441E-16  [ 1.0359086E+00  ]     5.009168908   9.3083443E-05 
-# iteration, mass error, total_partitions, energy_total, error_level
+# iteration, mass error, total partitions, total energy, error level
 # ---------- Run  ----------
 # Langevin step:  1
 #       18   -2.665E-15  [ 1.1837270E+00  ]     5.040091197   8.1538804E-05 

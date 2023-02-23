@@ -202,9 +202,9 @@ class SCFT:
 
         # iteration begins here
         if (self.box_is_altering):
-            print("iteration, mass error, total_partitions, energy_total, error_level, box size")
+            print("iteration, mass error, total partitions, total energy, error level, box size")
         else:
-            print("iteration, mass error, total_partitions, energy_total, error_level")
+            print("iteration, mass error, total partitions, total energy, error level")
 
         # reshape initial fields
         w = np.reshape([initial_fields["A"], initial_fields["B"]], [2, self.cb.get_n_grid()])

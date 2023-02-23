@@ -166,7 +166,7 @@ int main()
 
                     //------------------ run ----------------------
                     // std::cout<< "---------- Run ----------" << std::endl;
-                    // std::cout<< "iteration, mass error, total_partitions, energy_total, error_level" << std::endl;
+                    // std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;
                     chrono_start = std::chrono::system_clock::now();
                     // iteration begins here
                     for(int iter=0; iter<max_scft_iter; iter++)
