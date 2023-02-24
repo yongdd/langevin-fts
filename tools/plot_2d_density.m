@@ -13,7 +13,7 @@ data = phi_a;
 disp(max(max(max(data))))
 disp(min(min(min(data))))
 
-phi_a_2d = reshape(data,[nx(3), nx(2)]);
+phi_a_2d = reshape(data,[nx(2), nx(1)]);
 image(phi_a_2d(:,:),'CDataMapping','scaled');
 set(gca,'DataAspectRatio',[1 1 1]); % need to be changed...
 axis off;

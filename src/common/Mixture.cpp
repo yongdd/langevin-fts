@@ -219,7 +219,7 @@ void Mixture::add_polymer(
             // add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
-            unique_blocks[key].monomer_type = Mixture::key_to_species(key_v);
+            unique_blocks[key].monomer_type = Mixture::key_to_monomer_type(key_v);
             unique_blocks[key].n_segment_allocated = n_segment_allocated;
             unique_blocks[key].n_segment_offset    = n_segment_offset;
             unique_blocks[key].n_segment_original  = n_segment_original;
@@ -315,7 +315,7 @@ void Mixture::add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchK
     if (unique_branches.find(new_key) == unique_branches.end())
     {
         unique_branches[new_key].deps = Mixture::key_to_deps(new_key);
-        unique_branches[new_key].monomer_type = Mixture::key_to_species(new_key);
+        unique_branches[new_key].monomer_type = Mixture::key_to_monomer_type(new_key);
         unique_branches[new_key].max_n_segment = new_n_segment;
         unique_branches[new_key].height = Mixture::key_to_height(new_key);
     }
@@ -510,7 +510,7 @@ std::map<std::string, UniqueBlock> Mixture::superpose_branches_common(std::map<s
                 if (n_segment_set.size() == 0)
                 {
                     // add to map
-                    dep_u_superposition_map[std::get<1>(level_superposition_list[0])].monomer_type = Mixture::key_to_species(std::get<1>(level_superposition_list[0]));
+                    dep_u_superposition_map[std::get<1>(level_superposition_list[0])].monomer_type = Mixture::key_to_monomer_type(std::get<1>(level_superposition_list[0]));
                     dep_u_superposition_map[std::get<1>(level_superposition_list[0])].n_segment_allocated = std::get<0>(level_superposition_list[0]);
                     dep_u_superposition_map[std::get<1>(level_superposition_list[0])].n_segment_offset    = std::get<2>(level_superposition_list[0]);
                     dep_u_superposition_map[std::get<1>(level_superposition_list[0])].n_segment_original  = std::get<3>(level_superposition_list[0]);
@@ -562,17 +562,17 @@ std::map<std::string, UniqueBlock> Mixture::superpose_branches_common(std::map<s
                         dep_u_superposition += ":" + std::to_string(dep_v_u.size());
 
                     // add to map
-                    dep_u_superposition_map[std::get<1>(level_superposition_list[i])].monomer_type = Mixture::key_to_species(dep_key);
+                    dep_u_superposition_map[std::get<1>(level_superposition_list[i])].monomer_type = Mixture::key_to_monomer_type(dep_key);
                     dep_u_superposition_map[std::get<1>(level_superposition_list[i])].n_segment_allocated = n_segment_allocated;
                     dep_u_superposition_map[std::get<1>(level_superposition_list[i])].n_segment_offset    = n_segment_offset;
                     dep_u_superposition_map[std::get<1>(level_superposition_list[i])].n_segment_original  = n_segment_original;
                     dep_u_superposition_map[std::get<1>(level_superposition_list[i])].v_u                 = dep_v_u;
                 }
-                dep_u_superposition += "]" + Mixture::key_to_species(dep_key);
+                dep_u_superposition += "]" + Mixture::key_to_monomer_type(dep_key);
                 n_segment_allocated = current_n_segment - minimum_n_segment;
 
                 // add to remaining_keys
-                remaining_keys[dep_u_superposition].monomer_type = Mixture::key_to_species(dep_u_superposition);
+                remaining_keys[dep_u_superposition].monomer_type = Mixture::key_to_monomer_type(dep_u_superposition);
                 remaining_keys[dep_u_superposition].n_segment_allocated = n_segment_allocated;
                 remaining_keys[dep_u_superposition].n_segment_offset    = n_segment_offset_max;
                 remaining_keys[dep_u_superposition].n_segment_original  = n_segment_original_max;
@@ -723,7 +723,7 @@ std::string Mixture::key_minus_species(std::string key)
     }
 }
 
-std::string Mixture::key_to_species(std::string key)
+std::string Mixture::key_to_monomer_type(std::string key)
 {
     int key_start = 0;
     for(int i=key.size()-1; i>=0;i--)

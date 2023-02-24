@@ -112,7 +112,7 @@ public:
     int get_unique_n_branches() const;
     static std::vector<std::tuple<std::string, int, int>> key_to_deps(std::string key);
     static std::string key_minus_species(std::string key);
-    static std::string key_to_species(std::string key);
+    static std::string key_to_monomer_type(std::string key);
     static std::string key_to_initial_condition(std::string key);
     static int key_to_height(std::string key);
 
