@@ -500,7 +500,7 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            if (Mixture::key_to_species(dep_v) == monomer_type && n_segment_allocated != 0)
+            if (Mixture::key_to_monomer_type(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 

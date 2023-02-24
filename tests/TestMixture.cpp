@@ -27,7 +27,7 @@ int main()
         sub_deps = Mixture::key_to_deps(key);
         if(sub_deps.size() != 0)
             return -1;
-        if(Mixture::key_to_species(key) != "B")
+        if(Mixture::key_to_monomer_type(key) != "B")
             return -1;
 
         // sub_deps: [A:12, B:12]
@@ -37,7 +37,7 @@ int main()
             return -1;
         if(std::get<0>(sub_deps[1]) != "B" || std::get<1>(sub_deps[1]) != 12)
             return -1;
-        if(Mixture::key_to_species(key) != "A")
+        if(Mixture::key_to_monomer_type(key) != "A")
             return -1;
 
         // sub_deps: [(A12)B:12, (B12)A:9, (B12)B:12]
@@ -49,7 +49,7 @@ int main()
             return -1;
        if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
-        if(Mixture::key_to_species(key) != "A")
+        if(Mixture::key_to_monomer_type(key) != "A")
             return -1;
 
         // sub_deps: [(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A:12, (A12)B:12, (B12)B:12]}
@@ -61,7 +61,7 @@ int main()
             return -1;
         if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
-        if(Mixture::key_to_species(key) != "A")
+        if(Mixture::key_to_monomer_type(key) != "A")
             return -1;
 
         // print unique sub branches
