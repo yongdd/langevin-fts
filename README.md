@@ -69,6 +69,15 @@ conda env remove -n lfts
 + Use FTS in 1D and 2D only for the test. It does not have a physical meaning.
 + Matlab and Python tools for visualization and renormalization are included in `tools` folder.
 
+# Contribution
++ Most of python scripts implemented with this library are welcome. They could be very simple scripts for specific polymer morphologies, or modified versions of `scft.py`, `lfts.py`, etc.
++ Changing C++/CUDA codes by yourself is not recommended. If you want to add new features to this python library, please send me sample codes.
++ There should be relevant published literatures. And, they should contains sample results, test codes, or desired outputs to check whether they work correctly.
++ Currently, this library is updated without considering its compatibility with previous versions. I will keep managing the contributed codes so that they can be executed in the updated version.
++ **Contributed codes must not contains GPL-licensed codes.**
++ **Please do not send me exclusive codes of your lab. Make sure that they are allowed as open-source.**
++ Any suggestions and advices are welcome, but they could not be reflected.
+
 # Developer Guide
 #### Platforms  
   This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
