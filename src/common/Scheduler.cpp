@@ -17,11 +17,13 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
 
         std::vector<std::string> job_queue[N_STREAM];
         auto branch_hierarchies = make_branch_hierarchies(unique_branches);
+
+        // for height of branches
         for(size_t current_height=0; current_height<branch_hierarchies.size(); current_height++)
         {
             auto& same_height_branches = branch_hierarchies[current_height];
             std::vector<std::tuple<std::string, int>> Key_resolved_time;
-            // find dependencies resolved time
+            // determine when branch is ready to be computed, e.g., find dependencies resolved time.
             for(size_t i=0; i<same_height_branches.size(); i++)
             {
                 const auto& key = same_height_branches[i];
@@ -40,7 +42,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
                 Key_resolved_time.push_back(std::make_tuple(key, max_resolved_time));
             }
 
-            // sort branches on the basis of resolved time
+            // sort branches with time that they are ready
             std::sort(Key_resolved_time.begin(), Key_resolved_time.end(),
                 [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
             );
@@ -53,7 +55,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
             //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
             // }
 
-            // add jobs 
+            // add computation job to compute partition function of branches 
             for(size_t i=0; i<Key_resolved_time.size(); i++)
             {
                 // find index of stream that has minimum job_finish_time
@@ -85,19 +87,19 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
 
         }
 
-        // sort branches starting time
+        // sort branches with starting time
         for(const auto& item : stream_start_finish)
-            sorted_branch_start_time.push_back(std::make_tuple(item.first, std::get<1>(item.second)));
-        std::sort(sorted_branch_start_time.begin(), sorted_branch_start_time.end(),
+            sorted_branch_with_start_time.push_back(std::make_tuple(item.first, std::get<1>(item.second)));
+        std::sort(sorted_branch_with_start_time.begin(), sorted_branch_with_start_time.end(),
             [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
         );
 
         // collect time stamp
         std::set<int, std::less<int>> time_stamp_set;
-        for(size_t i=0; i<sorted_branch_start_time.size(); i++)
+        for(size_t i=0; i<sorted_branch_with_start_time.size(); i++)
         {
-            auto& key = std::get<0>(sorted_branch_start_time[i]);
-            int start_time = std::get<1>(sorted_branch_start_time[i]);
+            auto& key = std::get<0>(sorted_branch_with_start_time[i]);
+            int start_time = std::get<1>(sorted_branch_with_start_time[i]);
             int finish_time = start_time + std::max(unique_branches[key].max_n_segment, 1); // if max_n_segment is 0, add 1
             // std::cout << key << ":\n\t";
             // std::cout << "max_n_segment: " << unique_branches[key].max_n_segment;
@@ -123,37 +125,48 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
         //     std::cout << std::endl;
         // }
 
+        // for each stream, make iterator
         std::vector<std::string>::iterator iters[N_STREAM];
         for(int s=0; s<N_STREAM; s++)
             iters[s] = job_queue[s].begin();
 
+        // for each time stamp
         for(size_t i=0; i<time_stamp.size()-1; i++)
         {
             // std::cout << time_stamp[i]+1 << ", " << time_stamp[i+1] << std::endl;
             std::vector<std::tuple<std::string, int, int>> parallel_job;
+
+            // for each stream
             for(int s=0; s<N_STREAM; s++)
             {
-                // start_time < time_stamp[i]
+                // if iters[s] (branch iter) is not the end of job_queue
                 if(iters[s] != job_queue[s].end())
                 {
+                    // if the finishing time of current branch is smaller than finishing time of current time span, move to the next branch of iters[s]. 
                     if(time_stamp[i+1] > std::get<2>(stream_start_finish[*iters[s]]))
                         iters[s]++;
-                }
+                } 
+
+                // if iters[s] (branch iter) is not the end of job_queue
                 if(iters[s] != job_queue[s].end())
                 {
                     // std::cout << "\t*iters[s] " << *iters[s] << std::endl;
                     // std::cout << "\ttime_stamp " << time_stamp[i] << ", " << time_stamp[i+1] << std::endl;
                     // std::cout << "\tstream_start_finish " << std::get<1>(stream_start_finish[*iters[s]]) << ", " << std::get<2>(stream_start_finish[*iters[s]]) << std::endl;
 
+                    // if the time span is in between starting time to finishing time, add branch job to the parallel_job
                     if( time_stamp[i] >= std::get<1>(stream_start_finish[*iters[s]]) 
                         && time_stamp[i+1] <= std::get<2>(stream_start_finish[*iters[s]]))
                     {
                         int n_segment_from, n_segment_to;
+
+                        // if max_n_segment is 0, skip propagator iterations 
                         if(unique_branches[*iters[s]].max_n_segment == 0)
                         {
                             n_segment_from = 1;
                             n_segment_to = 0;
                         }
+                        // set range of n_segment to be computed
                         else
                         {
                             n_segment_from = 1+time_stamp[i]-std::get<1>(stream_start_finish[*iters[s]]);
@@ -191,7 +204,7 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
             same_height_branches.clear();
             for(size_t i=0; i<remaining_branches.size(); i++)
             {
-                if (current_height == Mixture::key_to_height(remaining_branches[i]))
+                if (current_height == Mixture::get_height_from_key(remaining_branches[i]))
                     same_height_branches.push_back(remaining_branches[i]);
             }
             if (!same_height_branches.empty())
@@ -207,7 +220,7 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
         // {
         //     std::cout << "Height:" << i << std::endl;
         //     for(const auto &item: branch_hierarchies[i])
-        //         std::cout << item << ": " << Mixture::key_to_height(item) << std::endl;
+        //         std::cout << item << ": " << Mixture::get_height_from_key(item) << std::endl;
         // }
 
         // for(const auto& item: unique_branches)
@@ -243,10 +256,10 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 }
 void Scheduler::display(std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches)
 {
-    for(size_t i=0; i<sorted_branch_start_time.size(); i++)
+    for(size_t i=0; i<sorted_branch_with_start_time.size(); i++)
     {
-        auto& key = std::get<0>(sorted_branch_start_time[i]);
-        int start_time = std::get<1>(sorted_branch_start_time[i]);
+        auto& key = std::get<0>(sorted_branch_with_start_time[i]);
+        int start_time = std::get<1>(sorted_branch_with_start_time[i]);
         int finish_time = start_time + unique_branches[key].max_n_segment;
         std::cout << key << ":\n\t";
         std::cout << "max_n_segment: " << unique_branches[key].max_n_segment;

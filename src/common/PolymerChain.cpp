@@ -15,7 +15,7 @@ PolymerChain::PolymerChain(
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
     std::vector<int> v, std::vector<int> u,
-    std::map<int, std::string> chain_end_to_initial_condition)
+    std::map<int, std::string> chain_end_to_q_init)
 {
     // check block size
     if( block_monomer_types.size() != contour_lengths.size())
@@ -51,10 +51,10 @@ PolymerChain::PolymerChain(
             throw_with_line_number("block_monomer_types[" + std::to_string(i) + "] (\"" + block_monomer_types[i] + "\") is not in bond_lengths.");
     }
 
-    // // check chain_end_to_initial_condition
-    // if( chain_end_to_initial_condition.size() > 0)
-    //     throw_with_line_number("Currently, \'chain_end_to_initial_condition\' is not supported.");
-    this->chain_end_to_initial_condition = chain_end_to_initial_condition;
+    // // check chain_end_to_q_init
+    // if( chain_end_to_q_init.size() > 0)
+    //     throw_with_line_number("Currently, \'chain_end_to_q_init\' is not supported.");
+    this->chain_end_to_q_init = chain_end_to_q_init;
 
     // save variables
     try

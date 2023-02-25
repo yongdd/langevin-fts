@@ -288,7 +288,7 @@ void CudaPseudoDiscrete::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        std::string g = Mixture::key_to_initial_condition(key);
+                        std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
                         gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_init[g], sizeof(double)*M,cudaMemcpyHostToDevice));
@@ -691,7 +691,7 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            if (Mixture::key_to_monomer_type(dep_v) == monomer_type && n_segment_allocated != 0)
+            if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
