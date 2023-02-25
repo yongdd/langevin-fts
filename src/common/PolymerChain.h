@@ -31,9 +31,9 @@ private:
     std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite partial partition functions as a text
 
     // grafting point.
-    // For instance, 'chain_end_to_initial_condition[a] = b' means that
+    // For instance, 'chain_end_to_q_init[a] = b' means that
     // the initial condition of chain end vertex 'a' will be given as 'initial[b]' in pseudo.compute_statistics()
-    std::map<int, std::string> chain_end_to_initial_condition;
+    std::map<int, std::string> chain_end_to_q_init;
 
 public:
     PolymerChain(
@@ -42,7 +42,7 @@ public:
         std::vector<std::string> block_monomer_types,
         std::vector<double> contour_lengths,
         std::vector<int> v, std::vector<int> u,
-        std::map<int, std::string> chain_end_to_initial_condition={});
+        std::map<int, std::string> chain_end_to_q_init={});
     ~PolymerChain() {};
 
     double get_alpha() const;

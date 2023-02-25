@@ -18,8 +18,8 @@ private:
 
     // variables
     std::map<std::string, std::tuple<int, int, int>, CompareBranchKey> stream_start_finish; //stream_number, starting time, finishing time
-    std::map<std::string, int> resolved_time; // when dependencies are resolved
-    std::vector<std::tuple<std::string, int>> sorted_branch_start_time;  // start time for each branch
+    std::map<std::string, int> resolved_time; // when dependencies are resolved, e.g., when branch is ready to be computed
+    std::vector<std::tuple<std::string, int>> sorted_branch_with_start_time;  // computation starting time for each branch
     std::vector<int> time_stamp; // times that new jobs are joined or jobs are finished.
     std::vector<std::vector<std::tuple<std::string, int, int>>> schedule;   // job schedule for each time interval
 

@@ -183,7 +183,7 @@ void CpuPseudoContinuous::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        std::string g = Mixture::key_to_initial_condition(key);
+                        std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
@@ -500,7 +500,7 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            if (Mixture::key_to_monomer_type(dep_v) == monomer_type && n_segment_allocated != 0)
+            if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 

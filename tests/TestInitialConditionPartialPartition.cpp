@@ -39,7 +39,7 @@ int main()
 
         // from a vertex index to a grafting point
         // following map means that vertex 
-        std::map<int, std::string> chain_end_to_initial_condition = {{0,"G"}};
+        std::map<int, std::string> chain_end_to_q_init = {{0,"G"}};
         const int M = nx[0]*nx[1]*nx[2];
 
         //-------------- allocate array ------------
@@ -64,7 +64,7 @@ int main()
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
-                    mx->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_initial_condition);
+                    mx->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
                     Pseudo *pseudo     = factory->create_pseudo(cb, mx);
 
                     // -------------- print simulation parameters ------------
@@ -75,7 +75,7 @@ int main()
 
                     // // display branches
                     // mx->display_unique_blocks();
-                    // mx->display_unique_branch_deps();
+                    // mx->display_all_unique_branch_deps();
 
                     for(int i=0; i<M; i++)
                     {
