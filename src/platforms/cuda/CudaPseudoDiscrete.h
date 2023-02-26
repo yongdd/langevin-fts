@@ -24,13 +24,13 @@ private:
     // partition function and complementary partition are 
     // contiguously stored in q_d for every segment step.
     // In other words,
-    // q       (r,1)   = q_d[0]          ~ q_d[MM-1]
-    // q^dagger(r,N)   = q_d[MM]         ~ q_d[2*MM-1]
-    // q       (r,2)   = q_d[2*MM]       ~ q_d[3*MM-1]
-    // q^dagger(r,N-2) = q_d[3*MM]       ~ q_d[4*MM-1]
+    // q       (r,1)   = q_d[0]          ~ q_d[M-1]
+    // q^dagger(r,N)   = q_d[M]         ~ q_d[2*M-1]
+    // q       (r,2)   = q_d[2*M]       ~ q_d[3*M-1]
+    // q^dagger(r,N-2) = q_d[3*M]       ~ q_d[4*M-1]
     // ......
-    // q       (r,n)   = q_d[(2*n-2)*MM] ~ q_d[(2*n-1)*MM-1]
-    // q^dagger(r,N-n) = q_d[(2*n-1)*MM] ~ q_d[(2*n  )*MM-1]
+    // q       (r,n)   = q_d[(2*n-2)*M] ~ q_d[(2*n-1)*M-1]
+    // q^dagger(r,N-n) = q_d[(2*n-1)*M] ~ q_d[(2*n  )*M-1]
     // ......
 
     // for pseudo-spectral: one_step()

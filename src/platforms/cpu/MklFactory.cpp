@@ -31,8 +31,11 @@ Mixture* MklFactory::create_mixture(
 {
     return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
-Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_memory_usage)
 {
+    if (reduce_memory_usage)
+        std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
+
     std::string chain_model = mx->get_model_name();
     if ( chain_model == "continuous" )
     {

@@ -16,6 +16,7 @@
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
+#include "CudaPseudoContinuousReduceMemory.h"
 #endif
 
 int main()
@@ -25,11 +26,11 @@ int main()
         const int II{5};
         const int JJ{4};
         const int KK{3};
-        const int MM{II*JJ*KK};
+        const int M{II*JJ*KK};
         
-        double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
+        double q_1_4_last[M]={0.0}, q_1_0_last[M]={0.0};
 
-        std::array<double,MM> diff_sq;
+        std::array<double,M> diff_sq;
         double error;
         double Lx, Ly, Lz;
 
@@ -38,7 +39,7 @@ int main()
         Lz = 2.0;
 
         // initialize pseudo spectral parameters
-        double w_a[MM] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
+        double w_a[M] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
                         0.792673860e-1,0.429684069e+0,0.290531312e+0,0.453270921e+0,0.199228629e+0,
                         0.754931905e-1,0.226924328e+0,0.936407886e+0,0.979392715e+0,0.464957186e+0,
                         0.742653949e+0,0.368019859e+0,0.885231224e+0,0.406191773e+0,0.653096157e+0,
@@ -51,7 +52,7 @@ int main()
                         0.217988206e+0,0.273487202e+0,0.937672578e+0,0.570540523e+0,0.409071185e+0,
                         0.391548274e-1,0.663478965e+0,0.260755447e+0,0.503943226e+0,0.979481790e+0
                         };
-        double w_b[MM] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
+        double w_b[M] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
                         0.604752856e+0,0.890062293e+0,0.328557615e+0,0.965824739e+0,0.865399960e+0,
                         0.698893686e+0,0.857947305e+0,0.594897904e+0,0.248187208e+0,0.155686710e+0,
                         0.116803898e+0,0.711146609e+0,0.107610460e+0,0.143034307e+0,0.123131521e+0,
@@ -65,7 +66,7 @@ int main()
                         0.516722213e+0,0.253395805e+0,0.472950065e-1,0.152934959e+0,0.292486174e+0
                         };
 
-        double q_1_4_last_ref[MM] =
+        double q_1_4_last_ref[M] =
         {
             2.5792560983e-03, 2.2312722072e-03, 2.2902702893e-03, 
             1.9002616092e-03, 1.8667855127e-03, 2.4550786309e-03, 
@@ -88,7 +89,7 @@ int main()
             2.5805251715e-03, 2.8352791996e-03, 2.2636680364e-03, 
             2.6807329597e-03, 2.5266037038e-03, 2.1560442718e-03,
         };
-        double q_1_0_last_ref[MM] =
+        double q_1_0_last_ref[M] =
         {
             7.8503181417e-03, 6.6877743330e-03, 6.8915862790e-03, 
             5.3973416052e-03, 5.2346000177e-03, 7.0757353621e-03, 
@@ -112,7 +113,7 @@ int main()
             8.8942026395e-03, 8.3244616444e-03, 7.0259882844e-03,
         };
 
-        double phi_a_ref[MM] =
+        double phi_a_ref[M] =
         {
             6.3467114341e-01, 4.7802291303e-01, 4.9852876927e-01, 
             3.5616614494e-01, 3.5122096343e-01, 5.6969359860e-01, 
@@ -135,7 +136,7 @@ int main()
             6.1926462265e-01, 7.3520085502e-01, 4.8137528712e-01, 
             6.6705998888e-01, 5.9208309153e-01, 4.3970947619e-01,
         };
-        double phi_b_ref[MM] =
+        double phi_b_ref[M] =
         {
             5.2363739111e-01, 4.8376050742e-01, 4.8454872805e-01, 
             4.1907336325e-01, 4.6809964464e-01, 4.3286088387e-01, 
@@ -167,7 +168,7 @@ int main()
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
 
-        double phi_a[MM]={0.0}, phi_b[MM]={0.0};
+        double phi_a[M]={0.0}, phi_b[M]={0.0};
 
         std::vector<Pseudo*> pseudo_list;
 
@@ -188,6 +189,8 @@ int main()
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
         pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
+        pseudo_list.push_back(new CudaPseudoContinuousReduceMemory(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
+        pseudo_list.push_back(new CudaPseudoContinuousReduceMemory(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
@@ -195,7 +198,7 @@ int main()
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
         {
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
             {
                 phi_a[i] = 0.0;
                 phi_b[i] = 0.0;
@@ -217,7 +220,7 @@ int main()
             const int p = 0;
             PolymerChain& pc = mx1->get_polymer(p);
             pseudo->get_partial_partition(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Partial Partition error: "<< error << std::endl;
@@ -225,7 +228,7 @@ int main()
                 return -1;
 
             pseudo->get_partial_partition(q_1_0_last, p, 1, 0, pc.get_block(1,0).n_segment);
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
@@ -238,14 +241,14 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;

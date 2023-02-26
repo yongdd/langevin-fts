@@ -177,8 +177,8 @@ void CpuPseudoContinuous::compute_statistics(
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 double *_unique_partition = unique_partition[key];
 
-                // calculate one block end
-                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                // if it is leaf node
+                if(n_segment_from == 1 && deps.size() == 0) 
                 {
                      // q_init
                     if (key[0] == '{')
@@ -196,7 +196,8 @@ void CpuPseudoContinuous::compute_statistics(
                     }
                     unique_partition_finished[key][0] = true;
                 }
-                else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
+                // if it is not leaf node
+                else if (n_segment_from == 1 && deps.size() > 0) 
                 {
                     // if it is superposition
                     if (key[0] == '[')
@@ -523,7 +524,7 @@ void CpuPseudoContinuous::get_polymer_concentration(int p, double *phi)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
         if (mx->is_using_superposition())
-            throw_with_line_number("Disable 'use_superposition' to invoke 'get_polymer_concentration'.");
+            throw_with_line_number("Disable 'superposition' option to invoke 'get_polymer_concentration'.");
 
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
@@ -680,7 +681,7 @@ void CpuPseudoContinuous::get_partial_partition(double *q_out, int polymer, int 
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'use_superposition' to obtain partial partition functions.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)

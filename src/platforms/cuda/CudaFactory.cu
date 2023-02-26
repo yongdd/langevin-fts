@@ -11,6 +11,7 @@
 
 #include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
+#include "CudaPseudoContinuousReduceMemory.h"
 #include "CudaPseudoDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
@@ -28,12 +29,17 @@ Mixture* CudaFactory::create_mixture(
 {
     return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
-Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_memory_usage)
 {
     std::string model_name = mx->get_model_name();
 
-    if( model_name == "continuous" )
+    if (model_name == "discrete" && reduce_memory_usage)
+        std::cout << "(warning) Reducing memory usage option only works for the continuous chain." << std::endl;
+
+    if( model_name == "continuous" && reduce_memory_usage == false)
         return new CudaPseudoContinuous(cb, mx);
+    else if( model_name == "continuous" && reduce_memory_usage == true)
+        return new CudaPseudoContinuousReduceMemory(cb, mx);
     else if ( model_name == "discrete" )
         return new CudaPseudoDiscrete(cb, mx);
     return NULL;

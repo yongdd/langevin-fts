@@ -97,7 +97,7 @@ void Mixture::add_polymer(
         unique_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
 
-    if (use_superposition)
+    if (this->use_superposition)
     {
         // find superposed branches in unique_blocks_new_polymer
         std::map<std::tuple<int, std::string>, std::map<std::string, UniqueBlock >> superposed_blocks;
@@ -799,7 +799,7 @@ UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string>
 void Mixture::display_unique_blocks() const
 {
     // print Unique Blocks
-    if (use_superposition)
+    if (this->use_superposition)
     {
         std::cout << "--------- Unique Blocks (Superposed) ---------" << std::endl;
         std::cout << "Polymer id, key1:\n\tn_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
@@ -827,7 +827,7 @@ void Mixture::display_unique_blocks() const
             v_tuple = std::make_tuple(std::get<0>(item.first), v_string);
         }
 
-        if (use_superposition)
+        if (this->use_superposition)
             std::cout << "\t(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
         else
             std::cout << "\t" + std::to_string(item.second.n_segment_allocated) + ", ";
@@ -853,7 +853,7 @@ void Mixture::display_unique_branches() const
     // print unique sub branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
-    if (use_superposition)
+    if (this->use_superposition)
         std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
     else
         std::cout << "--------- Unique Branches ---------" << std::endl;
@@ -880,7 +880,7 @@ void Mixture::display_all_unique_branch_deps() const
     // print unique sub branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
-    if (use_superposition)
+    if (this->use_superposition)
         std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
     else
         std::cout << "--------- Unique Branches ---------" << std::endl;
@@ -901,4 +901,44 @@ void Mixture::display_all_unique_branch_deps() const
     }
     std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
+}
+
+bool CompareBranchKey::operator()(const std::string& str1, const std::string& str2)
+{
+    // first compare heights
+    int height_str1 = Mixture::get_height_from_key(str1);
+    int height_str2 = Mixture::get_height_from_key(str2);
+
+    if (height_str1 < height_str2)
+        return true;
+    else if(height_str1 > height_str2)
+        return false;
+
+    // second compare their strings
+    int mix_length = std::min(str1.length(), str2.length());
+    for(int i=0; i<mix_length; i++)
+    {
+        if (str1[i] == str2[i])
+            continue;
+        else if (str2[i] == '[')
+            return true;
+        else if (str1[i] == '[')
+            return false;
+        else if (str2[i] == ']')
+            return true;
+        else if (str1[i] == ']')
+            return false;
+        else if (str2[i] == '(')
+            return true;
+        else if (str1[i] == '(')
+            return false;
+        else if (str2[i] == ')')
+            return true;
+        else if (str1[i] == ')')
+            return false;
+        else
+            return str1[i] < str2[i];
+    }
+    // third compare their lengths
+    return str1.length() < str2.length();
 }

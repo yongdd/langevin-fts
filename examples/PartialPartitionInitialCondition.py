@@ -21,7 +21,9 @@ lx = [4.0,4.0,4.0]                                # box size
 ds = 0.01                                         # contour step Interval
 stat_seg_length = {"A":1.0, "B":1.0}              # statistical segment lengths
 f = 0.5                                           # A-fraction of major BCP chain, f
+
 use_superposition = False
+reduce_gpu_memory_usage = False
 
 # polymer
 volume_faction = 1.0                               # volume faction
@@ -42,7 +44,7 @@ cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
 
 mixture.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
-pseudo = factory.create_pseudo(cb, mixture)
+pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 
 mixture.display_unique_blocks()
 mixture.display_unique_branches()

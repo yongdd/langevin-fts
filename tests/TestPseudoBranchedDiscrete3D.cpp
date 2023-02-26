@@ -24,11 +24,11 @@ int main()
         const int II{5};
         const int JJ{4};
         const int KK{3};
-        const int MM{II*JJ*KK};
+        const int M{II*JJ*KK};
 
-        double q_1_4_last[MM]={0.0}, q_1_0_last[MM]={0.0};
+        double q_1_4_last[M]={0.0}, q_1_0_last[M]={0.0};
 
-        std::array<double,MM> diff_sq;
+        std::array<double,M> diff_sq;
         double error;
         double Lx, Ly, Lz;
 
@@ -37,7 +37,7 @@ int main()
         Lz = 2.0;
 
         // initialize pseudo spectral parameters
-        double w_a[MM] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
+        double w_a[M] = {0.183471406e+0,0.623968915e+0,0.731257661e+0,0.997228140e+0,0.961913696e+0,
                         0.792673860e-1,0.429684069e+0,0.290531312e+0,0.453270921e+0,0.199228629e+0,
                         0.754931905e-1,0.226924328e+0,0.936407886e+0,0.979392715e+0,0.464957186e+0,
                         0.742653949e+0,0.368019859e+0,0.885231224e+0,0.406191773e+0,0.653096157e+0,
@@ -50,7 +50,7 @@ int main()
                         0.217988206e+0,0.273487202e+0,0.937672578e+0,0.570540523e+0,0.409071185e+0,
                         0.391548274e-1,0.663478965e+0,0.260755447e+0,0.503943226e+0,0.979481790e+0
                         };
-        double w_b[MM] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
+        double w_b[M] = {0.113822903e-1,0.330673934e+0,0.270138412e+0,0.669606774e+0,0.885344778e-1,
                         0.604752856e+0,0.890062293e+0,0.328557615e+0,0.965824739e+0,0.865399960e+0,
                         0.698893686e+0,0.857947305e+0,0.594897904e+0,0.248187208e+0,0.155686710e+0,
                         0.116803898e+0,0.711146609e+0,0.107610460e+0,0.143034307e+0,0.123131521e+0,
@@ -64,7 +64,7 @@ int main()
                         0.516722213e+0,0.253395805e+0,0.472950065e-1,0.152934959e+0,0.292486174e+0
                         };
 
-        double q_1_4_last_ref[MM] =
+        double q_1_4_last_ref[M] =
         {
             2.6696168107e-03, 2.2237143379e-03, 2.2603693699e-03, 
             1.8332470791e-03, 1.8066857554e-03, 2.5643745167e-03, 
@@ -87,7 +87,7 @@ int main()
             2.6174642690e-03, 2.9698825716e-03, 2.2469761233e-03, 
             2.7536947512e-03, 2.5411754742e-03, 2.0811084483e-03, 
         };
-        double q_1_0_last_ref[MM] =
+        double q_1_0_last_ref[M] =
         {
             8.0801484740e-03, 6.6029444720e-03, 6.7526913278e-03, 
             5.1446756465e-03, 4.9977938643e-03, 7.3451179484e-03, 
@@ -111,7 +111,7 @@ int main()
             9.1211118480e-03, 8.3469733900e-03, 6.7453796710e-03,
         };
 
-        double phi_a_ref[MM] =
+        double phi_a_ref[M] =
         {
             6.3730142556e-01, 4.7790914171e-01, 4.9585150774e-01, 
             3.5426977573e-01, 3.4950054791e-01, 5.7540303133e-01, 
@@ -134,7 +134,7 @@ int main()
             6.1846706149e-01, 7.3920735251e-01, 4.8039858645e-01, 
             6.6826428354e-01, 5.9066169877e-01, 4.3602989421e-01, 
         };
-        double phi_b_ref[MM] =
+        double phi_b_ref[M] =
         {
             5.3059591431e-01, 4.8454826509e-01, 4.8729923810e-01, 
             4.1545687566e-01, 4.7458570554e-01, 4.3024606849e-01, 
@@ -166,7 +166,7 @@ int main()
         std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
         std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
 
-        double phi_a[MM]={0.0}, phi_b[MM]={0.0};
+        double phi_a[M]={0.0}, phi_b[M]={0.0};
 
         Mixture* mx1 = new Mixture("Discrete", 0.15, bond_lengths, false);
         mx1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
@@ -193,7 +193,7 @@ int main()
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
         {
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
             {
                 phi_a[i] = 0.0;
                 phi_b[i] = 0.0;
@@ -215,7 +215,7 @@ int main()
             const int p = 0;
             PolymerChain& pc = mx1->get_polymer(p);
             pseudo->get_partial_partition(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Partial Partition error: "<< error << std::endl;
@@ -223,7 +223,7 @@ int main()
                 return -1;
 
             pseudo->get_partial_partition(q_1_0_last, p, 1, 0, pc.get_block(1,0).n_segment);
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
@@ -236,14 +236,14 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;

@@ -246,9 +246,6 @@ void CudaPseudoDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
         }
 
-        // if( q_init.size() > 0)
-        //     throw_with_line_number("Currently, \'q_init\' is not supported.");
-
         // exp_dw
         double exp_dw[M];
         for(const auto& item: w_input)
@@ -715,7 +712,7 @@ void CudaPseudoDiscrete::get_polymer_concentration(int p, double *phi)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
         if (mx->is_using_superposition())
-            throw_with_line_number("Disable 'use_superposition' to obtain concentration of each block.");
+            throw_with_line_number("Disable 'superposition' option to obtain concentration of each block.");
 
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
@@ -910,7 +907,7 @@ void CudaPseudoDiscrete::get_partial_partition(double *q_out, int polymer, int v
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'use_superposition' to obtain partial partition functions.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 1 || n > N)

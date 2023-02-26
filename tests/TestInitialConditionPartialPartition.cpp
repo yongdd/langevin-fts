@@ -42,6 +42,8 @@ int main()
         std::map<int, std::string> chain_end_to_q_init = {{0,"G"}};
         const int M = nx[0]*nx[1]*nx[2];
 
+        bool reduce_memory_usage=false;
+
         //-------------- allocate array ------------
         double w[M];
         double q_init[M];
@@ -65,7 +67,7 @@ int main()
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
                     mx->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
+                    Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
 
                     // -------------- print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);

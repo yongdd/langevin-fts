@@ -10,7 +10,6 @@
 #include <map>
 
 #include "PolymerChain.h"
-#include "CompareBranchKey.h"
 
 struct UniqueEdge{
     int max_n_segment;                                    // the maximum segment number
@@ -33,6 +32,12 @@ struct UniqueBlock{
     int n_segment_offset;      
     int n_segment_original;
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
+};
+
+/* This stucture defines comparison function for branched key */
+struct CompareBranchKey
+{
+    bool operator()(const std::string& str1, const std::string& str2);
 };
 
 class Mixture
