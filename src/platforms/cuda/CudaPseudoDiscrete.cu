@@ -288,18 +288,18 @@ void CudaPseudoDiscrete::compute_statistics(
                         std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
-                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_init[g], sizeof(double)*M,cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_init[g], sizeof(double)*M, cudaMemcpyHostToDevice));
                         multi_real<<<N_BLOCKS, N_THREADS>>>(_d_unique_partition[0], _d_unique_partition[0], d_exp_dw[monomer_type], 1.0, M);
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], d_exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpy(_d_unique_partition[0], d_exp_dw[monomer_type], sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     }
                     unique_partition_finished[key][0] = true;
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
-                    // if it is superposition
+                    // if it is superposed
                     if (key[0] == '[')
                     {
                         // initialize to zero
@@ -330,7 +330,7 @@ void CudaPseudoDiscrete::compute_statistics(
                     }
                     else
                     {
-                        // Illustration (four branches)
+                                                // Illustration (four branches)
                         //     A
                         //     |
                         // O - . - B
@@ -344,7 +344,7 @@ void CudaPseudoDiscrete::compute_statistics(
                         // A, B, C : other full segments
 
                         // combine branches
-                        gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M,cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M, cudaMemcpyHostToDevice));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -362,11 +362,10 @@ void CudaPseudoDiscrete::compute_statistics(
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                         }
-                        double *_d_unique_q_junctions = d_unique_q_junctions[key];
-                        gpu_error_check(cudaMemcpy(_d_unique_q_junctions, d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpy(d_unique_q_junctions[key], d_q_junction, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                         // add half bond
-                        half_bond_step(_d_unique_q_junctions, _d_unique_partition[0], d_boltz_bond_half[monomer_type]);
+                        half_bond_step(d_q_junction, _d_unique_partition[0], d_boltz_bond_half[monomer_type]);
 
                         // add full segment
                         multi_real<<<N_BLOCKS, N_THREADS>>>(_d_unique_partition[0], _d_unique_partition[0], d_exp_dw[monomer_type], 1.0, M);
@@ -593,8 +592,8 @@ void CudaPseudoDiscrete::one_step_2(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_in_1, sizeof(double)*M,cudaMemcpyDeviceToDevice));
-        gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_in_2, sizeof(double)*M,cudaMemcpyDeviceToDevice));
+        gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_in_1, sizeof(double)*M, cudaMemcpyDeviceToDevice));
+        gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_in_2, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
         //-------------- step 1 ----------
         // Execute a Forward FFT
@@ -616,7 +615,6 @@ void CudaPseudoDiscrete::one_step_2(
         throw_without_line_number(exc.what());
     }
 }
-
 void CudaPseudoDiscrete::half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half)
 {
     try
@@ -803,8 +801,8 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                     if (mx->get_unique_branch(dep_v).deps.size() == 0) // if v is leaf node, skip
                         continue;
                     
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_unique_q_junctions[dep_v], sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-1],                  sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_unique_q_junctions[dep_v], sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-1],                  sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond_half[monomer_type];
@@ -815,8 +813,8 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                     if (mx->get_unique_branch(dep_u).deps.size() == 0) // if u is leaf node, skip
                         continue;
 
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-1],         sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_unique_q_junctions[dep_u], sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-1],         sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_unique_q_junctions[dep_u], sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond_half[monomer_type];
                 }
@@ -829,8 +827,8 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                 // within the blocks
                 else
                 {
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-N_OFFSET-n-1], sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[n-1],                     sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-N_OFFSET-n-1], sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[n-1],                     sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond[monomer_type];
                 }

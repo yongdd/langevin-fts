@@ -195,7 +195,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
-                    // if it is superposition
+                    // if it is superposed
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
@@ -338,7 +338,7 @@ void CpuPseudoDiscrete::compute_statistics(
 
         // calculate segment concentrations
         #pragma omp parallel for
-        for(int b=0; b<unique_phi.size();b++)
+        for(size_t b=0; b<unique_phi.size();b++)
         {
             auto block = unique_phi.begin();
             advance(block, b);
@@ -553,7 +553,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
         // compute stress for each unique block
         #pragma omp parallel for
-        for(int b=0; b<unique_phi.size();b++)
+        for(size_t b=0; b<unique_phi.size();b++)
         {
             auto block = unique_phi.begin();
             advance(block, b);

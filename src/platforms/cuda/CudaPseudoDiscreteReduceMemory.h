@@ -1,17 +1,9 @@
 /*-------------------------------------------------------------
-This is a derived CudaPseudoContinuousReduceMemory class
-
-GPU memory usage is reduced by storing partial partition functions in main memory.
-In the GPU memory, memory space the can store only two steps of partial partition function is allocated.
-There are three streams. One is responsible for data transfer between CPU and GPU, another is responsible
-for the compute_statistics() using single batched cufft, and the other is responsible for compute_stress()
-using double batched cufft. Overlapping of kernel execution and data transfers is utilized so that 
-they can be executed in simultaneously. As a result, data transfer time can be hided.
-For more explanation, please see appendix of [Macromolecules 2021, 54, 24, 11304].
+* This is a derived CudaPseudoDiscreteReduceMemory class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_CONTINUOUS_REDUCE_MEMORY_H_
-#define CUDA_PSEUDO_CONTINUOUS_REDUCE_MEMORY_H_
+#ifndef CUDA_PSEUDO_DISCRETE_REDUCE_MEMORY_H_
+#define CUDA_PSEUDO_DISCRETE_REDUCE_MEMORY_H_
 
 #include <array>
 #include <cufft.h>
@@ -23,7 +15,7 @@ For more explanation, please see appendix of [Macromolecules 2021, 54, 24, 11304
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoContinuousReduceMemory : public Pseudo
+class CudaPseudoDiscreteReduceMemory : public Pseudo
 {
 private:
     // for pseudo-spectral: one_step()
@@ -32,11 +24,12 @@ private:
     ftsComplex *d_qk_in;
     double **d_q;
     double *d_unique_partition_sub_dep;
+    double *d_q_half_step, *d_q_junction;
 
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;
-    ftsComplex *d_two_qk_in;
-    double **d_q_two_partition;
+    double *d_q_in_temp_2;
+    ftsComplex *d_qk_in_2;
 
     double *d_fourier_basis_x;
     double *d_fourier_basis_y;
@@ -46,30 +39,31 @@ private:
     // three streams for overlapping kernel execution and data transfers 
     cudaStream_t *streams;
 
-    // key: (dep) + monomer_type, value: partition function
+    // key: (dep) + monomer_type, value: partition functions
     std::map<std::string, double *> unique_partition;
     std::map<std::string, bool *> unique_partition_finished;
 
-    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
+    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> unique_phi;
 
+    // key: (dep), value: array pointer
+    std::map<std::string, double*> unique_q_junctions;
+    
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond
     std::map<std::string, double*> d_exp_dw;            // boltzmann factor for the single segment
-    std::map<std::string, double*> d_exp_dw_half;       // boltzmann factor for the half segment
-
+    std::map<std::string, double*>   exp_dw;
+    
     // total partition functions for each polymer
     double* single_partitions;
 
-    void one_step(double *d_q_in, double *d_q_out,
-                  double *d_boltz_bond, double *d_boltz_bond_half,
-                  double *d_exp_dw, double *d_exp_dw_half);
+    void one_step(double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw);
+    void half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
+    void calculate_phi_one_block(double *d_phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 
-    void calculate_phi_one_block(double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-
-    CudaPseudoContinuousReduceMemory(ComputationBox *cb, Mixture *pc);
-    ~CudaPseudoContinuousReduceMemory();
+    CudaPseudoDiscreteReduceMemory(ComputationBox *cb, Mixture *mx);
+    ~CudaPseudoDiscreteReduceMemory();
 
     void update_bond_function() override;
     void compute_statistics(

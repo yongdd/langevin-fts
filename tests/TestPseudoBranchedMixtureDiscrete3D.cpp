@@ -15,6 +15,7 @@
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaPseudoDiscrete.h"
+#include "CudaPseudoDiscreteReduceMemory.h"
 #endif
 
 int main()
@@ -236,6 +237,8 @@ int main()
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
         pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
+        pseudo_list.push_back(new CudaPseudoDiscreteReduceMemory(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
+        pseudo_list.push_back(new CudaPseudoDiscreteReduceMemory(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};

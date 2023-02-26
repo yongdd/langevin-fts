@@ -54,7 +54,7 @@ blocks = create_bottle_brush(sc_alpha, n_sc, f)
 total_alpha = 1 + n_sc*sc_alpha
 
 print("Blocks:", *blocks, sep = "\n")
-print("Total alpha", total_alpha)
+print("Total alpha:", total_alpha)
 
 params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]

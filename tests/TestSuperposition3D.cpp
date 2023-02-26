@@ -95,13 +95,9 @@ int main()
                 {
                     for(bool reduce_memory_usage : reduce_memory_usages)
                     {
-                        if(reduce_memory_usage == true)
-                        {
-                            if(platform == "cpu-mkl")
+                        // 'cpu-mkl' does not support reduce_gpu_memory_usage
+                        if(reduce_memory_usage == true && platform == "cpu-mkl")
                                 continue;
-                            else if(platform == "cuda" && chain_model == "Discrete")
-                                continue;
-                        }
                         
                         AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
                         // factory->display_info();
