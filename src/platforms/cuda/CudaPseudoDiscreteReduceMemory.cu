@@ -1,19 +1,20 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECToptimal
 #define CUB_IGNORE_DEPRECATED_CPP_DIALECT
 
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
-#include "CudaPseudoContinuousReduceMemory.h"
+#include <iostream>
 #include "CudaComputationBox.h"
-#include "SimpsonQuadrature.h"
+#include "CudaPseudoDiscreteReduceMemory.h"
 
-CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
+CudaPseudoDiscreteReduceMemory::CudaPseudoDiscreteReduceMemory(
     ComputationBox *cb,
     Mixture *mx)
     : Pseudo(cb, mx)
 {
-    try{
+    try
+    {
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
@@ -24,13 +25,28 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
+             // There are N segments
+
+             // Illustration (N==5)
+             // O--O--O--O--O
+             // 0  1  2  3  4 unique_blocks
+
+             // Legend)
+             // -- : full bond
+             // O  : full segment
 
             // allocate pinned memory for device overlapping
-            cudaMallocHost((void**)&unique_partition[dep], sizeof(double)*(max_n_segment+1)*M);
+            cudaMallocHost((void**)&unique_partition[dep], sizeof(double)*max_n_segment*M);
 
-            unique_partition_finished[dep] = new bool[max_n_segment+1];
-            for(int i=0; i<=max_n_segment;i++)
+            unique_partition_finished[dep] = new bool[max_n_segment];
+            for(int i=0; i<max_n_segment;i++)
                 unique_partition_finished[dep][i] = false;
+        }
+
+        // allocate memory for unique_q_junctions, which contain partition function at junction of discrete chain
+        for(const auto& item: mx->get_unique_branches())
+        {
+            unique_q_junctions[item.first] = new double[M];
         }
 
         // allocate memory for concentrations
@@ -41,24 +57,24 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
             unique_phi[item.first] = new double[M];
         }
 
-        // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
-        for(const auto& item: mx->get_bond_lengths()){
+        // create boltz_bond, boltz_bond_half, and exp_dw
+        for(const auto& item: mx->get_bond_lengths())
+        {
             std::string monomer_type = item.first;
             d_boltz_bond     [monomer_type] = nullptr;
             d_boltz_bond_half[monomer_type] = nullptr;
             d_exp_dw         [monomer_type] = nullptr;
-            d_exp_dw_half    [monomer_type] = nullptr;
+            exp_dw           [monomer_type] = new double[M];
 
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw         [monomer_type], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half    [monomer_type], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw         [monomer_type], sizeof(double)*M));   
         }
 
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
-        // create FFT plan
+        // Create FFT plan
         const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
 
@@ -97,6 +113,9 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
         cufftSetStream(plan_bak, streams[1]); 
         cufftSetStream(plan_for_two, streams[2]);
 
+        gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(ftsComplex)*M_COMPLEX));
+
         // allocate memory for pseudo-spectral: one_step()
         d_q = new double*[2]; // one for prev, the other for next
         gpu_error_check(cudaMalloc((void**)&d_q[0], sizeof(double)*M));
@@ -112,12 +131,8 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));        
-        gpu_error_check(cudaMalloc((void**)&d_two_qk_in, sizeof(ftsComplex)*2*M_COMPLEX));
-
-        const int NUM_BATCHES_FOR_STRESS = 2;
-        d_q_two_partition = new double*[NUM_BATCHES_FOR_STRESS];
-        for (int i=0; i<NUM_BATCHES_FOR_STRESS; i++)
-            gpu_error_check(cudaMalloc((void**)&d_q_two_partition[i], sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_in_temp_2, sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_qk_in_2, sizeof(ftsComplex)*2*M_COMPLEX));
 
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX));
@@ -129,7 +144,7 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoContinuousReduceMemory::~CudaPseudoContinuousReduceMemory()
+CudaPseudoDiscreteReduceMemory::~CudaPseudoDiscreteReduceMemory()
 {
     const int NUM_STREAMS = 3;
     for (int i = 0; i < NUM_STREAMS; i++)
@@ -148,12 +163,14 @@ CudaPseudoContinuousReduceMemory::~CudaPseudoContinuousReduceMemory()
         cudaFree(item.second);
     for(const auto& item: d_exp_dw)
         cudaFree(item.second);
-    for(const auto& item: d_exp_dw_half)
-        cudaFree(item.second);
+    for(const auto& item: exp_dw)
+        delete[] item.second;
 
     for(const auto& item: unique_partition)
         cudaFreeHost(item.second);
     for(const auto& item: unique_phi)
+        delete[] item.second;
+    for(const auto& item: unique_q_junctions)
         delete[] item.second;
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
@@ -168,36 +185,37 @@ CudaPseudoContinuousReduceMemory::~CudaPseudoContinuousReduceMemory()
     cudaFree(d_qk_in);
     cudaFree(d_unique_partition_sub_dep);
 
+    cudaFree(d_q_half_step);
+    cudaFree(d_q_junction);
+
     // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
-    cudaFree(d_two_qk_in);
-
-    const int NUM_BATCHES_FOR_STRESS = 2;
-    for (int i=0; i<NUM_BATCHES_FOR_STRESS; i++)
-        cudaFree(d_q_two_partition[i]);
-    delete[] d_q_two_partition;
+    cudaFree(d_q_in_temp_2);
+    cudaFree(d_qk_in_2);
 
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 }
 
-void CudaPseudoContinuousReduceMemory::update_bond_function()
+void CudaPseudoDiscreteReduceMemory::update_bond_function()
 {
-    try{
+    try
+    {
         // for pseudo-spectral: one_step()
         const int M_COMPLEX = this->n_complex_grid;
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
-
+        
         for(const auto& item: mx->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
+
             get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
             get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
-        
-            gpu_error_check(cudaMemcpy(d_boltz_bond[monomer_type],      boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
+
+            gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
 
@@ -212,14 +230,15 @@ void CudaPseudoContinuousReduceMemory::update_bond_function()
     }
     catch(std::exception& exc)
     {
-        throw_with_line_number(exc.what());
+        throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuousReduceMemory::compute_statistics(
+void CudaPseudoDiscreteReduceMemory::compute_statistics(
     std::map<std::string, double*> w_input,
     std::map<std::string, double*> q_init)
 {
-    try{
+    try
+    {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
@@ -238,20 +257,14 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
         }
 
-        // exp_dw and exp_dw_half
-        double exp_dw[M];
-        double exp_dw_half[M];
+        // exp_dw
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
             double *w = item.second;
             for(int i=0; i<M; i++)
-            { 
-                exp_dw     [i] = exp(-w[i]*ds*0.5);
-                exp_dw_half[i] = exp(-w[i]*ds*0.25);
-            }
-            gpu_error_check(cudaMemcpy(d_exp_dw     [monomer_type], exp_dw,      sizeof(double)*M,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_exp_dw_half[monomer_type], exp_dw_half, sizeof(double)*M,cudaMemcpyHostToDevice));
+                exp_dw[monomer_type][i] = exp(-w[i]*ds);
+            gpu_error_check(cudaMemcpy(d_exp_dw[monomer_type], exp_dw[monomer_type], sizeof(double)*M,cudaMemcpyHostToDevice));
         }
 
         double q_uniform[M];
@@ -281,10 +294,11 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                     if (q_init.find(g) == q_init.end())
                         throw_with_line_number( "Could not find q_init[\"" + g + "\"].");
                     gpu_error_check(cudaMemcpy(d_q[0], q_init[g], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_q[0], d_q[0], d_exp_dw[monomer_type], 1.0, M);
                 }
                 else
                 {
-                    gpu_error_check(cudaMemcpy(d_q[0], q_uniform, sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q[0], d_exp_dw[monomer_type], sizeof(double)*M, cudaMemcpyDeviceToDevice));
                 }
                 unique_partition_finished[key][0] = true;
             }
@@ -306,20 +320,24 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                         // check sub key
                         if (unique_partition.find(sub_dep) == unique_partition.end())
                             throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
-                        if (!unique_partition_finished[sub_dep][sub_n_segment])
+                        if (!unique_partition_finished[sub_dep][sub_n_segment-1])
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
 
-                        gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][(sub_n_segment-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
                         lin_comb<<<N_BLOCKS, N_THREADS>>>(
                                 d_q[0], 1.0, d_q[0],
                                 sub_n_repeated, d_unique_partition_sub_dep, M);
                     }
+                    one_step(d_q[0], d_q[0],
+                        d_boltz_bond[monomer_type],
+                        d_exp_dw[monomer_type]);   
+
                     unique_partition_finished[key][0] = true;
                 }
                 else
                 { 
                     // initialize to one
-                    gpu_error_check(cudaMemcpy(d_q[0], q_uniform,
+                    gpu_error_check(cudaMemcpy(d_q_junction, q_uniform,
                         sizeof(double)*M, cudaMemcpyHostToDevice));
 
                     for(size_t d=0; d<deps.size(); d++)
@@ -330,37 +348,41 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                         // check sub key
                         if (unique_partition.find(sub_dep) == unique_partition.end())
                             throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
-                        if (!unique_partition_finished[sub_dep][sub_n_segment])
+                        if (!unique_partition_finished[sub_dep][sub_n_segment-1])
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
 
-                        gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
-                        multi_real<<<N_BLOCKS, N_THREADS>>>(
-                            d_q[0], d_q[0], d_unique_partition_sub_dep, 1.0, M);
+                        gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][(sub_n_segment-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
 
+                        half_bond_step(d_unique_partition_sub_dep,
+                            d_q_half_step, d_boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
+
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                     }
+                    gpu_error_check(cudaMemcpy(unique_q_junctions[key], d_q_junction, sizeof(double)*M,cudaMemcpyDeviceToHost));
+
+                    // add half bond
+                    half_bond_step(d_q_junction, d_q[0], d_boltz_bond_half[monomer_type]);
+
+                    // add full segment
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_q[0], d_q[0], d_exp_dw[monomer_type], 1.0, M);
                     unique_partition_finished[key][0] = true;
                 }
             }
             cudaDeviceSynchronize();
-
-            // if there is no segment to be computed
-            if (n_segment == 0)
-            {
-                gpu_error_check(cudaMemcpy(&_unique_partition[0], d_q[0], sizeof(double)*M, cudaMemcpyDeviceToHost));
-                continue;
-            }
 
             // apply the propagator successively
             int prev, next, swap;
             prev = 0;
             next = 1;
 
-            for(int n=1; n<=n_segment; n++)
+            for(int n=1; n<n_segment; n++)
             {
                 if (!unique_partition_finished[key][n-1])
                     throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
 
                 // STREAM 0: copy memory from device to host
+                // gpu_error_check(cudaMemcpy(&_unique_partition[(n-1)*M], d_q[prev], sizeof(double)*M,
+                //     cudaMemcpyDeviceToHost));
                 gpu_error_check(cudaMemcpyAsync(&_unique_partition[(n-1)*M], d_q[prev], sizeof(double)*M,
                     cudaMemcpyDeviceToHost, streams[0]));
 
@@ -369,9 +391,7 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                     d_q[prev],
                     d_q[next],
                     d_boltz_bond[monomer_type],
-                    d_boltz_bond_half[monomer_type],
-                    d_exp_dw[monomer_type],
-                    d_exp_dw_half[monomer_type]);
+                    d_exp_dw[monomer_type]);
 
                 swap = next;
                 next = prev;
@@ -379,7 +399,7 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 cudaDeviceSynchronize();
                 unique_partition_finished[key][n] = true;
             }
-            gpu_error_check(cudaMemcpy(&_unique_partition[(n_segment)*M], d_q[prev], sizeof(double)*M,
+            gpu_error_check(cudaMemcpy(&_unique_partition[(n_segment-1)*M], d_q[prev], sizeof(double)*M,
                 cudaMemcpyDeviceToHost));
         }
 
@@ -399,6 +419,7 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
             // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
             int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
             int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
+            std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -408,16 +429,16 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
 
             // check keys
             if (unique_partition.find(dep_v) == unique_partition.end())
-                std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
+                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
             if (unique_partition.find(dep_u) == unique_partition.end())
-                std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
-            single_partitions[p]= cb->inner_product(
-                &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M], // q
-                &unique_partition[dep_u][0])/n_superposed/cb->get_volume();        // q^dagger
+            single_partitions[p]= cb->inner_product_inverse_weight(
+                &unique_partition[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
+                &unique_partition[dep_u][0],                                          // q^dagger
+                exp_dw[monomer_type])/n_superposed/cb->get_volume();
 
             // std::cout << p << ", " << single_partitions[p] << std::endl;
-            // std::cout << p << ", "<< dep_v << ", "<< dep_u << ", "<< single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
             current_p++;
         }
@@ -437,14 +458,7 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
             int n_segment_allocated = mx->get_unique_block(key).n_segment_allocated;
             int n_segment_offset    = mx->get_unique_block(key).n_segment_offset;
             int n_segment_original  = mx->get_unique_block(key).n_segment_original;
-
-            // if there is no segment
-            if(n_segment_allocated == 0)
-            {
-                for(int i=0; i<M;i++)
-                    block->second[i] = 0.0;
-                continue;
-            }
+            std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -454,19 +468,20 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
 
             // check keys
             if (unique_partition.find(dep_v) == unique_partition.end())
-                std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
+                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
             if (unique_partition.find(dep_u) == unique_partition.end())
-                std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
-                block->second,             // phi
+                block->second,            // phi
                 unique_partition[dep_v],  // dependency v
                 unique_partition[dep_u],  // dependency u
+                exp_dw[monomer_type],     // exp_dw
                 n_segment_allocated,
                 n_segment_offset,
                 n_segment_original);
-
+            
             // normalize concentration
             PolymerChain& pc = mx->get_polymer(p);
             double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
@@ -479,12 +494,9 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-
-// Advance partial partition function using Richardson extrapolation.
-void CudaPseudoContinuousReduceMemory::one_step(
+void CudaPseudoDiscreteReduceMemory::one_step(
     double *d_q_in, double *d_q_out,
-    double *d_boltz_bond, double *d_boltz_bond_half,
-    double *d_exp_dw, double *d_exp_dw_half)
+    double *d_boltz_bond, double *d_exp_dw)
 {
     try
     {
@@ -495,79 +507,68 @@ void CudaPseudoContinuousReduceMemory::one_step(
         const int M_COMPLEX = this->n_complex_grid;
 
         //-------------- step 1 ----------
-        // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_step1, d_q_in, d_exp_dw, 1.0, M);
-
-        // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step1, d_qk_in);
+        // Execute a Forward FFT
+        cufftExecD2Z(plan_for, d_q_in, d_qk_in);
 
         // Multiply e^(-k^2 ds/6) in fourier space
         multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond, M_COMPLEX);
 
-        // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step1);
+        // Execute a backward FFT
+        cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
 
-        // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_step1, d_q_step1, d_exp_dw, 1.0/((double)M), M);
-
-        //-------------- step 2 ----------
-        // Evaluate e^(-w*ds/4) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_step2, d_q_in, d_exp_dw_half, 1.0, M);
-
-        // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step2, d_qk_in);
-
-        // Multiply e^(-k^2 ds/12) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond_half, M_COMPLEX);
-
-        // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step2);
-
-        // Evaluate e^(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_step2, d_q_step2, d_exp_dw, 1.0/((double)M), M);
-        // Execute a Forw_ard FFT
-        cufftExecD2Z(plan_for, d_q_step2, d_qk_in);
-
-        // Multiply e^(-k^2 ds/12) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond_half, M_COMPLEX);
-
-        // Execute a backw_ard FFT
-        cufftExecZ2D(plan_bak, d_qk_in, d_q_step2);
-
-        // Evaluate e^(-w*ds/4) in real space.
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_step2, d_q_step2, d_exp_dw_half, 1.0/((double)M), M);
-        //-------------- step 3 ----------
-        lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_out, 4.0/3.0, d_q_step2, -1.0/3.0, d_q_step1, M);
+        // Evaluate e^(-w*ds) in real space
+        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_out, d_q_out, d_exp_dw, 1.0/((double)M), M);
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuousReduceMemory::calculate_phi_one_block(
-    double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL)
+void CudaPseudoDiscreteReduceMemory::half_bond_step(double *d_q_in, double *d_q_out, double *d_boltz_bond_half)
 {
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
+        const int M = cb->get_n_grid();
+        const int M_COMPLEX = this->n_complex_grid;
+
+        // 3D fourier discrete transform, forward and inplace
+        cufftExecD2Z(plan_for, d_q_in, d_qk_in);
+        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
+        // 3D fourier discrete transform, backward and inplace
+        cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoDiscreteReduceMemory::calculate_phi_one_block(
+    double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL)
+{
     try
     {
         const int M = cb->get_n_grid();
-        std::vector<double> simpson_rule_coeff = SimpsonQuadrature::get_coeff(N);
-
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_ORIGINAL-N_OFFSET)*M]*q_2[i];
-        for(int n=1; n<=N; n++)
+            phi[i] = q_1[i+(N_ORIGINAL-N_OFFSET-1)*M]*q_2[i];
+        for(int n=1; n<N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_ORIGINAL-N_OFFSET-n)*M]*q_2[i+n*M];
+                phi[i] += q_1[i+(N_ORIGINAL-N_OFFSET-n-1)*M]*q_2[i+n*M];
         }
+        for(int i=0; i<M; i++)
+            phi[i] /= exp_dw[i];
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-double CudaPseudoContinuousReduceMemory::get_total_partition(int polymer)
+double CudaPseudoDiscreteReduceMemory::get_total_partition(int polymer)
 {
     try
     {
@@ -578,7 +579,7 @@ double CudaPseudoContinuousReduceMemory::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuousReduceMemory::get_monomer_concentration(std::string monomer_type, double *phi)
+void CudaPseudoDiscreteReduceMemory::get_monomer_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -604,7 +605,7 @@ void CudaPseudoContinuousReduceMemory::get_monomer_concentration(std::string mon
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuousReduceMemory::get_polymer_concentration(int p, double *phi)
+void CudaPseudoDiscreteReduceMemory::get_polymer_concentration(int p, double *phi)
 {
     try
     {
@@ -615,7 +616,7 @@ void CudaPseudoContinuousReduceMemory::get_polymer_concentration(int p, double *
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
         if (mx->is_using_superposition())
-            throw_with_line_number("Disable 'superposition' option to invoke 'get_polymer_concentration'.");
+            throw_with_line_number("Disable 'superposition' option to obtain concentration of each block.");
 
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
@@ -637,14 +638,14 @@ void CudaPseudoContinuousReduceMemory::get_polymer_concentration(int p, double *
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
+std::vector<double> CudaPseudoDiscreteReduceMemory::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // We only need the real part of stress calculation.
-
-    try{
+    try
+    {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
@@ -677,10 +678,6 @@ std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
             const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
             std::string monomer_type = mx->get_unique_block(key).monomer_type;
 
-            // if there is no segment
-            if(N == 0)
-                continue;
-
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
@@ -688,67 +685,84 @@ std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
             else
                 n_repeated = 1;
 
-            std::vector<double> s_coeff = SimpsonQuadrature::get_coeff(N);
-            double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            double* q_1 = unique_partition[dep_v];    // dependency v
-            double* q_2 = unique_partition[dep_u];    // dependency u
+            double *q_1 = unique_partition[dep_v];    // dependency v
+            double *q_2 = unique_partition[dep_u];    // dependency u
+
+            double bond_length_sq;
+            double *d_boltz_bond_now;
 
             std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
 
-            int prev, next, swap;
-            prev = 0;
-            next = 1;
-
-            /* STREAM 0: copy memory from device to host */
-            gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][0], &q_1[(N_ORIGINAL-N_OFFSET)*M], sizeof(double)*M,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][M], &q_2[0],                       sizeof(double)*M,cudaMemcpyHostToDevice));
-
-            // compute
+            // compute stress
             for(int n=0; n<=N; n++)
             {
-                // STREAM 0: copy memory from host to device
-                if (n < N)
+                // at v
+                if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    gpu_error_check(cudaMemcpyAsync(&d_q_two_partition[next][0], &q_1[(N_ORIGINAL-N_OFFSET-(n+1))*M], sizeof(double)*M,cudaMemcpyHostToDevice, streams[0]));
-                    gpu_error_check(cudaMemcpyAsync(&d_q_two_partition[next][M], &q_2[(n+1)*M],                       sizeof(double)*M,cudaMemcpyHostToDevice, streams[0]));
+                    if (mx->get_unique_branch(dep_v).deps.size() == 0) // if v is leaf node, skip
+                        continue;
+                    
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], unique_q_junctions[dep_v], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], &q_2[(N-1)*M],             sizeof(double)*M, cudaMemcpyHostToDevice));
+
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
+                }
+                // at u
+                else if (n + N_OFFSET == 0){
+                    if (mx->get_unique_branch(dep_u).deps.size() == 0) // if u is leaf node, skip
+                        continue;
+
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], &q_1[(N_ORIGINAL-1)*M],    sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], unique_q_junctions[dep_u], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
+                }
+                // at superposition junction
+                else if (n == 0)
+                {
+                    continue;
+                }
+                // within the blocks
+                else
+                {
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], &q_1[(N_ORIGINAL-N_OFFSET-n-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], &q_2[(n-1)*M],                     sizeof(double)*M, cudaMemcpyHostToDevice));
+                    bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now = d_boltz_bond[monomer_type];
                 }
 
-                // STREAM 2: execute a Forward FFT
-                cufftExecD2Z(plan_for_two, d_q_two_partition[prev], d_two_qk_in);
+                // execute a Forward FFT
+                cufftExecD2Z(plan_for_two, d_q_in_temp_2, d_qk_in_2);
 
                 // multiplay two partial partition functions in the fourier spaces
-                multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, &d_two_qk_in[0], &d_two_qk_in[M_COMPLEX], M_COMPLEX);
+                multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
 
+                multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_multi, d_q_multi, d_boltz_bond_now, bond_length_sq, M_COMPLEX);
                 if ( DIM == 3 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0, M_COMPLEX);
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[1] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
+                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[2] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                    _unique_dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 2 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[1] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 1 )
                 {
-                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
-
-                swap = next;
-                next = prev;
-                prev = swap;
-                cudaDeviceSynchronize();
             }
             unique_dq_dl[key] = _unique_dq_dl;
         }
@@ -758,11 +772,11 @@ std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
             stress[d] = 0.0;
         for(const auto& block: unique_phi)
         {
-            const auto& key   = block.first;
-            int p             = std::get<0>(key);
-            std::string dep_v = std::get<1>(key);
-            std::string dep_u = std::get<2>(key);
-            PolymerChain& pc  = mx->get_polymer(p);
+            const auto& key      = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
+            PolymerChain& pc = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
                 stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
@@ -777,8 +791,8 @@ std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuousReduceMemory::get_partial_partition(double *q_out, int polymer, int v, int u, int n)
-{
+void CudaPseudoDiscreteReduceMemory::get_partial_partition(double *q_out, int polymer, int v, int u, int n)
+{ 
     // This method should be invoked after invoking compute_statistics()
 
     // Get partial partition functions
@@ -791,14 +805,14 @@ void CudaPseudoContinuousReduceMemory::get_partial_partition(double *q_out, int 
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
             throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
-
+            
         const int N = mx->get_unique_branches()[dep].max_n_segment;
-        if (n < 0 || n > N)
-            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
+        if (n < 1 || n > N)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
-        double* _partition = unique_partition[dep];
+        double* partition = unique_partition[dep];
         for(int i=0; i<M; i++)
-            q_out[i] = _partition[n*M+i];
+            q_out[i] = partition[(n-1)*M+i];
     }
     catch(std::exception& exc)
     {

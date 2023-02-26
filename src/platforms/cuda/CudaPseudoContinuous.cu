@@ -304,7 +304,7 @@ void CudaPseudoContinuous::compute_statistics(
                 // if it is not leaf node
                 else if (n_segment_from == 1 && deps.size() > 0)
                 {
-                    // if it is superposition
+                    // if it is superposed
                     if (key[0] == '[')
                     {
                         // initialize to zero
