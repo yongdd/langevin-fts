@@ -23,7 +23,7 @@ public :
         double ds, std::map<std::string, double> bond_lengths, bool use_superposition) override;
 
     Pseudo* create_pseudo(
-        ComputationBox *cb, Mixture *mx) override;
+        ComputationBox *cb, Mixture *mx, bool reduce_memory_usage) override;
 
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

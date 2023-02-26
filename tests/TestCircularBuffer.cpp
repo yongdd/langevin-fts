@@ -9,16 +9,16 @@ int main()
 {
     try
     {
-        const int MM{5};
+        const int M{5};
         const int SIZE{3};
         std::stringstream ss;
         std::vector<std::string> vec_string;
 
         // arrays to calculate anderson mixing
-        CircularBuffer cb(SIZE, MM);
+        CircularBuffer cb(SIZE, M);
         double * p_arr;
 
-        p_arr = new double[MM] {1,2,3,5,4};
+        p_arr = new double[M] {1,2,3,5,4};
         cb.insert(p_arr);
         delete[] p_arr;
         ss << "cb.get_array";
@@ -26,13 +26,13 @@ int main()
         {
             p_arr = cb.get_array(i);
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << p_arr[j];
         }
         vec_string.push_back(ss.str());
         ss.str("");
 
-        p_arr = new double[MM] {4,2,1,1,2};
+        p_arr = new double[M] {4,2,1,1,2};
         cb.insert( p_arr );
         delete[] p_arr;
         ss << "cb.operator[]";
@@ -40,13 +40,13 @@ int main()
         {
             p_arr = cb[i];
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << p_arr[j];
         }
         vec_string.push_back(ss.str());
         ss.str("");
 
-        p_arr = new double[MM] {3,2,1,5,4};
+        p_arr = new double[M] {3,2,1,5,4};
         cb.insert( p_arr );
         delete[] p_arr;
         ss << "cb.get_array";
@@ -54,13 +54,13 @@ int main()
         {
             p_arr = cb.get_array(i);
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << p_arr[j];
         }
         vec_string.push_back(ss.str());
         ss.str("");
 
-        p_arr = new double[MM] {5,4,3,1,2};
+        p_arr = new double[M] {5,4,3,1,2};
         cb.insert( p_arr );
         delete[] p_arr;
         ss << "cb.get_array";
@@ -68,13 +68,13 @@ int main()
         {
             p_arr = cb.get_array(i);
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << p_arr[j];
         }
         vec_string.push_back(ss.str());
         ss.str("");
 
-        p_arr = new double[MM] {2,5,1,4,3};
+        p_arr = new double[M] {2,5,1,4,3};
         cb.insert( p_arr );
         delete[] p_arr;
         ss << "cb.get_array";
@@ -82,7 +82,7 @@ int main()
         {
             p_arr = cb.get_array(i);
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << p_arr[j];
         }
         vec_string.push_back(ss.str());
@@ -92,7 +92,7 @@ int main()
         for(int i=0; i<SIZE; i++)
         {
             ss << "," ;
-            for(int j=0; j<MM; j++)
+            for(int j=0; j<M; j++)
                 ss << cb.get(i,j);
         }
         vec_string.push_back(ss.str());

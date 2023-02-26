@@ -20,7 +20,9 @@ nx = [64,64,64]                                   # grid number
 lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step Interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
+
 use_superposition = False
+reduce_gpu_memory_usage = False
 
 block_lengths = []
 block_monomer_types = []
@@ -60,7 +62,7 @@ for p in range(len(block_lengths)):
      mixture.add_polymer(
      volume_faction[p],block_monomer_types[p],
      block_lengths[p],v[p],u[p])
-pseudo = factory.create_pseudo(cb, mixture)
+pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 
 mixture.display_unique_blocks()
 mixture.display_unique_branches()

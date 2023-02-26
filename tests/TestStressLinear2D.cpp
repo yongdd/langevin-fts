@@ -30,8 +30,8 @@ int main()
         // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
         // input and output fields, xi is temporary storage for pressures
-        double *w, *w_out, *w_diff;  // n_comp * MM
-        double *xi, *w_plus, *w_minus; // MM
+        double *w, *w_out, *w_diff;  // n_comp * M
+        double *xi, *w_plus, *w_minus; // M
         // segment concentration
         double *phi_a, *phi_b, *phi_tot;
 
@@ -93,6 +93,8 @@ int main()
             }
         }
 
+        bool reduce_memory_usage=false;
+
         // choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
@@ -110,7 +112,7 @@ int main()
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}}, use_superposition);
                     mx->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
+                    Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

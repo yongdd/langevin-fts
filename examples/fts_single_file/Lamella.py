@@ -103,6 +103,9 @@ langevin_dt = 0.8        # Langevin step interval, delta tau*N_Ref
 langevin_nbar = 1024     # invariant polymerization index
 langevin_max_step = 2000
 
+use_superposition = False
+reduce_gpu_memory_usage = False
+
 # -------------- initialize ------------
 # calculate chain parameters, dict_a_n = [a_A, a_B]
 dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
@@ -118,9 +121,9 @@ factory = PlatformSelector.create_factory(platform, chain_model)
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, dict_a_n, False)
+mixture = factory.create_mixture(ds, dict_a_n, use_superposition)
 mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
-pseudo = factory.create_pseudo(cb, mixture)
+pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 

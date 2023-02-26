@@ -114,8 +114,11 @@ class SCFT:
             # print(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"], polymer["u"])
             mixture.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
-        # (C++ class) Solvers using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, mixture)
+        # (C++ class) Solver using Pseudo-spectral method
+        if "reduce_gpu_memory_usage" in params and platform == "cuda":
+            pseudo = factory.create_pseudo(cb, mixture, params["reduce_gpu_memory_usage"])
+        else:
+            pseudo = factory.create_pseudo(cb, mixture, False)
 
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
 

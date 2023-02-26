@@ -85,6 +85,7 @@ int main()
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<bool> use_superpositions = {false, true};
+        std::vector<bool> reduce_memory_usages = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> energy_total_list;
@@ -92,146 +93,157 @@ int main()
             {
                 for(bool use_superposition : use_superpositions)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
-                    // factory->display_info();
-
-                    // create instances and assign to the variables of base classes for the dynamic binding
-                    ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
-                    Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
-                    mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
-                    AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
-                                        am_max_hist, am_start_error, am_mix_min, am_mix_init);
-
-                    // -------------- print simulation parameters ------------
-                    std::cout << std::setprecision(default_precision);
-                    std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
-                    std::cout << "Platform: " << platform << std::endl;
-                    std::cout << "Using Superposition: " << use_superposition << std::endl;
-
-                    // // display branches
-                    // mx->display_unique_blocks();
-                    // mx->display_unique_branches();
-
-                    // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
-                    double xx, yy, zz, c1, c2;
-                    for(int i=0; i<nx[0]; i++)
+                    for(bool reduce_memory_usage : reduce_memory_usages)
                     {
-                        xx = (i+1)*2*PI/nx[0];
-                        for(int j=0; j<nx[1]; j++)
+                        if(reduce_memory_usage == true)
                         {
-                            yy = (j+1)*2*PI/nx[1];
-                            for(int k=0; k<nx[2]; k++)
+                            if(platform == "cpu-mkl")
+                                continue;
+                            else if(platform == "cuda" && chain_model == "Discrete")
+                                continue;
+                        }
+                        
+                        AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
+                        // factory->display_info();
+
+                        // create instances and assign to the variables of base classes for the dynamic binding
+                        ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
+                        Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
+                        mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
+                        Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
+                        AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
+                                            am_max_hist, am_start_error, am_mix_min, am_mix_init);
+
+                        // -------------- print simulation parameters ------------
+                        std::cout << std::setprecision(default_precision);
+                        std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
+                        std::cout << "Platform: " << platform << std::endl;
+                        std::cout << "Using Superposition: " << use_superposition << std::endl;
+
+                        // // display branches
+                        // mx->display_unique_blocks();
+                        // mx->display_unique_branches();
+
+                        // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
+                        double xx, yy, zz, c1, c2;
+                        for(int i=0; i<nx[0]; i++)
+                        {
+                            xx = (i+1)*2*PI/nx[0];
+                            for(int j=0; j<nx[1]; j++)
                             {
-                                zz = (k+1)*2*PI/nx[2];
-                                c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
-                                    cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
-                                c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
-                                    cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
-                                idx = i*nx[1]*nx[2] + j*nx[2] + k;
-                                w[idx] = -0.3164*c1 +0.1074*c2;
-                                w[idx+M] = 0.3164*c1 -0.1074*c2;
+                                yy = (j+1)*2*PI/nx[1];
+                                for(int k=0; k<nx[2]; k++)
+                                {
+                                    zz = (k+1)*2*PI/nx[2];
+                                    c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
+                                        cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
+                                    c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
+                                        cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
+                                    idx = i*nx[1]*nx[2] + j*nx[2] + k;
+                                    w[idx] = -0.3164*c1 +0.1074*c2;
+                                    w[idx+M] = 0.3164*c1 -0.1074*c2;
+                                }
                             }
                         }
-                    }
 
-                    // keep the level of field value
-                    cb->zero_mean(&w[0]);
-                    cb->zero_mean(&w[M]);
+                        // keep the level of field value
+                        cb->zero_mean(&w[0]);
+                        cb->zero_mean(&w[M]);
 
-                    // assign large initial value for the energy and error
-                    energy_total = 1.0e20;
-                    error_level = 1.0e20;
+                        // assign large initial value for the energy and error
+                        energy_total = 1.0e20;
+                        error_level = 1.0e20;
 
-                    //------------------ run ----------------------
-                    // iteration begins here
-                    for(int iter=0; iter<max_scft_iter; iter++)
-                    {
-                        // for the given fields find the polymer statistics
-                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                        pseudo->get_monomer_concentration("A", phi_a);
-                        pseudo->get_monomer_concentration("B", phi_b);
-
-                        // compute stress
-                        std::vector<double> stress = pseudo->compute_stress();
-
-                        // calculate the total energy
-                        for(int i=0; i<M; i++)
+                        //------------------ run ----------------------
+                        // iteration begins here
+                        for(int iter=0; iter<max_scft_iter; iter++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            // for the given fields find the polymer statistics
+                            pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                            pseudo->get_monomer_concentration("A", phi_a);
+                            pseudo->get_monomer_concentration("B", phi_b);
+
+                            // compute stress
+                            std::vector<double> stress = pseudo->compute_stress();
+
+                            // calculate the total energy
+                            for(int i=0; i<M; i++)
+                            {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+
+                            energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<mx->get_n_polymers(); p++){
+                                PolymerChain& pc = mx->get_polymer(p);
+                                energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                            }
+
+                            for(int i=0; i<M; i++)
+                            {
+                                // calculate pressure field for the new field calculation
+                                xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
+                                // calculate output fields
+                                w_out[i]   = chi_n*phi_b[i] + xi[i];
+                                w_out[i+M] = chi_n*phi_a[i] + xi[i];
+                            }
+                            cb->zero_mean(&w_out[0]);
+                            cb->zero_mean(&w_out[M]);
+
+                            // error_level measures the "relative distance" between the input and output fields
+                            old_error_level = error_level;
+                            for(int i=0; i<2*M; i++)
+                                w_diff[i] = w_out[i]- w[i];
+                            error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
+                                            (cb->multi_inner_product(2,w,w)+1.0));
+                            error_level += sqrt(stress[0]*stress[0] + stress[1]*stress[1] + stress[2]*stress[2]);
+
+                            // print iteration # and error levels and check the mass conservation
+                            sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                            std::cout<< std::setw(8) << iter;
+                            std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
+                            std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
+                            for(int p=1; p<mx->get_n_polymers(); p++)
+                                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
+                            std::cout<< "]"; 
+                            std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
+                            std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
+
+                            // std::cout<< " [";
+                            // std::cout<< std::setw(10) << std::setprecision(7) << lx[0] << ", " << lx[1] << ", " << lx[2];
+                            // std::cout<< "]" << std::endl;
+
+                            // std::cout<< " [";
+                            // std::cout<< std::setw(10) << std::setprecision(7) << stress[0] << ", " << stress[1] << ", " << stress[2];
+                            // std::cout<< "]" << std::endl;
+
+                            // conditions to end the iteration
+                            if(error_level < tolerance) break;
+
+                            // calculate new fields using simple and Anderson mixing  //w_new, w_current, w_diff
+                            for(int d=0; d<cb->get_dim(); d++)
+                            {
+                                w[2*M+d] = cb->get_lx(d);
+                                w_diff[2*M+d] = -stress[d];
+                            }
+                            am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
+
+                            // update lx
+                            for(int d=0; d<cb->get_dim(); d++)
+                                lx[d] = w[2*M+d];
+                            
+                            cb->set_lx(lx);
+                            pseudo->update_bond_function();
                         }
-
-                        energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                        energy_total -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
-                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
-                        }
-
-                        for(int i=0; i<M; i++)
-                        {
-                            // calculate pressure field for the new field calculation
-                            xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
-                            // calculate output fields
-                            w_out[i]   = chi_n*phi_b[i] + xi[i];
-                            w_out[i+M] = chi_n*phi_a[i] + xi[i];
-                        }
-                        cb->zero_mean(&w_out[0]);
-                        cb->zero_mean(&w_out[M]);
-
-                        // error_level measures the "relative distance" between the input and output fields
-                        old_error_level = error_level;
-                        for(int i=0; i<2*M; i++)
-                            w_diff[i] = w_out[i]- w[i];
-                        error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
-                                          (cb->multi_inner_product(2,w,w)+1.0));
-                        error_level += sqrt(stress[0]*stress[0] + stress[1]*stress[1] + stress[2]*stress[2]);
-
-                        // print iteration # and error levels and check the mass conservation
-                        sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
-                        std::cout<< std::setw(8) << iter;
-                        std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                        std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
-                        for(int p=1; p<mx->get_n_polymers(); p++)
-                            std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
-                        std::cout<< "]"; 
-                        std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
-                        std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
-
-                        // std::cout<< " [";
-                        // std::cout<< std::setw(10) << std::setprecision(7) << lx[0] << ", " << lx[1] << ", " << lx[2];
-                        // std::cout<< "]" << std::endl;
-
-                        // std::cout<< " [";
-                        // std::cout<< std::setw(10) << std::setprecision(7) << stress[0] << ", " << stress[1] << ", " << stress[2];
-                        // std::cout<< "]" << std::endl;
-
-                        // conditions to end the iteration
-                        if(error_level < tolerance) break;
-
-                        // calculate new fields using simple and Anderson mixing  //w_new, w_current, w_diff
-                        for(int d=0; d<cb->get_dim(); d++)
-                        {
-                            w[2*M+d] = cb->get_lx(d);
-                            w_diff[2*M+d] = -stress[d];
-                        }
-                        am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
-
-                        // update lx
-                        for(int d=0; d<cb->get_dim(); d++)
-                            lx[d] = w[2*M+d];
+                        energy_total_list.push_back(energy_total);
                         
-                        cb->set_lx(lx);
-                        pseudo->update_bond_function();
+                        delete factory;
+                        delete cb;
+                        delete mx;
+                        delete pseudo;
+                        delete am;
                     }
-                    energy_total_list.push_back(energy_total);
-                    
-                    delete factory;
-                    delete cb;
-                    delete mx;
-                    delete pseudo;
-                    delete am;
                 }
             }
             double mean = std::accumulate(energy_total_list.begin(), energy_total_list.end(), 0.0)/energy_total_list.size();

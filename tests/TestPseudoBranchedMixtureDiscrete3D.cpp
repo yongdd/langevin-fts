@@ -24,9 +24,9 @@ int main()
         const int II{5};
         const int JJ{4};
         const int KK{3};
-        const int MM{II*JJ*KK};
+        const int M{II*JJ*KK};
 
-        std::array<double,MM> diff_sq;
+        std::array<double,M> diff_sq;
         double error;
         double Lx, Ly, Lz;
 
@@ -35,7 +35,7 @@ int main()
         Lz = 2.0;
 
         // initialize pseudo spectral parameters
-        double w_a[MM] = { 2.4653017345e-01,-8.4924926185e-01, 6.4079998942e-01,
+        double w_a[M] = { 2.4653017345e-01,-8.4924926185e-01, 6.4079998942e-01,
                         4.5189857495e-01, 8.1530724190e-01,-6.1719453339e-01,
                         4.8956544855e-01,-8.8248220720e-01, 3.0581985487e-01,
                         -4.5380053533e-01,-5.4676694151e-01, 7.5098234290e-01,
@@ -57,7 +57,7 @@ int main()
                         -1.0435627716e-01, 7.4952608270e-01,-7.4492707076e-01,
                         };
 
-        double w_b[MM] = { 1.6991139622e-01,-2.1409489979e-01, 2.9605393528e-02,
+        double w_b[M] = { 1.6991139622e-01,-2.1409489979e-01, 2.9605393528e-02,
                         -7.1234107205e-01, 9.1946237297e-01,-4.8180715350e-01,
                         2.1215587811e-01,-1.6048890869e-01,-9.6393356175e-01,
                         1.1590024768e-01,-7.1886124208e-01,-8.8643800835e-01,
@@ -79,7 +79,7 @@ int main()
                         -2.6763206691e-01, 3.8419380198e-02, 8.4290069518e-01,
                         };
 
-        double w_c[MM] = {2.2102067421e-01,-4.2083846494e-01, 9.6704214711e-01,
+        double w_c[M] = {2.2102067421e-01,-4.2083846494e-01, 9.6704214711e-01,
                         -2.5554658013e-01,-9.6188979038e-01, 3.7062134463e-01,
                         -7.9767624877e-01,-3.8815527859e-01, 6.8122337424e-01,
                         3.4514350929e-01,-9.6855585557e-01,-9.7153081596e-02,
@@ -101,7 +101,7 @@ int main()
                         1.7180116069e-01, 6.3570650780e-01,-8.0810537828e-01,
                         };
 
-        double phi_a_ref[MM] =
+        double phi_a_ref[M] =
         {
             1.4461712482e-01, 2.8417396570e-01, 8.8747404262e-02, 
             1.1757650760e-01, 1.3490313029e-01, 2.1454887257e-01, 
@@ -124,7 +124,7 @@ int main()
             1.9904890912e-01, 2.9992987732e-01, 4.8318549161e-01, 
             1.3780340805e-01, 1.0631788556e-01, 2.3650002276e-01, 
         };
-        double phi_b_ref[MM] =
+        double phi_b_ref[M] =
         {
             3.7523182274e-01, 4.0884044910e-01, 3.7825772443e-01, 
             4.4495530889e-01, 3.2368951118e-01, 4.1867780102e-01, 
@@ -147,7 +147,7 @@ int main()
             4.2993984873e-01, 4.2921226552e-01, 3.3213314378e-01, 
             3.1692706596e-01, 3.0401925918e-01, 2.5932908779e-01, 
         };
-        double phi_c_ref[MM] =
+        double phi_c_ref[M] =
         {
             1.3421219574e-01, 1.9217074633e-01, 1.1356329204e-01, 
             1.8699166901e-01, 2.2877463570e-01, 1.4949885282e-01, 
@@ -199,7 +199,7 @@ int main()
         v.push_back({0,0,0,0,1,1,2,2,2,3,3,5,5,8,8,8,8,9,10,11,13,14,14,16,16,18,21,22,23});
         u.push_back({1,2,8,12,4,5,3,11,13,6,7,9,18,10,14,20,26,27,15,17,16,19,22,21,29,23,24,25,28});
 
-        double phi_a[MM]={0.0}, phi_b[MM]={0.0}, phi_c[MM]={0.0};
+        double phi_a[M]={0.0}, phi_b[M]={0.0}, phi_c[M]={0.0};
 
         // for(int k=0; k<KK; k++)
         // {
@@ -243,7 +243,7 @@ int main()
         // For each platform    
         for(Pseudo* pseudo : pseudo_list)
         {
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
             {
                 phi_a[i] = 0.0;
                 phi_b[i] = 0.0;
@@ -279,21 +279,21 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration A error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_b[i] - phi_b_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration B error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            for(int i=0; i<MM; i++)
+            for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_c[i] - phi_c_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
             std::cout<< "Segment Concentration C error: "<< error << std::endl;
