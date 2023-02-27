@@ -101,17 +101,15 @@ CudaPseudoDiscreteReduceMemory::CudaPseudoDiscreteReduceMemory(
         // cufft plan using two batches for stress 
         cufftPlanMany(&plan_for_two, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
 
-        // three streams for overlapping kernel execution and data transfers 
+        // two streams for overlapping kernel execution and data transfers 
         // streams[0] : data transfers
         // streams[1] : compute_statistics() using single batched cufft
-        // streams[2] : compute_stress() using double batched cufft
-        const int NUM_STREAMS = 3;
+        const int NUM_STREAMS = 2;
         streams = (cudaStream_t*) malloc(sizeof(cudaStream_t)*NUM_STREAMS);
         for (int i = 0; i < NUM_STREAMS; i++)
             cudaStreamCreate(&streams[i]);
         cufftSetStream(plan_for, streams[1]);
         cufftSetStream(plan_bak, streams[1]); 
-        cufftSetStream(plan_for_two, streams[2]);
 
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(ftsComplex)*M_COMPLEX));
@@ -146,7 +144,7 @@ CudaPseudoDiscreteReduceMemory::CudaPseudoDiscreteReduceMemory(
 }
 CudaPseudoDiscreteReduceMemory::~CudaPseudoDiscreteReduceMemory()
 {
-    const int NUM_STREAMS = 3;
+    const int NUM_STREAMS = 2;
     for (int i = 0; i < NUM_STREAMS; i++)
         cudaStreamDestroy(streams[i]);
     free(streams);

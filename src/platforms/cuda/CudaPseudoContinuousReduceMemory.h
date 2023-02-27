@@ -2,7 +2,7 @@
 This is a derived CudaPseudoContinuousReduceMemory class
 
 GPU memory usage is reduced by storing partial partition functions in main memory.
-In the GPU memory, memory space the can store only two steps of partial partition function is allocated.
+In the GPU memory, array space that can store only two steps of partial partition function is allocated.
 There are three streams. One is responsible for data transfer between CPU and GPU, another is responsible
 for the compute_statistics() using single batched cufft, and the other is responsible for compute_stress()
 using double batched cufft. Overlapping of kernel execution and data transfers is utilized so that 
