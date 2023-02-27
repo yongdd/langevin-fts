@@ -23,9 +23,12 @@ CpuPseudoContinuous::CpuPseudoContinuous(
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
             unique_partition[dep] = new double[M*(max_n_segment+1)];
+
+            #ifndef NDEBUG
             unique_partition_finished[dep] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
                 unique_partition_finished[dep][i] = false;
+            #endif
         }
 
         // allocate memory for concentrations
@@ -87,8 +90,11 @@ CpuPseudoContinuous::~CpuPseudoContinuous()
         delete[] item.second;
     for(const auto& item: unique_phi)
         delete[] item.second;
+
+    #ifndef NDEBUG
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
+    #endif
 }
 void CpuPseudoContinuous::update_bond_function()
 {
@@ -173,8 +179,11 @@ void CpuPseudoContinuous::compute_statistics(
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // check key
+                #ifndef NDEBUG
                 if (unique_partition.find(key) == unique_partition.end())
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
+                #endif
+
                 double *_unique_partition = unique_partition[key];
 
                 // if it is leaf node
@@ -194,7 +203,10 @@ void CpuPseudoContinuous::compute_statistics(
                         for(int i=0; i<M; i++)
                             _unique_partition[i] = 1.0;
                     }
+
+                    #ifndef NDEBUG
                     unique_partition_finished[key][0] = true;
+                    #endif
                 }
                 // if it is not leaf node
                 else if (n_segment_from == 1 && deps.size() > 0) 
@@ -211,16 +223,20 @@ void CpuPseudoContinuous::compute_statistics(
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                            #endif
 
                             double *_unique_partition_sub_dep = unique_partition[sub_dep];
                             for(int i=0; i<M; i++)
                                 _unique_partition[i] += _unique_partition_sub_dep[sub_n_segment*M+i]*sub_n_repeated;
                         }
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else
@@ -233,16 +249,21 @@ void CpuPseudoContinuous::compute_statistics(
                             int sub_n_segment   = std::get<1>(deps[d]);
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                            #endif
 
                             double *_unique_partition_sub_dep = unique_partition[sub_dep];
                             for(int i=0; i<M; i++)
                                 _unique_partition[i] *= _unique_partition_sub_dep[sub_n_segment*M+i];
                         }
+
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                 }
@@ -250,17 +271,21 @@ void CpuPseudoContinuous::compute_statistics(
                 // apply the propagator successively
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
+                    #ifndef NDEBUG
                     if (!unique_partition_finished[key][n-1])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
-
+                    #endif
+                    
                     one_step(&_unique_partition[(n-1)*M],
                             &_unique_partition[n*M],
                             boltz_bond[monomer_type],
                             boltz_bond_half[monomer_type],
                             exp_dw[monomer_type],
                             exp_dw_half[monomer_type]);
-                    unique_partition_finished[key][n] = true;
 
+                    #ifndef NDEBUG
+                    unique_partition_finished[key][n] = true;
+                    #endif
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
                 }
             }
@@ -317,10 +342,12 @@ void CpuPseudoContinuous::compute_statistics(
                 n_superposed = mx->get_unique_block(block.first).v_u.size();
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             single_partitions[p]= cb->inner_product(
                 &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M], // q
@@ -363,10 +390,12 @@ void CpuPseudoContinuous::compute_statistics(
                 n_repeated = 1;
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
@@ -400,52 +429,45 @@ void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
         double q_out1[M], q_out2[M];
         std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
 
-        // #pragma omp parallel sections num_threads(2)
-        // {
-        //     #pragma omp section
-        //     {
-                // step 1
-                for(int i=0; i<M; i++)
-                    q_out1[i] = exp_dw[i]*q_in[i];
-                // 3D fourier discrete transform, forward and inplace
-                fft->forward(q_out1,k_q_in1);
-                // multiply e^(-k^2 ds/6) in fourier space, in all 3 directions
-                for(int i=0; i<M_COMPLEX; i++)
-                    k_q_in1[i] *= boltz_bond[i];
-                // 3D fourier discrete transform, backward and inplace
-                fft->backward(k_q_in1,q_out1);
-                // normalization calculation and evaluate e^(-w*ds/2) in real space
-                for(int i=0; i<M; i++)
-                    q_out1[i] *= exp_dw[i];
-            // }
-            // #pragma omp section
-            // {
-                // step 2
-                // evaluate e^(-w*ds/4) in real space
-                for(int i=0; i<M; i++)
-                    q_out2[i] = exp_dw_half[i]*q_in[i];
-                // 3D fourier discrete transform, forward and inplace
-                fft->forward(q_out2,k_q_in2);
-                // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
-                for(int i=0; i<M_COMPLEX; i++)
-                    k_q_in2[i] *= boltz_bond_half[i];
-                // 3D fourier discrete transform, backward and inplace
-                fft->backward(k_q_in2,q_out2);
-                // normalization calculation and evaluate e^(-w*ds/2) in real space
-                for(int i=0; i<M; i++)
-                    q_out2[i] *= exp_dw[i];
-                // 3D fourier discrete transform, forward and inplace
-                fft->forward(q_out2,k_q_in2);
-                // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
-                for(int i=0; i<M_COMPLEX; i++)
-                    k_q_in2[i] *= boltz_bond_half[i];
-                // 3D fourier discrete transform, backward and inplace
-                fft->backward(k_q_in2,q_out2);
-                // normalization calculation and evaluate e^(-w*ds/4) in real space
-                for(int i=0; i<M; i++)
-                    q_out2[i] *= exp_dw_half[i];
-        //     }
-        // }
+        // step 1
+        for(int i=0; i<M; i++)
+            q_out1[i] = exp_dw[i]*q_in[i];
+        // 3D fourier discrete transform, forward and inplace
+        fft->forward(q_out1,k_q_in1);
+        // multiply e^(-k^2 ds/6) in fourier space, in all 3 directions
+        for(int i=0; i<M_COMPLEX; i++)
+            k_q_in1[i] *= boltz_bond[i];
+        // 3D fourier discrete transform, backward and inplace
+        fft->backward(k_q_in1,q_out1);
+        // normalization calculation and evaluate e^(-w*ds/2) in real space
+        for(int i=0; i<M; i++)
+            q_out1[i] *= exp_dw[i];
+
+        // step 2
+        // evaluate e^(-w*ds/4) in real space
+        for(int i=0; i<M; i++)
+            q_out2[i] = exp_dw_half[i]*q_in[i];
+        // 3D fourier discrete transform, forward and inplace
+        fft->forward(q_out2,k_q_in2);
+        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        for(int i=0; i<M_COMPLEX; i++)
+            k_q_in2[i] *= boltz_bond_half[i];
+        // 3D fourier discrete transform, backward and inplace
+        fft->backward(k_q_in2,q_out2);
+        // normalization calculation and evaluate e^(-w*ds/2) in real space
+        for(int i=0; i<M; i++)
+            q_out2[i] *= exp_dw[i];
+        // 3D fourier discrete transform, forward and inplace
+        fft->forward(q_out2,k_q_in2);
+        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        for(int i=0; i<M_COMPLEX; i++)
+            k_q_in2[i] *= boltz_bond_half[i];
+        // 3D fourier discrete transform, backward and inplace
+        fft->backward(k_q_in2,q_out2);
+        // normalization calculation and evaluate e^(-w*ds/4) in real space
+        for(int i=0; i<M; i++)
+            q_out2[i] *= exp_dw_half[i];
+
         for(int i=0; i<M; i++)
             q_out[i] = (4.0*q_out2[i] - q_out1[i])/3.0;
     }

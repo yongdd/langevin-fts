@@ -42,7 +42,7 @@ conda activate lfts
 git clone https://github.com/yongdd/langevin-fts.git  
 # Build  
 cd langevin-fts && mkdir build && cd build  
-cmake ../   
+cmake ../ -DCMAKE_BUILD_TYPE=Release   
 make -j8  
 # Run Test  
 make test   

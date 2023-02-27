@@ -28,9 +28,11 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
             // allocate pinned memory for device overlapping
             cudaMallocHost((void**)&unique_partition[dep], sizeof(double)*(max_n_segment+1)*M);
 
+            #ifndef NDEBUG
             unique_partition_finished[dep] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
                 unique_partition_finished[dep][i] = false;
+            #endif
         }
 
         // allocate memory for concentrations
@@ -155,8 +157,11 @@ CudaPseudoContinuousReduceMemory::~CudaPseudoContinuousReduceMemory()
         cudaFreeHost(item.second);
     for(const auto& item: unique_phi)
         delete[] item.second;
+
+    #ifndef NDEBUG
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
+    #endif
 
     // for pseudo-spectral: one_step()
     cudaFree(d_q[0]);
@@ -267,8 +272,10 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
             auto monomer_type = item.second.monomer_type;
 
             // check key
+            #ifndef NDEBUG
             if (unique_partition.find(key) == unique_partition.end())
                 throw_with_line_number("Could not find key '" + key + "'. ");
+            #endif
             double *_unique_partition = unique_partition[key];
 
             // if it is leaf node
@@ -286,7 +293,10 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 {
                     gpu_error_check(cudaMemcpy(d_q[0], q_uniform, sizeof(double)*M, cudaMemcpyHostToDevice));
                 }
+
+                #ifndef NDEBUG
                 unique_partition_finished[key][0] = true;
+                #endif
             }
             // if it is not leaf node
             else if (deps.size() > 0) 
@@ -304,17 +314,22 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                         int sub_n_repeated  = std::get<2>(deps[d]);
 
                         // check sub key
+                        #ifndef NDEBUG
                         if (unique_partition.find(sub_dep) == unique_partition.end())
                             throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
                         if (!unique_partition_finished[sub_dep][sub_n_segment])
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                        #endif
 
                         gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
                         lin_comb<<<N_BLOCKS, N_THREADS>>>(
                                 d_q[0], 1.0, d_q[0],
                                 sub_n_repeated, d_unique_partition_sub_dep, M);
                     }
+
+                    #ifndef NDEBUG
                     unique_partition_finished[key][0] = true;
+                    #endif
                 }
                 else
                 { 
@@ -328,17 +343,22 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                         int sub_n_segment   = std::get<1>(deps[d]);
 
                         // check sub key
+                        #ifndef NDEBUG
                         if (unique_partition.find(sub_dep) == unique_partition.end())
                             throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
                         if (!unique_partition_finished[sub_dep][sub_n_segment])
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                        #endif
 
                         gpu_error_check(cudaMemcpy(d_unique_partition_sub_dep, &unique_partition[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
                         multi_real<<<N_BLOCKS, N_THREADS>>>(
                             d_q[0], d_q[0], d_unique_partition_sub_dep, 1.0, M);
 
                     }
+                    
+                    #ifndef NDEBUG
                     unique_partition_finished[key][0] = true;
+                    #endif
                 }
             }
             cudaDeviceSynchronize();
@@ -357,8 +377,10 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
 
             for(int n=1; n<=n_segment; n++)
             {
+                #ifndef NDEBUG
                 if (!unique_partition_finished[key][n-1])
                     throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                #endif
 
                 // STREAM 0: copy memory from device to host
                 gpu_error_check(cudaMemcpyAsync(&_unique_partition[(n-1)*M], d_q[prev], sizeof(double)*M,
@@ -377,7 +399,10 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 next = prev;
                 prev = swap;
                 cudaDeviceSynchronize();
+
+                #ifndef NDEBUG
                 unique_partition_finished[key][n] = true;
+                #endif
             }
             gpu_error_check(cudaMemcpy(&_unique_partition[(n_segment)*M], d_q[prev], sizeof(double)*M,
                 cudaMemcpyDeviceToHost));
@@ -407,10 +432,12 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 n_superposed = mx->get_unique_block(block.first).v_u.size();
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             single_partitions[p]= cb->inner_product(
                 &unique_partition[dep_v][(n_segment_original-n_segment_offset)*M], // q
@@ -453,10 +480,12 @@ void CudaPseudoContinuousReduceMemory::compute_statistics(
                 n_repeated = 1;
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
@@ -699,7 +728,7 @@ std::vector<double> CudaPseudoContinuousReduceMemory::compute_stress()
             prev = 0;
             next = 1;
 
-            /* STREAM 0: copy memory from device to host */
+            // copy memory from device to host
             gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][0], &q_1[(N_ORIGINAL-N_OFFSET)*M], sizeof(double)*M,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][M], &q_2[0],                       sizeof(double)*M,cudaMemcpyHostToDevice));
 
