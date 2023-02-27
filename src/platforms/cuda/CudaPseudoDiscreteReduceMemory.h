@@ -36,7 +36,7 @@ private:
     double *d_fourier_basis_z;
     double *d_q_multi, *d_stress_sum;
 
-    // three streams for overlapping kernel execution and data transfers 
+    // two streams for overlapping kernel execution and data transfers 
     cudaStream_t *streams;
 
     // key: (dep) + monomer_type, value: partition functions

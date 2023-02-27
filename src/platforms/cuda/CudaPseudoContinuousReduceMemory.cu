@@ -82,7 +82,7 @@ CudaPseudoContinuousReduceMemory::CudaPseudoContinuousReduceMemory(
         cufftPlanMany(&plan_for, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
         cufftPlanMany(&plan_bak, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
 
-        // cufft plan using two batches for stress 
+        // cufft plan using two batches for stress computation
         cufftPlanMany(&plan_for_two, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
 
         // three streams for overlapping kernel execution and data transfers 
