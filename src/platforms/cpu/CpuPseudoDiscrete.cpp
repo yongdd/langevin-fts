@@ -22,9 +22,13 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
             unique_partition[dep] = new double[M*max_n_segment];
+
+            #ifndef NDEBUG
             unique_partition_finished[dep] = new bool[max_n_segment];
             for(int i=0; i<max_n_segment;i++)
                 unique_partition_finished[dep][i] = false;
+            #endif
+
              // There are N segments
              // Illustration (N==5)
              // O--O--O--O--O
@@ -99,8 +103,11 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         delete[] item.second;
     for(const auto& item: unique_q_junctions)
         delete[] item.second;
+
+    #ifndef NDEBUG
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
+    #endif
 }
 void CpuPseudoDiscrete::update_bond_function()
 {
@@ -143,9 +150,6 @@ void CpuPseudoDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");     
         }
 
-        // if( q_init.size() > 0)
-        //     throw_with_line_number("Currently, \'q_init\' is not supported.");
-
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
@@ -169,8 +173,11 @@ void CpuPseudoDiscrete::compute_statistics(
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // check key
+                #ifndef NDEBUG
                 if (unique_partition.find(key) == unique_partition.end())
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
+                #endif
+
                 double *_unique_partition = unique_partition[key];
 
                 // calculate one block end
@@ -190,8 +197,10 @@ void CpuPseudoDiscrete::compute_statistics(
                         for(int i=0; i<M; i++)
                             _unique_partition[i] = exp_dw[monomer_type][i];
                     }
-                    unique_partition_finished[key][0] = true;
 
+                    #ifndef NDEBUG
+                    unique_partition_finished[key][0] = true;
+                    #endif
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
@@ -207,10 +216,12 @@ void CpuPseudoDiscrete::compute_statistics(
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                            #endif
 
                             double *_unique_partition_sub_dep = unique_partition[sub_dep];
                             for(int i=0; i<M; i++)
@@ -221,7 +232,9 @@ void CpuPseudoDiscrete::compute_statistics(
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
 
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else
@@ -250,10 +263,12 @@ void CpuPseudoDiscrete::compute_statistics(
                             double q_half_step[M];
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (unique_partition.find(sub_dep) == unique_partition.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!unique_partition_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                            #endif
 
                             half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
                                 q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
@@ -271,7 +286,10 @@ void CpuPseudoDiscrete::compute_statistics(
                         // add full segment
                         for(int i=0; i<M; i++)
                             _unique_partition[i] *= exp_dw[monomer_type][i];
+                        
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                     }
                 }
                 else
@@ -282,14 +300,19 @@ void CpuPseudoDiscrete::compute_statistics(
                 // apply the propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
+                    #ifndef NDEBUG
                     if (!unique_partition_finished[key][n-1])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
+                    #endif
 
                     one_step(&_unique_partition[(n-1)*M],
                             &_unique_partition[n*M],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
+
+                    #ifndef NDEBUG
                     unique_partition_finished[key][n] = true;
+                    #endif
 
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
                 }
@@ -321,10 +344,12 @@ void CpuPseudoDiscrete::compute_statistics(
                 n_superposed = mx->get_unique_block(block.first).v_u.size();
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             single_partitions[p]= cb->inner_product_inverse_weight(
                 &unique_partition[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
@@ -361,10 +386,12 @@ void CpuPseudoDiscrete::compute_statistics(
                 n_repeated = 1;
 
             // check keys
+            #ifndef NDEBUG
             if (unique_partition.find(dep_v) == unique_partition.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
             if (unique_partition.find(dep_u) == unique_partition.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(

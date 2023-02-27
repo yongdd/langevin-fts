@@ -48,7 +48,11 @@ private:
 
     // key: (dep) + monomer_type, value: partition function
     std::map<std::string, double *> unique_partition;
+
+    // check if computation of unique_partition is finished
+    #ifndef NDEBUG
     std::map<std::string, bool *> unique_partition_finished;
+    #endif
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
     std::map<std::tuple<int, std::string, std::string>, double *> unique_phi;

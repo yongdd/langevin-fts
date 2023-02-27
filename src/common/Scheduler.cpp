@@ -32,8 +32,10 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
                 {
                     const auto& sub_key = std::get<0>(unique_branches[key].deps[j]);
                     const auto& sub_n_segment = std::max(std::get<1>(unique_branches[key].deps[j]),1); // add 1, if it is 0
-                    // assert(("Could not find [" + sub_key + "] in stream_start_finish.", stream_start_finish.find(sub_key) == stream_start_finish.end()));
-                    assert(stream_start_finish.find(sub_key) != stream_start_finish.end() && "Could not find in stream_start_finish.");
+                    #ifndef NDEBUG
+                    if (stream_start_finish.find(sub_key) == stream_start_finish.end())
+                        throw_with_line_number("Could not find [" + sub_key + "] in stream_start_finish.");
+                    #endif
                     int sub_resolved_time = std::get<1>(stream_start_finish[sub_key]) + sub_n_segment; 
                     if (max_resolved_time == 0 || max_resolved_time < sub_resolved_time)
                         max_resolved_time = sub_resolved_time;

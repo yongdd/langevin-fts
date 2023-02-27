@@ -748,9 +748,8 @@ std::string Mixture::get_monomer_type_from_key(std::string key)
 std::string Mixture::get_q_input_idx_from_key(std::string key)
 {
     if (key[0] != '{')
-    {
         throw_with_line_number("There is no related initial condition in key (" + key + ").");
-    }
+
     int key_start = 0;
     for(int i=key.size()-1; i>=0;i--)
     {
@@ -783,6 +782,7 @@ UniqueEdge& Mixture::get_unique_branch(std::string key)
 {
     if (unique_branches.find(key) == unique_branches.end())
         throw_with_line_number("There is no such key (" + key + ").");
+
     return unique_branches[key];
 }
 std::map<std::tuple<int, std::string, std::string>, UniqueBlock>& Mixture::get_unique_blocks()
@@ -791,9 +791,10 @@ std::map<std::tuple<int, std::string, std::string>, UniqueBlock>& Mixture::get_u
 }
 UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string> key)
 {
-    // assert(("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
-    //     std::get<1>(key) + ", " + std::get<2>(key) + ", " + std::to_string(std::get<3>(key)) + ").", unique_blocks.count(key) != 0));
-    assert(unique_blocks.count(key) != 0 && "There is no such key.");
+    if (unique_blocks.find(key) == unique_blocks.end())
+        throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
+            std::get<1>(key) + ", " + std::get<2>(key) + ").");
+
     return unique_blocks[key];
 }
 void Mixture::display_unique_blocks() const

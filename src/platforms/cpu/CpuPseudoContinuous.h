@@ -28,9 +28,16 @@ private:
 
     // key: (dep) + monomer_type, value: partition functions
     std::map<std::string, double *> unique_partition;
+
+    // check if computation of unique_partition is finished
+    #ifndef NDEBUG
     std::map<std::string, bool *> unique_partition_finished;
-    Scheduler *sc;          // scheduler for partial partition function
-    const int N_STREAM = 4; // the number of job threads
+    #endif
+
+    // scheduler for partial partition function
+    Scheduler *sc;
+    // the number of job threads
+    const int N_STREAM = 4;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> unique_phi;

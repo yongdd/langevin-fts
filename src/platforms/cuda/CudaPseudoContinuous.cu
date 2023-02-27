@@ -29,9 +29,11 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             for(int i=0; i<d_unique_partition_size[dep]; i++)
                 gpu_error_check(cudaMalloc((void**)&d_unique_partition[dep][i], sizeof(double)*M));
 
+            #ifndef NDEBUG
             unique_partition_finished[dep] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
                 unique_partition_finished[dep][i] = false;
+            #endif
         }
 
         // allocate memory for concentrations
@@ -144,8 +146,10 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     for(const auto& item: d_unique_phi)
         cudaFree(item.second);
 
+    #ifndef NDEBUG
     for(const auto& item: unique_partition_finished)
         delete[] item.second;
+    #endif
 
     // for get_concentration
     cudaFree(d_phi);
@@ -276,8 +280,11 @@ void CudaPseudoContinuous::compute_statistics(
                 auto monomer_type = mx->get_unique_branch(key).monomer_type;
 
                 // check key
+                #ifndef NDEBUG
                 if (d_unique_partition.find(key) == d_unique_partition.end())
                     throw_with_line_number("Could not find key '" + key + "'. ");
+                #endif
+
                 double **_d_unique_partition = d_unique_partition[key];
 
                 // std::cout << std::to_string(time_span_count) + "job, key, n_segment_from: " +  ", " + key + ", " << std::to_string(n_segment_from) << std::endl;
@@ -299,7 +306,10 @@ void CudaPseudoContinuous::compute_statistics(
                         gpu_error_check(cudaMemcpy(_d_unique_partition[0], q_uniform,
                             sizeof(double)*M, cudaMemcpyHostToDevice));
                     }
+
+                    #ifndef NDEBUG
                     unique_partition_finished[key][0] = true;
+                    #endif
                 }
                 // if it is not leaf node
                 else if (n_segment_from == 1 && deps.size() > 0)
@@ -318,16 +328,21 @@ void CudaPseudoContinuous::compute_statistics(
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (d_unique_partition.find(sub_dep) == d_unique_partition.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                            #endif
 
                             lin_comb<<<N_BLOCKS, N_THREADS>>>(
                                 _d_unique_partition[0], 1.0, _d_unique_partition[0],
                                 sub_n_repeated, d_unique_partition[sub_dep][sub_n_segment], M);
                         }
+
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                         // std::cout << "finished, key, n: " + key + ", " << std::to_string(0) << std::endl;
                     }
                     else
@@ -343,16 +358,21 @@ void CudaPseudoContinuous::compute_statistics(
                             int sub_n_segment   = std::get<1>(deps[d]);
 
                             // check sub key
+                            #ifndef NDEBUG
                             if (d_unique_partition.find(sub_dep) == d_unique_partition.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
                             if (!unique_partition_finished[sub_dep][sub_n_segment])
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                            #endif
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(
                                 _d_unique_partition[0], _d_unique_partition[0],
                                 d_unique_partition[sub_dep][sub_n_segment], 1.0, M);
                         }
+                        
+                        #ifndef NDEBUG
                         unique_partition_finished[key][0] = true;
+                        #endif
                         // std::cout << "finished, key, n: " + key + ", " << std::to_string(0) << std::endl;
                     }
                 }
@@ -378,8 +398,10 @@ void CudaPseudoContinuous::compute_statistics(
 
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
+                    #ifndef NDEBUG
                     if (!unique_partition_finished[key][n-1])
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                    #endif
 
                     one_step_1(
                         _d_unique_partition_key[n-1],
@@ -389,7 +411,9 @@ void CudaPseudoContinuous::compute_statistics(
                         d_exp_dw[monomer_type],
                         d_exp_dw_half[monomer_type]);
 
+                    #ifndef NDEBUG
                     unique_partition_finished[key][n] = true;
+                    #endif
                 }
             }
             else if(parallel_job_copied.size()==2)
@@ -409,10 +433,12 @@ void CudaPseudoContinuous::compute_statistics(
 
                 for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
                 {
+                    #ifndef NDEBUG
                     if (!unique_partition_finished[key_1][n-1+n_segment_from_1])
                         throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-1+n_segment_from_1));
                     if (!unique_partition_finished[key_2][n-1+n_segment_from_2])
                         throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-1+n_segment_from_2));
+                    #endif
 
                     one_step_2(
                         _d_unique_partition_key_1[n-1+n_segment_from_1],
@@ -428,8 +454,10 @@ void CudaPseudoContinuous::compute_statistics(
                         d_exp_dw_half[species_1],
                         d_exp_dw_half[species_2]);
 
+                    #ifndef NDEBUG
                     unique_partition_finished[key_1][n+n_segment_from_1] = true;
                     unique_partition_finished[key_2][n+n_segment_from_2] = true;
+                    #endif
 
                     // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
                     // std::cout << "finished, key, n: " + key_2 + ", " << std::to_string(n+n_segment_from_2) << std::endl;
@@ -462,10 +490,12 @@ void CudaPseudoContinuous::compute_statistics(
                 n_superposed = mx->get_unique_block(block.first).v_u.size();
 
             // check keys
+            #ifndef NDEBUG
             if (d_unique_partition.find(dep_v) == d_unique_partition.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
             if (d_unique_partition.find(dep_u) == d_unique_partition.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+            #endif
 
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
                 d_unique_partition[dep_v][n_segment_original-n_segment_offset], // q
@@ -501,10 +531,12 @@ void CudaPseudoContinuous::compute_statistics(
                 n_repeated = 1;
 
             // check keys
+            #ifndef NDEBUG
             if (d_unique_partition.find(dep_v) == d_unique_partition.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
             if (d_unique_partition.find(dep_u) == d_unique_partition.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+            #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
