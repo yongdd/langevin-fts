@@ -18,7 +18,7 @@ os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 # simulation parameters
 nx = [64,64,64]                                   # grid number
 lx = [5.0,5.0,5.0]                                # box size
-ds = 0.01                                         # contour step Interval
+ds = 0.01                                         # contour step interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 
 use_superposition = False
