@@ -23,7 +23,7 @@ Scheduler::Scheduler(std::map<std::string, UniqueEdge, CompareBranchKey> unique_
         {
             auto& same_height_branches = branch_hierarchies[current_height];
             std::vector<std::tuple<std::string, int>> Key_resolved_time;
-            // determine when branch is ready to be computed, e.g., find dependencies resolved time.
+            // determine when branch is ready to be computed, i.e., find dependencies resolved time.
             for(size_t i=0; i<same_height_branches.size(); i++)
             {
                 const auto& key = same_height_branches[i];
