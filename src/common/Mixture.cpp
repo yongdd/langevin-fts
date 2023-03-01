@@ -296,7 +296,6 @@ std::pair<std::string, int> Mixture::get_text_code_of_branch(
                     memory, blocks, adjacent_nodes, edge_to_array,
                     chain_end_to_q_init,
                     adjacent_nodes[in_node][i], in_node);
-                std::cout << adjacent_nodes[in_node][i] << ", " << in_node << ", " << text_and_segments.first << std::endl;
                 memory[v_u_pair] = text_and_segments;
             }
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
