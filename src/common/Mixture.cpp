@@ -799,23 +799,16 @@ UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string>
 }
 void Mixture::display_unique_blocks() const
 {
-    // print Unique Blocks
-    if (this->use_superposition)
-    {
-        std::cout << "--------- Unique Blocks (Superposed) ---------" << std::endl;
-        std::cout << "Polymer id, key1:\n\tn_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
-    }
-    else
-    {
-        std::cout << "--------- Unique Blocks ---------" << std::endl;
-        std::cout << "Polymer id, key1:\n\tn_segment, key2, {v, u} list" << std::endl;
-    }
+    // print unique blocks
+    std::cout << "--------- Unique Blocks ---------" << std::endl;
+    std::cout << "Polymer id, key1:\n\tsuperposed, n_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
 
     for(const auto& item : unique_blocks)
     {
+        // print polymer id, key1
         const std::string v_string = std::get<1>(item.first);
         if (v_tuple != std::make_tuple(std::get<0>(item.first), v_string))
         {
@@ -828,17 +821,23 @@ void Mixture::display_unique_blocks() const
             v_tuple = std::make_tuple(std::get<0>(item.first), v_string);
         }
 
-        if (this->use_superposition)
-            std::cout << "\t(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
-        else
-            std::cout << "\t" + std::to_string(item.second.n_segment_allocated) + ", ";
-
+        // print if superposed
         const std::string u_string = std::get<2>(item.first);
+        std::cout << "\t ";
+        if (u_string.find('[') == std::string::npos)
+            std::cout << "X, ";
+        else
+            std::cout << "O, ";
+        // print n_segment (original, offset, allocated)
+        std::cout << "(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
+
+        // print key2
         if (u_string.size() <= MAX_PRINT_LENGTH)
             std::cout << u_string;
         else
             std::cout << u_string.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted>" ;
 
+        // print v_u list
         for(const auto& v_u : item.second.v_u)
         {
             std::cout << ", {"
@@ -851,14 +850,12 @@ void Mixture::display_unique_blocks() const
 }
 void Mixture::display_unique_branches() const
 {
-    // print unique sub branches
+    // print unique branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
-    if (this->use_superposition)
-        std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
-    else
-        std::cout << "--------- Unique Branches ---------" << std::endl;
-    std::cout << "Key:\n\tmax_n_segment, height" << std::endl;
+
+    std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "Key:\n\tsuperposed, max_n_segment, height" << std::endl;
     
     for(const auto& item : unique_branches)
     {
@@ -870,7 +867,13 @@ void Mixture::display_unique_branches() const
             std::cout << item.first;
         else
             std::cout << item.first.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted> " ;
-        std::cout << ":\n\t " << item.second.max_n_segment << ", " << item.second.height << std::endl;
+
+        std::cout << ":\n\t ";
+        if (item.first.find('[') == std::string::npos)
+            std::cout << "X, ";
+        else
+            std::cout << "O, ";
+        std::cout << item.second.max_n_segment << ", " << item.second.height << std::endl;
     }
     std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
@@ -881,18 +884,21 @@ void Mixture::display_all_unique_branch_deps() const
     // print unique sub branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
-    if (this->use_superposition)
-        std::cout << "--------- Unique Branches (Superposed) ---------" << std::endl;
-    else
-        std::cout << "--------- Unique Branches ---------" << std::endl;
-    std::cout << "Key:\n\tmax_n_segment, height, deps" << std::endl;
+    std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "Key:\n\tsuperposed, max_n_segment, height, deps," << std::endl;
     
     for(const auto& item : unique_branches)
     {
         total_segments += item.second.max_n_segment;
 
         std::cout << item.first;
-        std::cout << ":\n\t " << item.second.max_n_segment << ", " << item.second.height;
+        std::cout << ":\n\t ";
+        if (item.first.find('[') == std::string::npos)
+            std::cout << "X, ";
+        else
+            std::cout << "O, ";
+        std::cout << item.second.max_n_segment << ", " << item.second.height;
+
         sub_deps = get_deps_from_key(item.first);
         for(size_t i=0; i<sub_deps.size(); i++)
         {
