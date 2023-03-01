@@ -53,9 +53,11 @@ void Mixture::add_polymer(
     PolymerChain& pc = distinct_polymers.back();
 
     // generate text codes and find dependency for each block for each direction
+    std::map<std::pair<int, int>, std::pair<std::string, int>> memory;
     for (int i=0; i<pc.get_n_blocks(); i++)
     {
         deps = get_text_code_of_branch(
+            memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
             pc.get_array_from_edge(),
@@ -64,6 +66,7 @@ void Mixture::add_polymer(
         pc.set_deps_from_edge(deps, v[i], u[i]);
 
         deps = get_text_code_of_branch(
+            memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
             pc.get_array_from_edge(),
@@ -262,6 +265,7 @@ const std::map<std::string, double>& Mixture::get_bond_lengths() const
     return bond_lengths;
 }
 std::pair<std::string, int> Mixture::get_text_code_of_branch(
+    std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
     std::vector<PolymerChainBlock> blocks,
     std::map<int, std::vector<int>> adjacent_nodes,
     std::map<std::pair<int, int>, int> edge_to_array,
@@ -272,6 +276,10 @@ std::pair<std::string, int> Mixture::get_text_code_of_branch(
     std::vector<std::pair<std::string,int>> edge_dict;
     std::pair<std::string,int> text_and_segments;
 
+    // if it is already computed
+    if (memory.find(std::make_pair(in_node, out_node)) != memory.end())
+        return memory[std::make_pair(in_node, out_node)];
+
     // explore child branches
     //std::cout << "[" + std::to_string(in_node) + ", " +  std::to_string(out_node) + "]:";
     for(size_t i=0; i<adjacent_nodes[in_node].size(); i++)
@@ -279,10 +287,18 @@ std::pair<std::string, int> Mixture::get_text_code_of_branch(
         if (adjacent_nodes[in_node][i] != out_node)
         {
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
-            text_and_segments = get_text_code_of_branch(
-                blocks, adjacent_nodes, edge_to_array,
-                chain_end_to_q_init,
-                adjacent_nodes[in_node][i], in_node);
+            auto v_u_pair = std::make_pair(adjacent_nodes[in_node][i], in_node);
+            if (memory.find(v_u_pair) != memory.end())
+                text_and_segments = memory[v_u_pair];
+            else
+            {
+                text_and_segments = get_text_code_of_branch(
+                    memory, blocks, adjacent_nodes, edge_to_array,
+                    chain_end_to_q_init,
+                    adjacent_nodes[in_node][i], in_node);
+                std::cout << adjacent_nodes[in_node][i] << ", " << in_node << ", " << text_and_segments.first << std::endl;
+                memory[v_u_pair] = text_and_segments;
+            }
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
             edge_dict.push_back(text_and_segments);
             //std::cout << text_and_segments.first << " " << text_and_segments.second << std::endl;
@@ -313,8 +329,10 @@ std::pair<std::string, int> Mixture::get_text_code_of_branch(
 
     // add monomer_type at the end of text code
     text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].monomer_type;
+    auto text_and_segments_total = std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
+    memory[std::make_pair(in_node, out_node)] = text_and_segments_total;
 
-    return std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
+    return text_and_segments_total;
 }
 void Mixture::add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment)
 {
