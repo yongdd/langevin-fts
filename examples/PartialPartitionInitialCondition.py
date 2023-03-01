@@ -1,5 +1,4 @@
-# This example script computes partition functions and concentrations of polymer chains for given fields.
-# This script does not perform SCFT iteration.
+# This example script computes end-to-end distance of polymer chain
 
 import os
 import numpy as np
@@ -18,7 +17,7 @@ os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 # simulation parameters
 nx = [32,32,32]                                   # grid number
 lx = [4.0,4.0,4.0]                                # box size
-ds = 0.01                                         # contour step Interval
+ds = 0.01                                         # contour step interval
 stat_seg_length = {"A":1.0, "B":1.0}              # statistical segment lengths
 f = 0.5                                           # A-fraction of major BCP chain, f
 
