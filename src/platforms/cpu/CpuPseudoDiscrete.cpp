@@ -356,7 +356,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 &unique_partition[dep_u][0],                                          // q^dagger
                 exp_dw[monomer_type])/n_superposed/cb->get_volume();
 
-            // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
+            // std::cout << p << ", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
             current_p++;
         }
