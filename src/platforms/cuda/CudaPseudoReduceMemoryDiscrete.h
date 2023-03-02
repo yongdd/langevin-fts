@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CudaPseudoDiscreteReduceMemory class
+* This is a derived CudaPseudoReduceMemoryDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_DISCRETE_REDUCE_MEMORY_H_
-#define CUDA_PSEUDO_DISCRETE_REDUCE_MEMORY_H_
+#ifndef CUDA_PSEUDO_REDUCE_MEMORY_DISCRETE_H_
+#define CUDA_PSEUDO_REDUCE_MEMORY_DISCRETE_H_
 
 #include <array>
 #include <cufft.h>
@@ -15,7 +15,7 @@
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoDiscreteReduceMemory : public Pseudo
+class CudaPseudoReduceMemoryDiscrete : public Pseudo
 {
 private:
     // for pseudo-spectral: one_step()
@@ -66,8 +66,8 @@ private:
     void calculate_phi_one_block(double *d_phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 
 public:
-    CudaPseudoDiscreteReduceMemory(ComputationBox *cb, Mixture *mx);
-    ~CudaPseudoDiscreteReduceMemory();
+    CudaPseudoReduceMemoryDiscrete(ComputationBox *cb, Mixture *mx);
+    ~CudaPseudoReduceMemoryDiscrete();
 
     void update_bond_function() override;
     void compute_statistics(

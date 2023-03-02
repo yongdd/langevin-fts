@@ -75,9 +75,9 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaCommon.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudoContinuous.cu
-        src/platforms/cuda/CudaPseudoContinuousReduceMemory.cu
         src/platforms/cuda/CudaPseudoDiscrete.cu
-        src/platforms/cuda/CudaPseudoDiscreteReduceMemory.cu
+        src/platforms/cuda/CudaPseudoReduceMemoryContinuous.cu
+        src/platforms/cuda/CudaPseudoReduceMemoryDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
         src/platforms/cuda/CudaFactory.cu

@@ -1,17 +1,17 @@
 /*-------------------------------------------------------------
-This is a derived CudaPseudoContinuousReduceMemory class
+This is a derived CudaPseudoReduceMemoryContinuous class
 
 GPU memory usage is reduced by storing partial partition functions in main memory.
 In the GPU memory, array space that can store only two steps of partial partition function is allocated.
 There are three streams. One is responsible for data transfer between CPU and GPU, another is responsible
 for the compute_statistics() using single batched cufft, and the other is responsible for compute_stress()
 using double batched cufft. Overlapping of kernel execution and data transfers is utilized so that 
-they can be executed in simultaneously. As a result, data transfer time can be hided.
-For more explanation, please see appendix of [Macromolecules 2021, 54, 24, 11304].
+they can be simultaneously executed. As a result, data transfer time can be hided. For more explanation,
+please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_CONTINUOUS_REDUCE_MEMORY_H_
-#define CUDA_PSEUDO_CONTINUOUS_REDUCE_MEMORY_H_
+#ifndef CUDA_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
+#define CUDA_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>
@@ -23,7 +23,7 @@ For more explanation, please see appendix of [Macromolecules 2021, 54, 24, 11304
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoContinuousReduceMemory : public Pseudo
+class CudaPseudoReduceMemoryContinuous : public Pseudo
 {
 private:
     // for pseudo-spectral: one_step()
@@ -72,8 +72,8 @@ private:
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
 
-    CudaPseudoContinuousReduceMemory(ComputationBox *cb, Mixture *pc);
-    ~CudaPseudoContinuousReduceMemory();
+    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Mixture *pc);
+    ~CudaPseudoReduceMemoryContinuous();
 
     void update_bond_function() override;
     void compute_statistics(

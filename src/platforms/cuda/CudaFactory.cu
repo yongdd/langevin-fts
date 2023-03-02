@@ -11,9 +11,9 @@
 
 #include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
-#include "CudaPseudoContinuousReduceMemory.h"
+#include "CudaPseudoReduceMemoryContinuous.h"
 #include "CudaPseudoDiscrete.h"
-#include "CudaPseudoDiscreteReduceMemory.h"
+#include "CudaPseudoReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"
 
@@ -37,11 +37,11 @@ Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_
     if( model_name == "continuous" && reduce_memory_usage == false)
         return new CudaPseudoContinuous(cb, mx);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaPseudoContinuousReduceMemory(cb, mx);
+        return new CudaPseudoReduceMemoryContinuous(cb, mx);
     else if( model_name == "discrete" && reduce_memory_usage == false )
         return new CudaPseudoDiscrete(cb, mx);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaPseudoDiscreteReduceMemory(cb, mx);
+        return new CudaPseudoReduceMemoryDiscrete(cb, mx);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

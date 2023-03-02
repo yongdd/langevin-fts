@@ -16,7 +16,7 @@
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
-#include "CudaPseudoContinuousReduceMemory.h"
+#include "CudaPseudoReduceMemoryContinuous.h"
 #endif
 
 int main()
@@ -183,7 +183,7 @@ int main()
         #endif
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
-        pseudo_list.push_back(new CudaPseudoContinuousReduceMemory(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
         #endif
 
         // For each platform    
