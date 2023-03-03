@@ -50,15 +50,14 @@ for i in range(0,params["nx"][0]):
     xx = (i+1)*2*np.pi/params["nx"][0]
     for j in range(0,params["nx"][1]):
         yy = (j+1)*2*np.pi/params["nx"][1]
-        for k in range(0,params["nx"][2]):
-            zz = (k+1)*2*np.pi/params["nx"][2]
-            c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
-                np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
-            c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
-                np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
-            idx = i*params["nx"][1]*params["nx"][2] + j*params["nx"][2] + k
-            w_A[i,j,k] = -0.3164*c1 +0.1074*c2
-            w_B[i,j,k] =  0.3164*c1 -0.1074*c2
+        zz = np.arange(1,params["nx"][2]+1)*2*np.pi/params["nx"][2]
+        
+        c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
+            np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
+        c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
+            np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
+        w_A[i,j,:] = -0.3164*c1 +0.1074*c2
+        w_B[i,j,:] =  0.3164*c1 -0.1074*c2
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)

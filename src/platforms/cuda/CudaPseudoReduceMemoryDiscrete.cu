@@ -114,7 +114,7 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         cufftSetStream(plan_bak, streams[1]); 
 
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(ftsComplex)*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(double)*M));
 
         // allocate memory for pseudo-spectral: one_step()
         d_q = new double*[2]; // one for prev, the other for next
