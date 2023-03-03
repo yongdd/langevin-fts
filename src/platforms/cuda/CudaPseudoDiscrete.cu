@@ -118,7 +118,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         gpu_error_check(cudaMalloc((void**)&d_q_out_temp_2, sizeof(double)*2*M));
 
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(ftsComplex)*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(double)*M));
         
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
