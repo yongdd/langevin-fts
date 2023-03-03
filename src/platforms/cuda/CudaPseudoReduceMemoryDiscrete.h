@@ -28,7 +28,7 @@ private:
 
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;
-    double *d_q_in_temp_2;
+    double **d_q_in_temp;
     ftsComplex *d_qk_in_2;
 
     double *d_fourier_basis_x;
@@ -36,7 +36,7 @@ private:
     double *d_fourier_basis_z;
     double *d_q_multi, *d_stress_sum;
 
-    // two streams for overlapping kernel execution and data transfers 
+    // three streams for overlapping kernel execution and data transfers 
     cudaStream_t *streams;
 
     // key: (dep) + monomer_type, value: partition functions

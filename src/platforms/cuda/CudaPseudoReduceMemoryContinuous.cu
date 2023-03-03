@@ -371,7 +371,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
             }
 
             // apply the propagator successively
-            int prev, next, swap;
+            int prev, next;
             prev = 0;
             next = 1;
 
@@ -395,9 +395,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     d_exp_dw[monomer_type],
                     d_exp_dw_half[monomer_type]);
 
-                swap = next;
-                next = prev;
-                prev = swap;
+                std::swap(prev, next);
                 cudaDeviceSynchronize();
 
                 #ifndef NDEBUG
@@ -724,7 +722,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
 
             std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
 
-            int prev, next, swap;
+            int prev, next;
             prev = 0;
             next = 1;
 
@@ -764,7 +762,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
                 {
                     multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
                     _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-
+                    
                     multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
                     _unique_dq_dl[1] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
@@ -773,10 +771,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
                     multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
                     _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
-
-                swap = next;
-                next = prev;
-                prev = swap;
+                std::swap(prev, next);
                 cudaDeviceSynchronize();
             }
             unique_dq_dl[key] = _unique_dq_dl;

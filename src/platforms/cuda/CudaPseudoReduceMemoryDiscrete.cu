@@ -103,15 +103,17 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         // cufft plan using two batches for stress 
         cufftPlanMany(&plan_for_two, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
 
-        // two streams for overlapping kernel execution and data transfers 
+        // three streams for overlapping kernel execution and data transfers 
         // streams[0] : data transfers
         // streams[1] : compute_statistics() using single batched cufft
-        const int NUM_STREAMS = 2;
+        // streams[2] : compute_stress() using double batched cufft
+        const int NUM_STREAMS = 3;
         streams = (cudaStream_t*) malloc(sizeof(cudaStream_t)*NUM_STREAMS);
         for (int i = 0; i < NUM_STREAMS; i++)
             cudaStreamCreate(&streams[i]);
         cufftSetStream(plan_for, streams[1]);
         cufftSetStream(plan_bak, streams[1]); 
+        cufftSetStream(plan_for_two, streams[2]);
 
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(double)*M));
@@ -130,8 +132,10 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));        
-        gpu_error_check(cudaMalloc((void**)&d_q_in_temp_2, sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));     
+        d_q_in_temp = new double*[2]; // one for prev, the other for next   
+        gpu_error_check(cudaMalloc((void**)&d_q_in_temp[0], sizeof(double)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_in_temp[1], sizeof(double)*2*M));
         gpu_error_check(cudaMalloc((void**)&d_qk_in_2, sizeof(ftsComplex)*2*M_COMPLEX));
 
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
@@ -146,7 +150,7 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
 }
 CudaPseudoReduceMemoryDiscrete::~CudaPseudoReduceMemoryDiscrete()
 {
-    const int NUM_STREAMS = 2;
+    const int NUM_STREAMS = 3;
     for (int i = 0; i < NUM_STREAMS; i++)
         cudaStreamDestroy(streams[i]);
     free(streams);
@@ -195,9 +199,11 @@ CudaPseudoReduceMemoryDiscrete::~CudaPseudoReduceMemoryDiscrete()
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
-    cudaFree(d_q_in_temp_2);
-    cudaFree(d_qk_in_2);
+    cudaFree(d_q_in_temp[0]);
+    cudaFree(d_q_in_temp[1]);
+    delete[] d_q_in_temp;
 
+    cudaFree(d_qk_in_2);
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 }
@@ -389,7 +395,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
             cudaDeviceSynchronize();
 
             // apply the propagator successively
-            int prev, next, swap;
+            int prev, next;
             prev = 0;
             next = 1;
 
@@ -411,9 +417,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                     d_boltz_bond[monomer_type],
                     d_exp_dw[monomer_type]);
 
-                swap = next;
-                next = prev;
-                prev = swap;
+                std::swap(prev, next);
                 cudaDeviceSynchronize();
 
                 #ifndef NDEBUG
@@ -713,81 +717,110 @@ std::vector<double> CudaPseudoReduceMemoryDiscrete::compute_stress()
             double *q_1 = unique_partition[dep_v];    // dependency v
             double *q_2 = unique_partition[dep_u];    // dependency u
 
-            double bond_length_sq;
-            double *d_boltz_bond_now;
+            double bond_length_sq[2]; // prev and next
+            double *d_boltz_bond_now[2]; // prev and next
 
             std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
+
+            int prev, next;
+            prev = 0;
+            next = 1;
+
+            // copy memory from device to host
+            // at u
+            if (N_OFFSET == 0){
+                if (mx->get_unique_branch(dep_u).deps.size() != 0) // if u is leaf node, skip
+                {
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp[prev][0], &q_1[(N_ORIGINAL-1)*M],    sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp[prev][M], unique_q_junctions[dep_u], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    bond_length_sq[prev] = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                    d_boltz_bond_now[prev] = d_boltz_bond_half[monomer_type];
+                }
+            }
 
             // compute stress
             for(int n=0; n<=N; n++)
             {
+                // STREAM 0: copy memory from host to device
+                if (n < N)
+                {
+                    // at v
+                    if ((n+1) + N_OFFSET == N_ORIGINAL)
+                    {
+                        if (mx->get_unique_branch(dep_v).deps.size() != 0) // if v is leaf node, skip
+                        {
+                            gpu_error_check(cudaMemcpyAsync(&d_q_in_temp[next][0], unique_q_junctions[dep_v], sizeof(double)*M, cudaMemcpyHostToDevice, streams[0]));
+                            gpu_error_check(cudaMemcpyAsync(&d_q_in_temp[next][M], &q_2[(N-1)*M],             sizeof(double)*M, cudaMemcpyHostToDevice, streams[0]));
+                            bond_length_sq[next] = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                            d_boltz_bond_now[next] = d_boltz_bond_half[monomer_type];
+                        }
+                    }
+                    // within the blocks
+                    else
+                    {
+                        gpu_error_check(cudaMemcpyAsync(&d_q_in_temp[next][0], &q_1[(N_ORIGINAL-N_OFFSET-(n+1)-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice, streams[0]));
+                        gpu_error_check(cudaMemcpyAsync(&d_q_in_temp[next][M], &q_2[((n+1)-1)*M],                     sizeof(double)*M, cudaMemcpyHostToDevice, streams[0]));
+                        bond_length_sq[next] = bond_lengths[monomer_type]*bond_lengths[monomer_type];
+                        d_boltz_bond_now[next] = d_boltz_bond[monomer_type];
+                    }
+                }
+
                 // at v
+                bool skip = false;
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    if (mx->get_unique_branch(dep_v).deps.size() == 0) // if v is leaf node, skip
-                        continue;
-                    
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], unique_q_junctions[dep_v], sizeof(double)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], &q_2[(N-1)*M],             sizeof(double)*M, cudaMemcpyHostToDevice));
-
-                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
+                    // if v is leaf node, skip
+                    if (mx->get_unique_branch(dep_v).deps.size() == 0)
+                        skip = true;
                 }
                 // at u
-                else if (n + N_OFFSET == 0){
-                    if (mx->get_unique_branch(dep_u).deps.size() == 0) // if u is leaf node, skip
-                        continue;
-
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], &q_1[(N_ORIGINAL-1)*M],    sizeof(double)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], unique_q_junctions[dep_u], sizeof(double)*M, cudaMemcpyHostToDevice));
-                    bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-                    d_boltz_bond_now = d_boltz_bond_half[monomer_type];
+                else if (n + N_OFFSET == 0)
+                {
+                    // if u is leaf node, skip
+                    if (mx->get_unique_branch(dep_u).deps.size() == 0)
+                        skip = true;
                 }
                 // at superposition junction
                 else if (n == 0)
+                    skip = true;
+
+                // STREAM 2: execute a Forward FFT
+                if (!skip)
                 {
-                    continue;
+                    // execute a Forward FFT
+                    cufftExecD2Z(plan_for_two, d_q_in_temp[prev], d_qk_in_2);
+
+                    // multiplay two partial partition functions in the fourier spaces
+                    multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
+                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, d_q_multi, d_boltz_bond_now[prev], bond_length_sq[prev], M_COMPLEX);
+
+                    if ( DIM == 3 )
+                    {
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0, M_COMPLEX);
+                        _unique_dq_dl[0] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
+                        _unique_dq_dl[1] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                        _unique_dq_dl[2] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    }
+                    if ( DIM == 2 )
+                    {
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
+                        _unique_dq_dl[0] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                        
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                        _unique_dq_dl[1] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    }
+                    if ( DIM == 1 )
+                    {
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
+                        _unique_dq_dl[0] += thrust::reduce(thrust::cuda::par.on(streams[2]), temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    }
                 }
-                // within the blocks
-                else
-                {
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], &q_1[(N_ORIGINAL-N_OFFSET-n-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], &q_2[(n-1)*M],                     sizeof(double)*M, cudaMemcpyHostToDevice));
-                    bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-                    d_boltz_bond_now = d_boltz_bond[monomer_type];
-                }
-
-                // execute a Forward FFT
-                cufftExecD2Z(plan_for_two, d_q_in_temp_2, d_qk_in_2);
-
-                // multiplay two partial partition functions in the fourier spaces
-                multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
-
-                multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_multi, d_q_multi, d_boltz_bond_now, bond_length_sq, M_COMPLEX);
-                if ( DIM == 3 )
-                {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, 1.0, M_COMPLEX);
-                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
-                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    _unique_dq_dl[2] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-                }
-                if ( DIM == 2 )
-                {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, 1.0, M_COMPLEX);
-                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    _unique_dq_dl[1] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-                }
-                if ( DIM == 1 )
-                {
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, 1.0, M_COMPLEX);
-                    _unique_dq_dl[0] += thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
-                }
+                std::swap(prev, next);
+                cudaDeviceSynchronize();
             }
             unique_dq_dl[key] = _unique_dq_dl;
         }
