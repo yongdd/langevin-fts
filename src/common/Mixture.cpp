@@ -266,10 +266,10 @@ const std::map<std::string, double>& Mixture::get_bond_lengths() const
 }
 std::pair<std::string, int> Mixture::get_text_code_of_branch(
     std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
-    std::vector<PolymerChainBlock> blocks,
-    std::map<int, std::vector<int>> adjacent_nodes,
-    std::map<std::pair<int, int>, int> edge_to_array,
-    std::map<int, std::string> chain_end_to_q_init,
+    std::vector<PolymerChainBlock>& blocks,
+    std::map<int, std::vector<int>>& adjacent_nodes,
+    std::map<std::pair<int, int>, int>& edge_to_array,
+    std::map<int, std::string>& chain_end_to_q_init,
     int in_node, int out_node)
 {
     std::vector<std::string> edge_text;

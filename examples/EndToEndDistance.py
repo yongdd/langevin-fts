@@ -15,24 +15,23 @@ os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 
 # simulation parameters
-nx = [32,32,32]                                   # grid number
-lx = [4.0,4.0,4.0]                                # box size
-ds = 0.01                                         # contour step interval
-stat_seg_length = {"A":1.0, "B":1.0}              # statistical segment lengths
-f = 0.5                                           # A-fraction of major BCP chain, f
+nx = [32,32,32]               # grid number
+lx = [6.0,6.0,6.0]            # box size
+ds = 0.01                     # contour step interval
+stat_seg_length = {"A":1.0}   # statistical segment lengths
 
 use_superposition = False
 reduce_gpu_memory_usage = False
 
 # polymer
-volume_faction = 1.0                               # volume faction
-block_lengths  = [f, f, f, 1-f, 1-f, 1-f]          # contour length of each block (Star3Arm)
-block_monomer_types = ["A","A","A","B","B","B"]    # type of each block (Star3Arm)
-v = [0,0,0,1,2,3]                                  # vertices v (Star3Arm)
-u = [1,2,3,4,5,6]                                  # vertices u (Star3Arm)
+volume_faction = 1.0          # volume faction
+block_lengths  = [1.0]        # contour length of each block (A homopolymer)
+block_monomer_types = ["A"]   # type of each block
+v = [0]                       # vertices v
+u = [1]                       # vertices u
 
 # grafting points
-grafting_point = {4:"G",5:"G"}  # vertices 4 and 5 will be initialized with q_init["G"]
+grafting_point = {0:"G"}  # vertex 0 will be initialized with q_init["G"]
 
 # select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
 factory = PlatformSelector.create_factory("cuda", "continuous")
@@ -49,19 +48,18 @@ mixture.display_unique_blocks()
 mixture.display_unique_branches()
 
 # fields
-w = {"A": np.zeros(np.prod(nx)),
-     "B": np.zeros(np.prod(nx))}
+w = {"A": np.zeros(np.prod(nx))}
 
 q_init = {"G":np.zeros(np.prod(nx))}
 q_init["G"][0] = 1.0/cb.get_dv(0)
 
 # compute ensemble average concentration (phi) and total partition function (Q)
-pseudo.compute_statistics({"A":w["A"],"B":w["B"]}, q_init)
+pseudo.compute_statistics({"A":w["A"]}, q_init)
 
 N = round(1.0/ds)
-for n in range(10, round(f*N)+1, 10):
+for n in range(10, round(N)+1, 10):
                                 # output, p, v ,u, n
-     q_out = pseudo.get_partial_partition(0, 4, 1, n)
+     q_out = pseudo.get_partial_partition(0, 0, 1, n)
      sum = 0.0
      x_square = 0.0
      for i in range(nx[0]):
