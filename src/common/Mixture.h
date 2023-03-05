@@ -62,13 +62,13 @@ private:
     std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches; 
 
     // get text code of branch
-    // 'memory' is used for Top-down dynamic programming.
+    // This method is implemented using top-down dynamic programming approach.
     std::pair<std::string, int> get_text_code_of_branch(
         std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
-        std::vector<PolymerChainBlock> blocks,
-        std::map<int, std::vector<int>> adjacent_nodes,
-        std::map<std::pair<int, int>, int> edge_to_array,
-        std::map<int, std::string> chain_end_to_q_init,
+        std::vector<PolymerChainBlock>& blocks,
+        std::map<int, std::vector<int>>& adjacent_nodes,
+        std::map<std::pair<int, int>, int>& edge_to_array,
+        std::map<int, std::string>& chain_end_to_q_init,
         int in_node, int out_node);
 
     // add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
