@@ -370,7 +370,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 continue;
             }
 
-            // apply the propagator successively
+            // advance propagator successively
             int prev, next;
             prev = 0;
             next = 1;

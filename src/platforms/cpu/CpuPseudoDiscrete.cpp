@@ -297,7 +297,7 @@ void CpuPseudoDiscrete::compute_statistics(
                     n_segment_from--;
                 }
 
-                // apply the propagator successively
+                // advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG

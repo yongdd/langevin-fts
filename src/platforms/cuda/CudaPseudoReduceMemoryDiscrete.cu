@@ -394,7 +394,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
             }
             cudaDeviceSynchronize();
 
-            // apply the propagator successively
+            // advance propagator successively
             int prev, next;
             prev = 0;
             next = 1;
