@@ -387,7 +387,7 @@ void CudaPseudoContinuous::compute_statistics(
                     parallel_job_copied.push_back(*it);
             }
 
-            // apply the propagator successively
+            // advance propagator successively
             if(parallel_job_copied.size()==1)
             {
                 auto& key = std::get<0>(parallel_job_copied[0]);

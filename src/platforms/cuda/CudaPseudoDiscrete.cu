@@ -410,7 +410,7 @@ void CudaPseudoDiscrete::compute_statistics(
                 }
             }
                 
-            // apply the propagator successively
+            // advance propagator successively
             if(parallel_job->size()==1)
             {
                 auto& key = std::get<0>((*parallel_job)[0]);
