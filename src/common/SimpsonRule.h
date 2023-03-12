@@ -1,10 +1,10 @@
 
-#ifndef SIMPSON_QUADRATURE_H_
-#define SIMPSON_QUADRATURE_H_
+#ifndef SIMPSON_RULE_H_
+#define SIMPSON_RULE_H_
 
 #include <cassert>
 
-class SimpsonQuadrature
+class SimpsonRule
 {
 public:
     static std::vector<double> get_coeff(const int N)

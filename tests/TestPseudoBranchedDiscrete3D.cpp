@@ -217,7 +217,7 @@ int main()
             
             const int p = 0;
             PolymerChain& pc = mx1->get_polymer(p);
-            pseudo->get_partial_partition(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
+            pseudo->get_chain_propagator(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -225,7 +225,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            pseudo->get_partial_partition(q_1_0_last, p, 1, 0, pc.get_block(1,0).n_segment);
+            pseudo->get_chain_propagator(q_1_0_last, p, 1, 0, pc.get_block(1,0).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));

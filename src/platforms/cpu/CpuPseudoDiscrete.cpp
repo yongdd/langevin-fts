@@ -1,6 +1,6 @@
 #include <cmath>
 #include "CpuPseudoDiscrete.h"
-#include "SimpsonQuadrature.h"
+#include "SimpsonRule.h"
 
 CpuPseudoDiscrete::CpuPseudoDiscrete(
     ComputationBox *cb,
@@ -21,12 +21,12 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            unique_partition[dep] = new double[M*max_n_segment];
+            esssential_propagator[dep] = new double[M*max_n_segment];
 
             #ifndef NDEBUG
-            unique_partition_finished[dep] = new bool[max_n_segment];
+            esssential_propagator_finished[dep] = new bool[max_n_segment];
             for(int i=0; i<max_n_segment;i++)
-                unique_partition_finished[dep][i] = false;
+                esssential_propagator_finished[dep][i] = false;
             #endif
 
              // There are N segments
@@ -50,7 +50,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             throw_with_line_number("There is no unique block. Add polymers first.");
         for(const auto& item: mx->get_unique_blocks())
         {
-            unique_phi[item.first] = new double[M];
+            essential_block_phi[item.first] = new double[M];
         }
 
         // create boltz_bond, boltz_bond_half, and exp_dw
@@ -97,15 +97,15 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         delete[] item.second;
     for(const auto& item: exp_dw)
         delete[] item.second;
-    for(const auto& item: unique_partition)
+    for(const auto& item: esssential_propagator)
         delete[] item.second;
-    for(const auto& item: unique_phi)
+    for(const auto& item: essential_block_phi)
         delete[] item.second;
     for(const auto& item: unique_q_junctions)
         delete[] item.second;
 
     #ifndef NDEBUG
-    for(const auto& item: unique_partition_finished)
+    for(const auto& item: esssential_propagator_finished)
         delete[] item.second;
     #endif
 }
@@ -174,11 +174,11 @@ void CpuPseudoDiscrete::compute_statistics(
 
                 // check key
                 #ifndef NDEBUG
-                if (unique_partition.find(key) == unique_partition.end())
+                if (esssential_propagator.find(key) == esssential_propagator.end())
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
                 #endif
 
-                double *_unique_partition = unique_partition[key];
+                double *_esssential_propagator = esssential_propagator[key];
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
@@ -190,16 +190,16 @@ void CpuPseudoDiscrete::compute_statistics(
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
-                            _unique_partition[i] = q_init[g][i]*exp_dw[monomer_type][i];
+                            _esssential_propagator[i] = q_init[g][i]*exp_dw[monomer_type][i];
                     }
                     else
                     {
                         for(int i=0; i<M; i++)
-                            _unique_partition[i] = exp_dw[monomer_type][i];
+                            _esssential_propagator[i] = exp_dw[monomer_type][i];
                     }
 
                     #ifndef NDEBUG
-                    unique_partition_finished[key][0] = true;
+                    esssential_propagator_finished[key][0] = true;
                     #endif
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
@@ -208,7 +208,7 @@ void CpuPseudoDiscrete::compute_statistics(
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
-                            _unique_partition[i] = 0.0;
+                            _esssential_propagator[i] = 0.0;
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -217,23 +217,23 @@ void CpuPseudoDiscrete::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (unique_partition.find(sub_dep) == unique_partition.end())
+                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                            if (!esssential_propagator_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_unique_partition_sub_dep = unique_partition[sub_dep];
+                            double *_esssential_propagator_sub_dep = esssential_propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _unique_partition[i] += _unique_partition_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
+                                _esssential_propagator[i] += _esssential_propagator_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
                         }
-                        one_step(&_unique_partition[0],
-                            &_unique_partition[0],
+                        one_step(&_esssential_propagator[0],
+                            &_esssential_propagator[0],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
 
                         #ifndef NDEBUG
-                        unique_partition_finished[key][0] = true;
+                        esssential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
@@ -264,13 +264,13 @@ void CpuPseudoDiscrete::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (unique_partition.find(sub_dep) == unique_partition.end())
+                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!unique_partition_finished[sub_dep][sub_n_segment-1])
+                            if (!esssential_propagator_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            half_bond_step(&unique_partition[sub_dep][(sub_n_segment-1)*M],
+                            half_bond_step(&esssential_propagator[sub_dep][(sub_n_segment-1)*M],
                                 q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
 
                             for(int i=0; i<M; i++)
@@ -281,14 +281,14 @@ void CpuPseudoDiscrete::compute_statistics(
                             _unique_q_junctions[i] = q_junction[i];
 
                         // add half bond
-                        half_bond_step(q_junction, &_unique_partition[0], boltz_bond_half[monomer_type]);
+                        half_bond_step(q_junction, &_esssential_propagator[0], boltz_bond_half[monomer_type]);
 
                         // add full segment
                         for(int i=0; i<M; i++)
-                            _unique_partition[i] *= exp_dw[monomer_type][i];
+                            _esssential_propagator[i] *= exp_dw[monomer_type][i];
                         
                         #ifndef NDEBUG
-                        unique_partition_finished[key][0] = true;
+                        esssential_propagator_finished[key][0] = true;
                         #endif
                     }
                 }
@@ -301,17 +301,17 @@ void CpuPseudoDiscrete::compute_statistics(
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!unique_partition_finished[key][n-1])
+                    if (!esssential_propagator_finished[key][n-1])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
                     #endif
 
-                    one_step(&_unique_partition[(n-1)*M],
-                            &_unique_partition[n*M],
+                    one_step(&_esssential_propagator[(n-1)*M],
+                            &_esssential_propagator[n*M],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
 
                     #ifndef NDEBUG
-                    unique_partition_finished[key][n] = true;
+                    esssential_propagator_finished[key][n] = true;
                     #endif
 
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
@@ -321,7 +321,7 @@ void CpuPseudoDiscrete::compute_statistics(
 
         // compute total partition function of each distinct polymers
         int current_p = 0;
-        for(const auto& block: unique_phi)
+        for(const auto& block: essential_block_phi)
         {
             int p                = std::get<0>(block.first);
             std::string dep_v    = std::get<1>(block.first);
@@ -345,15 +345,15 @@ void CpuPseudoDiscrete::compute_statistics(
 
             // check keys
             #ifndef NDEBUG
-            if (unique_partition.find(dep_v) == unique_partition.end())
+            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (unique_partition.find(dep_u) == unique_partition.end())
+            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             single_partitions[p]= cb->inner_product_inverse_weight(
-                &unique_partition[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
-                &unique_partition[dep_u][0],                                          // q^dagger
+                &esssential_propagator[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
+                &esssential_propagator[dep_u][0],                                          // q^dagger
                 exp_dw[monomer_type])/n_superposed/cb->get_volume();
 
             // std::cout << p << ", " << single_partitions[p] << std::endl;
@@ -363,9 +363,9 @@ void CpuPseudoDiscrete::compute_statistics(
 
         // calculate segment concentrations
         #pragma omp parallel for
-        for(size_t b=0; b<unique_phi.size();b++)
+        for(size_t b=0; b<essential_block_phi.size();b++)
         {
-            auto block = unique_phi.begin();
+            auto block = essential_block_phi.begin();
             advance(block, b);
             const auto& key = block->first;
 
@@ -387,17 +387,17 @@ void CpuPseudoDiscrete::compute_statistics(
 
             // check keys
             #ifndef NDEBUG
-            if (unique_partition.find(dep_v) == unique_partition.end())
+            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (unique_partition.find(dep_u) == unique_partition.end())
+            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
                 block->second,            // phi
-                unique_partition[dep_v],  // dependency v
-                unique_partition[dep_u],  // dependency u
+                esssential_propagator[dep_v],  // dependency v
+                esssential_propagator[dep_u],  // dependency u
                 exp_dw[monomer_type],     // exp_dw
                 n_segment_allocated,
                 n_segment_offset,
@@ -505,7 +505,7 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
             phi[i] = 0.0;
 
         // for each block
-        for(const auto& block: unique_phi)
+        for(const auto& block: essential_block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
@@ -544,9 +544,9 @@ void CpuPseudoDiscrete::get_polymer_concentration(int p, double *phi)
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
 
-            double* _unique_phi = unique_phi[std::make_tuple(p, dep_v, dep_u)];
+            double* _essential_block_phi = essential_block_phi[std::make_tuple(p, dep_v, dep_u)];
             for(int i=0; i<M; i++)
-                phi[i+b*M] = _unique_phi[i]; 
+                phi[i+b*M] = _essential_block_phi[i]; 
         }
     }
     catch(std::exception& exc)
@@ -572,17 +572,17 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
 
         // reset stress map
-        for(const auto& item: unique_phi)
+        for(const auto& item: essential_block_phi)
         {
             for(int d=0; d<3; d++)
                 unique_dq_dl[item.first][d] = 0.0;
         }
 
-        // compute stress for each unique block
+        // compute stress for each block
         #pragma omp parallel for
-        for(size_t b=0; b<unique_phi.size();b++)
+        for(size_t b=0; b<essential_block_phi.size();b++)
         {
-            auto block = unique_phi.begin();
+            auto block = essential_block_phi.begin();
             advance(block, b);
             const auto& key   = block->first;
 
@@ -604,8 +604,8 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
 
-            double *q_1 = unique_partition[dep_v];    // dependency v
-            double *q_2 = unique_partition[dep_u];    // dependency u
+            double *q_1 = esssential_propagator[dep_v];    // dependency v
+            double *q_2 = esssential_propagator[dep_u];    // dependency u
 
             double coeff;
             double bond_length_sq;
@@ -704,7 +704,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         // compute total stress
         for(int d=0; d<cb->get_dim(); d++)
             stress[d] = 0.0;
-        for(const auto& block: unique_phi)
+        for(const auto& block: essential_block_phi)
         {
             const auto& key      = block.first;
             int p                = std::get<0>(key);
@@ -725,12 +725,12 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::get_partial_partition(double *q_out, int polymer, int v, int u, int n)
+void CpuPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 { 
     // This method should be invoked after invoking compute_statistics()
 
-    // Get partial partition functions
-    // This is made for debugging and testing
+    // Get chain propagator for a selected polymer, block and direction.
+    // This is made for debugging and testing.
     try
     {
         const int M = cb->get_n_grid();
@@ -744,7 +744,7 @@ void CpuPseudoDiscrete::get_partial_partition(double *q_out, int polymer, int v,
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
-        double* partition = unique_partition[dep];
+        double* partition = esssential_propagator[dep];
         for(int i=0; i<M; i++)
             q_out[i] = partition[(n-1)*M+i];
     }

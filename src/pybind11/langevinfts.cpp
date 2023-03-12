@@ -92,8 +92,8 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_polymer_concentration", overload_cast_<int>
             ()(&Pseudo::get_polymer_concentration), py::return_value_policy::move)
         .def("get_total_partition", &Pseudo::get_total_partition)
-        .def("get_partial_partition", overload_cast_<int, int, int, int>
-            ()(&Pseudo::get_partial_partition), py::return_value_policy::move)
+        .def("get_chain_propagator", overload_cast_<int, int, int, int>
+            ()(&Pseudo::get_chain_propagator), py::return_value_policy::move)
         .def("compute_stress", &Pseudo::compute_stress);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")

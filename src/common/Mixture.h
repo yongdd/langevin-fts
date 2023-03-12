@@ -132,6 +132,6 @@ public:
     // display
     void display_unique_branches() const;
     void display_unique_blocks() const;
-    void display_all_unique_branch_deps() const;
+    void display_unique_sub_branches() const;
 };
 #endif

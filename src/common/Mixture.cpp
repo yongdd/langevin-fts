@@ -378,7 +378,7 @@ std::map<std::string, UniqueBlock> Mixture::superpose_branches_of_continuous_cha
     std::map<std::string, UniqueBlock> superposed_second_map;
     std::map<std::string, UniqueBlock> superposed_second_map_total;
 
-    // Because of our SimpsonQuadrature implementation, whose weights of odd number n_segments and even number n_segments are slightly different,
+    // Because of our SimpsonRule implementation, whose weights of odd number n_segments and even number n_segments are slightly different,
     // superpositions for blocks of odd number and of even number are separately performed.
 
     // for even number
@@ -896,7 +896,7 @@ void Mixture::display_unique_branches() const
     std::cout << "------------------------------------" << std::endl;
 }
 
-void Mixture::display_all_unique_branch_deps() const
+void Mixture::display_unique_sub_branches() const
 {
     // print unique sub branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;

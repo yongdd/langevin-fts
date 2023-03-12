@@ -31,7 +31,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
     double **d_q;
-    double *d_unique_partition_sub_dep;
+    double *d_esssential_propagator_sub_dep;
 
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;
@@ -47,15 +47,15 @@ private:
     cudaStream_t *streams;
 
     // key: (dep) + monomer_type, value: partition function
-    std::map<std::string, double *> unique_partition;
+    std::map<std::string, double *> esssential_propagator;
 
-    // check if computation of unique_partition is finished
+    // check if computation of esssential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> unique_partition_finished;
+    std::map<std::string, bool *> esssential_propagator_finished;
     #endif
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
-    std::map<std::tuple<int, std::string, std::string>, double *> unique_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> essential_block_phi;
 
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond
@@ -83,7 +83,7 @@ public:
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
     std::vector<double> compute_stress() override;
-    void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;
+    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 };
 
 #endif

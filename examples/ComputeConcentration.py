@@ -31,23 +31,23 @@ v = []
 u = []
 
 # First Polymer
-volume_faction.append(0.5)              # volume faction
-block_lengths.append([0.5, 0.7, 0.3])   # contour length of each block (triblock)
-block_monomer_types.append(["A","B","A"])     # type of each block (triblock)
-v.append([0,1,2])                       # vertices v (triblock)
-u.append([1,2,3])                       # vertices u (triblock)
+volume_faction.append(0.5)                # volume faction
+block_lengths.append([0.5, 0.7, 0.3])     # contour length of each block (triblock)
+block_monomer_types.append(["A","B","A"]) # type of each block (triblock)
+v.append([0,1,2])                         # vertices v (triblock)
+u.append([1,2,3])                         # vertices u (triblock)
 
 # Second Polymer
 volume_faction.append(0.3)            # volume faction
 block_lengths.append([0.4, 0.5])      # contour length of each block (diblock)
-block_monomer_types.append(["A","C"])       # type of each block (diblock)
+block_monomer_types.append(["A","C"]) # type of each block (diblock)
 v.append([0,1])                       # vertices v (diblock)
 u.append([1,2])                       # vertices u (diblock)
 
 # Third Polymer
 volume_faction.append(0.2)        # volume faction
 block_lengths.append([1.0])       # contour length of each block (homo)
-block_monomer_types.append(["B"])       # type of each block (homo)
+block_monomer_types.append(["B"]) # type of each block (homo)
 v.append([0])                     # vertices v (homo)
 u.append([1])                     # vertices u (homo)
 
@@ -64,12 +64,13 @@ for p in range(len(block_lengths)):
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 
+# print unique blocks and branches
 mixture.display_unique_blocks()
 mixture.display_unique_branches()
 
 print(type(pseudo))
 
-# fields
+# external fields
 w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
      "B": np.random.normal(0.0, 1.0, np.prod(nx)),
      "C": np.random.normal(0.0, 1.0, np.prod(nx))}
@@ -77,6 +78,7 @@ w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
 # compute ensemble average concentration (phi) and total partition function (Q)
 pseudo.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
 
+# get concentration for each monomer type
 phi_a = pseudo.get_monomer_concentration("A")
 phi_b = pseudo.get_monomer_concentration("B")
 phi_c = pseudo.get_monomer_concentration("C")
@@ -89,7 +91,10 @@ for p in range(mixture.get_n_polymers()):
      phi = pseudo.get_polymer_concentration(p)
      Q = pseudo.get_total_partition(p)
 
-     print(f"Q({p}):", Q)           # total partition function
+     # total partition function
+     print(f"Q({p}):", Q)
      print(f"Total phi({p}):", np.mean(np.sum(phi, axis=0)))
+
+     # concentration for each block
      for b in range(mixture.get_polymer(p).get_n_blocks()):
-          print(phi[b]) # concentration for each block
+          print(phi[b])
