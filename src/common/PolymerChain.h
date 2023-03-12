@@ -28,7 +28,7 @@ private:
 
     std::map<int, std::vector<int>> adjacent_nodes;             // adjacent nodes
     std::map<std::pair<int, int>, int>         edge_to_array;   // array index for each edge
-    std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite partial partition functions as a text
+    std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite propagators as a text
 
     // grafting point.
     // For instance, 'chain_end_to_q_init[a] = b' means that

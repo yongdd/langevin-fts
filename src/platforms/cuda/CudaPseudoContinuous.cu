@@ -62,7 +62,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
-        // create scheduler for computation of partial partition function
+        // create scheduler for computation of propagator
         sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
 
         // create FFT plan
@@ -559,7 +559,7 @@ void CudaPseudoContinuous::compute_statistics(
     }
 }
 
-// Advance partial partition function using Richardson extrapolation.
+// Advance propagator using Richardson extrapolation.
 void CudaPseudoContinuous::one_step_1(
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
@@ -861,7 +861,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 gpu_error_check(cudaMemcpy(&d_q_step1_2[M], d_q_2[n], sizeof(double)*M,cudaMemcpyDeviceToDevice));
                 cufftExecD2Z(plan_for_2, d_q_step1_2, d_qk_in_2);
 
-                // multiplay two partial partition functions in the fourier spaces
+                // multiplay two propagators in the fourier spaces
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
                 if ( DIM == 3 )
                 {
@@ -929,7 +929,7 @@ void CudaPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int 
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)

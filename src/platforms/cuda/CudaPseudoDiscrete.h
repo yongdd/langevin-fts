@@ -48,7 +48,7 @@ private:
     std::map<std::string, bool *> esssential_propagator_finished;
     #endif
 
-    // scheduler for partial partition function
+    // scheduler for propagator
     Scheduler *sc;
     // the number of job threads
     const int N_STREAM = 2;
