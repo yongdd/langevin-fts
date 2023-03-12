@@ -77,7 +77,7 @@ int main()
 
                     // // display branches
                     // mx->display_unique_blocks();
-                    // mx->display_all_unique_branch_deps();
+                    // mx->display_unique_sub_branches();
 
                     for(int i=0; i<M; i++)
                     {
@@ -95,7 +95,7 @@ int main()
                     for(int n=20; n<=N; n+=20)
                     {   
                                                    //output, p, v ,u, n
-                        pseudo->get_partial_partition(q_out, 0, 0, 1, n);
+                        pseudo->get_chain_propagator(q_out, 0, 0, 1, n);
 
                         double sum = 0.0;
                         double x_square = 0.0;

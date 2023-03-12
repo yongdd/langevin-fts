@@ -23,7 +23,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
     double **d_q;
-    double *d_unique_partition_sub_dep;
+    double *d_esssential_propagator_sub_dep;
     double *d_q_half_step, *d_q_junction;
 
     // for stress calculation: compute_stress()
@@ -40,15 +40,15 @@ private:
     cudaStream_t *streams;
 
     // key: (dep) + monomer_type, value: partition functions
-    std::map<std::string, double *> unique_partition;
+    std::map<std::string, double *> esssential_propagator;
 
-    // check if computation of unique_partition is finished
+    // check if computation of esssential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> unique_partition_finished;
+    std::map<std::string, bool *> esssential_propagator_finished;
     #endif
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> unique_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> essential_block_phi;
 
     // key: (dep), value: array pointer
     std::map<std::string, double*> unique_q_junctions;
@@ -77,7 +77,7 @@ public:
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
     std::vector<double> compute_stress() override;
-    void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;
+    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 };
 
 #endif

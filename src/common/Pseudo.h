@@ -47,7 +47,7 @@ public:
     virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
     virtual std::vector<double> compute_stress() = 0;
-    virtual void get_partial_partition(double *q_out, int polymer, int v, int u, int n) = 0;
+    virtual void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
     void compute_statistics_pybind11(std::map<std::string,py::array_t<double>> w_input, std::map<std::string,py::array_t<double>> q_init)
@@ -126,13 +126,13 @@ public:
             throw_with_line_number(exc.what());
         }
     };
-    py::array_t<double> get_partial_partition(int polymer, int v, int u, int n)
+    py::array_t<double> get_chain_propagator(int polymer, int v, int u, int n)
     {
         try{
             const int M = cb->get_n_grid();
             py::array_t<double> q1 = py::array_t<double>(M);
             py::buffer_info buf_q1 = q1.request();
-            get_partial_partition((double*) buf_q1.ptr, polymer, v, u, n);
+            get_chain_propagator((double*) buf_q1.ptr, polymer, v, u, n);
             return q1;
         }
         catch(std::exception& exc)

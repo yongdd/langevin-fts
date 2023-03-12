@@ -40,12 +40,12 @@ private:
     double *d_phi;
 
     // key: (dep) + monomer_type, value: partition functions
-    std::map<std::string, double **> d_unique_partition;
-    std::map<std::string, int> d_unique_partition_size; // for deallocation
+    std::map<std::string, double **> d_esssential_propagator;
+    std::map<std::string, int> d_esssential_propagator_size; // for deallocation
 
-    // check if computation of unique_partition is finished
+    // check if computation of esssential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> unique_partition_finished;
+    std::map<std::string, bool *> esssential_propagator_finished;
     #endif
 
     // scheduler for partial partition function
@@ -54,7 +54,7 @@ private:
     const int N_STREAM = 2;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> d_unique_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> d_essential_block_phi;
 
     // key: (dep), value: array pointer
     std::map<std::string, double*> d_unique_q_junctions;
@@ -87,7 +87,7 @@ public:
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;
     std::vector<double> compute_stress() override;
-    void get_partial_partition(double *q_out, int polymer, int v, int u, int n) override;
+    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 };
 
 #endif
