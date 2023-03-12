@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class schedules partial partition function calculations for parallel computation
+* This class schedules propagator calculations for parallel computation
 *-----------------------------------------------------------*/
 
 #ifndef SCHEDULER_H_

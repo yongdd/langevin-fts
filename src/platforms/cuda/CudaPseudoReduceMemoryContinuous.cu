@@ -108,7 +108,9 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*M));
 
         gpu_error_check(cudaMalloc((void**)&d_qk_in,  sizeof(ftsComplex)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_esssential_propagator_sub_dep, sizeof(double)*M));
+        d_esssential_propagator_sub_dep = new double*[2]; // one for prev, the other for next
+        gpu_error_check(cudaMalloc((void**)&d_esssential_propagator_sub_dep[0], sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_esssential_propagator_sub_dep[1], sizeof(double)*M));
 
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
@@ -171,7 +173,10 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
     cudaFree(d_q_step1);
     cudaFree(d_q_step2);
     cudaFree(d_qk_in);
-    cudaFree(d_esssential_propagator_sub_dep);
+
+    cudaFree(d_esssential_propagator_sub_dep[0]);
+    cudaFree(d_esssential_propagator_sub_dep[1]);
+    delete[] d_esssential_propagator_sub_dep;
 
     // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);
@@ -307,11 +312,21 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     // initialize to zero
                     gpu_error_check(cudaMemset(d_q[0], 0, sizeof(double)*M));
 
+                    int prev, next;
+                    prev = 0;
+                    next = 1;
+
+                    // copy memory from device to host
+                    std::string sub_dep = std::get<0>(deps[0]);
+                    int sub_n_segment   = std::get<1>(deps[0]);
+                    int sub_n_repeated;
+                    gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep[prev], &esssential_propagator[sub_dep][(sub_n_segment)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
+
                     for(size_t d=0; d<deps.size(); d++)
                     {
-                        std::string sub_dep = std::get<0>(deps[d]);
-                        int sub_n_segment   = std::get<1>(deps[d]);
-                        int sub_n_repeated  = std::get<2>(deps[d]);
+                        sub_dep         = std::get<0>(deps[d]);
+                        sub_n_segment   = std::get<1>(deps[d]);
+                        sub_n_repeated  = std::get<2>(deps[d]);
 
                         // check sub key
                         #ifndef NDEBUG
@@ -321,10 +336,24 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep, &esssential_propagator[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
-                        lin_comb<<<N_BLOCKS, N_THREADS>>>(
+                        // STREAM 0: copy memory from device to host
+                        if (d < deps.size()-1)
+                        {
+                            std::string sub_dep_next = std::get<0>(deps[d+1]);
+                            int sub_n_segment_next   = std::get<1>(deps[d+1]);
+
+                            gpu_error_check(cudaMemcpyAsync(d_esssential_propagator_sub_dep[next],
+                                            &esssential_propagator[sub_dep_next][(sub_n_segment_next)*M], sizeof(double)*M,
+                                            cudaMemcpyHostToDevice, streams[0]));
+                        }
+
+                        // STREAM 1: compute linear combination
+                        lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(
                                 d_q[0], 1.0, d_q[0],
-                                sub_n_repeated, d_esssential_propagator_sub_dep, M);
+                                sub_n_repeated, d_esssential_propagator_sub_dep[prev], M);
+
+                        std::swap(prev, next);
+                        cudaDeviceSynchronize();
                     }
 
                     #ifndef NDEBUG
@@ -337,6 +366,15 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     gpu_error_check(cudaMemcpy(d_q[0], q_uniform,
                         sizeof(double)*M, cudaMemcpyHostToDevice));
 
+                    int prev, next;
+                    prev = 0;
+                    next = 1;
+
+                    // copy memory from device to host
+                    std::string sub_dep = std::get<0>(deps[0]);
+                    int sub_n_segment   = std::get<1>(deps[0]);
+                    gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep[prev], &esssential_propagator[sub_dep][(sub_n_segment)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
+
                     for(size_t d=0; d<deps.size(); d++)
                     {
                         std::string sub_dep = std::get<0>(deps[d]);
@@ -350,10 +388,23 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep, &esssential_propagator[sub_dep][sub_n_segment*M], sizeof(double)*M, cudaMemcpyHostToDevice));
-                        multi_real<<<N_BLOCKS, N_THREADS>>>(
-                            d_q[0], d_q[0], d_esssential_propagator_sub_dep, 1.0, M);
+                        // STREAM 0: copy memory from device to host
+                        if (d < deps.size()-1)
+                        {
+                            std::string sub_dep_next = std::get<0>(deps[d+1]);
+                            int sub_n_segment_next   = std::get<1>(deps[d+1]);
 
+                            gpu_error_check(cudaMemcpyAsync(d_esssential_propagator_sub_dep[next],
+                                            &esssential_propagator[sub_dep_next][(sub_n_segment_next)*M], sizeof(double)*M,
+                                            cudaMemcpyHostToDevice, streams[0]));
+                        }
+
+                        // STREAM 1: multiply 
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(
+                            d_q[0], d_q[0], d_esssential_propagator_sub_dep[prev], 1.0, M);
+
+                        std::swap(prev, next);
+                        cudaDeviceSynchronize();
                     }
                     
                     #ifndef NDEBUG
@@ -386,7 +437,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 gpu_error_check(cudaMemcpyAsync(&_esssential_propagator[(n-1)*M], d_q[prev], sizeof(double)*M,
                     cudaMemcpyDeviceToHost, streams[0]));
 
-                // STREAM 1: calculate partial partition function
+                // STREAM 1: calculate propagator
                 one_step(
                     d_q[prev],
                     d_q[next],
@@ -507,7 +558,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
     }
 }
 
-// Advance partial partition function using Richardson extrapolation.
+// Advance propagator using Richardson extrapolation.
 void CudaPseudoReduceMemoryContinuous::one_step(
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
@@ -743,7 +794,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
                 // STREAM 2: execute a Forward FFT
                 cufftExecD2Z(plan_for_two, d_q_two_partition[prev], d_two_qk_in);
 
-                // multiplay two partial partition functions in the fourier spaces
+                // multiplay two propagators in the fourier spaces
                 multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, &d_two_qk_in[0], &d_two_qk_in[M_COMPLEX], M_COMPLEX);
 
                 if ( DIM == 3 )
@@ -814,7 +865,7 @@ void CudaPseudoReduceMemoryContinuous::get_chain_propagator(double *q_out, int p
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)

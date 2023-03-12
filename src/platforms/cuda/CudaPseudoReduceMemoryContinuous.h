@@ -1,8 +1,8 @@
 /*-------------------------------------------------------------
 This is a derived CudaPseudoReduceMemoryContinuous class
 
-GPU memory usage is reduced by storing partial partition functions in main memory.
-In the GPU memory, array space that can store only two steps of partial partition function is allocated.
+GPU memory usage is reduced by storing propagators in main memory.
+In the GPU memory, array space that can store only two steps of propagator is allocated.
 There are three streams. One is responsible for data transfer between CPU and GPU, another is responsible
 for the compute_statistics() using single batched cufft, and the other is responsible for compute_stress()
 using double batched cufft. Overlapping of kernel execution and data transfers is utilized so that 
@@ -31,7 +31,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
     double **d_q;
-    double *d_esssential_propagator_sub_dep;
+    double **d_esssential_propagator_sub_dep;
 
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;

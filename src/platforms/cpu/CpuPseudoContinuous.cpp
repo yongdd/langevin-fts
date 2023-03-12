@@ -57,7 +57,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
-        // create scheduler for computation of partial partition function
+        // create scheduler for computation of propagator
         sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
 
         update_bond_function();
@@ -703,7 +703,7 @@ void CpuPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int v
         std::string dep = pc.get_dep(v,u);
 
         if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain partial partition functions.");
+            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
         const int N = mx->get_unique_branches()[dep].max_n_segment;
         if (n < 0 || n > N)

@@ -23,7 +23,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
     double **d_q;
-    double *d_esssential_propagator_sub_dep;
+    double **d_esssential_propagator_sub_dep;
     double *d_q_half_step, *d_q_junction;
 
     // for stress calculation: compute_stress()

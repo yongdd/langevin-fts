@@ -47,7 +47,7 @@ private:
                             // "discrete": discrete bead-spring model
                             
     double ds;              // contour step interval
-    bool use_superposition; // compute multiple partial partition functions using property of linearity of the diffusion equation.
+    bool use_superposition; // compute multiple propagators using property of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
@@ -91,7 +91,7 @@ public:
 
     // add new polymer
 
-    // Mark some chain ends to set initial conditions of partial partition functions when pseudo.compute_statistics() is invoked.
+    // Mark some chain ends to set initial conditions of propagators when pseudo.compute_statistics() is invoked.
     // For instance, if chain_end_to_q_init[a] is set to b, 
     // q_init[b] will be used as an initial condition of chain end 'a' in pseudo.compute_statistics().
         void add_polymer(
