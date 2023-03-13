@@ -76,8 +76,8 @@ int main()
                     std::cout << "Using Superposition: " << use_superposition << std::endl;
 
                     // // display branches
-                    // mx->display_unique_blocks();
-                    // mx->display_unique_sub_branches();
+                    // mx->display_blocks();
+                    // mx->display_sub_propagators();
 
                     for(int i=0; i<M; i++)
                     {

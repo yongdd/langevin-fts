@@ -95,8 +95,8 @@ int main()
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-            mx->display_unique_blocks();
-            mx->display_unique_branches();
+            mx->display_blocks();
+            mx->display_propagators();
 
             //-------------- allocate array ------------
             w       = new double[M*2];

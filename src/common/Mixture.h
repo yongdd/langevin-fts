@@ -115,7 +115,7 @@ public:
     int get_n_polymers() const;
     PolymerChain& get_polymer(const int p);
 
-    // get information of unique branches and blocks
+    // get information of Unique Propagators and blocks
     int get_unique_n_branches() const;
     std::map<std::string, UniqueEdge, CompareBranchKey>& get_unique_branches(); 
     UniqueEdge& get_unique_branch(std::string key);
@@ -130,8 +130,8 @@ public:
     static int get_height_from_key(std::string key);
 
     // display
-    void display_unique_branches() const;
-    void display_unique_blocks() const;
-    void display_unique_sub_branches() const;
+    void display_propagators() const;
+    void display_blocks() const;
+    void display_sub_propagators() const;
 };
 #endif

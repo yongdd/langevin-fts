@@ -117,8 +117,8 @@ int main()
                         std::cout << "Using Superposition: " << use_superposition << std::endl;
 
                         // // display branches
-                        // mx->display_unique_blocks();
-                        // mx->display_unique_branches();
+                        // mx->display_blocks();
+                        // mx->display_propagators();
 
                         // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
                         double xx, yy, zz, c1, c2;

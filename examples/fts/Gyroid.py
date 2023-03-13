@@ -37,7 +37,7 @@ params = {
         
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
-        "dt":0.8,               # Langevin step interval, delta tau*N_Ref
+        "dt":8.0,               # Langevin step interval, delta tau*N_Ref
         "nbar":10000,           # invariant polymerization index, nbar of N_Ref
     },
     
@@ -89,21 +89,15 @@ print("total time: %f, time per step: %f" %
 # Recording first a few iteration results for debugging and refactoring
 
 #        1    3.331E-15  [ 1.6835907E+01  ]     7.272741449   9.3906464E-05 
-# iteration, mass error, total partitions, total energy, error level
+# iteration, mass error, total partitions, total energy, incompressibility error
 # ---------- Run  ----------
 # Langevin step:  1
-#       33    6.883E-15  [ 1.8653328E+01  ]     7.744996235   9.0632164E-05 
-#       17    3.331E-15  [ 1.8508782E+01  ]     7.709080595   9.1220098E-05 
+#       38    9.104E-15  [ 1.4788474E+01  ]     5.591846783   8.1264960E-05 
 # Langevin step:  2
-#       33   -9.770E-15  [ 2.0148503E+01  ]     8.121646393   9.9045819E-05 
-#       17   -7.994E-15  [ 2.0006486E+01  ]     8.088031001   9.0288780E-05 
+#       36   -3.331E-15  [ 2.3331939E+01  ]     7.254891238   9.2202530E-05 
 # Langevin step:  3
-#       33    7.327E-15  [ 2.1357513E+01  ]     8.429947008   9.6396998E-05 
-#       17   -8.327E-15  [ 2.1226120E+01  ]     8.399015117   9.1699316E-05 
+#       38    5.551E-15  [ 2.2535250E+01  ]     7.281477802   8.3099757E-05 
 # Langevin step:  4
-#       33   -5.107E-15  [ 2.2652927E+01  ]     8.699233610   9.0287462E-05 
-#       17   -2.220E-15  [ 2.2517557E+01  ]     8.669878816   9.2572558E-05 
+#       38    9.104E-15  [ 2.1742114E+01  ]     7.252336185   8.7757742E-05 
 # Langevin step:  5
-#       33    6.661E-16  [ 2.3935931E+01  ]     8.930931734   9.5729341E-05 
-#       17    6.883E-15  [ 2.3801796E+01  ]     8.902988405   9.0702344E-05 
-
+#       38   -2.220E-15  [ 2.1681650E+01  ]     7.250200933   8.4056692E-05 

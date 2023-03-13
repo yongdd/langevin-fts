@@ -174,13 +174,13 @@ int main()
 
         Mixture* mx1 = new Mixture("Continuous", 0.15, bond_lengths, false);
         mx1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx1->display_unique_blocks();
-        mx1->display_unique_branches();
+        mx1->display_blocks();
+        mx1->display_propagators();
 
         Mixture* mx2 = new Mixture("Continuous", 0.15, bond_lengths, true);
         mx2->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx2->display_unique_blocks();
-        mx2->display_unique_branches();
+        mx2->display_blocks();
+        mx2->display_propagators();
 
         #ifdef USE_CPU_MKL
         pseudo_list.push_back(new CpuPseudoContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));

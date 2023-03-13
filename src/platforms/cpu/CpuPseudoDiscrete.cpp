@@ -239,7 +239,7 @@ void CpuPseudoDiscrete::compute_statistics(
                     }
                     else
                     {
-                        // Illustration (four branches)
+                        // Example (four branches)
                         //     A
                         //     |
                         // O - . - B
