@@ -15,7 +15,7 @@ struct EssentialEdge{
     int max_n_segment;                                    // the maximum segment number
     std::string monomer_type;                             // monomer_type
     std::vector<std::tuple<std::string, int, int>> deps;  // tuple <key, n_segment, n_repeated>
-    int height;                                           // height of branch (height of tree data Structure)
+    int height;                                           // height of propagator (height of tree data Structure)
 };
 struct EssentialBlock{
     std::string monomer_type;  // monomer_type
@@ -63,7 +63,7 @@ private:
 
     // get propagator code
     // This method is implemented using top-down dynamic programming approach.
-    std::pair<std::string, int> get_text_code_of_branch(
+    std::pair<std::string, int> get_propagator_code(
         std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
         std::vector<PolymerChainBlock>& blocks,
         std::map<int, std::vector<int>>& adjacent_nodes,
