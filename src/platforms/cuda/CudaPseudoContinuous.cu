@@ -18,28 +18,28 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         const int M_COMPLEX = this->n_complex_grid;
 
         // allocate memory for partition functions
-        if( mx->get_unique_branches().size() == 0)
-            throw_with_line_number("There is no unique branch. Add polymers first.");
-        for(const auto& item: mx->get_unique_branches())
+        if( mx->get_essential_propagator_codes().size() == 0)
+            throw_with_line_number("There is no propagator code. Add polymers first.");
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            d_esssential_propagator[dep] = new double*[max_n_segment+1];
-            d_esssential_propagator_size[dep] = max_n_segment+1;
-            for(int i=0; i<d_esssential_propagator_size[dep]; i++)
-                gpu_error_check(cudaMalloc((void**)&d_esssential_propagator[dep][i], sizeof(double)*M));
+            d_essential_propagator[dep] = new double*[max_n_segment+1];
+            d_essential_propagator_size[dep] = max_n_segment+1;
+            for(int i=0; i<d_essential_propagator_size[dep]; i++)
+                gpu_error_check(cudaMalloc((void**)&d_essential_propagator[dep][i], sizeof(double)*M));
 
             #ifndef NDEBUG
-            esssential_propagator_finished[dep] = new bool[max_n_segment+1];
+            essential_propagator_finished[dep] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
-                esssential_propagator_finished[dep][i] = false;
+                essential_propagator_finished[dep][i] = false;
             #endif
         }
 
         // allocate memory for concentrations
-        if( mx->get_unique_blocks().size() == 0)
-            throw_with_line_number("There is no unique block. Add polymers first.");
-        for(const auto& item: mx->get_unique_blocks())
+        if( mx->get_essential_blocks().size() == 0)
+            throw_with_line_number("There is no block. Add polymers first.");
+        for(const auto& item: mx->get_essential_blocks())
         {
             d_essential_block_phi[item.first] = nullptr;
             gpu_error_check(cudaMalloc((void**)&d_essential_block_phi[item.first], sizeof(double)*M));
@@ -63,7 +63,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_STREAM); 
 
         // create FFT plan
         const int NRANK{cb->get_dim()};
@@ -137,9 +137,9 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(item.second);
     for(const auto& item: d_exp_dw_half)
         cudaFree(item.second);
-    for(const auto& item: d_esssential_propagator)
+    for(const auto& item: d_essential_propagator)
     {
-        for(int i=0; i<d_esssential_propagator_size[item.first]; i++)
+        for(int i=0; i<d_essential_propagator_size[item.first]; i++)
             cudaFree(item.second[i]);
         delete[] item.second;
     }
@@ -147,7 +147,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(item.second);
 
     #ifndef NDEBUG
-    for(const auto& item: esssential_propagator_finished)
+    for(const auto& item: essential_propagator_finished)
         delete[] item.second;
     #endif
 
@@ -215,7 +215,7 @@ void CudaPseudoContinuous::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
 
-        for(const auto& item: mx->get_unique_branches())
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -270,22 +270,22 @@ void CudaPseudoContinuous::compute_statistics(
         // for each time span
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // for each job
+            // for each propagator
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = mx->get_unique_branch(key).deps;
-                auto monomer_type = mx->get_unique_branch(key).monomer_type;
+                auto& deps = mx->get_essential_propagator_code(key).deps;
+                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
 
                 // check key
                 #ifndef NDEBUG
-                if (d_esssential_propagator.find(key) == d_esssential_propagator.end())
+                if (d_essential_propagator.find(key) == d_essential_propagator.end())
                     throw_with_line_number("Could not find key '" + key + "'. ");
                 #endif
 
-                double **_d_esssential_propagator = d_esssential_propagator[key];
+                double **_d_essential_propagator = d_essential_propagator[key];
 
                 // std::cout << std::to_string(time_span_count) + "job, key, n_segment_from: " +  ", " + key + ", " << std::to_string(n_segment_from) << std::endl;
 
@@ -298,17 +298,17 @@ void CudaPseudoContinuous::compute_statistics(
                         std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
-                        gpu_error_check(cudaMemcpy(_d_esssential_propagator[0], q_init[g],
+                        gpu_error_check(cudaMemcpy(_d_essential_propagator[0], q_init[g],
                             sizeof(double)*M, cudaMemcpyHostToDevice));
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpy(_d_esssential_propagator[0], q_uniform,
+                        gpu_error_check(cudaMemcpy(_d_essential_propagator[0], q_uniform,
                             sizeof(double)*M, cudaMemcpyHostToDevice));
                     }
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][0] = true;
+                    essential_propagator_finished[key][0] = true;
                     #endif
                 }
                 // if it is not leaf node
@@ -318,7 +318,7 @@ void CudaPseudoContinuous::compute_statistics(
                     if (key[0] == '[')
                     {
                         // initialize to zero
-                        gpu_error_check(cudaMemset(_d_esssential_propagator[0], 0, sizeof(double)*M));
+                        gpu_error_check(cudaMemset(_d_essential_propagator[0], 0, sizeof(double)*M));
 
                         // add all partition functions at junctions if necessary 
                         for(size_t d=0; d<deps.size(); d++)
@@ -329,26 +329,26 @@ void CudaPseudoContinuous::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (d_esssential_propagator.find(sub_dep) == d_esssential_propagator.end())
+                            if (d_essential_propagator.find(sub_dep) == d_essential_propagator.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment])
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                             #endif
 
                             lin_comb<<<N_BLOCKS, N_THREADS>>>(
-                                _d_esssential_propagator[0], 1.0, _d_esssential_propagator[0],
-                                sub_n_repeated, d_esssential_propagator[sub_dep][sub_n_segment], M);
+                                _d_essential_propagator[0], 1.0, _d_essential_propagator[0],
+                                sub_n_repeated, d_essential_propagator[sub_dep][sub_n_segment], M);
                         }
 
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", " << std::to_string(0) << std::endl;
                     }
                     else
                     {
                         // initialize to one
-                        gpu_error_check(cudaMemcpy(_d_esssential_propagator[0], q_uniform,
+                        gpu_error_check(cudaMemcpy(_d_essential_propagator[0], q_uniform,
                             sizeof(double)*M, cudaMemcpyHostToDevice));
 
                         // multiplay all partition functions at junctions if necessary 
@@ -359,19 +359,19 @@ void CudaPseudoContinuous::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (d_esssential_propagator.find(sub_dep) == d_esssential_propagator.end())
+                            if (d_essential_propagator.find(sub_dep) == d_essential_propagator.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment])
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                             #endif
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(
-                                _d_esssential_propagator[0], _d_esssential_propagator[0],
-                                d_esssential_propagator[sub_dep][sub_n_segment], 1.0, M);
+                                _d_essential_propagator[0], _d_essential_propagator[0],
+                                d_essential_propagator[sub_dep][sub_n_segment], 1.0, M);
                         }
                         
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", " << std::to_string(0) << std::endl;
                     }
@@ -393,26 +393,26 @@ void CudaPseudoContinuous::compute_statistics(
                 auto& key = std::get<0>(parallel_job_copied[0]);
                 int n_segment_from = std::get<1>(parallel_job_copied[0]);
                 int n_segment_to = std::get<2>(parallel_job_copied[0]);
-                auto monomer_type = mx->get_unique_branch(key).monomer_type;
-                double **_d_esssential_propagator_key = d_esssential_propagator[key];
+                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
+                double **_d_essential_propagator_key = d_essential_propagator[key];
 
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!esssential_propagator_finished[key][n-1])
+                    if (!essential_propagator_finished[key][n-1])
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
                     #endif
 
                     one_step_1(
-                        _d_esssential_propagator_key[n-1],
-                        _d_esssential_propagator_key[n],
+                        _d_essential_propagator_key[n-1],
+                        _d_essential_propagator_key[n],
                         d_boltz_bond[monomer_type],
                         d_boltz_bond_half[monomer_type],
                         d_exp_dw[monomer_type],
                         d_exp_dw_half[monomer_type]);
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][n] = true;
+                    essential_propagator_finished[key][n] = true;
                     #endif
                 }
             }
@@ -421,30 +421,30 @@ void CudaPseudoContinuous::compute_statistics(
                 auto& key_1 = std::get<0>(parallel_job_copied[0]);
                 int n_segment_from_1 = std::get<1>(parallel_job_copied[0]);
                 int n_segment_to_1 = std::get<2>(parallel_job_copied[0]);
-                auto species_1 = mx->get_unique_branch(key_1).monomer_type;
+                auto species_1 = mx->get_essential_propagator_code(key_1).monomer_type;
 
                 auto& key_2 = std::get<0>(parallel_job_copied[1]);
                 int n_segment_from_2 = std::get<1>(parallel_job_copied[1]);
                 int n_segment_to_2 = std::get<2>(parallel_job_copied[1]);
-                auto species_2 = mx->get_unique_branch(key_2).monomer_type;
+                auto species_2 = mx->get_essential_propagator_code(key_2).monomer_type;
 
-                double **_d_esssential_propagator_key_1 = d_esssential_propagator[key_1];
-                double **_d_esssential_propagator_key_2 = d_esssential_propagator[key_2];
+                double **_d_essential_propagator_key_1 = d_essential_propagator[key_1];
+                double **_d_essential_propagator_key_2 = d_essential_propagator[key_2];
 
                 for(int n=0; n<=n_segment_to_1-n_segment_from_1; n++)
                 {
                     #ifndef NDEBUG
-                    if (!esssential_propagator_finished[key_1][n-1+n_segment_from_1])
+                    if (!essential_propagator_finished[key_1][n-1+n_segment_from_1])
                         throw_with_line_number("unfinished, key: " + key_1 + ", " + std::to_string(n-1+n_segment_from_1));
-                    if (!esssential_propagator_finished[key_2][n-1+n_segment_from_2])
+                    if (!essential_propagator_finished[key_2][n-1+n_segment_from_2])
                         throw_with_line_number("unfinished, key: " + key_2 + ", " + std::to_string(n-1+n_segment_from_2));
                     #endif
 
                     one_step_2(
-                        _d_esssential_propagator_key_1[n-1+n_segment_from_1],
-                        _d_esssential_propagator_key_2[n-1+n_segment_from_2],
-                        _d_esssential_propagator_key_1[n+n_segment_from_1],
-                        _d_esssential_propagator_key_2[n+n_segment_from_2],
+                        _d_essential_propagator_key_1[n-1+n_segment_from_1],
+                        _d_essential_propagator_key_2[n-1+n_segment_from_2],
+                        _d_essential_propagator_key_1[n+n_segment_from_1],
+                        _d_essential_propagator_key_2[n+n_segment_from_2],
                         d_boltz_bond[species_1],
                         d_boltz_bond[species_2],
                         d_boltz_bond_half[species_1],
@@ -455,8 +455,8 @@ void CudaPseudoContinuous::compute_statistics(
                         d_exp_dw_half[species_2]);
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key_1][n+n_segment_from_1] = true;
-                    esssential_propagator_finished[key_2][n+n_segment_from_2] = true;
+                    essential_propagator_finished[key_1][n+n_segment_from_1] = true;
+                    essential_propagator_finished[key_2][n+n_segment_from_2] = true;
                     #endif
 
                     // std::cout << "finished, key, n: " + key_1 + ", " << std::to_string(n+n_segment_from_1) << std::endl;
@@ -479,27 +479,27 @@ void CudaPseudoContinuous::compute_statistics(
                 continue;
 
             int n_superposed;
-            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
+            // int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_unique_block(block.first).v_u.size();
+                n_superposed = mx->get_essential_block(block.first).v_u.size();
 
             // check keys
             #ifndef NDEBUG
-            if (d_esssential_propagator.find(dep_v) == d_esssential_propagator.end())
+            if (d_essential_propagator.find(dep_v) == d_essential_propagator.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (d_esssential_propagator.find(dep_u) == d_esssential_propagator.end())
+            if (d_essential_propagator.find(dep_u) == d_essential_propagator.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
             #endif
 
             single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
-                d_esssential_propagator[dep_v][n_segment_original-n_segment_offset], // q
-                d_esssential_propagator[dep_u][0])/n_superposed/cb->get_volume();    // q^dagger
+                d_essential_propagator[dep_v][n_segment_original-n_segment_offset], // q
+                d_essential_propagator[dep_u][0])/n_superposed/cb->get_volume();    // q^dagger
 
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             current_p++;
@@ -513,9 +513,9 @@ void CudaPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(block.first);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
+            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
 
             // if there is no segment
             if(n_segment_allocated == 0)
@@ -526,23 +526,23 @@ void CudaPseudoContinuous::compute_statistics(
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(block.first).v_u.size();
+                n_repeated = mx->get_essential_block(block.first).v_u.size();
             else
                 n_repeated = 1;
 
             // check keys
             #ifndef NDEBUG
-            if (d_esssential_propagator.find(dep_v) == d_esssential_propagator.end())
+            if (d_essential_propagator.find(dep_v) == d_essential_propagator.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (d_esssential_propagator.find(dep_u) == d_esssential_propagator.end())
+            if (d_essential_propagator.find(dep_u) == d_essential_propagator.end())
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
             #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
                 block.second,               // phi
-                d_esssential_propagator[dep_v],  // dependency v
-                d_esssential_propagator[dep_u],  // dependency u
+                d_essential_propagator[dep_v],  // dependency v
+                d_essential_propagator[dep_u],  // dependency u
                 n_segment_allocated,
                 n_segment_offset,
                 n_segment_original);
@@ -749,7 +749,7 @@ void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, d
         for(const auto& block: d_essential_block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
             if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
@@ -812,17 +812,17 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
         thrust::device_ptr<double> temp_gpu_ptr(d_stress_sum);
 
         // reset stress map
         for(const auto& item: d_essential_block_phi)
         {
             for(int d=0; d<3; d++)
-                unique_dq_dl[item.first][d] = 0.0;
+                block_dq_dl[item.first][d] = 0.0;
         }
 
-        // compute stress for unique block
+        // compute stress for each block
         for(const auto& block: d_essential_block_phi)
         {
             const auto& key      = block.first;
@@ -830,10 +830,10 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = mx->get_unique_block(block.first).n_segment_allocated;
-            const int N_OFFSET    = mx->get_unique_block(block.first).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_unique_block(block.first).n_segment_original;
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
+            const int N           = mx->get_essential_block(block.first).n_segment_allocated;
+            const int N_OFFSET    = mx->get_essential_block(block.first).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_essential_block(block.first).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // if there is no segment
             if(N == 0)
@@ -842,16 +842,16 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(block.first).v_u.size();
+                n_repeated = mx->get_essential_block(block.first).v_u.size();
             else
                 n_repeated = 1;
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
             double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            double** d_q_1 = d_esssential_propagator[dep_v];    // dependency v
-            double** d_q_2 = d_esssential_propagator[dep_u];    // dependency u
+            double** d_q_1 = d_essential_propagator[dep_v];    // dependency v
+            double** d_q_2 = d_essential_propagator[dep_u];    // dependency u
 
-            std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
+            std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // compute
             for(int n=0; n<=N; n++)
@@ -866,30 +866,30 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 if ( DIM == 3 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[2] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                 }
                 if ( DIM == 2 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
 
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[1] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
                 if ( DIM == 1 )
                 {
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_stress_sum, d_q_multi, d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-                    _unique_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
+                    _block_dq_dl[0] += s_coeff[n]*thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + M_COMPLEX)*n_repeated;
                 }
             }
-            unique_dq_dl[key] = _unique_dq_dl;
+            block_dq_dl[key] = _block_dq_dl;
         }
 
         // compute total stress
@@ -904,7 +904,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             PolymerChain& pc  = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
-                stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<cb->get_dim(); d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
@@ -928,14 +928,14 @@ void CudaPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int 
         PolymerChain& pc = mx->get_polymer(polymer);
         std::string dep = pc.get_dep(v,u);
 
-        if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
+        if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
+            throw_with_line_number("Could not find the essential propagator codes '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
-        const int N = mx->get_unique_branches()[dep].max_n_segment;
+        const int N = mx->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        gpu_error_check(cudaMemcpy(q_out, d_esssential_propagator[dep][n], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(q_out, d_essential_propagator[dep][n], sizeof(double)*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {

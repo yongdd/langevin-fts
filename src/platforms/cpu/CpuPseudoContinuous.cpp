@@ -16,25 +16,25 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         this->fft = fft;
 
         // allocate memory for partition functions
-        if( mx->get_unique_branches().size() == 0)
-            throw_with_line_number("There is no unique branch. Add polymers first.");
-        for(const auto& item: mx->get_unique_branches())
+        if( mx->get_essential_propagator_codes().size() == 0)
+            throw_with_line_number("There is no propagator code. Add polymers first.");
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            esssential_propagator[dep] = new double[M*(max_n_segment+1)];
+            essential_propagator[dep] = new double[M*(max_n_segment+1)];
 
             #ifndef NDEBUG
-            esssential_propagator_finished[dep] = new bool[max_n_segment+1];
+            essential_propagator_finished[dep] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
-                esssential_propagator_finished[dep][i] = false;
+                essential_propagator_finished[dep][i] = false;
             #endif
         }
 
         // allocate memory for concentrations
-        if( mx->get_unique_blocks().size() == 0)
-            throw_with_line_number("There is no unique block. Add polymers first.");
-        for(const auto& item: mx->get_unique_blocks())
+        if( mx->get_essential_blocks().size() == 0)
+            throw_with_line_number("There is no block. Add polymers first.");
+        for(const auto& item: mx->get_essential_blocks())
         {
             essential_block_phi[item.first] = new double[M];
         }
@@ -58,7 +58,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_STREAM); 
 
         update_bond_function();
     }
@@ -86,13 +86,13 @@ CpuPseudoContinuous::~CpuPseudoContinuous()
         delete[] item.second;
     for(const auto& item: exp_dw_half)
         delete[] item.second;
-    for(const auto& item: esssential_propagator)
+    for(const auto& item: essential_propagator)
         delete[] item.second;
     for(const auto& item: essential_block_phi)
         delete[] item.second;
 
     #ifndef NDEBUG
-    for(const auto& item: esssential_propagator_finished)
+    for(const auto& item: essential_propagator_finished)
         delete[] item.second;
     #endif
 }
@@ -125,7 +125,7 @@ void CpuPseudoContinuous::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
 
-        for(const auto& item: mx->get_unique_branches())
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -168,23 +168,23 @@ void CpuPseudoContinuous::compute_statistics(
         // for each time span
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // for each job
+            // for each propagator
             #pragma omp parallel for
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = mx->get_unique_branch(key).deps;
-                auto monomer_type = mx->get_unique_branch(key).monomer_type;
+                auto& deps = mx->get_essential_propagator_code(key).deps;
+                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
 
                 // check key
                 #ifndef NDEBUG
-                if (esssential_propagator.find(key) == esssential_propagator.end())
+                if (essential_propagator.find(key) == essential_propagator.end())
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
-                double *_esssential_propagator = esssential_propagator[key];
+                double *_essential_propagator = essential_propagator[key];
 
                 // if it is leaf node
                 if(n_segment_from == 1 && deps.size() == 0) 
@@ -196,16 +196,16 @@ void CpuPseudoContinuous::compute_statistics(
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = q_init[g][i];
+                            _essential_propagator[i] = q_init[g][i];
                     }
                     else
                     {
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = 1.0;
+                            _essential_propagator[i] = 1.0;
                     }
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][0] = true;
+                    essential_propagator_finished[key][0] = true;
                     #endif
                 }
                 // if it is not leaf node
@@ -215,7 +215,7 @@ void CpuPseudoContinuous::compute_statistics(
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = 0.0;
+                            _essential_propagator[i] = 0.0;
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -224,25 +224,25 @@ void CpuPseudoContinuous::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
+                            if (essential_propagator.find(sub_dep) == essential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_esssential_propagator_sub_dep = esssential_propagator[sub_dep];
+                            double *_essential_propagator_sub_dep = essential_propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _esssential_propagator[i] += _esssential_propagator_sub_dep[sub_n_segment*M+i]*sub_n_repeated;
+                                _essential_propagator[i] += _essential_propagator_sub_dep[sub_n_segment*M+i]*sub_n_repeated;
                         }
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else
                     { 
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = 1.0;
+                            _essential_propagator[i] = 1.0;
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -250,19 +250,19 @@ void CpuPseudoContinuous::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
+                            if (essential_propagator.find(sub_dep) == essential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_esssential_propagator_sub_dep = esssential_propagator[sub_dep];
+                            double *_essential_propagator_sub_dep = essential_propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _esssential_propagator[i] *= _esssential_propagator_sub_dep[sub_n_segment*M+i];
+                                _essential_propagator[i] *= _essential_propagator_sub_dep[sub_n_segment*M+i];
                         }
 
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
@@ -272,19 +272,19 @@ void CpuPseudoContinuous::compute_statistics(
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!esssential_propagator_finished[key][n-1])
+                    if (!essential_propagator_finished[key][n-1])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                     #endif
                     
-                    one_step(&_esssential_propagator[(n-1)*M],
-                            &_esssential_propagator[n*M],
+                    one_step(&_essential_propagator[(n-1)*M],
+                            &_essential_propagator[n*M],
                             boltz_bond[monomer_type],
                             boltz_bond_half[monomer_type],
                             exp_dw[monomer_type],
                             exp_dw_half[monomer_type]);
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][n] = true;
+                    essential_propagator_finished[key][n] = true;
                     #endif
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
                 }
@@ -300,20 +300,20 @@ void CpuPseudoContinuous::compute_statistics(
         //     int n_segment_offset = std::get<4>(block.first);
 
         //     // check keys
-        //     if (esssential_propagator.find(dep_v) == esssential_propagator.end())
+        //     if (essential_propagator.find(dep_v) == essential_propagator.end())
         //         throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-        //     if (esssential_propagator.find(dep_u) == esssential_propagator.end())
+        //     if (essential_propagator.find(dep_u) == essential_propagator.end())
         //         throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
         //     for(int i=0; i<=n_segment+n_segment_offset; i++)
         //     {
-        //         if (!esssential_propagator_finished[dep_v][i])
+        //         if (!essential_propagator_finished[dep_v][i])
         //             throw_with_line_number("unfinished, dep_v, n'" + dep_v + ", " + std::to_string(i) + "'. ");
         //     }
 
         //     for(int i=0; i<=n_segment; i++)
         //     {
-        //         if (!esssential_propagator_finished[dep_u][i])
+        //         if (!essential_propagator_finished[dep_u][i])
         //             throw_with_line_number("unfinished, dep_u, n'" + dep_u + ", " + std::to_string(i) + "'. ");
         //     }
         // }
@@ -331,27 +331,27 @@ void CpuPseudoContinuous::compute_statistics(
                 continue;
 
             int n_superposed;
-            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
+            // int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_unique_block(block.first).v_u.size();
+                n_superposed = mx->get_essential_block(block.first).v_u.size();
 
             // check keys
             #ifndef NDEBUG
-            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
+            if (essential_propagator.find(dep_v) == essential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
+            if (essential_propagator.find(dep_u) == essential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             single_partitions[p]= cb->inner_product(
-                &esssential_propagator[dep_v][(n_segment_original-n_segment_offset)*M], // q
-                &esssential_propagator[dep_u][0])/n_superposed/cb->get_volume();        // q^dagger
+                &essential_propagator[dep_v][(n_segment_original-n_segment_offset)*M], // q
+                &essential_propagator[dep_u][0])/n_superposed/cb->get_volume();        // q^dagger
             
             // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
             // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
@@ -371,9 +371,9 @@ void CpuPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_unique_block(key).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(key).n_segment_original;
+            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
 
             // if there is no segment
             if(n_segment_allocated == 0)
@@ -385,23 +385,23 @@ void CpuPseudoContinuous::compute_statistics(
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(key).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
             // check keys
             #ifndef NDEBUG
-            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
+            if (essential_propagator.find(dep_v) == essential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
+            if (essential_propagator.find(dep_u) == essential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
                 block->second,             // phi
-                esssential_propagator[dep_v],  // dependency v
-                esssential_propagator[dep_u],  // dependency u
+                essential_propagator[dep_v],  // dependency v
+                essential_propagator[dep_u],  // dependency u
                 n_segment_allocated,
                 n_segment_offset,
                 n_segment_original);
@@ -522,7 +522,7 @@ void CpuPseudoContinuous::get_monomer_concentration(std::string monomer_type, do
         for(const auto& block: essential_block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
             if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
@@ -583,13 +583,13 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // reset stress map
         for(const auto& item: essential_block_phi)
         {
             for(int d=0; d<3; d++)
-                unique_dq_dl[item.first][d] = 0.0;
+                block_dq_dl[item.first][d] = 0.0;
         }
 
         // compute stress for each block
@@ -603,10 +603,10 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
 
-            const int N           = mx->get_unique_block(key).n_segment_allocated;
-            const int N_OFFSET    = mx->get_unique_block(key).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_unique_block(key).n_segment_original;
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
+            const int N           = mx->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // if there is no segment
             if(N == 0)
@@ -615,21 +615,21 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(key).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
 
-            double *q_1 = esssential_propagator[dep_v];    // dependency v
-            double *q_2 = esssential_propagator[dep_u];    // dependency u
+            double *q_1 = essential_propagator[dep_v];    // dependency v
+            double *q_2 = essential_propagator[dep_u];    // dependency u
 
             double coeff;
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
             double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
     
-            std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
+            std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // compute
             for(int n=0; n<=N; n++)
@@ -641,28 +641,28 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_x[i];
-                        _unique_dq_dl[1] += coeff*fourier_basis_y[i];
-                        _unique_dq_dl[2] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_x[i];
+                        _block_dq_dl[1] += coeff*fourier_basis_y[i];
+                        _block_dq_dl[2] += coeff*fourier_basis_z[i];
                     }
                 }
                 if ( DIM == 2 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_y[i];
-                        _unique_dq_dl[1] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_y[i];
+                        _block_dq_dl[1] += coeff*fourier_basis_z[i];
                     }
                 }
                 if ( DIM == 1 )
                 {
                     for(int i=0; i<M_COMPLEX; i++){
                         coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_z[i];
                     }
                 }
             }
-            unique_dq_dl[key] = _unique_dq_dl;
+            block_dq_dl[key] = _block_dq_dl;
         }
 
         // compute total stress
@@ -677,7 +677,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             PolymerChain& pc  = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
-                stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
 
         for(int d=0; d<cb->get_dim(); d++)
@@ -702,14 +702,14 @@ void CpuPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int v
         PolymerChain& pc = mx->get_polymer(polymer);
         std::string dep = pc.get_dep(v,u);
 
-        if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
+        if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
+            throw_with_line_number("Could not find the essential propagator codes '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
-        const int N = mx->get_unique_branches()[dep].max_n_segment;
+        const int N = mx->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        double* _partition = esssential_propagator[dep];
+        double* _partition = essential_propagator[dep];
         for(int i=0; i<M; i++)
             q_out[i] = _partition[n*M+i];
     }

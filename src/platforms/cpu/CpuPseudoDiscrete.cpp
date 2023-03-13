@@ -15,18 +15,18 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         this->fft = fft;
 
         // allocate memory for partition functions
-        if( mx->get_unique_branches().size() == 0)
-            throw_with_line_number("There is no unique branch. Add polymers first.");
-        for(const auto& item: mx->get_unique_branches())
+        if( mx->get_essential_propagator_codes().size() == 0)
+            throw_with_line_number("There is no propagator code. Add polymers first.");
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
-            esssential_propagator[dep] = new double[M*max_n_segment];
+            essential_propagator[dep] = new double[M*max_n_segment];
 
             #ifndef NDEBUG
-            esssential_propagator_finished[dep] = new bool[max_n_segment];
+            essential_propagator_finished[dep] = new bool[max_n_segment];
             for(int i=0; i<max_n_segment;i++)
-                esssential_propagator_finished[dep][i] = false;
+                essential_propagator_finished[dep][i] = false;
             #endif
 
              // There are N segments
@@ -39,16 +39,16 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
              // O  : full segment
         }
 
-        // allocate memory for unique_q_junctions, which contain partition function at junction of discrete chain
-        for(const auto& item: mx->get_unique_branches())
+        // allocate memory for essential_q_junctions, which contain partition function at junction of discrete chain
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
-            unique_q_junctions[item.first] = new double[M];
+            essential_q_junctions[item.first] = new double[M];
         }
 
         // allocate memory for concentrations
-        if( mx->get_unique_blocks().size() == 0)
-            throw_with_line_number("There is no unique block. Add polymers first.");
-        for(const auto& item: mx->get_unique_blocks())
+        if( mx->get_essential_blocks().size() == 0)
+            throw_with_line_number("There is no block. Add polymers first.");
+        for(const auto& item: mx->get_essential_blocks())
         {
             essential_block_phi[item.first] = new double[M];
         }
@@ -71,7 +71,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_unique_branches(), N_STREAM); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_STREAM); 
 
         update_bond_function();
     }
@@ -97,15 +97,15 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         delete[] item.second;
     for(const auto& item: exp_dw)
         delete[] item.second;
-    for(const auto& item: esssential_propagator)
+    for(const auto& item: essential_propagator)
         delete[] item.second;
     for(const auto& item: essential_block_phi)
         delete[] item.second;
-    for(const auto& item: unique_q_junctions)
+    for(const auto& item: essential_q_junctions)
         delete[] item.second;
 
     #ifndef NDEBUG
-    for(const auto& item: esssential_propagator_finished)
+    for(const auto& item: essential_propagator_finished)
         delete[] item.second;
     #endif
 }
@@ -138,7 +138,7 @@ void CpuPseudoDiscrete::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
 
-        for(const auto& item: mx->get_unique_branches())
+        for(const auto& item: mx->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -162,23 +162,23 @@ void CpuPseudoDiscrete::compute_statistics(
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // for each job
+            // for each propagator
             #pragma omp parallel for
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = mx->get_unique_branch(key).deps;
-                auto monomer_type = mx->get_unique_branch(key).monomer_type;
+                auto& deps = mx->get_essential_propagator_code(key).deps;
+                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
 
                 // check key
                 #ifndef NDEBUG
-                if (esssential_propagator.find(key) == esssential_propagator.end())
+                if (essential_propagator.find(key) == essential_propagator.end())
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
                 #endif
 
-                double *_esssential_propagator = esssential_propagator[key];
+                double *_essential_propagator = essential_propagator[key];
 
                 // calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
@@ -190,16 +190,16 @@ void CpuPseudoDiscrete::compute_statistics(
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = q_init[g][i]*exp_dw[monomer_type][i];
+                            _essential_propagator[i] = q_init[g][i]*exp_dw[monomer_type][i];
                     }
                     else
                     {
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = exp_dw[monomer_type][i];
+                            _essential_propagator[i] = exp_dw[monomer_type][i];
                     }
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][0] = true;
+                    essential_propagator_finished[key][0] = true;
                     #endif
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
@@ -208,7 +208,7 @@ void CpuPseudoDiscrete::compute_statistics(
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] = 0.0;
+                            _essential_propagator[i] = 0.0;
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -217,23 +217,23 @@ void CpuPseudoDiscrete::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
+                            if (essential_propagator.find(sub_dep) == essential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment-1])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_esssential_propagator_sub_dep = esssential_propagator[sub_dep];
+                            double *_essential_propagator_sub_dep = essential_propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _esssential_propagator[i] += _esssential_propagator_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
+                                _essential_propagator[i] += _essential_propagator_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
                         }
-                        one_step(&_esssential_propagator[0],
-                            &_esssential_propagator[0],
+                        one_step(&_essential_propagator[0],
+                            &_essential_propagator[0],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
 
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
@@ -264,31 +264,31 @@ void CpuPseudoDiscrete::compute_statistics(
 
                             // check sub key
                             #ifndef NDEBUG
-                            if (esssential_propagator.find(sub_dep) == esssential_propagator.end())
+                            if (essential_propagator.find(sub_dep) == essential_propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!esssential_propagator_finished[sub_dep][sub_n_segment-1])
+                            if (!essential_propagator_finished[sub_dep][sub_n_segment-1])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            half_bond_step(&esssential_propagator[sub_dep][(sub_n_segment-1)*M],
-                                q_half_step, boltz_bond_half[mx->get_unique_branch(sub_dep).monomer_type]);
+                            half_bond_step(&essential_propagator[sub_dep][(sub_n_segment-1)*M],
+                                q_half_step, boltz_bond_half[mx->get_essential_propagator_code(sub_dep).monomer_type]);
 
                             for(int i=0; i<M; i++)
                                 q_junction[i] *= q_half_step[i];
                         }
-                        double *_unique_q_junctions = unique_q_junctions[key];
+                        double *_essential_q_junctions = essential_q_junctions[key];
                         for(int i=0; i<M; i++)
-                            _unique_q_junctions[i] = q_junction[i];
+                            _essential_q_junctions[i] = q_junction[i];
 
                         // add half bond
-                        half_bond_step(q_junction, &_esssential_propagator[0], boltz_bond_half[monomer_type]);
+                        half_bond_step(q_junction, &_essential_propagator[0], boltz_bond_half[monomer_type]);
 
                         // add full segment
                         for(int i=0; i<M; i++)
-                            _esssential_propagator[i] *= exp_dw[monomer_type][i];
+                            _essential_propagator[i] *= exp_dw[monomer_type][i];
                         
                         #ifndef NDEBUG
-                        esssential_propagator_finished[key][0] = true;
+                        essential_propagator_finished[key][0] = true;
                         #endif
                     }
                 }
@@ -301,17 +301,17 @@ void CpuPseudoDiscrete::compute_statistics(
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!esssential_propagator_finished[key][n-1])
+                    if (!essential_propagator_finished[key][n-1])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
                     #endif
 
-                    one_step(&_esssential_propagator[(n-1)*M],
-                            &_esssential_propagator[n*M],
+                    one_step(&_essential_propagator[(n-1)*M],
+                            &_essential_propagator[n*M],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
 
                     #ifndef NDEBUG
-                    esssential_propagator_finished[key][n] = true;
+                    essential_propagator_finished[key][n] = true;
                     #endif
 
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
@@ -332,28 +332,28 @@ void CpuPseudoDiscrete::compute_statistics(
                 continue;
 
             int n_superposed;
-            // int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(block.first).n_segment_original;
-            std::string monomer_type = mx->get_unique_block(block.first).monomer_type;
+            // int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(block.first).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_unique_block(block.first).v_u.size();
+                n_superposed = mx->get_essential_block(block.first).v_u.size();
 
             // check keys
             #ifndef NDEBUG
-            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
+            if (essential_propagator.find(dep_v) == essential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
+            if (essential_propagator.find(dep_u) == essential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             single_partitions[p]= cb->inner_product_inverse_weight(
-                &esssential_propagator[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
-                &esssential_propagator[dep_u][0],                                          // q^dagger
+                &essential_propagator[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
+                &essential_propagator[dep_u][0],                                          // q^dagger
                 exp_dw[monomer_type])/n_superposed/cb->get_volume();
 
             // std::cout << p << ", " << single_partitions[p] << std::endl;
@@ -374,30 +374,30 @@ void CpuPseudoDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_unique_block(key).n_segment_allocated;
-            int n_segment_offset    = mx->get_unique_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_unique_block(key).n_segment_original;
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
+            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(key).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
             // check keys
             #ifndef NDEBUG
-            if (esssential_propagator.find(dep_v) == esssential_propagator.end())
+            if (essential_propagator.find(dep_v) == essential_propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (esssential_propagator.find(dep_u) == esssential_propagator.end())
+            if (essential_propagator.find(dep_u) == essential_propagator.end())
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
             // calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
                 block->second,            // phi
-                esssential_propagator[dep_v],  // dependency v
-                esssential_propagator[dep_u],  // dependency u
+                essential_propagator[dep_v],  // dependency v
+                essential_propagator[dep_u],  // dependency u
                 exp_dw[monomer_type],     // exp_dw
                 n_segment_allocated,
                 n_segment_offset,
@@ -508,7 +508,7 @@ void CpuPseudoDiscrete::get_monomer_concentration(std::string monomer_type, doub
         for(const auto& block: essential_block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_unique_block(block.first).n_segment_allocated;
+            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
             if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
@@ -569,13 +569,13 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
         auto bond_lengths = mx->get_bond_lengths();
         std::vector<double> stress(cb->get_dim());
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> unique_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // reset stress map
         for(const auto& item: essential_block_phi)
         {
             for(int d=0; d<3; d++)
-                unique_dq_dl[item.first][d] = 0.0;
+                block_dq_dl[item.first][d] = 0.0;
         }
 
         // compute stress for each block
@@ -589,23 +589,23 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
 
-            const int N           = mx->get_unique_block(key).n_segment_allocated;
-            const int N_OFFSET    = mx->get_unique_block(key).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_unique_block(key).n_segment_original;
-            std::string monomer_type = mx->get_unique_block(key).monomer_type;
+            const int N           = mx->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_unique_block(key).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
             std::complex<double> qk_1[M_COMPLEX];
             std::complex<double> qk_2[M_COMPLEX];
 
-            double *q_1 = esssential_propagator[dep_v];    // dependency v
-            double *q_2 = esssential_propagator[dep_u];    // dependency u
+            double *q_1 = essential_propagator[dep_v];    // dependency v
+            double *q_2 = essential_propagator[dep_u];    // dependency u
 
             double coeff;
             double bond_length_sq;
@@ -614,30 +614,30 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             // std::cout << "dep_v, dep_u, N_ORIGINAL, N_OFFSET, N: "
             //      << dep_v << ", " << dep_u << ", " << N_ORIGINAL << ", "<< N_OFFSET << ", " << N << std::endl;
 
-            std::array<double,3> _unique_dq_dl = unique_dq_dl[key];
+            std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // compute stress at each chain bond
             for(int n=0; n<=N; n++)
             {
-                // unique_dq_dl[key][0] = 0.0;
+                // block_dq_dl[key][0] = 0.0;
                 // at v
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    // std::cout << "case 1: " << unique_q_junctions[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
-                    if (mx->get_unique_branch(dep_v).deps.size() == 0) // if v is leaf node, skip
+                    // std::cout << "case 1: " << essential_q_junctions[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
+                    if (mx->get_essential_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
                         continue;
-                    fft->forward(unique_q_junctions[dep_v], qk_1);
+                    fft->forward(essential_q_junctions[dep_v], qk_1);
                     fft->forward(&q_2[(N-1)*M], qk_2);
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
                 // at u
                 else if (n + N_OFFSET == 0){
-                    // std::cout << "case 2: " << q_1[(N_ORIGINAL-N_OFFSET-1)*M] << ", " << unique_q_junctions[dep_u][0] << std::endl;
-                    if (mx->get_unique_branch(dep_u).deps.size() == 0) // if u is leaf node, skip
+                    // std::cout << "case 2: " << q_1[(N_ORIGINAL-N_OFFSET-1)*M] << ", " << essential_q_junctions[dep_u][0] << std::endl;
+                    if (mx->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
                         continue;
                     fft->forward(&q_1[(N_ORIGINAL-1)*M], qk_1);
-                    fft->forward(unique_q_junctions[dep_u], qk_2);
+                    fft->forward(essential_q_junctions[dep_u], qk_2);
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
@@ -674,9 +674,9 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++)
                     {
                         coeff = bond_length_sq*boltz_bond_now[i]*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_x[i];
-                        _unique_dq_dl[1] += coeff*fourier_basis_y[i];
-                        _unique_dq_dl[2] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_x[i];
+                        _block_dq_dl[1] += coeff*fourier_basis_y[i];
+                        _block_dq_dl[2] += coeff*fourier_basis_z[i];
                     }
                 }
                 else if ( DIM == 2 )
@@ -684,8 +684,8 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++)
                     {
                         coeff = bond_length_sq*boltz_bond_now[i]*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_y[i];
-                        _unique_dq_dl[1] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_y[i];
+                        _block_dq_dl[1] += coeff*fourier_basis_z[i];
                     }
                 }
                 else if ( DIM == 1 )
@@ -693,12 +693,12 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                     for(int i=0; i<M_COMPLEX; i++)
                     {
                         coeff = bond_length_sq*boltz_bond_now[i]*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _unique_dq_dl[0] += coeff*fourier_basis_z[i];
+                        _block_dq_dl[0] += coeff*fourier_basis_z[i];
                     }
                 }
-                // std::cout << "n: " << n << ", " << unique_dq_dl[key][0] << std::endl;
+                // std::cout << "n: " << n << ", " << block_dq_dl[key][0] << std::endl;
             }
-            unique_dq_dl[key] = _unique_dq_dl;
+            block_dq_dl[key] = _block_dq_dl;
         }
 
         // compute total stress
@@ -713,7 +713,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             PolymerChain& pc = mx->get_polymer(p);
 
             for(int d=0; d<cb->get_dim(); d++)
-                stress[d] += unique_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<cb->get_dim(); d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
@@ -737,14 +737,14 @@ void CpuPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v, 
         PolymerChain& pc = mx->get_polymer(polymer);
         std::string dep = pc.get_dep(v,u);
 
-        if (mx->get_unique_branches().find(dep) == mx->get_unique_branches().end())
-            throw_with_line_number("Could not find the branches '" + dep + "'. Disable 'superposition' option to obtain propagators.");
+        if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
+            throw_with_line_number("Could not find the essential propagator codes '" + dep + "'. Disable 'superposition' option to obtain propagators.");
             
-        const int N = mx->get_unique_branches()[dep].max_n_segment;
+        const int N = mx->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
-        double* partition = esssential_propagator[dep];
+        double* partition = essential_propagator[dep];
         for(int i=0; i<M; i++)
             q_out[i] = partition[(n-1)*M+i];
     }

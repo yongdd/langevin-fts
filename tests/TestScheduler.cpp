@@ -15,9 +15,9 @@ int main()
             {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13},
             {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18}, {});
 
-        Scheduler sc(mx.get_unique_branches(), 4);
+        Scheduler sc(mx.get_essential_propagator_codes(), 4);
 
-        sc.display(mx.get_unique_branches());
+        sc.display(mx.get_essential_propagator_codes());
 
         return 0;
     }
