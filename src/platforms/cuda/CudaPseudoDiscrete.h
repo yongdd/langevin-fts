@@ -40,12 +40,12 @@ private:
     double *d_phi;
 
     // key: (dep) + monomer_type, value: partition functions
-    std::map<std::string, double **> d_essential_propagator;
-    std::map<std::string, int> d_essential_propagator_size; // for deallocation
+    std::map<std::string, double **> d_propagator;
+    std::map<std::string, int> propagator_size; // for deallocation
 
-    // check if computation of essential_propagator is finished
+    // check if computation of propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> essential_propagator_finished;
+    std::map<std::string, bool *> propagator_finished;
     #endif
 
     // scheduler for propagator
@@ -54,10 +54,10 @@ private:
     const int N_STREAM = 2;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> d_essential_block_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> d_block_phi;
 
     // key: (dep), value: array pointer
-    std::map<std::string, double*> d_essential_q_junctions;
+    std::map<std::string, double*> d_q_junction_cache;
     
     std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond

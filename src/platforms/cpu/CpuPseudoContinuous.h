@@ -27,11 +27,11 @@ private:
     double *fourier_basis_z;
 
     // key: (dep) + monomer_type, value: partition functions
-    std::map<std::string, double *> essential_propagator;
+    std::map<std::string, double *> propagator;
 
-    // check if computation of essential_propagator is finished
+    // check if computation of propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> essential_propagator_finished;
+    std::map<std::string, bool *> propagator_finished;
     #endif
 
     // scheduler for propagator
@@ -40,7 +40,7 @@ private:
     const int N_STREAM = 4;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> essential_block_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> block_phi;
 
     std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond
