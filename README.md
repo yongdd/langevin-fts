@@ -16,7 +16,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
   * Pseudospectral Method (4th-order Method for Continuous Chain)
   * Anderson Mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
-  * Written in C++ and CUDA and Compiled as Python Library
+  * Written in C++/CUDA and Compiled as Python Library
   * GPU Memory Saving Option (**beta**)
   * Scheduling Parallel Computations of Propagators for Multi-core CPUs and Batched CUDA FFT
   * Provide Common Interfaces regardless of Dimension, Platform and Chain Model
@@ -134,7 +134,7 @@ conda env remove -n lfts
   5. The CPU version uses up to 4 CPUs, and the CUDA version uses batched cuFFT with a maximum batch size of 2.
 
 #### Reducing GPU Memory Usage
-  propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. In the current implementation, the polymer concentrations are computed on the CPU, whereas all calculations are parallelized on the GPU in the previous implementation. To enable this GPU memory saving option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaPseudoReduceMemoryContinuous or CudaPseudoReduceMemoryDiscrete.
+  Propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. In the current implementation, the polymer concentrations are computed on the CPU, whereas all calculations are parallelized on the GPU in the previous implementation. To enable this GPU memory saving option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaPseudoReduceMemoryContinuous or CudaPseudoReduceMemoryDiscrete.
 
 #### Anderson Mixing  
   It is necessary to store recent history of fields during iteration. For this purpose, it is natural to use `circular buffer` to reduce the number of array copies.

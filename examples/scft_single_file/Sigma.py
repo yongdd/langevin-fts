@@ -178,11 +178,7 @@ print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
 print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
-# free end initial condition. q1 is q and q2 is qdagger.
-# q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
-q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
-q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
 
 # initial fields
 print("w_A and w_B are initialized to Sigma phase.")
