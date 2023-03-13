@@ -260,7 +260,7 @@ class LFTS:
 
         # estimate execution time
         time_duration = time.time() - time_start
-        return total_saddle_iter, total_saddle_iter/self.langevin["max_step"], time_duration/self.langevin["max_step"], total_error_level
+        return total_saddle_iter, total_saddle_iter/self.langevin["max_step"], time_duration/self.langevin["max_step"], total_error_level/self.langevin["max_step"]
 
     def find_saddle_point(self,w_plus, w_minus):
             
