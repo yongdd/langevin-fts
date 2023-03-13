@@ -56,7 +56,7 @@ void Mixture::add_polymer(
     std::map<std::pair<int, int>, std::pair<std::string, int>> memory;
     for (int i=0; i<pc.get_n_blocks(); i++)
     {
-        deps = get_text_code_of_branch(
+        deps = get_propagator_code(
             memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
@@ -65,7 +65,7 @@ void Mixture::add_polymer(
             v[i], u[i]).first;
         pc.set_deps_from_edge(deps, v[i], u[i]);
 
-        deps = get_text_code_of_branch(
+        deps = get_propagator_code(
             memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
@@ -264,7 +264,7 @@ const std::map<std::string, double>& Mixture::get_bond_lengths() const
 {
     return bond_lengths;
 }
-std::pair<std::string, int> Mixture::get_text_code_of_branch(
+std::pair<std::string, int> Mixture::get_propagator_code(
     std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
     std::vector<PolymerChainBlock>& blocks,
     std::map<int, std::vector<int>>& adjacent_nodes,
@@ -292,7 +292,7 @@ std::pair<std::string, int> Mixture::get_text_code_of_branch(
                 text_and_segments = memory[v_u_pair];
             else
             {
-                text_and_segments = get_text_code_of_branch(
+                text_and_segments = get_propagator_code(
                     memory, blocks, adjacent_nodes, edge_to_array,
                     chain_end_to_q_init,
                     adjacent_nodes[in_node][i], in_node);

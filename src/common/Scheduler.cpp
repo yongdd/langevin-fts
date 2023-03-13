@@ -16,17 +16,17 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
         int job_finish_time[N_STREAM] = {0,};
 
         std::vector<std::string> job_queue[N_STREAM];
-        auto branch_hierarchies = make_branch_hierarchies(essential_propagator_codes);
+        auto propagator_hierarchies = make_propagator_hierarchies(essential_propagator_codes);
 
-        // for height of branches
-        for(size_t current_height=0; current_height<branch_hierarchies.size(); current_height++)
+        // for height of propagator
+        for(size_t current_height=0; current_height<propagator_hierarchies.size(); current_height++)
         {
-            auto& same_height_branches = branch_hierarchies[current_height];
+            auto& same_height_propagators = propagator_hierarchies[current_height];
             std::vector<std::tuple<std::string, int>> Key_resolved_time;
-            // determine when branch is ready to be computed, i.e., find dependencies resolved time.
-            for(size_t i=0; i<same_height_branches.size(); i++)
+            // determine when propagator is ready to be computed, i.e., find dependencies resolved time.
+            for(size_t i=0; i<same_height_propagators.size(); i++)
             {
-                const auto& key = same_height_branches[i];
+                const auto& key = same_height_propagators[i];
                 int max_resolved_time = 0;
                 for(size_t j=0; j<essential_propagator_codes[key].deps.size(); j++)
                 {
@@ -44,7 +44,7 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
                 Key_resolved_time.push_back(std::make_tuple(key, max_resolved_time));
             }
 
-            // sort branches with time that they are ready
+            // sort propagators with time that they are ready
             std::sort(Key_resolved_time.begin(), Key_resolved_time.end(),
                 [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
             );
@@ -57,7 +57,7 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
             //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
             // }
 
-            // add computation job to compute partition function of branches 
+            // add job to compute propagators 
             for(size_t i=0; i<Key_resolved_time.size(); i++)
             {
                 // find index of stream that has minimum job_finish_time
@@ -89,19 +89,19 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
 
         }
 
-        // sort branches with starting time
+        // sort propagators with starting time
         for(const auto& item : stream_start_finish)
-            sorted_branch_with_start_time.push_back(std::make_tuple(item.first, std::get<1>(item.second)));
-        std::sort(sorted_branch_with_start_time.begin(), sorted_branch_with_start_time.end(),
+            sorted_propagator_with_start_time.push_back(std::make_tuple(item.first, std::get<1>(item.second)));
+        std::sort(sorted_propagator_with_start_time.begin(), sorted_propagator_with_start_time.end(),
             [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
         );
 
         // collect time stamp
         std::set<int, std::less<int>> time_stamp_set;
-        for(size_t i=0; i<sorted_branch_with_start_time.size(); i++)
+        for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
         {
-            auto& key = std::get<0>(sorted_branch_with_start_time[i]);
-            int start_time = std::get<1>(sorted_branch_with_start_time[i]);
+            auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
+            int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
             int finish_time = start_time + std::max(essential_propagator_codes[key].max_n_segment, 1); // if max_n_segment is 0, add 1
             // std::cout << key << ":\n\t";
             // std::cout << "max_n_segment: " << essential_propagator_codes[key].max_n_segment;
@@ -141,22 +141,22 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
             // for each stream
             for(int s=0; s<N_STREAM; s++)
             {
-                // if iters[s] (branch iter) is not the end of job_queue
+                // if iters[s] (propagator iter) is not the end of job_queue
                 if(iters[s] != job_queue[s].end())
                 {
-                    // if the finishing time of current branch is smaller than finishing time of current time span, move to the next branch of iters[s]. 
+                    // if the finishing time of current propagator is smaller than finishing time of current time span, move to the next propagator of iters[s]. 
                     if(time_stamp[i+1] > std::get<2>(stream_start_finish[*iters[s]]))
                         iters[s]++;
                 } 
 
-                // if iters[s] (branch iter) is not the end of job_queue
+                // if iters[s] (propagator iter) is not the end of job_queue
                 if(iters[s] != job_queue[s].end())
                 {
                     // std::cout << "\t*iters[s] " << *iters[s] << std::endl;
                     // std::cout << "\ttime_stamp " << time_stamp[i] << ", " << time_stamp[i+1] << std::endl;
                     // std::cout << "\tstream_start_finish " << std::get<1>(stream_start_finish[*iters[s]]) << ", " << std::get<2>(stream_start_finish[*iters[s]]) << std::endl;
 
-                    // if the time span is in between starting time to finishing time, add branch job to the parallel_job
+                    // if the time span is in between starting time to finishing time, add propagator job to the parallel_job
                     if( time_stamp[i] >= std::get<1>(stream_start_finish[*iters[s]]) 
                         && time_stamp[i+1] <= std::get<2>(stream_start_finish[*iters[s]]))
                     {
@@ -188,14 +188,14 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
         throw_without_line_number(exc.what());
     }
 }
-std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
+std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
     std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes)
 {
     try
     {
-        std::vector<std::vector<std::string>> branch_hierarchies;
+        std::vector<std::vector<std::string>> propagator_hierarchies;
         int current_height = 0;
-        std::vector<std::string> same_height_branches; // key
+        std::vector<std::string> same_height_propagators; // key
         std::vector<std::string> remaining_branches;
 
         for(const auto& item : essential_propagator_codes)
@@ -203,25 +203,25 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
 
         while(!remaining_branches.empty())
         {
-            same_height_branches.clear();
+            same_height_propagators.clear();
             for(size_t i=0; i<remaining_branches.size(); i++)
             {
                 if (current_height == Mixture::get_height_from_key(remaining_branches[i]))
-                    same_height_branches.push_back(remaining_branches[i]);
+                    same_height_propagators.push_back(remaining_branches[i]);
             }
-            if (!same_height_branches.empty())
+            if (!same_height_propagators.empty())
             {
-                for(size_t i=0; i<same_height_branches.size(); i++)
-                    remaining_branches.erase(std::remove(remaining_branches.begin(), remaining_branches.end(), same_height_branches[i]), remaining_branches.end());
-                branch_hierarchies.push_back(same_height_branches);
+                for(size_t i=0; i<same_height_propagators.size(); i++)
+                    remaining_branches.erase(std::remove(remaining_branches.begin(), remaining_branches.end(), same_height_propagators[i]), remaining_branches.end());
+                propagator_hierarchies.push_back(same_height_propagators);
             }
             current_height++;
         }
 
-        // for(int i=0; i<branch_hierarchies.size(); i++)
+        // for(int i=0; i<propagator_hierarchies.size(); i++)
         // {
         //     std::cout << "Height:" << i << std::endl;
-        //     for(const auto &item: branch_hierarchies[i])
+        //     for(const auto &item: propagator_hierarchies[i])
         //         std::cout << item << ": " << Mixture::get_height_from_key(item) << std::endl;
         // }
 
@@ -236,16 +236,16 @@ std::vector<std::vector<std::string>> Scheduler::make_branch_hierarchies(
 
         //     if (current_height < height)
         //     {
-        //         branch_hierarchies.push_back(same_height_branches);
-        //         same_height_branches.clear();
+        //         propagator_hierarchies.push_back(same_height_propagators);
+        //         same_height_propagators.clear();
         //         current_height = height;
         //     }
-        //     same_height_branches.push_back(key);
+        //     same_height_propagators.push_back(key);
         // }
 
-        // branch_hierarchies.push_back(same_height_branches);
-        // same_height_branches.clear();
-        return branch_hierarchies;
+        // propagator_hierarchies.push_back(same_height_propagators);
+        // same_height_propagators.clear();
+        return propagator_hierarchies;
     }
     catch(std::exception& exc)
     {
@@ -258,10 +258,10 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 }
 void Scheduler::display(std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes)
 {
-    for(size_t i=0; i<sorted_branch_with_start_time.size(); i++)
+    for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
     {
-        auto& key = std::get<0>(sorted_branch_with_start_time[i]);
-        int start_time = std::get<1>(sorted_branch_with_start_time[i]);
+        auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
+        int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
         int finish_time = start_time + essential_propagator_codes[key].max_n_segment;
         std::cout << key << ":\n\t";
         std::cout << "max_n_segment: " << essential_propagator_codes[key].max_n_segment;

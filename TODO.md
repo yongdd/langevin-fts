@@ -13,7 +13,7 @@
 27. Syntax check of Keys in Mixture 
 31. Throws Exception in openMP block
 34. Detach Superposition Part from Mixture
-35. Write UnitTest: TestCompareBranchKey
+35. Write UnitTest: TestComparePropagatorKey
 36. Profiling Pseudo
 37. Reduce the number of split in scheduler
 38. Changing terminology: branch -> sub branched polymer (?)
