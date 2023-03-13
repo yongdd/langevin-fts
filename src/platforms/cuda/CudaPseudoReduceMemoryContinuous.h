@@ -31,7 +31,7 @@ private:
     double *d_q_step1, *d_q_step2;
     ftsComplex *d_qk_in;
     double **d_q;
-    double **d_esssential_propagator_sub_dep;
+    double **d_essential_propagator_sub_dep;
 
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;
@@ -47,11 +47,11 @@ private:
     cudaStream_t *streams;
 
     // key: (dep) + monomer_type, value: partition function
-    std::map<std::string, double *> esssential_propagator;
+    std::map<std::string, double *> essential_propagator;
 
-    // check if computation of esssential_propagator is finished
+    // check if computation of essential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> esssential_propagator_finished;
+    std::map<std::string, bool *> essential_propagator_finished;
     #endif
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration

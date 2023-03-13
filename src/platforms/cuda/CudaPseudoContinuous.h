@@ -39,12 +39,12 @@ private:
     double *d_phi;
 
     // key: (dep) + monomer_type, value: partition function
-    std::map<std::string, double **> d_esssential_propagator;
-    std::map<std::string, int> d_esssential_propagator_size; // for deallocation
+    std::map<std::string, double **> d_essential_propagator;
+    std::map<std::string, int> d_essential_propagator_size; // for deallocation
 
-    // check if computation of esssential_propagator is finished
+    // check if computation of essential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> esssential_propagator_finished;
+    std::map<std::string, bool *> essential_propagator_finished;
     #endif
 
     // scheduler for propagator

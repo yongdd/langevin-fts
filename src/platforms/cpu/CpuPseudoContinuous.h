@@ -27,11 +27,11 @@ private:
     double *fourier_basis_z;
 
     // key: (dep) + monomer_type, value: partition functions
-    std::map<std::string, double *> esssential_propagator;
+    std::map<std::string, double *> essential_propagator;
 
-    // check if computation of esssential_propagator is finished
+    // check if computation of essential_propagator is finished
     #ifndef NDEBUG
-    std::map<std::string, bool *> esssential_propagator_finished;
+    std::map<std::string, bool *> essential_propagator_finished;
     #endif
 
     // scheduler for propagator

@@ -11,13 +11,13 @@
 
 #include "PolymerChain.h"
 
-struct UniqueEdge{
+struct EssentialEdge{
     int max_n_segment;                                    // the maximum segment number
     std::string monomer_type;                             // monomer_type
     std::vector<std::tuple<std::string, int, int>> deps;  // tuple <key, n_segment, n_repeated>
     int height;                                           // height of branch (height of tree data Structure)
 };
-struct UniqueBlock{
+struct EssentialBlock{
     std::string monomer_type;  // monomer_type
 
     // When the 'use_superposition' is on, original block can be sliced to smaller block pieces.
@@ -35,7 +35,7 @@ struct UniqueBlock{
 };
 
 /* This stucture defines comparison function for branched key */
-struct CompareBranchKey
+struct ComparePropagatorKey
 {
     bool operator()(const std::string& str1, const std::string& str2);
 };
@@ -56,12 +56,12 @@ private:
     std::vector<PolymerChain> distinct_polymers;
 
     // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
-    std::map<std::tuple<int, std::string, std::string>, UniqueBlock> unique_blocks;
+    std::map<std::tuple<int, std::string, std::string>, EssentialBlock> essential_blocks;
 
-    // dictionary{key:non-duplicated Unique sub_branches, value: UniqueEdge}
-    std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches; 
+    // dictionary{key:non-duplicated unique propagator_codes, value: EssentialEdge}
+    std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes; 
 
-    // get text code of branch
+    // get propagator code
     // This method is implemented using top-down dynamic programming approach.
     std::pair<std::string, int> get_text_code_of_branch(
         std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
@@ -72,12 +72,12 @@ private:
         int in_node, int out_node);
 
     // add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
-    void add_unique_branch(std::map<std::string, UniqueEdge, CompareBranchKey>& unique_branches, std::string new_key, int new_n_segment);
+    void update_essential_propagator_code(std::map<std::string, EssentialEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment);
 
-    // superpose branches
-    std::map<std::string, UniqueBlock> superpose_branches_common    (std::map<std::string, UniqueBlock> remaining_keys, int minimum_n_segment);
-    std::map<std::string, UniqueBlock> superpose_branches_of_continuous_chain(std::map<std::string, UniqueBlock> u_map);
-    std::map<std::string, UniqueBlock> superpose_branches_of_discrete_chain  (std::map<std::string, UniqueBlock> u_map);
+    // superpose propagators
+    std::map<std::string, EssentialBlock> superpose_propagator_common             (std::map<std::string, EssentialBlock> remaining_keys, int minimum_n_segment);
+    std::map<std::string, EssentialBlock> superpose_propagator_of_continuous_chain(std::map<std::string, EssentialBlock> u_map);
+    std::map<std::string, EssentialBlock> superpose_propagator_of_discrete_chain  (std::map<std::string, EssentialBlock> u_map);
 
 public:
 
@@ -101,7 +101,8 @@ public:
         std::vector<int> v, std::vector<int> u,
         std::map<int, std::string> chain_end_to_q_init);
 
-    // add new polymer (All chain ends are free ends, e.g, q(r,0) = 1)
+    // add new polymer
+    // All chain ends are free ends, e.g, q(r,0) = 1.
     void add_polymer(
         double volume_fraction,
         std::vector<std::string> block_monomer_types,
@@ -115,12 +116,12 @@ public:
     int get_n_polymers() const;
     PolymerChain& get_polymer(const int p);
 
-    // get information of Unique Propagators and blocks
-    int get_unique_n_branches() const;
-    std::map<std::string, UniqueEdge, CompareBranchKey>& get_unique_branches(); 
-    UniqueEdge& get_unique_branch(std::string key);
-    std::map<std::tuple<int, std::string, std::string>, UniqueBlock>& get_unique_blocks(); 
-    UniqueBlock& get_unique_block(std::tuple<int, std::string, std::string> key);
+    // get information of essential propagators and blocks
+    int get_n_essential_propagator_codes() const;
+    std::map<std::string, EssentialEdge, ComparePropagatorKey>& get_essential_propagator_codes(); 
+    EssentialEdge& get_essential_propagator_code(std::string key);
+    std::map<std::tuple<int, std::string, std::string>, EssentialBlock>& get_essential_blocks(); 
+    EssentialBlock& get_essential_block(std::tuple<int, std::string, std::string> key);
 
     // get information from key
     static std::vector<std::tuple<std::string, int, int>> get_deps_from_key(std::string key);

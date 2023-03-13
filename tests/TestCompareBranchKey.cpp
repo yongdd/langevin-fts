@@ -2,14 +2,14 @@
 #include <string>
 #include <map>
 
-// #include "CompareBranchKey.h"
+// #include "ComparePropagatorKey.h"
 
 int main()
 {
     try
     {
         // std::string str1;
-        // std::map<std::string, int, CompareBranchKey> map;
+        // std::map<std::string, int, ComparePropagatorKey> map;
 
         // map["A"] = 0;
         // map["B"] = 1;

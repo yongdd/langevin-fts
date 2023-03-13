@@ -64,9 +64,9 @@ int main()
         if(Mixture::get_monomer_type_from_key(key) != "A")
             return -1;
 
-        // print unique sub branches
-        std::map<std::string, UniqueEdge, CompareBranchKey> unique_branches = mx.get_unique_branches();
-        for(const auto& item : unique_branches)
+        // print sub propagator_codes
+        std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes = mx.get_essential_propagator_codes();
+        for(const auto& item : essential_propagator_codes)
         {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
@@ -77,67 +77,67 @@ int main()
         }
 
         // check size of sub_deps dictionary
-        if(mx.get_unique_n_branches() != 29)
+        if(mx.get_n_essential_propagator_codes() != 29)
             return -1;
 
         // check max_n_segment
-        if(mx.get_unique_branch("B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(B12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(B12)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(B12)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("(B12)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("(A12B12)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(A12B12)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(A12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(A12)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("((A12B12)A9)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("((A12B12)A9)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
+        if(mx.get_essential_propagator_code("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
             return -1;
-        if(mx.get_unique_branch("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
+        if(mx.get_essential_propagator_code("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
             return -1;
-        if(mx.get_unique_branch("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
+        if(mx.get_essential_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
             return -1;
-        if(mx.get_unique_branch("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
             return -1;
-        if(mx.get_unique_branch("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
+        if(mx.get_essential_propagator_code("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
             return -1;
         return 0;
     }

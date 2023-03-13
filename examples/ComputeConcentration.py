@@ -64,7 +64,7 @@ for p in range(len(block_lengths)):
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 
-# print unique blocks and branches
+# print blocks and branches
 mixture.display_blocks()
 mixture.display_propagators()
 
