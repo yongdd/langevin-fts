@@ -19,7 +19,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
   * Written in C++/CUDA and Compiled as Python Library
   * GPU Memory Saving Option (**beta**)
   * Scheduling Parallel Computations of Propagators for Multi-core CPUs and Batched CUDA FFT
-  * Provide Common Interfaces regardless of Dimension, Platform and Chain Model
+  * Provide Common Interfaces Regardless of Dimension, Platform and Chain Model
 * SCFT and L-FTS:
   * AB-Type Polymer Melts in Bulk
   * Arbitrary Mixtures of Block Copolymers and Homopolymers (+ 1 Random Copolymer)
@@ -90,11 +90,11 @@ conda env remove -n lfts
 
 # How to Contribute
 + Most of python scripts implemented with this library are welcome. They could be very simple scripts for specific polymer morphologies, or modified versions of `scft.py`, `lfts.py`, etc.
-+ Changing C++/CUDA codes by yourself is not recommended. If you want to add new features to C++ part, please send me sample codes written in any programming languages.
++ Updating C++/CUDA codes by yourself is not recommended. If you want to add new features to C++ part, please send me sample codes written in any programming languages.
 + They should contain sample results, test codes, or desired outputs to check whether they work correctly.
 + They do not have to be optimal or to be excellent.
 + There should be relevant published literatures.
-+ Currently, this library is updated without considering its compatibility with previous versions. We will keep managing the contributed codes so that they can be executed in the updated version.
++ Currently, this library is updated without considering compatibility with previous versions. We will keep managing the contributed codes so that they can be executed in the updated version.
 + **Contributed codes must not contains GPL-licensed codes.**
 + Please do not send me exclusive codes of your lab. Make sure that they are allowed as open-source.
 + Any suggestions and advices are welcome, but they could not be reflected.
