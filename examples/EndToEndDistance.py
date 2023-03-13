@@ -44,8 +44,8 @@ mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
 mixture.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
 pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
 
-mixture.display_unique_blocks()
-mixture.display_unique_branches()
+mixture.display_blocks()
+mixture.display_propagators()
 
 # fields
 w = {"A": np.zeros(np.prod(nx))}

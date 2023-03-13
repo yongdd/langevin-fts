@@ -334,7 +334,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy memory from device to host
+                    // copy memory from host to device
                     std::string sub_dep = std::get<0>(deps[0]);
                     int sub_n_segment   = std::get<1>(deps[0]);
                     int sub_n_repeated;
@@ -354,7 +354,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        // STREAM 0: copy memory from device to host
+                        // STREAM 0: copy memory from host to device
                         if (d < deps.size()-1)
                         {
                             std::string sub_dep_next = std::get<0>(deps[d+1]);
@@ -391,7 +391,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy memory from device to host
+                    // copy memory from host to device
                     std::string sub_dep = std::get<0>(deps[0]);
                     int sub_n_segment   = std::get<1>(deps[0]);
                     gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep[prev], &esssential_propagator[sub_dep][(sub_n_segment-1)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
@@ -409,7 +409,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        // STREAM 0: copy memory from device to host
+                        // STREAM 0: copy memory from host to device
                         if (d < deps.size()-1)
                         {
                             std::string sub_dep_next = std::get<0>(deps[d+1]);

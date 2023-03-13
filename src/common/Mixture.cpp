@@ -814,10 +814,10 @@ UniqueBlock& Mixture::get_unique_block(std::tuple<int, std::string, std::string>
 
     return unique_blocks[key];
 }
-void Mixture::display_unique_blocks() const
+void Mixture::display_blocks() const
 {
-    // print unique blocks
-    std::cout << "--------- Unique Blocks ---------" << std::endl;
+    // print blocks
+    std::cout << "--------- Blocks ---------" << std::endl;
     std::cout << "Polymer id, key1:\n\tsuperposed, n_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
@@ -865,13 +865,13 @@ void Mixture::display_unique_blocks() const
     }
     std::cout << "------------------------------------" << std::endl;
 }
-void Mixture::display_unique_branches() const
+void Mixture::display_propagators() const
 {
-    // print unique branches
+    // print propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
 
-    std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\tsuperposed, max_n_segment, height" << std::endl;
     
     for(const auto& item : unique_branches)
@@ -892,16 +892,16 @@ void Mixture::display_unique_branches() const
             std::cout << "O, ";
         std::cout << item.second.max_n_segment << ", " << item.second.height << std::endl;
     }
-    std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
+    std::cout << "Total number of iterations to compute all propagators: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
 }
 
-void Mixture::display_unique_sub_branches() const
+void Mixture::display_sub_propagators() const
 {
     // print unique sub branches
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
-    std::cout << "--------- Unique Branches ---------" << std::endl;
+    std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\tsuperposed, max_n_segment, height, deps," << std::endl;
     
     for(const auto& item : unique_branches)
@@ -923,7 +923,7 @@ void Mixture::display_unique_sub_branches() const
         }
         std::cout << std::endl;
     }
-    std::cout << "Total number of propagator iterations to compute polymer concentration: " << total_segments << std::endl;
+    std::cout << "Total number of iterations to compute all propagators: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
 }
 

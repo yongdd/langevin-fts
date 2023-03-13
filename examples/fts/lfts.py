@@ -110,7 +110,6 @@ class LFTS:
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
 
         # (C++ class) Mixture box
-        print(params["segment_lengths"])
         if "use_superposition" in params:
             mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
         else:
@@ -142,6 +141,7 @@ class LFTS:
         # -------------- print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
+        print("Statistical Segment Lengths:", params["segment_lengths"])
         print("Box Dimension: %d" % (cb.get_dim()))
         print("Nx:", cb.get_nx())
         print("Lx:", cb.get_lx())
@@ -149,7 +149,7 @@ class LFTS:
         print("Volume: %f" % (cb.get_volume()))
         
         print("%s chain model" % (params["chain_model"]))
-        print("chi_n: %f," % (params["chi_n"]))
+        print("chi_n (N_ref): %f" % (params["chi_n"]))
         print("Conformational asymmetry (epsilon): %f" %
             (params["segment_lengths"]["A"]/params["segment_lengths"]["B"]))
 
@@ -161,12 +161,12 @@ class LFTS:
                  mixture.get_polymer(p).get_n_segment_total()))
             # add display monomer types and lengths
 
-        print("Invariant Polymerization Index: %d" % (params["langevin"]["nbar"]))
+        print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
-        mixture.display_unique_blocks()
-        mixture.display_unique_branches()
+        mixture.display_blocks()
+        mixture.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -210,8 +210,12 @@ class LFTS:
         # structure function
         sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx())),np.float64)
 
+        # create an empty array for field update algorithm
+        normal_noise_prev = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+
         # init timers
         total_saddle_iter = 0
+        total_error_level = 0
         time_start = time.time()
 
         #------------------ run ----------------------
@@ -220,21 +224,18 @@ class LFTS:
         for langevin_step in range(1, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # update w_minus
-            total_error_level = 0.0
-            for w_step in ["predictor", "corrector"]:
-                if w_step == "predictor":
-                    w_minus_copy = w_minus.copy()
-                    normal_noise = np.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
-                    lambda1 = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
-                    w_minus += -lambda1*self.langevin["dt"] + normal_noise
-                elif w_step == "corrector": 
-                    lambda2 = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
-                    w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*self.langevin["dt"] + normal_noise
-                    
-                phi, saddle_iter, error_level = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
-                total_saddle_iter += saddle_iter
-                total_error_level += error_level
+            # update w_minus      
+            normal_noise_current = np.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
+            lambda_minus = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
+            w_minus += -lambda_minus*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
+
+            # swap two noise arrays
+            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+
+            # find saddle point of the pressure field
+            phi, saddle_iter, error_level = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
+            total_saddle_iter += saddle_iter
+            total_error_level += error_level
 
             # calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:

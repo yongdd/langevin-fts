@@ -16,8 +16,8 @@ int main()
             {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18}, {});
 
         // display all blocks and branches
-        mx.display_unique_blocks();
-        mx.display_unique_branches();
+        mx.display_blocks();
+        mx.display_propagators();
 
         // test get_deps_from_key
         std::string key;

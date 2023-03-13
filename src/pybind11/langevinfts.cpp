@@ -75,8 +75,8 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_unique_branch", &Mixture::get_unique_branch)
         .def("get_unique_blocks", &Mixture::get_unique_blocks)
         .def("get_unique_block", &Mixture::get_unique_block)
-        .def("display_unique_branches", &Mixture::display_unique_branches)
-        .def("display_unique_blocks", &Mixture::display_unique_blocks);
+        .def("display_propagators", &Mixture::display_propagators)
+        .def("display_blocks", &Mixture::display_blocks);
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update_bond_function", &Pseudo::update_bond_function)

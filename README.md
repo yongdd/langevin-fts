@@ -24,7 +24,7 @@ Langevin Field-Theoretic Simulation (L-FTS) for Python
   * AB-Type Polymer Melts in Bulk
   * Arbitrary Mixtures of Block Copolymers and Homopolymers (+ 1 Random Copolymer)
   * Box Size Determination by Stress Calculation (SCFT only)
-  * Leimkuhler-Matthews Method for Updating Exchange Field
+  * Leimkuhler-Matthews Method for Updating Exchange Field (**beta**)
   * Written in Python
 * Distributed under the Apache License 2.0
 

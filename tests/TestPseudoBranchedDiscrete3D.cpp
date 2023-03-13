@@ -171,13 +171,13 @@ int main()
 
         Mixture* mx1 = new Mixture("Discrete", 0.15, bond_lengths, false);
         mx1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx1->display_unique_blocks();
-        mx1->display_unique_branches();
+        mx1->display_blocks();
+        mx1->display_propagators();
 
         Mixture* mx2 = new Mixture("Discrete", 0.15, bond_lengths, true);
         mx2->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx2->display_unique_blocks();
-        mx2->display_unique_branches();
+        mx2->display_blocks();
+        mx2->display_propagators();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL

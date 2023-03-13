@@ -218,16 +218,16 @@ int main()
             mx1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
-        mx1->display_unique_blocks();
-        mx1->display_unique_branches();
+        mx1->display_blocks();
+        mx1->display_propagators();
 
         Mixture* mx2 = new Mixture("Discrete", 0.15, bond_lengths, true);
         for(size_t p=0; p<block_monomer_types.size(); p++){
             mx2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
-        mx2->display_unique_blocks();
-        mx2->display_unique_branches();
+        mx2->display_blocks();
+        mx2->display_propagators();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL

@@ -316,7 +316,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy memory from device to host
+                    // copy memory from host to device
                     std::string sub_dep = std::get<0>(deps[0]);
                     int sub_n_segment   = std::get<1>(deps[0]);
                     int sub_n_repeated;
@@ -336,7 +336,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        // STREAM 0: copy memory from device to host
+                        // STREAM 0: copy memory from host to device
                         if (d < deps.size()-1)
                         {
                             std::string sub_dep_next = std::get<0>(deps[d+1]);
@@ -370,7 +370,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy memory from device to host
+                    // copy memory from host to device
                     std::string sub_dep = std::get<0>(deps[0]);
                     int sub_n_segment   = std::get<1>(deps[0]);
                     gpu_error_check(cudaMemcpy(d_esssential_propagator_sub_dep[prev], &esssential_propagator[sub_dep][(sub_n_segment)*M], sizeof(double)*M, cudaMemcpyHostToDevice));
@@ -388,7 +388,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                         #endif
 
-                        // STREAM 0: copy memory from device to host
+                        // STREAM 0: copy memory from host to device
                         if (d < deps.size()-1)
                         {
                             std::string sub_dep_next = std::get<0>(deps[d+1]);
@@ -433,7 +433,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
                 #endif
 
-                // STREAM 0: copy memory from device to host
+                // STREAM 0: copy memory from host to device
                 gpu_error_check(cudaMemcpyAsync(&_esssential_propagator[(n-1)*M], d_q[prev], sizeof(double)*M,
                     cudaMemcpyDeviceToHost, streams[0]));
 
@@ -777,7 +777,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
             prev = 0;
             next = 1;
 
-            // copy memory from device to host
+            // copy memory from host to device
             gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][0], &q_1[(N_ORIGINAL-N_OFFSET)*M], sizeof(double)*M,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(&d_q_two_partition[prev][M], &q_2[0],                       sizeof(double)*M,cudaMemcpyHostToDevice));
 

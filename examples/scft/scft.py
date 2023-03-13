@@ -103,7 +103,6 @@ class SCFT:
             polymer.update({"u":u_list})
 
         # (C++ class) Mixture box
-        print(params["segment_lengths"])
         if "use_superposition" in params:
             mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
         else:
@@ -151,6 +150,7 @@ class SCFT:
         # -------------- print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
+        print("Statistical Segment Lengths:", params["segment_lengths"])
         print("Box Dimension: %d" % (cb.get_dim()))
         print("Nx:", cb.get_nx())
         print("Lx:", cb.get_lx())
@@ -158,7 +158,7 @@ class SCFT:
         print("Volume: %f" % (cb.get_volume()))
         
         print("%s chain model" % (params["chain_model"]))
-        print("chi_n: %f," % (params["chi_n"]))
+        print("chi_n (N_ref): %f" % (params["chi_n"]))
         print("Conformational asymmetry (epsilon): %f" %
             (params["segment_lengths"]["A"]/params["segment_lengths"]["B"]))
 
@@ -170,8 +170,8 @@ class SCFT:
                  mixture.get_polymer(p).get_n_segment_total()))
             # add display monomer types and lengths
 
-        mixture.display_unique_blocks()
-        mixture.display_unique_branches()
+        mixture.display_blocks()
+        mixture.display_propagators()
 
         #  Save Internal Variables
         self.chi_n = params["chi_n"]

@@ -134,8 +134,8 @@ int main()
                     //     sum += cb->get_dv(i);
                     // std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-                    //mx->display_unique_branches();
-                    // mx->display_unique_blocks();
+                    //mx->display_propagators();
+                    // mx->display_blocks();
 
                     std::string line;
                     std::ifstream input_field_file;
