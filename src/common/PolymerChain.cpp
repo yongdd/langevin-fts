@@ -4,6 +4,7 @@
 #include <cassert>
 #include <algorithm>
 #include <stack>
+#include <set>
 
 #include "PolymerChain.h"
 #include "Exception.h"
@@ -81,7 +82,7 @@ PolymerChain::PolymerChain(
     this->alpha = alpha;
 
     // construct adjacent_nodes
-    for(size_t i=0; i<contour_lengths.size(); i++)
+    for(size_t i=0; i<v.size(); i++)
     {
         adjacent_nodes[v[i]].push_back(u[i]);
         adjacent_nodes[u[i]].push_back(v[i]);
@@ -102,47 +103,8 @@ PolymerChain::PolymerChain(
     //     std::cout << node.second[node.second.size()-1] << "]" << std::endl;
     // }
 
-    // detect a cycle and isolated nodes in the block copolymer graph using depth first search
-    std::map<int, bool> is_visited;
-    for (size_t i = 0; i < contour_lengths.size(); i++)
-        is_visited[v[i]] = false;
-
-    std::stack<std::pair<int,int>> connected_nodes;
-    connected_nodes.push(std::make_pair(v[0],-1));
-    while (!connected_nodes.empty())
-    {
-        //std::cout << "connected_nodes" << connected_nodes.top() << std::endl;
-
-        // pop item and visit
-        int cur = connected_nodes.top().first;
-        int parent = connected_nodes.top().second;
-        is_visited[cur] = true;
-        connected_nodes.pop();
-
-        // add adjacent_nodes at stack
-        auto nodes = adjacent_nodes[cur];
-        for(size_t i=0; i<nodes.size();i++)
-        {
-            if (is_visited[nodes[i]] && nodes[i] != parent)
-            {
-                throw_with_line_number("A cycle is detected, which contains nodes " 
-                    + std::to_string(nodes[i]) + " and " + std::to_string(parent)
-                    + ". Only acyclic block copolymer is allowed.");
-            }
-            else if(! is_visited[nodes[i]])
-            {
-                connected_nodes.push(std::make_pair(nodes[i], cur));
-            }
-        }
-    }
-    for (size_t i=0; i<contour_lengths.size(); i++)
-    {
-        if (!is_visited[v[i]])
-            throw_with_line_number("There are disconnected nodes. Please check node number: " + std::to_string(v[i]) + ".");
-    }
-
     // construct edge nodes
-    for (size_t i=0; i<contour_lengths.size(); i++)
+    for (size_t i=0; i<v.size(); i++)
     {
         if (edge_to_array.count(std::make_pair(v[i], u[i])) > 0)
         {
@@ -154,6 +116,68 @@ PolymerChain::PolymerChain(
             edge_to_array[std::make_pair(v[i],u[i])] = i;
             edge_to_array[std::make_pair(u[i],v[i])] = i;
         }
+    }
+
+    // detect a cycle and isolated nodes in the block copolymer graph using depth first search
+    std::map<int, bool> is_visited;
+    for (size_t i = 0; i < v.size(); i++)
+        is_visited[v[i]] = false;
+    for (size_t i = 0; i < u.size(); i++)
+        is_visited[u[i]] = false;
+
+    std::stack<std::pair<int,int>> connected_nodes;
+    // starting node is v[0]
+    connected_nodes.push(std::make_pair(v[0],-1));
+    // perform depth first search
+    while (!connected_nodes.empty())
+    {
+        // get one item and visit
+        int cur = connected_nodes.top().first;
+        int parent = connected_nodes.top().second;
+        is_visited[cur] = true;
+
+        // remove the item
+        connected_nodes.pop();
+
+        // add adjacent_nodes at stack 
+        auto nodes = adjacent_nodes[cur];
+        for(size_t i=0; i<nodes.size();i++)
+        {
+            if (is_visited[nodes[i]] && nodes[i] != parent)
+            {
+                throw_with_line_number("A cycle is detected, which contains nodes " 
+                    + std::to_string(nodes[i]) + " and " + std::to_string(parent)
+                    + ". Only acyclic branched polymers are allowed.");
+            }
+            else if(!is_visited[nodes[i]])
+            {
+                connected_nodes.push(std::make_pair(nodes[i], cur));
+            }
+        }
+    }
+
+    // collect isolated nodes
+    std::set<int> isolated_nodes_set;
+    for (size_t i=0; i<v.size(); i++)
+    {
+        if (!is_visited[v[i]])
+            isolated_nodes_set.insert(v[i]);
+    }
+    for (size_t i=0; i<u.size(); i++)
+    {
+        if (!is_visited[u[i]])
+            isolated_nodes_set.insert(u[i]);
+    }
+
+    // print isolated nodes
+    std::vector<int> isolated_nodes(isolated_nodes_set.begin(), isolated_nodes_set.end());
+    if (isolated_nodes.size() > 0)
+    {
+        std::string error_message = "There is no route from node " + std::to_string(v[0]) + " to nodes: "
+            + std::to_string(isolated_nodes[0]);
+        for (size_t i=1; i<isolated_nodes.size(); i++)
+            error_message += ", " + std::to_string(isolated_nodes[i]);
+        throw_with_line_number(error_message + ".");
     }
 }
 int PolymerChain::get_n_blocks() const
