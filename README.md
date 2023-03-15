@@ -2,7 +2,7 @@
 Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
-This is not just an application, but it contains a library for polymer field theory simulations. The most time-consuming and common routines in polymer field theory simulations are the computation of stresses, partition functions and concentrations of polymers in external fields. These routines are written in C++/CUDA and provided as python classes in library. With these classes, you can write your own programs using python language. It requires a little programming, but you can easily customize your applications and extend them by adopting numerous useful python libraries. You can focus on your researches rather than programming. This library supports following features:
+This is not just an application, but it contains a library for polymer field theory simulations. The most time-consuming and common routines in polymer field theory simulations are the computation of stresses, partition functions and concentrations of polymers in external fields. These routines are written in C++/CUDA and provided as python classes in this library. With these classes, you can write your own programs using python language. It requires a little programming, but your applications can be easily customized and extended by adopting numerous useful python libraries. Focus on your researches rather than programming. This library supports following features:
   * Any number of monomer types
   * Arbitrary acyclic branched polymers (**beta**)
   * Arbitrary mixtures of block copolymers and homopolymers (**beta**)
@@ -14,12 +14,14 @@ This is not just an application, but it contains a library for polymer field the
   * Automatic optimization to compute chain propagators with minimal iterations for arbitrary acyclic branched polymers (**beta**)
   * Pseudospectral method (4th-order method for continuous chain)
   * Anderson mixing
+  * Platforms: MKL (CPU) and CUDA (GPU)
   * GPU memory saving option (**beta**)
   * Parallel computations of propagators for multi-core CPUs and batched cuFFT
-  * Common interfaces regardless of simulation box dimension, platform and chain model
+  * Common interfaces regardless of chain model, simulation box dimension, and platform
 
-It also provides SCFT and L-FTS, which are implemented using the above python shared library. They supports following features:
+Using the above python shared library, SCFT and L-FTS are implemented. They supports following features:
   * AB-type polymer melts in bulk
+  * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers (+ 1 random copolymer)
   * Box size determination by stress calculation (SCFT only)
   * Leimkuhler-Matthews method for updating exchange field (L-FTS only) (**beta**)
