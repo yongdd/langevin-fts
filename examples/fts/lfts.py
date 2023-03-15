@@ -224,7 +224,7 @@ class LFTS:
         for langevin_step in range(1, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # update w_minus      
+            # update w_minus using Leimkuhler-Matthews method
             normal_noise_current = np.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
             lambda_minus = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
             w_minus += -lambda_minus*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
