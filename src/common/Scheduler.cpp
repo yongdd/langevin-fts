@@ -31,7 +31,7 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
                 for(size_t j=0; j<essential_propagator_codes[key].deps.size(); j++)
                 {
                     const auto& sub_key = std::get<0>(essential_propagator_codes[key].deps[j]);
-                    const auto& sub_n_segment = std::max(std::get<1>(essential_propagator_codes[key].deps[j]),1); // add 1, if it is 0
+                    int sub_n_segment = std::max(std::get<1>(essential_propagator_codes[key].deps[j]),1); // add 1, if it is 0
                     #ifndef NDEBUG
                     if (stream_start_finish.find(sub_key) == stream_start_finish.end())
                         throw_with_line_number("Could not find [" + sub_key + "] in stream_start_finish.");
