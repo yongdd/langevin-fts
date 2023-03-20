@@ -223,7 +223,7 @@ int main()
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-            std::cout<< "Partial Partition error: "<< error << std::endl;
+            std::cout<< "Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
@@ -231,13 +231,13 @@ int main()
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_0_last[i] - q_1_0_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-            std::cout<< "Complementary Partial Partition error: "<< error << std::endl;
+            std::cout<< "Complementary Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
             double QQ = pseudo->get_total_partition(p);
             error = std::abs(QQ-1.5701353236e-03/(Lx*Ly*Lz));
-            std::cout<< "Total Partial Partition error: "<< error << std::endl;
+            std::cout<< "Total Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
