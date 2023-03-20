@@ -58,7 +58,7 @@ pseudo.compute_statistics({"A":w["A"]}, q_init)
 
 N = round(1.0/ds)
 for n in range(10, round(N)+1, 10):
-                                # output, p, v ,u, n
+                                       # p, v ,u, n
      q_out = pseudo.get_chain_propagator(0, 0, 1, n)
      sum = 0.0
      x_square = 0.0

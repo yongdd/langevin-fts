@@ -13,14 +13,15 @@ SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #---------- FTS_LIBRARIES -----------
+IF(CMAKE_BUILD_TYPE STREQUAL Release)
+    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
+ENDIF()
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     SET(CMAKE_VERBOSE_MAKEFILE ON)
     ADD_COMPILE_OPTIONS(-Wall -Wextra -g)
     # -fsanitize=address -fno-omit-frame-pointer)
     # SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
     # SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" -fsanitize=address -fno-omit-frame-pointer)
-ELSE()
-    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
 ENDIF()
 
 # OpenMP
