@@ -26,9 +26,9 @@ private:
     std::vector<PolymerChainBlock> blocks;  // information of blocks, which contains 'monomer_type', 'n_segments', '
                                             // bond_length_sq', 'contour_length', and 'vertices'.
 
-    std::map<int, std::vector<int>> adjacent_nodes;             // adjacent nodes
-    std::map<std::pair<int, int>, int>         edge_to_array;   // array index for each edge
-    std::map<std::pair<int, int>, std::string> edge_to_deps;    // prerequisite propagators as a text
+    std::map<int, std::vector<int>> adjacent_nodes;                     // adjacent nodes
+    std::map<std::pair<int, int>, int>         edge_to_block_index;     // array index for each edge
+    std::map<std::pair<int, int>, std::string> edge_to_propagator_key;  // propagator key as a text
 
     // grafting point.
     // For instance, 'chain_end_to_q_init[a] = b' means that
@@ -55,10 +55,10 @@ public:
     int get_n_segment_total() const;
     int get_n_segment(const int idx) const;
 
-    int get_array_idx(const int v, const int u);
+    int get_block_index_from_edge(const int v, const int u);
     std::map<int, std::vector<int>>& get_adjacent_nodes();
-    std::map<std::pair<int, int>, int>& get_array_from_edge();
-    void set_deps_from_edge(const std::string deps, const int v, const int u);
-    std::string get_dep(const int v, const int u);
+    std::map<std::pair<int, int>, int>& get_block_indexes();
+    void set_propagator_key(const std::string deps, const int v, const int u);
+    std::string get_propagator_key(const int v, const int u);
 };
 #endif

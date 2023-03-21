@@ -45,34 +45,34 @@ void Mixture::add_polymer(
     std::vector<int> v, std::vector<int> u,
     std::map<int, std::string> chain_end_to_q_init)
 {
-    std::string deps;
+    std::string propagator_code;
     distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
         volume_fraction, block_monomer_types, contour_lengths,
         v, u, chain_end_to_q_init));
 
     PolymerChain& pc = distinct_polymers.back();
 
-    // generate text codes and find dependency for each block for each direction
+    // generate propagator code for each block and each direction
     std::map<std::pair<int, int>, std::pair<std::string, int>> memory;
     for (int i=0; i<pc.get_n_blocks(); i++)
     {
-        deps = get_propagator_code(
+        propagator_code = generate_propagator_code(
             memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
-            pc.get_array_from_edge(),
+            pc.get_block_indexes(),
             chain_end_to_q_init,
             v[i], u[i]).first;
-        pc.set_deps_from_edge(deps, v[i], u[i]);
+        pc.set_propagator_key(propagator_code, v[i], u[i]);
 
-        deps = get_propagator_code(
+        propagator_code = generate_propagator_code(
             memory,
             pc.get_blocks(),
             pc.get_adjacent_nodes(),
-            pc.get_array_from_edge(),
+            pc.get_block_indexes(),
             chain_end_to_q_init,
             u[i], v[i]).first;
-        pc.set_deps_from_edge(deps, u[i], v[i]);
+        pc.set_propagator_key(propagator_code, u[i], v[i]);
     }
 
     // temporary map for the new polymer
@@ -84,8 +84,8 @@ void Mixture::add_polymer(
     {
         int v = blocks[b].v;
         int u = blocks[b].u;
-        std::string dep_v = pc.get_dep(v, u);
-        std::string dep_u = pc.get_dep(u, v);
+        std::string dep_v = pc.get_propagator_key(v, u);
+        std::string dep_u = pc.get_propagator_key(u, v);
 
         if (dep_v < dep_u){
             dep_v.swap(dep_u);
@@ -178,8 +178,8 @@ void Mixture::add_polymer(
                             int v = v_adj_node;
                             int u = std::get<0>(v_u);
 
-                            std::string dep_v = pc.get_dep(v, u);
-                            std::string dep_u = pc.get_dep(u, v);
+                            std::string dep_v = pc.get_propagator_key(v, u);
+                            std::string dep_u = pc.get_propagator_key(u, v);
                             // std::cout << dep_v << ", " << dep_u << ", " << pc.get_block(v,u).n_segment << std::endl;
 
                             auto key = std::make_tuple(distinct_polymers.size()-1, dep_v);
@@ -264,11 +264,11 @@ const std::map<std::string, double>& Mixture::get_bond_lengths() const
 {
     return bond_lengths;
 }
-std::pair<std::string, int> Mixture::get_propagator_code(
+std::pair<std::string, int> Mixture::generate_propagator_code(
     std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
     std::vector<PolymerChainBlock>& blocks,
     std::map<int, std::vector<int>>& adjacent_nodes,
-    std::map<std::pair<int, int>, int>& edge_to_array,
+    std::map<std::pair<int, int>, int>& edge_to_block_index,
     std::map<int, std::string>& chain_end_to_q_init,
     int in_node, int out_node)
 {
@@ -292,8 +292,8 @@ std::pair<std::string, int> Mixture::get_propagator_code(
                 text_and_segments = memory[v_u_pair];
             else
             {
-                text_and_segments = get_propagator_code(
-                    memory, blocks, adjacent_nodes, edge_to_array,
+                text_and_segments = generate_propagator_code(
+                    memory, blocks, adjacent_nodes, edge_to_block_index,
                     chain_end_to_q_init,
                     adjacent_nodes[in_node][i], in_node);
                 memory[v_u_pair] = text_and_segments;
@@ -327,8 +327,8 @@ std::pair<std::string, int> Mixture::get_propagator_code(
     }
 
     // add monomer_type at the end of text code
-    text += blocks[edge_to_array[std::make_pair(in_node, out_node)]].monomer_type;
-    auto text_and_segments_total = std::make_pair(text, blocks[edge_to_array[std::make_pair(in_node, out_node)]].n_segment);
+    text += blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].monomer_type;
+    auto text_and_segments_total = std::make_pair(text, blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].n_segment);
     memory[std::make_pair(in_node, out_node)] = text_and_segments_total;
 
     return text_and_segments_total;
