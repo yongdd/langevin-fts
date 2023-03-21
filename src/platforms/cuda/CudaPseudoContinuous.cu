@@ -781,8 +781,8 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
 
         for(size_t b=0; b<blocks.size(); b++)
         {
-            std::string dep_v = pc.get_dep(blocks[b].v, blocks[b].u);
-            std::string dep_u = pc.get_dep(blocks[b].u, blocks[b].v);
+            std::string dep_v = pc.get_propagator_key(blocks[b].v, blocks[b].u);
+            std::string dep_u = pc.get_propagator_key(blocks[b].u, blocks[b].v);
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
 
@@ -926,7 +926,7 @@ void CudaPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int 
     {
         const int M = cb->get_n_grid();
         PolymerChain& pc = mx->get_polymer(polymer);
-        std::string dep = pc.get_dep(v,u);
+        std::string dep = pc.get_propagator_key(v,u);
 
         if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'superposition' option to obtain propagators.");

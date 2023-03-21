@@ -63,11 +63,11 @@ private:
 
     // get propagator code
     // This method is implemented using top-down dynamic programming approach.
-    std::pair<std::string, int> get_propagator_code(
+    std::pair<std::string, int> generate_propagator_code(
         std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
         std::vector<PolymerChainBlock>& blocks,
         std::map<int, std::vector<int>>& adjacent_nodes,
-        std::map<std::pair<int, int>, int>& edge_to_array,
+        std::map<std::pair<int, int>, int>& edge_to_block_index,
         std::map<int, std::string>& chain_end_to_q_init,
         int in_node, int out_node);
 

@@ -50,11 +50,11 @@ PYBIND11_MODULE(langevinfts, m)
         //.def("get_block_species", &PolymerChain::get_block_species)
         .def("get_n_segment_total", &PolymerChain::get_n_segment_total)
         .def("get_n_segment", &PolymerChain::get_n_segment)
-        .def("get_array_idx", &PolymerChain::get_array_idx)
+        .def("get_block_index_from_edge", &PolymerChain::get_block_index_from_edge)
         .def("get_adjacent_nodes", &PolymerChain::get_adjacent_nodes)
-        .def("get_array_from_edge", &PolymerChain::get_array_from_edge)
-        //.def("set_deps_from_edge", &PolymerChain::set_deps_from_edge)
-        .def("get_dep", &PolymerChain::get_dep);
+        .def("get_block_indexes", &PolymerChain::get_block_indexes)
+        //.def("set_propagator_key", &PolymerChain::set_propagator_key)
+        .def("get_propagator_key", &PolymerChain::get_propagator_key);
 
     py::class_<Mixture>(m, "Mixture")
         .def(py::init<std::string, double, std::map<std::string, double>, bool>())

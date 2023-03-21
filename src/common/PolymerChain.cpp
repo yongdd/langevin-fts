@@ -106,15 +106,15 @@ PolymerChain::PolymerChain(
     // construct edge nodes
     for (size_t i=0; i<v.size(); i++)
     {
-        if (edge_to_array.count(std::make_pair(v[i], u[i])) > 0)
+        if (edge_to_block_index.count(std::make_pair(v[i], u[i])) > 0)
         {
             throw_with_line_number("There are duplicated edges. Please check the edge between ("
                 + std::to_string(v[i]) + ", " + std::to_string(u[i]) + ").");
         }
         else
         {
-            edge_to_array[std::make_pair(v[i],u[i])] = i;
-            edge_to_array[std::make_pair(u[i],v[i])] = i;
+            edge_to_block_index[std::make_pair(v[i],u[i])] = i;
+            edge_to_block_index[std::make_pair(u[i],v[i])] = i;
         }
     }
 
@@ -203,17 +203,17 @@ double PolymerChain::get_volume_fraction() const
 {
     return volume_fraction;
 }
-int PolymerChain::get_array_idx(const int v, const int u)
+int PolymerChain::get_block_index_from_edge(const int v, const int u)
 {
-    if (edge_to_array.find(std::make_pair(v,u)) == edge_to_array.end())
+    if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
         throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
-    return edge_to_array[std::make_pair(v, u)];
+    return edge_to_block_index[std::make_pair(v, u)];
 }
 struct PolymerChainBlock& PolymerChain::get_block(const int v, const int u)
 {
-    if (edge_to_array.find(std::make_pair(v,u)) == edge_to_array.end())
+    if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
         throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
-    return blocks[edge_to_array[std::make_pair(v, u)]];
+    return blocks[edge_to_block_index[std::make_pair(v, u)]];
 }
 std::vector<PolymerChainBlock>& PolymerChain::get_blocks()
 {
@@ -223,16 +223,16 @@ std::map<int, std::vector<int>>& PolymerChain::get_adjacent_nodes()
 {
     return adjacent_nodes;
 }
-std::map<std::pair<int, int>, int>& PolymerChain::get_array_from_edge()
+std::map<std::pair<int, int>, int>& PolymerChain::get_block_indexes()
 {
-    return edge_to_array;
+    return edge_to_block_index;
 }
-void PolymerChain::set_deps_from_edge(const std::string deps, const int v, const int u)
+void PolymerChain::set_propagator_key(const std::string code, const int v, const int u)
 {
-    edge_to_deps[std::make_pair(v, u)] = deps;
+    edge_to_propagator_key[std::make_pair(v, u)] = code;
 }
-std::string PolymerChain::get_dep(const int v, const int u) {
-    if (edge_to_deps.find(std::make_pair(v,u)) == edge_to_deps.end())
+std::string PolymerChain::get_propagator_key(const int v, const int u) {
+    if (edge_to_propagator_key.find(std::make_pair(v,u)) == edge_to_propagator_key.end())
         throw_with_line_number("There is no such block (v, u): (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
-    return edge_to_deps[std::make_pair(v,u)];
+    return edge_to_propagator_key[std::make_pair(v,u)];
 }
