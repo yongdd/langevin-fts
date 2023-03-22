@@ -75,8 +75,9 @@ conda env remove -n lfts
 # User Guide
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To learn how to use it, please see `examples/ComputeConcentration.py`. 
 + The SCFT and L-FTS are implemented on the python shared library. Currently, only `AB`-type polymers are supported. To understand the entire process of simulations, please see sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations.
-  + Set 'reduce_gpu_memory_usage=True' (Default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 5 ~ 60% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
-  + Set 'use_superposition=False, (Default: True) if you want to use 'pseudo.get_polymer_concentration()', which returns block-wise concentrations of a selected polymer species, and 'pseudo.get_chain_propagator()', which returns a propagator of a selected branch.
+  + Set 'reduce_gpu_memory_usage=True' (default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 5 ~ 60% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
+  + Set 'use_superposition=False, (default: True) if you want to use 'pseudo.get_polymer_concentration()', which returns block-wise concentrations of a selected polymer species, and 'pseudo.get_chain_propagator()', which returns a propagator of a selected branch.
+  + If your SCFT calculation does not converge, reduce the "am.mix_min" (default:0.1) and "am.mix_init" (default:0.1) in parameter set. Please see 'examples/scft/BottleBrushLamella3D.py'.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + Use FTS in 1D and 2D only for the tests. It does not have a physical meaning.
   + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. As an example, please see 'examples/scft/Gyroid.py'.
