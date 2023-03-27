@@ -64,7 +64,7 @@ params = {
                           # where "a_Ref" is reference statistical segment length
                           # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
-    "use_superposition":True,   # Superpose multiple propagators when solving the modified diffusion equations. 
+    "use_superposition":True,   # Aggregate multiple propagators when solving diffusion equations for speedup. 
                                 # To obtain concentration of each block, disable this option.
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.

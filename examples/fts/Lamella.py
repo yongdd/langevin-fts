@@ -22,14 +22,14 @@ params = {
 
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/16,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n":20,                 # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n":20,                 # Bare interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
 
     "distinct_polymers":[{      # Distinct Polymers
-        "volume_fraction":1.0,  # volume fraction of polymer chain
+        "volume_fraction":1.0,  # Volume fraction of polymer chain
         "blocks":[              # AB diBlock Copolymer
             {"type":"A", "length":f, }, # A-block
             {"type":"B", "length":1-f}, # B-block
@@ -38,19 +38,19 @@ params = {
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
         "dt":8.0,               # Langevin step interval, delta tau*N_Ref
-        "nbar":1024,            # invariant polymerization index, nbar of N_Ref
+        "nbar":1024,            # Invariant polymerization index, nbar of N_Ref
     },
     
     "recording":{                       # Recording Simulation Data
         "dir":"data_simulation",        # Directory name
-        "recording_period":1000,        # period for recording concentrations and fields
-        "sf_computing_period":10,       # period for computing structure function
-        "sf_recording_period":10000,    # period for recording structure function
+        "recording_period":1000,        # Period for recording concentrations and fields
+        "sf_computing_period":10,       # Period for computing structure function
+        "sf_recording_period":10000,    # Period for recording structure function
     },
 
     "saddle":{                # Iteration for the pressure field 
-        "max_iter" :100,      # maximum the number of iterations
-        "tolerance":1e-4,     # tolerance of incompressibility 
+        "max_iter" :100,      # Maximum number of iterations
+        "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
     "am":{
