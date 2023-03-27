@@ -84,7 +84,7 @@ lx = [8.0, 8.0, 8.0]
 
 # Polymer Chain
 f = 0.5
-chi_n = 20
+chi_n = 20                   # Bare interaction parameter
 epsilon = 1.0                # a_A/a_B, conformational asymmetry
 chain_model = "Continuous"   # choose among [Continuous, Discrete]
 ds = 1/16                    # contour step interval
