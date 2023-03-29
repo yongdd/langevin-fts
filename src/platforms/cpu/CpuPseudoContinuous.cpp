@@ -58,7 +58,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_essential_propagator_codes(), N_STREAM); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_PARALLEL_STREAMS); 
 
         update_bond_function();
     }

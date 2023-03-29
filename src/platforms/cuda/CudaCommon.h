@@ -9,6 +9,9 @@
 
 typedef cufftDoubleComplex ftsComplex;
 
+// the maximum of GPUs
+#define MAX_GPUS 2
+
 // Design Pattern : Singleton (Scott Meyer)
 
 class CudaCommon
@@ -16,6 +19,8 @@ class CudaCommon
 private:
     int n_blocks;
     int n_threads;
+
+    int n_gpus;
 
     CudaCommon();
     ~CudaCommon();
@@ -39,6 +44,7 @@ public:
     
     int get_n_blocks();
     int get_n_threads();
+    int get_n_gpus();
     
     void set_n_blocks(int n_blocks);
     void set_n_threads(int n_threads);

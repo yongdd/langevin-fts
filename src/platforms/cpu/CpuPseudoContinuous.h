@@ -36,8 +36,9 @@ private:
 
     // scheduler for propagator
     Scheduler *sc;
-    // the number of job threads
-    const int N_STREAM = 4;
+
+    // the number of parallel streams for propagator computation
+    const int N_PARALLEL_STREAMS = 4;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> block_phi;

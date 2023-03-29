@@ -64,7 +64,7 @@ params = {
                             # 2 : Print at each saddle point iteration.
 }
 
-## random seed for MT19937
+# random seed for MT19937
 np.random.seed(5489)
 
 # Set initial fields

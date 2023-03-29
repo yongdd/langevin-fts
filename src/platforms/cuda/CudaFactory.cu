@@ -11,8 +11,8 @@
 
 #include "CudaComputationBox.h"
 #include "CudaPseudoContinuous.h"
-#include "CudaPseudoReduceMemoryContinuous.h"
 #include "CudaPseudoDiscrete.h"
+#include "CudaPseudoReduceMemoryContinuous.h"
 #include "CudaPseudoReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaFactory.h"

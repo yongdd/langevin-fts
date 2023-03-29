@@ -29,7 +29,7 @@ private:
     // for stress calculation: compute_stress()
     cufftHandle plan_for_two;
     double **d_q_in_temp;
-    ftsComplex *d_qk_in_2;
+    ftsComplex *d_qk_in_two;
 
     double *d_fourier_basis_x;
     double *d_fourier_basis_y;

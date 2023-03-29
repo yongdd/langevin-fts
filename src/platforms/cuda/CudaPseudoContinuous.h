@@ -2,8 +2,8 @@
 * This is a derived CudaPseudoContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_CONTINUOUS_H_
-#define CUDA_PSEUDO_CONTINUOUS_H_
+#ifndef CUDA_PSEUDO_MULTI_CONTINUOUS_H_
+#define CUDA_PSEUDO_MULTI_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>
@@ -18,15 +18,14 @@
 class CudaPseudoContinuous : public Pseudo
 {
 private:
-    cufftHandle plan_for_1, plan_bak_1;
-    cufftHandle plan_for_2, plan_bak_2;
 
     // for pseudo-spectral: one_step()
-    double *d_q_step1_1, *d_q_step2_1;
-    ftsComplex *d_qk_in_1;
+    cufftHandle plan_for_1[MAX_GPUS], plan_bak_1[MAX_GPUS];
+    double *d_q_step1_1[MAX_GPUS], *d_q_step2_1[MAX_GPUS];
+    ftsComplex *d_qk_in_1[MAX_GPUS];
 
-    double *d_q_step1_2, *d_q_step2_2;
-    ftsComplex *d_qk_in_2;
+    double *d_q_step1_two, *d_q_step2_two;
+    ftsComplex *d_qk_in_two;
 
     // for stress calculation: compute_stress()
     double *d_fourier_basis_x;
@@ -35,44 +34,54 @@ private:
     ftsComplex *d_qk_1, *d_qk_2;
     double *d_q_multi, *d_stress_sum;
 
+    cufftHandle plan_for_two, plan_bak_two;
+
     // to compute concentration
     double *d_phi;
+
+    // one stream for each gpu
+    cudaStream_t streams[MAX_GPUS];
 
     // key: (dep) + monomer_type, value: partition function
     std::map<std::string, double **> d_propagator;
     std::map<std::string, int> propagator_size; // for deallocation
+
+    // temporary arrys for device_1
+    double *d_propagator_device_1[2]; // one for prev, the other for nextN_GPU
 
     // check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
     #endif
 
+    // the number of parallel jobs for propagator computation
+    const int N_PARALLEL_STREAMS = 2;
+
     // scheduler for propagator
     Scheduler *sc;
-    // the number of job threads
-    const int N_STREAM = 2;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
     std::map<std::tuple<int, std::string, std::string>, double *> d_block_phi;
 
-    std::map<std::string, double*> d_boltz_bond;        // boltzmann factor for the single bond
-    std::map<std::string, double*> d_boltz_bond_half;   // boltzmann factor for the half bond
-    std::map<std::string, double*> d_exp_dw;            // boltzmann factor for the single segment
-    std::map<std::string, double*> d_exp_dw_half;       // boltzmann factor for the half segment
+    std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // boltzmann factor for the single bond
+    std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // boltzmann factor for the half bond
+    std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // boltzmann factor for the single segment
+    std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // boltzmann factor for the half segment
 
     // total partition functions for each polymer
     double* single_partitions;
 
-    void one_step_1(double *d_q_in, double *d_q_out,
-                  double *d_boltz_bond, double *d_boltz_bond_half,
-                  double *d_exp_dw, double *d_exp_dw_half);
+    void one_step_1(const int GPU,
+            double *d_q_in, double *d_q_out,
+            double *d_boltz_bond, double *d_boltz_bond_half,
+            double *d_exp_dw, double *d_exp_dw_half);
 
     void one_step_2(double *d_q_in_1, double *d_q_in_2,
-                  double *d_q_out_1, double *d_q_out_2,
-                  double *d_boltz_bond_1, double *d_boltz_bond_2, 
-                  double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
-                  double *d_exp_dw_1, double *d_exp_dw_2,
-                  double *d_exp_dw_half_1, double *d_exp_dw_half_2);
+            double *d_q_out_1, double *d_q_out_2,
+            double *d_boltz_bond_1, double *d_boltz_bond_2, 
+            double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
+            double *d_exp_dw_1, double *d_exp_dw_2,
+            double *d_exp_dw_half_1, double *d_exp_dw_half_2);
 
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
