@@ -139,7 +139,7 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         d_q_in_temp = new double*[2]; // one for prev, the other for next   
         gpu_error_check(cudaMalloc((void**)&d_q_in_temp[0], sizeof(double)*2*M));
         gpu_error_check(cudaMalloc((void**)&d_q_in_temp[1], sizeof(double)*2*M));
-        gpu_error_check(cudaMalloc((void**)&d_qk_in_2, sizeof(ftsComplex)*2*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_qk_in_two, sizeof(ftsComplex)*2*M_COMPLEX));
 
         gpu_error_check(cudaMalloc((void**)&d_q_multi,         sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_stress_sum,      sizeof(double)*M_COMPLEX));
@@ -208,7 +208,7 @@ CudaPseudoReduceMemoryDiscrete::~CudaPseudoReduceMemoryDiscrete()
     cudaFree(d_q_in_temp[1]);
     delete[] d_q_in_temp;
 
-    cudaFree(d_qk_in_2);
+    cudaFree(d_qk_in_two);
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 }
@@ -838,10 +838,10 @@ std::vector<double> CudaPseudoReduceMemoryDiscrete::compute_stress()
                 if (!skip)
                 {
                     // execute a Forward FFT
-                    cufftExecD2Z(plan_for_two, d_q_in_temp[prev], d_qk_in_2);
+                    cufftExecD2Z(plan_for_two, d_q_in_temp[prev], d_qk_in_two);
 
                     // multiply two propagators in the fourier spaces
-                    multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, &d_qk_in_2[0], &d_qk_in_2[M_COMPLEX], M_COMPLEX);
+                    multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, &d_qk_in_two[0], &d_qk_in_two[M_COMPLEX], M_COMPLEX);
                     multi_real<<<N_BLOCKS, N_THREADS, 0, streams[2]>>>(d_q_multi, d_q_multi, d_boltz_bond_now[prev], bond_length_sq[prev], M_COMPLEX);
 
                     if ( DIM == 3 )
