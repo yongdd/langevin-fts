@@ -22,6 +22,7 @@ private:
     cufftHandle plan_for_two, plan_bak_two;
 
     // for pseudo-spectral: one_step()
+    double *d_q_unity; // all elements are 1 for initializing propagtors
     ftsComplex *d_qk_in_1[MAX_GPUS];
     ftsComplex *d_qk_in_two;
 
@@ -39,14 +40,14 @@ private:
     double *d_phi;
 
     // one stream for each gpu
-    cudaStream_t streams[MAX_GPUS];
+    cudaStream_t streams[MAX_GPUS+1];
 
     // key: (dep) + monomer_type, value: partition functions
     std::map<std::string, double **> d_propagator;
     std::map<std::string, int> propagator_size; // for deallocation
 
-    // temporary arrys for device_1
-    double *d_propagator_device_1[2]; // one for prev, the other for nextN_GPU
+    // temporary arrays for device_1
+    double *d_propagator_device_1[2]; // one for prev, the other for next
 
     // check if computation of propagator is finished
     #ifndef NDEBUG

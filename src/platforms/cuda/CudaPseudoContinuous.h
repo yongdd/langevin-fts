@@ -2,8 +2,8 @@
 * This is a derived CudaPseudoContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_MULTI_CONTINUOUS_H_
-#define CUDA_PSEUDO_MULTI_CONTINUOUS_H_
+#ifndef CUDA_PSEUDO_CONTINUOUS_H_
+#define CUDA_PSEUDO_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>
@@ -20,34 +20,35 @@ class CudaPseudoContinuous : public Pseudo
 private:
 
     // for pseudo-spectral: one_step()
+    double *d_q_unity; // all elements are 1 for initializing propagtors
     cufftHandle plan_for_1[MAX_GPUS], plan_bak_1[MAX_GPUS];
-    double *d_q_step1_1[MAX_GPUS], *d_q_step2_1[MAX_GPUS];
-    ftsComplex *d_qk_in_1[MAX_GPUS];
+    cufftHandle plan_for_two[MAX_GPUS], plan_bak_two[MAX_GPUS];
 
+    double *d_q_step1_1[MAX_GPUS], *d_q_step2_1[MAX_GPUS];
     double *d_q_step1_two, *d_q_step2_two;
-    ftsComplex *d_qk_in_two;
+    ftsComplex *d_qk_in_1[MAX_GPUS];
+    ftsComplex *d_qk_in_two[MAX_GPUS];
 
     // for stress calculation: compute_stress()
-    double *d_fourier_basis_x;
-    double *d_fourier_basis_y;
-    double *d_fourier_basis_z;
-    ftsComplex *d_qk_1, *d_qk_2;
-    double *d_q_multi, *d_stress_sum;
-
-    cufftHandle plan_for_two, plan_bak_two;
+    double *d_fourier_basis_x[MAX_GPUS];
+    double *d_fourier_basis_y[MAX_GPUS];
+    double *d_fourier_basis_z[MAX_GPUS];
+    double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
+    double *d_stress_sum[MAX_GPUS];
+    double *d_q_multi[MAX_GPUS];
 
     // to compute concentration
     double *d_phi;
 
     // one stream for each gpu
-    cudaStream_t streams[MAX_GPUS];
+    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
     // key: (dep) + monomer_type, value: partition function
     std::map<std::string, double **> d_propagator;
     std::map<std::string, int> propagator_size; // for deallocation
 
-    // temporary arrys for device_1
-    double *d_propagator_device_1[2]; // one for prev, the other for nextN_GPU
+    // temporary arrays for device_1
+    double *d_propagator_device_1[2]; // one for prev, the other for next
 
     // check if computation of propagator is finished
     #ifndef NDEBUG
