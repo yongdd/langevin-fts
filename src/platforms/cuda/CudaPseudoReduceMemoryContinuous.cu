@@ -112,6 +112,12 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[0], sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[1], sizeof(double)*M));
 
+        double q_unity[M];
+        for(int i=0; i<M; i++)
+            q_unity[i] = 1.0;
+        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(double)*M));
+        gpu_error_check(cudaMemcpy(d_q_unity, q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
+
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
@@ -170,13 +176,14 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
     cudaFree(d_q[1]);
     delete[] d_q;
 
-    cudaFree(d_q_step1);
-    cudaFree(d_q_step2);
-    cudaFree(d_qk_in);
-
     cudaFree(d_propagator_sub_dep[0]);
     cudaFree(d_propagator_sub_dep[1]);
     delete[] d_propagator_sub_dep;
+
+    cudaFree(d_q_unity);
+    cudaFree(d_q_step1);
+    cudaFree(d_q_step2);
+    cudaFree(d_qk_in);
 
     // for stress calculation: compute_stress()
     cudaFree(d_fourier_basis_x);
@@ -264,10 +271,6 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
             gpu_error_check(cudaMemcpy(d_exp_dw_half[monomer_type], exp_dw_half, sizeof(double)*M,cudaMemcpyHostToDevice));
         }
 
-        double q_uniform[M];
-        for(int i=0; i<M; i++)
-            q_uniform[i] = 1.0;
-
         // for each propagator code
         for (auto& item: mx->get_essential_propagator_codes())
         {
@@ -296,7 +299,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 }
                 else
                 {
-                    gpu_error_check(cudaMemcpy(d_q[0], q_uniform, sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q[0], d_q_unity, sizeof(double)*M, cudaMemcpyDeviceToDevice));
                 }
 
                 #ifndef NDEBUG
@@ -363,8 +366,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 else
                 { 
                     // initialize to one
-                    gpu_error_check(cudaMemcpy(d_q[0], q_uniform,
-                        sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q[0], d_q_unity, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                     int prev, next;
                     prev = 0;

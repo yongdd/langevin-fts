@@ -92,8 +92,10 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            cudaStreamCreate(&streams[gpu]);
+            cudaStreamCreate(&streams[gpu]); // for cuFFT
         }
+        gpu_error_check(cudaSetDevice(N_GPUS-1));
+        cudaStreamCreate(&streams[N_GPUS]); // for PtoP Memcpy
 
         // Create FFT plan
         const int NRANK{cb->get_dim()};
@@ -136,6 +138,14 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             gpu_error_check(cudaSetDevice(gpu));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1[gpu], sizeof(ftsComplex)*M_COMPLEX));
         }
+
+        if (N_GPUS > 1)
+        {
+            gpu_error_check(cudaSetDevice(1));
+            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[0], sizeof(double)*M));  // prev
+            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[1], sizeof(double)*M));  // next
+        }
+
         gpu_error_check(cudaSetDevice(0));
         gpu_error_check(cudaMalloc((void**)&d_qk_in_two, sizeof(ftsComplex)*2*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_q_in_temp_2, sizeof(double)*2*M));
@@ -144,13 +154,11 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         gpu_error_check(cudaMalloc((void**)&d_q_half_step, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_junction,  sizeof(double)*M));
 
-        if (N_GPUS > 1)
-        {
-            gpu_error_check(cudaSetDevice(1));
-            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[0], sizeof(double)*M));  // prev
-            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[1], sizeof(double)*M));  // next
-        }
-        gpu_error_check(cudaSetDevice(0));
+        double q_unity[M];
+        for(int i=0; i<M; i++)
+            q_unity[i] = 1.0;
+        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(double)*M));
+        gpu_error_check(cudaMemcpy(d_q_unity, q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
 
         // allocate memory for stress calculation: compute_stress()
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
@@ -221,11 +229,10 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
         cudaFree(d_propagator_device_1[0]);
         cudaFree(d_propagator_device_1[1]);
     }
-
+    cudaFree(d_q_unity);
     cudaFree(d_qk_in_two);
     cudaFree(d_q_in_temp_2);
     cudaFree(d_q_out_temp_2);
-    
     cudaFree(d_q_half_step);
     cudaFree(d_q_junction);
 
@@ -235,6 +242,10 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     cudaFree(d_fourier_basis_z);
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
+
+    // destory streams
+    for (int i = 0; i < N_GPUS+1; i++)
+        cudaStreamDestroy(streams[i]);
 }
 
 void CudaPseudoDiscrete::update_bond_function()
@@ -317,10 +328,6 @@ void CudaPseudoDiscrete::compute_statistics(
             }
         }
 
-        double q_uniform[M];
-        for(int i=0; i<M; i++)
-            q_uniform[i] = 1.0;
-
         // for each time span
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
@@ -393,7 +400,7 @@ void CudaPseudoDiscrete::compute_statistics(
                             _d_propagator[0],
                             _d_propagator[0],
                             d_boltz_bond[0][monomer_type],
-                            d_exp_dw[0][monomer_type]);   
+                            d_exp_dw[0][monomer_type]);
 
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -415,7 +422,7 @@ void CudaPseudoDiscrete::compute_statistics(
                         // A, B, C : other full segments
 
                         // combine branches
-                        gpu_error_check(cudaMemcpy(d_q_junction, q_uniform, sizeof(double)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_junction, d_q_unity, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -518,7 +525,7 @@ void CudaPseudoDiscrete::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy memory for key1 from device0 to device1
+                    // copy propagator of key1 from device0 to device1
                     gpu_error_check(cudaMemcpy(
                         d_propagator_device_1[prev],
                         _d_propagator_key_1[n_segment_from_1-1],
@@ -555,12 +562,10 @@ void CudaPseudoDiscrete::compute_statistics(
                             gpu_error_check(cudaMemcpyAsync(
                                 _d_propagator_key_1[n-1+n_segment_from_1],
                                 d_propagator_device_1[prev],
-                                sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[1]));
+                                sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[2]));
                         }
-                        // gpu_error_check(cudaSetDevice(0));
-                        // gpu_error_check(cudaDeviceSynchronize());
-                        // gpu_error_check(cudaSetDevice(1));
-                        // gpu_error_check(cudaDeviceSynchronize());
+                        gpu_error_check(cudaStreamSynchronize(streams[1]));
+                        gpu_error_check(cudaStreamSynchronize(streams[2]));
 
                         std::swap(prev, next);
 
@@ -603,6 +608,11 @@ void CudaPseudoDiscrete::compute_statistics(
                     }
                 }
             }
+            for(int gpu=0; gpu<N_GPUS; gpu++)
+            {
+                gpu_error_check(cudaSetDevice(gpu));
+                gpu_error_check(cudaDeviceSynchronize());
+            }
         }
         gpu_error_check(cudaSetDevice(0));
 
@@ -610,25 +620,26 @@ void CudaPseudoDiscrete::compute_statistics(
         int current_p = 0;
         for(const auto& block: d_block_phi)
         {
-            int p                = std::get<0>(block.first);
-            std::string dep_v    = std::get<1>(block.first);
-            std::string dep_u    = std::get<2>(block.first);
+            const auto& key = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
 
             // already computed
             if (p != current_p)
                 continue;
 
             int n_superposed;
-            // int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(block.first).monomer_type;
+            // int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_essential_block(block.first).v_u.size();
+                n_superposed = mx->get_essential_block(key).v_u.size();
 
             // check keys
             #ifndef NDEBUG
@@ -651,19 +662,20 @@ void CudaPseudoDiscrete::compute_statistics(
         // calculate segment concentrations
         for(const auto& block: d_block_phi)
         {
-            int p                = std::get<0>(block.first);
-            std::string dep_v    = std::get<1>(block.first);
-            std::string dep_u    = std::get<2>(block.first);
+            const auto& key = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(block.first).monomer_type;
+            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(block.first).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -833,8 +845,9 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
         // for each block
         for(const auto& block: d_block_phi)
         {
-            std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            const auto& key = block.first;
+            std::string dep_v = std::get<1>(key);
+            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
             if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
         }
@@ -912,20 +925,20 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         // compute stress for each block
         for(const auto& block: d_block_phi)
         {
-            const auto& key      = block.first;
+            const auto& key = block.first;
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = mx->get_essential_block(block.first).n_segment_allocated;
-            const int N_OFFSET    = mx->get_essential_block(block.first).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_essential_block(block.first).n_segment_original;
+            const int N           = mx->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
             std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(block.first).v_u.size();
+                n_repeated = mx->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -951,7 +964,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                         continue;
                     
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_junction_cache[dep_v], sizeof(double)*M, cudaMemcpyDeviceToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-1],                  sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_2[N-1],                sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond_half[0][monomer_type];
@@ -962,7 +975,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
                     if (mx->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
                         continue;
 
-                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-1],         sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_q_in_temp_2[0], d_q_1[N_ORIGINAL-1],       sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     gpu_error_check(cudaMemcpy(&d_q_in_temp_2[M], d_q_junction_cache[dep_u], sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     d_boltz_bond_now = d_boltz_bond_half[0][monomer_type];
@@ -1022,7 +1035,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             stress[d] = 0.0;
         for(const auto& block: d_block_phi)
         {
-            const auto& key      = block.first;
+            const auto& key = block.first;
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
