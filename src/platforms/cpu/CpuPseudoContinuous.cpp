@@ -438,37 +438,37 @@ void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
             q_out1[i] = exp_dw[i]*q_in[i];
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_out1,k_q_in1);
-        // multiply e^(-k^2 ds/6) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in1[i] *= boltz_bond[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in1,q_out1);
-        // normalization calculation and evaluate e^(-w*ds/2) in real space
+        // normalization calculation and evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
             q_out1[i] *= exp_dw[i];
 
         // step 2
-        // evaluate e^(-w*ds/4) in real space
+        // evaluate exp(-w*ds/4) in real space
         for(int i=0; i<M; i++)
             q_out2[i] = exp_dw_half[i]*q_in[i];
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_out2,k_q_in2);
-        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in2[i] *= boltz_bond_half[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in2,q_out2);
-        // normalization calculation and evaluate e^(-w*ds/2) in real space
+        // normalization calculation and evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
             q_out2[i] *= exp_dw[i];
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_out2,k_q_in2);
-        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in2[i] *= boltz_bond_half[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in2,q_out2);
-        // normalization calculation and evaluate e^(-w*ds/4) in real space
+        // normalization calculation and evaluate exp(-w*ds/4) in real space
         for(int i=0; i<M; i++)
             q_out2[i] *= exp_dw_half[i];
 

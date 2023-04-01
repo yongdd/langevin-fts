@@ -58,7 +58,7 @@ void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
                 ktemp = k;
                 idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
                 boltz_bond[idx] = exp(bond_length_variance*
-                    (pow(itemp,2)*xfactor[0]+pow(jtemp,2)*xfactor[1]+pow(ktemp,2)*xfactor[2]));
+                    (itemp*itemp*xfactor[0]+jtemp*jtemp*xfactor[1]+ktemp*ktemp*xfactor[2]));
             }
         }
     }
@@ -103,9 +103,9 @@ void Pseudo::get_weighted_fourier_basis(
             {
                 ktemp = k;
                 idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
-                fourier_basis_x[idx] = pow(itemp,2)*xfactor[0];
-                fourier_basis_y[idx] = pow(jtemp,2)*xfactor[1];
-                fourier_basis_z[idx] = pow(ktemp,2)*xfactor[2];
+                fourier_basis_x[idx] = itemp*itemp*xfactor[0];
+                fourier_basis_y[idx] = jtemp*jtemp*xfactor[1];
+                fourier_basis_z[idx] = ktemp*ktemp*xfactor[2];
                 if (k != 0 && 2*k != tnx[2])
                 {
                     fourier_basis_x[idx] *= 2;

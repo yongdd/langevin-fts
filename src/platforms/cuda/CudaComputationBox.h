@@ -14,7 +14,12 @@ private:
     double *sum, *d_sum;   // temporal storage for reduction in integral_gpu
     double *d_multiple;    // temporal storage for mutiple_inner_product_gpu
     double *d_dv; // dV for GPU
-    
+
+    // variable for cub reduction sum
+    size_t temp_storage_bytes = 0;
+    double *d_temp_storage = NULL;
+    double *d_sum_out;
+
     void initialize();
 public:
     CudaComputationBox(std::vector<int> nx, std::vector<double> lx);

@@ -1,6 +1,3 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECToptimal
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
@@ -120,10 +117,10 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            cufftPlanMany(&plan_for_1[gpu], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
-            cufftPlanMany(&plan_bak_1[gpu], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
-            cufftSetStream(plan_for_1[gpu], streams[gpu]);
-            cufftSetStream(plan_bak_1[gpu], streams[gpu]);
+            cufftPlanMany(&plan_for_one[gpu], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
+            cufftPlanMany(&plan_bak_one[gpu], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
+            cufftSetStream(plan_for_one[gpu], streams[gpu]);
+            cufftSetStream(plan_bak_one[gpu], streams[gpu]);
         }
         gpu_error_check(cudaSetDevice(0));
         cufftPlanMany(&plan_for_two, NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
@@ -136,7 +133,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1[gpu], sizeof(ftsComplex)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[gpu], sizeof(ftsComplex)*M_COMPLEX));
         }
 
         if (N_GPUS > 1)
@@ -180,8 +177,8 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
-        cufftDestroy(plan_for_1[gpu]);
-        cufftDestroy(plan_bak_1[gpu]);
+        cufftDestroy(plan_for_one[gpu]);
+        cufftDestroy(plan_bak_one[gpu]);
     }
     cufftDestroy(plan_for_two);
     cufftDestroy(plan_bak_two);
@@ -222,7 +219,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     // for pseudo-spectral: one_step()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
-        cudaFree(d_qk_in_1[gpu]);
+        cudaFree(d_qk_in_1_one[gpu]);
     }
     if (N_GPUS > 1)
     {
@@ -723,15 +720,15 @@ void CudaPseudoDiscrete::one_step_1(
 
         //-------------- step 1 ----------
         // Execute a Forward FFT
-        cufftExecD2Z(plan_for_1[GPU], d_q_in, d_qk_in_1[GPU]);
+        cufftExecD2Z(plan_for_one[GPU], d_q_in, d_qk_in_1_one[GPU]);
 
-        // Multiply e^(-k^2 ds/6) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU]>>>(d_qk_in_1[GPU], d_boltz_bond, M_COMPLEX);
+        // Multiply exp(-k^2 ds/6) in fourier space
+        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU]>>>(d_qk_in_1_one[GPU], d_boltz_bond, M_COMPLEX);
 
         // Execute a backward FFT
-        cufftExecZ2D(plan_bak_1[GPU], d_qk_in_1[GPU], d_q_out);
+        cufftExecZ2D(plan_bak_one[GPU], d_qk_in_1_one[GPU], d_q_out);
 
-        // Evaluate e^(-w*ds) in real space
+        // Evaluate exp(-w*ds) in real space
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU]>>>(d_q_out, d_q_out, d_exp_dw, 1.0/((double)M), M);
     }
     catch(std::exception& exc)
@@ -760,14 +757,14 @@ void CudaPseudoDiscrete::one_step_2(
         // Execute a Forward FFT
         cufftExecD2Z(plan_for_two, d_q_in_temp_2, d_qk_in_two);
 
-        // Multiply e^(-k^2 ds/6) in fourier space
+        // Multiply exp(-k^2 ds/6) in fourier space
         multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_two[0],         d_boltz_bond_1, M_COMPLEX);
         multi_complex_real<<<N_BLOCKS, N_THREADS>>>(&d_qk_in_two[M_COMPLEX], d_boltz_bond_2, M_COMPLEX);
 
         // Execute a backward FFT
         cufftExecZ2D(plan_bak_two, d_qk_in_two, d_q_out_temp_2);
 
-        // Evaluate e^(-w*ds) in real space
+        // Evaluate exp(-w*ds) in real space
         multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_out_1, &d_q_out_temp_2[0], d_exp_dw_1, 1.0/((double)M), M);
         multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_out_2, &d_q_out_temp_2[M], d_exp_dw_2, 1.0/((double)M), M);
     }
@@ -787,11 +784,11 @@ void CudaPseudoDiscrete::half_bond_step(const int GPU, double *d_q_in, double *d
         const int M_COMPLEX = this->n_complex_grid;
 
         // 3D fourier discrete transform, forward and inplace
-        cufftExecD2Z(plan_for_1[GPU], d_q_in, d_qk_in_1[GPU]);
-        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
-        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU]>>>(d_qk_in_1[GPU], d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
+        cufftExecD2Z(plan_for_one[GPU], d_q_in, d_qk_in_1_one[GPU]);
+        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
+        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU]>>>(d_qk_in_1_one[GPU], d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
         // 3D fourier discrete transform, backward and inplace
-        cufftExecZ2D(plan_bak_1[GPU], d_qk_in_1[GPU], d_q_out);
+        cufftExecZ2D(plan_bak_one[GPU], d_qk_in_1_one[GPU], d_q_out);
     }
     catch(std::exception& exc)
     {
@@ -843,13 +840,13 @@ void CudaPseudoDiscrete::get_monomer_concentration(std::string monomer_type, dou
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         // for each block
-        for(const auto& block: d_block_phi)
+        for(const auto& d_block: d_block_phi)
         {
-            const auto& key = block.first;
+            const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
             int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
             if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
-                lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, block.second, M);
+                lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
     }
@@ -873,6 +870,9 @@ void CudaPseudoDiscrete::get_polymer_concentration(int p, double *phi)
 
         if (mx->is_using_superposition())
             throw_with_line_number("Disable 'superposition' option to obtain concentration of each block.");
+
+        // initialize to zero
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         PolymerChain& pc = mx->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();

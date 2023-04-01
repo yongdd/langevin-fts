@@ -426,12 +426,12 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in,k_q_in);
-        // multiply e^(-k^2 ds/6) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in[i] *= boltz_bond[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in,q_out);
-        // normalization calculation and evaluate e^(-w*ds) in real space
+        // normalization calculation and evaluate exp(-w*ds) in real space
         for(int i=0; i<M; i++)
             q_out[i] *= exp_dw[i];
     }
@@ -451,7 +451,7 @@ void CpuPseudoDiscrete::half_bond_step(double *q_in, double *q_out, double *bolt
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in,k_q_in);
-        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in[i] *= boltz_bond_half[i];
         // 3D fourier discrete transform, backward and inplace

@@ -36,7 +36,7 @@ This open-source code is distributed under the Apache license 2.0 instead of GPL
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
-  Required for the GPU computation. If it is not installed, ask admin for its installation.
+  It requires CUDA Toolkit Version 11.2 or higher for the GPU computation. If it is not installed, ask admin for its installation.
 
 #### Anaconda
   https://www.anaconda.com/
@@ -76,7 +76,7 @@ conda env remove -n lfts
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
 + The SCFT and L-FTS are implemented on the python shared library. Currently, only `AB`-type polymers are supported. To understand the entire process of simulations, please see sample scripts in `examples/scft_single_file` and `examples/fts_single_file`, and use sample scripts in the `examples/scft` and `examples/fts` to perform actual simulations.
   + Set 'reduce_gpu_memory_usage=True' (default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 5 ~ 60% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
-  + To use double GPUs, set `os.environ["LFTS_NUM_GPUS"]="2"`, but simulation time is only reduced by 5 ~ 35%, and it only works when grid number is large. As an example, please see 'examples/ComputeConcentration.py'.
+  + To use double GPUs, set `os.environ["LFTS_NUM_GPUS"]="2"`, but simulation time is reduced by 5 ~ 35%. Depending on grid number, segment number and GPU environment, simulation time may increase. Please check the performance first. As an example, see 'examples/scft/A15.py'.
   + Set 'use_superposition=False, (default: True) if you want to use 'pseudo.get_polymer_concentration()', which returns block-wise concentrations of a selected polymer species, and 'pseudo.get_chain_propagator()', which returns a propagator of a selected branch.
   + If your SCFT calculation does not converge, reduce the "am.mix_min" (default:0.1) and "am.mix_init" (default:0.1) in parameter set. Please see 'examples/scft/BottleBrushLamella3D.py'.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.

@@ -1,9 +1,6 @@
 /*----------------------------------------------------------
 * class CudaFactory
 *-----------------------------------------------------------*/
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <iostream>
 #include <array>
 #include <vector>
@@ -59,6 +56,7 @@ void CudaFactory::display_info()
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
     // get GPU info
     gpu_error_check(cudaGetDeviceCount(&devices_count));
@@ -67,6 +65,7 @@ void CudaFactory::display_info()
 
     std::cout<< "========== CUDA Setting and Device Information ==========" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
+    std::cout<< "N_GPUS (selected gpus): " << N_GPUS << std::endl;
 
     std::cout<< "DeviceCount: " << devices_count << std::endl;
     std::cout<< "Device " << device << ": \t\t\t\t" << prop.name << std::endl;

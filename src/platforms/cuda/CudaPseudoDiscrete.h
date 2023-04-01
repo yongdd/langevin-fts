@@ -18,12 +18,12 @@
 class CudaPseudoDiscrete : public Pseudo
 {
 private:
-    cufftHandle plan_for_1[MAX_GPUS], plan_bak_1[MAX_GPUS];
+    cufftHandle plan_for_one[MAX_GPUS], plan_bak_one[MAX_GPUS];
     cufftHandle plan_for_two, plan_bak_two;
 
     // for pseudo-spectral: one_step()
-    double *d_q_unity; // all elements are 1 for initializing propagtors
-    ftsComplex *d_qk_in_1[MAX_GPUS];
+    double *d_q_unity; // all elements are 1 for initializing propagators
+    ftsComplex *d_qk_in_1_one[MAX_GPUS];
     ftsComplex *d_qk_in_two;
 
     double *d_q_in_temp_2, *d_q_out_temp_2;
