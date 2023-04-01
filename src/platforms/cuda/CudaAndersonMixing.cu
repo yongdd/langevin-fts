@@ -1,10 +1,6 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>
-#include <thrust/device_ptr.h>
 #include "CudaCommon.h"
 #include "CudaComputationBox.h"
 #include "CudaCircularBuffer.h"
@@ -38,6 +34,11 @@ CudaAndersonMixing::CudaAndersonMixing(
         gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*n_var));
+
+        // allocate memory for cub reduction sum
+        gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
+        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
+        gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
         // reset_count
         reset_count();
@@ -101,8 +102,6 @@ void CudaAndersonMixing::calculate_new_fields(
         double *d_w_deriv_hist2;
 
         gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv, sizeof(double)*n_var, cudaMemcpyHostToDevice));
-
-        thrust::device_ptr<double> temp_gpu_ptr(d_sum);
         //printf("mix: %f\n", mix);
         // condition to start anderson mixing
         if(error_level < start_error || n_anderson >= 0)
@@ -120,7 +119,8 @@ void CudaAndersonMixing::calculate_new_fields(
             for(int i=0; i<= n_anderson; i++)
             {
                 multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, n_var);
-                w_deriv_dots[i] = thrust::reduce(temp_gpu_ptr, temp_gpu_ptr + n_var);
+                cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
+                gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
             }
             //print_array(max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots);

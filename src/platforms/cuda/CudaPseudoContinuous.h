@@ -20,24 +20,43 @@ class CudaPseudoContinuous : public Pseudo
 private:
 
     // for pseudo-spectral: one_step()
-    double *d_q_unity; // all elements are 1 for initializing propagtors
-    cufftHandle plan_for_1[MAX_GPUS], plan_bak_1[MAX_GPUS];
+    double *d_q_unity; // all elements are 1 for initializing propagators
+    cufftHandle plan_for_one[MAX_GPUS], plan_bak_one[MAX_GPUS];
     cufftHandle plan_for_two[MAX_GPUS], plan_bak_two[MAX_GPUS];
+    cufftHandle plan_for_four,          plan_bak_four;
 
-    double *d_q_step1_1[MAX_GPUS], *d_q_step2_1[MAX_GPUS];
-    double *d_q_step1_two, *d_q_step2_two;
-    ftsComplex *d_qk_in_1[MAX_GPUS];
-    ftsComplex *d_qk_in_two[MAX_GPUS];
+    double *d_q_step_1_one[MAX_GPUS], *d_q_step_2_one[MAX_GPUS];
+    double *d_q_step_1_two[MAX_GPUS], *d_q_step_2_two[MAX_GPUS];
+    double *d_q_step_1_four;
+
+    // double d_q_step_1_two, *d_q_step_2_two;
+    ftsComplex *d_qk_in_1_one[MAX_GPUS];
+    ftsComplex *d_qk_in_2_one[MAX_GPUS];
+    ftsComplex *d_qk_in_1_two[MAX_GPUS];
+    ftsComplex *d_qk_in_2_two[MAX_GPUS];
+    ftsComplex *d_qk_in_1_four;
 
     // for stress calculation: compute_stress()
     double *d_fourier_basis_x[MAX_GPUS];
     double *d_fourier_basis_y[MAX_GPUS];
     double *d_fourier_basis_z[MAX_GPUS];
     double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
-    double *d_stress_sum[MAX_GPUS];
     double *d_q_multi[MAX_GPUS];
 
-    // to compute concentration
+    // variable for cub Reduction Sum
+    size_t temp_storage_bytes[MAX_GPUS];
+    double *d_temp_storage[MAX_GPUS];
+    double *d_stress_sum[MAX_GPUS];
+    double *d_stress_sum_out[MAX_GPUS];
+
+    // remember one segment for each polymer chain to compute total partition function
+    // (polymer id, propagator forward, propagator backward, n_superposed)
+    std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
+
+    // total partition functions for each polymer
+    double *single_partitions;
+
+    // for concentration computation
     double *d_phi;
 
     // one stream for each gpu
@@ -68,9 +87,6 @@ private:
     std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // boltzmann factor for the half bond
     std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // boltzmann factor for the single segment
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // boltzmann factor for the half segment
-
-    // total partition functions for each polymer
-    double* single_partitions;
 
     void one_step_1(const int GPU,
             double *d_q_in, double *d_q_out,

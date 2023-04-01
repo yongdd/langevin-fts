@@ -22,7 +22,12 @@ private:
     double **u_nm, *v_n, *a_n;
     // temporary arrays
     double *d_w_new, *d_w_deriv, *d_sum;
-    
+
+    // variable for cub reduction sum
+    size_t temp_storage_bytes = 0;
+    double *d_temp_storage = NULL;
+    double *d_sum_out;
+
     void print_array(int n, double *a);
 public:
 

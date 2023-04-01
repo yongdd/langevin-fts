@@ -54,26 +54,31 @@ public:
 #define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
+__global__ void exp_real(double* dst,
+                        double* src,
+                        double  a, double exp_b,
+                        const int M);
+
 __global__ void multi_real(double* dst,
-                          double* src1,
-                          double* src2,
-                          double  a, const int M);
+                        double* src1,
+                        double* src2,
+                        double  a, const int M);
                           
 __global__ void mutiple_multi_real(int n_comp,
-                          double* dst,
-                          double* src1,
-                          double* src2,
-                          double  a, const int M);
+                        double* dst,
+                        double* src1,
+                        double* src2,
+                        double  a, const int M);
                                     
 __global__ void divide_real(double* dst,
-                          double* src1,
-                          double* src2,
-                          double  a, const int M);
+                        double* src1,
+                        double* src2,
+                        double  a, const int M);
                           
 __global__ void add_multi_real(double* dst,
-                             double* src1,
-                             double* src2,
-                             double  a, const int M);
+                        double* src1,
+                        double* src2,
+                        double  a, const int M);
 
 __global__ void lin_comb(double* dst,
                         double a,
@@ -83,11 +88,11 @@ __global__ void lin_comb(double* dst,
                         const int M);
 
 __global__ void add_lin_comb(double* dst,
-                           double a,
-                           double* src1,
-                           double b,
-                           double* src2,
-                           const int M);
+                        double a,
+                        double* src1,
+                        double b,
+                        double* src2,
+                        const int M);
 
 __global__ void multi_complex_real(ftsComplex* dst,
                                  double* src, const int M);
@@ -98,4 +103,28 @@ __global__ void multi_complex_real(ftsComplex* dst,
 __global__ void multi_complex_conjugate(double* dst,
                                  ftsComplex* src1,
                                  ftsComplex* src2, const int M);
+
+__global__ void real_multi_exp_dw_two(
+                        double* dst1, double* src1, double* exp_dw1,
+                        double* dst2, double* src2, double* exp_dw2,
+                        double  a, const int M);
+
+__global__ void real_multi_exp_dw_four(
+                        double* dst1, double* src1, double* exp_dw1,
+                        double* dst2, double* src2, double* exp_dw2,
+                        double* dst3, double* src3, double* exp_dw3,
+                        double* dst4, double* src4, double* exp_dw4,
+                        double  a, const int M);
+
+__global__ void complex_real_multi_bond_two(
+                        ftsComplex* dst1, double* boltz_bond1,
+                        ftsComplex* dst2, double* boltz_bond2,
+                        const int M);
+
+__global__ void complex_real_multi_bond_four(
+                        ftsComplex* dst1, double* boltz_bond1,
+                        ftsComplex* dst2, double* boltz_bond2,
+                        ftsComplex* dst3, double* boltz_bond3,
+                        ftsComplex* dst4, double* boltz_bond4,
+                        const int M);
 #endif

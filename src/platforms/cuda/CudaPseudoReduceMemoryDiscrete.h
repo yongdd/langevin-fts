@@ -19,9 +19,9 @@ class CudaPseudoReduceMemoryDiscrete : public Pseudo
 {
 private:
     // for pseudo-spectral: one_step()
-    double *d_q_unity; // all elements are 1 for initializing propagtors
+    double *d_q_unity; // all elements are 1 for initializing propagators
     cufftHandle plan_for, plan_bak;
-    double *d_q_step1, *d_q_step2;
+    double *d_q_step_1, *d_q_step_2;
     ftsComplex *d_qk_in;
     double **d_q;
     double **d_propagator_sub_dep;

@@ -1,6 +1,3 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -114,6 +111,20 @@ void CudaCommon::set_idx(int process_idx)
     gpu_error_check(cudaGetDeviceCount(&devices_count));
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
+
+__global__ void exp_real(double* dst,
+                        double* src,
+                        double  a, 
+                        double  exp_b, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = a * exp(exp_b*src[i]);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void multi_real(double* dst,
                           double* src1,
                           double* src2,
@@ -230,6 +241,76 @@ __global__ void multi_complex_conjugate(double* dst,
     while (i < M)
     {
         dst[i] = src1[i].x * src2[i].x + src1[i].y * src2[i].y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void real_multi_exp_dw_two(
+                        double* dst1, double* src1, double* exp_dw1,
+                        double* dst2, double* src2, double* exp_dw2,
+                        double  a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst1[i] = a * src1[i] * exp_dw1[i];
+        dst2[i] = a * src2[i] * exp_dw2[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void real_multi_exp_dw_four(
+                        double* dst1, double* src1, double* exp_dw1,
+                        double* dst2, double* src2, double* exp_dw2,
+                        double* dst3, double* src3, double* exp_dw3,
+                        double* dst4, double* src4, double* exp_dw4,
+                        double  a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst1[i] = a * src1[i] * exp_dw1[i];
+        dst2[i] = a * src2[i] * exp_dw2[i];
+        dst3[i] = a * src3[i] * exp_dw3[i];
+        dst4[i] = a * src4[i] * exp_dw4[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void complex_real_multi_bond_two(
+                        ftsComplex* dst1, double* boltz_bond1,
+                        ftsComplex* dst2, double* boltz_bond2,
+                        const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst1[i].x = dst1[i].x * boltz_bond1[i];
+        dst1[i].y = dst1[i].y * boltz_bond1[i];
+        dst2[i].x = dst2[i].x * boltz_bond2[i];
+        dst2[i].y = dst2[i].y * boltz_bond2[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void complex_real_multi_bond_four(
+                        ftsComplex* dst1, double* boltz_bond1,
+                        ftsComplex* dst2, double* boltz_bond2,
+                        ftsComplex* dst3, double* boltz_bond3,
+                        ftsComplex* dst4, double* boltz_bond4,
+                        const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst1[i].x = dst1[i].x * boltz_bond1[i];
+        dst1[i].y = dst1[i].y * boltz_bond1[i];
+        dst2[i].x = dst2[i].x * boltz_bond2[i];
+        dst2[i].y = dst2[i].y * boltz_bond2[i];
+        dst3[i].x = dst3[i].x * boltz_bond3[i];
+        dst3[i].y = dst3[i].y * boltz_bond3[i];
+        dst4[i].x = dst4[i].x * boltz_bond4[i];
+        dst4[i].y = dst4[i].y * boltz_bond4[i];
         i += blockDim.x * gridDim.x;
     }
 }

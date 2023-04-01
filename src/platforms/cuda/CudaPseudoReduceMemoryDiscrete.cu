@@ -1,6 +1,3 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECToptimal
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <complex>
 #include <thrust/reduce.h>
 #include <thrust/device_ptr.h>
@@ -123,8 +120,8 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         gpu_error_check(cudaMalloc((void**)&d_q[0], sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q[1], sizeof(double)*M));
 
-        gpu_error_check(cudaMalloc((void**)&d_q_step1, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_q_step2, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_step_1, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_step_2, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_qk_in,  sizeof(ftsComplex)*M_COMPLEX));
 
         d_propagator_sub_dep = new double*[2]; // one for prev, the other for next   
@@ -201,8 +198,8 @@ CudaPseudoReduceMemoryDiscrete::~CudaPseudoReduceMemoryDiscrete()
     delete[] d_propagator_sub_dep;
 
     cudaFree(d_q_unity);
-    cudaFree(d_q_step1);
-    cudaFree(d_q_step2);
+    cudaFree(d_q_step_1);
+    cudaFree(d_q_step_2);
     cudaFree(d_qk_in);
     cudaFree(d_q_half_step);
     cudaFree(d_q_junction);
@@ -591,13 +588,13 @@ void CudaPseudoReduceMemoryDiscrete::one_step(
         // Execute a Forward FFT
         cufftExecD2Z(plan_for, d_q_in, d_qk_in);
 
-        // Multiply e^(-k^2 ds/6) in fourier space
+        // Multiply exp(-k^2 ds/6) in fourier space
         multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond, M_COMPLEX);
 
         // Execute a backward FFT
         cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
 
-        // Evaluate e^(-w*ds) in real space
+        // Evaluate exp(-w*ds) in real space
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_q_out, d_q_out, d_exp_dw, 1.0/((double)M), M);
     }
     catch(std::exception& exc)
@@ -617,7 +614,7 @@ void CudaPseudoReduceMemoryDiscrete::half_bond_step(double *d_q_in, double *d_q_
 
         // 3D fourier discrete transform, forward and inplace
         cufftExecD2Z(plan_for, d_q_in, d_qk_in);
-        // multiply e^(-k^2 ds/12) in fourier space, in all 3 directions
+        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1]>>>(d_qk_in, d_boltz_bond_half, 1.0/((double)M), M_COMPLEX);
         // 3D fourier discrete transform, backward and inplace
         cufftExecZ2D(plan_bak, d_qk_in, d_q_out);
