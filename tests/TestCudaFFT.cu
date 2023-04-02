@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <random>
 #include <array>
+#include "CudaCommon.h"
 #include <cufft.h>
 
 int main()
@@ -38,9 +39,9 @@ int main()
         cufftPlanMany(&plan_for, 1, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, 1);
 
         d_data_init = new double*[2];
-        cudaMalloc((void**)&d_data_init[0], sizeof(double)*M);
-        cudaMalloc((void**)&d_data_init[1], sizeof(double)*M);
-        cudaMalloc((void**)&d_data_k, sizeof(cufftDoubleComplex)*M_COMPLEX);
+        gpu_error_check(cudaMalloc((void**)&d_data_init[0], sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_data_init[1], sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_data_k, sizeof(cufftDoubleComplex)*M_COMPLEX));
 
         //---------------- Forward --------------------
         std::cout<< "Running FFT 1D" << std::endl;

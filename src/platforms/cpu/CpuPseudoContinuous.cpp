@@ -57,8 +57,40 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         // total partition functions for each polymer
         single_partitions = new double[mx->get_n_polymers()];
 
+        // remember one segment for each polymer chain to compute total partition function
+        int current_p = 0;
+        for(const auto& block: block_phi)
+        {
+            const auto& key = block.first;
+            int p                = std::get<0>(key);
+            std::string dep_v    = std::get<1>(key);
+            std::string dep_u    = std::get<2>(key);
+
+            // skip if already found one segment
+            if (p != current_p)
+                continue;
+
+            int n_superposed;
+            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+
+            // contains no '['
+            if (dep_u.find('[') == std::string::npos)
+                n_superposed = 1;
+            else
+                n_superposed = mx->get_essential_block(key).v_u.size();
+
+            single_partition_segment.push_back(std::make_tuple(
+                p,
+                &propagator[dep_v][(n_segment_original-n_segment_offset)*M],   // q
+                &propagator[dep_u][0],                                   // q_dagger
+                n_superposed                    // how many propagators are aggregated
+                ));
+            current_p++;
+        }
+
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_essential_propagator_codes(), N_PARALLEL_STREAMS); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         update_bond_function();
     }
@@ -323,43 +355,15 @@ void CpuPseudoContinuous::compute_statistics(
         // }
 
         // compute total partition function of each distinct polymers
-        int current_p = 0;
-        for(const auto& block: block_phi)
+        for(const auto& segment_info: single_partition_segment)
         {
-            int p                = std::get<0>(block.first);
-            std::string dep_v    = std::get<1>(block.first);
-            std::string dep_u    = std::get<2>(block.first);
-
-            // already computed
-            if (p != current_p)
-                continue;
-
-            int n_superposed;
-            // int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
-            int n_segment_offset    = mx->get_essential_block(block.first).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(block.first).n_segment_original;
-
-            // contains no '['
-            if (dep_u.find('[') == std::string::npos)
-                n_superposed = 1;
-            else
-                n_superposed = mx->get_essential_block(block.first).v_u.size();
-
-            // check keys
-            #ifndef NDEBUG
-            if (propagator.find(dep_v) == propagator.end())
-                std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (propagator.find(dep_u) == propagator.end())
-                std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
-            #endif
+            int p                = std::get<0>(segment_info);
+            double *propagator_v = std::get<1>(segment_info);
+            double *propagator_u = std::get<2>(segment_info);
+            int n_superposed     = std::get<3>(segment_info);
 
             single_partitions[p]= cb->inner_product(
-                &propagator[dep_v][(n_segment_original-n_segment_offset)*M], // q
-                &propagator[dep_u][0])/n_superposed/cb->get_volume();        // q^dagger
-            
-            // std::cout << p <<", "<< dep_v <<", "<< dep_u <<", "<< n_segment <<", " << single_partitions[p] << std::endl;
-            // std::cout << p <<", "<< n_segment <<", "<< n_segment_offset <<", "<< single_partitions[p] << std::endl;
-            current_p++;
+                propagator_v, propagator_u)/n_superposed/cb->get_volume();
         }
 
         // calculate segment concentrations
@@ -586,7 +590,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
         const int M_COMPLEX = this->n_complex_grid;
 
         auto bond_lengths = mx->get_bond_lengths();
-        std::vector<double> stress(cb->get_dim());
+        std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // reset stress map
@@ -670,7 +674,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
         }
 
         // compute total stress
-        for(int d=0; d<cb->get_dim(); d++)
+        for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
         for(const auto& block: block_phi)
         {
@@ -680,11 +684,11 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             std::string dep_u = std::get<2>(key);
             PolymerChain& pc  = mx->get_polymer(p);
 
-            for(int d=0; d<cb->get_dim(); d++)
+            for(int d=0; d<DIM; d++)
                 stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
 
-        for(int d=0; d<cb->get_dim(); d++)
+        for(int d=0; d<DIM; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
 
         return stress;

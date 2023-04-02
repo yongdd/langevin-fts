@@ -20,6 +20,7 @@ class AbstractFactory
 {
 protected:
     std::string chain_model;
+    bool reduce_memory_usage;
 public :
     virtual ~AbstractFactory() {};
 
@@ -31,7 +32,7 @@ public :
         double ds, std::map<std::string, double> bond_lengths, bool use_superposition) = 0;
 
     virtual Pseudo* create_pseudo(
-        ComputationBox *cb, Mixture *mx, bool reduce_memory_usage) = 0; 
+        ComputationBox *cb, Mixture *mx) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

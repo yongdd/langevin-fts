@@ -15,7 +15,7 @@
 class MklFactory : public AbstractFactory
 {
 public :
-    MklFactory(std::string chain_model);
+    MklFactory(std::string chain_model, bool reduce_memory_usage);
 
     ComputationBox* create_computation_box(
         std::vector<int> nx,
@@ -24,7 +24,7 @@ public :
     Mixture* create_mixture(
         double ds, std::map<std::string, double> bond_lengths, bool use_superposition) override;
 
-    Pseudo* create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_memory_usage) override;
+    Pseudo* create_pseudo(ComputationBox *cb, Mixture *mx) override;
 
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

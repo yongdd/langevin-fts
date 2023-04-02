@@ -83,16 +83,16 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         single_partitions = new double[mx->get_n_polymers()];
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_essential_propagator_codes(), N_PARALLEL_STREAMS); 
+        sc = new Scheduler(mx->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         // create streams
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            cudaStreamCreate(&streams[gpu]); // for cuFFT
+            gpu_error_check(cudaStreamCreate(&streams[gpu])); // for cuFFT
         }
         gpu_error_check(cudaSetDevice(N_GPUS-1));
-        cudaStreamCreate(&streams[N_GPUS]); // for PtoP Memcpy
+        gpu_error_check(cudaStreamCreate(&streams[N_GPUS])); // for PtoP Memcpy
 
         // Create FFT plan
         const int NRANK{cb->get_dim()};
@@ -240,7 +240,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     cudaFree(d_q_multi);
     cudaFree(d_stress_sum);
 
-    // destory streams
+    // destroy streams
     for (int i = 0; i < N_GPUS+1; i++)
         cudaStreamDestroy(streams[i]);
 }

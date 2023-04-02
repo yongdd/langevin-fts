@@ -107,7 +107,7 @@ CudaPseudoReduceMemoryDiscrete::CudaPseudoReduceMemoryDiscrete(
         const int NUM_STREAMS = 3;
         streams = (cudaStream_t*) malloc(sizeof(cudaStream_t)*NUM_STREAMS);
         for (int i = 0; i < NUM_STREAMS; i++)
-            cudaStreamCreate(&streams[i]);
+            gpu_error_check(cudaStreamCreate(&streams[i]));
         cufftSetStream(plan_for, streams[1]);
         cufftSetStream(plan_bak, streams[1]); 
         cufftSetStream(plan_for_two, streams[2]);

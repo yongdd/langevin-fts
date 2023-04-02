@@ -80,7 +80,9 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaPseudoReduceMemoryContinuous.cu
         src/platforms/cuda/CudaPseudoReduceMemoryDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
+        src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
+        src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
         src/platforms/cuda/CudaFactory.cu
     )
     SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES OFF)

@@ -117,13 +117,13 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-factory = PlatformSelector.create_factory(platform, chain_model)
+factory = PlatformSelector.create_factory(platform, chain_model, reduce_gpu_memory_usage)
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, dict_a_n, use_superposition)
 mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
-pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
+pseudo = factory.create_pseudo(cb, mixture)
 am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 

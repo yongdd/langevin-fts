@@ -8,12 +8,18 @@ CircularBuffer::CircularBuffer(int length, int width)
     this->start = 0;
     this->n_items = 0;
 
-    elems = new double[length*width];
-    for(int i=0; i<length*width; i++)
-        elems[i] = 0.0;
+    elems = new double*[length];
+    for(int i=0; i<length; i++)
+    {
+        elems[i] = new double[width];
+        for(int j=0; j<width; j++)
+            elems[i][j] = 0.0;
+    }
 }
 CircularBuffer::~CircularBuffer()
 {
+    for(int i=0; i<length; i++)
+        delete[] elems[i];
     delete[] elems;
 }
 void CircularBuffer::reset()
@@ -25,7 +31,7 @@ void CircularBuffer::insert(double* new_arr)
 {
     int i = (start+n_items)%length;
     for(int m=0; m<width; m++){
-        elems[i*width + m] = new_arr[m];
+        elems[i][m] = new_arr[m];
     }
     if (n_items == length)
         start = (start+1)%length;
@@ -34,15 +40,15 @@ void CircularBuffer::insert(double* new_arr)
 double* CircularBuffer::get_array(int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return &elems[i*width];
+    return elems[i];
 }
 double* CircularBuffer::operator[] (int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return &elems[i*width];
+    return elems[i];
 }
 double CircularBuffer::get(int n, int m)
 {
     int i = (start+n_items-n-1+length)%length;
-    return elems[i*width + m];
+    return elems[i][m];
 }

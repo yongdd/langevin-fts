@@ -17,8 +17,14 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
-MklFactory::MklFactory(std::string chain_model){
+MklFactory::MklFactory(std::string chain_model, bool reduce_memory_usage)
+{
     this->chain_model = chain_model;
+    this->reduce_memory_usage = reduce_memory_usage;
+
+    if (this->reduce_memory_usage)
+        std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
+
 }
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)
@@ -31,11 +37,8 @@ Mixture* MklFactory::create_mixture(
 {
     return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
-Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_memory_usage)
+Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
 {
-    if (reduce_memory_usage)
-        std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
-
     std::string chain_model = mx->get_model_name();
     if ( chain_model == "continuous" )
     {

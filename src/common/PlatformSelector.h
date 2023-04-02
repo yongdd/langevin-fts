@@ -13,8 +13,8 @@ class PlatformSelector
 {
 public:
     static std::vector<std::string> avail_platforms();
-    static AbstractFactory* create_factory(std::string chain_model);
     static AbstractFactory* create_factory(std::string platform, std::string chain_model);
+    static AbstractFactory* create_factory(std::string platform, std::string chain_model, bool reduce_memory_usage);
 };
 
 #endif
