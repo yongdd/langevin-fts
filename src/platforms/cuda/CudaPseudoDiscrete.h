@@ -55,7 +55,7 @@ private:
     #endif
 
     // the number of parallel jobs for propagator computation
-    const int N_PARALLEL_STREAMS = 2;
+    const int N_SCHEDULER_STREAMS = 2;
 
     // scheduler for propagator
     Scheduler *sc;

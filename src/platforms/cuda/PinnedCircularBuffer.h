@@ -1,21 +1,21 @@
-#ifndef CUDA_CIRCULAR_BUFFER_H_
-#define CUDA_CIRCULAR_BUFFER_H_
+#ifndef PINNED_CIRCULAR_BUFFER_H_
+#define PINNED_CIRCULAR_BUFFER_H_
 
 /*-----------------------------------------------------------------
-! A circular buffer stores data in the GPU memory.
+! A circular buffer stores data in the pinned host memory.
 !-----------------------------------------------------------------*/
-class CudaCircularBuffer
+class PinnedCircularBuffer
 {
 private:
     int length; // maximum number of elements
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double** d_elems;
+    double** elems;
 
 public:
-    CudaCircularBuffer(int length, int width);
-    ~CudaCircularBuffer();
+    PinnedCircularBuffer(int length, int width);
+    ~PinnedCircularBuffer();
     void reset();
     void insert(double* new_arr);
     double* get_array(int n);

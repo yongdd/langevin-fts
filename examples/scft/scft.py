@@ -29,7 +29,10 @@ class SCFT:
             "There is no polymer chain."
 
         # (c++ class) Create a factory for given platform and chain_model
-        factory = PlatformSelector.create_factory(platform, params["chain_model"])
+        if "reduce_gpu_memory_usage" in params and platform == "cuda":
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], params["reduce_gpu_memory_usage"])
+        else:
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], False)
         factory.display_info()
         
         # (C++ class) Computation box
@@ -114,10 +117,7 @@ class SCFT:
             mixture.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solver using Pseudo-spectral method
-        if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            pseudo = factory.create_pseudo(cb, mixture, params["reduce_gpu_memory_usage"])
-        else:
-            pseudo = factory.create_pseudo(cb, mixture, False)
+        pseudo = factory.create_pseudo(cb, mixture)
 
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
 
@@ -133,7 +133,7 @@ class SCFT:
                 params["am"]["mix_min"],      # minimum mixing rate of simple mixing
                 params["am"]["mix_init"])     # initial mixing rate of simple mixing
         else : 
-            am = factory.create_anderson_mixing(am_n_var, 60, 1e-2, 0.1,  0.1)
+            am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.1,  0.1)
 
        # The maximum iteration steps
         if "max_iter" in params :

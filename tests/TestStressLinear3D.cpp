@@ -107,14 +107,14 @@ int main()
             {
                 for(bool use_superposition : use_superpositions)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
+                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
                     factory->display_info();
 
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}}, use_superposition);
                     mx->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
+                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

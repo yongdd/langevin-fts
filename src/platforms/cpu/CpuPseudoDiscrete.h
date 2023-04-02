@@ -26,35 +26,40 @@ private:
     double *fourier_basis_y;
     double *fourier_basis_z;
 
-    // key: (dep) + monomer_type, value: partition functions
+    // scheduler for propagator
+    Scheduler *sc;
+    // the number of parallel streams for propagator computation
+    const int N_SCHEDULER_STREAMS = 4;
+    // key: (dep), value: array pointer
+    std::map<std::string, double*> q_junction_cache;
+    // key: (dep) + monomer_type, value: propagator
     std::map<std::string, double *> propagator;
-
     // check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
     #endif
 
-    // scheduler for propagator
-    Scheduler *sc;
-    
-    // the number of parallel streams for propagator computation
-    const int N_PARALLEL_STREAMS = 4;
+    // total partition functions for each polymer
+    double* single_partitions;
+    // remember one segment for each polymer chain to compute total partition function
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_superposed)
+    std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> block_phi;
 
-    // key: (dep), value: array pointer
-    std::map<std::string, double*> q_junction_cache;
-    
+    // arrays for pseudo-spectral
     std::map<std::string, double*> boltz_bond;        // boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // boltzmann factor for the half bond
     std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
 
-    // total partition functions for each polymer
-    double* single_partitions;
-
+    // advance propagator by one segment step
     void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
+
+    // advance propagator by half bond step
     void half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
+
+    // calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
     CpuPseudoDiscrete(ComputationBox *cb, Mixture *mx, FFT *fft);

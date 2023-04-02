@@ -53,7 +53,7 @@ v.append([0])                     # vertices v (homo)
 u.append([1])                     # vertices u (homo)
 
 # select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous")
+factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
 factory.display_info()
 
 # create instances
@@ -63,7 +63,7 @@ for p in range(len(block_lengths)):
      mixture.add_polymer(
      volume_faction[p],block_monomer_types[p],
      block_lengths[p],v[p],u[p])
-pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
+pseudo = factory.create_pseudo(cb, mixture)
 
 # print blocks and branches
 mixture.display_blocks()

@@ -12,10 +12,13 @@
 #include "CudaPseudoReduceMemoryContinuous.h"
 #include "CudaPseudoReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
+#include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
 
-CudaFactory::CudaFactory(std::string chain_model){
+CudaFactory::CudaFactory(std::string chain_model, bool reduce_memory_usage)
+{
     this->chain_model = chain_model;
+    this->reduce_memory_usage = reduce_memory_usage;
 }
 ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)
@@ -27,7 +30,7 @@ Mixture* CudaFactory::create_mixture(
 {
     return new Mixture(chain_model, ds, bond_lengths, use_superposition);
 }
-Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx, bool reduce_memory_usage)
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
 {
     std::string model_name = mx->get_model_name();
 
@@ -45,8 +48,17 @@ AndersonMixing* CudaFactory::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-    return new CudaAndersonMixing(
-        n_var, max_hist, start_error, mix_min, mix_init);
+
+    if(this->reduce_memory_usage)
+    {
+        return new CudaAndersonMixingReduceMemory(
+            n_var, max_hist, start_error, mix_min, mix_init);
+    }
+    else
+    {
+        return new CudaAndersonMixing(
+            n_var, max_hist, start_error, mix_min, mix_init);
+    }
 }
 void CudaFactory::display_info()
 {

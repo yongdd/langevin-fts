@@ -99,14 +99,14 @@ int main()
                         if(reduce_memory_usage == true && platform == "cpu-mkl")
                                 continue;
                         
-                        AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
+                        AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
                         // factory->display_info();
 
                         // create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
                         Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
                         mx->add_polymer(1.0, block_species, contour_lengths, v, u, {});
-                        Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
+                        Pseudo *pseudo     = factory->create_pseudo(cb, mx);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

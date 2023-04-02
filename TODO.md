@@ -13,3 +13,4 @@
 34. Detach Superposition Part from Mixture
 35. Write UnitTest: TestComparePropagatorKey
 37. Reduce the number of split in scheduler
+40. Figure out why double GPUs performance keeps changing in A100

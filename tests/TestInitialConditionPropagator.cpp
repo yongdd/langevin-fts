@@ -60,14 +60,14 @@ int main()
             {
                 for(bool use_superposition : use_superpositions)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model);
+                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
                     // factory->display_info();
 
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
                     mx->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx, reduce_memory_usage);
+                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
 
                     // -------------- print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);

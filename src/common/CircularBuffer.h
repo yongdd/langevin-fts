@@ -14,7 +14,7 @@ private:
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double* elems;
+    double** elems;
 
 public:
     CircularBuffer(int length, int width);

@@ -34,7 +34,7 @@ u = [1]                       # vertices u
 grafting_point = {0:"G"}  # vertex 0 will be initialized with q_init["G"]
 
 # select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous")
+factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
 factory.display_info()
 
 # create instances
@@ -42,7 +42,7 @@ cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
 
 mixture.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
-pseudo = factory.create_pseudo(cb, mixture, reduce_gpu_memory_usage)
+pseudo = factory.create_pseudo(cb, mixture)
 
 mixture.display_blocks()
 mixture.display_propagators()
