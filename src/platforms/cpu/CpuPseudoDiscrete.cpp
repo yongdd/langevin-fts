@@ -39,10 +39,10 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
              // O  : full segment
         }
 
-        // allocate memory for q_junction_cache, which contain partition function at junction of discrete chain
+        // allocate memory for propagator_junction, which contain partition function at junction of discrete chain
         for(const auto& item: mx->get_essential_propagator_codes())
         {
-            q_junction_cache[item.first] = new double[M];
+            propagator_junction[item.first] = new double[M];
         }
 
         // allocate memory for concentrations
@@ -86,7 +86,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             int n_superposed;
             int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
             int n_segment_original  = mx->get_essential_block(key).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(block.first).monomer_type;
+            std::string monomer_type = mx->get_essential_block(key).monomer_type;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -135,7 +135,7 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         delete[] item.second;
     for(const auto& item: block_phi)
         delete[] item.second;
-    for(const auto& item: q_junction_cache)
+    for(const auto& item: propagator_junction)
         delete[] item.second;
 
     #ifndef NDEBUG
@@ -261,7 +261,7 @@ void CpuPseudoDiscrete::compute_statistics(
                             for(int i=0; i<M; i++)
                                 _propagator[i] += _propagator_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
                         }
-                        one_step(&_propagator[0],
+                        advance_propagator(&_propagator[0],
                             &_propagator[0],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
@@ -304,18 +304,18 @@ void CpuPseudoDiscrete::compute_statistics(
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            half_bond_step(&propagator[sub_dep][(sub_n_segment-1)*M],
+                            advance_propagator_half_bond_step(&propagator[sub_dep][(sub_n_segment-1)*M],
                                 q_half_step, boltz_bond_half[mx->get_essential_propagator_code(sub_dep).monomer_type]);
 
                             for(int i=0; i<M; i++)
                                 q_junction[i] *= q_half_step[i];
                         }
-                        double *_q_junction_cache = q_junction_cache[key];
+                        double *_q_junction_cache = propagator_junction[key];
                         for(int i=0; i<M; i++)
                             _q_junction_cache[i] = q_junction[i];
 
                         // add half bond
-                        half_bond_step(q_junction, &_propagator[0], boltz_bond_half[monomer_type]);
+                        advance_propagator_half_bond_step(q_junction, &_propagator[0], boltz_bond_half[monomer_type]);
 
                         // add full segment
                         for(int i=0; i<M; i++)
@@ -339,7 +339,7 @@ void CpuPseudoDiscrete::compute_statistics(
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
                     #endif
 
-                    one_step(&_propagator[(n-1)*M],
+                    advance_propagator(&_propagator[(n-1)*M],
                             &_propagator[n*M],
                             boltz_bond[monomer_type],
                             exp_dw[monomer_type]);
@@ -420,7 +420,7 @@ void CpuPseudoDiscrete::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
+void CpuPseudoDiscrete::advance_propagator(double *q_in, double *q_out,
                                  double *boltz_bond, double *exp_dw)
 {
     try
@@ -446,7 +446,7 @@ void CpuPseudoDiscrete::one_step(double *q_in, double *q_out,
     }
 }
 
-void CpuPseudoDiscrete::half_bond_step(double *q_in, double *q_out, double *boltz_bond_half)
+void CpuPseudoDiscrete::advance_propagator_half_bond_step(double *q_in, double *q_out, double *boltz_bond_half)
 {
     try
     {
@@ -573,7 +573,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         const int M_COMPLEX = this->n_complex_grid;
 
         auto bond_lengths = mx->get_bond_lengths();
-        std::vector<double> stress(cb->get_dim());
+        std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // reset stress map
@@ -628,21 +628,21 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                 // at v
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    // std::cout << "case 1: " << q_junction_cache[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
+                    // std::cout << "case 1: " << propagator_junction[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
                     if (mx->get_essential_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
                         continue;
-                    fft->forward(q_junction_cache[dep_v], qk_1);
+                    fft->forward(propagator_junction[dep_v], qk_1);
                     fft->forward(&q_2[(N-1)*M], qk_2);
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
                 // at u
                 else if (n + N_OFFSET == 0){
-                    // std::cout << "case 2: " << q_1[(N_ORIGINAL-N_OFFSET-1)*M] << ", " << q_junction_cache[dep_u][0] << std::endl;
+                    // std::cout << "case 2: " << q_1[(N_ORIGINAL-N_OFFSET-1)*M] << ", " << propagator_junction[dep_u][0] << std::endl;
                     if (mx->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
                         continue;
                     fft->forward(&q_1[(N_ORIGINAL-1)*M], qk_1);
-                    fft->forward(q_junction_cache[dep_u], qk_2);
+                    fft->forward(propagator_junction[dep_u], qk_2);
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
@@ -707,7 +707,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         }
 
         // compute total stress
-        for(int d=0; d<cb->get_dim(); d++)
+        for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
         for(const auto& block: block_phi)
         {
@@ -717,10 +717,10 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             std::string dep_u    = std::get<2>(key);
             PolymerChain& pc = mx->get_polymer(p);
 
-            for(int d=0; d<cb->get_dim(); d++)
+            for(int d=0; d<DIM; d++)
                 stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
-        for(int d=0; d<cb->get_dim(); d++)
+        for(int d=0; d<DIM; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
 
         return stress;

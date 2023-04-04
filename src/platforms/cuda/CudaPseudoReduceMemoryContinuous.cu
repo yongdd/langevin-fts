@@ -1,9 +1,5 @@
-#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
-#define CUB_IGNORE_DEPRECATED_CPP_DIALECT
-
 #include <complex>
 #include <thrust/reduce.h>
-#include <thrust/device_ptr.h>
 #include "CudaPseudoReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
 #include "SimpsonRule.h"
@@ -45,6 +41,7 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: mx->get_essential_blocks())
         {
+            block_phi[item.first] = nullptr;
             // allocate pinned memory
             gpu_error_check(cudaMallocHost((void**)&block_phi[item.first], sizeof(double)*M));
         }
@@ -148,7 +145,7 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         }
 
         gpu_error_check(cudaSetDevice(0));
-        // allocate memory for pseudo-spectral: one_step()
+        // allocate memory for pseudo-spectral: advance_one_propagator()
         gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[0], sizeof(double)*M)); // for prev
         gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[1], sizeof(double)*M)); // for next
 
@@ -158,7 +155,7 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
             // allocate memory for propagator computation
             gpu_error_check(cudaMalloc((void**)&d_q_one[gpu][0], sizeof(double)*M)); // for prev
             gpu_error_check(cudaMalloc((void**)&d_q_one[gpu][1], sizeof(double)*M)); // for next
-            // allocate memory for pseudo-spectral: one_step()
+            // allocate memory for pseudo-spectral: advance_one_propagator()
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[gpu], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[gpu], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[gpu], sizeof(double)*2*M));
@@ -198,8 +195,8 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            d_temp_storage[gpu] = NULL; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is NULL
-            temp_storage_bytes[MAX_GPUS] = 0;
+            d_temp_storage[gpu] = nullptr; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is nullptr
+            temp_storage_bytes[gpu] = 0;
             cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_stress_sum[gpu], d_stress_sum_out[gpu], M_COMPLEX, streams[gpu][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[gpu], temp_storage_bytes[gpu]));
         }
@@ -216,10 +213,10 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
     
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
-        cufftDestroy(plan_for_one [gpu]);
-        cufftDestroy(plan_for_two [gpu]);
-        cufftDestroy(plan_bak_one [gpu]);
-        cufftDestroy(plan_bak_two [gpu]);
+        cufftDestroy(plan_for_one[gpu]);
+        cufftDestroy(plan_for_two[gpu]);
+        cufftDestroy(plan_bak_one[gpu]);
+        cufftDestroy(plan_bak_two[gpu]);
     }
 
     delete sc;
@@ -264,7 +261,7 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
     }
     cudaFree(d_q_unity);
 
-    // for pseudo-spectral: one_step()
+    // for pseudo-spectral: advance_one_propagator()
     cudaFree(d_propagator_sub_dep[0]);
     cudaFree(d_propagator_sub_dep[1]);
 
@@ -300,7 +297,7 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
 void CudaPseudoReduceMemoryContinuous::update_bond_function()
 {
     try{
-        // for pseudo-spectral: one_step()
+        // for pseudo-spectral: advance_one_propagator()
         const int M_COMPLEX = this->n_complex_grid;
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
@@ -329,9 +326,9 @@ void CudaPseudoReduceMemoryContinuous::update_bond_function()
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMemcpy(d_fourier_basis_x[gpu], fourier_basis_x, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_fourier_basis_y[gpu], fourier_basis_y, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_fourier_basis_z[gpu], fourier_basis_z, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_fourier_basis_x[gpu], fourier_basis_x, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_fourier_basis_y[gpu], fourier_basis_y, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_fourier_basis_z[gpu], fourier_basis_z, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
     catch(std::exception& exc)
@@ -418,7 +415,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 if (propagator.find(key) == propagator.end())
                     throw_with_line_number("Could not find key '" + key + "'. ");
                 #endif
-                double **_propagator = propagator[key];
+                double *_propagator_0 = propagator[key][0];
 
                 // if it is leaf node
                 if(deps.size() == 0)
@@ -435,7 +432,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     {
                         gpu_error_check(cudaMemcpy(d_q_one[0][0], d_q_unity, sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     }
-                    gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
 
                     #ifndef NDEBUG
                     propagator_finished[key][0] = true;
@@ -493,7 +490,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             std::swap(prev, next);
                             cudaDeviceSynchronize();
                         }
-                        gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
+                        gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
                         
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -544,7 +541,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             std::swap(prev, next);
                             cudaDeviceSynchronize();
                         }
-                        gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
+                        gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
                         #endif
@@ -570,7 +567,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
             }
 
             // advance propagator successively
-            if(N_GPUS == 2 && non_zero_segment_jobs.size() == 2)
+            if(N_GPUS > 1 && non_zero_segment_jobs.size() == 2)
             {
                 const int N_JOBS = non_zero_segment_jobs.size();
                 std::string keys[N_JOBS];
@@ -622,7 +619,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     for(int gpu=0; gpu<N_GPUS; gpu++)
                     {
                         gpu_error_check(cudaSetDevice(gpu));
-                        one_step(gpu,
+                        advance_one_propagator(gpu,
                             d_q_one[gpu][prev],
                             d_q_one[gpu][next],
                             d_boltz_bond[gpu][monomer_types[gpu]],
@@ -679,22 +676,22 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     gpu_error_check(cudaMemcpy(d_q_one[0][prev], _propagator_keys[j][n_segment_froms[j]-1], sizeof(double)*M,
                         cudaMemcpyHostToDevice));
 
-                    for(int n=0; n<=n_segment_tos[0]-n_segment_froms[0]; n++)
+                    for(int n=n_segment_froms[j]; n<=n_segment_tos[j]; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[keys[j]][n-1+n_segment_froms[j]])
-                            throw_with_line_number("unfinished, key: " + keys[j] + ", " + std::to_string(n-1+n_segment_froms[j]));
+                        if (!propagator_finished[keys[j]][n-1])
+                            throw_with_line_number("unfinished, key: " + keys[j] + ", " + std::to_string(n-1));
                         #endif
 
                         // STREAM 1: copy propagators from device to host
-                        if (n > 0)
+                        if (n > n_segment_froms[j])
                         {
-                            gpu_error_check(cudaMemcpyAsync(_propagator_keys[j][n-1+n_segment_froms[j]], d_q_one[0][prev], sizeof(double)*M,
+                            gpu_error_check(cudaMemcpyAsync(_propagator_keys[j][n-1], d_q_one[0][prev], sizeof(double)*M,
                                 cudaMemcpyDeviceToHost, streams[0][1]));
                         }
 
                         // STREAM 0: compute propagator
-                        one_step(0, 
+                        advance_one_propagator(0, 
                             d_q_one[0][prev],
                             d_q_one[0][next],
                             d_boltz_bond[0][monomer_types[j]],
@@ -706,7 +703,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                         cudaDeviceSynchronize();
 
                         #ifndef NDEBUG
-                        propagator_finished[keys[j]][n+n_segment_froms[j]] = true;
+                        propagator_finished[keys[j]][n] = true;
                         #endif
                     }
                     // copy propagators from device to host
@@ -791,7 +788,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
 }
 
 // Advance propagator using Richardson extrapolation
-void CudaPseudoReduceMemoryContinuous::one_step(const int GPU,
+void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half)
@@ -852,7 +849,7 @@ void CudaPseudoReduceMemoryContinuous::one_step(const int GPU,
     }
 }
 void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
-    double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, double norm)
+    double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM)
 {
     try
     {
@@ -876,7 +873,7 @@ void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
         for(int n=0; n<=N; n++)
         {
             // STREAM 1: copy propagators from host to device
-            if (n < N)
+            if (n+1 <= N)
             {
                 gpu_error_check(cudaMemcpyAsync(d_q_block_v[next], q_1[N_ORIGINAL-N_OFFSET-(n+1)],
                     sizeof(double)*M, cudaMemcpyHostToDevice, streams[0][1]));
@@ -885,7 +882,7 @@ void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
             }
 
             // STREAM 0: multiply two propagators
-            add_multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_phi, d_q_block_v[prev], d_q_block_u[prev], norm*simpson_rule_coeff[n], M);
+            add_multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_phi, d_q_block_v[prev], d_q_block_u[prev], NORM*simpson_rule_coeff[n], M);
             std::swap(prev, next);
             cudaDeviceSynchronize();
         }
@@ -1031,11 +1028,14 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
             {
                 // index
                 int idx = gpu;
-                gpu_error_check(cudaSetDevice(gpu));
-                gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][0], q_1[N_ORIGINAL-N_OFFSET-idx],
-                        sizeof(double)*M,cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][M], q_2[idx],
-                        sizeof(double)*M,cudaMemcpyHostToDevice));
+                if (idx <= N)
+                {
+                    gpu_error_check(cudaSetDevice(gpu));
+                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][0], q_1[N_ORIGINAL-N_OFFSET-idx],
+                            sizeof(double)*M,cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][M], q_2[idx],
+                            sizeof(double)*M,cudaMemcpyHostToDevice));
+                }
             }
 
             // compute
@@ -1173,9 +1173,9 @@ void CudaPseudoReduceMemoryContinuous::get_chain_propagator(double *q_out, int p
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        double** _partition = propagator[dep];
+        double* _propagator = propagator[dep][n];
         for(int i=0; i<M; i++)
-            q_out[i] = _partition[n][i];
+            q_out[i] = _propagator[i];
     }
     catch(std::exception& exc)
     {

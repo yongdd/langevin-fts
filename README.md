@@ -16,7 +16,7 @@ This is not just an application, but it contains a library for polymer field the
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
   * GPU memory saving option (**beta**)
-  * Parallel computations of propagators for multi-core CPUs, batched cuFFT, and double GPUs (**beta**)
+  * Parallel computations of propagators with multi-core CPUs, batched cuFFT, or double GPUs (**beta**)
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
 Using the above python shared library, SCFT and L-FTS are implemented. They supports following features:
@@ -134,7 +134,8 @@ conda env remove -n lfts
   5. The CPU version uses up to 4 CPUs, and the CUDA version uses batched cuFFT with a maximum batch size of 2.
 
 #### Reducing GPU Memory Usage
-  Propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. To enable this option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaPseudoReduceMemoryContinuous or CudaPseudoReduceMemoryDiscrete.
+  1. Propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. To enable this option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaPseudoReduceMemoryContinuous or CudaPseudoReduceMemoryDiscrete. 
+  2. In addition, when 'reduce_gpu_memory_usage' is enabled, field history for Anderson Mixing is also stored in main memory, and the factory will create CudaAndersonMixingReduceMemory.
 
 #### Platforms  
   This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
@@ -156,7 +157,7 @@ conda env remove -n lfts
 + M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
 #### Exchange Field Update Algorithm
 + B.Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of
-field-theoretic simulations, *J. Chem. Phys.* **2023**, (in press)   
+field-theoretic simulations, *J. Chem. Phys.* **2023**, 158, 114117
 
 # Citation
 Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, *Macromolecules* **2022**, 55, 6505  
