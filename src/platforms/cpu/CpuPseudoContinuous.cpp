@@ -312,7 +312,7 @@ void CpuPseudoContinuous::compute_statistics(
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                     #endif
                     
-                    one_step(&_propagator[(n-1)*M],
+                    advance_propagator(&_propagator[(n-1)*M],
                             &_propagator[n*M],
                             boltz_bond[monomer_type],
                             boltz_bond_half[monomer_type],
@@ -426,7 +426,7 @@ void CpuPseudoContinuous::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudoContinuous::one_step(double *q_in, double *q_out,
+void CpuPseudoContinuous::advance_propagator(double *q_in, double *q_out,
                                  double *boltz_bond, double *boltz_bond_half,
                                  double *exp_dw, double *exp_dw_half)
 {

@@ -53,7 +53,7 @@ private:
     std::map<std::string, double*> exp_dw_half;       // boltzmann factor for the half segment
 
     // advance propagator by one contour step
-    void one_step(double *q_in, double *q_out, 
+    void advance_propagator(double *q_in, double *q_out, 
                   double *boltz_bond, double *boltz_bond_half,
                   double *exp_dw, double *exp_dw_half);
 

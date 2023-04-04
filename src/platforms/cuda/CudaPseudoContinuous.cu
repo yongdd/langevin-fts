@@ -147,7 +147,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         cufftSetStream(plan_for_four, streams[0][0]);
         cufftSetStream(plan_bak_four, streams[0][0]);
 
-        // allocate memory for pseudo-spectral: one_step()
+        // allocate memory for pseudo-spectral: advance_propagator()
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -196,8 +196,8 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            d_temp_storage[gpu] = NULL; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is NULL
-            temp_storage_bytes[MAX_GPUS] = 0;
+            d_temp_storage[gpu] = nullptr; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is nullptr
+            temp_storage_bytes[gpu] = 0;
             cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_stress_sum[gpu], d_stress_sum_out[gpu], M_COMPLEX, streams[gpu][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[gpu], temp_storage_bytes[gpu]));
         }
@@ -252,11 +252,10 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         delete[] item.second;
     #endif
 
-    // for get_concentration
     cudaFree(d_phi);
     cudaFree(d_q_unity);
 
-    // for pseudo-spectral: one_step()
+    // for pseudo-spectral: advance_propagator()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
         cudaFree(d_q_step_1_one[gpu]);
@@ -300,7 +299,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
 void CudaPseudoContinuous::update_bond_function()
 {
     try{
-        // for pseudo-spectral: one_step()
+        // for pseudo-spectral: advance_propagator()
         const int M_COMPLEX = this->n_complex_grid;
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
@@ -522,6 +521,7 @@ void CudaPseudoContinuous::compute_statistics(
                         #endif
                     }
                 }
+                cudaDeviceSynchronize();
             }
             // synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -544,7 +544,6 @@ void CudaPseudoContinuous::compute_statistics(
             if(non_zero_segment_jobs.size()==1)
             {
                 gpu_error_check(cudaSetDevice(0));
-
                 auto& key = std::get<0>(non_zero_segment_jobs[0]);
                 int n_segment_from = std::get<1>(non_zero_segment_jobs[0]);
                 int n_segment_to = std::get<2>(non_zero_segment_jobs[0]);
@@ -558,7 +557,7 @@ void CudaPseudoContinuous::compute_statistics(
                         throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
                     #endif
 
-                    one_step_1(0, 
+                    advance_one_propagator(0, 
                         _d_propagator_key[n-1],
                         _d_propagator_key[n],
                         d_boltz_bond[0][monomer_type],
@@ -612,7 +611,7 @@ void CudaPseudoContinuous::compute_statistics(
 
                         // DEVICE 0, STREAM 0: calculate propagator of key0
                         gpu_error_check(cudaSetDevice(0));
-                        one_step_1(0,
+                        advance_one_propagator(0,
                             _d_propagator_keys[0][n-1+n_segment_froms[0]],
                             _d_propagator_keys[0][n+n_segment_froms[0]],
                             d_boltz_bond[0][monomer_types[0]],
@@ -622,7 +621,7 @@ void CudaPseudoContinuous::compute_statistics(
 
                         // DEVICE 1, STREAM 0: calculate propagator of key1
                         gpu_error_check(cudaSetDevice(1));
-                        one_step_1(1,
+                        advance_one_propagator(1,
                             d_propagator_device_1[prev],
                             d_propagator_device_1[next],
                             d_boltz_bond[1][monomer_types[1]],
@@ -665,7 +664,7 @@ void CudaPseudoContinuous::compute_statistics(
                             throw_with_line_number("unfinished, key: " + keys[1] + ", " + std::to_string(n-1+n_segment_froms[1]));
                         #endif
 
-                        one_step_2(
+                        advance_two_propagators(
                             _d_propagator_keys[0][n-1+n_segment_froms[0]],
                             _d_propagator_keys[1][n-1+n_segment_froms[1]],
                             _d_propagator_keys[0][n+n_segment_froms[0]],
@@ -763,7 +762,7 @@ void CudaPseudoContinuous::compute_statistics(
 }
 
 // Advance propagator using Richardson extrapolation
-void CudaPseudoContinuous::one_step_1(const int GPU,
+void CudaPseudoContinuous::advance_one_propagator(const int GPU,
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half)
@@ -823,7 +822,7 @@ void CudaPseudoContinuous::one_step_1(const int GPU,
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::one_step_2(
+void CudaPseudoContinuous::advance_two_propagators(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2, 
@@ -1062,10 +1061,13 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 // index
                 int idx = gpu;
                 gpu_error_check(cudaSetDevice(gpu));
-                gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][0], d_q_1[N_ORIGINAL-N_OFFSET-idx],
-                        sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][M], d_q_2[idx],
-                        sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                if (idx <= N)
+                {
+                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][0], d_q_1[N_ORIGINAL-N_OFFSET-idx],
+                            sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][M], d_q_2[idx],
+                            sizeof(double)*M,cudaMemcpyDeviceToDevice));
+                }
             }
 
             // compute

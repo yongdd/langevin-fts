@@ -18,11 +18,10 @@
 class CudaPseudoContinuous : public Pseudo
 {
 private:
-
     // two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
-    // for pseudo-spectral: one_step()
+    // for pseudo-spectral: advance_propagator()
     double *d_q_unity; // all elements are 1 for initializing propagators
     cufftHandle plan_for_one[MAX_GPUS], plan_bak_one[MAX_GPUS];
     cufftHandle plan_for_two[MAX_GPUS], plan_bak_two[MAX_GPUS];
@@ -83,13 +82,13 @@ private:
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // boltzmann factor for the half segment
 
     // advance one propagator by one contour step
-    void one_step_1(const int GPU,
+    void advance_one_propagator(const int GPU,
             double *d_q_in, double *d_q_out,
             double *d_boltz_bond, double *d_boltz_bond_half,
             double *d_exp_dw, double *d_exp_dw_half);
 
     // advance two propagators by one contour step
-    void one_step_2(double *d_q_in_1, double *d_q_in_2,
+    void advance_two_propagators(double *d_q_in_1, double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             double *d_boltz_bond_1, double *d_boltz_bond_2, 
             double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         

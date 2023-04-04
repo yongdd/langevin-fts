@@ -29,7 +29,7 @@ private:
     // two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
-    // for pseudo-spectral: one_step()
+    // for pseudo-spectral: advance_one propagator()
     double *d_q_unity; // all elements are 1 for initializing propagators
     cufftHandle plan_for_one[MAX_GPUS], plan_bak_one[MAX_GPUS];
     cufftHandle plan_for_two[MAX_GPUS], plan_bak_two[MAX_GPUS];
@@ -90,13 +90,13 @@ private:
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // boltzmann factor for the half segment
 
     // advance one propagator by one contour step
-    void one_step(const int GPU,
+    void advance_one_propagator(const int GPU,
             double *d_q_in, double *d_q_out,
             double *d_boltz_bond, double *d_boltz_bond_half,
             double *d_exp_dw, double *d_exp_dw_half);
 
     // calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, double norm);
+    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM);
 public:
 
     CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Mixture *pc);

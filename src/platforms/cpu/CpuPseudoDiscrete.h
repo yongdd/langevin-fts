@@ -31,7 +31,7 @@ private:
     // the number of parallel streams for propagator computation
     const int N_SCHEDULER_STREAMS = 4;
     // key: (dep), value: array pointer
-    std::map<std::string, double*> q_junction_cache;
+    std::map<std::string, double*> propagator_junction;
     // key: (dep) + monomer_type, value: propagator
     std::map<std::string, double *> propagator;
     // check if computation of propagator is finished
@@ -54,10 +54,10 @@ private:
     std::map<std::string, double*> exp_dw;            // boltzmann factor for the single segment
 
     // advance propagator by one segment step
-    void one_step(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
+    void advance_propagator(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
 
     // advance propagator by half bond step
-    void half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
+    void advance_propagator_half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
 
     // calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
