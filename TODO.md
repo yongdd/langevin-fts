@@ -14,3 +14,4 @@
 35. Write UnitTest: TestComparePropagatorKey
 37. Reduce the number of split in scheduler
 40. Figure out why double GPUs performance keeps changing in A100
+42. Check if double GPUs can be utilized for CudaAndersonMixing

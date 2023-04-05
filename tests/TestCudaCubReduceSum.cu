@@ -27,7 +27,9 @@ int main()
             gpu_error_check(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
             gpu_error_check(cudaMemcpy(d_array, array, sizeof(double)*M, cudaMemcpyHostToDevice));
 
-            d_temp_storage = nullptr; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is nullptr
+            // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu],
+            // if d_temp_storage[gpu]=nullptr and temp_storage_bytes[gpu]=0.
+            d_temp_storage = nullptr;
             temp_storage_bytes = 0;
             cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
             gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
