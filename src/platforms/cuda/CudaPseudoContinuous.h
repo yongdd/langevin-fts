@@ -95,6 +95,14 @@ private:
             double *d_exp_dw_1, double *d_exp_dw_2,
             double *d_exp_dw_half_1, double *d_exp_dw_half_2);
 
+    // advance two propagators by one segment step in two GPUs
+    void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
+            double *d_q_out_1, double *d_q_out_2,
+            double *d_boltz_bond_1, double *d_boltz_bond_2, 
+            double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
+            double *d_exp_dw_1, double *d_exp_dw_2,
+            double *d_exp_dw_half_1, double *d_exp_dw_half_2);
+
     // calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:

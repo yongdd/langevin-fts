@@ -195,12 +195,14 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            d_temp_storage[gpu] = nullptr; // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu] if d_temp_storage[gpu] is nullptr
+            d_temp_storage[gpu] = nullptr;
             temp_storage_bytes[gpu] = 0;
             cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_stress_sum[gpu], d_stress_sum_out[gpu], M_COMPLEX, streams[gpu][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[gpu], temp_storage_bytes[gpu]));
         }
         update_bond_function();
+
+        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -330,6 +332,7 @@ void CudaPseudoReduceMemoryContinuous::update_bond_function()
             gpu_error_check(cudaMemcpy(d_fourier_basis_y[gpu], fourier_basis_y, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_fourier_basis_z[gpu], fourier_basis_z, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
         }
+        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -604,6 +607,21 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     }
                     #endif
 
+                    // DEVICE 0,1, STREAM 0: calculate propagators 
+                    advance_two_propagators_two_gpus(
+                        d_q_one[0][prev],
+                        d_q_one[1][prev],
+                        d_q_one[0][next],
+                        d_q_one[1][next],
+                        d_boltz_bond[0][monomer_types[0]],
+                        d_boltz_bond[1][monomer_types[1]],
+                        d_boltz_bond_half[0][monomer_types[0]],
+                        d_boltz_bond_half[1][monomer_types[1]],
+                        d_exp_dw[0][monomer_types[0]],
+                        d_exp_dw[1][monomer_types[1]],
+                        d_exp_dw_half[0][monomer_types[0]],
+                        d_exp_dw_half[1][monomer_types[1]]);
+
                     // STREAM 1: copy propagators from device to host
                     for(int gpu=0; gpu<N_GPUS; gpu++)
                     {
@@ -613,19 +631,6 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             gpu_error_check(cudaMemcpyAsync(_propagator_keys[gpu][n-1+n_segment_froms[gpu]], d_q_one[gpu][prev], sizeof(double)*M,
                                 cudaMemcpyDeviceToHost, streams[gpu][1]));
                         }
-                    }
-
-                    // STREAM 0: compute propagators
-                    for(int gpu=0; gpu<N_GPUS; gpu++)
-                    {
-                        gpu_error_check(cudaSetDevice(gpu));
-                        advance_one_propagator(gpu,
-                            d_q_one[gpu][prev],
-                            d_q_one[gpu][next],
-                            d_boltz_bond[gpu][monomer_types[gpu]],
-                            d_boltz_bond_half[gpu][monomer_types[gpu]],
-                            d_exp_dw[gpu][monomer_types[gpu]],
-                            d_exp_dw_half[gpu][monomer_types[gpu]]);
                     }
 
                     // synchronize all GPUs
@@ -683,13 +688,6 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             throw_with_line_number("unfinished, key: " + keys[j] + ", " + std::to_string(n-1));
                         #endif
 
-                        // STREAM 1: copy propagators from device to host
-                        if (n > n_segment_froms[j])
-                        {
-                            gpu_error_check(cudaMemcpyAsync(_propagator_keys[j][n-1], d_q_one[0][prev], sizeof(double)*M,
-                                cudaMemcpyDeviceToHost, streams[0][1]));
-                        }
-
                         // STREAM 0: compute propagator
                         advance_one_propagator(0, 
                             d_q_one[0][prev],
@@ -698,6 +696,13 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             d_boltz_bond_half[0][monomer_types[j]],
                             d_exp_dw[0][monomer_types[j]],
                             d_exp_dw_half[0][monomer_types[j]]);
+
+                        // STREAM 1: copy propagators from device to host
+                        if (n > n_segment_froms[j])
+                        {
+                            gpu_error_check(cudaMemcpyAsync(_propagator_keys[j][n-1], d_q_one[0][prev], sizeof(double)*M,
+                                cudaMemcpyDeviceToHost, streams[0][1]));
+                        }
 
                         std::swap(prev, next);
                         cudaDeviceSynchronize();
@@ -780,6 +785,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 n_segment_original,
                 norm);
         }
+        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -848,14 +854,115 @@ void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
         throw_without_line_number(exc.what());
     }
 }
+void CudaPseudoReduceMemoryContinuous::advance_two_propagators_two_gpus(
+    double *d_q_in_1, double *d_q_in_2,
+    double *d_q_out_1, double *d_q_out_2,
+    double *d_boltz_bond_1, double *d_boltz_bond_2, 
+    double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
+    double *d_exp_dw_1, double *d_exp_dw_2,
+    double *d_exp_dw_half_1, double *d_exp_dw_half_2)
+{
+    // overlapping computations for 1/2 step and 1/4 step
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+
+        const int M = cb->get_n_grid();
+        const int M_COMPLEX = this->n_complex_grid;
+
+        // step 1/2: Evaluate exp(-w*ds/2) in real space
+        // step 1/4: Evaluate exp(-w*ds/4) in real space
+        gpu_error_check(cudaSetDevice(0));
+        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            &d_q_step_1_two[0][0], d_q_in_1, d_exp_dw_1,
+            &d_q_step_1_two[0][M], d_q_in_1, d_exp_dw_half_1, 1.0, M);
+        gpu_error_check(cudaSetDevice(1));
+        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(
+            &d_q_step_1_two[1][0], d_q_in_2, d_exp_dw_2,
+            &d_q_step_1_two[1][M], d_q_in_2, d_exp_dw_half_2, 1.0, M);
+
+        // step 1/2: Execute a Forward FFT
+        // step 1/4: Execute a Forward FFT
+        gpu_error_check(cudaSetDevice(0));
+        cufftExecD2Z(plan_for_two[0], d_q_step_1_two[0], d_qk_in_1_two[0]);
+        gpu_error_check(cudaSetDevice(1));
+        cufftExecD2Z(plan_for_two[1], d_q_step_1_two[1], d_qk_in_1_two[1]);
+
+        // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
+        // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
+        gpu_error_check(cudaSetDevice(0));
+        complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            &d_qk_in_1_two[0][0],         d_boltz_bond_1,
+            &d_qk_in_1_two[0][M_COMPLEX], d_boltz_bond_half_1, M_COMPLEX);
+        gpu_error_check(cudaSetDevice(1));
+        complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(
+            &d_qk_in_1_two[1][0],         d_boltz_bond_2,
+            &d_qk_in_1_two[1][M_COMPLEX], d_boltz_bond_half_2, M_COMPLEX);
+
+        // step 1/2: Execute a backward FFT
+        // step 1/4: Execute a backward FFT
+        gpu_error_check(cudaSetDevice(0));
+        cufftExecZ2D(plan_bak_two[0], d_qk_in_1_two[0], d_q_step_1_two[0]);
+        gpu_error_check(cudaSetDevice(1));
+        cufftExecZ2D(plan_bak_two[1], d_qk_in_1_two[1], d_q_step_1_two[1]);
+
+        // step 1/2: Evaluate exp(-w*ds/2) in real space
+        // step 1/4: Evaluate exp(-w*ds/2) in real space
+        gpu_error_check(cudaSetDevice(0));
+        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            d_q_step_1_one[0], &d_q_step_1_two[0][0], d_exp_dw_1,
+            d_q_step_2_one[0], &d_q_step_1_two[0][M], d_exp_dw_1, 1.0/((double)M), M);
+        gpu_error_check(cudaSetDevice(1));
+        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(
+            d_q_step_1_one[1], &d_q_step_1_two[1][0], d_exp_dw_2,
+            d_q_step_2_one[1], &d_q_step_1_two[1][M], d_exp_dw_2, 1.0/((double)M), M);
+
+        // step 1/4: Execute a Forward FFT
+        gpu_error_check(cudaSetDevice(0));
+        cufftExecD2Z(plan_for_one[0], d_q_step_2_one[0], d_qk_in_2_one[0]);
+        gpu_error_check(cudaSetDevice(1));
+        cufftExecD2Z(plan_for_one[1], d_q_step_2_one[1], d_qk_in_2_one[1]);
+
+        // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
+        gpu_error_check(cudaSetDevice(0));
+        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_qk_in_2_one[0], d_boltz_bond_half_1, M_COMPLEX);
+        gpu_error_check(cudaSetDevice(1));
+        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_qk_in_2_one[1], d_boltz_bond_half_2, M_COMPLEX);
+
+        // step 1/4: Execute a backward FFT
+        gpu_error_check(cudaSetDevice(0));
+        cufftExecZ2D(plan_bak_one[0], d_qk_in_2_one[0], d_q_step_2_one[0]);
+        gpu_error_check(cudaSetDevice(1));
+        cufftExecZ2D(plan_bak_one[1], d_qk_in_2_one[1], d_q_step_2_one[1]);
+
+        // step 1/4: Evaluate exp(-w*ds/4) in real space.
+        gpu_error_check(cudaSetDevice(0));
+        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_step_2_one[0], d_q_step_2_one[0], d_exp_dw_half_1, 1.0/((double)M), M);
+        gpu_error_check(cudaSetDevice(1));
+        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_step_2_one[1], d_q_step_2_one[1], d_exp_dw_half_2, 1.0/((double)M), M);
+
+        // compute linear combination with 4/3 and -1/3 ratio
+        gpu_error_check(cudaSetDevice(0));
+        lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, 4.0/3.0, d_q_step_2_one[0], -1.0/3.0, d_q_step_1_one[0], M);
+        gpu_error_check(cudaSetDevice(1));
+        lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, 4.0/3.0, d_q_step_2_one[1], -1.0/3.0, d_q_step_1_one[1], M);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
 void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
     double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM)
 {
     try
     {
+        gpu_error_check(cudaSetDevice(0));
+
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
         const int M = cb->get_n_grid();
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N);
 
@@ -1128,6 +1235,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 block_dq_dl[gpu][key] = _block_dq_dl[gpu];
         }
+        gpu_error_check(cudaSetDevice(0));
 
         // compute total stress
         for(int d=0; d<DIM; d++)

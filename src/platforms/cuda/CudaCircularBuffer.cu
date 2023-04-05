@@ -27,10 +27,10 @@ void CudaCircularBuffer::reset()
     start = 0;
     n_items = 0;
 }
-void CudaCircularBuffer::insert(double* new_arr)
+void CudaCircularBuffer::insert(double* d_new_arr)
 {
     int i = (start+n_items)%length;
-    gpu_error_check(cudaMemcpy(d_elems[i], new_arr, sizeof(double)*width, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_elems[i], d_new_arr, sizeof(double)*width, cudaMemcpyDeviceToDevice));
     if (n_items == length)
         start = (start+1)%length;
     n_items = min(n_items+1, length);

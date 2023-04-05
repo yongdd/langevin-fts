@@ -17,7 +17,7 @@ public:
     CudaCircularBuffer(int length, int width);
     ~CudaCircularBuffer();
     void reset();
-    void insert(double* new_arr);
+    void insert(double* d_new_arr);
     double* get_array(int n);
 };
 

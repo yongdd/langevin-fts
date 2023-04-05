@@ -99,6 +99,12 @@ private:
             double *d_boltz_bond_1, double *d_boltz_bond_2,  
             double *d_exp_dw_1, double *d_exp_dw_2);
 
+    // advance two propagators by one segment step in two GPUs
+    void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
+            double *d_q_out_1, double *d_q_out_2,
+            double *d_boltz_bond_1, double *d_boltz_bond_2,
+            double *d_exp_dw_1, double *d_exp_dw_2);
+
     // advance propagator by half bond step
     void advance_propagator_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
 

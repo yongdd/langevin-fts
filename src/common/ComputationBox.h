@@ -45,11 +45,11 @@ public:
 
     virtual void set_lx(std::vector<double> new_lx);
 
-    double integral(double *g);
-    double inner_product(double *g, double *h);
-    double inner_product_inverse_weight(double *g, double *h, double *w);
-    double multi_inner_product(int n_comp, double *g, double *h);
-    void zero_mean(double *g);
+    virtual double integral(double *g);
+    virtual double inner_product(double *g, double *h);
+    virtual double inner_product_inverse_weight(double *g, double *h, double *w);
+    virtual double multi_inner_product(int n_comp, double *g, double *h);
+    virtual void zero_mean(double *g);
 
     // Methods for pybind11
     double integral(py::array_t<double> g) {
