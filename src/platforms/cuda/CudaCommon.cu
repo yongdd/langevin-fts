@@ -112,13 +112,13 @@ void CudaCommon::set_idx(int process_idx)
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
 
-__global__ void add_scalar_constant(
-            double* dst, double a, const int M)
+__global__ void linear_scaling_real(
+            double* dst, double* src, double a, double b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i] = dst[i] + a;
+        dst[i] = a*src[i] + b;
         i += blockDim.x * gridDim.x;
     }
 }

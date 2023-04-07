@@ -12,6 +12,7 @@
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
+#include "CpuArray.h"
 #include "CpuPseudoContinuous.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -26,12 +27,23 @@ MklFactory::MklFactory(std::string chain_model, bool reduce_memory_usage)
         std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
 
 }
+std::shared_ptr<Array> MklFactory::create_array(
+    unsigned int size)
+{
+    return std::make_shared<CpuArray>(size);
+}
+
+std::shared_ptr<Array> MklFactory::create_array(
+    double *data,
+    unsigned int size)
+{
+    return std::make_shared<CpuArray>(data, size);
+}
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)
 {
     return new ComputationBox(nx, lx);
 }
-
 Mixture* MklFactory::create_mixture(
     double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 
 {

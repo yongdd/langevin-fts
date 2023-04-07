@@ -13,6 +13,7 @@
 #include "Mixture.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h" 
+#include "Array.h" 
 
 // Design Pattern : Abstract Factory
 
@@ -23,6 +24,13 @@ protected:
     bool reduce_memory_usage;
 public :
     virtual ~AbstractFactory() {};
+
+    virtual std::shared_ptr<Array> create_array(
+        unsigned int size) = 0;
+
+    virtual std::shared_ptr<Array> create_array(
+        double *data,
+        unsigned int size) = 0;
 
     virtual ComputationBox* create_computation_box(
         std::vector<int> nx,

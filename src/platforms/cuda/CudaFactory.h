@@ -10,11 +10,20 @@
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
+#include "Array.h"
 
 class CudaFactory : public AbstractFactory
 {
 public :
     CudaFactory(std::string chain_model, bool reduce_memory_usage);
+
+    std::shared_ptr<Array> create_array(
+        unsigned int size) override;
+
+    std::shared_ptr<Array> create_array(
+        double *data,
+        unsigned int size) override;
+
     ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx) override;

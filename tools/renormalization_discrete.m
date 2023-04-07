@@ -14,9 +14,9 @@ if abs(epsilon - 1.0) > 1e-7
     return;
 end
 
-if ~strcmpi(chain_model,'Discrete')
-    fprintf("Your chain model is not the discrete chain model.\n");
-end
+// if ~strcmpi(chain_model,'Discrete')
+//     fprintf("Your chain model is not the discrete chain model.\n");
+// end
 
 % calculate v_cell * rho_zero
 vcellrho = double(nbar)^0.5*double(N)*dv;
