@@ -54,8 +54,8 @@ public:
 #define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
-__global__ void add_scalar_constant(
-            double* dst, double a, const int M);
+__global__ void linear_scaling_real(
+            double* dst, double* src, double a, double b, const int M);
 
 __global__ void exp_real(double* dst,
                         double* src,

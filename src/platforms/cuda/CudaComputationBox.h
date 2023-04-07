@@ -7,6 +7,7 @@
 
 #include <vector>
 #include "ComputationBox.h"
+#include "Array.h"
 
 class CudaComputationBox : public ComputationBox
 {
@@ -32,11 +33,17 @@ public:
     CudaComputationBox(std::vector<int> nx, std::vector<double> lx);
     ~CudaComputationBox() override;
 
-    // double integral(double *g) override;
-    // double inner_product(double *g, double *h) override;
-    // double inner_product_inverse_weight(double *g, double *h, double *w) override;
-    // double multi_inner_product(int n_comp, double *g, double *h) override;
-    // void zero_mean(double *g) override;
+    double integral(double *g) override;
+    double inner_product(double *g, double *h) override;
+    double inner_product_inverse_weight(double *g, double *h, double *w) override;
+    double multi_inner_product(int n_comp, double *g, double *h) override;
+    void zero_mean(double *g) override;
+
+    double integral(Array& g) override;
+    double inner_product(Array& g, Array& h) override;
+    double inner_product_inverse_weight(Array& g, Array& h, Array& w) override;
+    double multi_inner_product(int n_comp,  Array& g, Array& h) override;
+    void zero_mean(Array& g) override;
 
     double integral_gpu(double *d_g);
     double inner_product_gpu(double *d_g, double *d_h);

@@ -156,6 +156,15 @@ double ComputationBox::integral(double *g)
         sum += dv[i]*g[i];
     return sum;
 }
+double ComputationBox::integral(Array& g)
+{
+    double sum{0.0};
+    double *_g = g.get_ptr();
+    
+    for(int i=0; i<n_grid; i++)
+        sum += dv[i]*_g[i];
+    return sum;
+}
 // This method calculates inner product g and h
 double ComputationBox::inner_product(double *g, double *h)
 {
@@ -164,13 +173,33 @@ double ComputationBox::inner_product(double *g, double *h)
         sum += dv[i]*g[i]*h[i];
     return sum;
 }
+double ComputationBox::inner_product(Array& g, Array& h)
+{
+    double sum{0.0};
+    double *_g = g.get_ptr();
+    double *_h = h.get_ptr();
 
+    for(int i=0; i<n_grid; i++)
+        sum += dv[i]*_g[i]*_h[i];
+    return sum;
+}
 // This method calculates inner product g and h with weight 1/w
 double ComputationBox::inner_product_inverse_weight(double *g, double *h, double *w)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
         sum += dv[i]*g[i]*h[i]/w[i];
+    return sum;
+}
+double ComputationBox::inner_product_inverse_weight(Array& g, Array& h, Array& w)
+{
+    double sum{0.0};
+    double *_g = g.get_ptr();
+    double *_h = h.get_ptr();
+    double *_w = w.get_ptr();
+
+    for(int i=0; i<n_grid; i++)
+        sum += dv[i]*_g[i]*_h[i]/_w[i];
     return sum;
 }
 //-----------------------------------------------------------
@@ -184,6 +213,19 @@ double ComputationBox::multi_inner_product(int n_comp, double *g, double *h)
     }
     return sum;
 }
+double ComputationBox::multi_inner_product(int n_comp, Array& g, Array& h)
+{
+    double sum{0.0};
+    double *_g = g.get_ptr();
+    double *_h = h.get_ptr();
+
+    for(int n=0; n < n_comp; n++)
+    {
+        for(int i=0; i<n_grid; i++)
+            sum += dv[i]*_g[i+n*n_grid]*_h[i+n*n_grid];
+    }
+    return sum;
+}
 //-----------------------------------------------------------
 // This method makes the input a zero-meaned matrix
 void ComputationBox::zero_mean(double *g)
@@ -193,4 +235,14 @@ void ComputationBox::zero_mean(double *g)
         sum += dv[i]*g[i];
     for(int i=0; i<n_grid; i++)
         g[i] -= sum/volume;
+}
+void ComputationBox::zero_mean(Array& g)
+{
+    double sum{0.0};
+    double *_g = g.get_ptr();
+
+    for(int i=0; i<n_grid; i++)
+        sum += dv[i]*_g[i];
+    for(int i=0; i<n_grid; i++)
+        _g[i] -= sum/volume;
 }

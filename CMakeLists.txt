@@ -38,6 +38,7 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
 # Common Files
 ADD_LIBRARY(common
+    src/common/Array.cpp
     src/common/ComputationBox.cpp
     src/common/PolymerChain.cpp
     src/common/Mixture.cpp
@@ -57,6 +58,7 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT1D.cpp
         src/platforms/cpu/MklFFT2D.cpp
         src/platforms/cpu/MklFFT3D.cpp
+        src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuPseudoContinuous.cpp
         src/platforms/cpu/CpuPseudoDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
@@ -74,6 +76,7 @@ IF(CUDAToolkit_FOUND)
     ADD_DEFINITIONS(-DUSE_CUDA)
     ADD_LIBRARY(cuda
         src/platforms/cuda/CudaCommon.cu
+        src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudoContinuous.cu
         src/platforms/cuda/CudaPseudoDiscrete.cu
