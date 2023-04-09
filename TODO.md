@@ -1,6 +1,6 @@
 1. Parallel Tempering
 2. Neutral Boundary Condition
-6. Packaging with Conda, including scft.py,
+6. Packaging with Conda, including scft.py and lfts.py
 8. GPU bandwidth test
 9. UnitTest: Anderson Mixing
 10. Validation Check for Pseudo Parameters

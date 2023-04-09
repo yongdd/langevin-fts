@@ -43,6 +43,13 @@ params = {
             {"type":"B", "length":(1.0-f2)/2, }, # B-block
         ],},],
 
+    "am":{
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
+
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
