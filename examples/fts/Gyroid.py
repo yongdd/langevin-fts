@@ -63,8 +63,9 @@ params = {
     "verbose_level":1,      # 1 : Print at each Langevin step.
                             # 2 : Print at each saddle point iteration.
 }
-## random seed for MT19937
-np.random.seed(5489)
+# Set random seed
+# If you want to obtain different results for each execution, set random_seed=None
+random_seed = 12345
 
 # Set initial fields
 print("w_minus and w_plus are initialized to gyroid")
@@ -73,7 +74,7 @@ w_minus = input_data["w_minus"]
 w_plus = input_data["w_plus"]
 
 # Initialize calculation
-simulation = lfts.LFTS(params=params)
+simulation = lfts.LFTS(params=params, random_seed=random_seed)
 
 # Set a timer
 time_start = time.time()
@@ -92,12 +93,12 @@ print("total time: %f, time per step: %f" %
 # iteration, mass error, total partitions, total energy, incompressibility error
 # ---------- Run  ----------
 # Langevin step:  1
-#       38    9.104E-15  [ 1.4788474E+01  ]     5.591846783   8.1264960E-05 
+#       38    1.044E-14  [ 1.3958888E+01  ]     5.401031080   9.0245504E-05 
 # Langevin step:  2
-#       36   -3.331E-15  [ 2.3331939E+01  ]     7.254891238   9.2202530E-05 
+#       36   -1.721E-14  [ 2.2166124E+01  ]     7.118769657   9.4684849E-05 
 # Langevin step:  3
-#       38    5.551E-15  [ 2.2535250E+01  ]     7.281477802   8.3099757E-05 
+#       39    2.331E-14  [ 2.2177698E+01  ]     7.217321929   6.8053333E-05 
 # Langevin step:  4
-#       38    9.104E-15  [ 2.1742114E+01  ]     7.252336185   8.7757742E-05 
+#       38   -2.887E-15  [ 2.1590718E+01  ]     7.240015622   8.4859246E-05 
 # Langevin step:  5
-#       38   -2.220E-15  [ 2.1681650E+01  ]     7.250200933   8.4056692E-05 
+#       38    1.954E-14  [ 2.1011931E+01  ]     7.239728389   8.7309208E-05 

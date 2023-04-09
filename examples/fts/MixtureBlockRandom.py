@@ -64,9 +64,10 @@ params = {
     "verbose_level":1,      # 1 : Print at each Langevin step.
                             # 2 : Print at each saddle point iteration.
 }
-
-## random seed for MT19937
-np.random.seed(5489)
+# Set random seed
+# If you want to obtain different results for each execution, set random_seed=None
+random_seed = 12345
+np.random.seed(random_seed)
 
 # Set initial fields
 print("w_minus and w_plus are initialized to random")
@@ -74,7 +75,7 @@ w_plus  = np.random.normal(0.0, 1.0, params["nx"])
 w_minus = np.random.normal(0.0, 1.0, params["nx"])
 
 # Initialize calculation
-simulation = lfts.LFTS(params=params)
+simulation = lfts.LFTS(params=params, random_seed=random_seed)
 
 # Set a timer
 time_start = time.time()
@@ -92,12 +93,12 @@ print("total time: %f, time per step: %f" %
 #       21    4.441E-16  [ 1.0359367E+00  9.9716427E-01  ]     6.261376974   7.4857853E-05 
 # ---------- Run  ----------
 # Langevin step:  1
-#       16    2.665E-15  [ 1.1504483E+00  1.0010009E+00  ]     6.282266480   9.0886276E-05 
+#       16    4.663E-15  [ 1.1484868E+00  1.0009618E+00  ]     6.282563080   8.5362231E-05 
 # Langevin step:  2
-#       19   -6.661E-16  [ 1.6535901E+00  1.0113321E+00  ]     6.361301332   8.9827704E-05 
+#       19   -7.772E-15  [ 1.6344095E+00  1.0107626E+00  ]     6.360369930   8.7820501E-05 
 # Langevin step:  3
-#       20    2.665E-15  [ 2.2020159E+00  1.0256580E+00  ]     6.386744506   7.6052619E-05 
+#       20   -1.110E-16  [ 2.1855006E+00  1.0246363E+00  ]     6.383607644   7.6872507E-05 
 # Langevin step:  4
-#       20   -1.776E-15  [ 2.8239625E+00  1.0405886E+00  ]     6.381340056   9.3209010E-05 
+#       20   -3.664E-15  [ 2.8218615E+00  1.0401552E+00  ]     6.380405850   9.1313823E-05 
 # Langevin step:  5
-#       21    3.997E-15  [ 3.5696714E+00  1.0569576E+00  ]     6.363888540   7.1880345E-05 
+#       20   -3.553E-15  [ 3.5530528E+00  1.0566284E+00  ]     6.365407969   9.8310547E-05 

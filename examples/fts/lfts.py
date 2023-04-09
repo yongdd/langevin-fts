@@ -13,7 +13,7 @@ def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
         return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
 
 class LFTS:
-    def __init__(self, params):
+    def __init__(self, params, random_seed=None):
 
         # choose platform among [cuda, cpu-mkl]
         avail_platforms = PlatformSelector.avail_platforms()
@@ -138,6 +138,13 @@ class LFTS:
         # standard deviation of normal noise
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
+        # Set random generator
+        if random_seed == None:         
+            self.random_bg = np.random.PCG64()  # Set random bit generator
+        else:
+            self.random_bg = np.random.PCG64(random_seed)
+        self.random = np.random.Generator(self.random_bg)
+        
         # -------------- print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
@@ -163,7 +170,7 @@ class LFTS:
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
-        print("Random Number Generator: ", np.random.RandomState().get_state()[0])
+        print("Random Number Generator: ", self.random_bg.state)
 
         mixture.display_blocks()
         mixture.display_propagators()
@@ -190,8 +197,9 @@ class LFTS:
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "params": self.params,
-            "random_generator":np.random.RandomState().get_state()[0],
-            "random_seed":np.random.RandomState().get_state()[1],
+            "random_generator": self.random_bg.state["bit_generator"],
+            "random_state_state": str(self.random_bg.state["state"]["state"]),
+            "random_state_inc": str(self.random_bg.state["state"]["inc"]),
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_b":phi["B"]}
         savemat(path, mdic)
 
@@ -225,7 +233,7 @@ class LFTS:
             print("Langevin step: ", langevin_step)
             
             # update w_minus using Leimkuhler-Matthews method
-            normal_noise_current = np.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
+            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
             lambda_minus = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
             w_minus += -lambda_minus*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
 
@@ -274,6 +282,10 @@ class LFTS:
         # concentration of each monomer
         phi = {}
 
+        # compute hamiltonian part that is independent of w_plus
+        energy_total_minus = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
+        energy_total_minus += self.chi_n/4
+
         # saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             # for the given fields find the polymer statistics
@@ -304,9 +316,7 @@ class LFTS:
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
             
                 # calculate the total energy
-                energy_total = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
-                energy_total += self.chi_n/4
-                energy_total -= self.cb.integral(w_plus)/self.cb.get_volume()
+                energy_total = energy_total_minus - self.cb.integral(w_plus)/self.cb.get_volume()
                 for p in range(self.mixture.get_n_polymers()):
                     energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                     self.mixture.get_polymer(p).get_alpha() * \
