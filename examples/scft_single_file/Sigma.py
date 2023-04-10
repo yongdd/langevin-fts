@@ -25,6 +25,7 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         print("iteration, mass error, total_partition, energy_total, error_level")
     
     for scft_iter in range(1,max_iter+1):
+
         # for the given fields find the polymer statistics
         pseudo.compute_statistics({"A":w[0],"B":w[1]})
 
@@ -35,8 +36,8 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         w_minus = (w[0]-w[1])/2
         w_plus  = (w[0]+w[1])/2
 
-        energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
-        energy_total -= cb.integral(w_plus)/cb.get_volume()
+        energy_total = np.dot(w_minus,w_minus)/chi_n/cb.get_n_grid()
+        energy_total -= np.mean(w_plus)
         for p in range(mixture.get_n_polymers()):
             energy_total  -= np.log(pseudo.get_total_partition(p))
 
@@ -52,14 +53,14 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
         w_diff = w_out - w
 
         # keep the level of field value
-        cb.zero_mean(w_diff[0])
-        cb.zero_mean(w_diff[1])
+        w_diff[0] -= np.mean(w_diff[0])
+        w_diff[1] -= np.mean(w_diff[1])
 
-        multi_dot = cb.inner_product(w_diff[0],w_diff[0]) + cb.inner_product(w_diff[1],w_diff[1])
-        multi_dot /= cb.inner_product(w[0],w[0]) + cb.inner_product(w[1],w[1]) + 1.0
+        multi_dot = (np.dot(w_diff[0],w_diff[0]) + np.dot(w_diff[1],w_diff[1]))*cb.get_volume()/cb.get_n_grid()
+        multi_dot /= (np.dot(w[0],w[0]) + np.dot(w[1],w[1]))*cb.get_volume()/cb.get_n_grid() + 1.0
 
         # print iteration # and error levels and check the mass conservation
-        mass_error = (cb.integral(phi_a) + cb.integral(phi_b))/cb.get_volume() - 1.0
+        mass_error = np.mean(phi_a + phi_b - 1.0)
         error_level = np.sqrt(multi_dot)
         
         if (is_box_altering):
@@ -199,8 +200,8 @@ w[0] = gaussian_filter(w[0], sigma=np.min(cb.get_nx())/15, mode='wrap')
 w = np.reshape(w, [2, cb.get_n_grid()])
 
 # keep the level of field value
-cb.zero_mean(w[0])
-cb.zero_mean(w[1])
+w[0] -= np.mean(w[0])
+w[1] -= np.mean(w[1])
 
 #------------------ run ----------------------
 print("---------- Run ----------")

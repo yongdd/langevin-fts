@@ -27,17 +27,17 @@ MklFactory::MklFactory(std::string chain_model, bool reduce_memory_usage)
         std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
 
 }
-std::shared_ptr<Array> MklFactory::create_array(
+Array* MklFactory::create_array(
     unsigned int size)
 {
-    return std::make_shared<CpuArray>(size);
+    return new CpuArray(size);
 }
 
-std::shared_ptr<Array> MklFactory::create_array(
+Array* MklFactory::create_array(
     double *data,
     unsigned int size)
 {
-    return std::make_shared<CpuArray>(data, size);
+    return new CpuArray(data, size);
 }
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)

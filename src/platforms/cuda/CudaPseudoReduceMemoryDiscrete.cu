@@ -425,8 +425,8 @@ void CudaPseudoReduceMemoryDiscrete::update_bond_function()
     }
 }
 void CudaPseudoReduceMemoryDiscrete::compute_statistics(
-    std::map<std::string, double*> w_input,
-    std::map<std::string, double*> q_init)
+    std::map<std::string, const double*> w_input,
+    std::map<std::string, const double*> q_init, std::string device)
 {
     try
     {
@@ -436,6 +436,16 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
 
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
+
+        cudaMemcpyKind cudaMemcpyInputToDevice;
+        if (device == "gpu")
+            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
+        else if(device == "cpu")
+            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
+        else
+        {
+            throw_with_line_number("Invalid device \"" + device + "\".");
+        }
 
         for(const auto& item: mx->get_essential_propagator_codes())
         {
@@ -450,18 +460,33 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
         }
 
         // exp_dw
-        double exp_dw[M];
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
-            double *w = item.second;
-            for(int i=0; i<M; i++)
-                exp_dw[i] = exp(-w[i]*ds);
+            const double *w = item.second;
 
+            // copy field configurations from host to device
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
-                gpu_error_check(cudaMemcpy(d_exp_dw[gpu][monomer_type], exp_dw, sizeof(double)*M,cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpyAsync(
+                    d_exp_dw[gpu][monomer_type], w,      
+                    sizeof(double)*M, cudaMemcpyInputToDevice, streams[gpu][1]));
+            }
+
+            // compute exp_dw and exp_dw_half
+            for(int gpu=0; gpu<N_GPUS; gpu++)
+            {
+                gpu_error_check(cudaSetDevice(gpu));
+                exp_real<<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
+                    (d_exp_dw[gpu][monomer_type], d_exp_dw[gpu][monomer_type], 1.0, -1*ds, M);
+                
+            }
+            // synchronize all GPUs
+            for(int gpu=0; gpu<N_GPUS; gpu++)
+            {
+                gpu_error_check(cudaSetDevice(gpu));
+                gpu_error_check(cudaDeviceSynchronize());
             }
         }
 
@@ -496,7 +521,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                         std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number( "Could not find q_init[\"" + g + "\"].");
-                        gpu_error_check(cudaMemcpy(d_q_one[0][0], q_init[g], sizeof(double)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_one[0][0], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice));
                         multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[0][0], d_q_one[0][0], d_exp_dw[0][monomer_type], 1.0, M);
                     }
                     else

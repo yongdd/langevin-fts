@@ -105,6 +105,11 @@ private:
 
     // calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
+
+    // compute statistics with inputs from selected device arrays
+    void compute_statistics(
+        std::map<std::string, const double*> w_input,
+        std::map<std::string, const double*> q_init, std::string device);
 public:
 
     CudaPseudoContinuous(ComputationBox *cb, Mixture *pc);
@@ -112,8 +117,17 @@ public:
 
     void update_bond_function() override;
     void compute_statistics(
-        std::map<std::string, double*> w_input,
-        std::map<std::string, double*> q_init) override;
+        std::map<std::string, const double*> w_input,
+        std::map<std::string, const double*> q_init) override
+    {
+        compute_statistics(w_input, q_init, "cpu");
+    };
+    void compute_statistics_device(
+        std::map<std::string, const double*> d_w_input,
+        std::map<std::string, const double*> d_q_init) override
+    {
+        compute_statistics(d_w_input, d_q_init, "gpu");
+    };
     double get_total_partition(int polymer) override;
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;

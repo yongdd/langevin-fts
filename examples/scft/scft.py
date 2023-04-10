@@ -213,8 +213,8 @@ class SCFT:
         w = np.reshape([initial_fields["A"], initial_fields["B"]], [2, self.cb.get_n_grid()])
 
         # keep the level of field value
-        self.cb.zero_mean(w[0])
-        self.cb.zero_mean(w[1])
+        w[0] -= np.mean(w[0])
+        w[1] -= np.mean(w[1])
 
         for scft_iter in range(1, self.max_iter+1):
             # for the given fields find the polymer statistics
@@ -234,8 +234,8 @@ class SCFT:
             # calculate the total energy
             w_minus = (w[0]-w[1])/2
             w_plus  = (w[0]+w[1])/2
-            energy_total = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
-            energy_total -= self.cb.integral(w_plus)/self.cb.get_volume()
+            energy_total = np.dot(w_minus,w_minus)/self.chi_n/self.cb.get_n_grid()
+            energy_total -= np.mean(w_plus)
             for p in range(self.mixture.get_n_polymers()):
                 energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                 self.mixture.get_polymer(p).get_alpha() * \
@@ -253,15 +253,15 @@ class SCFT:
             w_diff = w_out - w
 
             # keep the level of field value
-            self.cb.zero_mean(w_diff[0])
-            self.cb.zero_mean(w_diff[1])
+            w_diff[0] -= np.mean(w_diff[0])
+            w_diff[1] -= np.mean(w_diff[1])
 
-            multi_dot = self.cb.inner_product(w_diff[0],w_diff[0]) + self.cb.inner_product(w_diff[1],w_diff[1])
-            multi_dot /= self.cb.inner_product(w[0],w[0]) + self.cb.inner_product(w[1],w[1]) + 1.0
+            multi_dot = (np.dot(w_diff[0],w_diff[0]) + np.dot(w_diff[1],w_diff[1]))*self.cb.get_volume()/self.cb.get_n_grid()
+            multi_dot /= (np.dot(w[0],w[0]) + np.dot(w[1],w[1]))*self.cb.get_volume()/self.cb.get_n_grid() + 1.0
             error_level = np.sqrt(multi_dot)
 
             # print iteration # and error levels and check the mass conservation
-            mass_error = self.cb.integral(phi["A"] + phi["B"])/self.cb.get_volume() - 1.0
+            mass_error = np.mean(phi["A"] + phi["B"] - 1.0)
             
             if (self.box_is_altering):
                 # calculate stress

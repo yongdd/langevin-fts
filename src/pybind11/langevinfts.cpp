@@ -6,6 +6,7 @@
 #include <pybind11/stl_bind.h>
 #include <pybind11/numpy.h>
 
+#include "Array.h"
 #include "PolymerChain.h"
 #include "ComputationBox.h"
 #include "Pseudo.h"
@@ -20,6 +21,11 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 
 PYBIND11_MODULE(langevinfts, m)
 {
+    py::class_<Array>(m, "Array")
+        .def("set_data", &Array::set_data_pybind11)
+        .def("get_ptr", &Array::get_ptr_pybind11)
+        .def("get_size", &Array::get_size);
+
     py::class_<ComputationBox>(m, "ComputationBox")
         .def(py::init<std::vector<int>, std::vector<double>>())
         .def("get_dim", &ComputationBox::get_dim)
@@ -32,11 +38,11 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_dv", &ComputationBox::get_dv)
         .def("get_n_grid", &ComputationBox::get_n_grid)
         .def("get_volume", &ComputationBox::get_volume)
-        .def("set_lx", &ComputationBox::set_lx)
-        .def("integral", overload_cast_<py::array_t<double>>()(&ComputationBox::integral))
-        .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&ComputationBox::inner_product))
-        .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
-        .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
+        .def("set_lx", &ComputationBox::set_lx);
+        // .def("integral", overload_cast_<py::array_t<double>>()(&ComputationBox::integral))
+        // .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&ComputationBox::inner_product))
+        // .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
+        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
 
     py::class_<PolymerChain>(m, "PolymerChain")
         .def(py::init<double, std::map<std::string, double>, double,
@@ -81,12 +87,19 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<Pseudo>(m, "Pseudo")
         .def("update_bond_function", &Pseudo::update_bond_function)
         .def("compute_statistics", overload_cast_<
-            std::map<std::string,py::array_t<double>>,
-            std::map<std::string,py::array_t<double>>>
+            std::map<std::string,py::array_t<const double>>,
+            std::map<std::string,py::array_t<const double>>>
             ()(&Pseudo::compute_statistics_pybind11), py::return_value_policy::move)
         .def("compute_statistics", overload_cast_<
-            std::map<std::string,py::array_t<double>>>
+            std::map<std::string,py::array_t<const double>>>
             ()(&Pseudo::compute_statistics_pybind11), py::return_value_policy::move)
+        .def("compute_statistics_device", overload_cast_<
+            std::map<std::string, const long int>,
+            std::map<std::string, const long int>>
+            ()(&Pseudo::compute_statistics_device_pybind11), py::return_value_policy::move)
+        .def("compute_statistics_device", overload_cast_<
+            std::map<std::string, const long int>>
+            ()(&Pseudo::compute_statistics_device_pybind11), py::return_value_policy::move)
         .def("get_monomer_concentration", overload_cast_<std::string>
             ()(&Pseudo::get_monomer_concentration), py::return_value_policy::move)
         .def("get_polymer_concentration", overload_cast_<int>
@@ -102,6 +115,7 @@ PYBIND11_MODULE(langevinfts, m)
             py::array_t<double>, double, double>()(&AndersonMixing::calculate_new_fields));
 
     py::class_<AbstractFactory>(m, "AbstractFactory")
+        .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
         .def("create_computation_box", &AbstractFactory::create_computation_box)
         .def("create_mixture", &AbstractFactory::create_mixture)
         .def("create_pseudo", &AbstractFactory::create_pseudo)

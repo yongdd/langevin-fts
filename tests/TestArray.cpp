@@ -67,9 +67,9 @@ int main()
 
             for (int i=0; i<N_REPEATS; i++)
             {
-                std::shared_ptr<Array> array_1 = factory->create_array(M);
-                std::shared_ptr<Array> array_2 = factory->create_array(M);
-                std::shared_ptr<Array> array_3 = factory->create_array(M);
+                Array* array_1 = factory->create_array(M);
+                Array* array_2 = factory->create_array(M);
+                Array* array_3 = factory->create_array(M);
 
                 array_1->set_data(_array_1, M);
                 array_2->set_data(_array_2, M);
@@ -165,8 +165,8 @@ int main()
                 }
 
                 // multi_inner_product(int n_comp,  Array& g, Array& h)
-                std::shared_ptr<Array> array_1_two = factory->create_array(_array_1_two, 2*M);
-                std::shared_ptr<Array> array_2_two = factory->create_array(_array_2_two, 2*M);
+                Array* array_1_two = factory->create_array(_array_1_two, 2*M);
+                Array* array_2_two = factory->create_array(_array_2_two, 2*M);
                 if (std::abs(cb->multi_inner_product(2, _array_1_two, _array_2_two) - cb->multi_inner_product(2, *array_1_two, *array_2_two)) > 1e-6)
                 {
                     std::cout << "Test failed, multi_inner_product(int n_comp,  Array& g, Array& h)." << std::endl;
@@ -184,6 +184,12 @@ int main()
                         return false;
                     }
                 }
+                delete array_1;
+                delete array_2;
+                delete array_3;
+
+                delete array_1_two;
+                delete array_2_two;
             }
 
             // estimate execution time

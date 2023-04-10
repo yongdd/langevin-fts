@@ -25,14 +25,13 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
         pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
         phi_a = pseudo.get_monomer_concentration("A")
         phi_b = pseudo.get_monomer_concentration("B")
-        phi_plus = phi_a + phi_b
-        
-        # calculate output fields
-        g_plus = phi_plus-1.0
 
         # error_level measures the "relative distance" between the input and output fields
         old_error_level = error_level
-        error_level = np.sqrt(cb.inner_product(g_plus, g_plus)/cb.get_volume())
+
+        # calculate incompressibility error
+        g_plus = phi_a + phi_b - 1.0
+        error_level = np.sqrt(np.dot(g_plus, g_plus)/cb.get_n_grid())
 
         # print iteration # and error levels
         if(verbose_level == 2 or
@@ -40,14 +39,14 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
          (error_level < saddle_tolerance or saddle_iter == saddle_max_iter)):
              
             # calculate the total energy
-            energy_total = cb.inner_product(w_minus,w_minus)/chi_n/cb.get_volume()
+            energy_total = np.dot(w_minus,w_minus)/chi_n/cb.get_n_grid()
             energy_total += chi_n/4
-            energy_total -= cb.integral(w_plus)/cb.get_volume()
+            energy_total -= np.mean(w_plus)
             for p in range(mixture.get_n_polymers()):
                 energy_total  -= np.log(pseudo.get_total_partition(p))
 
             # check the mass conservation
-            mass_error = cb.integral(phi_plus)/cb.get_volume() - 1.0
+            mass_error = np.mean(g_plus)
             print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
             for p in range(mixture.get_n_polymers()):
                 print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
@@ -60,7 +59,7 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
         # calculate new fields using simple and Anderson mixing
         w_plus[:] = am.calculate_new_fields(w_plus, g_plus, old_error_level, error_level)
 
-    cb.zero_mean(w_plus)
+    w_plus -= np.mean(w_plus)
     Q = []
     for p in range(mixture.get_n_polymers()):
         Q.append(pseudo.get_total_partition(p))
@@ -153,7 +152,7 @@ w_plus  = np.random.normal(0.0, 1.0, cb.get_n_grid())
 w_minus = np.random.normal(0.0, 1.0, cb.get_n_grid())
 
 # keep the level of field value
-cb.zero_mean(w_plus)
+w_plus -= np.mean(w_plus)
 
 phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
     w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)

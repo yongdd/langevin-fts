@@ -71,7 +71,7 @@ double* CpuArray::get_ptr() const
 }
 unsigned int CpuArray::get_size() const
 {
-    return size;
+    return this->size;
 }
 double CpuArray::operator[](unsigned int i) const
 {

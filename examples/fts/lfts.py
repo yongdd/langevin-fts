@@ -283,7 +283,7 @@ class LFTS:
         phi = {}
 
         # compute hamiltonian part that is independent of w_plus
-        energy_total_minus = self.cb.inner_product(w_minus,w_minus)/self.chi_n/self.cb.get_volume()
+        energy_total_minus = np.dot(w_minus,w_minus)/self.chi_n/self.cb.get_n_grid()
         energy_total_minus += self.chi_n/4
 
         # saddle point iteration begins here
@@ -302,28 +302,26 @@ class LFTS:
                 phi["A"] += phi["R"]*self.random_A_fraction
                 phi["B"] += phi["R"]*(1.0-self.random_A_fraction)
 
-            phi_plus = phi["A"] + phi["B"]
-
-            # calculate output fields
-            g_plus = phi_plus-1.0
-
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
-            error_level = np.sqrt(self.cb.inner_product(g_plus,g_plus)/self.cb.get_volume())
+
+            # calculate incompressibility error
+            g_plus = phi["A"] + phi["B"] - 1.0
+            error_level = np.sqrt(np.dot(g_plus, g_plus)/self.cb.get_n_grid())
 
             # print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
             
                 # calculate the total energy
-                energy_total = energy_total_minus - self.cb.integral(w_plus)/self.cb.get_volume()
+                energy_total = energy_total_minus - np.mean(w_plus)
                 for p in range(self.mixture.get_n_polymers()):
                     energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                     self.mixture.get_polymer(p).get_alpha() * \
                                     np.log(self.pseudo.get_total_partition(p))
 
                 # check the mass conservation
-                mass_error = self.cb.integral(phi_plus)/self.cb.get_volume() - 1.0
+                mass_error = np.mean(g_plus)
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.mixture.get_n_polymers()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
@@ -335,5 +333,5 @@ class LFTS:
                 
             # calculate new fields using simple and Anderson mixing
             w_plus[:] = self.am.calculate_new_fields(w_plus, g_plus, old_error_level, error_level)
-        self.cb.zero_mean(w_plus)
+        w_plus -= np.mean(w_plus)
         return phi, saddle_iter, error_level

@@ -10,7 +10,6 @@ class CudaArray : public Array
 {
 private:
     double *d_data = nullptr;
-    unsigned int size = 0;
 public:
     CudaArray(unsigned new_size);
     CudaArray(double* new_data, unsigned new_size);

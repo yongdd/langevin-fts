@@ -69,7 +69,7 @@ double* CudaArray::get_ptr() const
 }
 unsigned int CudaArray::get_size() const
 {
-    return size;
+    return this->size;
 }
 double CudaArray::operator[](unsigned int i) const
 {

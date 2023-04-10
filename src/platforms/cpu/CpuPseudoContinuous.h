@@ -65,8 +65,14 @@ public:
     
     void update_bond_function() override;
     void compute_statistics(
-        std::map<std::string, double*> w_block,
-        std::map<std::string, double*> q_init) override;
+        std::map<std::string, const double*> w_block,
+        std::map<std::string, const double*> q_init) override;
+    void compute_statistics_device(
+        std::map<std::string, const double*> w_block,
+        std::map<std::string, const double*> q_init) override
+    {
+        compute_statistics(w_block, q_init);
+    };
     double get_total_partition(int polymer) override;
     void get_monomer_concentration(std::string monomer_type, double *phi) override;
     void get_polymer_concentration(int polymer, double *phi) override;

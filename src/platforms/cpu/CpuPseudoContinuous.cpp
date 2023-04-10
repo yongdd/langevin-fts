@@ -149,8 +149,8 @@ void CpuPseudoContinuous::update_bond_function()
     }
 }
 void CpuPseudoContinuous::compute_statistics(
-    std::map<std::string, double*> w_input,
-    std::map<std::string, double*> q_init)
+    std::map<std::string, const double*> w_input,
+    std::map<std::string, const double*> q_init)
 {
     try
     {
@@ -175,7 +175,7 @@ void CpuPseudoContinuous::compute_statistics(
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
-            double *w = item.second;
+            const double *w = item.second;
             for(int i=0; i<M; i++)
             { 
                 exp_dw     [monomer_type][i] = exp(-w[i]*ds*0.5);

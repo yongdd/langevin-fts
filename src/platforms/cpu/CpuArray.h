@@ -11,7 +11,6 @@ class CpuArray : public Array
 
 private:
     double *data = nullptr;
-    unsigned int size = 0;
 public:
     CpuArray(unsigned new_size);
     CpuArray(double* new_data, unsigned new_size);
