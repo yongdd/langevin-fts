@@ -22,17 +22,17 @@ CudaFactory::CudaFactory(std::string chain_model, bool reduce_memory_usage)
     this->reduce_memory_usage = reduce_memory_usage;
 }
 
-std::shared_ptr<Array> CudaFactory::create_array(
+Array* CudaFactory::create_array(
     unsigned int size)
 {
-    return std::make_shared<CudaArray>(size);
+    return new CudaArray(size);
 }
 
-std::shared_ptr<Array> CudaFactory::create_array(
+Array* CudaFactory::create_array(
     double *data,
     unsigned int size)
 {
-    return std::make_shared<CudaArray>(data, size);
+    return new CudaArray(data, size);
 }
 ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double>  lx)

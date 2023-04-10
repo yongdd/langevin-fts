@@ -18,10 +18,10 @@ class MklFactory : public AbstractFactory
 public :
     MklFactory(std::string chain_model, bool reduce_memory_usage);
 
-    std::shared_ptr<Array> create_array(
+    Array* create_array(
         unsigned int size) override;
 
-    std::shared_ptr<Array> create_array(
+    Array* create_array(
         double *data,
         unsigned int size) override;
 

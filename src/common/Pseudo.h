@@ -40,9 +40,14 @@ public:
     virtual ~Pseudo() {};
 
     virtual void update_bond_function() = 0;
+    // inputs are in main memory
     virtual void compute_statistics(
-        std::map<std::string, double*> w_input,
-        std::map<std::string, double*> q_init) = 0;
+        std::map<std::string, const double*> w_input,
+        std::map<std::string, const double*> q_init) = 0;
+    // inputs are in platform memory (cpu or gpu)
+    virtual void compute_statistics_device(
+        std::map<std::string, const double*> d_w_input,
+        std::map<std::string, const double*> d_q_init) = 0;
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
     virtual void get_polymer_concentration(int polymer, double *phi) = 0;
@@ -50,12 +55,12 @@ public:
     virtual void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) = 0;
 
     // Methods for pybind11
-    void compute_statistics_pybind11(std::map<std::string,py::array_t<double>> w_input, std::map<std::string,py::array_t<double>> q_init)
+    void compute_statistics_pybind11(std::map<std::string,py::array_t<const double>> w_input, std::map<std::string,py::array_t<const double>> q_init)
     {
         try{
             const int M = cb->get_n_grid();
-            std::map<std::string,double*> map_buf_w_input;
-            std::map<std::string,double*> map_buf_q_init;
+            std::map<std::string, const double*> map_buf_w_input;
+            std::map<std::string, const double*> map_buf_q_init;
 
             for (auto it=w_input.begin(); it!=w_input.end(); ++it)
             {
@@ -66,7 +71,7 @@ public:
                 }
                 else
                 {
-                    map_buf_w_input.insert(std::pair<std::string, double*>(it->first,(double *)buf_w_input.ptr));
+                    map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *)buf_w_input.ptr));
                 }
             }
 
@@ -79,7 +84,7 @@ public:
                 }
                 else
                 {
-                    map_buf_q_init.insert(std::pair<std::string, double*>(it->first,(double *)buf_q_init.ptr));
+                    map_buf_q_init.insert(std::pair<std::string, const double*>(it->first,(const double *)buf_q_init.ptr));
                 }
             }
             compute_statistics(map_buf_w_input, map_buf_q_init);
@@ -89,11 +94,41 @@ public:
             throw_without_line_number(exc.what());
         }
     }
-    void compute_statistics_pybind11(std::map<std::string,py::array_t<double>> w_input)
+    void compute_statistics_pybind11(std::map<std::string,py::array_t<const double>> w_input)
     {
         compute_statistics_pybind11(w_input, {});
     }
+    void compute_statistics_device_pybind11(std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
+    {
+        try{
+            // const int M = cb->get_n_grid();
+            std::map<std::string, const double*> map_buf_w_input;
+            std::map<std::string, const double*> map_buf_q_init;
 
+            for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
+            {
+                //buf_w_input
+                const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
+                map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
+            }
+
+            for (auto it=d_q_init.begin(); it!=d_q_init.end(); ++it)
+            {
+                //buf_q_init
+                const double* q_init_ptr = reinterpret_cast<const double*>(it->second);
+                map_buf_q_init.insert(std::pair<std::string, const double*>(it->first,(const double *) q_init_ptr));
+            }
+            compute_statistics_device(map_buf_w_input, map_buf_q_init);
+        }
+        catch(std::exception& exc)
+        {
+            throw_without_line_number(exc.what());
+        }
+    }
+    void compute_statistics_device_pybind11(std::map<std::string, const long int> d_w_input)
+    {
+        compute_statistics_device_pybind11(d_w_input, {});
+    }
     py::array_t<double> get_monomer_concentration(std::string monomer_type)
     {
         try{

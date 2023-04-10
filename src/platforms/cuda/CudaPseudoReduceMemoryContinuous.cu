@@ -340,8 +340,8 @@ void CudaPseudoReduceMemoryContinuous::update_bond_function()
     }
 }
 void CudaPseudoReduceMemoryContinuous::compute_statistics(
-    std::map<std::string, double*> w_input,
-    std::map<std::string, double*> q_init)
+    std::map<std::string, const double*> w_input,
+    std::map<std::string, const double*> q_init, std::string device)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -350,6 +350,16 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
 
         const int M = cb->get_n_grid();
         const double ds = mx->get_ds();
+
+        cudaMemcpyKind cudaMemcpyInputToDevice;
+        if (device == "gpu")
+            cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
+        else if(device == "cpu")
+            cudaMemcpyInputToDevice = cudaMemcpyHostToDevice;
+        else
+        {
+            throw_with_line_number("Invalid device \"" + device + "\".");
+        }
 
         for(const auto& item: mx->get_essential_propagator_codes())
         {
@@ -367,7 +377,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
-            double *w = item.second;
+            const double *w = item.second;
 
             // copy field configurations from host to device
             for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -375,10 +385,10 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 gpu_error_check(cudaSetDevice(gpu));
                 gpu_error_check(cudaMemcpyAsync(
                     d_exp_dw     [gpu][monomer_type], w,      
-                    sizeof(double)*M, cudaMemcpyHostToDevice, streams[gpu][1]));
+                    sizeof(double)*M, cudaMemcpyInputToDevice, streams[gpu][1]));
                 gpu_error_check(cudaMemcpyAsync(
                     d_exp_dw_half[gpu][monomer_type], w,
-                    sizeof(double)*M, cudaMemcpyHostToDevice, streams[gpu][1]));
+                    sizeof(double)*M, cudaMemcpyInputToDevice, streams[gpu][1]));
             }
 
             // compute exp_dw and exp_dw_half
@@ -429,7 +439,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                         std::string g = Mixture::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number( "Could not find q_init[\"" + g + "\"].");
-                        gpu_error_check(cudaMemcpy(d_q_one[0][0], q_init[g], sizeof(double)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_one[0][0], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice));
                     }
                     else
                     {

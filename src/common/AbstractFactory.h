@@ -25,10 +25,10 @@ protected:
 public :
     virtual ~AbstractFactory() {};
 
-    virtual std::shared_ptr<Array> create_array(
+    virtual Array* create_array(
         unsigned int size) = 0;
 
-    virtual std::shared_ptr<Array> create_array(
+    virtual Array* create_array(
         double *data,
         unsigned int size) = 0;
 
