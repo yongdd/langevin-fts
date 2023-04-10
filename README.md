@@ -25,6 +25,7 @@ Using the above python shared library, SCFT and L-FTS are implemented. They supp
   * Arbitrary mixtures of block copolymers and homopolymers (+ 1 random copolymer)
   * Box size determination by stress calculation (SCFT only)
   * Leimkuhler-Matthews method for updating exchange field (L-FTS only) (**beta**)
+  * Random Number Generator for L-FTS: PCG64
 
 This open-source code is distributed under the Apache license 2.0 instead of GPL. This license is one of the permissive software licenses and has minimal restrictions.
 
@@ -83,7 +84,7 @@ conda env remove -n lfts
   + Use FTS in 1D and 2D only for the tests. It does not have a physical meaning.
   + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. As an example, please see 'examples/scft/Gyroid.py'.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
-+ To achieve the best performance, use the DL-FTS version even though you will not exploit DL. Because DL-FTS version performs python array operation on GPU. The Performance gain is less than 7%.
++ To achieve the best performance, use the DL-FTS version even if you will not exploit DL. Because DL-FTS version performs python array operations on GPU.
 + The unit of length in this library is *aN^(1/2)* for both `Continuous` and `Discrete` chain models, where *a* is a reference statistical segment length and *N* is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. Please refer to [*J. Chem. Phys.* **2014**, 141, 174103] to learn how to formulate polymer mixtures composed of multiple distinct polymers in the reference polymer length unit.
 
 + Open-source has no warranty. Make sure that this program reproduces the results of previous SCFT and FTS studies, and also produces reasonable results. For acyclic branched polymers adopting the `Continuous` model with an even number of contour steps, the results must be identical to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results must be identical to those of code in [*Polymers* **2021**, 13, 2437].
