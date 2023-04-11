@@ -6,10 +6,10 @@
 #include <map>
 
 #include "Exception.h"
-#include "ComputationBox.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
+#include "CpuComputationBox.h"
 #include "CpuPseudoContinuous.h"
 #endif
 #ifdef USE_CUDA
@@ -231,8 +231,8 @@ int main()
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));
-        pseudo_list.push_back(new CpuPseudoContinuous(new ComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
         pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));

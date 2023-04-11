@@ -714,7 +714,7 @@ void CudaPseudoContinuous::compute_statistics(
             double *d_propagator_u = std::get<2>(segment_info);
             int n_superposed       = std::get<3>(segment_info);
 
-            single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_gpu(
+            single_partitions[p] = cb->inner_product_device(
                 d_propagator_v, d_propagator_u)/n_superposed/cb->get_volume();
         }
 

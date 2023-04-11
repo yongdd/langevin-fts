@@ -928,7 +928,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator_v, sizeof(double)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_u, sizeof(double)*M, cudaMemcpyHostToDevice));
 
-            single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
+            single_partitions[p] = cb->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 d_exp_dw[0][monomer_type])/n_superposed/cb->get_volume();

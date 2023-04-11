@@ -788,7 +788,7 @@ void CudaPseudoDiscrete::compute_statistics(
             std::string monomer_type = std::get<3>(segment_info);
             int n_superposed         = std::get<4>(segment_info);
 
-            single_partitions[p] = ((CudaComputationBox *)cb)->inner_product_inverse_weight_gpu(
+            single_partitions[p] = cb->inner_product_inverse_weight_device(
                 d_propagator_v,  // q
                 d_propagator_u, // q^dagger
                 d_exp_dw[0][monomer_type])/n_superposed/cb->get_volume();

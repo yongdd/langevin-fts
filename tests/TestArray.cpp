@@ -141,14 +141,14 @@ int main()
                 }
 
                 // integral(Array& g)
-                if (std::abs(cb->integral(_array_1) - cb->integral(*array_1)) > 1e-6)
+                if (std::abs(cb->integral(_array_1) - cb->integral_device(array_1->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, integral(Array& g)." << std::endl;
                     return false;
                 }
 
                 // inner_product(Array& g, Array& h)
-                if (std::abs(cb->inner_product(_array_1, _array_2) - cb->inner_product(*array_1, *array_2)) > 1e-6)
+                if (std::abs(cb->inner_product(_array_1, _array_2) - cb->inner_product_device(array_1->get_ptr(), array_2->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, inner_product(Array& g, Array& h)." << std::endl;
                     return false;
@@ -158,7 +158,7 @@ int main()
                 array_3->add(*array_1, *array_2);
                 for(int i=0; i<M; i++)
                     _array_3[i] = _array_1[i] + _array_2[i];
-                if (std::abs(cb->inner_product_inverse_weight(_array_1, _array_2, _array_3) - cb->inner_product_inverse_weight(*array_1, *array_2, *array_3)) > 1e-6)
+                if (std::abs(cb->inner_product_inverse_weight(_array_1, _array_2, _array_3) - cb->inner_product_inverse_weight_device(array_1->get_ptr(), array_2->get_ptr(), array_3->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, inner_product_inverse_weight(Array& g, Array& h, Array& w)." << std::endl;
                     return false;
@@ -167,7 +167,7 @@ int main()
                 // multi_inner_product(int n_comp,  Array& g, Array& h)
                 Array* array_1_two = factory->create_array(_array_1_two, 2*M);
                 Array* array_2_two = factory->create_array(_array_2_two, 2*M);
-                if (std::abs(cb->multi_inner_product(2, _array_1_two, _array_2_two) - cb->multi_inner_product(2, *array_1_two, *array_2_two)) > 1e-6)
+                if (std::abs(cb->multi_inner_product(2, _array_1_two, _array_2_two) - cb->multi_inner_product_device(2, array_1_two->get_ptr(), array_2_two->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, multi_inner_product(int n_comp,  Array& g, Array& h)." << std::endl;
                     return false;
@@ -175,7 +175,7 @@ int main()
 
                 // zero_mean(Array& g);
                 cb->zero_mean(_array_1);
-                cb->zero_mean(*array_1);
+                cb->zero_mean_device(array_1->get_ptr());
                 for(int i=0; i<M; i++)
                 {
                     if (std::abs(_array_1[i] - (*array_1)[i]) > 1e-6)
