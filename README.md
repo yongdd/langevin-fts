@@ -79,7 +79,7 @@ conda env remove -n lfts
   + Set 'reduce_gpu_memory_usage=True' (default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
   + To use two GPUs, set `os.environ["LFTS_NUM_GPUS"]="2"`. This is useful if your GPUs do not support high performance in double precision, but only reduces simulation time by 5-40%. Simulation time may increase depending on the number of grids, number of segments, and GPU environment. Check the performance first. As an example, see 'examples/scft/A15.py'.
   + Set 'use_superposition=False, (default: True) if you want to use 'pseudo.get_polymer_concentration()', which returns block-wise concentrations of a selected polymer species, and 'pseudo.get_chain_propagator()', which returns a propagator of a selected branch.
-  + If your SCFT calculation does not converge, reduce the "am.mix_min" (default:0.05) and "am.mix_init" (default:0.05) in parameter set. Please see 'examples/scft/BottleBrushLamella3D.py'.
+  + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in parameter set. Please see 'examples/scft/BottleBrushLamella3D.py'.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + Use FTS in 1D and 2D only for the tests. It does not have a physical meaning.
   + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. As an example, please see 'examples/scft/Gyroid.py'.
