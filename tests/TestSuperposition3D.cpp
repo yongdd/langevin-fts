@@ -5,6 +5,7 @@
 #include <string>
 #include <array>
 #include <chrono>
+#include <numeric>
 
 #include "Exception.h"
 #include "ComputationBox.h"

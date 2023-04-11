@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <numeric>
 #include <cmath>
 #include <map>
 
