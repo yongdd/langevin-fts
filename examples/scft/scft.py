@@ -133,7 +133,7 @@ class SCFT:
                 params["am"]["mix_min"],      # minimum mixing rate of simple mixing
                 params["am"]["mix_init"])     # initial mixing rate of simple mixing
         else : 
-            am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.05,  0.05)
+            am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.01,  0.01)
 
        # The maximum iteration steps
         if "max_iter" in params :
