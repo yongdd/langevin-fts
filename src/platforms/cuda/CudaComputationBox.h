@@ -7,12 +7,10 @@
 
 #include <vector>
 #include "ComputationBox.h"
-#include "Array.h"
 
 class CudaComputationBox : public ComputationBox
 {
 private:
-
     // temporal storage for reduction in integral_gpu
     double *sum, *d_sum; 
     // temporal storage for mutiple_inner_product_gpu
@@ -33,22 +31,13 @@ public:
     CudaComputationBox(std::vector<int> nx, std::vector<double> lx);
     ~CudaComputationBox() override;
 
-    double integral(double *g) override;
-    double inner_product(double *g, double *h) override;
-    double inner_product_inverse_weight(double *g, double *h, double *w) override;
-    double multi_inner_product(int n_comp, double *g, double *h) override;
-    void zero_mean(double *g) override;
-
-    double integral(Array& g) override;
-    double inner_product(Array& g, Array& h) override;
-    double inner_product_inverse_weight(Array& g, Array& h, Array& w) override;
-    double multi_inner_product(int n_comp,  Array& g, Array& h) override;
-    void zero_mean(Array& g) override;
-
-    double integral_gpu(double *d_g);
-    double inner_product_gpu(double *d_g, double *d_h);
-    double inner_product_inverse_weight_gpu(double *d_g, double *d_h, double *d_w);
-    double mutiple_inner_product_gpu(int n_comp, double *d_g, double *d_h);
     void set_lx(std::vector<double> new_lx) override;
+
+    // methods with device array
+    double integral_device(double *d_g) override;
+    double inner_product_device(double *d_g, double *d_h) override;
+    double inner_product_inverse_weight_device(double *d_g, double *d_h, double *d_w) override;
+    double multi_inner_product_device(int n_comp, double *d_g, double *d_h) override;
+    void zero_mean_device(double *d_g) override;
 };
 #endif

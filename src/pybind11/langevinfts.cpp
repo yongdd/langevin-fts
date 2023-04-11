@@ -27,7 +27,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_size", &Array::get_size);
 
     py::class_<ComputationBox>(m, "ComputationBox")
-        .def(py::init<std::vector<int>, std::vector<double>>())
+        // .def(py::init<std::vector<int>, std::vector<double>>())
         .def("get_dim", &ComputationBox::get_dim)
         .def("get_nx", overload_cast_<>()(&ComputationBox::get_nx))
         .def("get_nx", overload_cast_<int>()(&ComputationBox::get_nx))

@@ -6,7 +6,6 @@
 #define CUDA_ANDERSON_MIXING_H_
 
 #include "CircularBuffer.h"
-#include "ComputationBox.h"
 #include "AndersonMixing.h"
 #include "CudaCommon.h"
 #include "CudaCircularBuffer.h"

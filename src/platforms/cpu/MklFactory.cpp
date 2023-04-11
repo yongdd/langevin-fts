@@ -13,6 +13,7 @@
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
 #include "CpuArray.h"
+#include "CpuComputationBox.h"
 #include "CpuPseudoContinuous.h"
 #include "CpuPseudoDiscrete.h"
 #include "CpuAndersonMixing.h"
@@ -42,7 +43,7 @@ Array* MklFactory::create_array(
 ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx)
 {
-    return new ComputationBox(nx, lx);
+    return new CpuComputationBox(nx, lx);
 }
 Mixture* MklFactory::create_mixture(
     double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 

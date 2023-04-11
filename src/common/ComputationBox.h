@@ -14,11 +14,9 @@
 #include <pybind11/numpy.h>
 
 #include "Exception.h"
-#include "Array.h"
 
 namespace py = pybind11;
 
-class Array;
 class ComputationBox
 {
 protected:
@@ -54,11 +52,11 @@ public:
     virtual double multi_inner_product(int n_comp, double *g, double *h);
     virtual void zero_mean(double *g);
 
-    virtual double integral(Array& g);
-    virtual double inner_product(Array& g, Array& h);
-    virtual double inner_product_inverse_weight(Array& g, Array& h, Array& w);
-    virtual double multi_inner_product(int n_comp,  Array& g, Array& h);
-    virtual void zero_mean(Array& g);
+    virtual double integral_device(double *g)=0;
+    virtual double inner_product_device(double *g, double *h)=0;
+    virtual double inner_product_inverse_weight_device(double *g, double *h, double *w)=0;
+    virtual double multi_inner_product_device(int n_comp, double *g, double *h)=0;
+    virtual void zero_mean_device(double *g)=0;
 
     // Methods for pybind11
     double integral(py::array_t<double> g) {
