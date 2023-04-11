@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <cmath>
 
 #include "Exception.h"
 #include "Array.h"

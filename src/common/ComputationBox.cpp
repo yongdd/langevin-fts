@@ -1,6 +1,8 @@
 
 #include <iostream>
 #include <sstream>
+#include <iterator>
+#include <algorithm>
 #include "ComputationBox.h"
 
 //----------------- Constructor -----------------------------

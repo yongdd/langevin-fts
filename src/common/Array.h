@@ -8,12 +8,7 @@
 #include <iostream>
 #include <vector>
 
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-
 #include "Exception.h"
-
-namespace py = pybind11;
 
 class Array
 {
@@ -51,35 +46,6 @@ public:
     
     // access element of array
     virtual double operator[](unsigned int) const=0;
-
-    // Methods for pybind11
-    void set_data_pybind11(py::array_t<const double> data)
-    {
-        try
-        {
-            py::buffer_info buf = data.request();
-            if (buf.size != this->size) {
-                throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(this->size) + ") must match");
-            }
-            set_data((double*) buf.ptr, this->size);
-        }
-        catch(std::exception& exc)
-        {
-            throw_without_line_number(exc.what());
-        }
-    }
-    long int get_ptr_pybind11()
-    {
-        try
-        {
-            double* data_ptr = get_ptr();
-            return reinterpret_cast<std::uintptr_t>(data_ptr);
-        }
-        catch(std::exception& exc)
-        {
-            throw_without_line_number(exc.what());
-        }
-    }
 };
 
 // // arithmetic operations with a float number
