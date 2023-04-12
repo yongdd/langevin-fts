@@ -4,12 +4,12 @@
 int main()
 {
     try{
-        const int M{128*128*128};
+        const int M{32*32*32};
 
         double *d_progpa_temp;
         double * propagator;
         std::string key = "A";
-        int max_n_segment = 200;
+        int max_n_segment = 10;
 
         // allocate gpu memory
         gpu_error_check(cudaMalloc((void**)&d_progpa_temp, sizeof(double)*M));
