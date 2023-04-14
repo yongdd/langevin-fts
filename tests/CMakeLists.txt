@@ -21,7 +21,6 @@ FOREACH(FILE_NAME ${FILE_LIST})
     TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
         factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
@@ -51,7 +50,7 @@ IF(CUDAToolkit_FOUND)
 
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
         TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-            factory cuda CUDA::cuda_driver CUDA::cufft common)
+            factory cuda CUDA::cufft common)
 
         SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
