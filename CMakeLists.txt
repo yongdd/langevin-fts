@@ -117,7 +117,6 @@ SET_TARGET_PROPERTIES(langevinfts PROPERTIES PREFIX "" SUFFIX ".so")
 TARGET_LINK_LIBRARIES(langevinfts PUBLIC pybind11::module PRIVATE 
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
-    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cuda_driver,>
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
