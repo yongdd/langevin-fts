@@ -30,10 +30,8 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
         phi_a = pseudo.get_monomer_concentration("A")
         phi_b = pseudo.get_monomer_concentration("B")
         
-        # error_level measures the "relative distance" between the input and output fields
-        old_error_level = error_level
-
         # calculate incompressibility error
+        old_error_level = error_level
         g_plus = phi_a + phi_b - 1.0
         error_level = np.sqrt(np.dot(g_plus, g_plus)/cb.get_n_grid())
 

@@ -25,7 +25,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
 
              // Example (N==5)
              // O--O--O--O--O
-             // 0  1  2  3  4 essential_blocks
+             // 0  1  2  3  4
 
              // Legend)
              // -- : full bond
