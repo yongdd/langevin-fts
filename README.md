@@ -19,7 +19,7 @@ This is not just an application, but it contains a library for polymer field the
   * Parallel computations of propagators with multi-core CPUs, batched cuFFT, or two GPUs (**beta**)
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
-Using the above python shared library, SCFT and L-FTS are implemented. They supports following features:
+Using the above python shared library, SCFT and L-FTS are implemented. They support following features:
   * AB-type polymer melts in bulk
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers (+ 1 random copolymer)

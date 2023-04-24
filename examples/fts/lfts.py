@@ -302,10 +302,8 @@ class LFTS:
                 phi["A"] += phi["R"]*self.random_A_fraction
                 phi["B"] += phi["R"]*(1.0-self.random_A_fraction)
 
-            # error_level measures the "relative distance" between the input and output fields
-            old_error_level = error_level
-
             # calculate incompressibility error
+            old_error_level = error_level
             g_plus = phi["A"] + phi["B"] - 1.0
             error_level = np.sqrt(np.dot(g_plus, g_plus)/self.cb.get_n_grid())
 
