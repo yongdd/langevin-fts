@@ -288,7 +288,7 @@ class LFTS:
 
         # saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
-            # for the given fields find the polymer statistics
+            # for the given fields compute the polymer statistics
             if self.random_copolymer_exist:
                 self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus,"R":w_minus*(2*self.random_A_fraction-1)+w_plus})
             else:

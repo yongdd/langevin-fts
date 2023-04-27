@@ -26,7 +26,7 @@ def find_saddle_point(cb, mixture, pseudo, am, lx, chi_n, w, max_iter, tolerance
     
     for scft_iter in range(1,max_iter+1):
 
-        # for the given fields find the polymer statistics
+        # for the given fields compute the polymer statistics
         pseudo.compute_statistics({"A":w[0],"B":w[1]})
 
         phi_a = pseudo.get_monomer_concentration("A")
