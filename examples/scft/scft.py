@@ -217,7 +217,7 @@ class SCFT:
         w[1] -= np.mean(w[1])
 
         for scft_iter in range(1, self.max_iter+1):
-            # for the given fields find the polymer statistics
+            # for the given fields compute the polymer statistics
             if self.random_copolymer_exist:
                 self.pseudo.compute_statistics({"A":w[0],"B":w[1],"R":w[0]*self.random_A_fraction + w[1]*(1.0-self.random_A_fraction)})
             else:
