@@ -1,6 +1,5 @@
 #include <complex>
 #include <thrust/reduce.h>
-#include <thrust/device_ptr.h>
 #include <iostream>
 #include "CudaComputationBox.h"
 #include "CudaPseudoReduceMemoryDiscrete.h"

@@ -33,7 +33,7 @@ params = {
         {
         "volume_fraction":0.3,  
         "blocks":[              # Random Copolymer. Currently, Only single block random copolymer is supported.
-            {"type":"random", "length":0.5, "fraction":{"A":0.5, "B":0.5},},
+            {"type":"R", "length":0.5, "fraction":{"A":0.5, "B":0.5},},
         ],}],
 
     "langevin":{                # Langevin Dynamics

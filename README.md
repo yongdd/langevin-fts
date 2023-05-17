@@ -37,7 +37,7 @@ This open-source code is distributed under the Apache license 2.0 instead of GPL
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
-  It requires CUDA Toolkit Version 11.2 or higher for the GPU computation. If it is not installed, ask admin for its installation.
+  It requires CUDA Toolkit Version 11.2 or higher, but less than 12.0 for the GPU computation. If it is not installed, ask admin for its installation.
 
 #### Anaconda
   https://www.anaconda.com/
@@ -151,15 +151,16 @@ conda env remove -n lfts
 
 # References
 #### Polymer Mixture
-+ D. Düchs, K. T. Delaney and G. H. Fredrickson, A multi-species exchange model for fully fluctuating polymer field theory simulations. *J. Chem. Phys.* **2014**, 141, 174103
++ D. Düchs, K. T. Delaney, and G. H. Fredrickson, A multi-species exchange model for fully fluctuating polymer field theory simulations. *J. Chem. Phys.* **2014**, 141, 174103
 #### CUDA Implementation
-+ G.K. Cheong, A. Chawla, D.C. Morse and K.D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
++ G. K. Cheong, A. Chawla, D. C. Morse, and K. D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 + D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces. *Macromolecules* **2021**, 54, 11304
 #### Langevin FTS
-+ M.W. Matsen, and T.M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
++ M. W. Matsen, and T. M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
 #### Exchange Field Update Algorithm
-+ B.Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of
-field-theoretic simulations, *J. Chem. Phys.* **2023**, 158, 114117
++ B. Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of field-theoretic simulations, *J. Chem. Phys.* **2023**, 158, 114117
+#### Anderson Mixing
++ A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
 
 # Citation
 Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, *Macromolecules* **2022**, 55, 6505  

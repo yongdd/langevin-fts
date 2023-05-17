@@ -23,11 +23,12 @@ params = {
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
     "ds":1/200,                   # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": 9.5,                 # Interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": [["A", "B", 9.5]],   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -39,6 +40,13 @@ params = {
             {"type":"B", "length":1-f, "v":2, "u":5},    # B-block
             {"type":"B", "length":1-f, "v":3, "u":6},    # B-block
         ],},],
+
+    "am":{
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
 
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
@@ -66,12 +74,12 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-phi_A, phi_B = calculation.get_concentrations()
-w_A, w_B = calculation.get_fields()
+phi = calculation.get_concentrations()
+w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
         "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w_A, "w_b":w_B, "phi_a":phi_A, "phi_b":phi_B}
+        "w_a":w["A"], "w_b":w["B"], "phi_a":phi["A"], "phi_b":phi["B"]}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring

@@ -13,15 +13,18 @@ class SCFT:
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
-        assert(len(self.monomer_types) >=2 and len(self.monomer_types) <= 3), \
-            "Currently, only AB- or ABC-type polymers are supported."
+        assert(len(self.monomer_types) >=2 and len(self.monomer_types) <= 4), \
+            "Currently, only AB-, ABC- or ABCD-type polymers are supported."
         if len(self.monomer_types) == 2:
             assert( len(set(["A","B"]).intersection(self.monomer_types)) == len(self.monomer_types)), \
                 "Use letters 'A' and 'B' for monomer names."
         elif len(self.monomer_types) == 3:
             assert( len(set(["A","B","C"]).intersection(self.monomer_types)) == len(self.monomer_types)), \
                 "Use letters 'A', 'B' and 'C' for monomer names."
-
+        elif len(self.monomer_types) == 4:
+            assert( len(set(["A","B","C","D"]).intersection(self.monomer_types)) == len(self.monomer_types)), \
+                "Use letters 'A', 'B', 'C', and 'D' for monomer names."
+                
         # Flory-Huggins parameters, chi*N
         self.chi_n = {}
         for pair_chi_n in params["chi_n"]:
@@ -41,7 +44,7 @@ class SCFT:
             if not frozenset(list(monomer_pair)) in self.chi_n:
                 self.chi_n[frozenset(list(monomer_pair))] = 0.0
 
-        # exchange mapping matrix.
+        # exchange mapping matrix. See paper *J. Chem. Phys.* **2014**, 141, 174103
         S = len(self.monomer_types)
         self.matrix_o = np.zeros((S-1,S-1))
         self.matrix_a = np.zeros((S,S))
@@ -58,8 +61,8 @@ class SCFT:
         #     self.matrix_o = np.array([0])
         #     self.matrix_a     = np.array([[1,1],[-1,1]])
         #     self.matrix_a_inv = np.array([[0.5,-0.5],[0.5,0.5]])
-
         # elif S >= 3:
+        
         matrix_chi = np.zeros((S,S))
         matrix_chin = np.zeros((S-1,S-1))
 
@@ -74,7 +77,8 @@ class SCFT:
             for j in range(S-1):
                 matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1]
 
-            
+        self.matrix_chi = matrix_chi
+
         # print(matrix_chi)
         # print(matrix_chin)
 
@@ -90,6 +94,12 @@ class SCFT:
         for i in range(S-1):
             self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
             self.matrix_a_inv[S-1,S-1] = 1
+
+        # matrix for field residuals. see *J. Chem. Phys.* **2017**, 146, 244902
+        matrix_chi_inv = np.linalg.inv(matrix_chi)
+        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        
+        # print(self.matrix_p)
 
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -173,14 +183,32 @@ class SCFT:
             params["segment_lengths"].update({random_string:statistical_segment_length})
             self.random_fraction[random_string] = polymer["blocks"][0]["fraction"]
 
+        # choose platform among [cuda, cpu-mkl]
+        avail_platforms = PlatformSelector.avail_platforms()
+        if "platform" in params:
+            platform = params["platform"]
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
+        elif "cuda" in avail_platforms: # If cuda is available, use GPU
+            platform = "cuda"
+        else:
+            platform = avail_platforms[0]
+
         # (c++ class) Create a factory for given platform and chain_model
-        factory = PlatformSelector.create_factory(params["platform"], params["chain_model"])
+        if "reduce_gpu_memory_usage" in params and platform == "cuda":
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], params["reduce_gpu_memory_usage"])
+        else:
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], False)
+        factory.display_info()
 
         # (C++ class) Computation box
         cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # (C++ class) Mixture box
-        mixture = factory.create_mixture(params["ds"], params["segment_lengths"])
+        if "use_superposition" in params:
+            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
+        else:
+            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
@@ -202,7 +230,7 @@ class SCFT:
                 params["am"]["mix_min"],      # minimum mixing rate of simple mixing
                 params["am"]["mix_init"])     # initial mixing rate of simple mixing
         else : 
-            am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.1,  0.1)
+            am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.01,  0.01)
 
        # The maximum iteration steps
         if "max_iter" in params :
@@ -226,7 +254,6 @@ class SCFT:
         print("Volume: %f" % (cb.get_volume()) )
 
         print("Chain model: %s" % (params["chain_model"]))
-
         print("Segment lengths:\n\t", list(params["segment_lengths"].items()))
         print("Conformational asymmetry (epsilon): ")
         for monomer_pair in itertools.combinations(self.monomer_types,2):
@@ -241,11 +268,12 @@ class SCFT:
             print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
 
         print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors O:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
+        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
         print("Vector chi_iS:\n\t", str(self.vector_s).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         for p in range(mixture.get_n_polymers()):
             print("distinct_polymers[%d]:" % (p) )
@@ -253,10 +281,9 @@ class SCFT:
                 (mixture.get_polymer(p).get_volume_fraction(),
                  mixture.get_polymer(p).get_alpha(),
                  mixture.get_polymer(p).get_n_segment_total()))
-            # add display monomer types and lengths
 
-        mixture.display_unique_branches()
-        mixture.display_unique_blocks()
+        mixture.display_blocks()
+        mixture.display_propagators()
 
         #  Save Internal Variables
         self.box_is_altering = params["box_is_altering"]
@@ -293,20 +320,15 @@ class SCFT:
 
         # reshape initial fields
         w = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+        
         for i in range(S):
             w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
 
-        # exchange-mapped chemical potential fields
-        w_exchange = np.matmul(self.matrix_a_inv, w)
-
         # keep the level of field value
         for i in range(S):
-            self.cb.zero_mean(w_exchange[i,:])
-
+            w[i] -= np.mean(w[i])
+            
         for scft_iter in range(1, self.max_iter+1):
-
-            # convert to species chemical potential fields
-            w = np.matmul(self.matrix_a, w_exchange)
 
             # make a dictionary for input fields 
             w_input = {}
@@ -331,52 +353,47 @@ class SCFT:
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
+            # exchange-mapped chemical potential fields
+            w_exchange = np.matmul(self.matrix_a_inv, w)
+
             # calculate the total energy
             energy_total = 0.0
-
             for i in range(S-1):
-                energy_total -= 0.5/self.exchange_eigenvalues[i]*self.cb.inner_product(w_exchange[i],w_exchange[i])/self.cb.get_volume()
+                energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i],w_exchange[i])/self.cb.get_n_grid()
             for i in range(S-1):
                 for j in range(S-1):
-                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*self.cb.integral(w_exchange[i])/self.cb.get_volume()
-            energy_total -= self.cb.integral(w_exchange[S-1])
+                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
+            energy_total -= np.mean(w_exchange[S-1])
 
             for p in range(self.mixture.get_n_polymers()):
                 energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
                                 self.mixture.get_polymer(p).get_alpha() * \
-                                np.log(self.pseudo.get_total_partition(p)/self.cb.get_volume())
-                
-            # print(np.std(w_exchange[i] - (w[0] - w[1])))
+                                np.log(self.pseudo.get_total_partition(p))
 
-            # calculate self-consistent error 
+            # calculate self-consistency error
             w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
-            for i in range(S-1):
-                w_diff[i] = 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
-                for j in range(S-1):
-                    w_diff[i] -= 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
-                    w_diff[i] -= self.matrix_o[j,i]*phi[self.monomer_types[j]]
-
+            
             for i in range(S):
-                w_diff[S-1] += phi[self.monomer_types[i]]
-            w_diff[S-1] -= 1.0
+                for j in range(S):
+                    w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
 
             # keep the level of field value
             for i in range(S):
-                self.cb.zero_mean(w_diff[i,:])
+                w_diff[i] -= np.mean(w_diff[i])
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
-            error_normal = 1.0 # add 1.0 to prevent divergence
+            error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
-                error_level += self.cb.inner_product(w_diff[i],w_diff[i])
-                error_normal += self.cb.inner_product(w_exchange[i],w_exchange[i])
+                error_level += np.dot(w_diff[i],w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_normal += np.dot(w[i],w[i])*self.cb.get_volume()/self.cb.get_n_grid()
             error_level = np.sqrt(error_level/error_normal)
 
             # print iteration # and error levels and check the mass conservation
             mass_error = -1.0
             for monomer_type in self.monomer_types: # do not add random copolymer
-                mass_error += self.cb.integral(phi[monomer_type])/self.cb.get_volume()
+                mass_error += np.mean(phi[monomer_type])
             
             if (self.box_is_altering):
                 # calculate stress
@@ -402,17 +419,17 @@ class SCFT:
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w_exchange,      S*self.cb.get_n_grid()), self.cb.get_lx()))
+                am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_n_grid()), self.cb.get_lx()))
                 am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), dlx))
                 am_new = self.am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # copy fields
-                w_exchange = np.reshape(am_new[0:S*self.cb.get_n_grid()], (S, self.cb.get_n_grid()))
+                w = np.reshape(am_new[0:S*self.cb.get_n_grid()], (S, self.cb.get_n_grid()))
 
                 # set box size
                 # restricting |dLx| to be less than 10 % of Lx
                 old_lx = np.array(self.cb.get_lx())
-                new_lx = np.array(am_new)
+                new_lx = np.array(am_new[-self.cb.get_dim():])
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
                 self.cb.set_lx(new_lx)
@@ -420,20 +437,20 @@ class SCFT:
                 # update bond parameters using new lx
                 self.pseudo.update_bond_function()
             else:
-                w_exchange = self.am.calculate_new_fields(
-                np.reshape(w_exchange,      S*self.cb.get_n_grid()),
+                w = self.am.calculate_new_fields(
+                np.reshape(w,      S*self.cb.get_n_grid()),
                 np.reshape(w_diff, S*self.cb.get_n_grid()), old_error_level, error_level)
-                w_exchange = np.reshape(w_exchange, (S, self.cb.get_n_grid()))
+                w = np.reshape(w, (S, self.cb.get_n_grid()))
 
         self.phi = phi
-        self.w_exchange = w_exchange
+        self.w = w
 
     def get_concentrations(self,):
         return self.phi
     
     def get_fields(self,):
         w_dict = {}
-        w = np.matmul(self.matrix_a, self.w_exchange)
+        # w = np.matmul(self.matrix_a, self.w_exchange)
         for idx, monomer_type in enumerate(self.monomer_types):
-            w_dict[monomer_type] = w[idx,:]
+            w_dict[monomer_type] = self.w[idx,:]
         return w_dict
