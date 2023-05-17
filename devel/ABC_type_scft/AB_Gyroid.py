@@ -49,7 +49,7 @@ params = {
             {"type":"random", "length":0.4, "fraction":{"A":0.6, "B":0.4},},
         ],},
         ],
-        
+
     "max_iter":2000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }

@@ -13,9 +13,9 @@ SET(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #---------- FTS_LIBRARIES -----------
-IF(CMAKE_BUILD_TYPE STREQUAL Release)
-    ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
-ENDIF()
+# IF(CMAKE_BUILD_TYPE STREQUAL Release)
+#     ADD_COMPILE_OPTIONS($<$<COMPILE_LANGUAGE:CXX>:-ffast-math>)
+# ENDIF()
 IF(CMAKE_BUILD_TYPE STREQUAL Debug)
     # SET(CMAKE_VERBOSE_MAKEFILE ON)
     ADD_COMPILE_OPTIONS(-Wall -Wextra -pg)
@@ -114,6 +114,11 @@ INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 # PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp) // new find python mode can cause segfault error depending on compile environment
 ADD_LIBRARY(langevinfts MODULE src/pybind11/langevinfts.cpp) 
 SET_TARGET_PROPERTIES(langevinfts PROPERTIES PREFIX "" SUFFIX ".so")
+
+IF(CMAKE_BUILD_TYPE STREQUAL Release)
+    TARGET_COMPILE_OPTIONS(langevinfts PRIVATE -ffast-math)
+ENDIF()
+
 TARGET_LINK_LIBRARIES(langevinfts PUBLIC pybind11::module PRIVATE 
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>

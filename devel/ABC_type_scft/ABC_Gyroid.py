@@ -9,8 +9,6 @@ import scft
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
-chi_n = 21
-f = 0.25
 params = {
     "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
@@ -25,20 +23,20 @@ params = {
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0,
-        "B":1.1,
-        "C":1.2},
+        "B":1.0,
+        "C":1.0},
 
-    "chi_n": [["A","B",chi_n],   # Interaction parameter, Flory-Huggins params * N_Ref
-              ["A","C",chi_n],
-              ["B","C",chi_n],
+    "chi_n": [["A","B",19],   # Interaction parameter, Flory-Huggins params * N_Ref
+              ["A","C",20],
+              ["B","C",21],
              ],
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
         "blocks":[              # ABC triblock Copolymer
-            {"type":"A", "length":f, },     # A-block
-            {"type":"B", "length":1-2*f},   # B-block
-            {"type":"C", "length":f},       # C-block
+            {"type":"A", "length":0.2},     # A-block
+            {"type":"B", "length":0.3},     # B-block
+            {"type":"C", "length":0.5},     # C-block
         ],},],
         
     "max_iter":2000,     # The maximum relaxation iterations
@@ -91,7 +89,7 @@ mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params
         "w_a":w["A"], "w_b":w["B"], "w_c":w["C"], "phi_a":phi["A"], "phi_b":phi["B"], "phi_c":phi["C"]}
 savemat("fields.mat", mdic)
 
-print(phi["A"])
+# print(phi["A"])
 
 # Recording first a few iteration results for debugging and refactoring
     #    1    5.551E-17  [ 3.6174136E+01  ]     6.573449234   4.1304847E+00  [  3.3000000, 3.3000000, 3.3000000 ]

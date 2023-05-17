@@ -72,9 +72,13 @@ int main()
                 Array* array_2 = factory->create_array(M);
                 Array* array_3 = factory->create_array(M);
 
+                std::cout << "Test passed, factory->create_array(M)." << std::endl;
+
                 array_1->set_data(_array_1, M);
                 array_2->set_data(_array_2, M);
                 array_3->set_data(_array_3, M);
+
+                std::cout << "Test passed, array->set_data(_array, M)." << std::endl;
 
                 // add(const Array& src_1, const Array& src_2)
                 array_3->add(*array_1, *array_2);
@@ -88,6 +92,7 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, add(const Array& src_1, const Array& src_2)." << std::endl;
 
                 // subtract(const Array& src_1, const Array& src_2)
                 array_3->subtract(*array_1, *array_2);
@@ -101,6 +106,7 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, subtract(const Array& src_1, const Array& src_2) const." << std::endl; 
 
                 // multiply(const Array& src_1, const Array& src_2)
                 array_3->multiply(*array_1, *array_2);
@@ -114,6 +120,7 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, multiply(const Array& src_1, const Array& src_2) const." << std::endl;
 
                 // divide(const Array& src_1, const Array& src_2)
                 array_3->divide(*array_1, *array_2);
@@ -127,6 +134,8 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, divide(const Array& src_1, const Array& src_2) const." << std::endl;
+
 
                 // linear_scaling(const Array& src, const double a,  const double b)
                 array_3->linear_scaling(*array_1, 4.126806, 5.2342231);
@@ -140,6 +149,7 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, linear_scaling(const Array& src, const double a,  const double b)." << std::endl;
 
                 // integral(Array& g)
                 if (std::abs(cb->integral(_array_1) - cb->integral_device(array_1->get_ptr())) > 1e-6)
@@ -147,12 +157,20 @@ int main()
                     std::cout << "Test failed, integral(Array& g)." << std::endl;
                     return false;
                 }
+                else
+                {
+                    std::cout << "Test passed, integral(Array& g)." << std::endl;
+                }
 
                 // inner_product(Array& g, Array& h)
                 if (std::abs(cb->inner_product(_array_1, _array_2) - cb->inner_product_device(array_1->get_ptr(), array_2->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, inner_product(Array& g, Array& h)." << std::endl;
                     return false;
+                }
+                else
+                {
+                    std::cout << "Test passed, inner_product(Array& g, Array& h)." << std::endl;
                 }
 
                 // inner_product_inverse_weight(Array& g, Array& h, Array& w)
@@ -164,6 +182,10 @@ int main()
                     std::cout << "Test failed, inner_product_inverse_weight(Array& g, Array& h, Array& w)." << std::endl;
                     return false;
                 }
+                else
+                {
+                    std::cout << "Test passed, inner_product_inverse_weight(Array& g, Array& h, Array& w)." << std::endl;
+                }
 
                 // multi_inner_product(int n_comp,  Array& g, Array& h)
                 Array* array_1_two = factory->create_array(_array_1_two, 2*M);
@@ -172,6 +194,10 @@ int main()
                 {
                     std::cout << "Test failed, multi_inner_product(int n_comp,  Array& g, Array& h)." << std::endl;
                     return false;
+                }
+                else
+                {
+                    std::cout << "Test passed, multi_inner_product(int n_comp,  Array& g, Array& h)." << std::endl;
                 }
 
                 // zero_mean(Array& g);
@@ -185,6 +211,8 @@ int main()
                         return false;
                     }
                 }
+                std::cout << "Test passed, zero_mean(Array& g)." << std::endl;
+
                 delete array_1;
                 delete array_2;
                 delete array_3;

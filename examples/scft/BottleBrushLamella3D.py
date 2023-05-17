@@ -70,11 +70,12 @@ params = {
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"discrete",     # "discrete" or "continuous" chain model
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n": chi_n/total_alpha,   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": [["A", "B", chi_n/total_alpha]],   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -114,12 +115,12 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-phi_A, phi_B = calculation.get_concentrations()
-w_A, w_B = calculation.get_fields()
+phi = calculation.get_concentrations()
+w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
         "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w_A, "w_b":w_B, "phi_a":phi_A, "phi_b":phi_B}
+        "w_a":w_A, "w_b":w_B, "phi_a":phi["A"], "phi_b":phi["B"]}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring (continuous)
