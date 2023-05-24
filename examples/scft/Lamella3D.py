@@ -74,8 +74,8 @@ phi = calculation.get_concentrations()
 w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
-        "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w_A, "w_b":w_B, "phi_a":phi["A"], "phi_b":phi["B"]}
+        "f":f, "chi_n":params["chi_n"][0][2], "epsilon":eps, "chain_model":params["chain_model"],
+        "w_a":w["A"], "w_b":w["B"], "phi_a":phi["A"], "phi_b":phi["B"]}
 savemat("fields.mat", mdic)
 
 # Recording first a few iteration results for debugging and refactoring

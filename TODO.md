@@ -17,3 +17,4 @@
 42. Check if two GPUs can be utilized for CudaAndersonMixing
 43. Operator Overloading for class Array
 44. Find a bug of CUDA cub in CUDA 12.0 and higher
+45. Save field and concentration data in scft.py
