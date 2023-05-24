@@ -13,7 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+     "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],        # Simulation grid numbers
     "lx":[2.9,2.9,2.9],     # Simulation box size as a_Ref * N_Ref^(1/2) unit,
@@ -45,12 +45,12 @@ params = {
     "am":{
         "max_hist":20,           # Maximum number of history
         "start_error":1e-2,      # When switch to AM from simple mixing
-        "mix_min":0.02,          # Minimum mixing rate of simple mixing
-        "mix_init":0.02,         # Initial mixing rate of simple mixing
+        "mix_min":1.0,          # Minimum mixing rate of simple mixing
+        "mix_init":1.0,         # Initial mixing rate of simple mixing
     },
 
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-6     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 # Initialize calculation

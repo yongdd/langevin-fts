@@ -17,7 +17,8 @@ params = {
     "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[3.2,3.2,3.2],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    # "lx":[3.8891334,3.8891334,3.8891334],
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -50,8 +51,15 @@ params = {
         ],},
         ],
 
-    "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+    "am":{
+        "max_hist":20,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.1,          # Minimum mixing rate of simple mixing
+        "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
+
+    "max_iter":5000,     # The maximum relaxation iterations
+    "tolerance":1e-6     # Terminate iteration if the self-consistency error is less than tolerance
 }
 # Initialize calculation
 calculation = scft.SCFT(params=params)
@@ -72,11 +80,24 @@ for i in range(0,params["nx"][0]):
             c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
                 np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
             idx = i*params["nx"][1]*params["nx"][2] + j*params["nx"][2] + k
-            w_A[i,j,k] = -0.3164*c1 +0.1074*c2
-            w_B[i,j,k] =  0.3164*c1 -0.1074*c2
+            w_A[i,j,k] = (-0.3164*c1 +0.1074*c2)*10
+            w_B[i,j,k] = ( 0.3164*c1 -0.1074*c2)*10
 
 # Set a timer
 time_start = time.time()
+
+# input_data = loadmat("fields_test.mat", squeeze_me=True)
+# w_A = input_data["w_a"]
+# w_B = input_data["w_b"]
+
+# aa = np.random.normal(0.0, 0.1, np.prod(params["nx"]))
+# ab = np.random.normal(0.0, 0.1, np.prod(params["nx"]))
+
+# w_A += aa
+# w_B += ab
+
+# print(aa)
+# print(ab)
 
 # Run
 calculation.run(initial_fields={"A": w_A, "B": w_B})
@@ -90,7 +111,7 @@ phi = calculation.get_concentrations()
 w = calculation.get_fields()
 
 mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
-        "f":f, "chi_n":params["chi_n"], "epsilon":eps, "chain_model":params["chain_model"],
+        "f":f, "chi_n":params["chi_n"][0][2], "epsilon":eps, "chain_model":params["chain_model"],
         "w_a":w["A"], "w_b":w["B"], "phi_a":phi["A"], "phi_b":phi["B"]}
 savemat("fields.mat", mdic)
 

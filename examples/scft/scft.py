@@ -26,8 +26,8 @@ class SCFT:
                 f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
             assert(len(set(pair_chi_n[0:2])) == 2), \
                 "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
-            assert(pair_chi_n[2] >= 0), \
-                f"chi N ({pair_chi_n[2]}) must be non-negative."
+            # assert(pair_chi_n[2] >= 0), \
+            #     f"chi N ({pair_chi_n[2]}) must be non-negative."
             assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
                 f"There are duplicated chi N ({pair_chi_n[0:2]}) parameters."
             self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
@@ -69,8 +69,8 @@ class SCFT:
 
         self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
 
-        assert(self.exchange_eigenvalues < 0).all(), \
-            f"There are non-negative eigenvalues {self.exchange_eigenvalues}. Cannot run with these chi_n parameters."
+        # assert(self.exchange_eigenvalues < 0).all(), \
+        #     f"There are non-negative eigenvalues {self.exchange_eigenvalues}. Cannot run with these chi_n parameters."
 
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
         self.matrix_a[:,S-1] = 1

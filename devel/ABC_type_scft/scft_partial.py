@@ -92,7 +92,7 @@ class SCFT:
         for i in range(S-1): 
             if self.exchange_eigenvalues[i] > 0:
                 self.imag_fields.append(i)
-
+        
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
         self.matrix_a[:,S-1] = 1
     
@@ -101,11 +101,11 @@ class SCFT:
             self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
             self.matrix_a_inv[S-1,S-1] = 1
 
-        # matrix for field residuals. see *J. Chem. Phys.* **2017**, 146, 244902
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        # # matrix for field residuals. see *J. Chem. Phys.* **2017**, 146, 244902
+        # matrix_chi_inv = np.linalg.inv(matrix_chi)
+        # self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
         
-        # print(self.matrix_p)
+        # # print(self.matrix_p)
 
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -280,7 +280,8 @@ class SCFT:
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a_inv, self.matrix_a)).replace("\n", "\n\t"))
-        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+        print("Imaginary Fields", self.imag_fields)
+        # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         for p in range(mixture.get_n_polymers()):
             print("distinct_polymers[%d]:" % (p) )
@@ -307,6 +308,9 @@ class SCFT:
 
         # the number of components
         S = len(self.monomer_types)
+
+        # # The number of imaginary fields
+        # I = len(self.imag_fields)
 
         # assign large initial value for the energy and error
         energy_total = 1.0e20
@@ -397,6 +401,10 @@ class SCFT:
             # keep the level of field value
             for i in range(S):
                 w_diff[i] -= np.mean(w_diff[i])
+
+            for i in range(S):
+                if not i in self.imag_fields:
+                    w_diff[i] = 0.0
             
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
