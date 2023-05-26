@@ -87,25 +87,20 @@ class SCFT:
         # assert(self.exchange_eigenvalues < 0).all(), \
         #     f"There are non-negative eigenvalues {self.exchange_eigenvalues}. Cannot run with these chi_n parameters."
 
-        # Indices whose exchange fields are imaginary
-        self.imag_fields = [S-1] # add pressure field
+        # Indices whose exchange fields are imaginary including the pressure field
+        self.imag_exchange_fields = []
         for i in range(S-1): 
             if self.exchange_eigenvalues[i] > 0:
-                self.imag_fields.append(i)
+                self.imag_exchange_fields.append(i)
+        self.imag_exchange_fields.append(S-1) # add pressure field
         
+        # Matrix A and Inverse for converting between exchange fields and monomer(?) fields
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
         self.matrix_a[:,S-1] = 1
-    
         self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
         for i in range(S-1):
             self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
             self.matrix_a_inv[S-1,S-1] = 1
-
-        # # matrix for field residuals. see *J. Chem. Phys.* **2017**, 146, 244902
-        # matrix_chi_inv = np.linalg.inv(matrix_chi)
-        # self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        
-        # # print(self.matrix_p)
 
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -226,9 +221,9 @@ class SCFT:
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["box_is_altering"] : 
-            am_n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
+            am_n_var = len(self.imag_exchange_fields)*np.prod(params["nx"]) + len(params["lx"])
         else :
-            am_n_var = len(self.monomer_types)*np.prod(params["nx"])
+            am_n_var = len(self.imag_exchange_fields)*np.prod(params["nx"])
         if "am" in params :
             am = factory.create_anderson_mixing(am_n_var,
                 params["am"]["max_hist"],     # maximum number of history
@@ -280,7 +275,7 @@ class SCFT:
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a_inv, self.matrix_a)).replace("\n", "\n\t"))
-        print("Imaginary Fields", self.imag_fields)
+        print("Imaginary Fields", self.imag_exchange_fields)
         # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         for p in range(mixture.get_n_polymers()):
@@ -309,8 +304,8 @@ class SCFT:
         # the number of components
         S = len(self.monomer_types)
 
-        # # The number of imaginary fields
-        # I = len(self.imag_fields)
+        # The number of imaginary fields including pressure field
+        I = len(self.imag_exchange_fields)
 
         # assign large initial value for the energy and error
         energy_total = 1.0e20
@@ -331,9 +326,8 @@ class SCFT:
 
         # reshape initial fields
         w = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
-        
         for i in range(S):
-            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
+            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
 
         # keep the level of field value
         for i in range(S):
@@ -347,7 +341,7 @@ class SCFT:
             # make a dictionary for input fields 
             w_input = {}
             for i in range(S):
-                w_input[self.monomer_types[i]] = w[i,:]
+                w_input[self.monomer_types[i]] = w[i]
             for random_polymer_name, random_fraction in self.random_fraction.items():
                 w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
                 for monomer_type, fraction in random_fraction.items():
@@ -382,42 +376,33 @@ class SCFT:
                                 np.log(self.pseudo.get_total_partition(p))
 
             # calculate self-consistency error
-            w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields            
-            for i in range(S-1):
-                w_diff[i] += 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
-            for i in range(S-1):
-                for j in range(S-1):
-                    w_diff[i] -= 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
-                    w_diff[i] -= self.matrix_o[j,i]*phi[self.monomer_types[j]]
-
+            w_diff = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
+            for count, i in enumerate(self.imag_exchange_fields):
+                if i != S-1:
+                    w_diff[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
+            for count, i in enumerate(self.imag_exchange_fields):
+                if i != S-1:
+                    for j in range(S-1):
+                        w_diff[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
+                        w_diff[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
             for i in range(S):
-                w_diff[S-1] -= phi[self.monomer_types[i]]
-            w_diff[S-1] += 1.0
-
-            # change a sign if field is imaginary
-            for i in self.imag_fields:
-                w_diff[i] = -w_diff[i]
+                w_diff[I-1] += phi[self.monomer_types[i]]
+            w_diff[I-1] -= 1.0
 
             # keep the level of field value
-            for i in range(S):
+            for i in range(I):
                 w_diff[i] -= np.mean(w_diff[i])
-
-            for i in range(S):
-                if not i in self.imag_fields:
-                    w_diff[i] = 0.0
             
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
-            for i in range(S):
+            for i in range(I):
                 error_level += np.std(w_diff[i])
-            error_level /= S
+            error_level /= I
 
             # print iteration # and error levels and check the mass conservation
-            mass_error = -1.0
-            for monomer_type in self.monomer_types: # do not add random copolymer
-                mass_error += np.mean(phi[monomer_type])
-            
+            mass_error = np.mean(w_diff[I-1])
+
             if (self.box_is_altering):
                 # calculate stress
                 stress_array = np.array(self.pseudo.compute_stress())
@@ -439,15 +424,17 @@ class SCFT:
             if error_level < self.tolerance:
                 break
 
+            w_exchange_imag= w_exchange[self.imag_exchange_fields]
+                
             # calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w_exchange, S*self.cb.get_n_grid()), self.cb.get_lx()))
-                am_diff     = np.concatenate((np.reshape(w_diff,     S*self.cb.get_n_grid()), dlx))
+                am_current  = np.concatenate((np.reshape(w_exchange_imag, I*self.cb.get_n_grid()), self.cb.get_lx()))
+                am_diff     = np.concatenate((np.reshape(w_diff,          I*self.cb.get_n_grid()), dlx))
                 am_new = self.am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # copy fields
-                w_exchange = np.reshape(am_new[0:S*self.cb.get_n_grid()], (S, self.cb.get_n_grid()))
+                w_exchange_imag = np.reshape(am_new[0:I*self.cb.get_n_grid()], (I, self.cb.get_n_grid()))
 
                 # set box size
                 # restricting |dLx| to be less than 10 % of Lx
@@ -460,11 +447,14 @@ class SCFT:
                 # update bond parameters using new lx
                 self.pseudo.update_bond_function()
             else:
-                w_exchange = self.am.calculate_new_fields(
-                np.reshape(w_exchange, S*self.cb.get_n_grid()),
-                np.reshape(w_diff,     S*self.cb.get_n_grid()), old_error_level, error_level)
-                w_exchange = np.reshape(w_exchange, (S, self.cb.get_n_grid()))
+                w_exchange_imag = self.am.calculate_new_fields(
+                np.reshape(w_exchange_imag, I*self.cb.get_n_grid()),
+                np.reshape(w_diff,          I*self.cb.get_n_grid()), old_error_level, error_level)
+                w_exchange_imag = np.reshape(w_exchange_imag, (I, self.cb.get_n_grid()))
             
+            for count, i in enumerate(self.imag_exchange_fields):
+                w_exchange[i] = w_exchange_imag[count]
+
             # convert to species chemical potential fields
             w = np.matmul(self.matrix_a, w_exchange)
 

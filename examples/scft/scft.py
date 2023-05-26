@@ -26,8 +26,6 @@ class SCFT:
                 f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
             assert(len(set(pair_chi_n[0:2])) == 2), \
                 "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
-            # assert(pair_chi_n[2] >= 0), \
-            #     f"chi N ({pair_chi_n[2]}) must be non-negative."
             assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
                 f"There are duplicated chi N ({pair_chi_n[0:2]}) parameters."
             self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
@@ -60,7 +58,7 @@ class SCFT:
         
         for i in range(S-1):
             for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1]
+                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
 
         self.matrix_chi = matrix_chi
 
@@ -69,12 +67,9 @@ class SCFT:
 
         self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
 
-        # assert(self.exchange_eigenvalues < 0).all(), \
-        #     f"There are non-negative eigenvalues {self.exchange_eigenvalues}. Cannot run with these chi_n parameters."
-
+        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
         self.matrix_a[:,S-1] = 1
-    
         self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
         for i in range(S-1):
             self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
@@ -136,7 +131,7 @@ class SCFT:
             polymer.update({"u":u_list})
 
         # Random Copolymer Chains
-        for polymer_counter, polymer in enumerate(params["distinct_polymers"]):
+        for polymer in params["distinct_polymers"]:
 
             is_random = False
             for block in polymer["blocks"]:
@@ -242,14 +237,10 @@ class SCFT:
         print("Segment lengths:\n\t", list(params["segment_lengths"].items()))
         print("Conformational asymmetry (epsilon): ")
         for monomer_pair in itertools.combinations(self.monomer_types,2):
-            # print(monomer_pair)
-            if "R_" in monomer_pair[0] or "R_" in monomer_pair[1]:
-                continue
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
 
         print("chiN: ")
         for pair in self.chi_n:
-            # print("\t%s, %s: %f" % (list(chi_n[0])[0], list(chi_n[0])[1], chi_n[1]))
             print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
 
         for p in range(mixture.get_n_polymers()):
