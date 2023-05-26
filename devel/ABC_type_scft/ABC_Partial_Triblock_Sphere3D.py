@@ -44,9 +44,9 @@ params = {
 
     "am":{
         "max_hist":20,           # Maximum number of history
-        "start_error":1e-2,      # When switch to AM from simple mixing
-        "mix_min":0.1,          # Minimum mixing rate of simple mixing
-        "mix_init":0.1,         # Initial mixing rate of simple mixing
+        "start_error":1e-1,      # When switch to AM from simple mixing
+        "mix_min":1.0,          # Minimum mixing rate of simple mixing
+        "mix_init":1.0,         # Initial mixing rate of simple mixing
     },
 
     "max_iter":2000,     # The maximum relaxation iterations
