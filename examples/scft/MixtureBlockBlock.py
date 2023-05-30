@@ -77,13 +77,7 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-phi = calculation.get_concentrations()
-w = calculation.get_fields()
-
-mdic = {"params":params, "dim":len(params["nx"]), "nx":params["nx"], "lx":params["lx"], "ds":params["ds"],
-        "chi_n":params["chi_n"][0][2], "epsilon":eps, "chain_model":params["chain_model"],
-        "w_a":w["A"], "w_b":w["B"], "phi_a":phi["A"], "phi_b":phi["B"]}
-savemat("fields.mat", mdic)
+calculation.save_results("fields.mat")
 
 # Recording first a few iteration results for debugging and refactoring
     #    1   -4.885E-14  [ 1.0512479E+00  1.0126059E+00  ]    -0.006786525   6.4245880E-01  [  4.0000000, 4.0000000, 3.9000000 ]

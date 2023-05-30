@@ -4,6 +4,8 @@ clear all;
 load("fields.mat");
 if exist('phi_A','var')
     phi_a = phi_A;
+elseif exist('phi','var')
+    phi_a = phi.A;
 end
     
 %Plot

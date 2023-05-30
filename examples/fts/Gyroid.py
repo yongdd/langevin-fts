@@ -9,6 +9,9 @@ import lfts
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
+# GPU environment variables
+os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
+
 f = 0.4        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 

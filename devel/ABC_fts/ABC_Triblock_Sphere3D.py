@@ -3,7 +3,7 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage.filters import gaussian_filter
-import scft
+import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
@@ -13,14 +13,13 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+     "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],        # Simulation grid numbers
     "lx":[2.9,2.9,2.9],     # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                             # where "a_Ref" is reference statistical segment length
                             # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref. 
 
@@ -42,19 +41,34 @@ params = {
             {"type":"C", "length":0.35},       # C-block
         ],},],
 
-    "am":{
-        "max_hist":20,           # Maximum number of history
-        "start_error":1e-2,      # When switch to AM from simple mixing
-        "mix_min":0.02,          # Minimum mixing rate of simple mixing
-        "mix_init":0.02,         # Initial mixing rate of simple mixing
+    "langevin":{                # Langevin Dynamics
+        "max_step":200,      # Langevin steps for simulation
+        "dt":8.0,               # Langevin step interval, delta tau*N_Ref
+        "nbar":1.0e20,           # Invariant polymerization index, nbar of N_Ref
+    },
+    
+    "recording":{                       # Recording Simulation Data
+        "dir":"data_simulation",        # Directory name
+        "recording_period":200,        # Period for recording concentrations and fields
+        "sf_computing_period":10,       # Period for computing structure function
+        "sf_recording_period":10000,    # Period for recording structure function
     },
 
-    "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
-}
+    "saddle":{                # Iteration for the pressure field 
+        "max_iter" :100,      # Maximum number of iterations
+        "tolerance":1e-6,     # Tolerance of incompressibility 
+    },
 
-# Initialize calculation
-calculation = scft.SCFT(params=params)
+    "am":{
+        "max_hist":20,              # Maximum number of history
+        "start_error":8e-1,         # When switch to AM from simple mixing
+        "mix_min":0.1,              # Minimum mixing rate of simple mixing
+        "mix_init":0.1,             # Initial mixing rate of simple mixing
+    },
+
+    "verbose_level":1,      # 1 : Print at each Langevin step.
+                            # 2 : Print at each saddle point iteration.
+}
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
@@ -73,22 +87,16 @@ for x,y,z in sphere_positions:
     w_A[mx,my,mz] = -50/(np.prod(params["lx"])/np.prod(params["nx"]))
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
 
+# Initialize calculation
+simulation = lfts.LFTS(params=params, random_seed=12345)
+
 # Set a timer
 time_start = time.time()
 
 # Run
-calculation.run(initial_fields={"A": w_A, "B": w_B, "C": w_C})
+simulation.run(initial_fields={"A": w_A, "B": w_B, "C": w_C})
 
 # Estimate execution time
 time_duration = time.time() - time_start
-print("total time: %f " % time_duration)
-
-# Save final results
-calculation.save_results("fields.mat")
-
-# Recording first a few iteration results for debugging and refactoring
-    #    1    0.000E+00  [ 3.6079092E+00  ]    -0.318161996   4.4693432E+00  [  2.9000000, 2.9000000, 2.9000000 ]
-    #    2    1.665E-15  [ 3.0252432E+00  ]    -0.249220685   3.8560277E+00  [  2.9006622, 2.9006622, 2.9006622 ]
-    #    3    1.998E-15  [ 2.6847016E+00  ]    -0.201835726   3.3958896E+00  [  2.9011100, 2.9011100, 2.9011100 ]
-    #    4   -1.971E-15  [ 2.4628496E+00  ]    -0.166892626   3.0245843E+00  [  2.9014276, 2.9014276, 2.9014276 ]
-    #    5    4.441E-16  [ 2.3083187E+00  ]    -0.139935578   2.7121688E+00  [  2.9016589, 2.9016589, 2.9016589 ]
+print("total time: %f, time per step: %f" %
+    (time_duration, time_duration/params["langevin"]["max_step"]) )

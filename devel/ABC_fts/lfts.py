@@ -67,10 +67,10 @@ class LFTS:
         
         for i in range(S-1):
             for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1]
+                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
 
         self.matrix_chi = matrix_chi
-
+        
         # print(matrix_chi)
         # print(matrix_chin)
 
@@ -257,7 +257,6 @@ class LFTS:
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a_inv, self.matrix_a)).replace("\n", "\n\t"))
         print("Imaginary Fields", self.exchange_fields_imag_idx)
 
         for p in range(mixture.get_n_polymers()):
@@ -277,9 +276,7 @@ class LFTS:
         #  Save Internal Variables
         self.params = params
         self.chain_model = params["chain_model"]
-        self.chi_n = params["chi_n"]
         self.ds = params["ds"]
-        self.epsilon = params["segment_lengths"]["A"]/params["segment_lengths"]["B"]
         self.langevin = params["langevin"]
         self.langevin.update({"sigma":langevin_sigma})
 
@@ -293,49 +290,96 @@ class LFTS:
         self.am = am
 
     def save_simulation_data(self, path, w, phi):
+        
+        # Make dictionary for w fields
+        w_species = {}
+        for i, name in enumerate(self.monomer_types):
+            w_species[name] = w[i]
+
+        # Make a dictionary for chi_n
+        chi_n_mat = {}
+        for pair_chi_n in self.params["chi_n"]:
+            sorted_name_pair = sorted(pair_chi_n[0:2])
+            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+
+        # Make dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-            "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
-            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "params": self.params,
+            "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
             "random_generator": self.random_bg.state["bit_generator"],
             "random_state_state": str(self.random_bg.state["state"]["state"]),
             "random_state_inc": str(self.random_bg.state["state"]["inc"]),
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_b":phi["B"]}
+            "w": w_species, "phi":phi, "monomer_types":self.monomer_types}
+        
+        # Save data with matlab format
+        savemat(path, mdic)
+
+    def save_simulation_data(self, path, w, phi):
+        
+        # Make dictionary for w fields
+        w_species = {}
+        for i, name in enumerate(self.monomer_types):
+            w_species[name] = w[i]
+
+        # Make a dictionary for chi_n
+        chi_n_mat = {}
+        for pair_chi_n in self.params["chi_n"]:
+            sorted_name_pair = sorted(pair_chi_n[0:2])
+            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+
+        # Make dictionary for data
+        mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+            "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
+            "random_generator": self.random_bg.state["bit_generator"],
+            "random_state_state": str(self.random_bg.state["state"]["state"]),
+            "random_state_inc": str(self.random_bg.state["state"]["inc"]),
+            "w": w_species, "phi":phi, "monomer_types":self.monomer_types}
+        
+        # Save data with matlab format
         savemat(path, mdic)
 
     def run(self, initial_fields):
 
-        # the number of components
+        # The number of components
         S = len(self.monomer_types)
 
         # The number of real and imaginary fields respectively
         R = len(self.exchange_fields_real_idx)
         I = len(self.exchange_fields_imag_idx)
 
-        # simulation data directory
+        # Simulation data directory
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
-        # # flattening arrays
-        # w_plus  = np.reshape((initial_fields["A"] + initial_fields["B"])/2, self.cb.get_n_grid())
-        # w_minus = np.reshape((initial_fields["A"] - initial_fields["B"])/2, self.cb.get_n_grid())
-        
-        # reshape initial fields
+        # Reshape initial fields
         w = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
         for i in range(S):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
             
-        # exchange-mapped chemical potential fields
+        # Exchange-mapped chemical potential fields
         w_exchange = np.matmul(self.matrix_a_inv, w)
 
-        # find saddle point 
+        # Find saddle point 
         phi, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
-        # structure function
-        sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())),np.float64)
+        # Structure function
+        sf_average_1 = {} # <u(k) phi(-k)> 
+        sf_average_2 = {} # <u(k) u(-k)>
+        sf_average_3 = {} # <phi(k)>
+        sf_average_4 = {} # <u(k))>
+        for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+            sorted_pair = sorted(monomer_id_pair)
+            key = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
+            print(key)
+            sf_average_1[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average_2[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average_3[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average_4[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
-        # create an empty array for field update algorithm
+        # Create an empty array for field update algorithm
         normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
 
-        # init timers
+        # Init timers
         total_saddle_iter = 0
         total_error_level = 0
         time_start = time.time()
@@ -346,7 +390,7 @@ class LFTS:
         for langevin_step in range(1, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # update w_minus using Leimkuhler-Matthews method
+            # Update w_minus using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
             w_lambda = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
             
@@ -359,75 +403,115 @@ class LFTS:
             
             w_exchange[self.exchange_fields_real_idx] += -w_lambda*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
 
-            # swap two noise arrays
+            # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # find saddle point of the pressure field
-            phi, saddle_iter, error_level = self.find_saddle_point(w_exchange)
+            # Find saddle point of the pressure field
+            phi, saddle_iter, error_level = self.find_saddle_point(w_exchange=w_exchange)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
 
-            # # calculate structure function
-            # if langevin_step % self.recording["sf_computing_period"] == 0:
-            #     sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx()))/self.cb.get_n_grid())**2
+            # Calculate structure function
+            if langevin_step % self.recording["sf_computing_period"] == 0:
+                
+                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+                    sorted_pair = sorted(monomer_id_pair)
+                    i = sorted_pair[0]
+                    j = sorted_pair[1]
+                    key = self.monomer_types[i] + "," + self.monomer_types[j]
 
-            # # save structure function
-            # if langevin_step % self.recording["sf_recording_period"] == 0:
-            #     sf_average *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-            #             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])/self.chi_n**2
-            #     sf_average -= 1.0/(2*self.chi_n)
-            #     mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(), "params": self.params,
-            #         "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
-            #         "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "structure_function":sf_average}
-            #     savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
-            #     sf_average[:,:,:] = 0.0
+                    phi_fourier = np.fft.rfftn(np.reshape(phi[self.monomer_types[j]], self.cb.get_nx()))/self.cb.get_n_grid()
+                    mu_fourier = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+                    for k in range(S-1) :
+                        mu_fourier += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]
+                        
+                    sf_average_1[key] += mu_fourier* np.conj(phi_fourier)
+                    sf_average_2[key] += mu_fourier* np.conj(mu_fourier)
+                    sf_average_3[key] += mu_fourier
+                    sf_average_4[key] += phi_fourier
 
-            # save simulation data
+            # Save structure function
+            if langevin_step % self.recording["sf_recording_period"] == 0:
+                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+                    sorted_pair = sorted(monomer_id_pair)
+                    i = sorted_pair[0]
+                    j = sorted_pair[1]
+                    key = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average_1[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                    sf_average_2[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                    sf_average_3[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                    sf_average_4[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+
+                mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(), "params": self.params,
+                    "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
+                    "dt": self.langevin["dt"], "nbar":self.langevin["nbar"],
+                    "structure_function_1":sf_average_1,
+                    "structure_function_2":sf_average_2,
+                    "structure_function_3":sf_average_3,
+                    "structure_function_4":sf_average_4,}
+                
+                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
+                
+                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+                    sorted_pair = sorted(monomer_id_pair)
+                    i = sorted_pair[0]
+                    j = sorted_pair[1]
+                    key = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average_1[key][:,:,:] = 0.0
+                    sf_average_2[key][:,:,:] = 0.0
+                    sf_average_3[key][:,:,:] = 0.0
+                    sf_average_4[key][:,:,:] = 0.0
+
+            # Save simulation data
             if (langevin_step) % self.recording["recording_period"] == 0:
                 w = np.matmul(self.matrix_a, w_exchange)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
                     w=w, phi=phi)
 
-        # estimate execution time
+        # Estimate execution time
         time_duration = time.time() - time_start
         return total_saddle_iter, total_saddle_iter/self.langevin["max_step"], time_duration/self.langevin["max_step"], total_error_level/self.langevin["max_step"]
 
     def find_saddle_point(self, w_exchange):
 
-        # the number of components
+        # The number of components
         S = len(self.monomer_types)
 
         # The number of real and imaginary fields respectively
         R = len(self.exchange_fields_real_idx)
         I = len(self.exchange_fields_imag_idx)
             
-        # assign large initial value for the energy and error
+        # Assign large initial value for the energy and error
         energy_total = 1e20
         error_level = 1e20
 
-        # reset Anderson mixing module
+        # Reset Anderson mixing module
         self.am.reset_count()
 
-        # concentration of each monomer
+        # Concentration of each monomer
         phi = {}
 
-        # compute hamiltonian part that is related to real-valued fields
+        # Compute hamiltonian part that is related to real-valued fields
         energy_total_real = 0.0
         for count, i in enumerate(self.exchange_fields_real_idx):
             energy_total_real -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i], w_exchange[i])/self.cb.get_n_grid()
         for count, i in enumerate(self.exchange_fields_real_idx):
             for j in range(S-1):
                 energy_total_real += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
-        # energy_total_real += 18.35/4
+        # Energy_total_real += 18.35/4
 
-        # saddle point iteration begins here
+        # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             
-            # convert to species chemical potential fields
+            # Convert to species chemical potential fields
             w = np.matmul(self.matrix_a, w_exchange)
             
-            # make a dictionary for input fields 
+            # Make a dictionary for input fields 
             w_input = {}
             for i in range(S):
                 w_input[self.monomer_types[i]] = w[i]
@@ -436,21 +520,21 @@ class LFTS:
                 for monomer_type, fraction in random_fraction.items():
                     w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
-            # for the given fields find the polymer statistics
+            # For the given fields find the polymer statistics
             self.pseudo.compute_statistics(w_input)
 
-            # compute concentration for each monomer type
+            # Compute concentration for each monomer type
             phi = {}
             for monomer_type in self.monomer_types:
                 phi[monomer_type] = self.pseudo.get_monomer_concentration(monomer_type)
 
-            # add random copolymer concentration to each monomer type
+            # Add random copolymer concentration to each monomer type
             for random_polymer_name, random_fraction in self.random_fraction.items():
                 phi[random_polymer_name] = self.pseudo.get_monomer_concentration(random_polymer_name)
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
-            # calculate incompressibility and saddle point error
+            # Calculate incompressibility and saddle point error
             old_error_level = error_level
             w_diff = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
             for count, i in enumerate(self.exchange_fields_imag_idx):
@@ -469,11 +553,11 @@ class LFTS:
                 error_level += np.std(w_diff[i])
             error_level /= I
 
-            # print iteration # and error levels
+            # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
             
-                # calculate the total energy
+                # Calculate the total energy
                 energy_total = energy_total_real - np.mean(w_exchange[S-1])
                 for count, i in enumerate(self.exchange_fields_imag_idx):
                     if i != S-1:
@@ -487,21 +571,21 @@ class LFTS:
                                     self.mixture.get_polymer(p).get_alpha() * \
                                     np.log(self.pseudo.get_total_partition(p))
 
-                # check the mass conservation
+                # Check the mass conservation
                 mass_error = np.mean(w_diff[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.mixture.get_n_polymers()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
-            # conditions to end the iteration
+            # Conditions to end the iteration
             if error_level < self.saddle["tolerance"]:
                 break
                 
-            # calculate new fields using simple and Anderson mixing
+            # Calculate new fields using simple and Anderson mixing
             w_exchange[self.exchange_fields_imag_idx] = self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], w_diff, old_error_level, error_level)
         
-        # set mean of pressure field to zero
+        # Set mean of pressure field to zero
         w_exchange[S-1] -= np.mean(w_exchange[S-1])
         
         return phi, saddle_iter, error_level
