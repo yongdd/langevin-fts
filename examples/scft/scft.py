@@ -2,6 +2,7 @@ import os
 import string
 import numpy as np
 import itertools
+from scipy.io import savemat, loadmat
 from langevinfts import *
 
 # OpenMP environment variables
@@ -257,14 +258,16 @@ class SCFT:
         print("Vector chi_iS:\n\t", str(self.vector_s).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-
 
         mixture.display_blocks()
         mixture.display_propagators()
 
         #  Save Internal Variables
+        self.params = params
+        self.chain_model = params["chain_model"]
+        self.ds = params["ds"]
         self.box_is_altering = params["box_is_altering"]
 
         self.max_iter = max_iter
@@ -274,6 +277,27 @@ class SCFT:
         self.mixture = mixture
         self.pseudo = pseudo
         self.am = am
+
+    def save_results(self, path):
+        
+        # Make a dictionary for w fields
+        w_species = {}
+        for i, name in enumerate(self.monomer_types):
+            w_species[name] = self.w[i]
+    
+        # Make a dictionary for chi_n
+        chi_n_mat = {}
+        for pair_chi_n in self.params["chi_n"]:
+            sorted_name_pair = sorted(pair_chi_n[0:2])
+            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+            
+        # Make a dictionary for data
+        mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+            "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds, "initial_params": self.params,
+            "w": w_species, "phi":self.phi, "monomer_types":self.monomer_types}
+        
+        # Save data with matlab format
+        savemat(path, mdic)
 
     def run(self, initial_fields):
 
@@ -421,14 +445,15 @@ class SCFT:
                 np.reshape(w_diff, S*self.cb.get_n_grid()), old_error_level, error_level)
                 w = np.reshape(w, (S, self.cb.get_n_grid()))
 
+        # Store phi and w
         self.phi = phi
         self.w = w
 
-    def get_concentrations(self,):
-        return self.phi
+    # def get_concentrations(self,):
+    #     return self.phi
     
-    def get_fields(self,):
-        w_dict = {}
-        for idx, monomer_type in enumerate(self.monomer_types):
-            w_dict[monomer_type] = self.w[idx,:]
-        return w_dict
+    # def get_fields(self,):
+    #     w_dict = {}
+    #     for idx, monomer_type in enumerate(self.monomer_types):
+    #         w_dict[monomer_type] = self.w[idx,:]
+    #     return w_dict

@@ -22,11 +22,13 @@ params = {
 
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/16,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n":20,                 # Bare interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": [["A","B", 20.0],  # Bare interaction parameter, Flory-Huggins params * N_Ref
+             ],
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # Volume fraction of polymer chain
@@ -73,6 +75,9 @@ print("w_minus and w_plus are initialized to random")
 w_plus  = np.random.normal(0.0, 1.0, params["nx"])
 w_minus = np.random.normal(0.0, 1.0, params["nx"])
 
+w_A = w_plus + w_minus
+w_B = w_plus - w_minus
+
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
 
@@ -80,7 +85,7 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 time_start = time.time()
 
 # Run
-simulation.run(w_minus=w_minus, w_plus=w_plus)
+simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
 time_duration = time.time() - time_start

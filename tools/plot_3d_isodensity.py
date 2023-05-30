@@ -12,6 +12,8 @@ if 'phi_a' in mdic.keys():
     phi_a = mdic['phi_a']
 elif 'phi_A' in mdic.keys():
     phi_a = mdic['phi_A']
+elif 'phi' in mdic.keys():
+    phi_a = mdic['phi']['A']
 
 X, Y, Z = np.mgrid[0:nx[0], 0:nx[1], 0:nx[2]]
 values = np.reshape(phi_a, nx)

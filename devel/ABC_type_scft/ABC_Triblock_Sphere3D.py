@@ -12,6 +12,9 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 # Major Simulation params
 chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref
 
+# GPU environment variables
+os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
+
 params = {
      "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     

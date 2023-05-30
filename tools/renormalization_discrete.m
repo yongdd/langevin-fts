@@ -5,6 +5,18 @@ if exist('ds','var')
     N = 1.0/ds;
 end
 
+if exist('phi_a','var')
+    f = mean(phi_a);
+elseif exist('phi_A','var')
+    f = mean(phi_A);
+elseif exist('phi','var')
+    f = mean(phi.A);
+end
+
+if ~exist('epsilon','var')
+    epsilon = initial_params.segment_lengths.A/initial_params.segment_lengths.B;
+end
+
 dx = lx./double(nx);
 dv = dx(1)*dx(2)*dx(3);
 bond_t = 100;
@@ -14,9 +26,9 @@ if abs(epsilon - 1.0) > 1e-7
     return;
 end
 
-// if ~strcmpi(chain_model,'Discrete')
-//     fprintf("Your chain model is not the discrete chain model.\n");
-// end
+% if ~strcmpi(chain_model,'Discrete')
+%     fprintf("Your chain model is not the discrete chain model.\n");
+% end
 
 % calculate v_cell * rho_zero
 vcellrho = double(nbar)^0.5*double(N)*dv;

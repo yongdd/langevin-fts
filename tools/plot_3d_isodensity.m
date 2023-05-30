@@ -1,7 +1,11 @@
+clear all;
+
 % Load Data
 load("fields_002000.mat");
 if exist('phi_A','var')
     phi_a = phi_A;
+elseif exist('phi','var')
+    phi_a = phi.A;
 end
 
 v = reshape(phi_a,[nx(3), nx(2), nx(1)]);

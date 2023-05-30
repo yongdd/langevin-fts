@@ -6,8 +6,14 @@ if exist('ds','var')
 end
 if exist('phi_a','var')
     f = mean(phi_a);
-else
+elseif exist('phi_A','var')
     f = mean(phi_A);
+elseif exist('phi','var')
+    f = mean(phi.A);
+end
+
+if ~exist('epsilon','var')
+    epsilon = params.segment_lengths.A/params.segment_lengths.B;
 end
 
 dx = lx./double(nx);
