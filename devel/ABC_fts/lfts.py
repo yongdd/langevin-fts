@@ -363,10 +363,10 @@ class LFTS:
         phi, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
         # Structure function
-        sf_average_1 = {} # <u(k) phi(-k)> 
-        sf_average_2 = {} # <u(k) u(-k)>
-        sf_average_3 = {} # <phi(k)>
-        sf_average_4 = {} # <u(k))>
+        sf_average_1 = {} # <u(k) u(-k)> 
+        sf_average_2 = {} # <u(k) phi(-k)>
+        sf_average_3 = {} # <u(k))>
+        sf_average_4 = {} # <phi(k)>
         for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
             sorted_pair = sorted(monomer_id_pair)
             key = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
@@ -423,10 +423,10 @@ class LFTS:
                     phi_fourier = np.fft.rfftn(np.reshape(phi[self.monomer_types[j]], self.cb.get_nx()))/self.cb.get_n_grid()
                     mu_fourier = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
                     for k in range(S-1) :
-                        mu_fourier += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]
-                        
-                    sf_average_1[key] += mu_fourier* np.conj(phi_fourier)
-                    sf_average_2[key] += mu_fourier* np.conj(mu_fourier)
+                        mu_fourier += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
+
+                    sf_average_1[key] += mu_fourier* np.conj(mu_fourier)
+                    sf_average_2[key] += mu_fourier* np.conj(phi_fourier)
                     sf_average_3[key] += mu_fourier
                     sf_average_4[key] += phi_fourier
 
@@ -446,14 +446,20 @@ class LFTS:
                     sf_average_4[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
 
-                mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(), "params": self.params,
-                    "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
-                    "dt": self.langevin["dt"], "nbar":self.langevin["nbar"],
+                # Make a dictionary for chi_n
+                chi_n_mat = {}
+                for pair_chi_n in self.params["chi_n"]:
+                    sorted_name_pair = sorted(pair_chi_n[0:2])
+                    chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+
+                mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+                    "chi_n":self.chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+                    "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
                     "structure_function_1":sf_average_1,
                     "structure_function_2":sf_average_2,
                     "structure_function_3":sf_average_3,
                     "structure_function_4":sf_average_4,}
-                
+
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
                 
                 for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
@@ -583,7 +589,7 @@ class LFTS:
                 break
                 
             # Calculate new fields using simple and Anderson mixing
-            w_exchange[self.exchange_fields_imag_idx] = self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], w_diff, old_error_level, error_level)
+            w_exchange[self.exchange_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], w_diff, old_error_level, error_level), [I, self.cb.get_n_grid()])
         
         # Set mean of pressure field to zero
         w_exchange[S-1] -= np.mean(w_exchange[S-1])

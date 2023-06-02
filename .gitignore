@@ -16,3 +16,5 @@ examples/scft/*.m
 examples/fts/*.m
 examples/scft/Test*
 examples/fts/Test*
+devel/test*
+devel/*.m
