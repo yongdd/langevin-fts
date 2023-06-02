@@ -9,9 +9,6 @@ import lfts
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
-# GPU environment variables
-os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
-
 f = 0.5         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
@@ -25,11 +22,13 @@ params = {
 
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/16,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n":20,                 # Bare interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": [["A","B", 20.0],  # Bare interaction parameter, Flory-Huggins params * N_Ref
+             ],
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # Volume fraction of polymer chain
@@ -59,8 +58,8 @@ params = {
     "am":{
         "max_hist":20,              # Maximum number of history
         "start_error":8e-1,         # When switch to AM from simple mixing
-        "mix_min":0.1,              # Minimum mixing rate of simple mixing
-        "mix_init":0.1,             # Initial mixing rate of simple mixing
+        "mix_min":0.01,             # Minimum mixing rate of simple mixing
+        "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
 
     "verbose_level":1,      # 1 : Print at each Langevin step.
@@ -73,8 +72,8 @@ np.random.seed(random_seed)
 
 # Set initial fields
 print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0.0, 1.0, params["nx"])
-w_minus = np.random.normal(0.0, 1.0, params["nx"])
+w_A  = np.random.normal(0.0, 1.0, params["nx"])
+w_B = np.random.normal(0.0, 1.0, params["nx"])
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
@@ -83,7 +82,10 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 time_start = time.time()
 
 # Run
-simulation.run(w_minus=w_minus, w_plus=w_plus)
+simulation.run(initial_fields={"A": w_A, "B": w_B})
+
+# # Continue simulation with recorded field configurations and random state.
+# simulation.continue_run(file_name="fields_010000.mat")
 
 # Estimate execution time
 time_duration = time.time() - time_start

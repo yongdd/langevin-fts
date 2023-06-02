@@ -3,6 +3,7 @@ __pycache__
 build
 doc
 temp
+*.sh
 *.dat
 *.out
 *.png
@@ -12,9 +13,11 @@ temp
 data_simulation*
 fields*.mat
 structure_function*.mat
-examples/scft/*.m
-examples/fts/*.m
-examples/scft/Test*
-examples/fts/Test*
+examples/scft*/*.m
+examples/fts*/*.m
+examples/scft*/Test*
+examples/fts*/Test*
+examples/temp*
+examples/test*
 devel/test*
 devel/*.m

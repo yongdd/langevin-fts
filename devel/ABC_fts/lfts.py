@@ -362,17 +362,18 @@ class LFTS:
         # Find saddle point 
         phi, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
-        # Structure function
-        sf_average_1 = {} # <u(k) u(-k)> 
-        sf_average_2 = {} # <u(k) phi(-k)>
+        # Arrays for structure function
+        sf_average_1 = {} # <u(k) phi(-k)>
+        sf_average_2 = {} # <u(k) u(-k)> 
         sf_average_3 = {} # <u(k))>
         sf_average_4 = {} # <phi(k)>
         for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
             sorted_pair = sorted(monomer_id_pair)
-            key = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            print(key)
-            sf_average_1[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
-            sf_average_2[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
+            sf_average_1[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average_2[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+        for i in range(S):
+            key = self.monomer_types[i]
             sf_average_3[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
             sf_average_4[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
@@ -413,22 +414,28 @@ class LFTS:
 
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
-                
+                # Perform Fourier transforms
+                mu_fourier = {}
+                phi_fourier = {}
+                for i in range(S):
+                    key = self.monomer_types[i]
+                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_n_grid()
+                    mu_fourier[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+                    for k in range(S-1) :
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
+                # Accumulate S_ij(K) 
                 for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
                     sorted_pair = sorted(monomer_id_pair)
                     i = sorted_pair[0]
                     j = sorted_pair[1]
-                    key = self.monomer_types[i] + "," + self.monomer_types[j]
-
-                    phi_fourier = np.fft.rfftn(np.reshape(phi[self.monomer_types[j]], self.cb.get_nx()))/self.cb.get_n_grid()
-                    mu_fourier = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
-                    for k in range(S-1) :
-                        mu_fourier += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
-
-                    sf_average_1[key] += mu_fourier* np.conj(mu_fourier)
-                    sf_average_2[key] += mu_fourier* np.conj(phi_fourier)
-                    sf_average_3[key] += mu_fourier
-                    sf_average_4[key] += phi_fourier
+                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average_1[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj( mu_fourier[self.monomer_types[j]])
+                    sf_average_2[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj(phi_fourier[self.monomer_types[j]])
+                # Accumulate <mu_i(k)> and <phi_i(k)>
+                for i in range(S):
+                    key = self.monomer_types[i]
+                    sf_average_3[key] += mu_fourier[key]
+                    sf_average_4[key] += phi_fourier[key]
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -436,11 +443,13 @@ class LFTS:
                     sorted_pair = sorted(monomer_id_pair)
                     i = sorted_pair[0]
                     j = sorted_pair[1]
-                    key = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average_1[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average_1[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    sf_average_2[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                    sf_average_2[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                for i in range(S):
+                    key = self.monomer_types[i]
                     sf_average_3[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
                     sf_average_4[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
@@ -453,22 +462,25 @@ class LFTS:
                     chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
 
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-                    "chi_n":self.chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+                    "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
                     "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
                     "structure_function_1":sf_average_1,
                     "structure_function_2":sf_average_2,
                     "structure_function_3":sf_average_3,
-                    "structure_function_4":sf_average_4,}
-
+                    "structure_function_4":sf_average_4,
+                    }
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
                 
+                # Reset Arrays
                 for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
                     sorted_pair = sorted(monomer_id_pair)
                     i = sorted_pair[0]
                     j = sorted_pair[1]
-                    key = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average_1[key][:,:,:] = 0.0
-                    sf_average_2[key][:,:,:] = 0.0
+                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average_1[type_pair][:,:,:] = 0.0
+                    sf_average_2[type_pair][:,:,:] = 0.0
+                for i in range(S):
+                    key = self.monomer_types[i]
                     sf_average_3[key][:,:,:] = 0.0
                     sf_average_4[key][:,:,:] = 0.0
 
@@ -509,7 +521,13 @@ class LFTS:
         for count, i in enumerate(self.exchange_fields_real_idx):
             for j in range(S-1):
                 energy_total_real += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
-        # Energy_total_real += 18.35/4
+        
+        # Reference energy
+        for i in range(S-1):
+            energy_ref = 0.0
+            for j in range(S-1):
+                energy_ref += self.matrix_o[j,i]*self.vector_s[j]
+            energy_total_real -= 0.5*energy_ref**2/self.exchange_eigenvalues[i]
 
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
@@ -556,8 +574,8 @@ class LFTS:
             w_diff[I-1] -= 1.0
             error_level = 0.0
             for i in range(I):
-                error_level += np.std(w_diff[i])
-            error_level /= I
+                error_level += w_diff[i]
+            error_level = np.std(error_level/I)
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
