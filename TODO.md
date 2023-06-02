@@ -18,3 +18,4 @@
 43. Operator Overloading for class Array
 44. Find a bug of CUDA cub in CUDA 12.0 and higher
 45. Save field and concentration data in scft.py
+46. Replace "new" keyword to a safe memory allocation

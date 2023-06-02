@@ -134,7 +134,6 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
         dx[d] = lx[d]/nx[d];
 
     // weight factor for integral
-    dv = new double[n_grid];
     for(int i=0; i<n_grid; i++)
     {
         dv[i] = 1.0;
