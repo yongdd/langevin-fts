@@ -9,9 +9,6 @@ import lfts
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
-# GPU environment variables
-os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
-
 f = 0.4        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
@@ -25,11 +22,13 @@ params = {
 
     "chain_model":"discrete",   # "discrete" or "continuous" chain model
     "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
-    "chi_n":18.35,              # Bare interaction parameter, Flory-Huggins params * N_Ref
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+
+    "chi_n": [["A","B", 18.35],     # Bare interaction parameter, Flory-Huggins params * N_Ref
+             ],
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # Volume fraction of polymer chain
@@ -59,8 +58,8 @@ params = {
     "am":{
         "max_hist":20,              # Maximum number of history
         "start_error":8e-1,         # When switch to AM from simple mixing
-        "mix_min":0.1,              # Minimum mixing rate of simple mixing
-        "mix_init":0.1,             # Initial mixing rate of simple mixing
+        "mix_min":0.01,             # Minimum mixing rate of simple mixing
+        "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
 
     "verbose_level":1,      # 1 : Print at each Langevin step.
@@ -73,8 +72,8 @@ random_seed = 12345
 # Set initial fields
 print("w_minus and w_plus are initialized to gyroid")
 input_data = loadmat("GyroidInput.mat", squeeze_me=True)
-w_minus = input_data["w_minus"]
-w_plus = input_data["w_plus"]
+w_A = input_data["w_plus"] + input_data["w_minus"]
+w_B = input_data["w_plus"] - input_data["w_minus"]
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
@@ -83,7 +82,7 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 time_start = time.time()
 
 # Run
-simulation.run(w_minus=w_minus, w_plus=w_plus)
+simulation.run(initial_fields={"A": w_A, "B": w_B})
 
 # Estimate execution time
 time_duration = time.time() - time_start
@@ -105,3 +104,18 @@ print("total time: %f, time per step: %f" %
 #       38   -2.887E-15  [ 2.1590718E+01  ]     7.240015622   8.4859246E-05 
 # Langevin step:  5
 #       38    1.954E-14  [ 2.1011931E+01  ]     7.239728389   8.7309208E-05 
+
+#        1   -1.379E-16  [ 1.6835907E+01  ]     2.685241449   9.3906464E-05 
+# iteration, mass error, total partitions, total energy, incompressibility error
+# ---------- Run  ----------
+# Langevin step:  1
+#       35    5.856E-16  [ 4.4022050E+00  ]     1.849170786   9.5010170E-05 
+# Langevin step:  2
+#       36    1.116E-16  [ 4.1851264E+00  ]     2.128925889   8.7348972E-05 
+# Langevin step:  3
+#       36    1.339E-15  [ 3.9864843E+00  ]     2.310751680   9.0770694E-05 
+# Langevin step:  4
+#       36   -2.765E-16  [ 3.8347376E+00  ]     2.433727606   9.8766791E-05 
+# Langevin step:  5
+#       36    7.221E-16  [ 3.7154152E+00  ]     2.512102848   9.5318576E-05 
+
