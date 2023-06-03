@@ -41,10 +41,10 @@ params = {
             {"type":"C", "length":0.35},       # C-block
         ],},],
 
-    "langevin":{                # Langevin Dynamics
-        "max_step":200,      # Langevin steps for simulation
-        "dt":8.0,               # Langevin step interval, delta tau*N_Ref
-        "nbar":1.0e20,           # Invariant polymerization index, nbar of N_Ref
+    "langevin":{             # Langevin Dynamics
+        "max_step":100,      # Langevin steps for simulation
+        "dt":4.0,            # Langevin step interval, delta tau*N_Ref
+        "nbar":1.0e6,        # Invariant polymerization index, nbar of N_Ref
     },
     
     "recording":{                       # Recording Simulation Data
@@ -56,12 +56,12 @@ params = {
 
     "saddle":{                # Iteration for the pressure field 
         "max_iter" :100,      # Maximum number of iterations
-        "tolerance":1e-6,     # Tolerance of incompressibility 
+        "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
     "am":{
         "max_hist":20,              # Maximum number of history
-        "start_error":8e-1,         # When switch to AM from simple mixing
+        "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
         "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
@@ -100,3 +100,19 @@ simulation.run(initial_fields={"A": w_A, "B": w_B, "C": w_C})
 time_duration = time.time() - time_start
 print("total time: %f, time per step: %f" %
     (time_duration, time_duration/params["langevin"]["max_step"]) )
+
+# Recording first a few iteration results for debugging and refactoring
+
+#       53   -1.599E-15  [ 1.1878907E+01  ]     5.662175232   9.4787433E-05 
+# iteration, mass error, total partitions, total energy, incompressibility error
+# ---------- Run  ----------
+# Langevin step:  1
+#       47    3.100E-15  [ 3.9660222E+02  ]     3.613950471   9.2307569E-05 
+# Langevin step:  2
+#       50    4.438E-16  [ 2.5470678E+03  ]     3.524305723   9.4422736E-05 
+# Langevin step:  3
+#       52    1.468E-15  [ 6.5078582E+03  ]     3.577918322   9.4715137E-05 
+# Langevin step:  4
+#       52   -5.250E-16  [ 1.0622248E+04  ]     3.641069204   9.9022490E-05 
+# Langevin step:  5
+#       51   -1.052E-15  [ 1.4325268E+04  ]     3.695548155   9.4177222E-05 

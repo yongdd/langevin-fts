@@ -97,7 +97,7 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       21    4.441E-16  [ 1.0359367E+00  9.9716427E-01  ]     6.261376974   7.4857853E-05 
+#       21   -1.234E-16  [ 1.0474635E+00  1.0027661E+00  ]     6.261298965   7.5528814E-05 
 # ---------- Run  ----------
 # Langevin step:  1
 #       16    4.663E-15  [ 1.1484868E+00  1.0009618E+00  ]     6.282563080   8.5362231E-05 

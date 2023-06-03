@@ -39,7 +39,7 @@ params = {
         
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
-        "dt":8.0,               # Langevin step interval, delta tau*N_Ref
+        "dt":4.0,               # Langevin step interval, delta tau*N_Ref
         "nbar":10000,           # Invariant polymerization index, nbar of N_Ref
     },
     
@@ -57,7 +57,7 @@ params = {
 
     "am":{
         "max_hist":20,              # Maximum number of history
-        "start_error":8e-1,         # When switch to AM from simple mixing
+        "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
         "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
@@ -91,31 +91,16 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#        1    3.331E-15  [ 1.6835907E+01  ]     7.272741449   9.3906464E-05 
+#        1   -1.379E-16  [ 1.6835907E+01  ]     7.272741449   9.3906464E-05 
 # iteration, mass error, total partitions, total energy, incompressibility error
 # ---------- Run  ----------
 # Langevin step:  1
-#       38    1.044E-14  [ 1.3958888E+01  ]     5.401031080   9.0245504E-05 
+#       33    6.021E-17  [ 5.0011149E+00  ]     6.824310220   8.8463166E-05 
 # Langevin step:  2
-#       36   -1.721E-14  [ 2.2166124E+01  ]     7.118769657   9.4684849E-05 
+#       34    1.929E-16  [ 4.7762739E+00  ]     6.901045969   9.9778284E-05 
 # Langevin step:  3
-#       39    2.331E-14  [ 2.2177698E+01  ]     7.217321929   6.8053333E-05 
+#       34    2.927E-16  [ 4.5725979E+00  ]     6.963406524   9.0634365E-05 
 # Langevin step:  4
-#       38   -2.887E-15  [ 2.1590718E+01  ]     7.240015622   8.4859246E-05 
+#       34    6.100E-16  [ 4.4066899E+00  ]     7.017589114   9.7651220E-05 
 # Langevin step:  5
-#       38    1.954E-14  [ 2.1011931E+01  ]     7.239728389   8.7309208E-05 
-
-#        1   -1.379E-16  [ 1.6835907E+01  ]     2.685241449   9.3906464E-05 
-# iteration, mass error, total partitions, total energy, incompressibility error
-# ---------- Run  ----------
-# Langevin step:  1
-#       35    5.856E-16  [ 4.4022050E+00  ]     1.849170786   9.5010170E-05 
-# Langevin step:  2
-#       36    1.116E-16  [ 4.1851264E+00  ]     2.128925889   8.7348972E-05 
-# Langevin step:  3
-#       36    1.339E-15  [ 3.9864843E+00  ]     2.310751680   9.0770694E-05 
-# Langevin step:  4
-#       36   -2.765E-16  [ 3.8347376E+00  ]     2.433727606   9.8766791E-05 
-# Langevin step:  5
-#       36    7.221E-16  [ 3.7154152E+00  ]     2.512102848   9.5318576E-05 
-
+#       34    5.411E-16  [ 4.2678232E+00  ]     7.059564839   9.8991089E-05 
