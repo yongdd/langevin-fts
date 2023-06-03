@@ -39,7 +39,7 @@ params = {
         
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
-        "dt":8.0,               # Langevin step interval, delta tau*N_Ref
+        "dt":4.0,               # Langevin step interval, delta tau*N_Ref
         "nbar":1024,            # Invariant polymerization index, nbar of N_Ref
     },
     
@@ -57,7 +57,7 @@ params = {
 
     "am":{
         "max_hist":20,              # Maximum number of history
-        "start_error":8e-1,         # When switch to AM from simple mixing
+        "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
         "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
@@ -94,15 +94,16 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       21    1.332E-15  [ 1.0359086E+00  ]     5.009168908   9.3083443E-05 
+#       20    1.571E-16  [ 1.0217261E+00  ]     5.004521219   8.9464276E-05 
 # iteration, mass error, total partitions, total energy, incompressibility error
+# ---------- Run  ----------
 # Langevin step:  1
-#       20    3.331E-15  [ 1.4211341E+00  ]     5.086248221   8.2028227E-05 
+#       21   -2.285E-16  [ 1.0627898E+00  ]     5.012925069   9.1323769E-05 
 # Langevin step:  2
-#       23    3.775E-15  [ 3.8284791E+00  ]     5.389688212   8.6680512E-05 
+#       22   -3.384E-17  [ 1.2292088E+00  ]     5.050349656   9.3796402E-05 
 # Langevin step:  3
-#       24    3.331E-15  [ 6.7628060E+00  ]     5.472349495   8.6883509E-05 
+#       22   -1.660E-17  [ 1.4075170E+00  ]     5.086852520   9.5113039E-05 
 # Langevin step:  4
-#       24   -3.220E-15  [ 9.5428437E+00  ]     5.473121143   9.5375666E-05 
+#       22   -9.077E-18  [ 1.6066179E+00  ]     5.123810416   9.5503717E-05 
 # Langevin step:  5
-#       25    2.220E-16  [ 1.1893207E+01  ]     5.454094734   7.2648021E-05 
+#       22    1.874E-16  [ 1.8323529E+00  ]     5.159958262   9.6096733E-05 

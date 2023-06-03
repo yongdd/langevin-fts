@@ -40,7 +40,7 @@ params = {
 
     "langevin":{                # Langevin Dynamics
         "max_step":200000,      # Langevin steps for simulation
-        "dt":8.0,               # Langevin step interval, delta tau*N_ref
+        "dt":4.0,               # Langevin step interval, delta tau*N_ref
         "nbar":10000,           # Invariant polymerization index, nbar of N_Ref
     },
     
@@ -58,9 +58,9 @@ params = {
 
     "am":{
         "max_hist":20,              # Maximum number of history
-        "start_error":8e-1,         # When switch to AM from simple mixing
-        "mix_min":0.1,              # Minimum mixing rate of simple mixing
-        "mix_init":0.1,             # Initial mixing rate of simple mixing
+        "start_error":5e-1,         # When switch to AM from simple mixing
+        "mix_min":0.01,              # Minimum mixing rate of simple mixing
+        "mix_init":0.01,             # Initial mixing rate of simple mixing
     },
 
     "verbose_level":1,      # 1 : Print at each Langevin step.
@@ -73,11 +73,8 @@ np.random.seed(random_seed)
 
 # Set initial fields
 print("w_minus and w_plus are initialized to random")
-w_plus  = np.random.normal(0.0, 1.0, params["nx"])
-w_minus = np.random.normal(0.0, 1.0, params["nx"])
-
-w_A = w_plus + w_minus
-w_B = w_plus - w_minus
+w_A  = np.random.normal(0.0, 1.0, params["nx"])
+w_B = np.random.normal(0.0, 1.0, params["nx"])
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
@@ -95,15 +92,16 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       21    4.441E-16  [ 1.0359367E+00  9.9716427E-01  ]     6.261376974   7.4857853E-05 
+#       20   -6.668E-17  [ 1.0217332E+00  1.0004506E+00  ]     6.255662440   6.8265095E-05 
+# iteration, mass error, total partitions, total energy, incompressibility error
 # ---------- Run  ----------
 # Langevin step:  1
-#       16    4.663E-15  [ 1.1484868E+00  1.0009618E+00  ]     6.282563080   8.5362231E-05 
+#       19   -1.025E-16  [ 1.0356511E+00  1.0009398E+00  ]     6.258628648   7.9686027E-05 
 # Langevin step:  2
-#       19   -7.772E-15  [ 1.6344095E+00  1.0107626E+00  ]     6.360369930   8.7820501E-05 
+#       20   -7.614E-17  [ 1.0828365E+00  9.9836223E-01  ]     6.271763005   8.2435677E-05 
 # Langevin step:  3
-#       20   -1.110E-16  [ 2.1855006E+00  1.0246363E+00  ]     6.383607644   7.6872507E-05 
+#       20    2.288E-16  [ 1.1286346E+00  9.9506450E-01  ]     6.283650660   7.6551681E-05 
 # Langevin step:  4
-#       20   -3.664E-15  [ 2.8218615E+00  1.0401552E+00  ]     6.380405850   9.1313823E-05 
+#       20    2.114E-18  [ 1.1780540E+00  9.9337073E-01  ]     6.294901533   7.5729019E-05 
 # Langevin step:  5
-#       20   -3.553E-15  [ 3.5530528E+00  1.0566284E+00  ]     6.365407969   9.8310547E-05 
+#       20   -3.235E-16  [ 1.2329994E+00  9.9344009E-01  ]     6.305416197   8.1243369E-05 

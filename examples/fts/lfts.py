@@ -88,6 +88,9 @@ class LFTS:
             else:
                 self.exchange_fields_real_idx.append(i)
         self.exchange_fields_imag_idx.append(S-1) # add pressure field
+
+        print("(Warning!) For a given chi N interaction parameters, at least one of the exchange fields is an imaginary field. ", end="")
+        print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
         
         # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
@@ -289,7 +292,7 @@ class LFTS:
         self.pseudo = pseudo
         self.am = am
 
-    def save_simulation_data(self, path, w, phi):
+    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
         
         # Make dictionary for w fields
         w_species = {}
@@ -306,45 +309,44 @@ class LFTS:
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
-            "random_generator": self.random_bg.state["bit_generator"],
-            "random_state_state": str(self.random_bg.state["state"]["state"]),
-            "random_state_inc": str(self.random_bg.state["state"]["inc"]),
+            "langevin_step":langevin_step,
+            "random_generator":self.random_bg.state["bit_generator"],
+            "random_state_state":str(self.random_bg.state["state"]["state"]),
+            "random_state_inc":str(self.random_bg.state["state"]["inc"]),
+            "normal_noise_prev":normal_noise_prev,
             "w": w_species, "phi":phi, "monomer_types":self.monomer_types}
         
         # Save data with matlab format
         savemat(path, mdic)
 
-    def save_simulation_data(self, path, w, phi):
-        
-        # Make dictionary for w fields
-        w_species = {}
-        for i, name in enumerate(self.monomer_types):
-            w_species[name] = w[i]
+    def continue_run(self, file_name):
 
-        # Make a dictionary for chi_n
-        chi_n_mat = {}
-        for pair_chi_n in self.params["chi_n"]:
-            sorted_name_pair = sorted(pair_chi_n[0:2])
-            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+        # Load_data
+        load_data = loadmat(file_name, squeeze_me=True)
 
-        # Make dictionary for data
-        mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-            "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
-            "random_generator": self.random_bg.state["bit_generator"],
-            "random_state_state": str(self.random_bg.state["state"]["state"]),
-            "random_state_inc": str(self.random_bg.state["state"]["inc"]),
-            "w": w_species, "phi":phi, "monomer_types":self.monomer_types}
-        
-        # Save data with matlab format
-        savemat(path, mdic)
+        # Restore random state
+        self.random_bg.state ={'bit_generator': 'PCG64',
+            'state': {'state': int(load_data["random_state_state"]),
+                      'inc':   int(load_data["random_state_inc"])},
+                      'has_uint32': 0, 'uinteger': 0}
+        print("Restored Random Number Generator: ", self.random_bg.state)
 
-    def run(self, initial_fields):
+        # Make initial_fields
+        initial_fields = {}
+        for name in self.monomer_types:
+            initial_fields[name] = np.array(load_data["w"][name].tolist())
+
+        # run
+        self.run(initial_fields=initial_fields,
+            normal_noise_prev=load_data["normal_noise_prev"],
+            start_langevin_step=load_data["langevin_step"]+1)
+
+    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
 
         # The number of components
         S = len(self.monomer_types)
 
-        # The number of real and imaginary fields respectively
+        # The number of real and imaginary fields, respectively
         R = len(self.exchange_fields_real_idx)
         I = len(self.exchange_fields_imag_idx)
 
@@ -363,22 +365,20 @@ class LFTS:
         phi, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
         # Arrays for structure function
-        sf_average_1 = {} # <u(k) phi(-k)>
-        sf_average_2 = {} # <u(k) u(-k)> 
-        sf_average_3 = {} # <u(k))>
-        sf_average_4 = {} # <phi(k)>
+        sf_average = {} # <u(k) phi(-k)>
         for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            sf_average_1[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
-            sf_average_2[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
-        for i in range(S):
-            key = self.monomer_types[i]
-            sf_average_3[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
-            sf_average_4[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
         # Create an empty array for field update algorithm
-        normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
+        if type(normal_noise_prev) == type(None) :
+            normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
+        else:
+            normal_noise_prev = normal_noise_prev
+
+        if start_langevin_step == None :
+            start_langevin_step = 1
 
         # Init timers
         total_saddle_iter = 0
@@ -388,7 +388,7 @@ class LFTS:
         #------------------ run ----------------------
         print("iteration, mass error, total partitions, total energy, incompressibility error")
         print("---------- Run  ----------")
-        for langevin_step in range(1, self.langevin["max_step"]+1):
+        for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
             # Update w_minus using Leimkuhler-Matthews method
@@ -429,13 +429,9 @@ class LFTS:
                     i = sorted_pair[0]
                     j = sorted_pair[1]
                     type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average_1[type_pair] += mu_fourier[self.monomer_types[i]]*np.conj(phi_fourier[self.monomer_types[j]])
-                    sf_average_2[type_pair] += mu_fourier[self.monomer_types[i]]*np.conj( mu_fourier[self.monomer_types[j]])
-                # Accumulate <mu_i(k)> and <phi_i(k)>
-                for i in range(S):
-                    key = self.monomer_types[i]
-                    sf_average_3[key] += mu_fourier[key]
-                    sf_average_4[key] += phi_fourier[key]
+
+                    # Assuming that <u(k)>*<phi(-k)> is zero in the disordered phase
+                    sf_average[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj( mu_fourier[self.monomer_types[j]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -444,15 +440,7 @@ class LFTS:
                     i = sorted_pair[0]
                     j = sorted_pair[1]
                     type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average_1[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    sf_average_2[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                for i in range(S):
-                    key = self.monomer_types[i]
-                    sf_average_3[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    sf_average_4[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                    sf_average[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
 
                 # Make a dictionary for chi_n
@@ -464,11 +452,7 @@ class LFTS:
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
                     "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
                     "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
-                    "structure_function_1":sf_average_1,
-                    "structure_function_2":sf_average_2,
-                    "structure_function_3":sf_average_3,
-                    "structure_function_4":sf_average_4,
-                    }
+                    "structure_function":sf_average}
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
                 
                 # Reset Arrays
@@ -477,23 +461,21 @@ class LFTS:
                     i = sorted_pair[0]
                     j = sorted_pair[1]
                     type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average_1[type_pair][:,:,:] = 0.0
-                    sf_average_2[type_pair][:,:,:] = 0.0
-                for i in range(S):
-                    key = self.monomer_types[i]
-                    sf_average_3[key][:,:,:] = 0.0
-                    sf_average_4[key][:,:,:] = 0.0
+                    sf_average[type_pair][:,:,:] = 0.0
 
             # Save simulation data
             if (langevin_step) % self.recording["recording_period"] == 0:
                 w = np.matmul(self.matrix_a, w_exchange)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
-                    w=w, phi=phi)
+                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
 
         # Estimate execution time
         time_duration = time.time() - time_start
-        return total_saddle_iter, total_saddle_iter/self.langevin["max_step"], time_duration/self.langevin["max_step"], total_error_level/self.langevin["max_step"]
+        return total_saddle_iter, \
+                total_saddle_iter/(self.langevin["max_step"]+1-start_langevin_step), \
+                time_duration/(self.langevin["max_step"]+1-start_langevin_step), \
+                total_error_level/(self.langevin["max_step"]+1-start_langevin_step)
 
     def find_saddle_point(self, w_exchange):
 
@@ -521,7 +503,6 @@ class LFTS:
         for count, i in enumerate(self.exchange_fields_real_idx):
             for j in range(S-1):
                 energy_total_real += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
-        
         # Reference energy
         for i in range(S-1):
             energy_ref = 0.0

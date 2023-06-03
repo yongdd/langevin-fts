@@ -84,6 +84,8 @@ conda env remove -n lfts
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + Use FTS in 1D and 2D only for the tests. It does not have a physical meaning.
   + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. As an example, please see 'examples/scft/Gyroid.py'.
+  + The calculated structure function is correct only in the disordered phase.
+  + L-FTS is one of the partial saddle-point approximation methods, which apply saddle-point approximation to all imaginary fields. It is known that L-FTS give accurate results for AB-type block copolymers, where the saddle-point approximation is applied only onto the pressure field. However, it has not been confirmed that L-FTS gives accurate results for ABC-type block copolymers, where one of the exchange fields can be an imaginary field. In this case, the field fluctuations would not be fully reflected, and run this simulation at your own risk.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
 + To achieve the best performance, use the DL-FTS version even if you will not exploit DL. Because DL-FTS version performs python array operations on GPU.
 + The unit of length in this library is *aN^(1/2)* for both `Continuous` and `Discrete` chain models, where *a* is a reference statistical segment length and *N* is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. Please refer to [*J. Chem. Phys.* **2014**, 141, 174103] to learn how to formulate polymer mixtures composed of multiple distinct polymers in the reference polymer length unit.
@@ -151,16 +153,16 @@ conda env remove -n lfts
   https://pybind11.readthedocs.io/en/stable/index.html   
 
 # References
-#### Polymer Mixture
+#### Multi-Species Exchange Mapping
 + D. Düchs, K. T. Delaney, and G. H. Fredrickson, A multi-species exchange model for fully fluctuating polymer field theory simulations. *J. Chem. Phys.* **2014**, 141, 174103
 #### CUDA Implementation
 + G. K. Cheong, A. Chawla, D. C. Morse, and K. D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 + D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces. *Macromolecules* **2021**, 54, 11304
 #### Langevin FTS
 + M. W. Matsen, and T. M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation, *Polymers* **2021**, 13, 2437   
-#### Exchange Field Update Algorithm
+#### Field Update Algorithm for L-FTS
 + B. Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of field-theoretic simulations, *J. Chem. Phys.* **2023**, 158, 114117
-#### Anderson Mixing
+#### Field Update Algorithm for SCFT 
 + A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
 
 # Citation
