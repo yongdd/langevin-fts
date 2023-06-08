@@ -38,7 +38,7 @@ This open-source code is distributed under the Apache license 2.0 instead of GPL
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   
-  It requires CUDA Toolkit Version 11.2 or higher, but less than 12.0 for the GPU computation. If it is not installed, ask admin for its installation.
+  It requires CUDA Toolkit Version 11.2 or higher for the GPU computation. If it is not installed, ask admin for its installation.
 
 #### Anaconda
   https://www.anaconda.com/
