@@ -89,8 +89,9 @@ class LFTS:
                 self.exchange_fields_real_idx.append(i)
         self.exchange_fields_imag_idx.append(S-1) # add pressure field
 
-        print("(Warning!) For a given chi N interaction parameters, at least one of the exchange fields is an imaginary field. ", end="")
-        print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
+        if len (self.exchange_fields_imag_idx) > 1:
+            print("(Warning!) For a given chi N interaction parameters, at least one of the exchange fields is an imaginary field. ", end="")
+            print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
         
         # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
         self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
@@ -431,7 +432,7 @@ class LFTS:
                     type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
 
                     # Assuming that <u(k)>*<phi(-k)> is zero in the disordered phase
-                    sf_average[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj( mu_fourier[self.monomer_types[j]])
+                    sf_average[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj( phi_fourier[self.monomer_types[j]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -496,7 +497,7 @@ class LFTS:
         # Concentration of each monomer
         phi = {}
 
-        # Compute hamiltonian part that is related to real-valued fields
+        # Compute hamiltonian part that is only related to real-valued fields
         energy_total_real = 0.0
         for count, i in enumerate(self.exchange_fields_real_idx):
             energy_total_real -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i], w_exchange[i])/self.cb.get_n_grid()
@@ -555,8 +556,8 @@ class LFTS:
             w_diff[I-1] -= 1.0
             error_level = 0.0
             for i in range(I):
-                error_level += w_diff[i]
-            error_level = np.std(error_level/I)
+                error_level += np.std(w_diff[i])
+            error_level /= I
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and

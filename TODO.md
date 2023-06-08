@@ -4,7 +4,6 @@
 8. GPU bandwidth test
 9. UnitTest: Anderson Mixing
 10. Validation Check for Pseudo Parameters
-11. UnitTest: example/miscellaneous
 16. Process Bar
 20. Graphic User Interface
 24. Draw network graph image for given polymer architecture
@@ -16,6 +15,6 @@
 40. Figure out why two GPUs performance keeps changing in A100
 42. Check if two GPUs can be utilized for CudaAndersonMixing
 43. Operator Overloading for class Array
-44. Find a bug of CUDA cub in CUDA 12.0 and higher
-45. Save field and concentration data in scft.py
+44. Check if CUDA cub works in CUDA 12.0 and higher
 46. Replace "new" keyword to a safe memory allocation
+47. Add tests for example files
