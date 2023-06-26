@@ -1045,7 +1045,7 @@ double CudaPseudoContinuous::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, double *phi)
+void CudaPseudoContinuous::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -1074,7 +1074,42 @@ void CudaPseudoContinuous::get_monomer_concentration(std::string monomer_type, d
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
+void CudaPseudoContinuous::get_total_concentration(int p, std::string monomer_type, double *phi)
+{
+    try
+    {
+        gpu_error_check(cudaSetDevice(0));
+
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        const int P = mx->get_n_polymers();
+
+        if (p < 0 || p > P-1)
+            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        // initialize to zero
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
+
+        // for each block
+        for(const auto& d_block: d_block_phi)
+        {
+            const auto& key = d_block.first;
+            int polymer_idx = std::get<0>(key);
+            std::string dep_v = std::get<1>(key);
+            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
+            if (polymer_idx == p && Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+                lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
+        }
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoContinuous::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -1089,7 +1124,7 @@ void CudaPseudoContinuous::get_polymer_concentration(int p, double *phi)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
         if (mx->is_using_superposition())
-            throw_with_line_number("Disable 'superposition' option to invoke 'get_polymer_concentration'.");
+            throw_with_line_number("Disable 'superposition' option to invoke 'get_block_concentration'.");
 
         // initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));

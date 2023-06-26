@@ -129,8 +129,9 @@ public:
         compute_statistics(d_w_input, d_q_init, "gpu");
     };
     double get_total_partition(int polymer) override;
-    void get_monomer_concentration(std::string monomer_type, double *phi) override;
-    void get_polymer_concentration(int polymer, double *phi) override;
+    void get_total_concentration(std::string monomer_type, double *phi) override;
+    void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
+    void get_block_concentration(int polymer, double *phi) override;
     std::vector<double> compute_stress() override;
     void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 };

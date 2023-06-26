@@ -16,7 +16,7 @@ os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
 
-# simulation parameters
+# Simulation parameters
 nx = [64,64,64]                                   # grid number
 lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step interval
@@ -52,11 +52,11 @@ block_monomer_types.append(["B"]) # type of each block (homo)
 v.append([0])                     # vertices v (homo)
 u.append([1])                     # vertices u (homo)
 
-# select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
+# Select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
+factory = PlatformSelector.create_factory("cuda", "discrete", reduce_gpu_memory_usage)
 factory.display_info()
 
-# create instances
+# Create instances
 cb = factory.create_computation_box(nx, lx)
 mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
 for p in range(len(block_lengths)):
@@ -65,37 +65,47 @@ for p in range(len(block_lengths)):
      block_lengths[p],v[p],u[p])
 pseudo = factory.create_pseudo(cb, mixture)
 
-# print blocks and branches
+# Print blocks and branches
 mixture.display_blocks()
 mixture.display_propagators()
 
 print(type(pseudo))
 
-# external fields
+# External fields
 w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
      "B": np.random.normal(0.0, 1.0, np.prod(nx)),
      "C": np.random.normal(0.0, 1.0, np.prod(nx))}
 
-# compute ensemble average concentration (phi) and total partition function (Q)
+# Compute ensemble average concentration (phi) and total partition function (Q)
 pseudo.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
 
-# get concentration for each monomer type
-phi_a = pseudo.get_monomer_concentration("A")
-phi_b = pseudo.get_monomer_concentration("B")
-phi_c = pseudo.get_monomer_concentration("C")
+# Compute total concentration for each monomer type
+phi_a = pseudo.get_total_concentration("A")
+phi_b = pseudo.get_total_concentration("B")
+phi_c = pseudo.get_total_concentration("C")
 
 print(phi_a, phi_b, phi_c)
 print("Total phi:", np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
 
-# for each polymer chain
+# For each polymer chain
 for p in range(mixture.get_n_polymers()):
-     phi = pseudo.get_polymer_concentration(p)
+
+     print(f"\nPolymer: {p}")
+
+     # Total partition function
      Q = pseudo.get_total_partition(p)
-
-     # total partition function
      print(f"Q({p}):", Q)
-     print(f"Total phi({p}):", np.mean(np.sum(phi, axis=0)))
 
-     # concentration for each block
+     # Compute total concentration for a given polymer index and monomer type
+     phi_p_a = pseudo.get_total_concentration(p, "A")
+     phi_p_b = pseudo.get_total_concentration(p, "B")
+     phi_p_c = pseudo.get_total_concentration(p, "C")
+
+     print(f"Total phi({p}):", np.mean(phi_p_a), np.mean(phi_p_b), np.mean(phi_p_c))
+     print(phi_p_a, phi_p_b, phi_p_c)
+
+     # Compute concentration of each block for a given polymer index
+     phi = pseudo.get_block_concentration(p)
+     print(f"Block phi({p}):", np.mean(np.sum(phi, axis=0)))
      for b in range(mixture.get_polymer(p).get_n_blocks()):
           print(phi[b])

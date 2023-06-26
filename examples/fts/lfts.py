@@ -22,6 +22,27 @@ class LFTS:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
+        # Choose platform among [cuda, cpu-mkl]
+        avail_platforms = PlatformSelector.avail_platforms()
+        if "platform" in params:
+            platform = params["platform"]
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
+        elif "cuda" in avail_platforms: # If cuda is available, use GPU
+            platform = "cuda"
+        else:
+            platform = avail_platforms[0]
+
+        # (c++ class) Create a factory for given platform and chain_model
+        if "reduce_gpu_memory_usage" in params and platform == "cuda":
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], params["reduce_gpu_memory_usage"])
+        else:
+            factory = PlatformSelector.create_factory(platform, params["chain_model"], False)
+        factory.display_info()
+
+        # (C++ class) Computation box
+        cb = factory.create_computation_box(params["nx"], params["lx"])
+
         # Flory-Huggins parameters, chi*N
         self.chi_n = {}
         for pair_chi_n in params["chi_n"]:
@@ -89,7 +110,11 @@ class LFTS:
                 self.exchange_fields_real_idx.append(i)
         self.exchange_fields_imag_idx.append(S-1) # add pressure field
 
-        if len (self.exchange_fields_imag_idx) > 1:
+        # The numbers of real and imaginary fields, respectively
+        self.R = len(self.exchange_fields_real_idx)
+        self.I = len(self.exchange_fields_imag_idx)
+
+        if self.I > 1:
             print("(Warning!) For a given chi N interaction parameters, at least one of the exchange fields is an imaginary field. ", end="")
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
         
@@ -181,27 +206,6 @@ class LFTS:
             params["segment_lengths"].update({random_type_string:statistical_segment_length})
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
 
-        # Choose platform among [cuda, cpu-mkl]
-        avail_platforms = PlatformSelector.avail_platforms()
-        if "platform" in params:
-            platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
-        elif "cuda" in avail_platforms: # If cuda is available, use GPU
-            platform = "cuda"
-        else:
-            platform = avail_platforms[0]
-
-        # (c++ class) Create a factory for given platform and chain_model
-        if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["chain_model"], params["reduce_gpu_memory_usage"])
-        else:
-            factory = PlatformSelector.create_factory(platform, params["chain_model"], False)
-        factory.display_info()
-
-        # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"])
-
         # (C++ class) Mixture box
         if "use_superposition" in params:
             mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
@@ -280,13 +284,14 @@ class LFTS:
         #  Save Internal Variables
         self.params = params
         self.chain_model = params["chain_model"]
+        self.chi_n = params["chi_n"]
         self.ds = params["ds"]
-        self.langevin = params["langevin"]
+        self.langevin = params["langevin"].copy()
         self.langevin.update({"sigma":langevin_sigma})
 
         self.verbose_level = params["verbose_level"]
-        self.saddle = params["saddle"]
-        self.recording = params["recording"]
+        self.saddle = params["saddle"].copy()
+        self.recording = params["recording"].copy()
 
         self.cb = cb
         self.mixture = mixture
@@ -300,7 +305,7 @@ class LFTS:
         for i, name in enumerate(self.monomer_types):
             w_species[name] = w[i]
 
-        # Make a dictionary for chi_n
+        # Make dictionary for chi_n
         chi_n_mat = {}
         for pair_chi_n in self.params["chi_n"]:
             sorted_name_pair = sorted(pair_chi_n[0:2])
@@ -347,7 +352,7 @@ class LFTS:
         # The number of components
         S = len(self.monomer_types)
 
-        # The number of real and imaginary fields, respectively
+        # The numbers of real and imaginary fields, respectively
         R = len(self.exchange_fields_real_idx)
         I = len(self.exchange_fields_imag_idx)
 
@@ -421,7 +426,7 @@ class LFTS:
                 for i in range(S):
                     key = self.monomer_types[i]
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_n_grid()
-                    mu_fourier[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+                    mu_fourier[key] = np.zeros_like(np.fft.rfftn(np.reshape(w_exchange[0], self.cb.get_nx())), np.complex128)
                     for k in range(S-1) :
                         mu_fourier[key] += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
                 # Accumulate S_ij(K) 
@@ -483,7 +488,7 @@ class LFTS:
         # The number of components
         S = len(self.monomer_types)
 
-        # The number of real and imaginary fields respectively
+        # The numbers of real and imaginary fields respectively
         R = len(self.exchange_fields_real_idx)
         I = len(self.exchange_fields_imag_idx)
             
@@ -504,7 +509,8 @@ class LFTS:
         for count, i in enumerate(self.exchange_fields_real_idx):
             for j in range(S-1):
                 energy_total_real += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
-        # Reference energy
+        
+        # Compute hamiltonian part that is constant
         for i in range(S-1):
             energy_ref = 0.0
             for j in range(S-1):
@@ -526,37 +532,37 @@ class LFTS:
                 for monomer_type, fraction in random_fraction.items():
                     w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
-            # For the given fields find the polymer statistics
+            # For the given fields, compute the polymer statistics
             self.pseudo.compute_statistics(w_input)
 
-            # Compute concentration for each monomer type
+            # Compute total concentration for each monomer type
             phi = {}
             for monomer_type in self.monomer_types:
-                phi[monomer_type] = self.pseudo.get_monomer_concentration(monomer_type)
+                phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
 
             # Add random copolymer concentration to each monomer type
             for random_polymer_name, random_fraction in self.random_fraction.items():
-                phi[random_polymer_name] = self.pseudo.get_monomer_concentration(random_polymer_name)
+                phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
             # Calculate incompressibility and saddle point error
             old_error_level = error_level
-            w_diff = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
+            h_deriv = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
             for count, i in enumerate(self.exchange_fields_imag_idx):
                 if i != S-1:
-                    w_diff[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
+                    h_deriv[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
             for count, i in enumerate(self.exchange_fields_imag_idx):
                 if i != S-1:
                     for j in range(S-1):
-                        w_diff[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
-                        w_diff[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
+                        h_deriv[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
+                        h_deriv[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
             for i in range(S):
-                w_diff[I-1] += phi[self.monomer_types[i]]
-            w_diff[I-1] -= 1.0
+                h_deriv[I-1] += phi[self.monomer_types[i]]
+            h_deriv[I-1] -= 1.0
             error_level = 0.0
             for i in range(I):
-                error_level += np.std(w_diff[i])
+                error_level += np.std(h_deriv[i])
             error_level /= I
 
             # Print iteration # and error levels
@@ -578,7 +584,7 @@ class LFTS:
                                     np.log(self.pseudo.get_total_partition(p))
 
                 # Check the mass conservation
-                mass_error = np.mean(w_diff[I-1])
+                mass_error = np.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.mixture.get_n_polymers()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
@@ -589,7 +595,7 @@ class LFTS:
                 break
                 
             # Calculate new fields using simple and Anderson mixing
-            w_exchange[self.exchange_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], w_diff, old_error_level, error_level), [I, self.cb.get_n_grid()])
+            w_exchange[self.exchange_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
         
         # Set mean of pressure field to zero
         w_exchange[S-1] -= np.mean(w_exchange[S-1])

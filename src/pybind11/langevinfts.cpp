@@ -248,13 +248,13 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         })
-        .def("get_monomer_concentration", [](Pseudo& obj, std::string monomer_type)
+        .def("get_total_concentration", [](Pseudo& obj, std::string monomer_type)
         {
             try{
                 const int M = obj.get_n_grid();
                 py::array_t<double> phi = py::array_t<double>(M);
                 py::buffer_info buf_phi = phi.request();
-                obj.get_monomer_concentration(monomer_type, (double*) buf_phi.ptr);
+                obj.get_total_concentration(monomer_type, (double*) buf_phi.ptr);
                 return phi;
             }
             catch(std::exception& exc)
@@ -262,7 +262,21 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_polymer_concentration", [](Pseudo& obj, int polymer)
+        .def("get_total_concentration", [](Pseudo& obj, int polymer, std::string monomer_type)
+        {
+            try{
+                const int M = obj.get_n_grid();
+                py::array_t<double> phi = py::array_t<double>(M);
+                py::buffer_info buf_phi = phi.request();
+                obj.get_total_concentration(polymer, monomer_type, (double*) buf_phi.ptr);
+                return phi;
+            }
+            catch(std::exception& exc)
+            {
+                throw_with_line_number(exc.what());
+            }
+        })
+        .def("get_block_concentration", [](Pseudo& obj, int polymer)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -270,7 +284,7 @@ PYBIND11_MODULE(langevinfts, m)
 
                 py::array_t<double> phi = py::array_t<double>({N_B,M});
                 py::buffer_info buf_phi = phi.request();
-                obj.get_polymer_concentration(polymer, (double*) buf_phi.ptr);
+                obj.get_block_concentration(polymer, (double*) buf_phi.ptr);
                 return phi;
             }
             catch(std::exception& exc)

@@ -299,11 +299,11 @@ class LFTS:
             else:
                 self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
 
-            phi["A"] = self.pseudo.get_monomer_concentration("A")
-            phi["B"] = self.pseudo.get_monomer_concentration("B")
+            phi["A"] = self.pseudo.get_total_concentration("A")
+            phi["B"] = self.pseudo.get_total_concentration("B")
 
             if self.random_copolymer_exist:
-                phi["R"] = self.pseudo.get_monomer_concentration("R")
+                phi["R"] = self.pseudo.get_total_concentration("R")
                 phi["A"] += phi["R"]*self.random_A_fraction
                 phi["B"] += phi["R"]*(1.0-self.random_A_fraction)
 

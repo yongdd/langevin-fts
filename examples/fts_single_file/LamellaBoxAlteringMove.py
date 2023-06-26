@@ -27,8 +27,8 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
 
         # for the given fields compute the polymer statistics
         pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
-        phi_a = pseudo.get_monomer_concentration("A")
-        phi_b = pseudo.get_monomer_concentration("B")
+        phi_a = pseudo.get_total_concentration("A")
+        phi_b = pseudo.get_total_concentration("B")
         
         # calculate incompressibility error
         old_error_level = error_level
