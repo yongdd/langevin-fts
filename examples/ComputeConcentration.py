@@ -53,7 +53,7 @@ v.append([0])                     # vertices v (homo)
 u.append([1])                     # vertices u (homo)
 
 # Select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "discrete", reduce_gpu_memory_usage)
+factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create instances
