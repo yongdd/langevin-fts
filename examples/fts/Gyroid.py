@@ -81,6 +81,9 @@ simulation = lfts.LFTS(params=params, random_seed=random_seed)
 # Set a timer
 time_start = time.time()
 
+# # Continue simulation with recorded field configurations and random state.
+# simulation.continue_run(file_name="fields_010000.mat")
+
 # Run
 simulation.run(initial_fields={"A": w_A, "B": w_B})
 

@@ -209,9 +209,9 @@ int main()
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
             pseudo->compute_statistics({{"A",w_a},{"B",w_b}},{});
-            pseudo->get_monomer_concentration("A", phi_a);
-            pseudo->get_monomer_concentration("B", phi_b);
-            //pseudo->get_polymer_concentration(0, phi);
+            pseudo->get_total_concentration("A", phi_a);
+            pseudo->get_total_concentration("B", phi_b);
+            //pseudo->get_block_concentration(0, phi);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;

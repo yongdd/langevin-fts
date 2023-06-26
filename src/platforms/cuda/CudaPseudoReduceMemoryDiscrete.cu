@@ -1173,7 +1173,7 @@ double CudaPseudoReduceMemoryDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryDiscrete::get_monomer_concentration(std::string monomer_type, double *phi)
+void CudaPseudoReduceMemoryDiscrete::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -1199,7 +1199,39 @@ void CudaPseudoReduceMemoryDiscrete::get_monomer_concentration(std::string monom
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryDiscrete::get_polymer_concentration(int p, double *phi)
+void CudaPseudoReduceMemoryDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        const int P = mx->get_n_polymers();
+
+        if (p < 0 || p > P-1)
+            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        // initialize array
+        for(int i=0; i<M; i++)
+            phi[i] = 0.0;
+
+        // for each block
+        for(const auto& block: block_phi)
+        {
+            int polymer_idx = std::get<0>(block.first);
+            std::string dep_v = std::get<1>(block.first);
+            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
+            if (polymer_idx == p && Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            {
+                for(int i=0; i<M; i++)
+                    phi[i] += block.second[i]; 
+            }
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoReduceMemoryDiscrete::get_block_concentration(int p, double *phi)
 {
     try
     {

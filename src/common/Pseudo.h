@@ -46,8 +46,9 @@ public:
         std::map<std::string, const double*> d_w_input,
         std::map<std::string, const double*> d_q_init) = 0;
     virtual double get_total_partition(int polymer) = 0;
-    virtual void get_monomer_concentration(std::string monomer_type, double *phi) = 0;
-    virtual void get_polymer_concentration(int polymer, double *phi) = 0;
+    virtual void get_total_concentration(std::string monomer_type, double *phi) = 0;
+    virtual void get_total_concentration(int polymer, std::string monomer_type, double *phi) = 0;
+    virtual void get_block_concentration(int polymer, double *phi) = 0;
     virtual std::vector<double> compute_stress() = 0;
     virtual void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) = 0;
 };

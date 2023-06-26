@@ -353,11 +353,11 @@ class SCFT:
             # compute concentration for each monomer type
             phi = {}
             for monomer_type in self.monomer_types:
-                phi[monomer_type] = self.pseudo.get_monomer_concentration(monomer_type)
+                phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
 
             # add random copolymer concentration to each monomer type
             for random_polymer_name, random_fraction in self.random_fraction.items():
-                phi[random_polymer_name] = self.pseudo.get_monomer_concentration(random_polymer_name)
+                phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
