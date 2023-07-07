@@ -115,7 +115,7 @@ class LFTS:
         self.I = len(self.exchange_fields_imag_idx)
 
         if self.I > 1:
-            print("(Warning!) For a given chi N interaction parameters, at least one of the exchange fields is an imaginary field. ", end="")
+            print("(Warning!) For a given chi N interaction parameter set, at least one of the exchange fields is an imaginary field. ", end="")
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
         
         # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
@@ -392,7 +392,7 @@ class LFTS:
         time_start = time.time()
 
         #------------------ run ----------------------
-        print("iteration, mass error, total partitions, total energy, incompressibility error")
+        print("iteration, mass error, total partitions, total energy, incompressibility error (or saddle point error)")
         print("---------- Run  ----------")
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
@@ -457,7 +457,7 @@ class LFTS:
 
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
                     "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                    "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
+                    "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params,
                     "structure_function":sf_average}
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
                 
@@ -547,7 +547,6 @@ class LFTS:
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
             # Calculate incompressibility and saddle point error
-            old_error_level = error_level
             h_deriv = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
             for count, i in enumerate(self.exchange_fields_imag_idx):
                 if i != S-1:
@@ -560,10 +559,13 @@ class LFTS:
             for i in range(S):
                 h_deriv[I-1] += phi[self.monomer_types[i]]
             h_deriv[I-1] -= 1.0
-            error_level = 0.0
+
+            # Compute total error
+            old_error_level = error_level
+            error_level_list = []
             for i in range(I):
-                error_level += np.std(h_deriv[i])
-            error_level /= I
+                error_level_list.append(np.std(h_deriv[i]))
+            error_level = np.max(error_level_list)
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
@@ -588,7 +590,10 @@ class LFTS:
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.mixture.get_n_polymers()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
-                print("] %15.9f %15.7E " % (energy_total, error_level))
+                print("] %15.9f   [" % (energy_total), end="")
+                for i in range(I):
+                    print("%13.7E" % (error_level_list[i]), end=" ")
+                print("]")
 
             # Conditions to end the iteration
             if error_level < self.saddle["tolerance"]:
