@@ -562,10 +562,8 @@ class LFTS:
 
             # Compute total error
             old_error_level = error_level
-            error_level_list = []
-            for i in range(I):
-                error_level_list.append(np.std(h_deriv[i]))
-            error_level = np.max(error_level_list)
+            error_level_array = np.std(h_deriv, axis=1)
+            error_level = np.max(error_level_array)
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
@@ -592,7 +590,7 @@ class LFTS:
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f   [" % (energy_total), end="")
                 for i in range(I):
-                    print("%13.7E" % (error_level_list[i]), end=" ")
+                    print("%13.7E" % (error_level_array[i]), end=" ")
                 print("]")
 
             # Conditions to end the iteration
