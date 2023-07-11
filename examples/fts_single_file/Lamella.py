@@ -145,7 +145,7 @@ print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
-print("w_minus and w_plus are initialized to random")
+print("w_A and w_B are initialized to random Gaussian.")
 w_plus  = np.random.normal(0.0, 1.0, cb.get_n_grid())
 w_minus = np.random.normal(0.0, 1.0, cb.get_n_grid())
 
@@ -213,7 +213,7 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-# w_minus and w_plus are initialized to random
+# w_A and w_B are initialized to random
 #       21    8.882E-16  [ 1.0419908E+00  ]     5.009168908   9.3083443E-05 
 # ---------- Run ----------
 # iteration, mass error, total_partition, energy_total, error_level

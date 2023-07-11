@@ -191,7 +191,7 @@ print("Invariant Polymerization Index: %d" % (langevin_nbar) )
 print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
-print("w_minus and w_plus are initialized to lamellar")
+print("w_A and w_B are initialized to lamellar phase.")
 w_plus  = (input_data["w_a"] + input_data["w_b"])/2
 w_minus = (input_data["w_a"] - input_data["w_b"])/2
 
@@ -262,7 +262,7 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-# w_minus and w_plus are initialized to lamellar
+# w_A and w_B are initialized to lamellar
 #        3   -5.818E-14  [ 3.7439547E+00  ]     3.753877750   1.3019734E-05 
 # ---------- Run ----------
 # iteration, mass error, total_partition, energy_total, error_level
