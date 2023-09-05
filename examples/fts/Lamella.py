@@ -72,7 +72,7 @@ np.random.seed(random_seed)
 
 # Set initial fields
 print("w_A and w_B are initialized to random Gaussian.")
-w_A  = np.random.normal(0.0, 1.0, params["nx"])
+w_A = np.random.normal(0.0, 1.0, params["nx"])
 w_B = np.random.normal(0.0, 1.0, params["nx"])
 
 # Initialize calculation

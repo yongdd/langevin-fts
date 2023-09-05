@@ -72,8 +72,8 @@ random_seed = 12345
 # Set initial fields
 print("w_A and w_B are initialized to gyroid phase.")
 input_data = loadmat("GyroidInput.mat", squeeze_me=True)
-w_A = input_data["w_plus"] + input_data["w_minus"]
-w_B = input_data["w_plus"] - input_data["w_minus"]
+w_A = input_data["w_A"]
+w_B = input_data["w_B"]
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)

@@ -294,10 +294,19 @@ class SCFT:
         # Make a dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds, "initial_params": self.params,
-            "w": w_species, "phi":self.phi, "monomer_types":self.monomer_types}
+            "eigenvalues": self.exchange_eigenvalues, "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv,
+            "monomer_types":self.monomer_types}
+
+        # Add w fields to the dictionary
+        for i, name in enumerate(self.monomer_types):
+            mdic["w_" + name] = self.w[i]
         
+        # Add concentrations to the dictionary
+        for name in self.monomer_types:
+            mdic["phi_" + name] = self.phi[name]
+
         # Save data with matlab format
-        savemat(path, mdic)
+        savemat(path, mdic, do_compression=True)
 
     def run(self, initial_fields):
 

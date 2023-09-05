@@ -192,8 +192,8 @@ print("Langevin Sigma: %f" % (langevin_sigma) )
 print("Random Number Generator: ", np.random.RandomState().get_state()[0])
 
 print("w_A and w_B are initialized to lamellar phase.")
-w_plus  = (input_data["w_a"] + input_data["w_b"])/2
-w_minus = (input_data["w_a"] - input_data["w_b"])/2
+w_plus  = (input_data["w_A"] + input_data["w_B"])/2
+w_minus = (input_data["w_A"] - input_data["w_B"])/2
 
 # keep the level of field value
 w_plus -= np.mean(w_plus)
@@ -235,8 +235,8 @@ for langevin_step in range(1, langevin_max_step+1):
             "chain_model":mixture.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
-            "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi_a, "phi_b":phi_b}
-        savemat( "fields_%06d.mat" % (langevin_step), mdic)
+            "w_A":w_plus+w_minus, "w_B":w_plus-w_minus, "phi_A":phi_a, "phi_B":phi_b}
+        savemat("fields_%06d.mat" % (langevin_step), mdic, do_compression=True)
         
     # caculate stress
     dlogQ_dl = -np.array(pseudo.compute_stress())

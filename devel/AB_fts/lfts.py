@@ -206,7 +206,7 @@ class LFTS:
             "random_state_state": str(self.random_bg.state["state"]["state"]),
             "random_state_inc": str(self.random_bg.state["state"]["inc"]),
             "w_plus":w_plus, "w_minus":w_minus, "phi_a":phi["A"], "phi_b":phi["B"]}
-        savemat(path, mdic)
+        savemat(path, mdic, do_compression=True)
 
     def run(self, w_plus, w_minus):
 
@@ -237,7 +237,7 @@ class LFTS:
         for langevin_step in range(1, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # update w_minus using Leimkuhler-Matthews method
+            # Update w_exchange using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
             lambda_minus = phi["A"]-phi["B"] + 2*w_minus/self.chi_n
             w_minus += -lambda_minus*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
@@ -262,7 +262,7 @@ class LFTS:
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(), "params": self.params,
                     "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds, "epsilon":self.epsilon,
                     "dt": self.langevin["dt"], "nbar":self.langevin["nbar"], "structure_function":sf_average}
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
+                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 sf_average[:,:,:] = 0.0
 
             # save simulation data

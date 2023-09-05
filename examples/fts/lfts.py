@@ -60,42 +60,19 @@ class LFTS:
             if not frozenset(list(monomer_pair)) in self.chi_n:
                 self.chi_n[frozenset(list(monomer_pair))] = 0.0
 
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            if not frozenset(list(monomer_pair)) in self.chi_n:
-                self.chi_n[frozenset(list(monomer_pair))] = 0.0
-
         # Exchange mapping matrix.
         # See paper *J. Chem. Phys.* **2014**, 141, 174103
         S = len(self.monomer_types)
-        self.matrix_o = np.zeros((S-1,S-1))
-        self.matrix_a = np.zeros((S,S))
-        self.matrix_a_inv = np.zeros((S,S))
-        self.vector_s = np.zeros(S-1)
-
-        for i in range(S-1):
-            key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
-            self.vector_s[i] = self.chi_n[key]
-
-        matrix_chi = np.zeros((S,S))
-        matrix_chin = np.zeros((S-1,S-1))
-
-        for i in range(S):
-            for j in range(i+1,S):
-                key = frozenset([self.monomer_types[i], self.monomer_types[j]])
-                if key in self.chi_n:
-                    matrix_chi[i,j] = self.chi_n[key]
-                    matrix_chi[j,i] = self.chi_n[key]
-        
-        for i in range(S-1):
-            for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
-
-        self.matrix_chi = matrix_chi
-        
-        # print(matrix_chi)
-        # print(matrix_chin)
-
-        self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
+            
+        # Compute exchange mapping for given chiN set
+        # Initialize following variables:
+        #   self.exchange_eigenvalues,
+        #   self.matrix_o,
+        #   self.free_energy_coef
+        #   self.vector_s,
+        #   self.matrix_a,
+        #   self.matrix_a_inv,
+        self.initialize_exchange_mapping()
         
         # Indices whose exchange fields are real
         self.exchange_fields_real_idx = []
@@ -103,7 +80,7 @@ class LFTS:
         self.exchange_fields_imag_idx = []
         for i in range(S-1):
             assert(not np.isclose(self.exchange_eigenvalues[i], 0.0)), \
-                "One of eigenvalues is zero. change your chin values."
+                "One of eigenvalues is zero for given chiN values."
             if self.exchange_eigenvalues[i] > 0:
                 self.exchange_fields_imag_idx.append(i)
             else:
@@ -117,14 +94,6 @@ class LFTS:
         if self.I > 1:
             print("(Warning!) For a given chi N interaction parameter set, at least one of the exchange fields is an imaginary field. ", end="")
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
-        
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
-        self.matrix_a[:,S-1] = 1
-        self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
-        for i in range(S-1):
-            self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
-            self.matrix_a_inv[S-1,S-1] = 1
 
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -231,7 +200,10 @@ class LFTS:
         # Langevin Dynamics
         # standard deviation of normal noise
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
-
+        self.dt_scaling = np.ones(S)
+        for i in range(len(self.exchange_eigenvalues)):
+            self.dt_scaling[i] = np.abs(self.exchange_eigenvalues[i])/np.max(np.abs(self.exchange_eigenvalues))
+        
         # Set random generator
         if random_seed == None:         
             self.random_bg = np.random.PCG64()  # Set random bit generator
@@ -257,7 +229,8 @@ class LFTS:
 
         print("chiN: ")
         for pair in self.chi_n:
-            print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
+            sorted_name_pair = sorted(list(pair)[0:2])
+            print("\t%s, %s: %f" % (sorted_name_pair[0], sorted_name_pair[1], self.chi_n[pair]))
 
         print("Eigenvalues:\n\t", self.exchange_eigenvalues)
         print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
@@ -265,7 +238,8 @@ class LFTS:
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("Imaginary Fields", self.exchange_fields_imag_idx)
+        print("Real Fields: ",      self.exchange_fields_real_idx)
+        print("Imaginary Fields: ", self.exchange_fields_imag_idx)
 
         for p in range(mixture.get_n_polymers()):
             print("distinct_polymers[%d]:" % (p) )
@@ -276,6 +250,7 @@ class LFTS:
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
+        print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
         mixture.display_blocks()
@@ -284,7 +259,6 @@ class LFTS:
         #  Save Internal Variables
         self.params = params
         self.chain_model = params["chain_model"]
-        self.chi_n = params["chi_n"]
         self.ds = params["ds"]
         self.langevin = params["langevin"].copy()
         self.langevin.update({"sigma":langevin_sigma})
@@ -297,6 +271,71 @@ class LFTS:
         self.mixture = mixture
         self.pseudo = pseudo
         self.am = am
+
+    def compute_eigenvalues(self, chi_n, chin_epsilon=None):
+        S = len(self.monomer_types)
+        matrix_chi = np.zeros((S,S))
+        matrix_chin = np.zeros((S-1,S-1))
+        for i in range(S):
+            for j in range(i+1,S):
+                key = frozenset([self.monomer_types[i], self.monomer_types[j]])
+                if key in chi_n:
+                    matrix_chi[i,j] = chi_n[key]
+                    matrix_chi[j,i] = chi_n[key]
+                    
+                # Add very small number to compute derivatives
+                if chin_epsilon:
+                    if key in chin_epsilon:
+                        matrix_chi[i,j] += chin_epsilon[key]
+                        matrix_chi[j,i] += chin_epsilon[key]
+        
+        for i in range(S-1):
+            for j in range(S-1):
+                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
+        
+        return np.linalg.eig(matrix_chin)
+
+    def compute_free_energy_coef(self, chin, exchange_eigenvalues, epsilon=1e-3):
+        S = len(self.monomer_types)
+        free_energy_coef = {}            
+        for key in chin:
+            exchange_eigenvalues_plus,  _ = self.compute_eigenvalues(chin, chin_epsilon = {key: epsilon})
+            exchange_eigenvalues_minus, _ = self.compute_eigenvalues(chin, chin_epsilon = {key: -epsilon})
+            exchange_eigenvalues_derivative = (exchange_eigenvalues_plus-exchange_eigenvalues_minus)/(2*epsilon)
+            # Compute derivative of -1/(2Vd) w.r.t. chiN
+            free_energy_coef[key] = 0.5*exchange_eigenvalues_derivative/(exchange_eigenvalues)**2
+        return free_energy_coef
+
+    def initialize_exchange_mapping(self,):
+        S = len(self.monomer_types)
+        # Compute vector X_iS
+        vector_s = np.zeros(S-1)
+        for i in range(S-1):
+            key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
+            vector_s[i] = self.chi_n[key]
+
+        # Compute eigenvalues and orthogonal matrix
+        exchange_eigenvalues, matrix_o = self.compute_eigenvalues(self.chi_n)
+
+        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
+        matrix_a = np.zeros((S,S))
+        matrix_a_inv = np.zeros((S,S))
+        matrix_a[0:S-1,0:S-1] = matrix_o[0:S-1,0:S-1]
+        matrix_a[:,S-1] = 1
+        matrix_a_inv[0:S-1,0:S-1] = np.transpose(matrix_o[0:S-1,0:S-1])
+        for i in range(S-1):
+            matrix_a_inv[i,S-1] =  -np.sum(matrix_o[:,i])
+            matrix_a_inv[S-1,S-1] = 1
+
+        # Compute coefficients for free energy computation
+        free_energy_coef = self.compute_free_energy_coef(self.chi_n, exchange_eigenvalues, epsilon=1e-3)
+        
+        self.exchange_eigenvalues = exchange_eigenvalues
+        self.matrix_o = matrix_o
+        self.vector_s = vector_s
+        self.matrix_a = matrix_a
+        self.matrix_a_inv = matrix_a_inv
+        self.free_energy_coef = free_energy_coef
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
         
@@ -315,20 +354,36 @@ class LFTS:
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
+            "eigenvalues": self.exchange_eigenvalues,
+            "exchange_fields_real": self.exchange_fields_real_idx, "exchange_fields_imag": self.exchange_fields_imag_idx,
+            "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv, 
             "langevin_step":langevin_step,
             "random_generator":self.random_bg.state["bit_generator"],
             "random_state_state":str(self.random_bg.state["state"]["state"]),
             "random_state_inc":str(self.random_bg.state["state"]["inc"]),
-            "normal_noise_prev":normal_noise_prev,
-            "w": w_species, "phi":phi, "monomer_types":self.monomer_types}
+            "normal_noise_prev":normal_noise_prev, "monomer_types":self.monomer_types}
+
+        # Add w fields to the dictionary
+        for i, name in enumerate(self.monomer_types):
+            mdic["w_" + name] = w[i]
         
+        # Add concentrations to the dictionary
+        for name in self.monomer_types:
+            mdic["phi_" + name] = phi[name]
+
         # Save data with matlab format
-        savemat(path, mdic)
+        savemat(path, mdic, do_compression=True)
 
     def continue_run(self, file_name):
 
         # Load_data
         load_data = loadmat(file_name, squeeze_me=True)
+        
+        # Check if load_data["langevin_step"] is a multiple of self.recording["sf_recording_period"]
+        if load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
+            print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'sf_recording_period'.")
+            next_sf_langevin_step = (load_data["langevin_step"]//self.recording["sf_recording_period"] + 1)*self.recording["sf_recording_period"]
+            print(f"The structure function will be correctly recorded after {next_sf_langevin_step}th langevin_step." )
 
         # Restore random state
         self.random_bg.state ={'bit_generator': 'PCG64',
@@ -340,7 +395,7 @@ class LFTS:
         # Make initial_fields
         initial_fields = {}
         for name in self.monomer_types:
-            initial_fields[name] = np.array(load_data["w"][name].tolist())
+            initial_fields[name] = np.array(load_data["w_" + name])
 
         # run
         self.run(initial_fields=initial_fields,
@@ -377,6 +432,11 @@ class LFTS:
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
             sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
+        # # Arrays for free energy computation
+        # dF_dchiN = {}
+        # for key in self.chi_n:
+        #     dF_dchiN[key] = np.zeros(self.recording["sf_recording_period"], dtype=np.float64)
+
         # Create an empty array for field update algorithm
         if type(normal_noise_prev) == type(None) :
             normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
@@ -397,18 +457,20 @@ class LFTS:
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # Update w_minus using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
+            # Compute functional derivative of Hamiltonian
             w_lambda = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
-            
             for count, i in enumerate(self.exchange_fields_real_idx):
                 w_lambda[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
             for count, i in enumerate(self.exchange_fields_real_idx):
                 for j in range(S-1):
                     w_lambda[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
                     w_lambda[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
-            
-            w_exchange[self.exchange_fields_real_idx] += -w_lambda*self.langevin["dt"] + (normal_noise_prev + normal_noise_current)/2
+
+            # Update w_exchange using Leimkuhler-Matthews method
+            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
+            for count, i in enumerate(self.exchange_fields_real_idx):
+                scaling = self.dt_scaling[i]
+                w_exchange[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
@@ -417,7 +479,17 @@ class LFTS:
             phi, saddle_iter, error_level = self.find_saddle_point(w_exchange=w_exchange)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
-
+            
+            # # # Update exchange mapping for given chiN set
+            # # self.initialize_exchange_mapping()
+            # # Compute dF/dchiN
+            # for key in self.chi_n:
+            #     idx = langevin_step % self.recording["sf_recording_period"] - 1
+            #     for k in range(S-1):                   
+            #         dF_dchiN[key][idx] += self.free_energy_coef[key][k]*np.mean(w_exchange[k]**2)
+            # #         print(idx, dF_dchiN[key][idx], self.free_energy_coef[key][k]*np.mean(w_exchange[k]**2))
+            # # print(np.mean(w_exchange[0]**2), np.mean(w_exchange[0]))
+                    
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 # Perform Fourier transforms
@@ -441,14 +513,7 @@ class LFTS:
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
-                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-                    sorted_pair = sorted(monomer_id_pair)
-                    i = sorted_pair[0]
-                    j = sorted_pair[1]
-                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-
+                
                 # Make a dictionary for chi_n
                 chi_n_mat = {}
                 for pair_chi_n in self.params["chi_n"]:
@@ -457,9 +522,18 @@ class LFTS:
 
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
                     "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                    "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params,
-                    "structure_function":sf_average}
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic)
+                    "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
+                
+                # Add structure functions to the dictionary
+                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+                    sorted_pair = sorted(monomer_id_pair)
+                    i = sorted_pair[0]
+                    j = sorted_pair[1]
+                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
+                    sf_average[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                    mdic["structure_function_" + self.monomer_types[i] + "_" + self.monomer_types[j]] = sf_average[type_pair]
+                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 
                 # Reset Arrays
                 for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
@@ -468,6 +542,9 @@ class LFTS:
                     j = sorted_pair[1]
                     type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
                     sf_average[type_pair][:,:,:] = 0.0
+                
+                # for key in self.chi_n:
+                #     dF_dchiN[key][:] = 0.0
 
             # Save simulation data
             if (langevin_step) % self.recording["recording_period"] == 0:
@@ -564,6 +641,9 @@ class LFTS:
             old_error_level = error_level
             error_level_array = np.std(h_deriv, axis=1)
             error_level = np.max(error_level_array)
+
+            # Scaling h_deriv
+            h_deriv *= self.dt_scaling[self.exchange_fields_imag_idx]
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
