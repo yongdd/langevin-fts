@@ -179,7 +179,7 @@ print("dx: %f, %f, %f" % (cb.get_dx(0), cb.get_dx(1), cb.get_dx(2)) )
 print("Volume: %f" % (cb.get_volume()) )
 
 #-------------- allocate array ------------
-w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
+w = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
 
 # initial fields
 print("w_A and w_B are initialized to Sigma phase.")
@@ -217,8 +217,8 @@ print("total time: %f " % time_duration)
 # save final results
 mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
         "N":mixture.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
-        "chain_model":chain_model, "w_a":w[0], "w_b":w[1], "phi_a":phi_a, "phi_b":phi_b}
-savemat("fields.mat", mdic)
+        "chain_model":chain_model, "w_A":w[0], "w_B":w[1], "phi_A":phi_a, "phi_B":phi_b}
+savemat("fields.mat", mdic, do_compression=True)
 
 # Recording first a few iteration results for debugging and refactoring
     #    1   -1.077E-14  [ 1.0040000E+00  ]    -0.001859583   1.9215121E+00  [  7.0000000, 7.0000000, 4.0000000 ]

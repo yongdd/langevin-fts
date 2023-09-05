@@ -1,7 +1,7 @@
 clear all;
 
 file_path = 'data_simulation/structure_function';
-type_pair = "A,A"; % "A,A", "A,B", "B,B" 
+type_pair = "A_A"; % "A_A", "A_B", "B_B" 
 load(strcat(file_path,'_002000.mat'));
 
 % Calculate k (Fourier mode) sqaure 
@@ -34,7 +34,7 @@ for langevin_iter = 1000:1000:2000
     fprintf('%s\n', file_name);
     load(file_name);
 
-    v = getfield(structure_function, type_pair);
+    v = eval(strcat("structure_function_", type_pair));
     for i = 0:nx(1)-1
         for j = 0:nx(2)-1
             for k = 0:floor(double(nx(3))/2)

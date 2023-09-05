@@ -18,3 +18,5 @@
 44. Check if CUDA cub works in CUDA 12.0 and higher
 46. Replace "new" keyword to a safe memory allocation
 47. Add tests for example files
+48. Check if CUDA can be installed using Conda
+50. 
