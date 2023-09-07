@@ -643,7 +643,8 @@ class LFTS:
             error_level = np.max(error_level_array)
 
             # Scaling h_deriv
-            h_deriv *= self.dt_scaling[self.exchange_fields_imag_idx]
+            for count, i in enumerate(self.exchange_fields_imag_idx):
+                h_deriv[count] *= self.dt_scaling[i]
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
