@@ -337,6 +337,84 @@ class LFTS:
         self.matrix_a_inv = matrix_a_inv
         self.free_energy_coef = free_energy_coef
 
+    def compute_concentrations(self, w_exchange):
+        
+        S = len(self.monomer_types)
+        elapsed_time = {}
+
+        # Convert to species chemical potential fields
+        w = np.matmul(self.matrix_a, w_exchange)
+
+        # Make a dictionary for input fields 
+        w_input = {}
+        for i in range(S):
+            w_input[self.monomer_types[i]] = w[i]
+        for random_polymer_name, random_fraction in self.random_fraction.items():
+            w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+            for monomer_type, fraction in random_fraction.items():
+                w_input[random_polymer_name] += w_input[monomer_type]*fraction
+
+        # For the given fields, compute the polymer statistics
+        time_p_start = time.time()
+        self.pseudo.compute_statistics(w_input)
+        elapsed_time["pseudo"] = time.time() - time_p_start
+
+        # Compute total concentration for each monomer type
+        phi = {}
+        for monomer_type in self.monomer_types:
+            phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
+
+        # Add random copolymer concentration to each monomer type
+        for random_polymer_name, random_fraction in self.random_fraction.items():
+            phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
+            for monomer_type, fraction in random_fraction.items():
+                phi[monomer_type] += phi[random_polymer_name]*fraction
+        
+        return phi, elapsed_time
+
+    # Compute functional derivatives of Hamiltonian w.r.t. real exchange fields 
+    def compute_func_deriv_real(self, w_exchange, phi):
+        
+        S = len(self.monomer_types)
+        R = self.R
+        elapsed_time = {}
+
+        time_e_start = time.time()        
+        h_deriv = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
+        for count, i in enumerate(self.exchange_fields_real_idx):
+            h_deriv[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
+        for count, i in enumerate(self.exchange_fields_real_idx):
+            for j in range(S-1):
+                h_deriv[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
+                h_deriv[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
+        elapsed_time["energy"] = time.time() - time_e_start
+        
+        return  h_deriv, elapsed_time
+
+    # Compute functional derivatives of Hamiltonian w.r.t. imaginary exchange fields 
+    def compute_func_deriv_imag(self, w_exchange, phi):
+
+        S = len(self.monomer_types)
+        I = self.I
+        elapsed_time = {}
+
+        time_e_start = time.time()
+        h_deriv = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
+        for count, i in enumerate(self.exchange_fields_imag_idx):
+            if i != S-1:
+                h_deriv[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
+        for count, i in enumerate(self.exchange_fields_imag_idx):
+            if i != S-1:
+                for j in range(S-1):
+                    h_deriv[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
+                    h_deriv[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
+        for i in range(S):
+            h_deriv[I-1] += phi[self.monomer_types[i]]
+        h_deriv[I-1] -= 1.0
+        elapsed_time["energy"] = time.time() - time_e_start
+        
+        return  h_deriv, elapsed_time
+
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
         
         # Make dictionary for w fields
@@ -457,14 +535,8 @@ class LFTS:
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
             
-            # Compute functional derivative of Hamiltonian
-            w_lambda = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
-            for count, i in enumerate(self.exchange_fields_real_idx):
-                w_lambda[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
-            for count, i in enumerate(self.exchange_fields_real_idx):
-                for j in range(S-1):
-                    w_lambda[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
-                    w_lambda[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
+            # Compute functional derivatives of Hamiltonian w.r.t. real exchange fields 
+            w_lambda, _ = self.compute_func_deriv_real(w_exchange, phi)
 
             # Update w_exchange using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
@@ -597,54 +669,16 @@ class LFTS:
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             
-            # Convert to species chemical potential fields
-            w = np.matmul(self.matrix_a, w_exchange)
-            
-            # Make a dictionary for input fields 
-            w_input = {}
-            for i in range(S):
-                w_input[self.monomer_types[i]] = w[i]
-            for random_polymer_name, random_fraction in self.random_fraction.items():
-                w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
-                for monomer_type, fraction in random_fraction.items():
-                    w_input[random_polymer_name] += w_input[monomer_type]*fraction
+            # Compute total concentrations with noised w_exchange
+            phi, _ = self.compute_concentrations(w_exchange)
 
-            # For the given fields, compute the polymer statistics
-            self.pseudo.compute_statistics(w_input)
-
-            # Compute total concentration for each monomer type
-            phi = {}
-            for monomer_type in self.monomer_types:
-                phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
-
-            # Add random copolymer concentration to each monomer type
-            for random_polymer_name, random_fraction in self.random_fraction.items():
-                phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
-                for monomer_type, fraction in random_fraction.items():
-                    phi[monomer_type] += phi[random_polymer_name]*fraction
-
-            # Calculate incompressibility and saddle point error
-            h_deriv = np.zeros([I, self.cb.get_n_grid()], dtype=np.float64)
-            for count, i in enumerate(self.exchange_fields_imag_idx):
-                if i != S-1:
-                    h_deriv[count] -= 1.0/self.exchange_eigenvalues[i]*w_exchange[i]
-            for count, i in enumerate(self.exchange_fields_imag_idx):
-                if i != S-1:
-                    for j in range(S-1):
-                        h_deriv[count] += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]
-                        h_deriv[count] += self.matrix_o[j,i]*phi[self.monomer_types[j]]
-            for i in range(S):
-                h_deriv[I-1] += phi[self.monomer_types[i]]
-            h_deriv[I-1] -= 1.0
+            # Compute functional derivatives of Hamiltonian w.r.t. real exchange fields 
+            h_deriv, _ = self.compute_func_deriv_imag(w_exchange, phi)
 
             # Compute total error
             old_error_level = error_level
             error_level_array = np.std(h_deriv, axis=1)
             error_level = np.max(error_level_array)
-
-            # Scaling h_deriv
-            for count, i in enumerate(self.exchange_fields_imag_idx):
-                h_deriv[count] *= self.dt_scaling[i]
 
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
@@ -677,7 +711,11 @@ class LFTS:
             # Conditions to end the iteration
             if error_level < self.saddle["tolerance"]:
                 break
-                
+
+            # Scaling h_deriv
+            for count, i in enumerate(self.exchange_fields_imag_idx):
+                h_deriv[count] *= self.dt_scaling[i]
+
             # Calculate new fields using simple and Anderson mixing
             w_exchange[self.exchange_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_exchange[self.exchange_fields_imag_idx], h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
         
