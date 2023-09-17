@@ -1,3 +1,5 @@
+% The original version is written by T. M. Beardsley and M. W. Matsen.
+
 clear all;
 
 load("fields_000200.mat");
