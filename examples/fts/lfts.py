@@ -361,8 +361,10 @@ class LFTS:
 
         # Compute total concentration for each monomer type
         phi = {}
+        time_phi_start = time.time()
         for monomer_type in self.monomer_types:
             phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
+        elapsed_time["phi"] = time.time() - time_phi_start
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
@@ -524,6 +526,10 @@ class LFTS:
         if start_langevin_step == None :
             start_langevin_step = 1
 
+        # The number of times that 'find_saddle_point' has failed to find a saddle point
+        saddle_fail_count = 0
+        successive_fail_count = 0
+
         # Init timers
         total_saddle_iter = 0
         total_error_level = 0
@@ -534,7 +540,11 @@ class LFTS:
         print("---------- Run  ----------")
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
-            
+
+            # Copy data for restoring
+            w_exchange_copy = w_exchange.copy()
+            phi_copy = phi.copy()
+
             # Compute functional derivatives of Hamiltonian w.r.t. real exchange fields 
             w_lambda, _ = self.compute_func_deriv_real(w_exchange, phi)
 
@@ -551,7 +561,25 @@ class LFTS:
             phi, saddle_iter, error_level = self.find_saddle_point(w_exchange=w_exchange)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
-            
+
+            # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
+            if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:
+
+                if successive_fail_count < 5:                
+                    print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
+
+                    # Restore w_exchange and phi
+                    w_exchange = w_exchange_copy
+                    phi = phi_copy
+                    
+                    successive_fail_count += 1
+                    saddle_fail_count += 1
+                    continue
+                else:
+                    print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (successive_fail_count))
+            else:
+                successive_fail_count = 0
+
             # # # Update exchange mapping for given chiN set
             # # self.initialize_exchange_mapping()
             # # Compute dF/dchiN
@@ -624,6 +652,9 @@ class LFTS:
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
                     w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
+
+        print( "The number of times that tolerance of saddle point was not met and Langevin random noise was regenerated: %d times" % 
+            (saddle_fail_count))
 
         # Estimate execution time
         time_duration = time.time() - time_start
