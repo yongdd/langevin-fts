@@ -18,7 +18,7 @@ class SCFT:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
-        # Flory-Huggins parameters, chi*N
+        # Flory-Huggins parameters, χN
         self.chi_n = {}
         for pair_chi_n in params["chi_n"]:
             assert(pair_chi_n[0] in params["segment_lengths"]), \
@@ -28,7 +28,7 @@ class SCFT:
             assert(len(set(pair_chi_n[0:2])) == 2), \
                 "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
             assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
-                f"There are duplicated chi N ({pair_chi_n[0:2]}) parameters."
+                f"There are duplicated χN ({pair_chi_n[0:2]}) parameters."
             self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
 
         for monomer_pair in itertools.combinations(self.monomer_types, 2):
