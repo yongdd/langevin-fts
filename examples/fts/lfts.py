@@ -474,9 +474,9 @@ class LFTS:
         for key in self.chi_n:
             dH[key] = self.h_const_deriv_chin[key]
             for i in range(S-1):
-                dH[key] += self.h_coef_mu2_deriv_chin[i]*np.mean(w_exchange[i]**2)
+                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_exchange[i]**2)
                 for j in range(S-1):
-                    dH[key] += self.h_coef_mu1_deriv_chin[i,j]*np.mean(w_exchange[i])                            
+                    dH[key] += self.h_coef_mu1_deriv_chin[key][i,j]*np.mean(w_exchange[i])                            
         return dH
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
@@ -486,11 +486,11 @@ class LFTS:
         for i, name in enumerate(self.monomer_types):
             w_species[name] = w[i]
 
-        # Make dictionary for chi_n
+        # Make a dictionary for chi_n
         chi_n_mat = {}
-        for pair_chi_n in self.params["chi_n"]:
-            sorted_name_pair = sorted(pair_chi_n[0:2])
-            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+        for key in self.chi_n:
+            sorted_monomer_types = sorted(list(key))
+            chi_n_mat[sorted_monomer_types[0] + "," + sorted_monomer_types[1]] = self.chi_n[key]
 
         # Make dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
@@ -567,12 +567,16 @@ class LFTS:
         # Find saddle point 
         phi, _, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
+        # Dictionary for ensemble average of H and dH/dχN
+        H_average = 0.0
+        dH_average = {}
+        for key in self.chi_n:
+            dH_average[key] = 0.0
+
         # Arrays for structure function
         sf_average = {} # <u(k) phi(-k)>
-        for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-            sorted_pair = sorted(monomer_id_pair)
-            type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+        for key in self.chi_n:
+            sf_average[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
         # Create an empty array for field update algorithm
         if type(normal_noise_prev) == type(None) :
@@ -615,7 +619,7 @@ class LFTS:
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
             # Find saddle point of the pressure field
-            phi, _, saddle_iter, error_level = self.find_saddle_point(w_exchange=w_exchange)
+            phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_exchange=w_exchange)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
 
@@ -634,12 +638,30 @@ class LFTS:
                     continue
                 else:
                     print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (successive_fail_count))
+                    break
             else:
                 successive_fail_count = 0
 
-            # # # Update exchange mapping for given chiN set
-            # # self.initialize_exchange_mapping()
-            # # Compute dF/dchiN
+            # Compute H and dH/dχN
+            if langevin_step % self.recording["sf_computing_period"] == 0:
+                H_average += hamiltonian
+                dH = self.compute_h_deriv_chin(w_exchange)
+                for key in self.chi_n:
+                    dH_average[key] += dH[key]
+
+            # Save H and dH/dχN
+            if langevin_step % self.recording["sf_recording_period"] == 0:
+                H_average *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]
+                mdic = {"H": H_average}
+                for key in self.chi_n:
+                    dH_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]
+                    sorted_monomer_types = sorted(list(key))
+                    mdic["dH_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = dH_average[key]
+                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
+                # Reset dictionary
+                H_average = 0.0
+                for key in self.chi_n:
+                    dH_average[key] = 0.0
                     
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
@@ -652,50 +674,31 @@ class LFTS:
                     mu_fourier[key] = np.zeros_like(np.fft.rfftn(np.reshape(w_exchange[0], self.cb.get_nx())), np.complex128)
                     for k in range(S-1) :
                         mu_fourier[key] += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
-                # Accumulate S_ij(K) 
-                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-                    sorted_pair = sorted(monomer_id_pair)
-                    i = sorted_pair[0]
-                    j = sorted_pair[1]
-                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-
-                    # Assuming that <u(k)>*<phi(-k)> is zero in the disordered phase
-                    sf_average[type_pair] += mu_fourier[self.monomer_types[i]]* np.conj( phi_fourier[self.monomer_types[j]])
+                # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
+                for key in self.chi_n:
+                    sorted_monomer_types = sorted(list(key))
+                    sf_average[key] += mu_fourier[sorted_monomer_types[0]]* np.conj( phi_fourier[sorted_monomer_types[1]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
-                
                 # Make a dictionary for chi_n
                 chi_n_mat = {}
-                for pair_chi_n in self.params["chi_n"]:
-                    sorted_name_pair = sorted(pair_chi_n[0:2])
-                    chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
-
+                for key in self.chi_n:
+                    sorted_monomer_types = sorted(list(key))
+                    chi_n_mat[sorted_monomer_types[0] + "," + sorted_monomer_types[1]] = self.chi_n[key]
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
                     "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
                     "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
-                
                 # Add structure functions to the dictionary
-                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-                    sorted_pair = sorted(monomer_id_pair)
-                    i = sorted_pair[0]
-                    j = sorted_pair[1]
-                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average[type_pair] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
+                for key in self.chi_n:
+                    sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    mdic["structure_function_" + self.monomer_types[i] + "_" + self.monomer_types[j]] = sf_average[type_pair]
+                    sorted_monomer_types = sorted(list(key))
+                    mdic["structure_function_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = sf_average[key]
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, do_compression=True)
-                
-                # Reset Arrays
-                for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-                    sorted_pair = sorted(monomer_id_pair)
-                    i = sorted_pair[0]
-                    j = sorted_pair[1]
-                    type_pair = self.monomer_types[i] + "," + self.monomer_types[j]
-                    sf_average[type_pair][:,:,:] = 0.0
-                
-                # for key in self.chi_n:
-                #     dF_dchiN[key][:] = 0.0
+                # Reset arrays
+                for key in self.chi_n:
+                    sf_average[key][:,:,:] = 0.0
 
             # Save simulation data
             if (langevin_step) % self.recording["recording_period"] == 0:
