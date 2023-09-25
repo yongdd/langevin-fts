@@ -567,11 +567,11 @@ class LFTS:
         # Find saddle point 
         phi, _, _, _, = self.find_saddle_point(w_exchange=w_exchange)
 
-        # Dictionary for ensemble average of H and dH/dχN
-        H_average = 0.0
-        dH_average = {}
+        # Dictionary to record history of H and dH/dχN
+        H_history = []
+        dH_history = {}
         for key in self.chi_n:
-            dH_average[key] = 0.0
+            dH_history[key] = []
 
         # Arrays for structure function
         sf_average = {} # <u(k) phi(-k)>
@@ -644,24 +644,24 @@ class LFTS:
 
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:
-                H_average += hamiltonian
+                H_history.append(hamiltonian)
                 dH = self.compute_h_deriv_chin(w_exchange)
                 for key in self.chi_n:
-                    dH_average[key] += dH[key]
+                    dH_history[key].append(dH[key])
 
             # Save H and dH/dχN
             if langevin_step % self.recording["sf_recording_period"] == 0:
-                H_average *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]
-                mdic = {"H": H_average}
+                H_history = np.array(H_history)
+                mdic = {"H_history": H_history}
                 for key in self.chi_n:
-                    dH_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]
+                    dH_history[key] = np.array(dH_history[key])
                     sorted_monomer_types = sorted(list(key))
-                    mdic["dH_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = dH_average[key]
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
+                    mdic["dH_history_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = dH_history[key]
+                savemat(os.path.join(self.recording["dir"], prefix + "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 # Reset dictionary
-                H_average = 0.0
+                H_history = []
                 for key in self.chi_n:
-                    dH_average[key] = 0.0
+                    dH_history[key] = []
                     
             # Calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
