@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import pathlib
 import numpy as np
 import itertools
@@ -45,20 +46,26 @@ class LFTS:
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
-        for pair_chi_n in params["chi_n"]:
-            assert(pair_chi_n[0] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[0]}' is not in 'segment_lengths'."
-            assert(pair_chi_n[1] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
-            assert(len(set(pair_chi_n[0:2])) == 2), \
-                "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
-            assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
-                f"There are duplicated χN ({pair_chi_n[0:2]}) parameters."
-            self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
+        for monomer_pair_str, chin_value in params["chi_n"].items():
+            monomer_pair = re.split(',| |_|/', monomer_pair_str)
+            assert(monomer_pair[0] in params["segment_lengths"]), \
+                f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'."
+            assert(monomer_pair[1] in params["segment_lengths"]), \
+                f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'."
+            assert(monomer_pair[0] != monomer_pair[1]), \
+                "Do not add self interaction parameter, " + monomer_pair_str + "."
+            monomer_pair.sort()
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
+            assert(not sorted_monomer_pair in self.chi_n), \
+                f"There are duplicated χN ({sorted_monomer_pair}) parameters."
+            self.chi_n[sorted_monomer_pair] = chin_value
 
         for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            if not frozenset(list(monomer_pair)) in self.chi_n:
-                self.chi_n[frozenset(list(monomer_pair))] = 0.0
+            monomer_pair = list(monomer_pair)
+            monomer_pair.sort()
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
+            if not sorted_monomer_pair in self.chi_n:
+                self.chi_n[sorted_monomer_pair] = 0.0
 
         # Exchange mapping matrix.
         # See paper *J. Chem. Phys.* **2014**, 141, 174103
@@ -78,7 +85,7 @@ class LFTS:
         #     self.h_const_deriv_chin,
         #     self.h_coef_mu1_deriv_chin,
         #     self.h_coef_mu2_deriv_chin,
-        self.initialize_exchange_mapping()
+        self.initialize_exchange_mapping(self.chi_n)
         
         # Indices whose exchange fields are real
         self.exchange_fields_real_idx = []
@@ -234,9 +241,8 @@ class LFTS:
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
 
         print("χN: ")
-        for pair in self.chi_n:
-            sorted_name_pair = sorted(list(pair)[0:2])
-            print("\t%s, %s: %f" % (sorted_name_pair[0], sorted_name_pair[1], self.chi_n[pair]))
+        for key in self.chi_n:
+            print("\t%s: %f" % (key, self.chi_n[key]))
 
         print("Eigenvalues:\n\t", self.exchange_eigenvalues)
         print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
@@ -291,7 +297,9 @@ class LFTS:
         matrix_chin = np.zeros((S-1,S-1))
         for i in range(S):
             for j in range(i+1,S):
-                key = frozenset([self.monomer_types[i], self.monomer_types[j]])
+                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
+                monomer_pair.sort()
+                key = monomer_pair[0] + "," + monomer_pair[1]
                 if key in chi_n:
                     matrix_chi[i,j] = chi_n[key]
                     matrix_chi[j,i] = chi_n[key]
@@ -308,7 +316,9 @@ class LFTS:
         # Compute vector X_iS
         vector_s = np.zeros(S-1)
         for i in range(S-1):
-            key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
+            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
+            monomer_pair.sort()
+            key = monomer_pair[0] + "," + monomer_pair[1]            
             vector_s[i] = chi_n[key]
 
         # Compute reference part of Hamiltonian
@@ -329,14 +339,14 @@ class LFTS:
 
         return h_const, h_coef_mu1, h_coef_mu2
 
-    def initialize_exchange_mapping(self,):
+    def initialize_exchange_mapping(self, chi_n):
         S = len(self.monomer_types)
 
         # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o = self.compute_eigen_system(self.chi_n)
+        eigenvalues, matrix_o = self.compute_eigen_system(chi_n)
 
         # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(self.chi_n, eigenvalues, matrix_o)
+        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, matrix_o)
 
         # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
         matrix_a = np.zeros((S,S))
@@ -362,10 +372,10 @@ class LFTS:
         self.h_const_deriv_chin = {}
         self.h_coef_mu1_deriv_chin = {}
         self.h_coef_mu2_deriv_chin = {}
-        for key in self.chi_n:
+        for key in chi_n:
             
-            chi_n_p = self.chi_n.copy()
-            chi_n_n = self.chi_n.copy()
+            chi_n_p = chi_n.copy()
+            chi_n_n = chi_n.copy()
             
             chi_n_p[key] += epsilon
             chi_n_n[key] -= epsilon
@@ -489,8 +499,7 @@ class LFTS:
         # Make a dictionary for chi_n
         chi_n_mat = {}
         for key in self.chi_n:
-            sorted_monomer_types = sorted(list(key))
-            chi_n_mat[sorted_monomer_types[0] + "," + sorted_monomer_types[1]] = self.chi_n[key]
+            chi_n_mat[key] = self.chi_n[key]
 
         # Make dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
@@ -657,7 +666,7 @@ class LFTS:
                     dH_history[key] = np.array(dH_history[key])
                     sorted_monomer_types = sorted(list(key))
                     mdic["dH_history_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = dH_history[key]
-                savemat(os.path.join(self.recording["dir"], prefix + "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
+                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 # Reset dictionary
                 H_history = []
                 for key in self.chi_n:
@@ -676,25 +685,25 @@ class LFTS:
                         mu_fourier[key] += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
                 # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
                 for key in self.chi_n:
-                    sorted_monomer_types = sorted(list(key))
-                    sf_average[key] += mu_fourier[sorted_monomer_types[0]]* np.conj( phi_fourier[sorted_monomer_types[1]])
+                    monomer_pair = sorted(key.split(","))
+                    sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
                 # Make a dictionary for chi_n
                 chi_n_mat = {}
                 for key in self.chi_n:
-                    sorted_monomer_types = sorted(list(key))
-                    chi_n_mat[sorted_monomer_types[0] + "," + sorted_monomer_types[1]] = self.chi_n[key]
+                    monomer_pair = sorted(key.split(","))
+                    chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
                 mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-                    "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                    "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
+                        "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
                 # Add structure functions to the dictionary
                 for key in self.chi_n:
                     sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    sorted_monomer_types = sorted(list(key))
-                    mdic["structure_function_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = sf_average[key]
+                    monomer_pair = sorted(key.split(","))
+                    mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 # Reset arrays
                 for key in self.chi_n:
