@@ -55,7 +55,7 @@ class LFTS:
             assert(monomer_pair[0] != monomer_pair[1]), \
                 "Do not add self interaction parameter, " + monomer_pair_str + "."
             monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
             assert(not sorted_monomer_pair in self.chi_n), \
                 f"There are duplicated χN ({sorted_monomer_pair}) parameters."
             self.chi_n[sorted_monomer_pair] = chin_value
