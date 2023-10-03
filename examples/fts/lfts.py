@@ -218,7 +218,7 @@ class LFTS:
             self.dt_scaling[i] = np.abs(self.exchange_eigenvalues[i])/np.max(np.abs(self.exchange_eigenvalues))
         
         # Set random generator
-        if random_seed == None:         
+        if random_seed is None:         
             self.random_bg = np.random.PCG64()  # Set random bit generator
         else:
             self.random_bg = np.random.PCG64(random_seed)
@@ -588,12 +588,12 @@ class LFTS:
             sf_average[key] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
         # Create an empty array for field update algorithm
-        if type(normal_noise_prev) == type(None) :
+        if normal_noise_prev is None :
             normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
         else:
             normal_noise_prev = normal_noise_prev
 
-        if start_langevin_step == None :
+        if start_langevin_step is None :
             start_langevin_step = 1
 
         # The number of times that 'find_saddle_point' has failed to find a saddle point
