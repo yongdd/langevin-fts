@@ -666,8 +666,8 @@ class LFTS:
                 mdic = {"H_history": H_history}
                 for key in self.chi_n:
                     dH_history[key] = np.array(dH_history[key])
-                    sorted_monomer_types = sorted(list(key))
-                    mdic["dH_history_" + sorted_monomer_types[0] + "_" + sorted_monomer_types[1]] = dH_history[key]
+                    monomer_pair = sorted(key.split(","))
+                    mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_history[key]
                 savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
                 # Reset dictionary
                 H_history = []
