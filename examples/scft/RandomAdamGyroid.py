@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import numpy as np
 from scipy.io import savemat
@@ -10,25 +11,25 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.36        # A-fraction of major BCP chain, f
+f = 0.4        # A-fraction of major BCP chain, f
 
 params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[3.3,3.3,3.3],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[3.654,3.654,3.654],   # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "box_is_altering":False,    # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"discrete",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "ds":1/50,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": [["A", "B", 20]],   # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": [["A", "B", 15]],   # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -37,34 +38,30 @@ params = {
             {"type":"B", "length":1-f}, # B-block
         ],},],
 
-    "am":{
-        "max_hist":20,          # Maximum number of history
-        "start_error":1e-2,     # When switch to AM from simple mixing
-        "mix_min":0.1,          # Minimum mixing rate of simple mixing
-        "mix_init":0.1,         # Initial mixing rate of simple mixing
-    },
+    "optimizer":"adam", # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
 
-    "max_iter":2000,     # The maximum relaxation iterations
+    # "am":{
+    #     "max_hist":20,          # Maximum number of history
+    #     "start_error":1e-3,     # When switch to AM from simple mixing
+    #     "mix_min":0.01,          # Minimum mixing rate of simple mixing
+    #     "mix_init":0.01,         # Initial mixing rate of simple mixing
+    # },
+
+    "max_iter":10000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
+# # Set random seed
+# # If you want to obtain different results for each execution, set random_seed=None
+# np.random.seed(random_seed)
+
 # Set initial fields
-w_A = np.zeros(list(params["nx"]), dtype=np.float64)
-w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to gyroid phase.")
-# [Ref: https://pubs.acs.org/doi/pdf/10.1021/ma951138i]
-for i in range(0,params["nx"][0]):
-    xx = (i+1)*2*np.pi/params["nx"][0]
-    for j in range(0,params["nx"][1]):
-        yy = (j+1)*2*np.pi/params["nx"][1]
-        zz = np.arange(1,params["nx"][2]+1)*2*np.pi/params["nx"][2]
-        
-        c1 = np.sqrt(8.0/3.0)*(np.cos(xx)*np.sin(yy)*np.sin(2.0*zz) +
-            np.cos(yy)*np.sin(zz)*np.sin(2.0*xx)+np.cos(zz)*np.sin(xx)*np.sin(2.0*yy))
-        c2 = np.sqrt(4.0/3.0)*(np.cos(2.0*xx)*np.cos(2.0*yy)+
-            np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
-        w_A[i,j,:] = -0.3164*c1 +0.1074*c2
-        w_B[i,j,:] =  0.3164*c1 -0.1074*c2
+print("w_A and w_B are initialized to random Gaussian.")
+w_A = np.random.normal(0.0, 1.0, params["nx"])
+w_B = np.random.normal(0.0, 1.0, params["nx"])
+
+# w_A = np.random.uniform(-1.0, 1.0, params["nx"])
+# w_B = np.random.uniform(-1.0, 1.0, params["nx"])
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
@@ -80,7 +77,11 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-calculation.save_results("fields.mat")
+if len(sys.argv) >= 2:
+    file_name = "fields_%05d.mat" % (int(sys.argv[1]))
+else:
+    file_name = "fields.mat"
+calculation.save_results(file_name)
 
 # Recording first a few iteration results for debugging and refactoring
     #    1   -2.554E-15  [ 1.0112006E+00  ]    -0.005556176   1.4462576E+00 

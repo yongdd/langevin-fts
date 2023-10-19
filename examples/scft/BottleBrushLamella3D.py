@@ -10,7 +10,6 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
 f = 0.5          # A-fraction of major BCP chain, f
-eps = 1.0        # a_A/a_B, conformational asymmetry
 n_sc = 50        # the number of side chains
 sc_alpha = 0.3   # N_sc/ N_bb
 chi_n = 36       # Interaction parameter, Flory-Huggins params * N_total
@@ -72,8 +71,8 @@ params = {
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
-        "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+        "A":1.0, 
+        "B":1.0, },
 
     "chi_n": [["A", "B", chi_n/total_alpha]],   # Interaction parameter, Flory-Huggins params * N_Ref
 

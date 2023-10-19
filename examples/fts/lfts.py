@@ -682,7 +682,7 @@ class LFTS:
                 for i in range(S):
                     key = self.monomer_types[i]
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_n_grid()
-                    mu_fourier[key] = np.zeros_like(np.fft.rfftn(np.reshape(w_exchange[0], self.cb.get_nx())), np.complex128)
+                    mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(S-1) :
                         mu_fourier[key] += np.fft.rfftn(np.reshape(w_exchange[k], self.cb.get_nx()))*self.matrix_a_inv[k,i]/self.exchange_eigenvalues[k]/self.cb.get_n_grid()
                 # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
