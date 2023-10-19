@@ -10,7 +10,6 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
 f = 0.5         # A-fraction of major BCP chain, f
-eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
@@ -25,8 +24,8 @@ params = {
     "ds":1/200,                   # Contour step interval, which is equal to 1/N_Ref.
     
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
-        "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+        "A":1.0, 
+        "B":1.0, },
 
     "chi_n": [["A", "B", 9.5]],   # Interaction parameter, Flory-Huggins params * N_Ref
 
