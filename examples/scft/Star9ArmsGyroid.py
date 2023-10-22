@@ -55,11 +55,12 @@ params = {
     "max_iter":2000,      # The maximum relaxation iterations
     "tolerance":1e-8,     # Terminate iteration if the self-consistency error is less than tolerance
 
-    "am":{
-        "max_hist":60,            # Maximum number of history
-        "start_error":1e-2,       # When switch to AM from simple mixing
-        "mix_min":0.02,           # Minimum mixing rate of simple mixing
-        "mix_init":0.02,          # Initial mixing rate of simple mixing
+    "optimizer":{
+        "name":"am",            # Anderson Mixing
+        "max_hist":60,          # Maximum number of history
+        "start_error":1e-2,     # When switch to AM from simple mixing
+        "mix_min":0.02,         # Minimum mixing rate of simple mixing
+        "mix_init":0.02,        # Initial mixing rate of simple mixing
     },
 }
 

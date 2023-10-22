@@ -37,7 +37,8 @@ params = {
             {"type":"A", "length":f, },     # A-block
         ],},],
 
-    "am":{
+    "optimizer":{
+        "name":"am",
         "max_hist":20,           # Maximum number of history
         "start_error":1e-2,      # When switch to AM from simple mixing
         "mix_min":0.1,          # Minimum mixing rate of simple mixing

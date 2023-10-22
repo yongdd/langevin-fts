@@ -44,7 +44,8 @@ params = {
             {"type":"B", "length":(1.0-f2)/2, }, # B-block
         ],},],
 
-    "am":{
+    "optimizer":{
+        "name":"am",            # Anderson Mixing
         "max_hist":20,          # Maximum number of history
         "start_error":1e-2,     # When switch to AM from simple mixing
         "mix_min":0.1,          # Minimum mixing rate of simple mixing
