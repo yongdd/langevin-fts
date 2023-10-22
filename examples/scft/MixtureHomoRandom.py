@@ -41,7 +41,8 @@ params = {
             {"type":"R", "fraction":{"A":RCP_A_frac, "B":1-RCP_A_frac}, "length":0.3, },
         ],}],
 
-    "am":{
+    "optimizer":{
+        "name":"am",            # Anderson Mixing
         "max_hist":20,          # Maximum number of history
         "start_error":1e-2,     # When switch to AM from simple mixing
         "mix_min":0.1,          # Minimum mixing rate of simple mixing

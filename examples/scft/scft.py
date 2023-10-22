@@ -10,6 +10,57 @@ from langevinfts import *
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
+# For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
+class Adam:
+    def __init__(self, M,
+                    S,
+                    lr = 1e-2,       # learning rate, γ
+                    b1 = 0.9,        # β1
+                    b2 = 0.999,      # β2
+                    eps = 1e-8,      # epsilon, small number to prevent dividing by zero
+                    gamma = 1.0,     # learning rate is reducing during iteration according to lr*γ^(t-1), where t is iteration step
+                    ):
+        self.M = M
+        self.S = S
+        self.lr = lr
+        self.b1 = b1
+        self.b2 = b2
+        self.eps = eps
+        self.gamma = gamma
+        self.count = 1
+        
+        self.m = np.zeros([S, M], dtype=np.float64) # first moment
+        self.v = np.zeros([S, M], dtype=np.float64) # second moment
+        
+    def reset_count(self,):
+        self.count = 1
+        self.m[:,:] = 0.0
+        self.v[:,:] = 0.0        
+        
+    def calculate_new_fields(self, w_current, w_diff, old_error_level, error_level):
+
+        lr = self.lr*self.gamma**(self.count-1)
+        
+        w_current = np.reshape(w_current, [self.S, self.M])
+        w_diff = np.reshape(w_diff, [self.S, self.M])
+        w_new = np.zeros_like(w_current)
+        w_update = np.zeros_like(w_current)
+        
+        m = self.m
+        v = self.v
+
+        for i in range(self.S):
+            m[i] = self.b1*m[i] + (1.0-self.b1)*w_diff[i]
+            v[i] = self.b2*v[i] + (1.0-self.b2)*w_diff[i]**2
+            m_hat = m[i]/(1.0-self.b1**self.count)
+            v_hat = v[i]/(1.0-self.b2**self.count)
+            w_update[i] = lr*m_hat/(np.sqrt(v_hat) + self.eps)
+            w_update[i] -= np.mean(w_update[i])
+            w_new[i] = w_current[i] + w_update[i]
+        
+        self.count += 1
+        return w_new
+
 class SCFT:
     def __init__(self, params):
 
@@ -200,36 +251,34 @@ class SCFT:
         pseudo = factory.create_pseudo(cb, mixture)
 
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
-        # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
-        if "optimizer" in params:
-            if params["optimizer"] == "am":
-                self.optimizer = "AM"
-            elif params["optimizer"] == "adam":
-                self.optimizer = "ADAM"
-            else:
-                print("Invalid optimizer name: ", params["optimizer"], '. Choose among "am" and "adam".')
-        else:
-            self.optimizer = "AM"
-        
-        if self.optimizer == "AM":
-            # (C++ class) Fields Relaxation using Anderson Mixing
+        # (C++ class) Anderson Mixing method for finding saddle point
+        if params["optimizer"]["name"] == "am":
             if params["box_is_altering"] : 
                 am_n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
             else :
                 am_n_var = len(self.monomer_types)*np.prod(params["nx"])
-            if "am" in params :
-                am = factory.create_anderson_mixing(am_n_var,
-                    params["am"]["max_hist"],     # maximum number of history
-                    params["am"]["start_error"],  # when switch to AM from simple mixing
-                    params["am"]["mix_min"],      # minimum mixing rate of simple mixing
-                    params["am"]["mix_init"])     # initial mixing rate of simple mixing
-            else : 
-                am = factory.create_anderson_mixing(am_n_var, 20, 1e-2, 0.01,  0.01)
-            self.am = am
-        elif self.optimizer == "ADAM":
+
+            self.field_optimizer = factory.create_anderson_mixing(am_n_var,
+            params["optimizer"]["max_hist"],     # maximum number of history
+            params["optimizer"]["start_error"],  # when switch to AM from simple mixing
+            params["optimizer"]["mix_min"],      # minimum mixing rate of simple mixing
+            params["optimizer"]["mix_init"])     # initial mixing rate of simple mixing
+
+        # (Python class) ADAM optimizer for finding saddle point
+        elif params["optimizer"]["name"] == "adam":
             if params["box_is_altering"]:
                 print("Altering box is not supported in ADAM")
                 sys.exit()
+
+            self.field_optimizer = Adam(
+                    M = np.prod(params["nx"]),
+                    S = S,
+                    lr  = params["optimizer"]["lr"],     
+                    b1  = params["optimizer"]["b1"],
+                    b2  = params["optimizer"]["b2"],
+                    eps = params["optimizer"]["eps"])
+        else:
+            print("Invalid optimizer name: ", params["optimizer"], '. Choose among "am" and "adam".')
 
        # The maximum iteration steps
         if "max_iter" in params :
@@ -335,16 +384,8 @@ class SCFT:
         energy_total = 1.0e20
         error_level = 1.0e20
 
-        if self.optimizer == "AM":
-            # Reset Anderson mixing module
-            self.am.reset_count()
-        elif self.optimizer == "ADAM":
-            lr = 1e-2       # learning rate, γ
-            eps = 1e-8      # epsilon
-            b1 = 0.9        # β1
-            b2 = 0.999      # β2
-            m = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # first moment
-            v = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # second moment
+        # Reset Optimizer
+        self.field_optimizer.reset_count()
         
         #------------------ run ----------------------
         print("---------- Run ----------")
@@ -459,7 +500,7 @@ class SCFT:
                 dlx = -stress_array
                 am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_n_grid()), self.cb.get_lx()))
                 am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), dlx))
-                am_new = self.am.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
+                am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
                 w = np.reshape(am_new[0:S*self.cb.get_n_grid()], (S, self.cb.get_n_grid()))
@@ -475,23 +516,10 @@ class SCFT:
                 # Update bond parameters using new lx
                 self.pseudo.update_bond_function()
             else:
-                if self.optimizer == "AM":
-                    w = self.am.calculate_new_fields(
-                    np.reshape(w,      S*self.cb.get_n_grid()),
-                    np.reshape(w_diff, S*self.cb.get_n_grid()), old_error_level, error_level)
-                    w = np.reshape(w, (S, self.cb.get_n_grid()))
-                elif self.optimizer == "ADAM":
-                    
-                    # if scft_iter % 20 == 0:
-                    #     lr *= 0.99                    
-                    for i in range(S):
-                        m[i] = b1*m[i] + (1.0-b1)*w_diff[i]
-                        v[i] = b2*v[i] + (1.0-b2)*w_diff[i]**2
-                        m_hat = m[i]/(1.0-b1**scft_iter)
-                        v_hat = v[i]/(1.0-b2**scft_iter)
-                        w[i] += lr * m_hat/(np.sqrt(v_hat) + eps)
-                        
-                        w[i] -= np.mean(w[i])
+                w = self.field_optimizer.calculate_new_fields(
+                np.reshape(w,      S*self.cb.get_n_grid()),
+                np.reshape(w_diff, S*self.cb.get_n_grid()), old_error_level, error_level)
+                w = np.reshape(w, (S, self.cb.get_n_grid()))
                         
         # Store phi and w
         self.phi = phi

@@ -38,14 +38,21 @@ params = {
             {"type":"B", "length":1-f}, # B-block
         ],},],
 
-    "optimizer":"adam", # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
+    # Select an optimizer among "am"(Anderson Mixing) and 'adam'(ADAM) for finding saddle point
 
-    # "am":{
+    "optimizer":{
+        "name":"adam",     # ADAM optimizer
+        "lr":1e-2,         # learning rate, 
+        "b1":0.9,          # β1
+        "b2":0.999,        # β2
+        "eps":1e-8,        # epsilon, small number to prevent dividing by zero
+        
+    #     "name":"am",            # Anderson Mixing
     #     "max_hist":20,          # Maximum number of history
-    #     "start_error":1e-3,     # When switch to AM from simple mixing
-    #     "mix_min":0.01,          # Minimum mixing rate of simple mixing
-    #     "mix_init":0.01,         # Initial mixing rate of simple mixing
-    # },
+    #     "start_error":1e-2,     # When switch to AM from simple mixing
+    #     "mix_min":0.1,          # Minimum mixing rate of simple mixing
+    #     "mix_init":0.1,         # Initial mixing rate of simple mixing
+    },
 
     "max_iter":10000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
