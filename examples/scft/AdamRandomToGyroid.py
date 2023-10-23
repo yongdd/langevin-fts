@@ -42,10 +42,8 @@ params = {
 
     "optimizer":{
         "name":"adam",     # ADAM optimizer
-        "lr":1e-2,         # learning rate, 
-        "b1":0.9,          # β1
-        "b2":0.999,        # β2
-        "eps":1e-8,        # epsilon, small number to prevent dividing by zero
+        "lr":1e-1,         # initial learning rate
+        "gamma":0.9993,    # learning rate at Tth iteration is lr*γ^(T-1)
         
     #     "name":"am",            # Anderson Mixing
     #     "max_hist":20,          # Maximum number of history
@@ -54,7 +52,7 @@ params = {
     #     "mix_init":0.1,         # Initial mixing rate of simple mixing
     },
 
-    "max_iter":10000,     # The maximum relaxation iterations
+    "max_iter":5000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
@@ -63,12 +61,23 @@ params = {
 # np.random.seed(random_seed)
 
 # Set initial fields
-print("w_A and w_B are initialized to random Gaussian.")
+# print("w_A and w_B are initialized to random Fourier components.")
+# temp = np.zeros(params["nx"])
+# temp_k = np.fft.rfftn(temp)
+
+# cutoff=3
+# w_A_k = np.zeros_like(temp_k)
+# w_B_k = np.zeros_like(temp_k)
+# phase_A = np.random.uniform(0.0, 2*np.pi, (cutoff,cutoff,cutoff))
+# phase_B = np.random.uniform(0.0, 2*np.pi, (cutoff,cutoff,cutoff))
+# w_A_k[0:cutoff,0:cutoff,0:cutoff] = np.random.normal(0.0, 1.0, (cutoff,cutoff,cutoff))*np.exp(1j*phase_A)
+# w_B_k[0:cutoff,0:cutoff,0:cutoff] = np.random.normal(0.0, 1.0, (cutoff,cutoff,cutoff))*np.exp(1j*phase_B)
+# w_A = np.fft.irfftn(w_A_k)
+# w_B = np.fft.irfftn(w_B_k)
+
+# print("w_A and w_B are initialized to random Gaussian.")
 w_A = np.random.normal(0.0, 1.0, params["nx"])
 w_B = np.random.normal(0.0, 1.0, params["nx"])
-
-# w_A = np.random.uniform(-1.0, 1.0, params["nx"])
-# w_B = np.random.uniform(-1.0, 1.0, params["nx"])
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
@@ -89,10 +98,3 @@ if len(sys.argv) >= 2:
 else:
     file_name = "fields.mat"
 calculation.save_results(file_name)
-
-# Recording first a few iteration results for debugging and refactoring
-    #    1   -2.554E-15  [ 1.0112006E+00  ]    -0.005556176   1.4462576E+00 
-    #    2    6.439E-15  [ 1.0120959E+00  ]    -0.005282124   1.0825724E+00 
-    #    3    3.553E-15  [ 1.0136723E+00  ]    -0.005608658   8.8710667E-01 
-    #    4   -1.066E-14  [ 1.0156904E+00  ]    -0.006254574   7.8531908E-01 
-    #    5   -6.772E-15  [ 1.0180879E+00  ]    -0.007113039   7.3257170E-01 

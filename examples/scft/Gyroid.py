@@ -37,7 +37,11 @@ params = {
             {"type":"B", "length":1-f}, # B-block
         ],},],
 
-    "optimizer":{
+    "optimizer":{       
+        # "name":"adam",     # ADAM optimizer
+        # "lr":1e-1,         # initial learning rate,
+        # "gamma":0.9993,    # learning rate at Tth iteration is lr*γ^(T-1)
+        
         "name":"am",            # Anderson Mixing
         "max_hist":20,          # Maximum number of history
         "start_error":1e-2,     # When switch to AM from simple mixing
@@ -45,7 +49,7 @@ params = {
         "mix_init":0.1,         # Initial mixing rate of simple mixing
     },
 
-    "max_iter":2000,     # The maximum relaxation iterations
+    "max_iter":5000,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
