@@ -149,7 +149,7 @@ PYBIND11_MODULE(langevinfts, m)
                 {
                     //buf_w_input
                     py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.shape[0] != M){
+                    if (buf_w_input.size != M){
                         throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
@@ -162,7 +162,7 @@ PYBIND11_MODULE(langevinfts, m)
                 {
                     //buf_q_init
                     py::buffer_info buf_q_init = it->second.request();
-                    if (buf_q_init.shape[0] != M){
+                    if (buf_q_init.size != M){
                         throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
@@ -188,7 +188,7 @@ PYBIND11_MODULE(langevinfts, m)
                 {
                     //buf_w_input
                     py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.shape[0] != M){
+                    if (buf_w_input.size != M){
                         throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
