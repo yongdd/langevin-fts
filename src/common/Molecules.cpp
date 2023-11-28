@@ -13,7 +13,7 @@
 Molecules::Molecules(
     std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation)
 {
-    // checking chain model
+    // Checking chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
                    [](unsigned char c)
     {
@@ -26,7 +26,7 @@ Molecules::Molecules(
     }
     this->model_name = model_name;
 
-    // save variables
+    // Save variables
     try
     {
         this->ds = ds;
@@ -40,19 +40,25 @@ Molecules::Molecules(
 }
 void Molecules::add_polymer(
     double volume_fraction,
-    std::vector<std::string> block_monomer_types,
-    std::vector<double> contour_lengths,
-    std::vector<int> v, std::vector<int> u,
+    std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
     std::string propagator_code;
-    distinct_polymers.push_back(PolymerChain(ds, bond_lengths, 
-        volume_fraction, block_monomer_types, contour_lengths,
-        v, u, chain_end_to_q_init));
+    distinct_polymers.push_back(Polymer(ds, bond_lengths, 
+        volume_fraction, block_inputs, chain_end_to_q_init));
 
-    PolymerChain& pc = distinct_polymers.back();
+    Polymer& pc = distinct_polymers.back();
 
-    // generate propagator code for each block and each direction
+    // Construct starting vertices 'v', ending vertices 'u', 
+    std::vector<int> v;
+    std::vector<int> u;
+    for(size_t i=0; i<block_inputs.size(); i++)
+    {
+        v.push_back(block_inputs[i].v);
+        u.push_back(block_inputs[i].u);
+    }
+
+    // Generate propagator code for each block and each direction
     std::map<std::pair<int, int>, std::pair<std::string, int>> memory;
     for (int i=0; i<pc.get_n_blocks(); i++)
     {
@@ -75,11 +81,11 @@ void Molecules::add_polymer(
         pc.set_propagator_key(propagator_code, u[i], v[i]);
     }
 
-    // temporary map for the new polymer
+    // Temporary map for the new polymer
     std::map<std::tuple<int, std::string>, std::map<std::string, EssentialBlock >> essential_blocks_new_polymer;
 
-    // find essential_blocks in new_polymer
-    std::vector<PolymerChainBlock> blocks = pc.get_blocks();
+    // Find essential_blocks in new_polymer
+    std::vector<Block> blocks = pc.get_blocks();
     for(size_t b=0; b<blocks.size(); b++)
     {
         int v = blocks[b].v;
@@ -102,13 +108,13 @@ void Molecules::add_polymer(
 
     if (this->reduce_propagator_computation)
     {
-        // find superposed branches in essential_blocks_new_polymer
+        // Find superposed branches in essential_blocks_new_polymer
         std::map<std::tuple<int, std::string>, std::map<std::string, EssentialBlock >> superposed_blocks;
         for(auto& item : essential_blocks_new_polymer)
         {
             
             std::vector<std::tuple<int, int>> total_v_u_list;
-            // find all (v,u) pairs in superposed_blocks for the given key
+            // Find all (v,u) pairs in superposed_blocks for the given key
             for(auto& second_key : superposed_blocks[item.first]) // map <tuple, v_u_vector>
             {
                 for(auto& superposition_v_u : second_key.second.v_u) 
@@ -118,7 +124,7 @@ void Molecules::add_polymer(
                 }
             }
 
-            // remove keys of second map in essential_blocks_new_polymer, which exist in superposed_blocks.
+            // Remove keys of second map in essential_blocks_new_polymer, which exist in superposed_blocks.
             for(auto it = item.second.cbegin(); it != item.second.cend();) // map <tuple, v_u_vector>
             {
                 bool removed = false;
@@ -135,11 +141,11 @@ void Molecules::add_polymer(
                     ++it;
             }
 
-            // after the removal is done, add the superposed branches
+            // After the removal is done, add the superposed branches
             for(auto& second_key : superposed_blocks[item.first]) 
                 essential_blocks_new_polymer[item.first][second_key.first] = second_key.second;
 
-            // superpose propagators for given key
+            // Superpose propagators for given key
             // If the number of elements in the second map is only 1, it will return the map without superposition.
             // Not all elements of superposed_second_map are superposed.
             std::map<std::string, EssentialBlock> superposed_second_map;
@@ -148,12 +154,12 @@ void Molecules::add_polymer(
             else if (model_name == "discrete")
                 superposed_second_map = superpose_propagator_of_discrete_chain(item.second);
 
-            // replace the second map of essential_blocks_new_polymer with superposed_second_map
+            // Replace the second map of essential_blocks_new_polymer with superposed_second_map
             essential_blocks_new_polymer[item.first].clear();
             for(auto& superposed_propagator_code : superposed_second_map)
                 essential_blocks_new_polymer[item.first][superposed_propagator_code.first] = superposed_propagator_code.second;
 
-            // for each superposed_propagator_code
+            // For each superposed_propagator_code
             for(auto& superposed_propagator_code : superposed_second_map)
             {
                 int n_segment_allocated = superposed_propagator_code.second.n_segment_allocated;
@@ -161,15 +167,15 @@ void Molecules::add_polymer(
                 int n_segment_offset = superposed_propagator_code.second.n_segment_offset;
                 int n_segment_original = superposed_propagator_code.second.n_segment_original;
 
-                // skip, if it is not superposed
+                // Skip, if it is not superposed
                 if ( dep_key[0] != '[' || n_segment_offset+n_segment_allocated != n_segment_original)
                     continue;
 
-                // for each v_u 
+                // For each v_u 
                 for(auto& v_u : superposed_propagator_code.second.v_u)
                 {
                     auto& v_adj_nodes = pc.get_adjacent_nodes()[std::get<0>(v_u)];
-                    // for each v_adj_node
+                    // For each v_adj_node
                     for(auto& v_adj_node : v_adj_nodes)
                     {
                         if (v_adj_node != std::get<1>(v_u))
@@ -186,7 +192,7 @@ void Molecules::add_polymer(
                             // pc.get_block(v,u).monomer_type
                             // pc.get_block(v,u).n_segment
 
-                            // make new key
+                            // Make new key
                             std::string new_u_key = "(" + dep_key
                                 + std::to_string(n_segment_allocated);
 
@@ -198,7 +204,7 @@ void Molecules::add_polymer(
                             }
                             new_u_key += ")" + pc.get_block(v,u).monomer_type;
 
-                            // add the new key
+                            // Add the new key
                             superposed_blocks[key][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
                             superposed_blocks[key][new_u_key].n_segment_allocated = pc.get_block(v,u).n_segment;
                             superposed_blocks[key][new_u_key].n_segment_offset = 0;
@@ -211,7 +217,7 @@ void Molecules::add_polymer(
         }
     }
 
-    // add results to essential_blocks and essential_propagator_codes
+    // Add results to essential_blocks and essential_propagator_codes
     for(const auto& v_item : essential_blocks_new_polymer)
     {
         for(const auto& u_item : v_item.second)
@@ -225,7 +231,7 @@ void Molecules::add_polymer(
             int n_segment_offset = u_item.second.n_segment_offset;
             int n_segment_original = u_item.second.n_segment_original;
 
-            // add blocks
+            // Add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
             essential_blocks[key].monomer_type = Molecules::get_monomer_type_from_key(key_v);
@@ -234,7 +240,7 @@ void Molecules::add_polymer(
             essential_blocks[key].n_segment_original  = n_segment_original;
             essential_blocks[key].v_u = u_item.second.v_u;
 
-            // update propagators
+            // Update propagators
             update_essential_propagator_code(essential_propagator_codes, key_v, n_segment_original);
             update_essential_propagator_code(essential_propagator_codes, key_u, n_segment_allocated);
         }
@@ -256,7 +262,7 @@ int Molecules::get_n_polymer_types() const
 {
     return distinct_polymers.size();
 }
-PolymerChain& Molecules::get_polymer(const int p)
+Polymer& Molecules::get_polymer(const int p)
 {
     return distinct_polymers[p];
 }
@@ -266,7 +272,7 @@ const std::map<std::string, double>& Molecules::get_bond_lengths() const
 }
 std::pair<std::string, int> Molecules::generate_propagator_code(
     std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
-    std::vector<PolymerChainBlock>& blocks,
+    std::vector<Block>& blocks,
     std::map<int, std::vector<int>>& adjacent_nodes,
     std::map<std::pair<int, int>, int>& edge_to_block_index,
     std::map<int, std::string>& chain_end_to_q_init,
@@ -276,11 +282,11 @@ std::pair<std::string, int> Molecules::generate_propagator_code(
     std::vector<std::pair<std::string,int>> edge_dict;
     std::pair<std::string,int> text_and_segments;
 
-    // if it is already computed
+    // If it is already computed
     if (memory.find(std::make_pair(in_node, out_node)) != memory.end())
         return memory[std::make_pair(in_node, out_node)];
 
-    // explore child blocks
+    // Explore child blocks
     //std::cout << "[" + std::to_string(in_node) + ", " +  std::to_string(out_node) + "]:";
     for(size_t i=0; i<adjacent_nodes[in_node].size(); i++)
     {
@@ -304,11 +310,11 @@ std::pair<std::string, int> Molecules::generate_propagator_code(
         }
     }
 
-    // merge code of child blocks
+    // Merge code of child blocks
     std::string text;
     if(edge_text.size() == 0)
     {
-        // if in_node does not exist in chain_end_to_q_init
+        // If in_node does not exist in chain_end_to_q_init
         if (chain_end_to_q_init.find(in_node) == chain_end_to_q_init.end())
             text = "";
 
@@ -326,7 +332,7 @@ std::pair<std::string, int> Molecules::generate_propagator_code(
         text += ")";
     }
 
-    // add monomer_type at the end of text code
+    // Add monomer_type at the end of text code
     text += blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].monomer_type;
     auto text_and_segments_total = std::make_pair(text, blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].n_segment);
     memory[std::make_pair(in_node, out_node)] = text_and_segments_total;
@@ -381,7 +387,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continu
     // Because of our SimpsonRule implementation, whose weights of odd number n_segments and even number n_segments are slightly different,
     // superpositions for blocks of odd number and of even number are separately performed.
 
-    // for even number
+    // For even number
     for(const auto& item : not_superposed_yet_second_map)
     {
         if (item.second.n_segment_allocated % 2 == 0)
@@ -389,7 +395,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continu
     }
     superposed_second_map_total = superpose_propagator_common(remaining_keys, 0);
 
-    // for odd number
+    // For odd number
     remaining_keys.clear();
     for(const auto& item : not_superposed_yet_second_map)
     {
@@ -398,7 +404,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continu
     }
     superposed_second_map = superpose_propagator_common(remaining_keys, 0);
 
-    // merge maps
+    // Merge maps
     superposed_second_map_total.insert(std::begin(superposed_second_map), std::end(superposed_second_map));
 
     return superposed_second_map_total;
@@ -451,7 +457,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
     std::vector<std::tuple<int ,int>> v_u_total;
 
     std::map<std::string, EssentialBlock> superposed_second_map;
-    // tuple <n_segment_allocated, key, n_segment_offset, n_segment_original, v_u_list>
+    // Tuple <n_segment_allocated, key, n_segment_offset, n_segment_original, v_u_list>
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> same_superposition_level_list;
 
     // std::cout << "---------map------------" << std::endl;
@@ -471,14 +477,14 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
     // }
     // std::cout << "-----------------------" << std::endl;
 
-    // int count = 0;
+    // Int count = 0;
     current_n_segment = 0;
     for(const auto& item: remaining_keys)
         current_n_segment = std::max(current_n_segment, item.second.n_segment_allocated);
     while(!remaining_keys.empty())
     {
-        // count ++;
-        // if (count == 10)
+        // Count ++;
+        // If (count == 10)
         //     break;
         // std::cout << "------remaining_keys------" << std::endl;
         // for(const auto& item: remaining_keys)
@@ -490,7 +496,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
         // }
         // std::cout << "-------------" << std::endl;
 
-        // find keys that have the same superposition level from remaining_keys
+        // Find keys that have the same superposition level from remaining_keys
         std::set<int, std::greater<int>> n_segment_set; // for finding the largest n_segment that is not in same_superposition_level_list.
         for (auto it = remaining_keys.cbegin(); it != remaining_keys.cend(); )
         {
@@ -516,7 +522,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
                 ++it;
             }
         }
-        // if it empty, decrease current_n_segment.
+        // If it empty, decrease current_n_segment.
         if (same_superposition_level_list.empty())
             current_n_segment = *std::next(n_segment_set.begin(), 0);
         else
@@ -527,23 +533,23 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
             // std::cout << "------------------------------------" << std::endl;
 
             v_u_total.clear();
-            // if there is only one element
+            // If there is only one element
             if (same_superposition_level_list.size() == 1)
             {
                 //  no the second largest element
                 if (n_segment_set.size() == 0)
                 {
-                    // add to map
+                    // Add to map
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].monomer_type = Molecules::get_monomer_type_from_key(std::get<1>(same_superposition_level_list[0]));
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_allocated = std::get<0>(same_superposition_level_list[0]);
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_offset    = std::get<2>(same_superposition_level_list[0]);
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_original  = std::get<3>(same_superposition_level_list[0]);
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].v_u                 = std::get<4>(same_superposition_level_list[0]);
 
-                    // erase element
+                    // Erase element
                     remaining_keys.erase(std::get<1>(same_superposition_level_list[0]));
                 }
-                // lower 'current_n_segment' to the next level and repeat
+                // Lower 'current_n_segment' to the next level and repeat
                 else
                     current_n_segment = *std::next(n_segment_set.begin(), 0);
             }
@@ -558,7 +564,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
                         }
                 );
 
-                // add one by one
+                // Add one by one
                 std::string dep_key;
                 std::vector<std::tuple<int ,int>> dep_v_u ;
                 int n_segment_offset_max = 0;
@@ -585,7 +591,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
                     if (dep_key.find('[') == std::string::npos)
                         superposed_propagator_code += ":" + std::to_string(dep_v_u.size());
 
-                    // add to map
+                    // Add to map
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].monomer_type = Molecules::get_monomer_type_from_key(dep_key);
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].n_segment_allocated = n_segment_allocated;
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].n_segment_offset    = n_segment_offset;
@@ -595,14 +601,14 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
                 superposed_propagator_code += "]" + Molecules::get_monomer_type_from_key(dep_key);
                 n_segment_allocated = current_n_segment - minimum_n_segment;
 
-                // add to remaining_keys
+                // Add to remaining_keys
                 remaining_keys[superposed_propagator_code].monomer_type = Molecules::get_monomer_type_from_key(superposed_propagator_code);
                 remaining_keys[superposed_propagator_code].n_segment_allocated = n_segment_allocated;
                 remaining_keys[superposed_propagator_code].n_segment_offset    = n_segment_offset_max;
                 remaining_keys[superposed_propagator_code].n_segment_original  = n_segment_original_max;
                 remaining_keys[superposed_propagator_code].v_u                 = v_u_total;
 
-                // erase elements
+                // Erase elements
                 for(size_t i=0; i<same_superposition_level_list.size(); i++)
                     remaining_keys.erase(std::get<1>(same_superposition_level_list[i]));
             }
@@ -632,7 +638,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
     for(size_t i=0; i<key.size();i++)
     {
-        // it was reading key and have found a digit
+        // It was reading key and have found a digit
         if( isdigit(key[i]) && is_reading_key && brace_count == 1 )
         {
             // std::cout << "key_to_deps1" << std::endl;
@@ -644,7 +650,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
             key_start = i;
         }
-        // it was reading n_segment and have found a ':'
+        // It was reading n_segment and have found a ':'
         else if( key[i]==':' && is_reading_n_segment && brace_count == 1 )
         {
             // std::cout << "key_to_deps2" << std::endl;
@@ -656,7 +662,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
             key_start = i+1;
         }
-        // it was reading n_segment and have found a comma
+        // It was reading n_segment and have found a comma
         else if( key[i]==',' && is_reading_n_segment && brace_count == 1 )
         {
             // std::cout << "key_to_deps3" << std::endl;
@@ -669,7 +675,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
             key_start = i+1;
         }
-        // it was reading n_repeated and have found a comma
+        // It was reading n_repeated and have found a comma
         else if( key[i]==',' && is_reading_n_repeated && brace_count == 1 )
         {
             // std::cout << "key_to_deps4" << std::endl;
@@ -682,7 +688,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
             key_start = i+1;
         }
-        // it was reading n_repeated and have found a non-digit
+        // It was reading n_repeated and have found a non-digit
         else if( !isdigit(key[i]) && is_reading_n_repeated && brace_count == 1)
         {
             // std::cout << "key_to_deps5" << std::endl;
@@ -695,7 +701,7 @@ std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std:
 
             key_start = i;
         }
-        // it was reading n_segment and have found a non-digit
+        // It was reading n_segment and have found a non-digit
         else if( !isdigit(key[i]) && is_reading_n_segment && brace_count == 1)
         {
             // std::cout << "key_to_deps6" << std::endl;
@@ -816,7 +822,7 @@ EssentialBlock& Molecules::get_essential_block(std::tuple<int, std::string, std:
 }
 void Molecules::display_blocks() const
 {
-    // print blocks
+    // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
     std::cout << "Polymer id, key1:\n\tsuperposed, n_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
 
@@ -825,7 +831,7 @@ void Molecules::display_blocks() const
 
     for(const auto& item : essential_blocks)
     {
-        // print polymer id, key1
+        // Print polymer id, key1
         const std::string v_string = std::get<1>(item.first);
         if (v_tuple != std::make_tuple(std::get<0>(item.first), v_string))
         {
@@ -838,23 +844,23 @@ void Molecules::display_blocks() const
             v_tuple = std::make_tuple(std::get<0>(item.first), v_string);
         }
 
-        // print if superposed
+        // Print if superposed
         const std::string u_string = std::get<2>(item.first);
         std::cout << "\t ";
         if (u_string.find('[') == std::string::npos)
             std::cout << "X, ";
         else
             std::cout << "O, ";
-        // print n_segment (original, offset, allocated)
+        // Print n_segment (original, offset, allocated)
         std::cout << "(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
 
-        // print key2
+        // Print key2
         if (u_string.size() <= MAX_PRINT_LENGTH)
             std::cout << u_string;
         else
             std::cout << u_string.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted>" ;
 
-        // print v_u list
+        // Print v_u list
         for(const auto& v_u : item.second.v_u)
         {
             std::cout << ", {"
@@ -867,7 +873,7 @@ void Molecules::display_blocks() const
 }
 void Molecules::display_propagators() const
 {
-    // print propagators
+    // Print propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
 
@@ -898,7 +904,7 @@ void Molecules::display_propagators() const
 
 void Molecules::display_sub_propagators() const
 {
-    // print sub propagators
+    // Print sub propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
     std::cout << "--------- Propagators ---------" << std::endl;
@@ -929,7 +935,7 @@ void Molecules::display_sub_propagators() const
 
 bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2)
 {
-    // first compare heights
+    // First compare heights
     int height_str1 = Molecules::get_height_from_key(str1);
     int height_str2 = Molecules::get_height_from_key(str2);
 
@@ -963,6 +969,6 @@ bool ComparePropagatorKey::operator()(const std::string& str1, const std::string
         else
             return str1[i] < str2[i];
     }
-    // third compare their lengths
+    // Third compare their lengths
     return str1.length() < str2.length();
 }

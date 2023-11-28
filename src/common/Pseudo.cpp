@@ -37,7 +37,7 @@ void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
         tdx[3-cb->get_dim()+d] = dx[d];
     }
 
-    // calculate the exponential factor
+    // Calculate the exponential factor
     for(int d=0; d<3; d++)
         xfactor[d] = -std::pow(2*PI/(tnx[d]*tdx[d]),2)*ds/6.0;
 
@@ -83,7 +83,7 @@ void Pseudo::get_weighted_fourier_basis(
         tdx[3-cb->get_dim()+d] = dx[d];
     }
 
-    // calculate the exponential factor
+    // Calculate the exponential factor
     for(int d=0; d<3; d++)
         xfactor[d] = std::pow(2*PI/(tnx[d]*tdx[d]),2);
 

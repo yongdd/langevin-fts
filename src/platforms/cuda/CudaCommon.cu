@@ -15,7 +15,7 @@ void throw_on_cuda_error(cudaError_t code, const char *file, int line, const cha
 CudaCommon::CudaCommon()
 {
     try{
-        // intialize NUM_BLOCKS and NUM_THREADS
+        // Intialize NUM_BLOCKS and NUM_THREADS
         const char *ENV_N_BLOCKS  = getenv("LFTS_GPU_NUM_BLOCKS");
         const char *ENV_N_THREADS = getenv("LFTS_GPU_NUM_THREADS");
 
@@ -32,7 +32,7 @@ CudaCommon::CudaCommon()
         else
             this->n_threads = std::stoi(env_var_n_threads);
 
-        // the number of GPUs
+        // The number of GPUs
         int devices_count;
         gpu_error_check(cudaGetDeviceCount(&devices_count));
         const char *ENV_N_GPUS = getenv("LFTS_NUM_GPUS");
@@ -43,7 +43,7 @@ CudaCommon::CudaCommon()
         else
             n_gpus = std::min(std::min(std::stoi(env_var_n_gpus), devices_count), MAX_GPUS);
 
-        // check if can access peer GPUs
+        // Check if can access peer GPUs
         if (n_gpus > 1)
         {
             int can_access_from_0_to_1;
@@ -79,7 +79,7 @@ void CudaCommon::set(int n_blocks, int n_threads, int process_idx)
     this->set_n_blocks(n_blocks);
     this->set_n_threads(n_threads);
 
-    // change GPU setting
+    // Change GPU setting
     gpu_error_check(cudaGetDeviceCount(&devices_count));
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
@@ -107,7 +107,7 @@ void CudaCommon::set_idx(int process_idx)
 {
     int devices_count;
 
-    // change GPU setting
+    // Change GPU setting
     gpu_error_check(cudaGetDeviceCount(&devices_count));
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }

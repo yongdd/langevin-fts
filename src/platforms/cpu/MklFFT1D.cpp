@@ -27,7 +27,7 @@ MklFFT1D::MklFFT1D(int nx)
         if (status !=0)
             std::cout << "MKL status: " << status << std::endl;
 
-        // compute a normalization factor
+        // Compute a normalization factor
         this->fft_normal_factor = nx;
     }
     catch(std::exception& exc)

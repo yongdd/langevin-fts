@@ -80,7 +80,7 @@ double CudaArray::operator[](unsigned int i) const
     return element;
 }
 
-// arithmetic operations with two arrays
+// Arithmetic operations with two arrays
 void CudaArray::add(const Array& src_1, const Array& src_2)
 {
     unsigned int src1_size = src_1.get_size();
@@ -177,7 +177,7 @@ void CudaArray::divide(const Array& src_1, const Array& src_2)
 
     divide_real<<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src1_data, d_src2_data, 1.0, this->size);
 }
-// arithmetic operations with an array and a float number
+// Arithmetic operations with an array and a float number
 void CudaArray::linear_scaling(const Array& src, const double a, const double b)
 {
     unsigned int src_size = src.get_size();

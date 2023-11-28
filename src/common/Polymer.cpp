@@ -6,32 +6,17 @@
 #include <stack>
 #include <set>
 
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
-PolymerChain::PolymerChain(
+Polymer::Polymer(
     double ds, std::map<std::string, double> bond_lengths, 
-    double volume_fraction, 
-    std::vector<std::string> block_monomer_types,
-    std::vector<double> contour_lengths,
-    std::vector<int> v, std::vector<int> u,
+    double volume_fraction, std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
-    // check block size
-    if( block_monomer_types.size() != contour_lengths.size())
-        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
-            ") and contour_lengths (" +std::to_string(contour_lengths.size()) + ") must be consistent.");
 
-    if( block_monomer_types.size() != v.size())
-        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
-            ") and edges v (" +std::to_string(v.size()) + ") must be consistent.");
-
-    if( block_monomer_types.size() != u.size())
-        throw_with_line_number("The sizes of block_monomer_types (" + std::to_string(block_monomer_types.size()) + 
-            ") and edges u (" +std::to_string(v.size()) + ") must be consistent.");
-
-    // check the name of monomer_type. Only alphabets and underscore(_) are allowed.
+    // Check the name of monomer_type. Only alphabets and underscore are allowed.
     for(const auto& item : bond_lengths)
     {
         if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isalpha(c) || c=='_' ; }))
@@ -41,32 +26,33 @@ PolymerChain::PolymerChain(
             throw_with_line_number("bond_lengths[\"" + item.first + "\"] must be a positive number.");
     }
 
-    // check block lengths, segments, types
-    for(size_t i=0; i<contour_lengths.size(); i++)
+    // Check block lengths, segments, types
+    for(size_t i=0; i<block_inputs.size(); i++)
     {
-        if( contour_lengths[i] <= 0)
-            throw_with_line_number("contour_lengths[" + std::to_string(i) + "] (" +std::to_string(contour_lengths[i]) + ") must be a positive number.");
-        if( std::abs(std::lround(contour_lengths[i]/ds)-contour_lengths[i]/ds) > 1.e-6)
-            throw_with_line_number("contour_lengths[" + std::to_string(i) + "]/ds (" + std::to_string(contour_lengths[i]) + "/" + std::to_string(ds) + ") is not an integer.");
-        if( bond_lengths.count(block_monomer_types[i]) == 0 )
-            throw_with_line_number("block_monomer_types[" + std::to_string(i) + "] (\"" + block_monomer_types[i] + "\") is not in bond_lengths.");
+        if( block_inputs[i].contour_length <= 0)
+            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths (" +std::to_string(block_inputs[i].contour_length) + ") must be a positive number.");
+        if( std::abs(std::lround(block_inputs[i].contour_length/ds)-block_inputs[i].contour_length/ds) > 1.e-6)
+            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths/ds (" + std::to_string(block_inputs[i].contour_length) + "/" + std::to_string(ds) + ") is not an integer.");
+        if( bond_lengths.count(block_inputs[i].monomer_type) == 0 )
+            throw_with_line_number("block_inputs[" + std::to_string(i) + "].monomer_type (\"" + block_inputs[i].monomer_type + "\") is not in bond_lengths.");
     }
 
-    // // check chain_end_to_q_init
-    // if( chain_end_to_q_init.size() > 0)
+    // // Check chain_end_to_q_init
+    // If( chain_end_to_q_init.size() > 0)
     //     throw_with_line_number("Currently, \'chain_end_to_q_init\' is not supported.");
     this->chain_end_to_q_init = chain_end_to_q_init;
 
-    // save variables
+    // Save variables
     try
     {
         this->volume_fraction = volume_fraction;
-        for(size_t i=0; i<contour_lengths.size(); i++){
+        for(size_t i=0; i<block_inputs.size(); i++){
             blocks.push_back({
-                block_monomer_types[i],                     // monomer_type
-                (int) std::lround(contour_lengths[i]/ds),   // n_segment
-                contour_lengths[i],                         // contour_length
-                v[i], u[i]});                               // nodes
+                block_inputs[i].monomer_type,                           // monomer_type
+                (int) std::lround(block_inputs[i].contour_length/ds),   // n_segment
+                block_inputs[i].contour_length,                         // contour_length
+                block_inputs[i].v,                                      // starting node
+                block_inputs[i].u});                                    // ending node
         }
     }
     catch(std::exception& exc)
@@ -74,19 +60,28 @@ PolymerChain::PolymerChain(
         throw_without_line_number(exc.what());
     }
 
-    // compute alpha, sum of relative contour lengths
+    // Compute alpha, sum of relative contour lengths
     double alpha{0.0};
     for(size_t i=0; i<blocks.size(); i++){
         alpha += blocks[i].contour_length;
     }
     this->alpha = alpha;
 
-    // construct adjacent_nodes
+    // Construct starting vertices 'v', ending vertices 'u', 
+    std::vector<int> v;
+    std::vector<int> u;
+    for(size_t i=0; i<block_inputs.size(); i++)
+    {
+        v.push_back(block_inputs[i].v);
+        u.push_back(block_inputs[i].u);
+    }
+
+    // Construct adjacent_nodes
     for(size_t i=0; i<v.size(); i++)
     {
         adjacent_nodes[v[i]].push_back(u[i]);
         adjacent_nodes[u[i]].push_back(v[i]);
-        // v and u must be a non-negative integer for depth first search
+        // V and u must be a non-negative integer for depth first search
         if( v[i] < 0 )
             throw_with_line_number("v[" + std::to_string(i) + "] (" + std::to_string(v[i]) + ") must be a non-negative integer.");
         if( u[i] < 0 )
@@ -95,7 +90,7 @@ PolymerChain::PolymerChain(
             throw_with_line_number("v[" + std::to_string(i) + "] and u[" + std::to_string(i) + "] must be different integers.");
     }
 
-    // // print adjacent_nodes
+    // // Print adjacent_nodes
     // for(const auto& node : adjacent_nodes){
     //     std::cout << node.first << ": [";
     //     for(int i=0; i<node.second.size()-1; i++)
@@ -103,7 +98,7 @@ PolymerChain::PolymerChain(
     //     std::cout << node.second[node.second.size()-1] << "]" << std::endl;
     // }
 
-    // construct edge nodes
+    // Construct edge nodes
     for (size_t i=0; i<v.size(); i++)
     {
         if (edge_to_block_index.count(std::make_pair(v[i], u[i])) > 0)
@@ -118,7 +113,7 @@ PolymerChain::PolymerChain(
         }
     }
 
-    // detect a cycle and isolated nodes in the block copolymer graph using depth first search
+    // Detect a cycle and isolated nodes in the block copolymer graph using depth first search
     std::map<int, bool> is_visited;
     for (size_t i = 0; i < v.size(); i++)
         is_visited[v[i]] = false;
@@ -126,20 +121,20 @@ PolymerChain::PolymerChain(
         is_visited[u[i]] = false;
 
     std::stack<std::pair<int,int>> connected_nodes;
-    // starting node is v[0]
+    // Starting node is v[0]
     connected_nodes.push(std::make_pair(v[0],-1));
-    // perform depth first search
+    // Perform depth first search
     while (!connected_nodes.empty())
     {
-        // get one item and visit
+        // Get one item and visit
         int cur = connected_nodes.top().first;
         int parent = connected_nodes.top().second;
         is_visited[cur] = true;
 
-        // remove the item
+        // Remove the item
         connected_nodes.pop();
 
-        // add adjacent_nodes at stack 
+        // Add adjacent_nodes at stack 
         auto nodes = adjacent_nodes[cur];
         for(size_t i=0; i<nodes.size();i++)
         {
@@ -156,7 +151,7 @@ PolymerChain::PolymerChain(
         }
     }
 
-    // collect isolated nodes
+    // Collect isolated nodes
     std::set<int> isolated_nodes_set;
     for (size_t i=0; i<v.size(); i++)
     {
@@ -169,7 +164,7 @@ PolymerChain::PolymerChain(
             isolated_nodes_set.insert(u[i]);
     }
 
-    // print isolated nodes
+    // Print isolated nodes
     std::vector<int> isolated_nodes(isolated_nodes_set.begin(), isolated_nodes_set.end());
     if (isolated_nodes.size() > 0)
     {
@@ -180,58 +175,58 @@ PolymerChain::PolymerChain(
         throw_with_line_number(error_message + ".");
     }
 }
-int PolymerChain::get_n_blocks() const
+int Polymer::get_n_blocks() const
 {
     return blocks.size();
 }
-int PolymerChain::get_n_segment(const int idx) const
+int Polymer::get_n_segment(const int idx) const
 {
     return blocks[idx].n_segment;
 }
-int PolymerChain::get_n_segment_total() const
+int Polymer::get_n_segment_total() const
 {
     int total_n{0};
     for(size_t i=0; i<blocks.size(); i++)
         total_n += blocks[i].n_segment;
     return total_n;
 }
-double PolymerChain::get_alpha() const
+double Polymer::get_alpha() const
 {
     return alpha;
 }
-double PolymerChain::get_volume_fraction() const
+double Polymer::get_volume_fraction() const
 {
     return volume_fraction;
 }
-int PolymerChain::get_block_index_from_edge(const int v, const int u)
+int Polymer::get_block_index_from_edge(const int v, const int u)
 {
     if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
         throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return edge_to_block_index[std::make_pair(v, u)];
 }
-struct PolymerChainBlock& PolymerChain::get_block(const int v, const int u)
+struct Block& Polymer::get_block(const int v, const int u)
 {
     if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
         throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return blocks[edge_to_block_index[std::make_pair(v, u)]];
 }
-std::vector<PolymerChainBlock>& PolymerChain::get_blocks()
+std::vector<Block>& Polymer::get_blocks()
 {
     return blocks;
 }
-std::map<int, std::vector<int>>& PolymerChain::get_adjacent_nodes()
+std::map<int, std::vector<int>>& Polymer::get_adjacent_nodes()
 {
     return adjacent_nodes;
 }
-std::map<std::pair<int, int>, int>& PolymerChain::get_block_indexes()
+std::map<std::pair<int, int>, int>& Polymer::get_block_indexes()
 {
     return edge_to_block_index;
 }
-void PolymerChain::set_propagator_key(const std::string code, const int v, const int u)
+void Polymer::set_propagator_key(const std::string code, const int v, const int u)
 {
     edge_to_propagator_key[std::make_pair(v, u)] = code;
 }
-std::string PolymerChain::get_propagator_key(const int v, const int u) {
+std::string Polymer::get_propagator_key(const int v, const int u) {
     if (edge_to_propagator_key.find(std::make_pair(v,u)) == edge_to_propagator_key.end())
         throw_with_line_number("There is no such block (v, u): (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
     return edge_to_propagator_key[std::make_pair(v,u)];

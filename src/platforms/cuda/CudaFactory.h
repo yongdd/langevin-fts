@@ -6,7 +6,7 @@
 #define CUDA_FACTORY_H_
 
 #include "ComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"

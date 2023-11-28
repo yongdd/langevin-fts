@@ -34,31 +34,31 @@ cb = factory.create_computation_box(nx, lx)
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
 molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, reduce_propagator_computation)
 
-# First Polymer
+# First Polymer (homopolymer)
 molecules.add_polymer(
      0.2,      # volume faction
-     ["B"],    # type of each block (homo)
-     [1.0],    # contour length of each block (homo)
-     [0],      # vertices v of chain graph (homo)
-     [1],      # vertices u of chain graph (homo)
+     [
+     ["B", 1.0,  0,  1],  # first block (type, length, starting node, ending node)
+     ]
 )
 
-# Second Polymer
+# Second Polymer (diblock copolymer)
 molecules.add_polymer(
-     0.3,           # volume faction
-     ["A","C"],     # type of each block (diblock)
-     [0.4, 0.5],    # contour length of each block (diblock)
-     [0,1],         # vertices v of chain graph  (diblock)
-     [1,2],         # vertices u of chain graph  (diblock)
+     0.3,                # volume faction
+     [
+     ["A", 0.4, 0, 1],   # first block
+     ["C", 0.5, 1, 2],   # second block
+     ]
 )
 
-# Third Polymer
+# Third Polymer (triblock copolymer)
 molecules.add_polymer(
      0.5,                # volume faction
-     ["A","B","A"],      # type of each block (triblock)
-     [0.5, 0.7, 0.3],    # contour length of each block (triblock)
-     [0,1,2],            # vertices v of chain graph  (triblock)
-     [1,2,3],            # vertices u of chain graph  (triblock)
+     [
+     ["A", 0.5, 0, 1],   # first block
+     ["B", 0.7, 1, 2],   # second block
+     ["A", 0.3, 2, 3],   # third block
+     ]
 )
 
 pseudo = factory.create_pseudo(cb, molecules)

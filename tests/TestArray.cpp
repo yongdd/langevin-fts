@@ -14,10 +14,10 @@ int main()
     {
         const int N_REPEATS = 1;
 
-        // math constants
+        // Math constants
         const double PI = 3.14159265358979323846;
 
-        // chrono timer
+        // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
         std::chrono::duration<double> time_duration;
 
@@ -52,14 +52,14 @@ int main()
             _array_2_two[i+M] = sqrt(PI*(i+30000));
         }
 
-        // choose platform
+        // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms)
         {
             AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
             factory->display_info();
 
-            // create instances and assign to the variables of base classes for the dynamic binding
+            // Create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
             
             std::cout<< "---------- Run ----------" << std::endl;
@@ -80,7 +80,7 @@ int main()
 
                 std::cout << "Test passed, array->set_data(_array, M)." << std::endl;
 
-                // add(const Array& src_1, const Array& src_2)
+                // Add(const Array& src_1, const Array& src_2)
                 array_3->add(*array_1, *array_2);
                 for(int i=0; i<M; i++)
                     _array_3[i] = _array_1[i] + _array_2[i];
@@ -108,7 +108,7 @@ int main()
                 }
                 std::cout << "Test passed, subtract(const Array& src_1, const Array& src_2) const." << std::endl; 
 
-                // multiply(const Array& src_1, const Array& src_2)
+                // Multiply(const Array& src_1, const Array& src_2)
                 array_3->multiply(*array_1, *array_2);
                 for(int i=0; i<M; i++)
                     _array_3[i] = _array_1[i] * _array_2[i];
@@ -137,7 +137,7 @@ int main()
                 std::cout << "Test passed, divide(const Array& src_1, const Array& src_2) const." << std::endl;
 
 
-                // linear_scaling(const Array& src, const double a,  const double b)
+                // Linear_scaling(const Array& src, const double a,  const double b)
                 array_3->linear_scaling(*array_1, 4.126806, 5.2342231);
                 for(int i=0; i<M; i++)
                     _array_3[i] = 4.126806*(*array_1)[i] + 5.2342231;
@@ -151,7 +151,7 @@ int main()
                 }
                 std::cout << "Test passed, linear_scaling(const Array& src, const double a,  const double b)." << std::endl;
 
-                // integral(Array& g)
+                // Integral(Array& g)
                 if (std::abs(cb->integral(_array_1) - cb->integral_device(array_1->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, integral(Array& g)." << std::endl;
@@ -162,7 +162,7 @@ int main()
                     std::cout << "Test passed, integral(Array& g)." << std::endl;
                 }
 
-                // inner_product(Array& g, Array& h)
+                // Inner_product(Array& g, Array& h)
                 if (std::abs(cb->inner_product(_array_1, _array_2) - cb->inner_product_device(array_1->get_ptr(), array_2->get_ptr())) > 1e-6)
                 {
                     std::cout << "Test failed, inner_product(Array& g, Array& h)." << std::endl;
@@ -173,7 +173,7 @@ int main()
                     std::cout << "Test passed, inner_product(Array& g, Array& h)." << std::endl;
                 }
 
-                // inner_product_inverse_weight(Array& g, Array& h, Array& w)
+                // Inner_product_inverse_weight(Array& g, Array& h, Array& w)
                 array_3->add(*array_1, *array_2);
                 for(int i=0; i<M; i++)
                     _array_3[i] = _array_1[i] + _array_2[i];
@@ -187,7 +187,7 @@ int main()
                     std::cout << "Test passed, inner_product_inverse_weight(Array& g, Array& h, Array& w)." << std::endl;
                 }
 
-                // multi_inner_product(int n_comp,  Array& g, Array& h)
+                // Multi_inner_product(int n_comp,  Array& g, Array& h)
                 Array* array_1_two = factory->create_array(_array_1_two, 2*M);
                 Array* array_2_two = factory->create_array(_array_2_two, 2*M);
                 if (std::abs(cb->multi_inner_product(2, _array_1_two, _array_2_two) - cb->multi_inner_product_device(2, array_1_two->get_ptr(), array_2_two->get_ptr())) > 1e-6)
@@ -221,7 +221,7 @@ int main()
                 delete array_2_two;
             }
 
-            // estimate execution time
+            // Estimate execution time
             chrono_end = std::chrono::system_clock::now();
             time_duration = chrono_end - chrono_start;
             std::cout<< "total time: ";

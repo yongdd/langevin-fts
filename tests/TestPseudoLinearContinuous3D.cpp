@@ -8,7 +8,7 @@
 #include "Exception.h"
 #include "CpuComputationBox.h"
 #include "Molecules.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "CpuPseudoContinuous.h"
@@ -165,15 +165,16 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
-        std::vector<std::string> block_monomer_types = {"A","B"};
-        std::vector<double> contour_lengths = {f, 1.0-f};
-        std::vector<int> v = {0,1};
-        std::vector<int> u = {1,2};
+        std::vector<BlockInput> blocks = 
+        {
+            {"A",    f, 0, 1},
+            {"B",1.0-f, 1, 2},
+        };
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
         Molecules* molecules = new Molecules("Continuous", 1.0/NN, bond_lengths, false);
-        molecules->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules->add_polymer(1.0, blocks, {});
         molecules->display_blocks();
         molecules->display_propagators();
 
@@ -208,7 +209,7 @@ int main()
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
             const int p = 0;
-            PolymerChain& pc = molecules->get_polymer(p);
+            Polymer& pc = molecules->get_polymer(p);
             pseudo->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);

@@ -11,7 +11,7 @@ int main()
         for (int i=0; i<M; i++)
             array[i] = i;
 
-        // variables for cub reduction sum
+        // Variables for cub reduction sum
         size_t temp_storage_bytes;
         double *d_temp_storage;
         double *d_array;
@@ -26,8 +26,8 @@ int main()
             gpu_error_check(cudaMalloc((void**)&d_array_sum, sizeof(double)*1));
             gpu_error_check(cudaMemcpy(d_array, array, sizeof(double)*M, cudaMemcpyHostToDevice));
 
-            // it seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu],
-            // if d_temp_storage[gpu]=nullptr and temp_storage_bytes[gpu]=0.
+            // It seems that cub::DeviceReduce::Sum changes temp_storage_bytes[gpu],
+            // If d_temp_storage[gpu]=nullptr and temp_storage_bytes[gpu]=0.
             d_temp_storage = nullptr;
             temp_storage_bytes = 0;
             cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);

@@ -14,14 +14,14 @@
 class CudaAndersonMixingReduceMemory : public AndersonMixing
 {
 private:
-    // a few previous field values are stored for anderson mixing in pinned host memory
+    // A few previous field values are stored for anderson mixing in pinned host memory
     PinnedCircularBuffer *pinned_cb_w_hist, *pinned_cb_w_deriv_hist;
 
     CircularBuffer *cb_w_deriv_dots;
     double *w_deriv_dots;
-    // a matrix and arrays for determining coefficients
+    // A matrix and arrays for determining coefficients
     double **u_nm, *v_n, *a_n;
-    // temporary arrays
+    // Temporary arrays
     double *d_w_new;
     double *d_w_deriv;
     double *d_sum;
@@ -31,7 +31,7 @@ private:
     double *d_w_deriv_hist1;
     double *d_w_deriv_hist2;
 
-    // variables for cub reduction sum
+    // Variables for cub reduction sum
     size_t temp_storage_bytes = 0;
     double *d_temp_storage = nullptr;
     double *d_sum_out;

@@ -33,16 +33,16 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
         nx = new_nx;
         lx = new_lx;
 
-        // grid interval
+        // Grid interval
         for(int d=0; d<dim; d++)
             dx.push_back(lx[d]/nx[d]);
 
-        // the number of grids
+        // The number of grids
         n_grid = 1;
         for(int d=0; d<dim; d++)
             n_grid *= nx[d];
 
-        // weight factor for integral
+        // Weight factor for integral
         dv = new double[n_grid];
         for(int i=0; i<n_grid; i++)
         {
@@ -51,7 +51,7 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
                 dv[i] *= dx[d];
         }
 
-        // volume of simulation box
+        // Volume of simulation box
         volume = 1.0;
         for(int d=0; d<dim; d++)
             volume *= lx[d];
@@ -129,11 +129,11 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
 
     lx = new_lx;
 
-    // grid interval
+    // Grid interval
     for(int d=0; d<dim; d++)
         dx[d] = lx[d]/nx[d];
 
-    // weight factor for integral
+    // Weight factor for integral
     for(int i=0; i<n_grid; i++)
     {
         dv[i] = 1.0;
@@ -141,7 +141,7 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
             dv[i] *= dx[d];
     }
 
-    // volume of simulation box
+    // Volume of simulation box
     volume = 1.0;
     for(int d=0; d<dim; d++)
         volume *= lx[d];

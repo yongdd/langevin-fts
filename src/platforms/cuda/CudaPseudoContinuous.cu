@@ -14,7 +14,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         const int M_COMPLEX = this->n_complex_grid;
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        // allocate memory for propagators
+        // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
         if( molecules->get_essential_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
@@ -35,7 +35,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             #endif
         }
 
-        // allocate memory for concentrations
+        // Allocate memory for concentrations
         if( molecules->get_essential_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: molecules->get_essential_blocks())
@@ -44,7 +44,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             gpu_error_check(cudaMalloc((void**)&d_block_phi[item.first], sizeof(double)*M));
         }
 
-        // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
@@ -63,10 +63,10 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             }
         }
         
-        // total partition functions for each polymer
+        // Total partition functions for each polymer
         single_partitions = new double[molecules->get_n_polymer_types()];
 
-        // remember one segment for each polymer chain to compute total partition function
+        // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
         for(const auto& block: d_block_phi)
         {
@@ -75,7 +75,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            // skip if already found one segment
+            // Skip if already found one segment
             if (p != current_p)
                 continue;
 
@@ -83,7 +83,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
             int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
 
-            // contains no '['
+            // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
@@ -92,16 +92,16 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 d_propagator[dep_v][n_segment_original-n_segment_offset], // q
-                d_propagator[dep_u][0],                                   // q_dagger
-                n_superposed                    // how many propagators are aggregated
+                d_propagator[dep_u][0],                                   // Q_dagger
+                n_superposed                    // How many propagators are aggregated
                 ));
             current_p++;
         }
 
-        // create scheduler for computation of propagator
+        // Create scheduler for computation of propagator
         sc = new Scheduler(molecules->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
-        // create streams
+        // Create streams
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -109,7 +109,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
 
-        // create FFT plan
+        // Create FFT plan
         const int NRANK{cb->get_dim()};
         int n_grid[NRANK];
 
@@ -147,7 +147,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         cufftSetStream(plan_for_four, streams[0][0]);
         cufftSetStream(plan_bak_four, streams[0][0]);
 
-        // allocate memory for pseudo-spectral: advance_propagator()
+        // Allocate memory for pseudo-spectral: advance_propagator()
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -178,7 +178,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
         gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(double)*M));
         gpu_error_check(cudaMemcpy(d_q_unity, q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
 
-        // allocate memory for stress calculation: compute_stress()
+        // Allocate memory for stress calculation: compute_stress()
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -192,7 +192,7 @@ CudaPseudoContinuous::CudaPseudoContinuous(
             gpu_error_check(cudaMalloc((void**)&d_q_multi[gpu],         sizeof(double)*M_COMPLEX));
         }
 
-        // allocate memory for cub reduction sum
+        // Allocate memory for cub reduction sum
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -256,7 +256,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
     cudaFree(d_phi);
     cudaFree(d_q_unity);
 
-    // for pseudo-spectral: advance_propagator()
+    // For pseudo-spectral: advance_propagator()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
         cudaFree(d_q_step_1_one[gpu]);
@@ -275,7 +275,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(d_propagator_device_1[1]);
     }
 
-    // for stress calculation: compute_stress()
+    // For stress calculation: compute_stress()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
         cudaFree(d_fourier_basis_x[gpu]);
@@ -289,7 +289,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
         cudaFree(d_temp_storage[gpu]);
     }
 
-    // destroy streams
+    // Destroy streams
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
         cudaStreamDestroy(streams[gpu][0]);
@@ -300,7 +300,7 @@ CudaPseudoContinuous::~CudaPseudoContinuous()
 void CudaPseudoContinuous::update_bond_function()
 {
     try{
-        // for pseudo-spectral: advance_propagator()
+        // For pseudo-spectral: advance_propagator()
         const int M_COMPLEX = this->n_complex_grid;
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
@@ -321,7 +321,7 @@ void CudaPseudoContinuous::update_bond_function()
             }
         }
 
-        // for stress calculation: compute_stress()
+        // For stress calculation: compute_stress()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
@@ -374,13 +374,13 @@ void CudaPseudoContinuous::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
         }
 
-        // exp_dw and exp_dw_half
+        // Exp_dw and exp_dw_half
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
             const double *w = item.second;
 
-            // copy field configurations from host to device
+            // Copy field configurations from host to device
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
@@ -392,7 +392,7 @@ void CudaPseudoContinuous::compute_statistics(
                     sizeof(double)*M, cudaMemcpyInputToDevice, streams[gpu][1]));
             }
 
-            // compute exp_dw and exp_dw_half
+            // Compute exp_dw and exp_dw_half
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
@@ -402,7 +402,7 @@ void CudaPseudoContinuous::compute_statistics(
                     (d_exp_dw_half[gpu][monomer_type], d_exp_dw_half[gpu][monomer_type], 1.0, -0.25*ds, M);
                 
             }
-            // synchronize all GPUs
+            // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
@@ -412,8 +412,8 @@ void CudaPseudoContinuous::compute_statistics(
 
         auto& branch_schedule = sc->get_schedule();
         // // display all jobs
-        // int time_span_count=0;
-        // for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
+        // Int time_span_count=0;
+        // For (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         // {
         //     std::cout << "jobs: " << time_span_count << std::endl;
         //     for(int job=0; job<parallel_job->size(); job++)
@@ -425,13 +425,13 @@ void CudaPseudoContinuous::compute_statistics(
         //     }
         //     time_span_count++;
         // }
-        // time_span_count=0;
+        // Time_span_count=0;
 
-        // for each time span
+        // For each time span
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             gpu_error_check(cudaSetDevice(0));
-            // for each propagator
+            // For each propagator
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
@@ -440,7 +440,7 @@ void CudaPseudoContinuous::compute_statistics(
                 auto& deps = molecules->get_essential_propagator_code(key).deps;
                 auto monomer_type = molecules->get_essential_propagator_code(key).monomer_type;
 
-                // check key
+                // Check key
                 #ifndef NDEBUG
                 if (d_propagator.find(key) == d_propagator.end())
                     throw_with_line_number("Could not find key '" + key + "'. ");
@@ -448,10 +448,10 @@ void CudaPseudoContinuous::compute_statistics(
 
                 double **_d_propagator = d_propagator[key];
 
-                // if it is leaf node
+                // If it is leaf node
                 if(n_segment_from == 1 && deps.size() == 0)
                 {
-                     // q_init
+                     // Q_init
                     if (key[0] == '{')
                     {
                         std::string g = Molecules::get_q_input_idx_from_key(key);
@@ -470,23 +470,23 @@ void CudaPseudoContinuous::compute_statistics(
                     propagator_finished[key][0] = true;
                     #endif
                 }
-                // if it is not leaf node
+                // If it is not leaf node
                 else if (n_segment_from == 1 && deps.size() > 0)
                 {
-                    // if it is superposed
+                    // If it is superposed
                     if (key[0] == '[')
                     {
-                        // initialize to zero
+                        // Initialize to zero
                         gpu_error_check(cudaMemset(_d_propagator[0], 0, sizeof(double)*M));
 
-                        // add all propagators at junction if necessary 
+                        // Add all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
-                            // check sub key
+                            // Check sub key
                             #ifndef NDEBUG
                             if (d_propagator.find(sub_dep) == d_propagator.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
@@ -505,17 +505,17 @@ void CudaPseudoContinuous::compute_statistics(
                     }
                     else
                     {
-                        // initialize to one
+                        // Initialize to one
                         gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity,
                             sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
-                        // multiply all propagators at junction if necessary 
+                        // Multiply all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
 
-                            // check sub key
+                            // Check sub key
                             #ifndef NDEBUG
                             if (d_propagator.find(sub_dep) == d_propagator.end())
                                 throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
@@ -535,14 +535,14 @@ void CudaPseudoContinuous::compute_statistics(
                 }
                 cudaDeviceSynchronize();
             }
-            // synchronize all GPUs
+            // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
                 gpu_error_check(cudaDeviceSynchronize());
             }
 
-            // copy jobs that have non-zero segments
+            // Copy jobs that have non-zero segments
             std::vector<std::tuple<std::string, int, int>> non_zero_segment_jobs;
             for (auto it = parallel_job->begin(); it != parallel_job->end(); it++)
             {
@@ -552,7 +552,7 @@ void CudaPseudoContinuous::compute_statistics(
                     non_zero_segment_jobs.push_back(*it);
             }
 
-            // advance propagator successively
+            // Advance propagator successively
             if(non_zero_segment_jobs.size()==1)
             {
                 gpu_error_check(cudaSetDevice(0));
@@ -606,7 +606,7 @@ void CudaPseudoContinuous::compute_statistics(
                     prev = 0;
                     next = 1;
 
-                    // copy propagator of key1 from device0 to device1
+                    // Copy propagator of key1 from device0 to device1
                     gpu_error_check(cudaMemcpy(
                         d_propagator_device_1[prev],
                         _d_propagator_keys[1][n_segment_froms[1]-1],
@@ -645,7 +645,7 @@ void CudaPseudoContinuous::compute_statistics(
                                 sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[1][1]));
                         }
 
-                        // synchronize all GPUs
+                        // Synchronize all GPUs
                         for(int gpu=0; gpu<N_GPUS; gpu++)
                         {
                             gpu_error_check(cudaSetDevice(gpu));
@@ -697,7 +697,7 @@ void CudaPseudoContinuous::compute_statistics(
                     }
                 }
             }
-            // synchronize all GPUs
+            // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
@@ -706,7 +706,7 @@ void CudaPseudoContinuous::compute_statistics(
         }
         gpu_error_check(cudaSetDevice(0));
 
-        // compute total partition function of each distinct polymers
+        // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
         {
             int p                  = std::get<0>(segment_info);
@@ -718,7 +718,7 @@ void CudaPseudoContinuous::compute_statistics(
                 d_propagator_v, d_propagator_u)/n_superposed/cb->get_volume();
         }
 
-        // calculate segment concentrations
+        // Calculate segment concentrations
         for(const auto& d_block: d_block_phi)
         {
             const auto& key = d_block.first;
@@ -731,14 +731,14 @@ void CudaPseudoContinuous::compute_statistics(
             int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
             int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
 
-            // if there is no segment
+            // If there is no segment
             if(n_segment_allocated == 0)
             {
                 gpu_error_check(cudaMemset(d_block.second, 0, sizeof(double)*M));
                 continue;
             }
 
-            // check keys
+            // Check keys
             #ifndef NDEBUG
             if (d_propagator.find(dep_v) == d_propagator.end())
                 throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
@@ -746,23 +746,23 @@ void CudaPseudoContinuous::compute_statistics(
                 throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
             #endif
 
-            // contains no '['
+            // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
-            // calculate phi of one block (possibly multiple blocks when using superposition)
+            // Calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
-                d_block.second,       // phi
+                d_block.second,       // Phi
                 d_propagator[dep_v],  // dependency v
                 d_propagator[dep_u],  // dependency u
                 n_segment_allocated,
                 n_segment_offset,
                 n_segment_original);
 
-            // normalize concentration
-            PolymerChain& pc = molecules->get_polymer(p);
+            // Normalize concentration
+            Polymer& pc = molecules->get_polymer(p);
             double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
         }
@@ -780,7 +780,7 @@ void CudaPseudoContinuous::advance_one_propagator(const int GPU,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half)
 {
-    // overlapping computations for 1/2 step and 1/4 step
+    // Overlapping computations for 1/2 step and 1/4 step
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -827,7 +827,7 @@ void CudaPseudoContinuous::advance_one_propagator(const int GPU,
         // step 1/4: Evaluate exp(-w*ds/4) in real space.
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_step_2_one[GPU], d_q_step_2_one[GPU], d_exp_dw_half, 1.0/((double)M), M);
 
-        // compute linear combination with 4/3 and -1/3 ratio
+        // Compute linear combination with 4/3 and -1/3 ratio
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[GPU], -1.0/3.0, d_q_step_1_one[GPU], M);
     }
     catch(std::exception& exc)
@@ -843,7 +843,7 @@ void CudaPseudoContinuous::advance_two_propagators(
     double *d_exp_dw_1, double *d_exp_dw_2,
     double *d_exp_dw_half_1, double *d_exp_dw_half_2)
 {
-    // overlapping computations for 1/2 step and 1/4 step using 4-batch cuFFT
+    // Overlapping computations for 1/2 step and 1/4 step using 4-batch cuFFT
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -900,7 +900,7 @@ void CudaPseudoContinuous::advance_two_propagators(
             &d_q_step_2_two[0][0], &d_q_step_2_two[0][0], d_exp_dw_half_1,
             &d_q_step_2_two[0][M], &d_q_step_2_two[0][M], d_exp_dw_half_2, 1.0/((double)M), M);
 
-        // compute linear combination with 4/3 and -1/3 ratio
+        // Compute linear combination with 4/3 and -1/3 ratio
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, 4.0/3.0, &d_q_step_2_two[0][0], -1.0/3.0, &d_q_step_1_two[0][0], M);
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, 4.0/3.0, &d_q_step_2_two[0][M], -1.0/3.0, &d_q_step_1_two[0][M], M);
     }
@@ -917,7 +917,7 @@ void CudaPseudoContinuous::advance_two_propagators_two_gpus(
     double *d_exp_dw_1, double *d_exp_dw_2,
     double *d_exp_dw_half_1, double *d_exp_dw_half_2)
 {
-    // overlapping computations for 1/2 step and 1/4 step
+    // Overlapping computations for 1/2 step and 1/4 step
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -998,7 +998,7 @@ void CudaPseudoContinuous::advance_two_propagators_two_gpus(
         gpu_error_check(cudaSetDevice(1));
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_step_2_one[1], d_q_step_2_one[1], d_exp_dw_half_2, 1.0/((double)M), M);
 
-        // compute linear combination with 4/3 and -1/3 ratio
+        // Compute linear combination with 4/3 and -1/3 ratio
         gpu_error_check(cudaSetDevice(0));
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, 4.0/3.0, d_q_step_2_one[0], -1.0/3.0, d_q_step_1_one[0], M);
         gpu_error_check(cudaSetDevice(1));
@@ -1055,10 +1055,10 @@ void CudaPseudoContinuous::get_total_concentration(std::string monomer_type, dou
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = cb->get_n_grid();
 
-        // initialize to zero
+        // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        // for each block
+        // For each block
         for(const auto& d_block: d_block_phi)
         {
             const auto& key = d_block.first;
@@ -1089,10 +1089,10 @@ void CudaPseudoContinuous::get_total_concentration(int p, std::string monomer_ty
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // initialize to zero
+        // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        // for each block
+        // For each block
         for(const auto& d_block: d_block_phi)
         {
             const auto& key = d_block.first;
@@ -1126,11 +1126,11 @@ void CudaPseudoContinuous::get_block_concentration(int p, double *phi)
         if (molecules->is_using_superposition())
             throw_with_line_number("Disable 'superposition' option to invoke 'get_block_concentration'.");
 
-        // initialize to zero
+        // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        PolymerChain& pc = molecules->get_polymer(p);
-        std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+        Polymer& pc = molecules->get_polymer(p);
+        std::vector<Block>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
         {
@@ -1169,7 +1169,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[MAX_GPUS];
         double stress_sum_out[MAX_GPUS][3];
 
-        // compute stress for each block
+        // Compute stress for each block
         for(const auto& block: d_block_phi)
         {
             const auto& key = block.first;
@@ -1182,11 +1182,11 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             const int N_ORIGINAL  = molecules->get_essential_block(key).n_segment_original;
             std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
-            // if there is no segment
+            // If there is no segment
             if(N == 0)
                 continue;
 
-            // contains no '['
+            // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
                 n_repeated = molecules->get_essential_block(key).v_u.size();
@@ -1207,10 +1207,10 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             prev = 0;
             next = 1;
 
-            // copy memory from device to device
+            // Copy memory from device to device
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
-                // index
+                // Index
                 int idx = gpu;
                 gpu_error_check(cudaSetDevice(gpu));
                 if (idx <= N)
@@ -1222,13 +1222,13 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 }
             }
 
-            // compute
+            // Compute
             for(int n=0; n<=N; n+=N_GPUS)
             {
                 // STREAM 1: copy memory from device to device
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
-                    // index
+                    // Index
                     const int idx = n + gpu;
                     const int idx_next = idx + N_GPUS;
 
@@ -1242,7 +1242,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                     }
                 }
                 // STREAM 0: execute kernels
-                // execute a Forward FFT
+                // Execute a Forward FFT
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
                     const int idx = n + gpu;
@@ -1250,7 +1250,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                     if (idx <= N)
                         cufftExecD2Z(plan_for_two[gpu], d_stress_q[gpu][prev], d_qk_in_1_two[gpu]);
                 }
-                // multiply two propagators in the fourier spaces
+                // Multiply two propagators in the fourier spaces
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
                     const int idx = n + gpu;
@@ -1294,13 +1294,13 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                             cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_stress_sum[gpu], d_stress_sum_out[gpu], M_COMPLEX, streams[gpu][0]);
                             gpu_error_check(cudaMemcpyAsync(&stress_sum_out[gpu][0],d_stress_sum_out[gpu],sizeof(double),cudaMemcpyDeviceToHost, streams[gpu][0]));
                         }
-                        // synchronize streams and add results
+                        // Synchronize streams and add results
                         gpu_error_check(cudaStreamSynchronize(streams[gpu][0]));
                         for(int d=0; d<DIM; d++)
                             _block_dq_dl[gpu][d] += s_coeff[idx]*stress_sum_out[gpu][d]*n_repeated;
                     }
                 }
-                // synchronize all GPUs
+                // Synchronize all GPUs
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
                     gpu_error_check(cudaSetDevice(gpu));
@@ -1308,13 +1308,13 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
                 }
                 std::swap(prev, next);
             }
-            // copy stress data
+            // Copy stress data
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 block_dq_dl[gpu][key] = _block_dq_dl[gpu];
         }
         gpu_error_check(cudaSetDevice(0));
 
-        // compute total stress
+        // Compute total stress
         for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
         for(const auto& block: d_block_phi)
@@ -1323,7 +1323,7 @@ std::vector<double> CudaPseudoContinuous::compute_stress()
             int p             = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
-            PolymerChain& pc  = molecules->get_polymer(p);
+            Polymer& pc  = molecules->get_polymer(p);
 
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 for(int d=0; d<DIM; d++)
@@ -1348,7 +1348,7 @@ void CudaPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int 
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain& pc = molecules->get_polymer(polymer);
+        Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
         if (molecules->get_essential_propagator_codes().find(dep) == molecules->get_essential_propagator_codes().end())

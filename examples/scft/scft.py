@@ -133,45 +133,28 @@ class SCFT:
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
 
         # Polymer Chains
-        self.random_fraction = {}
         for polymer_counter, polymer in enumerate(params["distinct_polymers"]):
-            block_length_list = []
-            block_monomer_type_list = []
-            v_list = []
-            u_list = []
-
+            blocks_input = []
             alpha = 0.0             # total_relative_contour_length
-            block_count = 0
             is_linear_chain = not "v" in polymer["blocks"][0]
             for block in polymer["blocks"]:
-                block_length_list.append(block["length"])
-                block_monomer_type_list.append(block["type"])
                 alpha += block["length"]
-
                 if is_linear_chain:
                     assert(not "v" in block), \
                         "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
                     assert(not "u" in block), \
                         "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
-
-                    v_list.append(block_count)
-                    u_list.append(block_count+1)
+                    blocks_input.append([block["type"], block["length"], len(blocks_input), len(blocks_input)+1])
                 else:
                     assert("v" in block), \
                         "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
                     assert("u" in block), \
                         "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
-
-                    v_list.append(block["v"])
-                    u_list.append(block["u"])
-                block_count += 1
-
-            polymer.update({"block_monomer_types":block_monomer_type_list})
-            polymer.update({"block_lengths":block_length_list})
-            polymer.update({"v":v_list})
-            polymer.update({"u":u_list})
+                    blocks_input.append([block["type"], block["length"], block["v"], block["u"]])
+            polymer.update({"blocks_input":blocks_input})
 
         # Random Copolymer Chains
+        self.random_fraction = {}
         for polymer in params["distinct_polymers"]:
 
             is_random = False
@@ -216,9 +199,9 @@ class SCFT:
 
         # (c++ class) Create a factory for given platform and chain_model
         if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["chain_model"], params["reduce_gpu_memory_usage"])
+            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"])
         else:
-            factory = PlatformSelector.create_factory(platform, params["chain_model"], False)
+            factory = PlatformSelector.create_factory(platform, False)
         factory.display_info()
 
         # (C++ class) Computation box
@@ -226,14 +209,13 @@ class SCFT:
 
         # (C++ class) Molecules list
         if "reduce_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
+            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
         else:
-            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
-            # print(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"], polymer["u"])
-            molecules.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
+            molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
         # (C++ class) Solvers using Pseudo-spectral method
         pseudo = factory.create_pseudo(cb, molecules)

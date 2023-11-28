@@ -110,9 +110,9 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 d_propagator[dep_v][n_segment_original-n_segment_offset-1],  // q
-                d_propagator[dep_u][0],                                      // q_dagger
+                d_propagator[dep_u][0],                                      // Q_dagger
                 monomer_type,       
-                n_superposed                   // how many propagators are aggregated
+                n_superposed                   // How many propagators are aggregated
                 ));
             current_p++;
         }
@@ -499,7 +499,7 @@ void CudaPseudoDiscrete::compute_statistics(
                 // Calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                     // q_init
+                     // Q_init
                     if (key[0] == '{')
                     {
                         std::string g = Molecules::get_q_input_idx_from_key(key);
@@ -721,7 +721,7 @@ void CudaPseudoDiscrete::compute_statistics(
                                 sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[1][1]));
                         }
 
-                        // synchronize all GPUs
+                        // Synchronize all GPUs
                         for(int gpu=0; gpu<N_GPUS; gpu++)
                         {
                             gpu_error_check(cudaSetDevice(gpu));
@@ -825,7 +825,7 @@ void CudaPseudoDiscrete::compute_statistics(
 
             // Calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
-                block.second,              // phi
+                block.second,              // Phi
                 d_propagator[dep_v],       // dependency v
                 d_propagator[dep_u],       // dependency u
                 d_exp_dw[0][monomer_type], // exp_dw
@@ -834,7 +834,7 @@ void CudaPseudoDiscrete::compute_statistics(
                 n_segment_original);
             
             // Normalize concentration
-            PolymerChain& pc = molecules->get_polymer(p);
+            Polymer& pc = molecules->get_polymer(p);
             double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
         }
@@ -1099,8 +1099,8 @@ void CudaPseudoDiscrete::get_block_concentration(int p, double *phi)
         // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        PolymerChain& pc = molecules->get_polymer(p);
-        std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+        Polymer& pc = molecules->get_polymer(p);
+        std::vector<Block>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
         {
@@ -1161,8 +1161,8 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
 
             double bond_length_sq[MAX_GPUS][2];       // one for prev, the other for next
             double *d_boltz_bond_now[MAX_GPUS][2];    // one for prev, the other for next
-            double **d_q_1 = d_propagator[dep_v];     // propagator q
-            double **d_q_2 = d_propagator[dep_u];     // propagator q^dagger
+            double **d_q_1 = d_propagator[dep_v];     // Propagator q
+            double **d_q_2 = d_propagator[dep_u];     // Propagator q^dagger
 
             std::array<double,3> _block_dq_dl[MAX_GPUS];
             for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -1353,7 +1353,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             int p             = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
-            PolymerChain& pc  = molecules->get_polymer(p);
+            Polymer& pc  = molecules->get_polymer(p);
 
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 for(int d=0; d<DIM; d++)
@@ -1378,7 +1378,7 @@ void CudaPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v,
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain& pc = molecules->get_polymer(polymer);
+        Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
         if (molecules->get_essential_propagator_codes().find(dep) == molecules->get_essential_propagator_codes().end())

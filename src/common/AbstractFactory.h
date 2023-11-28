@@ -9,7 +9,7 @@
 #include <array>
 
 #include "ComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h" 
