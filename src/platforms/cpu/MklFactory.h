@@ -7,7 +7,7 @@
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -16,7 +16,7 @@
 class MklFactory : public AbstractFactory
 {
 public :
-    MklFactory(std::string chain_model, bool reduce_memory_usage);
+    MklFactory(bool reduce_memory_usage);
 
     Array* create_array(
         unsigned int size) override;
@@ -29,10 +29,10 @@ public :
         std::vector<int> nx,
         std::vector<double> lx) override;
 
-    Mixture* create_mixture(
-        double ds, std::map<std::string, double> bond_lengths, bool use_superposition) override;
+    Molecules* create_molecule_information(
+        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) override;
 
-    Pseudo* create_pseudo(ComputationBox *cb, Mixture *mx) override;
+    Pseudo* create_pseudo(ComputationBox *cb, Molecules *molecules) override;
 
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

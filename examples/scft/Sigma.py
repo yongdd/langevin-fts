@@ -63,8 +63,8 @@ sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
 [0.18,0.18,0.75],[0.82,0.82,0.75],[0.32,0.68,0.75],[0.68,0.32,0.75]] #E
 
 for x,y,z in sphere_positions:
-    mx, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
-    w_A[mx,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+    w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 # Initialize calculation

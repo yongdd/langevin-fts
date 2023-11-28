@@ -9,7 +9,7 @@
 #include "Exception.h"
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -52,32 +52,32 @@ int main()
         // choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        std::vector<bool> use_superpositions = {false, true};
+        std::vector<bool> reduce_propagator_computations = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> x_square_total_list;
             for(std::string platform : avail_platforms)
             {
-                for(bool use_superposition : use_superpositions)
+                for(bool reduce_propagator_computation : reduce_propagator_computations)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
+                    AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
                     // factory->display_info();
 
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Mixture* mx        = factory->create_mixture(ds, bond_lengths, use_superposition);
-                    mx->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
+                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, reduce_propagator_computation);
+                    molecules->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
+                    Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
 
                     // -------------- print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
-                    std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
+                    std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                     std::cout << "Platform: " << platform << std::endl;
-                    std::cout << "Using Superposition: " << use_superposition << std::endl;
+                    std::cout << "Using Superposition: " << reduce_propagator_computation << std::endl;
 
                     // // display branches
-                    // mx->display_blocks();
-                    // mx->display_sub_propagators();
+                    // molecules->display_blocks();
+                    // molecules->display_sub_propagators();
 
                     for(int i=0; i<M; i++)
                     {
@@ -135,7 +135,7 @@ int main()
                     
                     delete factory;
                     delete cb;
-                    delete mx;
+                    delete molecules;
                     delete pseudo;
                 }
             }

@@ -16,9 +16,8 @@
 #include "CudaFactory.h"
 #include "CudaArray.h"
 
-CudaFactory::CudaFactory(std::string chain_model, bool reduce_memory_usage)
+CudaFactory::CudaFactory(bool reduce_memory_usage)
 {
-    this->chain_model = chain_model;
     this->reduce_memory_usage = reduce_memory_usage;
 }
 
@@ -39,23 +38,23 @@ ComputationBox* CudaFactory::create_computation_box(
 {
     return new CudaComputationBox(nx, lx);
 }
-Mixture* CudaFactory::create_mixture(
-    double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 
+Molecules* CudaFactory::create_molecule_information(
+    std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) 
 {
-    return new Mixture(chain_model, ds, bond_lengths, use_superposition);
+    return new Molecules(chain_model, ds, bond_lengths, reduce_propagator_computation);
 }
-Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Molecules *molecules)
 {
-    std::string model_name = mx->get_model_name();
+    std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaPseudoContinuous(cb, mx);
+        return new CudaPseudoContinuous(cb, molecules);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryContinuous(cb, mx);
+        return new CudaPseudoReduceMemoryContinuous(cb, molecules);
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaPseudoDiscrete(cb, mx);
+        return new CudaPseudoDiscrete(cb, molecules);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryDiscrete(cb, mx);
+        return new CudaPseudoReduceMemoryDiscrete(cb, molecules);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

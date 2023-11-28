@@ -41,7 +41,7 @@ ADD_LIBRARY(common
     src/common/Array.cpp
     src/common/ComputationBox.cpp
     src/common/PolymerChain.cpp
-    src/common/Mixture.cpp
+    src/common/Molecules.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
     src/common/AndersonMixing.cpp

@@ -206,7 +206,7 @@ std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
             same_height_propagators.clear();
             for(size_t i=0; i<remaining_branches.size(); i++)
             {
-                if (current_height == Mixture::get_height_from_key(remaining_branches[i]))
+                if (current_height == Molecules::get_height_from_key(remaining_branches[i]))
                     same_height_propagators.push_back(remaining_branches[i]);
             }
             if (!same_height_propagators.empty())
@@ -222,7 +222,7 @@ std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
         // {
         //     std::cout << "Height:" << i << std::endl;
         //     for(const auto &item: propagator_hierarchies[i])
-        //         std::cout << item << ": " << Mixture::get_height_from_key(item) << std::endl;
+        //         std::cout << item << ": " << Molecules::get_height_from_key(item) << std::endl;
         // }
 
         // for(const auto& item: essential_propagator_codes)

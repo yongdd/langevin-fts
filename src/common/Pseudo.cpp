@@ -4,15 +4,15 @@
 
 Pseudo::Pseudo(
     ComputationBox *cb,
-    Mixture *mx)
+    Molecules *molecules)
 {
     if (cb == nullptr)
         throw_with_line_number("ComputationBox *cb is null pointer");
-    if (mx == nullptr)
-        throw_with_line_number("Mixture *mx is null pointer");
+    if (molecules == nullptr)
+        throw_with_line_number("Molecules *molecules is null pointer");
 
     this->cb = cb;
-    this->mx = mx;
+    this->molecules = molecules;
 
     if (cb->get_dim() == 3)
         this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);

@@ -130,7 +130,7 @@ class SCFT:
         total_volume_fraction = 0.0
         for polymer in params["distinct_polymers"]:
             total_volume_fraction += polymer["volume_fraction"]
-        assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
+        assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
 
         # Polymer Chains
         self.random_fraction = {}
@@ -192,7 +192,7 @@ class SCFT:
             statistical_segment_length = np.sqrt(statistical_segment_length)
 
             assert(np.isclose(total_random_fraction, 1.0)), \
-                "The sum of volume fraction of random copolymer must be equal to 1."
+                "The sum of volume fractions of random copolymer must be equal to 1."
 
             random_type_string = polymer["blocks"][0]["type"]
             assert(not random_type_string in params["segment_lengths"]), \
@@ -224,19 +224,19 @@ class SCFT:
         # (C++ class) Computation box
         cb = factory.create_computation_box(params["nx"], params["lx"])
 
-        # (C++ class) Mixture box
-        if "use_superposition" in params:
-            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
+        # (C++ class) Molecules list
+        if "reduce_propagator_computation" in params:
+            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
         else:
-            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             # print(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"], polymer["u"])
-            mixture.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
+            molecules.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solvers using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, mixture)
+        pseudo = factory.create_pseudo(cb, molecules)
 
         # Total number of variables to be adjusted to minimize the Hamiltonian
         if params["box_is_altering"] : 
@@ -292,12 +292,12 @@ class SCFT:
         for pair in self.chi_n:
             print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
 
-        for p in range(mixture.get_n_polymers()):
+        for p in range(molecules.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (mixture.get_polymer(p).get_volume_fraction(),
-                 mixture.get_polymer(p).get_alpha(),
-                 mixture.get_polymer(p).get_n_segment_total()))
+                (molecules.get_polymer(p).get_volume_fraction(),
+                 molecules.get_polymer(p).get_alpha(),
+                 molecules.get_polymer(p).get_n_segment_total()))
 
         print("------- Matrices and Vectors for chin parameters -------")
         print("X matrix for chin:\n\t", str(self.matrix_chi).replace("\n", "\n\t"))
@@ -309,8 +309,8 @@ class SCFT:
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        mixture.display_blocks()
-        mixture.display_propagators()
+        molecules.display_blocks()
+        molecules.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -322,7 +322,7 @@ class SCFT:
         self.tolerance = tolerance
 
         self.cb = cb
-        self.mixture = mixture
+        self.molecules = molecules
         self.pseudo = pseudo
 
     def save_results(self, path):
@@ -424,9 +424,9 @@ class SCFT:
                     energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i])
             energy_total -= np.mean(w_exchange[S-1])
 
-            for p in range(self.mixture.get_n_polymers()):
-                energy_total -= self.mixture.get_polymer(p).get_volume_fraction()/ \
-                                self.mixture.get_polymer(p).get_alpha() * \
+            for p in range(self.molecules.get_n_polymer_types()):
+                energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
+                                self.molecules.get_polymer(p).get_alpha() * \
                                 np.log(self.pseudo.get_total_partition(p))
 
             # Calculate self-consistency error
@@ -461,13 +461,13 @@ class SCFT:
 
                 print("%8d %12.3E " %
                 (scft_iter, mass_error), end=" [ ")
-                for p in range(self.mixture.get_n_polymers()):
+                for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
             else:
                 print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
-                for p in range(self.mixture.get_n_polymers()):
+                for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 

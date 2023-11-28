@@ -11,7 +11,7 @@
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "FFT.h"
 #include "Scheduler.h"
@@ -60,7 +60,7 @@ private:
     // calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-    CpuPseudoContinuous(ComputationBox *cb, Mixture *pc, FFT *ff);
+    CpuPseudoContinuous(ComputationBox *cb, Molecules *pc, FFT *ff);
     ~CpuPseudoContinuous();
     
     void update_bond_function() override;

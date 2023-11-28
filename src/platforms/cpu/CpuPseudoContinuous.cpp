@@ -5,9 +5,9 @@
 
 CpuPseudoContinuous::CpuPseudoContinuous(
     ComputationBox *cb,
-    Mixture *mx,
+    Molecules *molecules,
     FFT *fft)
-    : Pseudo(cb, mx)
+    : Pseudo(cb, molecules)
 {
     try
     {
@@ -16,9 +16,9 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         this->fft = fft;
 
         // allocate memory for propagators
-        if( mx->get_essential_propagator_codes().size() == 0)
+        if( molecules->get_essential_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: mx->get_essential_propagator_codes())
+        for(const auto& item: molecules->get_essential_propagator_codes())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
@@ -32,15 +32,15 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         }
 
         // allocate memory for concentrations
-        if( mx->get_essential_blocks().size() == 0)
+        if( molecules->get_essential_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
-        for(const auto& item: mx->get_essential_blocks())
+        for(const auto& item: molecules->get_essential_blocks())
         {
             block_phi[item.first] = new double[M];
         }
 
         // create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
-        for(const auto& item: mx->get_bond_lengths())
+        for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             boltz_bond     [monomer_type] = new double[M_COMPLEX];
@@ -55,7 +55,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         fourier_basis_z = new double[M_COMPLEX];
 
         // total partition functions for each polymer
-        single_partitions = new double[mx->get_n_polymers()];
+        single_partitions = new double[molecules->get_n_polymer_types()];
 
         // remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
@@ -71,14 +71,14 @@ CpuPseudoContinuous::CpuPseudoContinuous(
                 continue;
 
             int n_superposed;
-            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+            int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_essential_block(key).v_u.size();
+                n_superposed = molecules->get_essential_block(key).v_u.size();
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -90,7 +90,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         }
 
         // create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
+        sc = new Scheduler(molecules->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         update_bond_function();
     }
@@ -132,12 +132,12 @@ void CpuPseudoContinuous::update_bond_function()
 {
     try
     {
-        for(const auto& item: mx->get_bond_lengths())
+        for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
-            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
 
             // for stress calculation: compute_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
@@ -155,9 +155,9 @@ void CpuPseudoContinuous::compute_statistics(
     try
     {
         const int M = cb->get_n_grid();
-        const double ds = mx->get_ds();
+        const double ds = molecules->get_ds();
 
-        for(const auto& item: mx->get_essential_propagator_codes())
+        for(const auto& item: molecules->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -207,8 +207,8 @@ void CpuPseudoContinuous::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = mx->get_essential_propagator_code(key).deps;
-                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
+                auto& deps = molecules->get_essential_propagator_code(key).deps;
+                auto monomer_type = molecules->get_essential_propagator_code(key).monomer_type;
 
                 // check key
                 #ifndef NDEBUG
@@ -224,7 +224,7 @@ void CpuPseudoContinuous::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        std::string g = Mixture::get_q_input_idx_from_key(key);
+                        std::string g = Molecules::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
@@ -379,9 +379,9 @@ void CpuPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
-            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
+            int n_segment_allocated = molecules->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
 
             // if there is no segment
             if(n_segment_allocated == 0)
@@ -393,7 +393,7 @@ void CpuPseudoContinuous::compute_statistics(
 
             // contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(key).v_u.size();
+                n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -415,8 +415,8 @@ void CpuPseudoContinuous::compute_statistics(
                 n_segment_original);
 
             // normalize concentration
-            PolymerChain& pc = mx->get_polymer(p);
-            double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            PolymerChain& pc = molecules->get_polymer(p);
+            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }
@@ -530,8 +530,8 @@ void CpuPseudoContinuous::get_total_concentration(std::string monomer_type, doub
         for(const auto& block: block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
-            if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_allocated = molecules->get_essential_block(block.first).n_segment_allocated;
+            if (Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -548,7 +548,7 @@ void CpuPseudoContinuous::get_total_concentration(int p, std::string monomer_typ
     try
     {
         const int M = cb->get_n_grid();
-        const int P = mx->get_n_polymers();
+        const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -562,8 +562,8 @@ void CpuPseudoContinuous::get_total_concentration(int p, std::string monomer_typ
         {
             int polymer_idx = std::get<0>(block.first);
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = mx->get_essential_block(block.first).n_segment_allocated;
-            if (polymer_idx == p && Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_allocated = molecules->get_essential_block(block.first).n_segment_allocated;
+            if (polymer_idx == p && Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -580,15 +580,15 @@ void CpuPseudoContinuous::get_block_concentration(int p, double *phi)
     try
     {
         const int M = cb->get_n_grid();
-        const int P = mx->get_n_polymers();
+        const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (mx->is_using_superposition())
+        if (molecules->is_using_superposition())
             throw_with_line_number("Disable 'superposition' option to invoke 'get_block_concentration'.");
 
-        PolymerChain& pc = mx->get_polymer(p);
+        PolymerChain& pc = molecules->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
@@ -621,7 +621,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        auto bond_lengths = mx->get_bond_lengths();
+        auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
@@ -643,10 +643,10 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
 
-            const int N           = mx->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(key).monomer_type;
+            const int N           = molecules->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = molecules->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = molecules->get_essential_block(key).n_segment_original;
+            std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
             // if there is no segment
             if(N == 0)
@@ -655,7 +655,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             // contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(key).v_u.size();
+                n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -714,14 +714,14 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             int p             = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
-            PolymerChain& pc  = mx->get_polymer(p);
+            PolymerChain& pc  = molecules->get_polymer(p);
 
             for(int d=0; d<DIM; d++)
                 stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
 
         for(int d=0; d<DIM; d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
 
         return stress;
     }
@@ -739,13 +739,13 @@ void CpuPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int v
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain& pc = mx->get_polymer(polymer);
+        PolymerChain& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
+        if (molecules->get_essential_propagator_codes().find(dep) == molecules->get_essential_propagator_codes().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
-        const int N = mx->get_essential_propagator_codes()[dep].max_n_segment;
+        const int N = molecules->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 

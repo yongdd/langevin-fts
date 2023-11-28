@@ -7,9 +7,9 @@
 16. Process Bar
 20. Graphic User Interface
 24. Draw network graph image for given polymer architecture
-27. Syntax check of Keys in Mixture 
+27. Syntax check of Keys in Molecules 
 31. Throws Exception in openMP block
-34. Detach Superposition Part from Mixture
+34. Detach Superposition Part from Molecules
 35. Write UnitTest: TestComparePropagatorKey
 37. Reduce the number of split in scheduler
 40. Figure out why two GPUs performance keeps changing in A100

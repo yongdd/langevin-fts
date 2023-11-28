@@ -10,7 +10,7 @@
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "CudaCommon.h"
 #include "Scheduler.h"
@@ -112,7 +112,7 @@ private:
         std::map<std::string, const double*> q_init, std::string device);
 public:
 
-    CudaPseudoContinuous(ComputationBox *cb, Mixture *pc);
+    CudaPseudoContinuous(ComputationBox *cb, Molecules *pc);
     ~CudaPseudoContinuous();
 
     void update_bond_function() override;

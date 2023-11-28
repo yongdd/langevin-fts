@@ -170,26 +170,26 @@ int main()
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
-        Mixture* mx1 = new Mixture("Discrete", 0.15, bond_lengths, false);
-        mx1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx1->display_blocks();
-        mx1->display_propagators();
+        Molecules* molecules1 = new Molecules("Discrete", 0.15, bond_lengths, false);
+        molecules1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules1->display_blocks();
+        molecules1->display_propagators();
 
-        Mixture* mx2 = new Mixture("Discrete", 0.15, bond_lengths, true);
-        mx2->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx2->display_blocks();
-        mx2->display_propagators();
+        Molecules* molecules2 = new Molecules("Discrete", 0.15, bond_lengths, true);
+        molecules2->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules2->display_blocks();
+        molecules2->display_propagators();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));
-        pseudo_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
-        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
+        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
+        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
@@ -217,7 +217,7 @@ int main()
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
             const int p = 0;
-            PolymerChain& pc = mx1->get_polymer(p);
+            PolymerChain& pc = molecules1->get_polymer(p);
             pseudo->get_chain_propagator(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);

@@ -17,7 +17,7 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "CudaCommon.h"
 #include "Scheduler.h"
@@ -112,7 +112,7 @@ private:
         std::map<std::string, const double*> q_init, std::string device);
 public:
 
-    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Mixture *pc);
+    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Molecules *pc);
     ~CudaPseudoReduceMemoryContinuous();
 
     void update_bond_function() override;

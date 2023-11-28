@@ -7,7 +7,7 @@
 
 #include "Exception.h"
 #include "CpuComputationBox.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "PolymerChain.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
@@ -172,18 +172,18 @@ int main()
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
-        Mixture* mx = new Mixture("Continuous", 1.0/NN, bond_lengths, false);
-        mx->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
-        mx->display_blocks();
-        mx->display_propagators();
+        Molecules* molecules = new Molecules("Continuous", 1.0/NN, bond_lengths, false);
+        molecules->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules->display_blocks();
+        molecules->display_propagators();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx));
+        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
         #endif
 
         // For each platform    
@@ -208,7 +208,7 @@ int main()
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
             const int p = 0;
-            PolymerChain& pc = mx->get_polymer(p);
+            PolymerChain& pc = molecules->get_polymer(p);
             pseudo->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);

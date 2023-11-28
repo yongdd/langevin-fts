@@ -26,28 +26,28 @@ std::vector<std::string> PlatformSelector::avail_platforms()
         throw_with_line_number("No available platform");
     return names;
 }
-AbstractFactory *PlatformSelector::create_factory(std::string platform, std::string chain_model)
+AbstractFactory *PlatformSelector::create_factory(std::string platform)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory(chain_model, false);
+        return new MklFactory(false);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory(chain_model, false);
+        return new CudaFactory(false);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return NULL;
 }
-AbstractFactory *PlatformSelector::create_factory(std::string platform, std::string chain_model, bool reduce_memory_usage)
+AbstractFactory *PlatformSelector::create_factory(std::string platform, bool reduce_memory_usage)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory(chain_model, reduce_memory_usage);
+        return new MklFactory(reduce_memory_usage);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory(chain_model, reduce_memory_usage);
+        return new CudaFactory(reduce_memory_usage);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return NULL;

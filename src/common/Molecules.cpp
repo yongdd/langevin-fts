@@ -6,12 +6,12 @@
 #include <stack>
 #include <set>
 
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
-Mixture::Mixture(
-    std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool use_superposition)
+Molecules::Molecules(
+    std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation)
 {
     // checking chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
@@ -31,14 +31,14 @@ Mixture::Mixture(
     {
         this->ds = ds;
         this->bond_lengths = bond_lengths;
-        this->use_superposition = use_superposition;
+        this->reduce_propagator_computation = reduce_propagator_computation;
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-void Mixture::add_polymer(
+void Molecules::add_polymer(
     double volume_fraction,
     std::vector<std::string> block_monomer_types,
     std::vector<double> contour_lengths,
@@ -100,7 +100,7 @@ void Mixture::add_polymer(
         essential_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
 
-    if (this->use_superposition)
+    if (this->reduce_propagator_computation)
     {
         // find superposed branches in essential_blocks_new_polymer
         std::map<std::tuple<int, std::string>, std::map<std::string, EssentialBlock >> superposed_blocks;
@@ -228,7 +228,7 @@ void Mixture::add_polymer(
             // add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
-            essential_blocks[key].monomer_type = Mixture::get_monomer_type_from_key(key_v);
+            essential_blocks[key].monomer_type = Molecules::get_monomer_type_from_key(key_v);
             essential_blocks[key].n_segment_allocated = n_segment_allocated;
             essential_blocks[key].n_segment_offset    = n_segment_offset;
             essential_blocks[key].n_segment_original  = n_segment_original;
@@ -240,31 +240,31 @@ void Mixture::add_polymer(
         }
     }
 }
-std::string Mixture::get_model_name() const
+std::string Molecules::get_model_name() const
 {
     return model_name;
 }
-double Mixture::get_ds() const
+double Molecules::get_ds() const
 {
     return ds;
 }
-bool Mixture::is_using_superposition() const
+bool Molecules::is_using_superposition() const
 {
-    return use_superposition;
+    return reduce_propagator_computation;
 }
-int Mixture::get_n_polymers() const
+int Molecules::get_n_polymer_types() const
 {
     return distinct_polymers.size();
 }
-PolymerChain& Mixture::get_polymer(const int p)
+PolymerChain& Molecules::get_polymer(const int p)
 {
     return distinct_polymers[p];
 }
-const std::map<std::string, double>& Mixture::get_bond_lengths() const
+const std::map<std::string, double>& Molecules::get_bond_lengths() const
 {
     return bond_lengths;
 }
-std::pair<std::string, int> Mixture::generate_propagator_code(
+std::pair<std::string, int> Molecules::generate_propagator_code(
     std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
     std::vector<PolymerChainBlock>& blocks,
     std::map<int, std::vector<int>>& adjacent_nodes,
@@ -333,14 +333,14 @@ std::pair<std::string, int> Mixture::generate_propagator_code(
 
     return text_and_segments_total;
 }
-void Mixture::update_essential_propagator_code(std::map<std::string, EssentialEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment)
+void Molecules::update_essential_propagator_code(std::map<std::string, EssentialEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment)
 {
     if (essential_propagator_codes.find(new_key) == essential_propagator_codes.end())
     {
-        essential_propagator_codes[new_key].deps = Mixture::get_deps_from_key(new_key);
-        essential_propagator_codes[new_key].monomer_type = Mixture::get_monomer_type_from_key(new_key);
+        essential_propagator_codes[new_key].deps = Molecules::get_deps_from_key(new_key);
+        essential_propagator_codes[new_key].monomer_type = Molecules::get_monomer_type_from_key(new_key);
         essential_propagator_codes[new_key].max_n_segment = new_n_segment;
-        essential_propagator_codes[new_key].height = Mixture::get_height_from_key(new_key);
+        essential_propagator_codes[new_key].height = Molecules::get_height_from_key(new_key);
     }
     else
     {
@@ -348,7 +348,7 @@ void Mixture::update_essential_propagator_code(std::map<std::string, EssentialEd
             essential_propagator_codes[new_key].max_n_segment = new_n_segment;
     }
 }
-std::map<std::string, EssentialBlock> Mixture::superpose_propagator_of_continuous_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
+std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continuous_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
 {
     // Example)
     // 0, B:
@@ -404,7 +404,7 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_of_continuou
     return superposed_second_map_total;
 
 }
-std::map<std::string, EssentialBlock> Mixture::superpose_propagator_of_discrete_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
+std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_discrete_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
 {
 
     // Example)
@@ -440,7 +440,7 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_of_discrete_
     return superpose_propagator_common(not_superposed_yet_second_map, 1);
 }
 
-std::map<std::string, EssentialBlock> Mixture::superpose_propagator_common(std::map<std::string, EssentialBlock> remaining_keys, int minimum_n_segment)
+std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std::map<std::string, EssentialBlock> remaining_keys, int minimum_n_segment)
 {
     int current_n_segment;
     int n_segment_allocated;
@@ -534,7 +534,7 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_common(std::
                 if (n_segment_set.size() == 0)
                 {
                     // add to map
-                    superposed_second_map[std::get<1>(same_superposition_level_list[0])].monomer_type = Mixture::get_monomer_type_from_key(std::get<1>(same_superposition_level_list[0]));
+                    superposed_second_map[std::get<1>(same_superposition_level_list[0])].monomer_type = Molecules::get_monomer_type_from_key(std::get<1>(same_superposition_level_list[0]));
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_allocated = std::get<0>(same_superposition_level_list[0]);
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_offset    = std::get<2>(same_superposition_level_list[0]);
                     superposed_second_map[std::get<1>(same_superposition_level_list[0])].n_segment_original  = std::get<3>(same_superposition_level_list[0]);
@@ -554,7 +554,7 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_common(std::
                 std::sort(same_superposition_level_list.begin(), same_superposition_level_list.end(),
                     [](auto const &t1, auto const &t2)
                         {
-                            return Mixture::get_height_from_key(std::get<1>(t1)) > Mixture::get_height_from_key(std::get<1>(t2));
+                            return Molecules::get_height_from_key(std::get<1>(t1)) > Molecules::get_height_from_key(std::get<1>(t2));
                         }
                 );
 
@@ -586,17 +586,17 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_common(std::
                         superposed_propagator_code += ":" + std::to_string(dep_v_u.size());
 
                     // add to map
-                    superposed_second_map[std::get<1>(same_superposition_level_list[i])].monomer_type = Mixture::get_monomer_type_from_key(dep_key);
+                    superposed_second_map[std::get<1>(same_superposition_level_list[i])].monomer_type = Molecules::get_monomer_type_from_key(dep_key);
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].n_segment_allocated = n_segment_allocated;
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].n_segment_offset    = n_segment_offset;
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].n_segment_original  = n_segment_original;
                     superposed_second_map[std::get<1>(same_superposition_level_list[i])].v_u                 = dep_v_u;
                 }
-                superposed_propagator_code += "]" + Mixture::get_monomer_type_from_key(dep_key);
+                superposed_propagator_code += "]" + Molecules::get_monomer_type_from_key(dep_key);
                 n_segment_allocated = current_n_segment - minimum_n_segment;
 
                 // add to remaining_keys
-                remaining_keys[superposed_propagator_code].monomer_type = Mixture::get_monomer_type_from_key(superposed_propagator_code);
+                remaining_keys[superposed_propagator_code].monomer_type = Molecules::get_monomer_type_from_key(superposed_propagator_code);
                 remaining_keys[superposed_propagator_code].n_segment_allocated = n_segment_allocated;
                 remaining_keys[superposed_propagator_code].n_segment_offset    = n_segment_offset_max;
                 remaining_keys[superposed_propagator_code].n_segment_original  = n_segment_original_max;
@@ -612,11 +612,11 @@ std::map<std::string, EssentialBlock> Mixture::superpose_propagator_common(std::
     return superposed_second_map;
 }
 
-int Mixture::get_n_essential_propagator_codes() const
+int Molecules::get_n_essential_propagator_codes() const
 {
     return essential_propagator_codes.size();
 }
-std::vector<std::tuple<std::string, int, int>> Mixture::get_deps_from_key(std::string key)
+std::vector<std::tuple<std::string, int, int>> Molecules::get_deps_from_key(std::string key)
 {
     std::vector<std::tuple<std::string, int, int>> sub_deps;
     int sub_n_segment;
@@ -716,7 +716,7 @@ std::vector<std::tuple<std::string, int, int>> Mixture::get_deps_from_key(std::s
     return sub_deps;
 }
 
-std::string Mixture::remove_monomer_type_from_key(std::string key)
+std::string Molecules::remove_monomer_type_from_key(std::string key)
 {
     if (key[0] != '[' && key[0] != '(' && key[0] != '{')
     {
@@ -747,7 +747,7 @@ std::string Mixture::remove_monomer_type_from_key(std::string key)
     }
 }
 
-std::string Mixture::get_monomer_type_from_key(std::string key)
+std::string Molecules::get_monomer_type_from_key(std::string key)
 {
     int key_start = 0;
     for(int i=key.size()-1; i>=0;i--)
@@ -762,7 +762,7 @@ std::string Mixture::get_monomer_type_from_key(std::string key)
     //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
     return key.substr(key_start, key.size()-key_start);
 }
-std::string Mixture::get_q_input_idx_from_key(std::string key)
+std::string Molecules::get_q_input_idx_from_key(std::string key)
 {
     if (key[0] != '{')
         throw_with_line_number("There is no related initial condition in key (" + key + ").");
@@ -779,7 +779,7 @@ std::string Mixture::get_q_input_idx_from_key(std::string key)
     // std::cout << key.substr(1, key_start-1) << std::endl;
     return key.substr(1, key_start-1);
 }
-int Mixture::get_height_from_key(std::string key)
+int Molecules::get_height_from_key(std::string key)
 {
     int height_count = 0;
     for(size_t i=0; i<key.size();i++)
@@ -791,22 +791,22 @@ int Mixture::get_height_from_key(std::string key)
     }
     return height_count;
 }
-std::map<std::string, EssentialEdge, ComparePropagatorKey>& Mixture::get_essential_propagator_codes()
+std::map<std::string, EssentialEdge, ComparePropagatorKey>& Molecules::get_essential_propagator_codes()
 {
     return essential_propagator_codes;
 }
-EssentialEdge& Mixture::get_essential_propagator_code(std::string key)
+EssentialEdge& Molecules::get_essential_propagator_code(std::string key)
 {
     if (essential_propagator_codes.find(key) == essential_propagator_codes.end())
         throw_with_line_number("There is no such key (" + key + ").");
 
     return essential_propagator_codes[key];
 }
-std::map<std::tuple<int, std::string, std::string>, EssentialBlock>& Mixture::get_essential_blocks()
+std::map<std::tuple<int, std::string, std::string>, EssentialBlock>& Molecules::get_essential_blocks()
 {
     return essential_blocks;
 }
-EssentialBlock& Mixture::get_essential_block(std::tuple<int, std::string, std::string> key)
+EssentialBlock& Molecules::get_essential_block(std::tuple<int, std::string, std::string> key)
 {
     if (essential_blocks.find(key) == essential_blocks.end())
         throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
@@ -814,7 +814,7 @@ EssentialBlock& Mixture::get_essential_block(std::tuple<int, std::string, std::s
 
     return essential_blocks[key];
 }
-void Mixture::display_blocks() const
+void Molecules::display_blocks() const
 {
     // print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
@@ -865,7 +865,7 @@ void Mixture::display_blocks() const
     }
     std::cout << "------------------------------------" << std::endl;
 }
-void Mixture::display_propagators() const
+void Molecules::display_propagators() const
 {
     // print propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
@@ -896,7 +896,7 @@ void Mixture::display_propagators() const
     std::cout << "------------------------------------" << std::endl;
 }
 
-void Mixture::display_sub_propagators() const
+void Molecules::display_sub_propagators() const
 {
     // print sub propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
@@ -930,8 +930,8 @@ void Mixture::display_sub_propagators() const
 bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2)
 {
     // first compare heights
-    int height_str1 = Mixture::get_height_from_key(str1);
-    int height_str2 = Mixture::get_height_from_key(str2);
+    int height_str1 = Molecules::get_height_from_key(str1);
+    int height_str2 = Molecules::get_height_from_key(str2);
 
     if (height_str1 < height_str2)
         return true;

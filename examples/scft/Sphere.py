@@ -59,8 +59,8 @@ for i in range(0,n_unitcell):
             sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
             sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
 for x,y,z in sphere_positions:
-    mx, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
-    w_A[mx,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+    w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 # Initialize calculation

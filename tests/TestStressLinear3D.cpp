@@ -10,7 +10,7 @@
 #include "Exception.h"
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -100,21 +100,21 @@ int main()
         // choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
-        std::vector<bool> use_superpositions = {false, true};
+        std::vector<bool> reduce_propagator_computations = {false, true};
         for(std::string platform : avail_platforms)
         {
             for(std::string chain_model : chain_models)
             {
-                for(bool use_superposition : use_superpositions)
+                for(bool reduce_propagator_computation : reduce_propagator_computations)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
+                    AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
                     factory->display_info();
 
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}}, use_superposition);
-                    mx->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
-                    Pseudo *pseudo     = factory->create_pseudo(cb, mx);
+                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, reduce_propagator_computation);
+                    molecules->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
+                    Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -122,8 +122,8 @@ int main()
                     std::cout << std::setprecision(default_precision);
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
-                    std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
-                    std::cout << "Using Superposition: " << use_superposition << std::endl;
+                    std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                    std::cout << "Using Superposition: " << reduce_propagator_computation << std::endl;
                     // std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
                     // std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
                     // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
@@ -134,14 +134,14 @@ int main()
                     //     sum += cb->get_dv(i);
                     // std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-                    //mx->display_propagators();
-                    // mx->display_blocks();
+                    //molecules->display_propagators();
+                    // molecules->display_blocks();
 
                     std::string line;
                     std::ifstream input_field_file;
-                    if(mx->get_model_name() == "continuous")
+                    if(molecules->get_model_name() == "continuous")
                         input_field_file.open("Stress3D_ContinuousInput.txt");
-                    else if(mx->get_model_name() == "discrete")
+                    else if(molecules->get_model_name() == "discrete")
                         input_field_file.open("Stress3D_DiscreteInput.txt");
 
                     if (input_field_file.is_open())
@@ -189,8 +189,8 @@ int main()
 
                         energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -217,7 +217,7 @@ int main()
                         // std::cout<< std::setw(8) << iter;
                         // std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                         // std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
-                        // for(int p=1; p<mx->get_n_polymers(); p++)
+                        // for(int p=1; p<molecules->get_n_polymer_types(); p++)
                         //     std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
                         // std::cout<< "]"; 
                         // std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
@@ -231,7 +231,7 @@ int main()
                         am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
                     }
 
-                    // if(mx->get_model_name() == "continuous")
+                    // if(molecules->get_model_name() == "continuous")
                     // {
                     //     std::ofstream output_field_file("Stress3D_ContinuousInput.txt");
                     //     if (output_field_file.is_open())
@@ -242,7 +242,7 @@ int main()
                     //         output_field_file.close();
                     //     }
                     // }
-                    // else if(mx->get_model_name() == "discrete")
+                    // else if(molecules->get_model_name() == "discrete")
                     // {
                     //     std::ofstream output_field_file("Stress3D_DiscreteInput.txt");
                     //     if (output_field_file.is_open())
@@ -278,8 +278,8 @@ int main()
 
                         double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -302,8 +302,8 @@ int main()
 
                         double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -337,8 +337,8 @@ int main()
 
                         double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -361,8 +361,8 @@ int main()
 
                         double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -397,8 +397,8 @@ int main()
 
                         double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -421,8 +421,8 @@ int main()
 
                         double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<mx->get_n_polymers(); p++){
-                            PolymerChain& pc = mx->get_polymer(p);
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            PolymerChain& pc = molecules->get_polymer(p);
                             energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
@@ -436,7 +436,7 @@ int main()
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;
                     }
-                    delete mx;
+                    delete molecules;
                     delete cb;
                     delete pseudo;
                     delete am;

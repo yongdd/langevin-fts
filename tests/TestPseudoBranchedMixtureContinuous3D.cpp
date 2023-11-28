@@ -214,32 +214,32 @@ int main()
         //     }
         // }
 
-        Mixture* mx1 = new Mixture("Continuous", 0.15, bond_lengths, false);
+        Molecules* molecules1 = new Molecules("Continuous", 0.15, bond_lengths, false);
         for(size_t p=0; p<block_monomer_types.size(); p++){
-            mx1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
+            molecules1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
-        mx1->display_blocks();
-        mx1->display_propagators();
+        molecules1->display_blocks();
+        molecules1->display_propagators();
 
-        Mixture* mx2 = new Mixture("Continuous", 0.15, bond_lengths, true);
+        Molecules* molecules2 = new Molecules("Continuous", 0.15, bond_lengths, true);
         for(size_t p=0; p<block_monomer_types.size(); p++){
-            mx2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
+            molecules2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
             std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
         }
-        mx2->display_blocks();
-        mx2->display_propagators();
+        molecules2->display_blocks();
+        molecules2->display_propagators();
 
         std::vector<Pseudo*> pseudo_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1, new MklFFT3D({II,JJ,KK})));
-        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1, new MklFFT3D({II,JJ,KK})));
+        pseudo_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
-        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx1));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), mx2));
+        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
+        pseudo_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
+        pseudo_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
@@ -265,7 +265,7 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
 
-            for(int p=0; p<mx1->get_n_polymers();p++)
+            for(int p=0; p<molecules1->get_n_polymer_types();p++)
                 std::cout<< std::setprecision(10) << std::scientific << "Total Partial Partition (" + std::to_string(p) + "): " << pseudo->get_total_partition(p) << std::endl;
 
             error = std::abs(pseudo->get_total_partition(0)-1.1763668568e+05/(Lx*Ly*Lz))/std::abs(pseudo->get_total_partition(0));

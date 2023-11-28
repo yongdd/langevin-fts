@@ -12,7 +12,7 @@ import scipy.special as sp
 from scipy.io import loadmat, savemat
 from langevinfts import *
 
-def find_saddle_point(cb, mixture, pseudo, am, chi_n,
+def find_saddle_point(cb, molecules, pseudo, am, chi_n,
     w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level):
         
     # assign large initial value for the energy and error
@@ -44,13 +44,13 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
             energy_total = np.dot(w_minus,w_minus)/chi_n/cb.get_n_grid()
             energy_total += chi_n/4
             energy_total -= np.mean(w_plus)
-            for p in range(mixture.get_n_polymers()):
+            for p in range(molecules.get_n_polymer_types()):
                 energy_total  -= np.log(pseudo.get_total_partition(p))
 
             # check the mass conservation
             mass_error = np.mean(g_plus)
             print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
-            for p in range(mixture.get_n_polymers()):
+            for p in range(molecules.get_n_polymer_types()):
                 print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
             print("] %15.9f %15.7E " % (energy_total, error_level))
 
@@ -63,7 +63,7 @@ def find_saddle_point(cb, mixture, pseudo, am, chi_n,
 
     w_plus -= np.mean(w_plus)
     Q = []
-    for p in range(mixture.get_n_polymers()):
+    for p in range(molecules.get_n_polymer_types()):
         Q.append(pseudo.get_total_partition(p))
 
     return phi_a, phi_b, Q, energy_total
@@ -139,7 +139,7 @@ langevin_dt = 0.8      # Langevin step interval, delta tau*N
 langevin_nbar = 10000  # Invariant polymerization index
 langevin_max_step = 2000
 
-use_superposition = False
+reduce_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # -------------- initialize ------------
@@ -157,9 +157,9 @@ factory = PlatformSelector.create_factory(platform, chain_model, reduce_gpu_memo
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, dict_a_n, use_superposition)
-mixture.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
-pseudo = factory.create_pseudo(cb, mixture)
+molecules = factory.create_molecule_information(chain_model, ds, dict_a_n, reduce_propagator_computation)
+molecules.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
+pseudo = factory.create_pseudo(cb, molecules)
 am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -179,8 +179,8 @@ np.random.seed(5489)
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
 print("Box Dimension: %d" % (cb.get_dim()))
-print("chi_n: %f, f: %f, N: %d" % (chi_n, f, mixture.get_polymer(0).get_n_segment_total()) )
-print("%s chain model" % (mixture.get_model_name()) )
+print("chi_n: %f, f: %f, N: %d" % (chi_n, f, molecules.get_polymer(0).get_n_segment_total()) )
+print("%s chain model" % (molecules.get_model_name()) )
 print("Conformational asymmetry (epsilon): %f" % (epsilon) )
 print("Nx: %d, %d, %d" % (cb.get_nx(0), cb.get_nx(1), cb.get_nx(2)) )
 print("Lx: %f, %f, %f" % (cb.get_lx(0), cb.get_lx(1), cb.get_lx(2)) )
@@ -198,7 +198,7 @@ w_minus = (input_data["w_A"] - input_data["w_B"])/2
 # keep the level of field value
 w_plus -= np.mean(w_plus)
 
-phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+phi_a, phi_b, _, _ = find_saddle_point(cb, molecules, pseudo, am, chi_n,
     w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
 
 # for box move
@@ -211,7 +211,7 @@ print("iteration, mass error, total_partition, energy_total, error_level")
 for langevin_step in range(1, langevin_max_step+1):
 
     # calculate bare chi_n
-    z_inf, dz_inf_dl = renormal_psum(cb.get_lx(), cb.get_nx(), mixture.get_polymer(0).get_n_segment_total(), langevin_nbar)
+    z_inf, dz_inf_dl = renormal_psum(cb.get_lx(), cb.get_nx(), molecules.get_polymer(0).get_n_segment_total(), langevin_nbar)
     chi_n = effective_chi_n/z_inf
 
     print("langevin step: ", langevin_step)
@@ -219,20 +219,20 @@ for langevin_step in range(1, langevin_max_step+1):
     normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
     lambda1 = phi_a-phi_b + 2*w_minus/chi_n
     w_minus += -lambda1*langevin_dt + normal_noise
-    phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+    phi_a, phi_b, _, _ = find_saddle_point(cb, molecules, pseudo, am, chi_n,
         w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
 
     # update w_minus: correct step
     lambda2 = phi_a-phi_b + 2*w_minus/chi_n
     w_minus = w_minus_copy - 0.5*(lambda1+lambda2)*langevin_dt + normal_noise
-    phi_a, phi_b, _, _ = find_saddle_point(cb, mixture, pseudo, am, chi_n,
+    phi_a, phi_b, _, _ = find_saddle_point(cb, molecules, pseudo, am, chi_n,
         w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level)
 
     # write density and field data
     if langevin_step % 100 == 0:
         mdic = {"dim":cb.get_dim(), "nx":cb.get_nx(), "lx":cb.get_lx(),
-            "N":mixture.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
-            "chain_model":mixture.get_model_name(), "nbar":langevin_nbar,
+            "N":molecules.get_polymer(0).get_n_segment_total(), "f":f, "chi_n":chi_n, "epsilon":epsilon,
+            "chain_model":molecules.get_model_name(), "nbar":langevin_nbar,
             "random_generator":np.random.RandomState().get_state()[0],
             "random_seed":np.random.RandomState().get_state()[1],
             "w_A":w_plus+w_minus, "w_B":w_plus-w_minus, "phi_A":phi_a, "phi_B":phi_b}
