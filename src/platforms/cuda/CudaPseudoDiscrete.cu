@@ -6,8 +6,8 @@
 
 CudaPseudoDiscrete::CudaPseudoDiscrete(
     ComputationBox *cb,
-    Mixture *mx)
-    : Pseudo(cb, mx)
+    Molecules *molecules)
+    : Pseudo(cb, molecules)
 {
     try
     {
@@ -17,9 +17,9 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
-        if( mx->get_essential_propagator_codes().size() == 0)
+        if( molecules->get_essential_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: mx->get_essential_propagator_codes())
+        for(const auto& item: molecules->get_essential_propagator_codes())
         {
              // There are N segments
 
@@ -47,7 +47,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
         // Allocate memory for propagator_junction, which contain propagator at junction of discrete chain
-        for(const auto& item: mx->get_essential_propagator_codes())
+        for(const auto& item: molecules->get_essential_propagator_codes())
         {
             std::string key = item.first;
             d_propagator_junction[key] = nullptr;
@@ -55,16 +55,16 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
         // Allocate memory for concentrations
-        if( mx->get_essential_blocks().size() == 0)
+        if( molecules->get_essential_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
-        for(const auto& item: mx->get_essential_blocks())
+        for(const auto& item: molecules->get_essential_blocks())
         {
             d_block_phi[item.first] = nullptr;
             gpu_error_check(cudaMalloc((void**)&d_block_phi[item.first], sizeof(double)*M));
         }
 
         // Create boltz_bond, boltz_bond_half, and exp_dw
-        for(const auto& item: mx->get_bond_lengths())
+        for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -81,7 +81,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
         // Total partition functions for each polymer
-        single_partitions = new double[mx->get_n_polymers()];
+        single_partitions = new double[molecules->get_n_polymer_types()];
 
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
@@ -97,15 +97,15 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
                 continue;
 
             int n_superposed;
-            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(key).monomer_type;
+            int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
+            std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
-                n_superposed = mx->get_essential_block(key).v_u.size();
+                n_superposed = molecules->get_essential_block(key).v_u.size();
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -125,9 +125,9 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = mx->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
+            const int N           = molecules->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = molecules->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = molecules->get_essential_block(key).n_segment_original;
 
             double **d_q_1 = d_propagator[dep_v];    // dependency v
             double **d_q_2 = d_propagator[dep_u];    // dependency u
@@ -144,7 +144,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
                 // At v
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    if (mx->get_essential_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
+                    if (molecules->get_essential_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
                     {
                         _block_stress_info_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
                         continue;
@@ -156,7 +156,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
                 }
                 // At u
                 else if (n + N_OFFSET == 0){
-                    if (mx->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
+                    if (molecules->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_info_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
                         continue;
@@ -184,7 +184,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(mx->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
+        sc = new Scheduler(molecules->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         // Create streams
         for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -376,13 +376,13 @@ void CudaPseudoDiscrete::update_bond_function()
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
         
-        for(const auto& item: mx->get_bond_lengths())
+        for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
 
-            get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), mx->get_ds());
-            get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), mx->get_ds());
+            get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
@@ -420,7 +420,7 @@ void CudaPseudoDiscrete::compute_statistics(
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         const int M = cb->get_n_grid();
-        const double ds = mx->get_ds();
+        const double ds = molecules->get_ds();
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -432,7 +432,7 @@ void CudaPseudoDiscrete::compute_statistics(
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        for(const auto& item: mx->get_essential_propagator_codes())
+        for(const auto& item: molecules->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -486,8 +486,8 @@ void CudaPseudoDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = mx->get_essential_propagator_code(key).deps;
-                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
+                auto& deps = molecules->get_essential_propagator_code(key).deps;
+                auto monomer_type = molecules->get_essential_propagator_code(key).monomer_type;
 
                 // Check key
                 #ifndef NDEBUG
@@ -502,7 +502,7 @@ void CudaPseudoDiscrete::compute_statistics(
                      // q_init
                     if (key[0] == '{')
                     {
-                        std::string g = Mixture::get_q_input_idx_from_key(key);
+                        std::string g = Molecules::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
                         gpu_error_check(cudaMemcpy(_d_propagator[0], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice));
@@ -587,7 +587,7 @@ void CudaPseudoDiscrete::compute_statistics(
 
                             advance_propagator_half_bond_step(0,
                                 d_propagator[sub_dep][sub_n_segment-1],
-                                d_q_half_step, d_boltz_bond_half[0][mx->get_essential_propagator_code(sub_dep).monomer_type]);
+                                d_q_half_step, d_boltz_bond_half[0][molecules->get_essential_propagator_code(sub_dep).monomer_type]);
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                         }
@@ -640,7 +640,7 @@ void CudaPseudoDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[0]);
                 int n_segment_from = std::get<1>((*parallel_job)[0]);
                 int n_segment_to = std::get<2>((*parallel_job)[0]);
-                auto monomer_type = mx->get_essential_propagator_code(key).monomer_type;
+                auto monomer_type = molecules->get_essential_propagator_code(key).monomer_type;
                 double **_d_propagator_key = d_propagator[key];
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
@@ -676,7 +676,7 @@ void CudaPseudoDiscrete::compute_statistics(
                     keys[j] = std::get<0>((*parallel_job)[j]);
                     n_segment_froms[j] = std::get<1>((*parallel_job)[j]);
                     n_segment_tos[j] = std::get<2>((*parallel_job)[j]);
-                    monomer_types[j] = mx->get_essential_propagator_code(keys[j]).monomer_type;
+                    monomer_types[j] = molecules->get_essential_propagator_code(keys[j]).monomer_type;
                     _d_propagator_keys[j] = d_propagator[keys[j]];
                 }
 
@@ -804,14 +804,14 @@ void CudaPseudoDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
-            int n_segment_offset    = mx->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = mx->get_essential_block(key).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(key).monomer_type;
+            int n_segment_allocated = molecules->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = molecules->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
+            std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(key).v_u.size();
+                n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -834,8 +834,8 @@ void CudaPseudoDiscrete::compute_statistics(
                 n_segment_original);
             
             // Normalize concentration
-            PolymerChain& pc = mx->get_polymer(p);
-            double norm = mx->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            PolymerChain& pc = molecules->get_polymer(p);
+            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
         }
         gpu_error_check(cudaSetDevice(0));
@@ -1032,8 +1032,8 @@ void CudaPseudoDiscrete::get_total_concentration(std::string monomer_type, doubl
         {
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
-            if (Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_allocated = molecules->get_essential_block(key).n_segment_allocated;
+            if (Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -1053,7 +1053,7 @@ void CudaPseudoDiscrete::get_total_concentration(int p, std::string monomer_type
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int P = mx->get_n_polymers();
+        const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -1067,8 +1067,8 @@ void CudaPseudoDiscrete::get_total_concentration(int p, std::string monomer_type
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = mx->get_essential_block(key).n_segment_allocated;
-            if (polymer_idx == p && Mixture::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_allocated = molecules->get_essential_block(key).n_segment_allocated;
+            if (polymer_idx == p && Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -1088,18 +1088,18 @@ void CudaPseudoDiscrete::get_block_concentration(int p, double *phi)
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int P = mx->get_n_polymers();
+        const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (mx->is_using_superposition())
+        if (molecules->is_using_superposition())
             throw_with_line_number("Disable 'superposition' option to obtain concentration of each block.");
 
         // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
-        PolymerChain& pc = mx->get_polymer(p);
+        PolymerChain& pc = molecules->get_polymer(p);
         std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
@@ -1134,7 +1134,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         const int M    = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        auto bond_lengths = mx->get_bond_lengths();
+        auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[MAX_GPUS];
         double stress_sum_out[MAX_GPUS][3];
@@ -1147,15 +1147,15 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = mx->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = mx->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = mx->get_essential_block(key).n_segment_original;
-            std::string monomer_type = mx->get_essential_block(key).monomer_type;
+            const int N           = molecules->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = molecules->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = molecules->get_essential_block(key).n_segment_original;
+            std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
             // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = mx->get_essential_block(key).v_u.size();
+                n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -1353,14 +1353,14 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
             int p             = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
-            PolymerChain& pc  = mx->get_polymer(p);
+            PolymerChain& pc  = molecules->get_polymer(p);
 
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 for(int d=0; d<DIM; d++)
                     stress[d] += block_dq_dl[gpu][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
         }
         for(int d=0; d<DIM; d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/mx->get_ds();
+            stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
             
         return stress;
     }
@@ -1378,13 +1378,13 @@ void CudaPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v,
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain& pc = mx->get_polymer(polymer);
+        PolymerChain& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (mx->get_essential_propagator_codes().find(dep) == mx->get_essential_propagator_codes().end())
+        if (molecules->get_essential_propagator_codes().find(dep) == molecules->get_essential_propagator_codes().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'superposition' option to obtain propagators.");
 
-        const int N = mx->get_essential_propagator_codes()[dep].max_n_segment;
+        const int N = molecules->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 

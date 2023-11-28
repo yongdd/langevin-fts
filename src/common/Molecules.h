@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines polymer mixture parameters
+* This class defines polymer molecules parameters
 *-----------------------------------------------------------*/
 
 #ifndef MIXTURE_H_
@@ -20,12 +20,12 @@ struct EssentialEdge{
 struct EssentialBlock{
     std::string monomer_type;  // monomer_type
 
-    // When the 'use_superposition' is on, original block can be sliced to smaller block pieces.
+    // When the 'reduce_propagator_computation' is on, original block can be sliced to smaller block pieces.
     // For example, suppose one block is composed of 5'A' monomers. -> -A-A-A-A-A-
     // And this block is sliced into 3'A' monomers and 2'A' monomers -> -A-A-A-,  -A-A-
     // For the first slice, n_segment_allocated, n_segment_offset, and n_segment_original are 3, 0, and 5, respectively.
     // For the second slice, n_segment_allocated, n_segment_offset, and n_segment_original are 2, 3, and 5, respectively.
-    // If the 'use_superposition' is off, original block is not sliced to smaller block pieces.
+    // If the 'reduce_propagator_computation' is off, original block is not sliced to smaller block pieces.
     // In this case, n_segment_allocated, n_segment_offset, and n_segment_original are 5, 0, and 5, respectively.
 
     int n_segment_allocated;
@@ -40,14 +40,14 @@ struct ComparePropagatorKey
     bool operator()(const std::string& str1, const std::string& str2);
 };
 
-class Mixture
+class Molecules
 {
 private:
     std::string model_name; // "continuous": continuous standard Gaussian model
                             // "discrete": discrete bead-spring model
                             
     double ds;              // contour step interval
-    bool use_superposition; // compute multiple propagators using property of linearity of the diffusion equation.
+    bool reduce_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
@@ -81,8 +81,8 @@ private:
 
 public:
 
-    Mixture(std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool use_superposition);
-    ~Mixture() {};
+    Molecules(std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation);
+    ~Molecules() {};
 
     std::string get_model_name() const;
     double get_ds() const;
@@ -113,7 +113,7 @@ public:
     }
 
     // get polymers
-    int get_n_polymers() const;
+    int get_n_polymer_types() const;
     PolymerChain& get_polymer(const int p);
 
     // get information of essential propagators and blocks

@@ -19,9 +19,8 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
-MklFactory::MklFactory(std::string chain_model, bool reduce_memory_usage)
+MklFactory::MklFactory(bool reduce_memory_usage)
 {
-    this->chain_model = chain_model;
     this->reduce_memory_usage = reduce_memory_usage;
 
     if (this->reduce_memory_usage)
@@ -45,36 +44,36 @@ ComputationBox* MklFactory::create_computation_box(
 {
     return new CpuComputationBox(nx, lx);
 }
-Mixture* MklFactory::create_mixture(
-    double ds, std::map<std::string, double> bond_lengths, bool use_superposition) 
+Molecules* MklFactory::create_molecule_information(
+    std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) 
 {
-    return new Mixture(chain_model, ds, bond_lengths, use_superposition);
+    return new Molecules(chain_model, ds, bond_lengths, reduce_propagator_computation);
 }
-Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Mixture *mx)
+Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Molecules *molecules)
 {
-    std::string chain_model = mx->get_model_name();
+    std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, molecules,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, molecules,
                 new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoContinuous(cb, mx,
+            return new CpuPseudoContinuous(cb, molecules,
                 new MklFFT1D(cb->get_nx(0)));
     }
     else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, molecules,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, molecules,
                 new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoDiscrete(cb, mx,
+            return new CpuPseudoDiscrete(cb, molecules,
                 new MklFFT1D(cb->get_nx(0)));
     }
     return NULL;

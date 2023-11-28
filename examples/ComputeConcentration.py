@@ -22,52 +22,50 @@ lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 
-use_superposition = False
+reduce_propagator_computation = False
 reduce_gpu_memory_usage = False
 
-block_lengths = []
-block_monomer_types = []
-volume_faction = []
-v = []
-u = []
-
-# First Polymer
-volume_faction.append(0.5)                # volume faction
-block_lengths.append([0.5, 0.7, 0.3])     # contour length of each block (triblock)
-block_monomer_types.append(["A","B","A"]) # type of each block (triblock)
-v.append([0,1,2])                         # vertices v (triblock)
-u.append([1,2,3])                         # vertices u (triblock)
-
-# Second Polymer
-volume_faction.append(0.3)            # volume faction
-block_lengths.append([0.4, 0.5])      # contour length of each block (diblock)
-block_monomer_types.append(["A","C"]) # type of each block (diblock)
-v.append([0,1])                       # vertices v (diblock)
-u.append([1,2])                       # vertices u (diblock)
-
-# Third Polymer
-volume_faction.append(0.2)        # volume faction
-block_lengths.append([1.0])       # contour length of each block (homo)
-block_monomer_types.append(["B"]) # type of each block (homo)
-v.append([0])                     # vertices v (homo)
-u.append([1])                     # vertices u (homo)
-
-# Select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
+# Select platform ("cuda" or "cpu-mkl")
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
-# Create instances
-cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
-for p in range(len(block_lengths)):
-     mixture.add_polymer(
-     volume_faction[p],block_monomer_types[p],
-     block_lengths[p],v[p],u[p])
-pseudo = factory.create_pseudo(cb, mixture)
+# Create an instance for computation box
+cb = factory.create_computation_box(nx, lx) 
+# Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
+molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, reduce_propagator_computation)
+
+# First Polymer
+molecules.add_polymer(
+     0.2,      # volume faction
+     ["B"],    # type of each block (homo)
+     [1.0],    # contour length of each block (homo)
+     [0],      # vertices v of chain graph (homo)
+     [1],      # vertices u of chain graph (homo)
+)
+
+# Second Polymer
+molecules.add_polymer(
+     0.3,           # volume faction
+     ["A","C"],     # type of each block (diblock)
+     [0.4, 0.5],    # contour length of each block (diblock)
+     [0,1],         # vertices v of chain graph  (diblock)
+     [1,2],         # vertices u of chain graph  (diblock)
+)
+
+# Third Polymer
+molecules.add_polymer(
+     0.5,                # volume faction
+     ["A","B","A"],      # type of each block (triblock)
+     [0.5, 0.7, 0.3],    # contour length of each block (triblock)
+     [0,1,2],            # vertices v of chain graph  (triblock)
+     [1,2,3],            # vertices u of chain graph  (triblock)
+)
+
+pseudo = factory.create_pseudo(cb, molecules)
 
 # Print blocks and branches
-mixture.display_blocks()
-mixture.display_propagators()
+molecules.display_blocks()
+molecules.display_propagators()
 
 print(type(pseudo))
 
@@ -87,8 +85,8 @@ phi_c = pseudo.get_total_concentration("C")
 print(phi_a, phi_b, phi_c)
 print("Total phi:", np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
 
-# For each polymer chain
-for p in range(mixture.get_n_polymers()):
+# For each polymer chain type
+for p in range(molecules.get_n_polymer_types()):
 
      print(f"\nPolymer: {p}")
 
@@ -96,7 +94,7 @@ for p in range(mixture.get_n_polymers()):
      Q = pseudo.get_total_partition(p)
      print(f"Q({p}):", Q)
 
-     # Compute total concentration for a given polymer index and monomer type
+     # Compute total concentration for a given polymer type index and monomer type
      phi_p_a = pseudo.get_total_concentration(p, "A")
      phi_p_b = pseudo.get_total_concentration(p, "B")
      phi_p_c = pseudo.get_total_concentration(p, "C")
@@ -104,8 +102,8 @@ for p in range(mixture.get_n_polymers()):
      print(f"Total phi({p}):", np.mean(phi_p_a), np.mean(phi_p_b), np.mean(phi_p_c))
      print(phi_p_a, phi_p_b, phi_p_c)
 
-     # Compute concentration of each block for a given polymer index
+     # Compute concentration of each block for a given polymer type index
      phi = pseudo.get_block_concentration(p)
      print(f"Block phi({p}):", np.mean(np.sum(phi, axis=0)))
-     for b in range(mixture.get_polymer(p).get_n_blocks()):
+     for b in range(molecules.get_polymer(p).get_n_blocks()):
           print(phi[b])

@@ -56,7 +56,7 @@ int main()
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms)
         {
-            AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
+            AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
             factory->display_info();
 
             // create instances and assign to the variables of base classes for the dynamic binding

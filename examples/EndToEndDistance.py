@@ -20,7 +20,7 @@ lx = [6.0,6.0,6.0]            # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
 
-use_superposition = False
+reduce_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # polymer
@@ -39,13 +39,13 @@ factory.display_info()
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-mixture = factory.create_mixture(ds, stat_seg_length, use_superposition)
+molecules = factory.create_molecule_information(chain_model, ds, stat_seg_length, reduce_propagator_computation)
 
-mixture.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
-pseudo = factory.create_pseudo(cb, mixture)
+molecules.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
+pseudo = factory.create_pseudo(cb, molecules)
 
-mixture.display_blocks()
-mixture.display_propagators()
+molecules.display_blocks()
+molecules.display_propagators()
 
 # fields
 w = {"A": np.zeros(np.prod(nx))}
@@ -72,9 +72,9 @@ for n in range(10, round(N)+1, 10):
                     x_square += q_out[idx]*cb.get_dv(idx)*(xx*xx + yy*yy + zz*zz)
                     sum += q_out[idx]*cb.get_dv(idx)
                     
-     if mixture.get_model_name() == "continuous":
+     if molecules.get_model_name() == "continuous":
           x_square *= N/n
           print("n, <x^2>N/n:", n, x_square)
-     elif mixture.get_model_name() == "discrete":
+     elif molecules.get_model_name() == "discrete":
           x_square *= N/(n-1)
           print("n, <x^2>N/(n-1):", n, x_square)

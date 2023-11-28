@@ -115,7 +115,7 @@ class LFTS:
         total_volume_fraction = 0.0
         for polymer in params["distinct_polymers"]:
             total_volume_fraction += polymer["volume_fraction"]
-        assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fraction must be equal to 1."
+        assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
 
         # Polymer Chains
         self.random_fraction = {}
@@ -177,7 +177,7 @@ class LFTS:
             statistical_segment_length = np.sqrt(statistical_segment_length)
 
             assert(np.isclose(total_random_fraction, 1.0)), \
-                "The sum of volume fraction of random copolymer must be equal to 1."
+                "The sum of volume fractions of random copolymer must be equal to 1."
 
             random_type_string = polymer["blocks"][0]["type"]
             assert(not random_type_string in params["segment_lengths"]), \
@@ -188,19 +188,19 @@ class LFTS:
             params["segment_lengths"].update({random_type_string:statistical_segment_length})
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
 
-        # (C++ class) Mixture box
-        if "use_superposition" in params:
-            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], params["use_superposition"])
+        # (C++ class) Molecules list
+        if "reduce_propagator_computation" in params:
+            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
         else:
-            mixture = factory.create_mixture(params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             # print(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"], polymer["u"])
-            mixture.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
+            molecules.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solver using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, mixture)
+        pseudo = factory.create_pseudo(cb, molecules)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
@@ -260,20 +260,20 @@ class LFTS:
         print("\td(coef of mu1)/dχN: ", self.h_coef_mu1_deriv_chin)
         print("\td(coef of mu2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
-        for p in range(mixture.get_n_polymers()):
+        for p in range(molecules.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (mixture.get_polymer(p).get_volume_fraction(),
-                 mixture.get_polymer(p).get_alpha(),
-                 mixture.get_polymer(p).get_n_segment_total()))
+                (molecules.get_polymer(p).get_volume_fraction(),
+                 molecules.get_polymer(p).get_alpha(),
+                 molecules.get_polymer(p).get_n_segment_total()))
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        mixture.display_blocks()
-        mixture.display_propagators()
+        molecules.display_blocks()
+        molecules.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -287,7 +287,7 @@ class LFTS:
         self.recording = params["recording"].copy()
 
         self.cb = cb
-        self.mixture = mixture
+        self.molecules = molecules
         self.pseudo = pseudo
         self.am = am
 
@@ -446,9 +446,9 @@ class LFTS:
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
-        for p in range(self.mixture.get_n_polymers()):
-            hamiltonian_partition -= self.mixture.get_polymer(p).get_volume_fraction()/ \
-                            self.mixture.get_polymer(p).get_alpha() * \
+        for p in range(self.molecules.get_n_polymer_types()):
+            hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
+                            self.molecules.get_polymer(p).get_alpha() * \
                             np.log(total_partitions[p])
 
         return self.h_const + hamiltonian_partition + hamiltonian_fields
@@ -762,13 +762,13 @@ class LFTS:
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
             
                 # Calculate Hamiltonian
-                total_partitions = [self.pseudo.get_total_partition(p) for p in range(self.mixture.get_n_polymers())]
+                total_partitions = [self.pseudo.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
                 hamiltonian = self.compute_hamiltonian(w_exchange, total_partitions)
 
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
-                for p in range(self.mixture.get_n_polymers()):
+                for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
                 print("] %15.9f   [" % (hamiltonian), end="")
                 for i in range(I):

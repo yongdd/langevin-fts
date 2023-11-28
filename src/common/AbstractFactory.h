@@ -10,7 +10,7 @@
 
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h" 
 #include "Array.h" 
@@ -36,11 +36,11 @@ public :
         std::vector<int> nx,
         std::vector<double> lx) = 0;
 
-    virtual Mixture* create_mixture(
-        double ds, std::map<std::string, double> bond_lengths, bool use_superposition) = 0;
+    virtual Molecules* create_molecule_information(
+        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) = 0;
 
     virtual Pseudo* create_pseudo(
-        ComputationBox *cb, Mixture *mx) = 0; 
+        ComputationBox *cb, Molecules *molecules) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

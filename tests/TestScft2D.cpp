@@ -10,7 +10,7 @@
 #include "Exception.h"
 #include "ComputationBox.h"
 #include "PolymerChain.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -68,14 +68,14 @@ int main()
         // choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms){
-            AbstractFactory *factory = PlatformSelector::create_factory(platform, chain_model, reduce_memory_usage);
+            AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
             factory->display_info();
 
             // create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
-            Mixture* mx        = factory->create_mixture(ds, {{"A",1.0}, {"B",1.0}}, false);
-            mx->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
-            Pseudo *pseudo     = factory->create_pseudo(cb, mx);
+            Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, false);
+            molecules->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
+            Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -85,7 +85,7 @@ int main()
             std::cout << std::setprecision(default_precision);
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
-            std::cout << "Chain Model: " << mx->get_model_name() << std::endl;
+            std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
             std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
             std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << std::endl;
             std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << std::endl;
@@ -95,8 +95,8 @@ int main()
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-            mx->display_blocks();
-            mx->display_propagators();
+            molecules->display_blocks();
+            molecules->display_propagators();
 
             //-------------- allocate array ------------
             w       = new double[M*2];
@@ -161,8 +161,8 @@ int main()
                 energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                 energy_total -= cb->integral(w_plus)/cb->get_volume();
                 //energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
-                for(int p=0; p<mx->get_n_polymers(); p++){
-                    PolymerChain& pc = mx->get_polymer(p);
+                for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                    PolymerChain& pc = molecules->get_polymer(p);
                     energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                 }
 
@@ -189,7 +189,7 @@ int main()
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
                 std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
-                for(int p=1; p<mx->get_n_polymers(); p++)
+                for(int p=1; p<molecules->get_n_polymer_types(); p++)
                     std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
                 std::cout<< "]"; 
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
@@ -220,7 +220,7 @@ int main()
             delete[] w_plus;
             delete[] w_minus;
 
-            delete mx;
+            delete molecules;
             delete cb;
             delete pseudo;
             delete am;

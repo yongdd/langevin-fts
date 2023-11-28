@@ -12,7 +12,7 @@
 #include <map>
 
 #include "ComputationBox.h"
-#include "Mixture.h"
+#include "Molecules.h"
 #include "PolymerChain.h"
 #include "Exception.h"
 
@@ -20,7 +20,7 @@ class Pseudo
 {
 protected:
     ComputationBox *cb;
-    Mixture *mx;
+    Molecules *molecules;
 
     int n_complex_grid;
 
@@ -31,11 +31,11 @@ protected:
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
 public:
-    Pseudo(ComputationBox *cb, Mixture *mx);
+    Pseudo(ComputationBox *cb, Molecules *molecules);
     virtual ~Pseudo() {};
 
     int get_n_grid() {return cb->get_n_grid();};
-    int get_n_blocks(int polymer) { PolymerChain& pc = mx->get_polymer(polymer); return pc.get_n_blocks();};
+    int get_n_blocks(int polymer) { PolymerChain& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};
     virtual void update_bond_function() = 0;
     // inputs are in main memory
     virtual void compute_statistics(

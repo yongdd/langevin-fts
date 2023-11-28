@@ -114,27 +114,27 @@ PYBIND11_MODULE(langevinfts, m)
         //.def("set_propagator_key", &PolymerChain::set_propagator_key)
         .def("get_propagator_key", &PolymerChain::get_propagator_key);
 
-    py::class_<Mixture>(m, "Mixture")
+    py::class_<Molecules>(m, "Molecules")
         .def(py::init<std::string, double, std::map<std::string, double>, bool>())
-        .def("get_model_name", &Mixture::get_model_name)
-        .def("get_ds", &Mixture::get_ds)
-        .def("get_bond_lengths", &Mixture::get_bond_lengths)
-        .def("get_n_polymers", &Mixture::get_n_polymers)
+        .def("get_model_name", &Molecules::get_model_name)
+        .def("get_ds", &Molecules::get_ds)
+        .def("get_bond_lengths", &Molecules::get_bond_lengths)
+        .def("get_n_polymer_types", &Molecules::get_n_polymer_types)
         .def("add_polymer", overload_cast_<
             double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>, std::map<int, std::string>
-            >()(&Mixture::add_polymer))
+            >()(&Molecules::add_polymer))
         .def("add_polymer", overload_cast_<
             double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>
-            >()(&Mixture::add_polymer))
-        .def("get_polymer", &Mixture::get_polymer)
-        .def("get_deps_from_key", &Mixture::get_deps_from_key)
-        .def("get_monomer_type_from_key", &Mixture::get_monomer_type_from_key)
-        .def("get_essential_propagator_codes", &Mixture::get_essential_propagator_codes)
-        .def("get_essential_propagator_code", &Mixture::get_essential_propagator_code)
-        .def("get_essential_blocks", &Mixture::get_essential_blocks)
-        .def("get_essential_block", &Mixture::get_essential_block)
-        .def("display_propagators", &Mixture::display_propagators)
-        .def("display_blocks", &Mixture::display_blocks);
+            >()(&Molecules::add_polymer))
+        .def("get_polymer", &Molecules::get_polymer)
+        .def("get_deps_from_key", &Molecules::get_deps_from_key)
+        .def("get_monomer_type_from_key", &Molecules::get_monomer_type_from_key)
+        .def("get_essential_propagator_codes", &Molecules::get_essential_propagator_codes)
+        .def("get_essential_propagator_code", &Molecules::get_essential_propagator_code)
+        .def("get_essential_blocks", &Molecules::get_essential_blocks)
+        .def("get_essential_block", &Molecules::get_essential_block)
+        .def("display_propagators", &Molecules::display_propagators)
+        .def("display_blocks", &Molecules::display_blocks);
 
     py::class_<Pseudo>(m, "Pseudo")
         .def("update_bond_function", &Pseudo::update_bond_function)
@@ -343,7 +343,7 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<AbstractFactory>(m, "AbstractFactory")
         .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
         .def("create_computation_box", &AbstractFactory::create_computation_box)
-        .def("create_mixture", &AbstractFactory::create_mixture)
+        .def("create_molecule_information", &AbstractFactory::create_molecule_information)
         .def("create_pseudo", &AbstractFactory::create_pseudo)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)
@@ -352,6 +352,6 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def("create_factory", overload_cast_<std::string, std::string>()(&PlatformSelector::create_factory))
-        .def("create_factory", overload_cast_<std::string, std::string, bool>()(&PlatformSelector::create_factory));
+        .def("create_factory", overload_cast_<std::string>()(&PlatformSelector::create_factory))
+        .def("create_factory", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory));
 }
