@@ -13,13 +13,13 @@ CudaAndersonMixingReduceMemory::CudaAndersonMixingReduceMemory(
 {
     try
     {
-        // number of anderson mixing steps, increases from 0 to max_hist
+        // Number of anderson mixing steps, increases from 0 to max_hist
         n_anderson = -1;
-        // record history of w in pinned host memory
+        // Record history of w in pinned host memory
         pinned_cb_w_hist = new PinnedCircularBuffer(max_hist+1, n_var);
-        // record history of w_deriv in pinned host memory
+        // Record history of w_deriv in pinned host memory
         pinned_cb_w_deriv_hist = new PinnedCircularBuffer(max_hist+1, n_var);
-        // record history of inner_product product of w_deriv in CPU host memory
+        // Record history of inner_product product of w_deriv in CPU host memory
         cb_w_deriv_dots = new CircularBuffer(max_hist+1, max_hist+1);
 
         // define arrays for anderson mixing
@@ -30,7 +30,7 @@ CudaAndersonMixingReduceMemory::CudaAndersonMixingReduceMemory(
         this->a_n = new double[max_hist];
         this->w_deriv_dots = new double[max_hist+1];
 
-        // temporary fields arrays
+        // Temporary fields arrays
         gpu_error_check(cudaMalloc((void**)&d_w_hist1,  sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_w_hist2,  sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_w_deriv_hist1,  sizeof(double)*n_var));
@@ -40,12 +40,12 @@ CudaAndersonMixingReduceMemory::CudaAndersonMixingReduceMemory(
         gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(double)*n_var));
         gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(double)*n_var));
 
-        // allocate memory for cub reduction sum
+        // Allocate memory for cub reduction sum
         gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
         gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
-        // reset_count
+        // Reset_count
         reset_count();
     }
     catch(std::exception& exc)
@@ -110,19 +110,19 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
         
         gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv, sizeof(double)*n_var, cudaMemcpyHostToDevice));
         //printf("mix: %f\n", mix);
-        // condition to start anderson mixing
+        // Condition to start anderson mixing
         if(error_level < start_error || n_anderson >= 0)
             n_anderson = n_anderson + 1;
         if( n_anderson >= 0 )
         {
-            // number of histories to use for anderson mixing
+            // Number of histories to use for anderson mixing
             n_anderson = std::min(max_hist, n_anderson);
             
             // store the input and output field (the memory is used in a periodic way)
             pinned_cb_w_hist->insert(w_current);
             pinned_cb_w_deriv_hist->insert(w_deriv);
 
-            // evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
+            // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
             for(int i=0; i<= n_anderson; i++)
             {
                 gpu_error_check(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(double)*n_var, cudaMemcpyHostToDevice));
@@ -134,7 +134,7 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
             cb_w_deriv_dots->insert(w_deriv_dots);
         }
 
-        // conditions to apply the simple mixing method
+        // Conditions to apply the simple mixing method
         if( n_anderson <= 0 )
         {
             // dynamically change mixing parameter
@@ -143,13 +143,13 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
             else
                 mix = mix*1.01;
 
-            // make a simple mixing of input and output fields for the next iteration
+            // Make a simple mixing of input and output fields for the next iteration
             for(int i=0; i<n_var; i++)
                 w_new[i] = w_current[i] + mix*w_deriv[i];
         }
         else
         {
-            // calculate Unm and Vn
+            // Calculate Unm and Vn
             for(int i=0; i<n_anderson; i++)
             {
                 v_n[i] = cb_w_deriv_dots->get(0, 0)
@@ -168,7 +168,7 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
             //exit(-1);
             find_an(u_nm, v_n, a_n, n_anderson);
 
-            // calculate the new field
+            // Calculate the new field
             gpu_error_check(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(double)*n_var,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(double)*n_var,cudaMemcpyHostToDevice));
 

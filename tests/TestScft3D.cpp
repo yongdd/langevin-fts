@@ -9,7 +9,7 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
@@ -20,32 +20,32 @@ int main()
 {
     try
     {
-        // math constants
+        // Math constants
         const double PI = 3.14159265358979323846;
-        // chrono timer
+        // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
         std::chrono::duration<double> time_duration;
 
         double energy_total;
         // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
-        // input and output fields, xi is temporary storage for pressures
+        // Input and output fields, xi is temporary storage for pressures
         double *w, *w_out, *w_diff;  // n_comp * M
         double *xi, *w_plus, *w_minus; // M
-        // segment concentration
+        // Segment concentration
         double *phi_a, *phi_b, *phi_tot;
 
-        // string to output file and print stream
+        // String to output file and print stream
         std::streamsize default_precision = std::cout.precision();
         std::ofstream print_stream;
         std::stringstream ss;
         std::string print_file_name;
-        // temp
+        // Temp
         int idx;
         double sum;
 
-        // -------------- initialize ------------
-        // platform type, [cuda, cpu-mkl]
+        // -------------- Initialize ------------
+        // Platform type, [cuda, cpu-mkl]
         
         int max_scft_iter = 20;
         double tolerance = 1e-9;
@@ -63,25 +63,31 @@ int main()
         double am_mix_min = 0.1;
         double am_mix_init = 0.1;
 
+        std::vector<BlockInput> blocks =
+        {
+            {"A",    f, 0, 1},
+            {"B",1.0-f, 1, 2},
+        };
+
         bool reduce_memory_usage=false;
 
-        // choose platform
+        // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms){
             AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
             factory->display_info();
 
-            // create instances and assign to the variables of base classes for the dynamic binding
+            // Create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
             Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, false);
-            molecules->add_polymer(1.0, {"A", "B"}, {f, 1.0-f}, {0,1}, {1,2}, {});
+            molecules->add_polymer(1.0, blocks, {});
             Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
             const int M = cb->get_n_grid();
 
-            // -------------- print simulation parameters ------------
+            // -------------- Print simulation parameters ------------
             std::cout << std::setprecision(default_precision);
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
@@ -98,7 +104,7 @@ int main()
             molecules->display_blocks();
             molecules->display_propagators();
 
-            //-------------- allocate array ------------
+            //-------------- Allocate array ------------
             w       = new double[M*2];
             w_out   = new double[M*2];
             w_diff  = new double[M*2];
@@ -108,7 +114,7 @@ int main()
             phi_tot = new double[M];
             w_plus  = new double[M];
             w_minus = new double[M];
-            //-------------- setup fields ------------
+            //-------------- Setup fields ------------
             //call random_number(phi_a)
             //   phi_a = reshape( phi_a, (/ x_hi-x_lo+1,y_hi-y_lo+1,z_hi-z_lo+1 /), order = (/ 3, 2, 1 /))
             //   call random_number(phi_a(:,:,z_lo))
@@ -132,11 +138,11 @@ int main()
                 w[i+M] = chi_n*phi_a[i];
             }
 
-            // keep the level of field value
+            // Keep the level of field value
             cb->zero_mean(&w[0]);
             cb->zero_mean(&w[M]);
 
-            // assign large initial value for the energy and error
+            // Assign large initial value for the energy and error
             energy_total = 1.0e20;
             error_level = 1.0e20;
 
@@ -144,15 +150,15 @@ int main()
             std::cout<< "---------- Run ----------" << std::endl;
             std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;
             chrono_start = std::chrono::system_clock::now();
-            // iteration begins here
+            // Iteration begins here
             for(int iter=0; iter<max_scft_iter; iter++)
             {
-                // for the given fields find the polymer statistics
+                // For the given fields find the polymer statistics
                 pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                 pseudo->get_total_concentration("A", phi_a);
                 pseudo->get_total_concentration("B", phi_b);
 
-                // calculate the total energy
+                // Calculate the total energy
                 for(int i=0; i<M; i++)
                 {
                     w_minus[i] = (w[i]-w[i + M])/2;
@@ -161,17 +167,17 @@ int main()
 
                 energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                 energy_total -= cb->integral(w_plus)/cb->get_volume();
-                //energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
+                // energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
                 for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                    PolymerChain& pc = molecules->get_polymer(p);
+                    Polymer& pc = molecules->get_polymer(p);
                     energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                 }
 
                 for(int i=0; i<M; i++)
                 {
-                    // calculate pressure field for the new field calculation
+                    // Calculate pressure field for the new field calculation
                     xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
-                    // calculate output fields
+                    // Calculate output fields
                     w_out[i]                  = chi_n*phi_b[i] + xi[i];
                     w_out[i+M] = chi_n*phi_a[i] + xi[i];
                 }
@@ -185,7 +191,7 @@ int main()
                 error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
                                 (cb->multi_inner_product(2,w,w)+1.0));
 
-                // print iteration # and error levels and check the mass conservation
+                // Print iteration # and error levels and check the mass conservation
                 sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
@@ -196,20 +202,20 @@ int main()
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
 
-                // conditions to end the iteration
+                // Conditions to end the iteration
                 if(error_level < tolerance) break;
-                // calculate new fields using simple and Anderson mixing
+                // Calculate new fields using simple and Anderson mixing
                                 //w_new, w_current, w_diff
                 am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
             }
 
-            // estimate execution time
+            // Estimate execution time
             chrono_end = std::chrono::system_clock::now();
             time_duration = chrono_end - chrono_start;
             std::cout<< "total time, time per step: ";
             std::cout<< time_duration.count() << " " << time_duration.count()/max_scft_iter << std::endl;
 
-            //------------- finalize -------------
+            //------------- Finalize -------------
             delete[] w;
             delete[] w_out;
             delete[] w_diff;

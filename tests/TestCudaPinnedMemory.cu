@@ -11,9 +11,9 @@ int main()
         std::string key = "A";
         int max_n_segment = 10;
 
-        // allocate gpu memory
+        // Allocate gpu memory
         gpu_error_check(cudaMalloc((void**)&d_progpa_temp, sizeof(double)*M));
-        // allocate pinned host memory
+        // Allocate pinned host memory
         gpu_error_check(cudaMallocHost((void**)&propagator, sizeof(double)*(max_n_segment+1)*M));
 
         for(int n=0; n<=max_n_segment; n++)

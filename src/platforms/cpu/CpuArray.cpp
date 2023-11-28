@@ -80,7 +80,7 @@ double CpuArray::operator[](unsigned int i) const
     return data[i];
 }
 
-// arithmetic operations with two arrays
+// Arithmetic operations with two arrays
 void CpuArray::add(const Array& src_1, const Array& src_2)
 {
     unsigned int src1_size = src_1.get_size();
@@ -153,7 +153,7 @@ void CpuArray::divide(const Array& src_1, const Array& src_2)
     for (unsigned int i=0; i<size; i++)
         data[i] = src1_data[i] / src2_data[i];
 }
-// arithmetic operations with an array and a float number
+// Arithmetic operations with an array and a float number
 void CpuArray::linear_scaling(const Array& src, const double a, const double b)
 {
     unsigned int src_size = src.get_size();

@@ -14,7 +14,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         const int M_COMPLEX = this->n_complex_grid;
         this->fft = fft;
 
-        // allocate memory for propagators
+        // Allocate memory for propagators
         if( molecules->get_essential_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
         for(const auto& item: molecules->get_essential_propagator_codes())
@@ -39,13 +39,13 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
              // O  : full segment
         }
 
-        // allocate memory for propagator_junction, which contain partition function at junction of discrete chain
+        // Allocate memory for propagator_junction, which contain partition function at junction of discrete chain
         for(const auto& item: molecules->get_essential_propagator_codes())
         {
             propagator_junction[item.first] = new double[M];
         }
 
-        // allocate memory for concentrations
+        // Allocate memory for concentrations
         if( molecules->get_essential_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: molecules->get_essential_blocks())
@@ -53,7 +53,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             block_phi[item.first] = new double[M];
         }
 
-        // create boltz_bond, boltz_bond_half, and exp_dw
+        // Create boltz_bond, boltz_bond_half, and exp_dw
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
@@ -62,15 +62,15 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             exp_dw         [monomer_type] = new double[M];
         }
 
-        // allocate memory for stress calculation: compute_stress()
+        // Allocate memory for stress calculation: compute_stress()
         fourier_basis_x = new double[M_COMPLEX];
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
 
-        // total partition functions for each polymer
+        // Total partition functions for each polymer
         single_partitions = new double[molecules->get_n_polymer_types()];
 
-        // remember one segment for each polymer chain to compute total partition function
+        // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
         for(const auto& block: block_phi)
         {
@@ -79,7 +79,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            // skip if already found one segment
+            // Skip if already found one segment
             if (p != current_p)
                 continue;
 
@@ -88,7 +88,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
             std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
-            // contains no '['
+            // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_superposed = 1;
             else
@@ -97,14 +97,14 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 &propagator[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
-                &propagator[dep_u][0],                                        // q_dagger
+                &propagator[dep_u][0],                                        // Q_dagger
                 monomer_type,       
-                n_superposed                   // how many propagators are aggregated
+                n_superposed                   // How many propagators are aggregated
                 ));
             current_p++;
         }
 
-        // create scheduler for computation of propagator
+        // Create scheduler for computation of propagator
         sc = new Scheduler(molecules->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         update_bond_function();
@@ -154,7 +154,7 @@ void CpuPseudoDiscrete::update_bond_function()
             get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
             get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
 
-            // for stress calculation: compute_stress()
+            // For stress calculation: compute_stress()
             get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         }
     }
@@ -192,11 +192,11 @@ void CpuPseudoDiscrete::compute_statistics(
                 exp_dw[monomer_type][i] = exp(-w[i]*ds);
         }
 
-        // for each time span
+        // For each time span
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // for each propagator
+            // For each propagator
             #pragma omp parallel for
             for(size_t job=0; job<parallel_job->size(); job++)
             {
@@ -206,7 +206,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 auto& deps = molecules->get_essential_propagator_code(key).deps;
                 auto monomer_type = molecules->get_essential_propagator_code(key).monomer_type;
 
-                // check key
+                // Check key
                 #ifndef NDEBUG
                 if (propagator.find(key) == propagator.end())
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
@@ -214,10 +214,10 @@ void CpuPseudoDiscrete::compute_statistics(
 
                 double *_propagator = propagator[key];
 
-                // calculate one block end
+                // Calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                     // q_init
+                     // Q_init
                     if (key[0] == '{')
                     {
                         std::string g = Molecules::get_q_input_idx_from_key(key);
@@ -238,7 +238,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 }
                 else if (n_segment_from == 1 && deps.size() > 0) // if it is not leaf node
                 {
-                    // if it is superposed
+                    // If it is superposed
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
@@ -249,7 +249,7 @@ void CpuPseudoDiscrete::compute_statistics(
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
-                            // check sub key
+                            // Check sub key
                             #ifndef NDEBUG
                             if (propagator.find(sub_dep) == propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
@@ -286,7 +286,7 @@ void CpuPseudoDiscrete::compute_statistics(
                         // -, |    : half bonds
                         // A, B, C : other full segments
 
-                        // combine branches
+                        // Combine branches
                         double q_junction[M];
                         for(int i=0; i<M; i++)
                             q_junction[i] = 1.0;
@@ -296,7 +296,7 @@ void CpuPseudoDiscrete::compute_statistics(
                             int sub_n_segment   = std::get<1>(deps[d]);
                             double q_half_step[M];
 
-                            // check sub key
+                            // Check sub key
                             #ifndef NDEBUG
                             if (propagator.find(sub_dep) == propagator.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
@@ -314,10 +314,10 @@ void CpuPseudoDiscrete::compute_statistics(
                         for(int i=0; i<M; i++)
                             _q_junction_cache[i] = q_junction[i];
 
-                        // add half bond
+                        // Add half bond
                         advance_propagator_half_bond_step(q_junction, &_propagator[0], boltz_bond_half[monomer_type]);
 
-                        // add full segment
+                        // Add full segment
                         for(int i=0; i<M; i++)
                             _propagator[i] *= exp_dw[monomer_type][i];
                         
@@ -331,7 +331,7 @@ void CpuPseudoDiscrete::compute_statistics(
                     n_segment_from--;
                 }
 
-                // advance propagator successively
+                // Advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
@@ -353,7 +353,7 @@ void CpuPseudoDiscrete::compute_statistics(
             }
         }
 
-        // compute total partition function of each distinct polymers
+        // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
         {
             int p                    = std::get<0>(segment_info);
@@ -366,7 +366,7 @@ void CpuPseudoDiscrete::compute_statistics(
                 propagator_v, propagator_u, exp_dw[monomer_type])/n_superposed/cb->get_volume();
         }
 
-        // calculate segment concentrations
+        // Calculate segment concentrations
         #pragma omp parallel for
         for(size_t b=0; b<block_phi.size();b++)
         {
@@ -384,13 +384,13 @@ void CpuPseudoDiscrete::compute_statistics(
             int n_segment_original  = molecules->get_essential_block(key).n_segment_original;
             std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
-            // contains no '['
+            // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_repeated = molecules->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
-            // check keys
+            // Check keys
             #ifndef NDEBUG
             if (propagator.find(dep_v) == propagator.end())
                 std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
@@ -398,18 +398,18 @@ void CpuPseudoDiscrete::compute_statistics(
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
-            // calculate phi of one block (possibly multiple blocks when using superposition)
+            // Calculate phi of one block (possibly multiple blocks when using superposition)
             calculate_phi_one_block(
-                block->second,            // phi
+                block->second,            // Phi
                 propagator[dep_v],  // dependency v
                 propagator[dep_u],  // dependency u
-                exp_dw[monomer_type],     // exp_dw
+                exp_dw[monomer_type],     // Exp_dw
                 n_segment_allocated,
                 n_segment_offset,
                 n_segment_original);
             
-            // normalize concentration
-            PolymerChain& pc = molecules->get_polymer(p);
+            // Normalize concentration
+            Polymer& pc = molecules->get_polymer(p);
             double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
@@ -431,12 +431,12 @@ void CpuPseudoDiscrete::advance_propagator(double *q_in, double *q_out,
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in,k_q_in);
-        // multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
+        // Multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in[i] *= boltz_bond[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in,q_out);
-        // normalization calculation and evaluate exp(-w*ds) in real space
+        // Normalization calculation and evaluate exp(-w*ds) in real space
         for(int i=0; i<M; i++)
             q_out[i] *= exp_dw[i];
     }
@@ -450,13 +450,13 @@ void CpuPseudoDiscrete::advance_propagator_half_bond_step(double *q_in, double *
 {
     try
     {
-        // const int M = cb->get_n_grid();
+        // Const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
         std::complex<double> k_q_in[M_COMPLEX];
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in,k_q_in);
-        // multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
+        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         for(int i=0; i<M_COMPLEX; i++)
             k_q_in[i] *= boltz_bond_half[i];
         // 3D fourier discrete transform, backward and inplace
@@ -505,11 +505,11 @@ void CpuPseudoDiscrete::get_total_concentration(std::string monomer_type, double
     try
     {
         const int M = cb->get_n_grid();
-        // initialize array
+        // Initialize array
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // for each block
+        // For each block
         for(const auto& block: block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
@@ -536,11 +536,11 @@ void CpuPseudoDiscrete::get_total_concentration(int p, std::string monomer_type,
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        // initialize array
+        // Initialize array
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // for each block
+        // For each block
         for(const auto& block: block_phi)
         {
             int polymer_idx = std::get<0>(block.first);
@@ -571,8 +571,8 @@ void CpuPseudoDiscrete::get_block_concentration(int p, double *phi)
         if (molecules->is_using_superposition())
             throw_with_line_number("Disable 'superposition' option to obtain concentration of each block.");
 
-        PolymerChain& pc = molecules->get_polymer(p);
-        std::vector<PolymerChainBlock>& blocks = pc.get_blocks();
+        Polymer& pc = molecules->get_polymer(p);
+        std::vector<Block>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
         {
@@ -608,14 +608,14 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
-        // reset stress map
+        // Reset stress map
         for(const auto& item: block_phi)
         {
             for(int d=0; d<3; d++)
                 block_dq_dl[item.first][d] = 0.0;
         }
 
-        // compute stress for each block
+        // Compute stress for each block
         #pragma omp parallel for
         for(size_t b=0; b<block_phi.size();b++)
         {
@@ -631,7 +631,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             const int N_ORIGINAL  = molecules->get_essential_block(key).n_segment_original;
             std::string monomer_type = molecules->get_essential_block(key).monomer_type;
 
-            // contains no '['
+            // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
                 n_repeated = molecules->get_essential_block(key).v_u.size();
@@ -653,11 +653,11 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
-            // compute stress at each chain bond
+            // Compute stress at each chain bond
             for(int n=0; n<=N; n++)
             {
-                // block_dq_dl[key][0] = 0.0;
-                // at v
+                // Block_dq_dl[key][0] = 0.0;
+                // At v
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
                     // std::cout << "case 1: " << propagator_junction[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
@@ -668,7 +668,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
-                // at u
+                // At u
                 else if (n + N_OFFSET == 0){
                     // std::cout << "case 2: " << q_1[(N_ORIGINAL-N_OFFSET-1)*M] << ", " << propagator_junction[dep_u][0] << std::endl;
                     if (molecules->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
@@ -678,20 +678,20 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
                     bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
                     boltz_bond_now = boltz_bond_half[monomer_type];
                 }
-                // at superposition junction
+                // At superposition junction
                 else if (n == 0)
                 {
                     // std::cout << "case 4" << std::endl;
                     continue;
                 }
-                // within the blocks
+                // Within the blocks
                 else
                 {
                     // std::cout << "case 5: " << q_1[(N_ORIGINAL-N_OFFSET-n-1)*M] << ", " << q_2[(n-1)*M] << std::endl;
 
                     // double temp_sum1=0;
                     // double temp_sum2=0;
-                    // for (int i=0;i<M;i++)
+                    // For (int i=0;i<M;i++)
                     // {
                     //     temp_sum1 += q_1[(N_ORIGINAL-N_OFFSET-n-1)*M+1];
                     //     temp_sum2 += q_2[(n-1)*M+1];
@@ -705,7 +705,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
-                // compute 
+                // Compute 
                 if ( DIM == 3 )
                 {
                     for(int i=0; i<M_COMPLEX; i++)
@@ -738,7 +738,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             block_dq_dl[key] = _block_dq_dl;
         }
 
-        // compute total stress
+        // Compute total stress
         for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
         for(const auto& block: block_phi)
@@ -747,7 +747,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
-            PolymerChain& pc = molecules->get_polymer(p);
+            Polymer& pc = molecules->get_polymer(p);
 
             for(int d=0; d<DIM; d++)
                 stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
@@ -771,7 +771,7 @@ void CpuPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v, 
     try
     {
         const int M = cb->get_n_grid();
-        PolymerChain& pc = molecules->get_polymer(polymer);
+        Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
         if (molecules->get_essential_propagator_codes().find(dep) == molecules->get_essential_propagator_codes().end())

@@ -13,7 +13,7 @@
 
 #include "ComputationBox.h"
 #include "Molecules.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Exception.h"
 
 class Pseudo
@@ -35,13 +35,13 @@ public:
     virtual ~Pseudo() {};
 
     int get_n_grid() {return cb->get_n_grid();};
-    int get_n_blocks(int polymer) { PolymerChain& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};
+    int get_n_blocks(int polymer) { Polymer& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};
     virtual void update_bond_function() = 0;
-    // inputs are in main memory
+    // Inputs are in main memory
     virtual void compute_statistics(
         std::map<std::string, const double*> w_input,
         std::map<std::string, const double*> q_init) = 0;
-    // inputs are in platform memory (cpu or gpu)
+    // Inputs are in platform memory (cpu or gpu)
     virtual void compute_statistics_device(
         std::map<std::string, const double*> d_w_input,
         std::map<std::string, const double*> d_q_init) = 0;

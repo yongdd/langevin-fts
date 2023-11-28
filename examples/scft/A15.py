@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from scipy.io import savemat
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 import scft
 
 # OpenMP environment variables

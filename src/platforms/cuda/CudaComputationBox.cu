@@ -19,14 +19,14 @@ void CudaComputationBox::initialize()
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*n_grid));
     gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid,cudaMemcpyHostToDevice));
 
-    // temporal storage
+    // Temporal storage
     gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*n_grid));
 
     gpu_error_check(cudaMalloc((void**)&d_g, sizeof(double)*n_grid));
     gpu_error_check(cudaMalloc((void**)&d_h, sizeof(double)*n_grid));
     gpu_error_check(cudaMalloc((void**)&d_w, sizeof(double)*n_grid));
 
-    // allocate memory for cub reduction sum
+    // Allocate memory for cub reduction sum
     gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*n_grid));
     gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);

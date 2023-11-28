@@ -9,7 +9,7 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
@@ -20,26 +20,26 @@ int main()
 {
     try
     {
-        // chrono timer
+        // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
 
         double energy_total;
         // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
-        // input and output fields, xi is temporary storage for pressures
+        // Input and output fields, xi is temporary storage for pressures
         double *w, *w_out, *w_diff;  // n_comp * M
         double *xi, *w_plus, *w_minus; // M
-        // segment concentration
+        // Segment concentration
         double *phi_a, *phi_b, *phi_tot;
 
-        // string to output file and print stream
+        // String to output file and print stream
         std::streamsize default_precision = std::cout.precision();
         std::ofstream print_stream;
         std::stringstream ss;
         std::string print_file_name;
 
-        // -------------- initialize ------------
-        // platform type, [cuda, cpu-mkl]
+        // -------------- Initialize ------------
+        // Platform type, [cuda, cpu-mkl]
         
         int max_scft_iter = 200;
         double tolerance = 1e-9;
@@ -50,15 +50,22 @@ int main()
         double ds = 1.0/100;
 
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
-        std::vector<std::string> block_species_1 = {"A","A","B","B","A","A"};
-        std::vector<double> contour_lengths_1 = {0.6,1.2,1.2,0.9,0.9,1.2};
-        std::vector<int> v_1 = {0,0,0,0,1,1};
-        std::vector<int> u_1 = {1,2,5,6,4,15};
+        std::vector<BlockInput> blocks_1 =
+        {
+            {"A", 0.6, 0, 1},
+            {"A", 1.2, 0, 2},
+            {"B", 1.2, 0, 5},
+            {"B", 0.9, 0, 6},
+            {"A", 0.9, 1, 4},
+            {"A", 1.2, 1,15},
 
-        std::vector<std::string> block_species_2 = {"A","B"};
-        std::vector<double> contour_lengths_2 = {0.4,0.6};
-        std::vector<int> v_2 = {0,1};
-        std::vector<int> u_2 = {1,2};
+        };
+
+        std::vector<BlockInput> blocks_2 =
+        {
+            {"A", 0.4, 0, 1},
+            {"B", 0.6, 1, 2},
+        };
 
         int am_n_var = 2*nx[0];  // A and B
         int am_max_hist = 20;
@@ -67,7 +74,7 @@ int main()
         double am_mix_init = 0.1;
 
         const int M = nx[0];
-        //-------------- allocate array ------------
+        //-------------- Allocate array ------------
         w       = new double[2*M];
         w_out   = new double[2*M];
         w_diff  = new double[2*M];
@@ -80,7 +87,7 @@ int main()
 
         bool reduce_memory_usage=false;
 
-        // choose platform
+        // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<bool> reduce_propagator_computations = {false, true};
@@ -93,16 +100,16 @@ int main()
                     AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
                     factory->display_info();
 
-                    // create instances and assign to the variables of base classes for the dynamic binding
+                    // Create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, reduce_propagator_computation);
-                    molecules->add_polymer(0.7, block_species_1, contour_lengths_1, v_1, u_1, {});
-                    molecules->add_polymer(0.3, block_species_2, contour_lengths_2, v_2, u_2, {});
+                    molecules->add_polymer(0.7, blocks_1, {});
+                    molecules->add_polymer(0.3, blocks_2, {});
                     Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
-                    // -------------- print simulation parameters ------------
+                    // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
@@ -145,27 +152,27 @@ int main()
                         std::cout << "Could not open input file." << std::endl;
                     }
 
-                    // keep the level of field value
+                    // Keep the level of field value
                     cb->zero_mean(&w[0]);
                     cb->zero_mean(&w[M]);
 
-                    // assign large initial value for the energy and error
+                    // Assign large initial value for the energy and error
                     energy_total = 1.0e20;
                     error_level = 1.0e20;
 
-                    //------------------ run ----------------------
+                    //------------------ Run ----------------------
                     // std::cout<< "---------- Run ----------" << std::endl;
                     // std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;
                     chrono_start = std::chrono::system_clock::now();
-                    // iteration begins here
+                    // Iteration begins here
                     for(int iter=0; iter<max_scft_iter; iter++)
                     {
-                        // for the given fields find the polymer statistics
+                        // For the given fields find the polymer statistics
                         pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                         pseudo->get_total_concentration("A", phi_a);
                         pseudo->get_total_concentration("B", phi_b);
 
-                        // calculate the total energy
+                        // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
                             w_minus[i] = (w[i]-w[i+M])/2;
@@ -175,15 +182,15 @@ int main()
                         energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                            PolymerChain& pc = molecules->get_polymer(p);
+                            Polymer& pc = molecules->get_polymer(p);
                             energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                         }
 
                         for(int i=0; i<M; i++)
                         {
-                            // calculate pressure field for the new field calculation
+                            // Calculate pressure field for the new field calculation
                             xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
-                            // calculate output fields
+                            // Calculate output fields
                             w_out[i]   = chi_n*phi_b[i] + xi[i];
                             w_out[i+M] = chi_n*phi_a[i] + xi[i];
                         }
@@ -201,10 +208,10 @@ int main()
                         // // print iteration # and error levels and check the mass conservation
                         // sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
 
-                        // conditions to end the iteration
+                        // Conditions to end the iteration
                         if(error_level < tolerance) break;
 
-                        // calculate new fields using simple and Anderson mixing
+                        // Calculate new fields using simple and Anderson mixing
                                         //w_new, w_current, w_diff
                         am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
                     }
@@ -234,17 +241,17 @@ int main()
 
                     double dL = 0.0000001;
                     double old_lx = lx[0];
-                    //----------- compute derivate of H: lx + delta ----------------
+                    //----------- Compute derivate of H: lx + delta ----------------
                     lx[0] = old_lx + dL/2;
                     cb->set_lx(lx);
                     pseudo->update_bond_function();
 
-                    // for the given fields find the polymer statistics
+                    // For the given fields find the polymer statistics
                     pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                     pseudo->get_total_concentration("A", phi_a);
                     pseudo->get_total_concentration("B", phi_b);
 
-                    // calculate the total energy
+                    // Calculate the total energy
                     for(int i=0; i<M; i++)
                     {
                         w_minus[i] = (w[i]-w[i+M])/2;
@@ -254,21 +261,21 @@ int main()
                     double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                     energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                        PolymerChain& pc = molecules->get_polymer(p);
+                        Polymer& pc = molecules->get_polymer(p);
                         energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                     }
 
-                    //----------- compute derivate of H: lx - delta ----------------
+                    //----------- Compute derivate of H: lx - delta ----------------
                     lx[0] = old_lx - dL/2;
                     cb->set_lx(lx);
                     pseudo->update_bond_function();
 
-                    // for the given fields find the polymer statistics
+                    // For the given fields find the polymer statistics
                     pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                     pseudo->get_total_concentration("A", phi_a);
                     pseudo->get_total_concentration("B", phi_b);
 
-                    // calculate the total energy
+                    // Calculate the total energy
                     for(int i=0; i<M; i++)
                     {
                         w_minus[i] = (w[i]-w[i+M])/2;
@@ -278,11 +285,11 @@ int main()
                     double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                     energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                        PolymerChain& pc = molecules->get_polymer(p);
+                        Polymer& pc = molecules->get_polymer(p);
                         energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
                     }
 
-                    // compute stress
+                    // Compute stress
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
                     auto stress = pseudo->compute_stress();
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
@@ -292,7 +299,7 @@ int main()
                     if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                         return -1;
 
-                    //------------- finalize -------------
+                    //------------- Finalize -------------
                     delete molecules;
                     delete cb;
                     delete pseudo;

@@ -17,7 +17,7 @@ public:
     CpuComputationBox(std::vector<int> nx, std::vector<double> lx) : ComputationBox(nx, lx) {};
     virtual ~CpuComputationBox() {};
 
-    // methods with device array
+    // Methods with device array
     double integral_device(double *g) override
     {
         return ComputationBox::integral(g);

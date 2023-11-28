@@ -14,7 +14,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 
-# simulation parameters
+# Simulation parameters
 nx = [32,32,32]               # grid number
 lx = [6.0,6.0,6.0]            # box size
 ds = 0.01                     # contour step interval
@@ -23,37 +23,36 @@ stat_seg_length = {"A":1.0}   # statistical segment lengths
 reduce_propagator_computation = False
 reduce_gpu_memory_usage = False
 
-# polymer
-volume_faction = 1.0          # volume faction
-block_lengths  = [1.0]        # contour length of each block (A homopolymer)
-block_monomer_types = ["A"]   # type of each block
-v = [0]                       # vertices v
-u = [1]                       # vertices u
-
-# grafting points
+# Grafting points
 grafting_point = {0:"G"}  # vertex 0 will be initialized with q_init["G"]
 
-# select platform and chain model  ("cuda" or "cpu-mkl"), ("continuous" or "discrete")
-factory = PlatformSelector.create_factory("cuda", "continuous", reduce_gpu_memory_usage)
+# Select platform ("cuda" or "cpu-mkl")
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
-# create instances
-cb = factory.create_computation_box(nx, lx)
-molecules = factory.create_molecule_information(chain_model, ds, stat_seg_length, reduce_propagator_computation)
+# Create an instance for computation box
+cb = factory.create_computation_box(nx, lx) 
+# Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
+molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, reduce_propagator_computation)
 
-molecules.add_polymer(volume_faction,block_monomer_types, block_lengths,v, u, grafting_point)
+molecules.add_polymer(
+     1.0,
+     [
+     ["A", 1.0, 0, 1],  # first block (type, length, starting node, ending node)
+     ],
+     grafting_point,
+)
 pseudo = factory.create_pseudo(cb, molecules)
 
 molecules.display_blocks()
 molecules.display_propagators()
 
-# fields
+# Fields
 w = {"A": np.zeros(np.prod(nx))}
-
 q_init = {"G":np.zeros(np.prod(nx))}
 q_init["G"][0] = 1.0/cb.get_dv(0)
 
-# compute ensemble average concentration (phi) and total partition function (Q)
+# Compute ensemble average concentration (phi) and total partition function (Q)
 pseudo.compute_statistics({"A":w["A"]}, q_init)
 
 N = round(1.0/ds)

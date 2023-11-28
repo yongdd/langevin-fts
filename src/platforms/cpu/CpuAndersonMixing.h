@@ -12,11 +12,11 @@
 class CpuAndersonMixing : public AndersonMixing
 {
 private:
-    // a few previous field values are stored
+    // A few previous field values are stored
     CircularBuffer *cb_w_hist, *cb_w_deriv_hist;
     CircularBuffer *cb_w_deriv_dots;
     double *w_deriv_dots;
-    // a matrix and arrays for determining coefficients
+    // A matrix and arrays for determining coefficients
     double **u_nm, *v_n, *a_n;
     
     double dot_product(double *a, double *b);

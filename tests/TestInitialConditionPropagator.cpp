@@ -8,7 +8,7 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "Molecules.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
@@ -31,11 +31,7 @@ int main()
         double ds = 1.0/N;
 
         std::map<std::string, double> bond_lengths = {{"A",1.0}};
-
-        std::vector<std::string> block_species = {"A"};
-        std::vector<double> contour_lengths = {1.0};
-        std::vector<int> v = {0};
-        std::vector<int> u = {1};
+        std::vector<BlockInput> block_inputs = {{"A", 1.0, 0, 1}};
 
         // from a vertex index to a grafting point
         // following map means that vertex 
@@ -66,7 +62,7 @@ int main()
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, reduce_propagator_computation);
-                    molecules->add_polymer(1.0, block_species, contour_lengths, v, u, chain_end_to_q_init);
+                    molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
                     Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
 
                     // -------------- print simulation parameters ------------

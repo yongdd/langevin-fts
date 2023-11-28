@@ -35,7 +35,7 @@ MklFFT3D::MklFFT3D(std::array<int,3> nx)
         if (status !=0)
             std::cout << "MKL status: " << status << std::endl;
 
-        // compute a normalization factor
+        // Compute a normalization factor
         this->fft_normal_factor = nx[0]*nx[1]*nx[2];
     }
     catch(std::exception& exc)

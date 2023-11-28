@@ -7,7 +7,7 @@
 #include <map>
 
 #include "Exception.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "CpuComputationBox.h"
@@ -178,28 +178,122 @@ int main()
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",2.0}, {"C",1.5}};
 
         std::vector<double> volume_fraction;
-        std::vector<std::vector<std::string>> block_monomer_types;
-        std::vector<std::vector<double>> contour_lengths;
-        std::vector<std::vector<int>> v;
-        std::vector<std::vector<int>> u;
+        std::vector<std::vector<BlockInput>> block_inputs;
 
         volume_fraction.push_back(0.5);
-        block_monomer_types.push_back({"C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","A","A","A","A","A","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B","C","B","B","B","B","B"});
-        contour_lengths.push_back({1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9,1.2,0.9,0.9,0.9,0.9,0.9});
-        v.push_back({0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7});
-        u.push_back({1,9,10,11,12,13,2,14,15,16,17,18,3,19,20,21,22,23,4,24,25,26,27,28,5,29,30,31,32,33,6,34,35,36,37,38,7,39,40,41,42,43,8,44,45,46,47,48});
+        std::vector<BlockInput> block_input_1 = 
+        {
+            {"C", 1.2, 0, 1},
+            {"A", 0.9, 0, 9},
+            {"A", 0.9, 0,10},
+            {"A", 0.9, 0,11},
+            {"A", 0.9, 0,12},
+            {"A", 0.9, 0,13},
+            {"C", 1.2, 1, 2},
+            {"A", 0.9, 1,14},
+            {"A", 0.9, 1,15},
+            {"A", 0.9, 1,16},
+            {"A", 0.9, 1,17},
+            {"A", 0.9, 1,18},
+            {"C", 1.2, 2, 3},
+            {"A", 0.9, 2,19},
+            {"A", 0.9, 2,20},
+            {"A", 0.9, 2,21},
+            {"A", 0.9, 2,22},
+            {"A", 0.9, 2,23},
+            {"C", 1.2, 3, 4},
+            {"A", 0.9, 3,24},
+            {"A", 0.9, 3,25},
+            {"A", 0.9, 3,26},
+            {"A", 0.9, 3,27},
+            {"A", 0.9, 3,28},
+            {"C", 1.2, 4, 5},
+            {"B", 0.9, 4,29},
+            {"B", 0.9, 4,30},
+            {"B", 0.9, 4,31},
+            {"B", 0.9, 4,32},
+            {"B", 0.9, 4,33},
+            {"C", 1.2, 5, 6},
+            {"B", 0.9, 5,34},
+            {"B", 0.9, 5,35},
+            {"B", 0.9, 5,36},
+            {"B", 0.9, 5,37},
+            {"B", 0.9, 5,38},
+            {"C", 1.2, 6, 7},
+            {"B", 0.9, 6,39},
+            {"B", 0.9, 6,40},
+            {"B", 0.9, 6,41},
+            {"B", 0.9, 6,42},
+            {"B", 0.9, 6,43},
+            {"C", 1.2, 7, 8},
+            {"B", 0.9, 7,44},
+            {"B", 0.9, 7,45},
+            {"B", 0.9, 7,46},
+            {"B", 0.9, 7,47},
+            {"B", 0.9, 7,48},
+        };
 
         volume_fraction.push_back(0.3);
-        block_monomer_types.push_back({"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"});
-        contour_lengths.push_back({0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2});
-        v.push_back({0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13});
-        u.push_back({1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18});
+        std::vector<BlockInput> block_input_2 = 
+        {
+            {"A",0.6, 0, 1},
+            {"A",1.2, 0, 2},
+            {"B",1.2, 0, 5},
+            {"B",0.9, 0, 6},
+            {"A",0.9, 1, 4},
+            {"A",1.2, 1,15},
+            {"B",1.2, 2, 3},
+            {"A",0.9, 2, 7},
+            {"B",1.2, 2,10},
+            {"B",1.2, 3,14},
+            {"A",0.9, 4, 8},
+            {"A",1.2, 4, 9},
+            {"B",1.2, 7,19},
+            {"A",0.9, 8,13},
+            {"B",1.2, 9,12},
+            {"A",1.2, 9,16},
+            {"A",1.2,10,11},
+            {"B",1.2,13,17},
+            {"A",1.2,13,18},
+        };
 
         volume_fraction.push_back(0.2);
-        block_monomer_types.push_back({"A","A","B","B","C","C","B","A","C","C","A","B","C","C","C","C","B","B","B","B","C","B","B","C","C","B","B","C","B"});
-        contour_lengths.push_back({0.9,1.2,1.2,0.9,0.9,1.2,1.2,0.9,0.9,1.2,1.2,1.2,1.2,0.9,1.2,1.2,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,0.9,0.9,0.9});
-        v.push_back({0,0,0,0,1,1,2,2,2,3,3,5,5,8,8,8,8,9,10,11,13,14,14,16,16,18,21,22,23});
-        u.push_back({1,2,8,12,4,5,3,11,13,6,7,9,18,10,14,20,26,27,15,17,16,19,22,21,29,23,24,25,28});
+        std::vector<BlockInput> block_input_3 = 
+        {
+            {"A", 0.9, 0, 1},
+            {"A", 1.2, 0, 2},
+            {"B", 1.2, 0, 8},
+            {"B", 0.9, 0,12},
+            {"C", 0.9, 1, 4},
+            {"C", 1.2, 1, 5},
+            {"B", 1.2, 2, 3},
+            {"A", 0.9, 2,11},
+            {"C", 0.9, 2,13},
+            {"C", 1.2, 3, 6},
+            {"A", 1.2, 3, 7},
+            {"B", 1.2, 5, 9},
+            {"C", 1.2, 5,18},
+            {"C", 0.9, 8,10},
+            {"C", 1.2, 8,14},
+            {"C", 1.2, 8,20},
+            {"B", 1.2, 8,26},
+            {"B", 1.2, 9,27},
+            {"B", 0.9,10,15},
+            {"B", 1.2,11,17},
+            {"C", 1.2,13,16},
+            {"B", 0.9,14,19},
+            {"B", 1.2,14,22},
+            {"C", 1.2,16,21},
+            {"C", 1.2,16,29},
+            {"B", 1.2,18,23},
+            {"B", 0.9,21,24},
+            {"C", 0.9,22,25},
+            {"B", 0.9,23,28},
+        };
+
+        block_inputs.push_back(block_input_1);
+        block_inputs.push_back(block_input_2);
+        block_inputs.push_back(block_input_3);
 
         double phi_a[M]={0.0}, phi_b[M]={0.0}, phi_c[M]={0.0};
 
@@ -215,17 +309,17 @@ int main()
         // }
 
         Molecules* molecules1 = new Molecules("Continuous", 0.15, bond_lengths, false);
-        for(size_t p=0; p<block_monomer_types.size(); p++){
-            molecules1->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
-            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
+        for(size_t p=0; p<block_inputs.size(); p++){
+            molecules1->add_polymer(volume_fraction[p], block_inputs[p], {});
+            std::cout << "block size: " << block_inputs[p].size() << std::endl;
         }
         molecules1->display_blocks();
         molecules1->display_propagators();
 
         Molecules* molecules2 = new Molecules("Continuous", 0.15, bond_lengths, true);
-        for(size_t p=0; p<block_monomer_types.size(); p++){
-            molecules2->add_polymer(volume_fraction[p], block_monomer_types[p], contour_lengths[p], v[p], u[p], {});
-            std::cout << "block size: " << block_monomer_types[p].size() << std::endl;
+        for(size_t p=0; p<block_inputs.size(); p++){
+            molecules2->add_polymer(volume_fraction[p], block_inputs[p], {});
+            std::cout << "block size: " << block_inputs[p].size() << std::endl;
         }
         molecules2->display_blocks();
         molecules2->display_propagators();

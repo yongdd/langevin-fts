@@ -8,7 +8,7 @@ public:
 
     const int M{32*32*32};
 
-    // variables for cub reduction sum
+    // Variables for cub reduction sum
     size_t temp_storage_bytes;
     double *d_temp_storage;
     double *d_array;

@@ -7,7 +7,7 @@
 #include <pybind11/numpy.h>
 
 #include "Array.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #include "ComputationBox.h"
 #include "Pseudo.h"
 #include "AndersonMixing.h"
@@ -88,7 +88,7 @@ PYBIND11_MODULE(langevinfts, m)
         //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x n_grid' (" + std::to_string(n_comp*n_grid) + ") must match");
         //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
         // };
-        // void zero_mean(py::array_t<double> g) {
+        // Void zero_mean(py::array_t<double> g) {
         //     py::buffer_info buf = g.request();
         //     if (buf.size != n_grid) {
         //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
@@ -96,23 +96,23 @@ PYBIND11_MODULE(langevinfts, m)
         //     zero_mean((double*) buf.ptr);
         // };
 
-    py::class_<PolymerChain>(m, "PolymerChain")
-        .def(py::init<double, std::map<std::string, double>, double,
-            std::vector<std::string>, std::vector<double>,
-            std::vector<int>, std::vector<int>, std::map<int, std::string>>())
-        .def("get_alpha", &PolymerChain::get_alpha)
-        .def("get_volume_fraction", &PolymerChain::get_volume_fraction)
-        .def("get_n_blocks", &PolymerChain::get_n_blocks)
-        .def("get_blocks", &PolymerChain::get_blocks)
-        .def("get_block", &PolymerChain::get_block)
-        //.def("get_block_species", &PolymerChain::get_block_species)
-        .def("get_n_segment_total", &PolymerChain::get_n_segment_total)
-        .def("get_n_segment", &PolymerChain::get_n_segment)
-        .def("get_block_index_from_edge", &PolymerChain::get_block_index_from_edge)
-        .def("get_adjacent_nodes", &PolymerChain::get_adjacent_nodes)
-        .def("get_block_indexes", &PolymerChain::get_block_indexes)
-        //.def("set_propagator_key", &PolymerChain::set_propagator_key)
-        .def("get_propagator_key", &PolymerChain::get_propagator_key);
+    py::class_<Polymer>(m, "Polymer")
+        // .def(py::init<double, std::map<std::string, double>, double,
+        //     std::vector<std::string>, std::vector<double>,
+        //     std::vector<int>, std::vector<int>, std::map<int, std::string>>())
+        .def("get_alpha", &Polymer::get_alpha)
+        .def("get_volume_fraction", &Polymer::get_volume_fraction)
+        .def("get_n_blocks", &Polymer::get_n_blocks)
+        .def("get_blocks", &Polymer::get_blocks)
+        .def("get_block", &Polymer::get_block)
+        //.def("get_block_species", &Polymer::get_block_species)
+        .def("get_n_segment_total", &Polymer::get_n_segment_total)
+        .def("get_n_segment", &Polymer::get_n_segment)
+        .def("get_block_index_from_edge", &Polymer::get_block_index_from_edge)
+        .def("get_adjacent_nodes", &Polymer::get_adjacent_nodes)
+        .def("get_block_indexes", &Polymer::get_block_indexes)
+        //.def("set_propagator_key", &Polymer::set_propagator_key)
+        .def("get_propagator_key", &Polymer::get_propagator_key);
 
     py::class_<Molecules>(m, "Molecules")
         .def(py::init<std::string, double, std::map<std::string, double>, bool>())
@@ -120,12 +120,32 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_ds", &Molecules::get_ds)
         .def("get_bond_lengths", &Molecules::get_bond_lengths)
         .def("get_n_polymer_types", &Molecules::get_n_polymer_types)
-        .def("add_polymer", overload_cast_<
-            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>, std::map<int, std::string>
-            >()(&Molecules::add_polymer))
-        .def("add_polymer", overload_cast_<
-            double, std::vector<std::string>, std::vector<double>, std::vector<int>, std::vector<int>
-            >()(&Molecules::add_polymer))
+        .def("add_polymer", [](Molecules& obj, double volume_fraction, std::vector<std::vector<py::object>> block_list)
+        {
+            std::vector<BlockInput> block_inputs;
+            for (const auto& py_block : block_list) {
+                BlockInput block;
+                block.monomer_type = py::cast<std::string>(py_block[0]);
+                block.contour_length = py::cast<double>(py_block[1]);
+                block.v = py::cast<int>(py_block[2]);
+                block.u = py::cast<int>(py_block[3]);
+                block_inputs.push_back(block);
+            }
+            obj.add_polymer(volume_fraction, block_inputs, {});
+        })
+        .def("add_polymer", [](Molecules& obj, double volume_fraction, std::vector<std::vector<py::object>> block_list, std::map<int, std::string> chain_end_to_q_init)
+        {
+            std::vector<BlockInput> block_inputs;
+            for (const auto& py_block : block_list) {
+                BlockInput block;
+                block.monomer_type = py::cast<std::string>(py_block[0]);
+                block.contour_length = py::cast<double>(py_block[1]);
+                block.v = py::cast<int>(py_block[2]);
+                block.u = py::cast<int>(py_block[3]);
+                block_inputs.push_back(block);
+            }
+            obj.add_polymer(volume_fraction, block_inputs, chain_end_to_q_init);
+        })
         .def("get_polymer", &Molecules::get_polymer)
         .def("get_deps_from_key", &Molecules::get_deps_from_key)
         .def("get_monomer_type_from_key", &Molecules::get_monomer_type_from_key)

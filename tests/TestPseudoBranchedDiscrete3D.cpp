@@ -8,7 +8,7 @@
 
 #include "Exception.h"
 #include "CpuComputationBox.h"
-#include "PolymerChain.h"
+#include "Polymer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "CpuPseudoDiscrete.h"
@@ -163,20 +163,43 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.5}};
-        std::vector<std::string> block_monomer_types = {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"};
-        std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2};
-        std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
-        std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
+        // std::vector<std::string> block_monomer_types = {"A","A","B","B","A","A","B","A","B","B","A","A","B","A","B","A","A","B","A"};
+        // std::vector<double> contour_lengths = {0.6,1.2,1.2,0.9,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,0.9,1.2,1.2,1.2,1.2,1.2};
+        // std::vector<int> v = {0,0,0,0,1,1,2,2,2,3,4,4,7,8,9,9,10,13,13};
+        // std::vector<int> u = {1,2,5,6,4,15,3,7,10,14,8,9,19,13,12,16,11,17,18};
+
+        std::vector<BlockInput> blocks = 
+        {
+            {"A",0.6, 0, 1},
+            {"A",1.2, 0, 2},
+            {"B",1.2, 0, 5},
+            {"B",0.9, 0, 6},
+            {"A",0.9, 1, 4},
+            {"A",1.2, 1,15},
+            {"B",1.2, 2, 3},
+            {"A",0.9, 2, 7},
+            {"B",1.2, 2,10},
+            {"B",1.2, 3,14},
+            {"A",0.9, 4, 8},
+            {"A",1.2, 4, 9},
+            {"B",1.2, 7,19},
+            {"A",0.9, 8,13},
+            {"B",1.2, 9,12},
+            {"A",1.2, 9,16},
+            {"A",1.2,10,11},
+            {"B",1.2,13,17},
+            {"A",1.2,13,18},
+        };
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
         Molecules* molecules1 = new Molecules("Discrete", 0.15, bond_lengths, false);
-        molecules1->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules1->add_polymer(1.0, blocks, {});
         molecules1->display_blocks();
         molecules1->display_propagators();
 
         Molecules* molecules2 = new Molecules("Discrete", 0.15, bond_lengths, true);
-        molecules2->add_polymer(1.0, block_monomer_types, contour_lengths, v, u, {});
+        molecules2->add_polymer(1.0, blocks, {});
         molecules2->display_blocks();
         molecules2->display_propagators();
 
@@ -217,7 +240,7 @@ int main()
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
             const int p = 0;
-            PolymerChain& pc = molecules1->get_polymer(p);
+            Polymer& pc = molecules1->get_polymer(p);
             pseudo->get_chain_propagator(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);
