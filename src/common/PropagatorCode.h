@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class constains functions for propagator code
+* This class contains functions for propagator code
 *-----------------------------------------------------------*/
 
 #ifndef PROPAGATOR_CODE_H_

@@ -48,20 +48,20 @@ int main()
         // choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        std::vector<bool> reduce_propagator_computations = {false, true};
+        std::vector<bool> aggregate_propagator_computations = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> x_square_total_list;
             for(std::string platform : avail_platforms)
             {
-                for(bool reduce_propagator_computation : reduce_propagator_computations)
+                for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
                     AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
                     // factory->display_info();
 
                     // create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, reduce_propagator_computation);
+                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
                     molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
                     Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
 
@@ -69,7 +69,7 @@ int main()
                     std::cout << std::setprecision(default_precision);
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                     std::cout << "Platform: " << platform << std::endl;
-                    std::cout << "Using Superposition: " << reduce_propagator_computation << std::endl;
+                    std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
                     // // display branches
                     // molecules->display_blocks();

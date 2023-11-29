@@ -12,7 +12,7 @@
 
 //----------------- Constructor ----------------------------
 Molecules::Molecules(
-    std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation)
+    std::string model_name, double ds, std::map<std::string, double> bond_lengths, bool aggregate_propagator_computation)
 {
     // Checking chain model
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
@@ -32,7 +32,7 @@ Molecules::Molecules(
     {
         this->ds = ds;
         this->bond_lengths = bond_lengths;
-        this->reduce_propagator_computation = reduce_propagator_computation;
+        this->aggregate_propagator_computation = aggregate_propagator_computation;
     }
     catch(std::exception& exc)
     {
@@ -50,7 +50,7 @@ void Molecules::add_polymer(
     Polymer& pc = polymer_types.back();
 
     // Temporary map for the new polymer
-    std::map<std::tuple<int, std::string>, std::map<std::string, EssentialBlock >> essential_blocks_new_polymer;
+    std::map<std::tuple<int, std::string>, std::map<std::string, ComputationBlock >> essential_blocks_new_polymer;
 
     // Find essential_blocks in new_polymer
     std::vector<Block> blocks = pc.get_blocks();
@@ -74,10 +74,10 @@ void Molecules::add_polymer(
         essential_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
 
-    if (this->reduce_propagator_computation)
+    if (this->aggregate_propagator_computation)
     {
         // Find superposed branches in essential_blocks_new_polymer
-        std::map<std::tuple<int, std::string>, std::map<std::string, EssentialBlock >> superposed_blocks;
+        std::map<std::tuple<int, std::string>, std::map<std::string, ComputationBlock >> superposed_blocks;
         for(auto& item : essential_blocks_new_polymer)
         {
             
@@ -116,7 +116,7 @@ void Molecules::add_polymer(
             // Superpose propagators for given key
             // If the number of elements in the second map is only 1, it will return the map without superposition.
             // Not all elements of superposed_second_map are superposed.
-            std::map<std::string, EssentialBlock> superposed_second_map;
+            std::map<std::string, ComputationBlock> superposed_second_map;
             if (model_name == "continuous")
                 superposed_second_map = superpose_propagator_of_continuous_chain(item.second);
             else if (model_name == "discrete")
@@ -222,9 +222,9 @@ double Molecules::get_ds() const
 {
     return ds;
 }
-bool Molecules::is_using_superposition() const
+bool Molecules::is_using_propagator_aggregation() const
 {
-    return reduce_propagator_computation;
+    return aggregate_propagator_computation;
 }
 int Molecules::get_n_polymer_types() const
 {
@@ -238,7 +238,7 @@ const std::map<std::string, double>& Molecules::get_bond_lengths() const
 {
     return bond_lengths;
 }
-void Molecules::update_essential_propagator_code(std::map<std::string, EssentialEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment)
+void Molecules::update_essential_propagator_code(std::map<std::string, ComputationEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment)
 {
     if (essential_propagator_codes.find(new_key) == essential_propagator_codes.end())
     {
@@ -253,7 +253,7 @@ void Molecules::update_essential_propagator_code(std::map<std::string, Essential
             essential_propagator_codes[new_key].max_n_segment = new_n_segment;
     }
 }
-std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continuous_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
+std::map<std::string, ComputationBlock> Molecules::superpose_propagator_of_continuous_chain(std::map<std::string, ComputationBlock> not_superposed_yet_second_map)
 {
     // Example)
     // 0, B:
@@ -279,9 +279,9 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continu
     //   6, 2, 2, [(C)B2:1,(D)B0:3,(E)B0:2]B,             // done
     //   6, 4, 2, [[(C)B2:1,(D)B0:3,(E)B0:2]B2,(F)B2:1]B  // done
 
-    std::map<std::string, EssentialBlock> remaining_keys;
-    std::map<std::string, EssentialBlock> superposed_second_map;
-    std::map<std::string, EssentialBlock> superposed_second_map_total;
+    std::map<std::string, ComputationBlock> remaining_keys;
+    std::map<std::string, ComputationBlock> superposed_second_map;
+    std::map<std::string, ComputationBlock> superposed_second_map_total;
 
     // Because of our SimpsonRule implementation, whose weights of odd number n_segments and even number n_segments are slightly different,
     // superpositions for blocks of odd number and of even number are separately performed.
@@ -309,7 +309,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_continu
     return superposed_second_map_total;
 
 }
-std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_discrete_chain(std::map<std::string, EssentialBlock> not_superposed_yet_second_map)
+std::map<std::string, ComputationBlock> Molecules::superpose_propagator_of_discrete_chain(std::map<std::string, ComputationBlock> not_superposed_yet_second_map)
 {
 
     // Example)
@@ -336,7 +336,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_discret
     //   6, 3, 2, [(C)B3:1,(D)B1:3,(E)B1:2]B,             // done
     //   6, 5, 1, [[(C)B3:1,(D)B1:3,(E)B1:2]B2,(F)B1:1]B  // done
 
-    // std::map<std::string, EssentialBlock> remaining_keys;
+    // std::map<std::string, ComputationBlock> remaining_keys;
     // for(const auto& item : not_superposed_yet_second_map)
     // {
     //     remaining_keys[item.first] = item.second;
@@ -345,7 +345,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_of_discret
     return superpose_propagator_common(not_superposed_yet_second_map, 1);
 }
 
-std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std::map<std::string, EssentialBlock> remaining_keys, int minimum_n_segment)
+std::map<std::string, ComputationBlock> Molecules::superpose_propagator_common(std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment)
 {
     int current_n_segment;
     int n_segment_allocated;
@@ -355,7 +355,7 @@ std::map<std::string, EssentialBlock> Molecules::superpose_propagator_common(std
     std::string superposed_propagator_code;
     std::vector<std::tuple<int ,int>> v_u_total;
 
-    std::map<std::string, EssentialBlock> superposed_second_map;
+    std::map<std::string, ComputationBlock> superposed_second_map;
     // Tuple <n_segment_allocated, key, n_segment_offset, n_segment_original, v_u_list>
     std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> same_superposition_level_list;
 
@@ -521,22 +521,22 @@ int Molecules::get_n_essential_propagator_codes() const
 {
     return essential_propagator_codes.size();
 }
-std::map<std::string, EssentialEdge, ComparePropagatorKey>& Molecules::get_essential_propagator_codes()
+std::map<std::string, ComputationEdge, ComparePropagatorKey>& Molecules::get_essential_propagator_codes()
 {
     return essential_propagator_codes;
 }
-EssentialEdge& Molecules::get_essential_propagator_code(std::string key)
+ComputationEdge& Molecules::get_essential_propagator_code(std::string key)
 {
     if (essential_propagator_codes.find(key) == essential_propagator_codes.end())
         throw_with_line_number("There is no such key (" + key + ").");
 
     return essential_propagator_codes[key];
 }
-std::map<std::tuple<int, std::string, std::string>, EssentialBlock>& Molecules::get_essential_blocks()
+std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& Molecules::get_essential_blocks()
 {
     return essential_blocks;
 }
-EssentialBlock& Molecules::get_essential_block(std::tuple<int, std::string, std::string> key)
+ComputationBlock& Molecules::get_essential_block(std::tuple<int, std::string, std::string> key)
 {
     if (essential_blocks.find(key) == essential_blocks.end())
         throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
@@ -655,44 +655,4 @@ void Molecules::display_sub_propagators() const
     }
     std::cout << "Total number of iterations to compute all propagators: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
-}
-
-bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2)
-{
-    // First compare heights
-    int height_str1 = PropagatorCode::get_height_from_key(str1);
-    int height_str2 = PropagatorCode::get_height_from_key(str2);
-
-    if (height_str1 < height_str2)
-        return true;
-    else if(height_str1 > height_str2)
-        return false;
-
-    // Second compare their strings
-    int mix_length = std::min(str1.length(), str2.length());
-    for(int i=0; i<mix_length; i++)
-    {
-        if (str1[i] == str2[i])
-            continue;
-        else if (str2[i] == '[')
-            return true;
-        else if (str1[i] == '[')
-            return false;
-        else if (str2[i] == ']')
-            return true;
-        else if (str1[i] == ']')
-            return false;
-        else if (str2[i] == '(')
-            return true;
-        else if (str1[i] == '(')
-            return false;
-        else if (str2[i] == ')')
-            return true;
-        else if (str1[i] == ')')
-            return false;
-        else
-            return str1[i] < str2[i];
-    }
-    // Third compare their lengths
-    return str1.length() < str2.length();
 }

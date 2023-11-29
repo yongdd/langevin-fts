@@ -20,7 +20,7 @@ lx = [6.0,6.0,6.0]            # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
 
-reduce_propagator_computation = False
+aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Grafting points
@@ -33,7 +33,7 @@ factory.display_info()
 # Create an instance for computation box
 cb = factory.create_computation_box(nx, lx) 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
-molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, reduce_propagator_computation)
+molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
 
 molecules.add_polymer(
      1.0,

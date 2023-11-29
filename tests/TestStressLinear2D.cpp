@@ -104,19 +104,19 @@ int main()
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
-        std::vector<bool> reduce_propagator_computations = {false, true};
+        std::vector<bool> aggregate_propagator_computations = {false, true};
         for(std::string platform : avail_platforms)
         {
             for(std::string chain_model : chain_models)
             {
-                for(bool reduce_propagator_computation : reduce_propagator_computations)
+                for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
                     AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
                     factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, reduce_propagator_computation);
+                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, aggregate_propagator_computation);
                     molecules->add_polymer(1.0, blocks, {});
                     Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
@@ -127,7 +127,7 @@ int main()
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
-                    std::cout << "Using Superposition: " << reduce_propagator_computation << std::endl;
+                    std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
                     // std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
                     // std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
                     // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;

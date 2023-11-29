@@ -29,7 +29,7 @@ public :
         std::vector<double> lx) override;
 
     Molecules* create_molecule_information(
-        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) override;
+        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool aggregate_propagator_computation) override;
 
     Pseudo* create_pseudo(
         ComputationBox *cb, Molecules *molecules) override;

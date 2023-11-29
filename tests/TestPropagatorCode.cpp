@@ -82,7 +82,7 @@ int main()
             return -1;
 
         // Print sub propagator_codes
-        std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes = molecules.get_essential_propagator_codes();
+        std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes = molecules.get_essential_propagator_codes();
         for(const auto& item : essential_propagator_codes)
         {
             std::cout << item.first << ":\n\t";

@@ -45,9 +45,9 @@ ComputationBox* MklFactory::create_computation_box(
     return new CpuComputationBox(nx, lx);
 }
 Molecules* MklFactory::create_molecule_information(
-    std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) 
+    std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool aggregate_propagator_computation) 
 {
-    return new Molecules(chain_model, ds, bond_lengths, reduce_propagator_computation);
+    return new Molecules(chain_model, ds, bond_lengths, aggregate_propagator_computation);
 }
 Pseudo* MklFactory::create_pseudo(ComputationBox *cb, Molecules *molecules)
 {

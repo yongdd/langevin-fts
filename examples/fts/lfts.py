@@ -172,8 +172,8 @@ class LFTS:
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
 
         # (C++ class) Molecules list
-        if "reduce_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
+        if "aggregate_propagator_computation" in params:
+            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
         else:
             molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
 

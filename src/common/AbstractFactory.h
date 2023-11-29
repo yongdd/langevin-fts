@@ -37,7 +37,7 @@ public :
         std::vector<double> lx) = 0;
 
     virtual Molecules* create_molecule_information(
-        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool reduce_propagator_computation) = 0;
+        std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool aggregate_propagator_computation) = 0;
 
     virtual Pseudo* create_pseudo(
         ComputationBox *cb, Molecules *molecules) = 0; 
