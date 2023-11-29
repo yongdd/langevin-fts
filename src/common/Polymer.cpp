@@ -7,6 +7,7 @@
 #include <set>
 
 #include "Polymer.h"
+#include "PropagatorCode.h"
 #include "Exception.h"
 
 //----------------- Constructor ----------------------------
@@ -174,6 +175,17 @@ Polymer::Polymer(
             error_message += ", " + std::to_string(isolated_nodes[i]);
         throw_with_line_number(error_message + ".");
     }
+
+    // Generate propagator codes and assign each of them to each of propagator
+    auto propagator_codes = PropagatorCode::generate_codes(*this, chain_end_to_q_init);
+    for(size_t i=0; i<propagator_codes.size(); i++)
+    {
+        int v = std::get<0>(propagator_codes[i]);
+        int u = std::get<1>(propagator_codes[i]);
+        std::string propagator_code = std::get<2>(propagator_codes[i]);
+        this->set_propagator_key(propagator_code, v, u);
+    }
+
 }
 int Polymer::get_n_blocks() const
 {

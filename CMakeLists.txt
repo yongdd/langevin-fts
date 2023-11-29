@@ -40,6 +40,7 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 ADD_LIBRARY(common
     src/common/Array.cpp
     src/common/ComputationBox.cpp
+    src/common/PropagatorCode.cpp
     src/common/Polymer.cpp
     src/common/Molecules.cpp
     src/common/CircularBuffer.cpp
