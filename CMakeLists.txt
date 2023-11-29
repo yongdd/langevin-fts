@@ -43,6 +43,7 @@ ADD_LIBRARY(common
     src/common/PropagatorCode.cpp
     src/common/Polymer.cpp
     src/common/Molecules.cpp
+    src/common/Propagators.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
     src/common/AndersonMixing.cpp

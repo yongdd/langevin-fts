@@ -1090,7 +1090,7 @@ void CudaPseudoReduceMemoryContinuous::get_block_concentration(int p, double *ph
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (molecules->is_using_superposition())
+        if (molecules->is_using_propagator_aggregation())
             throw_with_line_number("Disable 'superposition' option to invoke 'get_block_concentration'.");
 
         Polymer& pc = molecules->get_polymer(p);

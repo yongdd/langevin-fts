@@ -118,8 +118,8 @@ class LFTS:
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
 
         # (C++ class) Molecules list
-        if "reduce_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["reduce_propagator_computation"])
+        if "aggregate_propagator_computation" in params:
+            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
         else:
             molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], True)
 

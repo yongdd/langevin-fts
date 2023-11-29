@@ -8,7 +8,7 @@
 
 #include "Scheduler.h"
 
-Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes, const int N_STREAM)
+Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes, const int N_STREAM)
 {
     try
     {
@@ -189,7 +189,7 @@ Scheduler::Scheduler(std::map<std::string, EssentialEdge, ComparePropagatorKey> 
     }
 }
 std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
-    std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes)
+    std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes)
 {
     try
     {
@@ -256,7 +256,7 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 {
     return schedule;
 }
-void Scheduler::display(std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes)
+void Scheduler::display(std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes)
 {
     for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
     {

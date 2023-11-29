@@ -139,7 +139,7 @@ langevin_dt = 0.8      # Langevin step interval, delta tau*N
 langevin_nbar = 10000  # Invariant polymerization index
 langevin_max_step = 2000
 
-reduce_propagator_computation = False
+aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # -------------- initialize ------------
@@ -157,7 +157,7 @@ factory = PlatformSelector.create_factory(platform, chain_model, reduce_gpu_memo
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-molecules = factory.create_molecule_information(chain_model, ds, dict_a_n, reduce_propagator_computation)
+molecules = factory.create_molecule_information(chain_model, ds, dict_a_n, aggregate_propagator_computation)
 molecules.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
 pseudo = factory.create_pseudo(cb, molecules)
 am = factory.create_anderson_mixing(am_n_var,

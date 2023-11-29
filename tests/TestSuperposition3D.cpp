@@ -111,14 +111,14 @@ int main()
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        std::vector<bool> reduce_propagator_computations = {false, true};
+        std::vector<bool> aggregate_propagator_computations = {false, true};
         std::vector<bool> reduce_memory_usages = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> energy_total_list;
             for(std::string platform : avail_platforms)
             {
-                for(bool reduce_propagator_computation : reduce_propagator_computations)
+                for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
                     for(bool reduce_memory_usage : reduce_memory_usages)
                     {
@@ -131,7 +131,7 @@ int main()
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
-                        Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, reduce_propagator_computation);
+                        Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
                         molecules->add_polymer(1.0, blocks, {});
                         Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
@@ -141,7 +141,7 @@ int main()
                         std::cout << std::setprecision(default_precision);
                         std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
-                        std::cout << "Using Superposition: " << reduce_propagator_computation << std::endl;
+                        std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
                         // // display branches
                         // molecules->display_blocks();

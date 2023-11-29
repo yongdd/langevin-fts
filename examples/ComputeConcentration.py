@@ -22,7 +22,7 @@ lx = [5.0,5.0,5.0]                                # box size
 ds = 0.01                                         # contour step interval
 stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 
-reduce_propagator_computation = False
+aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Select platform ("cuda" or "cpu-mkl")
@@ -32,7 +32,7 @@ factory.display_info()
 # Create an instance for computation box
 cb = factory.create_computation_box(nx, lx) 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
-molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, reduce_propagator_computation)
+molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
 
 # First Polymer (homopolymer)
 molecules.add_polymer(
