@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include <map>
-
+#include "PropagatorCode.h"
 #include "Polymer.h"
 
 struct EssentialEdge{
@@ -46,30 +46,20 @@ private:
     std::string model_name; // "continuous": continuous standard Gaussian model
                             // "discrete": discrete bead-spring model
                             
-    double ds;              // contour step interval
+    double ds;                          // contour step interval
     bool reduce_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
     // dictionary{key:monomer_type, value:relative statistical_segment_length. (a_A/a_Ref)^2 or (a_B/a_Ref)^2, ...}
     std::map<std::string, double> bond_lengths;
 
-    // distinct_polymers
-    std::vector<Polymer> distinct_polymers;
+    // Polymer types
+    std::vector<Polymer> polymer_types;
 
     // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
     std::map<std::tuple<int, std::string, std::string>, EssentialBlock> essential_blocks;
 
     // dictionary{key:non-duplicated unique propagator_codes, value: EssentialEdge}
     std::map<std::string, EssentialEdge, ComparePropagatorKey> essential_propagator_codes; 
-
-    // Get propagator code
-    // This method is implemented using memoization(top-down dynamic programming) approach.
-    std::pair<std::string, int> generate_propagator_code(
-        std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
-        std::vector<Block>& blocks,
-        std::map<int, std::vector<int>>& adjacent_nodes,
-        std::map<std::pair<int, int>, int>& edge_to_block_index,
-        std::map<int, std::string>& chain_end_to_q_init,
-        int in_node, int out_node);
 
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
     void update_essential_propagator_code(std::map<std::string, EssentialEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment);
@@ -93,7 +83,7 @@ public:
     // Mark some chain ends to set initial conditions of propagators when pseudo.compute_statistics() is invoked.
     // For instance, if chain_end_to_q_init[a] is set to b, 
     // Q_init[b] will be used as an initial condition of chain end 'a' in pseudo.compute_statistics().
-        void add_polymer(
+    void add_polymer(
         double volume_fraction,
         std::vector<BlockInput> block_inputs,
         std::map<int, std::string> chain_end_to_q_init);
@@ -118,12 +108,7 @@ public:
     std::map<std::tuple<int, std::string, std::string>, EssentialBlock>& get_essential_blocks(); 
     EssentialBlock& get_essential_block(std::tuple<int, std::string, std::string> key);
 
-    // Get information from key
-    static std::vector<std::tuple<std::string, int, int>> get_deps_from_key(std::string key);
-    static std::string remove_monomer_type_from_key(std::string key);
-    static std::string get_monomer_type_from_key(std::string key);
-    static std::string get_q_input_idx_from_key(std::string key);
-    static int get_height_from_key(std::string key);
+
 
     // Display
     void display_propagators() const;

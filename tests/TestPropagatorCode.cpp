@@ -41,44 +41,44 @@ int main()
         std::vector<std::tuple<std::string, int, int>> sub_deps;
         // sub_deps: []
         key = "B";
-        sub_deps = Molecules::get_deps_from_key(key);
+        sub_deps = PropagatorCode::get_deps_from_key(key);
         if(sub_deps.size() != 0)
             return -1;
-        if(Molecules::get_monomer_type_from_key(key) != "B")
+        if(PropagatorCode::get_monomer_type_from_key(key) != "B")
             return -1;
 
         // sub_deps: [A:12, B:12]
         key = "(A12B12)A";
-        sub_deps = Molecules::get_deps_from_key(key);
+        sub_deps = PropagatorCode::get_deps_from_key(key);
         if(std::get<0>(sub_deps[0]) != "A" || std::get<1>(sub_deps[0]) != 12)
             return -1;
         if(std::get<0>(sub_deps[1]) != "B" || std::get<1>(sub_deps[1]) != 12)
             return -1;
-        if(Molecules::get_monomer_type_from_key(key) != "A")
+        if(PropagatorCode::get_monomer_type_from_key(key) != "A")
             return -1;
 
         // sub_deps: [(A12)B:12, (B12)A:9, (B12)B:12]
         key = "((A12)B12(B12)A9(B12)B12)A";
-        sub_deps = Molecules::get_deps_from_key(key);
+        sub_deps = PropagatorCode::get_deps_from_key(key);
         if(std::get<0>(sub_deps[0]) != "(A12)B" || std::get<1>(sub_deps[0]) != 12)
             return -1;
         if(std::get<0>(sub_deps[1]) != "(B12)A" || std::get<1>(sub_deps[1]) != 9)
             return -1;
        if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
-        if(Molecules::get_monomer_type_from_key(key) != "A")
+        if(PropagatorCode::get_monomer_type_from_key(key) != "A")
             return -1;
 
         // sub_deps: [(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A:12, (A12)B:12, (B12)B:12]}
         key = "((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A";
-        sub_deps = Molecules::get_deps_from_key(key);
+        sub_deps = PropagatorCode::get_deps_from_key(key);
         if(std::get<0>(sub_deps[0]) != "(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A" || std::get<1>(sub_deps[0]) != 12)
             return -1;
         if(std::get<0>(sub_deps[1]) != "(A12)B" || std::get<1>(sub_deps[1]) != 12)
             return -1;
         if(std::get<0>(sub_deps[2]) != "(B12)B" || std::get<1>(sub_deps[2]) != 12)
             return -1;
-        if(Molecules::get_monomer_type_from_key(key) != "A")
+        if(PropagatorCode::get_monomer_type_from_key(key) != "A")
             return -1;
 
         // Print sub propagator_codes
@@ -87,7 +87,7 @@ int main()
         {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
-            sub_deps = Molecules::get_deps_from_key(item.first);
+            sub_deps = PropagatorCode::get_deps_from_key(item.first);
             for(size_t i=0; i<sub_deps.size(); i++)
                 std::cout << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]) << ", " ;
             std::cout << "]}" << std::endl;

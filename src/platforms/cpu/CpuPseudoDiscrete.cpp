@@ -220,7 +220,7 @@ void CpuPseudoDiscrete::compute_statistics(
                      // Q_init
                     if (key[0] == '{')
                     {
-                        std::string g = Molecules::get_q_input_idx_from_key(key);
+                        std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
@@ -514,7 +514,7 @@ void CpuPseudoDiscrete::get_total_concentration(std::string monomer_type, double
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = molecules->get_essential_block(block.first).n_segment_allocated;
-            if (Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -546,7 +546,7 @@ void CpuPseudoDiscrete::get_total_concentration(int p, std::string monomer_type,
             int polymer_idx = std::get<0>(block.first);
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = molecules->get_essential_block(block.first).n_segment_allocated;
-            if (polymer_idx == p && Molecules::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 

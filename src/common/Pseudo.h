@@ -14,6 +14,7 @@
 #include "ComputationBox.h"
 #include "Molecules.h"
 #include "Polymer.h"
+#include "PropagatorCode.h"
 #include "Exception.h"
 
 class Pseudo
