@@ -43,18 +43,18 @@ Molecules* CudaFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-Solver* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, Propagators* propagators)
+Solver* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer)
 {
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaPseudoContinuous(cb, molecules, propagators);
+        return new CudaPseudoContinuous(cb, molecules, propagators_analyzer);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryContinuous(cb, molecules, propagators);
+        return new CudaPseudoReduceMemoryContinuous(cb, molecules, propagators_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaPseudoDiscrete(cb, molecules, propagators);
+        return new CudaPseudoDiscrete(cb, molecules, propagators_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryDiscrete(cb, molecules, propagators);
+        return new CudaPseudoReduceMemoryDiscrete(cb, molecules, propagators_analyzer);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

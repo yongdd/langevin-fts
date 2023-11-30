@@ -6,12 +6,12 @@
 #include <string>
 #include <array>
 #include <chrono>
-#include <fstream>
 
 #include "Exception.h"
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
+#include "PropagatorsAnalyzer.h"
 #include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -49,19 +49,19 @@ int main()
         int max_scft_iter = 500;
         double tolerance = 1e-9;
 
-        double f = 0.3;
-        double chi_n = 24.0;
-        std::vector<int> nx = {33,29};
-        std::vector<double> lx = {1.5,1.7};
+        double f = 0.36;
+        double chi_n = 20.0;
+        std::vector<int> nx = {23,27,25};
+        std::vector<double> lx = {3.2,3.3,3.4};
         double ds = 1.0/100;
 
-        int am_n_var = 2*nx[0]*nx[1];  // A and B
+        int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
         int am_max_hist = 20;
         double am_start_error = 1e-1;
         double am_mix_min = 0.1;
         double am_mix_init = 0.1;
 
-        const int M = nx[0]*nx[1];
+        const int M = nx[0]*nx[1]*nx[2];
 
         std::vector<BlockInput> blocks =
         {
@@ -80,22 +80,25 @@ int main()
         w_plus  = new double[M];
         w_minus = new double[M];
 
-        // std::cout<< "w_a and w_b are initialized to a cylinder." << std::endl;
-        double xx, yy, c1, c2;
+        // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
+        double xx, yy, zz, c1, c2;
         for(int i=0; i<nx[0]; i++)
         {
-            xx = float(i+1)/float(nx[0]);
+            xx = (i+1)*2*PI/nx[0];
             for(int j=0; j<nx[1]; j++)
             {
-                yy = float(j+1)/float(nx[1]);
-                c1  = std::min(xx,1-xx)*std::min(xx,1-xx);
-                c1 += std::min(yy,1-yy)*std::min(yy,1-yy);
-
-                //std::cout << i << ", " << j << ", " << c1 << std::endl;
-                c2 = cos(2*PI*c1);
-                idx = i*nx[1] + j;
-                w[idx]  = -c2;
-                w[idx+M] = c2;
+                yy = (j+1)*2*PI/nx[1];
+                for(int k=0; k<nx[2]; k++)
+                {
+                    zz = (k+1)*2*PI/nx[2];
+                    c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
+                        cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
+                    c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
+                        cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
+                    idx = i*nx[1]*nx[2] + j*nx[2] + k;
+                    w[idx] = -0.3164*c1 +0.1074*c2;
+                    w[idx+M] = 0.3164*c1 -0.1074*c2;
+                }
             }
         }
 
@@ -116,13 +119,14 @@ int main()
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, aggregate_propagator_computation);
+                    Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
-                    Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
+                    PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
+                    Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
-                    // -------------- print simulation parameters ------------
+                    // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
@@ -144,9 +148,9 @@ int main()
                     std::string line;
                     std::ifstream input_field_file;
                     if(molecules->get_model_name() == "continuous")
-                        input_field_file.open("Stress2D_ContinuousInput.txt");
+                        input_field_file.open("Stress3D_ContinuousInput.txt");
                     else if(molecules->get_model_name() == "discrete")
-                        input_field_file.open("Stress2D_DiscreteInput.txt");
+                        input_field_file.open("Stress3D_DiscreteInput.txt");
 
                     if (input_field_file.is_open())
                     {
@@ -172,7 +176,7 @@ int main()
                     energy_total = 1.0e20;
                     error_level = 1.0e20;
 
-                    //------------------ Run ----------------------
+                    //------------------ run ----------------------
                     // std::cout<< "---------- Run ----------" << std::endl;
                     // std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;
                     chrono_start = std::chrono::system_clock::now();
@@ -237,7 +241,7 @@ int main()
 
                     // if(molecules->get_model_name() == "continuous")
                     // {
-                    //     std::ofstream output_field_file("Stress2D_ContinuousInput.txt");
+                    //     std::ofstream output_field_file("Stress3D_ContinuousInput.txt");
                     //     if (output_field_file.is_open())
                     //     {
                     //         for(int i=0; i<2*M ; i++){
@@ -248,7 +252,7 @@ int main()
                     // }
                     // else if(molecules->get_model_name() == "discrete")
                     // {
-                    //     std::ofstream output_field_file("Stress2D_DiscreteInput.txt");
+                    //     std::ofstream output_field_file("Stress3D_DiscreteInput.txt");
                     //     if (output_field_file.is_open())
                     //     {
                     //         for(int i=0; i<2*M ; i++){
@@ -261,6 +265,7 @@ int main()
                     double dL = 0.0000001;
                     double old_lx = lx[0];
                     double old_ly = lx[1];
+                    double old_lz = lx[2];
                     {
                         //----------- Compute derivate of H: lx + delta ----------------
                         lx[0] = old_lx + dL/2;
@@ -319,8 +324,6 @@ int main()
                         std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;
-
-                        
                     }
                     {
                         //----------- Compute derivate of H: ly + delta ----------------
@@ -381,6 +384,66 @@ int main()
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;
                     }
+
+                    {
+                        //----------- Compute derivate of H: lz + delta ----------------
+                        lx[2] = old_lz + dL/2;
+                        cb->set_lx(lx);
+                        solver->update_bond_function();
+
+                        // For the given fields find the polymer statistics
+                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->get_total_concentration("A", phi_a);
+                        solver->get_total_concentration("B", phi_b);
+
+                        // Calculate the total energy
+                        for(int i=0; i<M; i++)
+                        {
+                            w_minus[i] = (w[i]-w[i+M])/2;
+                            w_plus[i]  = (w[i]+w[i+M])/2;
+                        }
+
+                        double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            Polymer& pc = molecules->get_polymer(p);
+                            energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                        }
+
+                        //----------- Compute derivate of H: ly - delta ----------------
+                        lx[2] = old_lz - dL/2;
+                        cb->set_lx(lx);
+                        solver->update_bond_function();
+
+                        // For the given fields find the polymer statistics
+                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->get_total_concentration("A", phi_a);
+                        solver->get_total_concentration("B", phi_b);
+
+                        // Calculate the total energy
+                        for(int i=0; i<M; i++)
+                        {
+                            w_minus[i] = (w[i]-w[i+M])/2;
+                            w_plus[i]  = (w[i]+w[i+M])/2;
+                        }
+
+                        double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            Polymer& pc = molecules->get_polymer(p);
+                            energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                        }
+
+                        // Compute stress
+                        double dh_dl = (energy_total_1-energy_total_2)/dL;
+                        auto stress = solver->compute_stress();
+                        std:: cout << "dH/dL : " << dh_dl << std::endl;
+                        std:: cout << "Stress : " << stress[2] << std::endl;
+                        double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);
+                        std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
+                        if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                            return -1;
+                    }
                     delete molecules;
                     delete cb;
                     delete solver;
@@ -390,7 +453,7 @@ int main()
             }
         }
 
-        //------------- finalize -------------
+        //------------- Finalize -------------
         delete[] w;
         delete[] w_out;
         delete[] w_diff;

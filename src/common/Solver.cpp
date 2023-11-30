@@ -5,7 +5,7 @@
 Solver::Solver(
     ComputationBox *cb,
     Molecules *molecules,
-    Propagators *propagators)
+    PropagatorsAnalyzer *propagators_analyzer)
 {
     if (cb == nullptr)
         throw_with_line_number("ComputationBox *cb is null pointer");
@@ -14,7 +14,7 @@ Solver::Solver(
 
     this->cb = cb;
     this->molecules = molecules;
-    this->propagators = propagators;
+    this->propagators_analyzer = propagators_analyzer;
 
     if (cb->get_dim() == 3)
         this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);

@@ -8,15 +8,16 @@
 
 #include "Exception.h"
 #include "Polymer.h"
+#include "PropagatorsAnalyzer.h"
 #ifdef USE_CPU_MKL
-#include "CpuComputationBox.h"
 #include "MklFFT3D.h"
-#include "CpuPseudoDiscrete.h"
+#include "CpuComputationBox.h"
+#include "CpuPseudoContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaPseudoDiscrete.h"
-#include "CudaPseudoReduceMemoryDiscrete.h"
+#include "CudaPseudoContinuous.h"
+#include "CudaPseudoReduceMemoryContinuous.h"
 #endif
 
 int main()
@@ -105,72 +106,72 @@ int main()
 
         double phi_a_ref[M] =
         {
-            1.4461712482e-01, 2.8417396570e-01, 8.8747404262e-02, 
-            1.1757650760e-01, 1.3490313029e-01, 2.1454887257e-01, 
-            1.5720318547e-01, 4.1264591112e-01, 2.1617900514e-01, 
-            2.4816794201e-01, 3.9933129079e-01, 1.2546574794e-01, 
-            6.3847842443e-01, 3.7087064415e-01, 2.1525220828e-01, 
-            4.7688693222e-01, 5.4375843956e-01, 2.7461675958e-01, 
-            3.5315962248e-01, 3.6873129673e-01, 7.5756011503e-01, 
-            4.1107104484e-01, 5.3811607518e-01, 3.3640138694e-01, 
-            7.4815358959e-01, 3.2162016897e-01, 1.0549028191e+00, 
-            4.3994807831e-01, 1.1820552999e+00, 8.7056695158e-01, 
-            3.4434952304e-01, 9.3849770834e-01, 1.0741733250e+00, 
-            3.4499444020e-01, 4.3816133929e-01, 1.0588898385e+00, 
-            1.3340116686e-01, 2.6349153812e-01, 4.2641465826e-01, 
-            3.4206038719e-01, 3.3171639504e-01, 3.3916033317e-01, 
-            6.3142374473e-01, 5.0522975114e-01, 8.8480698027e-01, 
-            2.2142199732e-01, 1.6729072525e-01, 2.8905688099e-01, 
-            4.8723027080e-02, 7.2438167299e-02, 7.3880571116e-02, 
-            1.1103080676e-01, 1.5549004432e-01, 2.5054985301e-01, 
-            1.9904890912e-01, 2.9992987732e-01, 4.8318549161e-01, 
-            1.3780340805e-01, 1.0631788556e-01, 2.3650002276e-01, 
+            1.4588864076e-01, 2.8199135627e-01, 8.9483878128e-02, 
+            1.1825193966e-01, 1.3711593226e-01, 2.1202269625e-01, 
+            1.5855218603e-01, 4.0845945878e-01, 2.1822413804e-01, 
+            2.4709320986e-01, 4.0172929037e-01, 1.2721515267e-01, 
+            6.3793110902e-01, 3.7329278488e-01, 2.1735231682e-01, 
+            4.7376941893e-01, 5.4070923543e-01, 2.7869799643e-01, 
+            3.5179712697e-01, 3.7250347732e-01, 7.5276986518e-01, 
+            4.1114485903e-01, 5.3673658401e-01, 3.3990934986e-01, 
+            7.4084635280e-01, 3.2759715518e-01, 1.0436355902e+00, 
+            4.4545923982e-01, 1.1770971549e+00, 8.6912498507e-01, 
+            3.4897470246e-01, 9.3704226295e-01, 1.0730183883e+00, 
+            3.4874593349e-01, 4.3649076515e-01, 1.0570243902e+00, 
+            1.3616009059e-01, 2.5982029496e-01, 4.2017902708e-01, 
+            3.4097423284e-01, 3.3512435935e-01, 3.4453173508e-01, 
+            6.3052070637e-01, 5.0719194865e-01, 8.8314810861e-01, 
+            2.2019823354e-01, 1.6862206386e-01, 2.9365064562e-01, 
+            4.9063658692e-02, 7.3041927451e-02, 7.4973821356e-02, 
+            1.1222824796e-01, 1.5566921339e-01, 2.4972301126e-01, 
+            2.0149797025e-01, 3.0071433311e-01, 4.8071153091e-01, 
+            1.3787441002e-01, 1.0795940427e-01, 2.3387084273e-01, 
         };
         double phi_b_ref[M] =
         {
-            3.7523182274e-01, 4.0884044910e-01, 3.7825772443e-01, 
-            4.4495530889e-01, 3.2368951118e-01, 4.1867780102e-01, 
-            3.8617835112e-01, 4.1821123353e-01, 4.9131744486e-01, 
-            3.8478088108e-01, 4.8563151952e-01, 4.7683841293e-01, 
-            5.7351552153e-01, 5.4673982638e-01, 5.4077111583e-01, 
-            4.1632622071e-01, 4.2805435741e-01, 3.6727863860e-01, 
-            3.6341636011e-01, 3.5875851017e-01, 4.9067768230e-01, 
-            4.7318636365e-01, 5.1780931388e-01, 4.6959616541e-01, 
-            4.2291249183e-01, 3.7410052481e-01, 4.0395190691e-01, 
-            5.4311335001e-01, 5.0702196075e-01, 4.7835708985e-01, 
-            6.1173931584e-01, 5.8343064640e-01, 5.3364173523e-01, 
-            5.0418463434e-01, 3.8822352311e-01, 4.9434638718e-01, 
-            4.0878240367e-01, 3.7807159055e-01, 3.8338695076e-01, 
-            5.0609869949e-01, 4.2970586421e-01, 4.4006968918e-01, 
-            4.5962462093e-01, 3.8687932594e-01, 4.5896818221e-01, 
-            2.8252921012e-01, 2.6040830736e-01, 2.9811783820e-01, 
-            3.2452320342e-01, 3.0692271928e-01, 2.9790827478e-01, 
-            4.6813827409e-01, 3.8400335756e-01, 3.7102707098e-01, 
-            4.2993984873e-01, 4.2921226552e-01, 3.3213314378e-01, 
-            3.1692706596e-01, 3.0401925918e-01, 2.5932908779e-01, 
+            3.8366972539e-01, 4.0845209883e-01, 3.8272648304e-01, 
+            4.3155217145e-01, 3.3968289897e-01, 4.0943124816e-01, 
+            3.9422087762e-01, 4.1754264331e-01, 4.7518327273e-01, 
+            3.8997391168e-01, 4.8241125077e-01, 4.6341406680e-01, 
+            5.6033866206e-01, 5.4097414943e-01, 5.2391268239e-01, 
+            4.2049699942e-01, 4.2290285319e-01, 3.8578384115e-01, 
+            3.7523629052e-01, 3.7342640564e-01, 4.7398368174e-01, 
+            4.7499429298e-01, 5.1072282367e-01, 4.8457968767e-01, 
+            4.3345928466e-01, 3.8194645617e-01, 4.1425517921e-01, 
+            5.3606235862e-01, 5.1162893922e-01, 4.8023415228e-01, 
+            5.9940866517e-01, 5.6373678018e-01, 5.4258382097e-01, 
+            4.8778015765e-01, 3.9909628187e-01, 4.8635831474e-01, 
+            3.9694839109e-01, 3.6793749512e-01, 3.7612362318e-01, 
+            5.0800493866e-01, 4.3839542038e-01, 4.4625406396e-01, 
+            4.5879715310e-01, 3.9625887367e-01, 4.4826781963e-01, 
+            2.9532485137e-01, 2.6908173769e-01, 3.0242263953e-01, 
+            3.2646756997e-01, 3.0847773604e-01, 3.0086934383e-01, 
+            4.6130101921e-01, 3.8590445387e-01, 3.7739252687e-01, 
+            4.2477714259e-01, 4.1639606299e-01, 3.4644704284e-01, 
+            3.1125372413e-01, 3.0514211994e-01, 2.7008119732e-01, 
         };
         double phi_c_ref[M] =
         {
-            1.3421219574e-01, 1.9217074633e-01, 1.1356329204e-01, 
-            1.8699166901e-01, 2.2877463570e-01, 1.4949885282e-01, 
-            2.1773901167e-01, 2.2124043395e-01, 1.5334572276e-01, 
-            1.4567686225e-01, 2.4814470213e-01, 1.6221161040e-01, 
-            2.4591979214e-01, 2.5576213033e-01, 2.5541006930e-01, 
-            2.3755579260e-01, 3.2104346034e-01, 2.7797603640e-01, 
-            2.2819116940e-01, 1.8620205795e-01, 3.1208487627e-01, 
-            1.7882228405e-01, 2.5692577992e-01, 2.1882415017e-01, 
-            2.2506586023e-01, 2.0983017556e-01, 2.2883618451e-01, 
-            2.9854136116e-01, 3.9180807882e-01, 3.6771702735e-01, 
-            2.9013232229e-01, 2.2046391358e-01, 2.8502493572e-01, 
-            1.4407781345e-01, 1.5228163549e-01, 2.8807076451e-01, 
-            1.0318948385e-01, 9.4408275392e-02, 1.1241688406e-01, 
-            1.8370117492e-01, 1.9987930027e-01, 1.9381720848e-01, 
-            1.5450982779e-01, 1.8458112038e-01, 1.8788535099e-01, 
-            9.6804664628e-02, 7.2491761590e-02, 9.9349216072e-02, 
-            7.6714582272e-02, 8.0910447650e-02, 1.0980379926e-01, 
-            1.6892376879e-01, 1.4353117153e-01, 1.5784472476e-01, 
-            1.4815535103e-01, 1.3062150194e-01, 1.1797784104e-01, 
-            9.0422365298e-02, 8.3484833575e-02, 1.2279884035e-01, 
+            1.3409454004e-01, 1.9208463484e-01, 1.1744044236e-01, 
+            1.8800684739e-01, 2.2253958008e-01, 1.5142608489e-01, 
+            2.1261045115e-01, 2.2096819335e-01, 1.5764211477e-01, 
+            1.4795804089e-01, 2.4494750339e-01, 1.6214046392e-01, 
+            2.4719128519e-01, 2.6054976214e-01, 2.5142444240e-01, 
+            2.4108402371e-01, 3.1490197658e-01, 2.7592016102e-01, 
+            2.2546542127e-01, 1.9102747112e-01, 3.0555619844e-01, 
+            1.8137226571e-01, 2.5263089899e-01, 2.2076768301e-01, 
+            2.2283573794e-01, 2.0842780630e-01, 2.3570270608e-01, 
+            3.0082972266e-01, 3.8975986118e-01, 3.6098808569e-01, 
+            2.8208712524e-01, 2.2655296721e-01, 2.9141965260e-01, 
+            1.4855934481e-01, 1.5211313433e-01, 2.7914342547e-01, 
+            1.0418273815e-01, 9.5699074947e-02, 1.1388620467e-01, 
+            1.8519982466e-01, 1.9965061456e-01, 1.9434229854e-01, 
+            1.5904516849e-01, 1.8102298489e-01, 1.8896788043e-01, 
+            9.4688708192e-02, 7.3378230546e-02, 1.0042634236e-01, 
+            7.8891880313e-02, 8.2323168488e-02, 1.0855300721e-01, 
+            1.6873145376e-01, 1.4478960278e-01, 1.5586712559e-01, 
+            1.4822479941e-01, 1.3288716984e-01, 1.2115223606e-01, 
+            9.0584644406e-02, 8.4848654382e-02, 1.1884703344e-01, 
         };
 
         //-------------- initialize ------------
@@ -308,32 +309,30 @@ int main()
         //     }
         // }
 
-        Molecules* molecules1 = new Molecules("Discrete", 0.15, bond_lengths, false);
+        Molecules* molecules = new Molecules("Continuous", 0.15, bond_lengths);
         for(size_t p=0; p<block_inputs.size(); p++){
-            molecules1->add_polymer(volume_fraction[p], block_inputs[p], {});
+            molecules->add_polymer(volume_fraction[p], block_inputs[p], {});
             std::cout << "block size: " << block_inputs[p].size() << std::endl;
         }
-        molecules1->display_blocks();
-        molecules1->display_propagators();
 
-        Molecules* molecules2 = new Molecules("Discrete", 0.15, bond_lengths, true);
-        for(size_t p=0; p<block_inputs.size(); p++){
-            molecules2->add_polymer(volume_fraction[p], block_inputs[p], {});
-            std::cout << "block size: " << block_inputs[p].size() << std::endl;
-        }
-        molecules2->display_blocks();
-        molecules2->display_propagators();
+        PropagatorsAnalyzer* propagators_analyzer_1 = new PropagatorsAnalyzer(molecules, false);
+        propagators_analyzer_1->display_blocks();
+        propagators_analyzer_1->display_propagators();
+
+        PropagatorsAnalyzer* propagators_analyzer_2 = new PropagatorsAnalyzer(molecules, true);
+        propagators_analyzer_2->display_blocks();
+        propagators_analyzer_2->display_propagators();
 
         std::vector<Solver*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1, new MklFFT3D({II,JJ,KK})));
-        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
-        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
-        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
-        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
+        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
@@ -359,20 +358,20 @@ int main()
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
 
-            for(int p=0; p<molecules1->get_n_polymer_types();p++)
+            for(int p=0; p<molecules->get_n_polymer_types();p++)
                 std::cout<< std::setprecision(10) << std::scientific << "Total Partial Partition (" + std::to_string(p) + "): " << solver->get_total_partition(p) << std::endl;
 
-            error = std::abs(solver->get_total_partition(0)-1.3999194661e+05/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(0));
+            error = std::abs(solver->get_total_partition(0)-1.1763668568e+05/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(0));
             std::cout<< "Total Partial Partition (0) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(solver->get_total_partition(1)-1.5625863384e+03/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(1));
+            error = std::abs(solver->get_total_partition(1)-1.4384268278e+03/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(1));
             std::cout<< "Total Partial Partition (1) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            error = std::abs(solver->get_total_partition(2)-1.6167175694e+03/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(2));
+            error = std::abs(solver->get_total_partition(2)-1.3821533787e+03/(Lx*Ly*Lz))/std::abs(solver->get_total_partition(2));
             std::cout<< "Total Partial Partition (2) error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;

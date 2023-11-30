@@ -8,7 +8,7 @@
 
 #include "Array.h"
 #include "Polymer.h"
-#include "Propagators.h"
+#include "PropagatorsAnalyzer.h"
 #include "ComputationBox.h"
 #include "Solver.h"
 #include "AndersonMixing.h"
@@ -151,13 +151,13 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
-    py::class_<Propagators>(m, "Propagators")
-        .def("get_essential_propagator_codes", &Propagators::get_essential_propagator_codes)
-        .def("get_essential_propagator_code", &Propagators::get_essential_propagator_code)
-        .def("get_essential_blocks", &Propagators::get_essential_blocks)
-        .def("get_essential_block", &Propagators::get_essential_block)
-        .def("display_propagators", &Propagators::display_propagators)
-        .def("display_blocks", &Propagators::display_blocks);
+    py::class_<PropagatorsAnalyzer>(m, "Propagators")
+        .def("get_essential_propagator_codes", &PropagatorsAnalyzer::get_essential_propagator_codes)
+        .def("get_essential_propagator_code", &PropagatorsAnalyzer::get_essential_propagator_code)
+        .def("get_essential_blocks", &PropagatorsAnalyzer::get_essential_blocks)
+        .def("get_essential_block", &PropagatorsAnalyzer::get_essential_block)
+        .def("display_propagators", &PropagatorsAnalyzer::display_propagators)
+        .def("display_blocks", &PropagatorsAnalyzer::display_blocks);
 
     py::class_<Solver>(m, "Solver")
         .def("update_bond_function", &Solver::update_bond_function)
@@ -367,6 +367,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
         .def("create_computation_box", &AbstractFactory::create_computation_box)
         .def("create_molecules_information", &AbstractFactory::create_molecules_information)
+        .def("create_propagators_analyzer", &AbstractFactory::create_propagators_analyzer)
         .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)

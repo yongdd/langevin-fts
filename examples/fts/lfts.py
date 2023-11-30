@@ -172,17 +172,20 @@ class LFTS:
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
 
         # (C++ class) Molecules list
-        if "aggregate_propagator_computation" in params:
-            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
-        else:
-            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
+        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
+        # (C++ class) Propagator Analyzer
+        if "aggregate_propagator_computation" in params:
+            propagators_analyzer = factory.create_propagators_analyzer(molecules, params["aggregate_propagator_computation"])
+        else:
+            propagators_analyzer = factory.create_propagators_analyzer(molecules, True)
+
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
@@ -254,8 +257,8 @@ class LFTS:
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        molecules.display_blocks()
-        molecules.display_propagators()
+        propagators_analyzer.display_blocks()
+        propagators_analyzer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -270,6 +273,7 @@ class LFTS:
 
         self.cb = cb
         self.molecules = molecules
+        self.propagators_analyzer = propagators_analyzer
         self.solver = solver 
         self.am = am
 
@@ -590,7 +594,7 @@ class LFTS:
         time_start = time.time()
 
         #------------------ run ----------------------
-        print("iteration, mass error, total partitions, hamiltonian, incompressibility error (or saddle point error)")
+        print("iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
         print("---------- Run  ----------")
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)

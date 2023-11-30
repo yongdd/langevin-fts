@@ -111,7 +111,7 @@ private:
         std::map<std::string, const double*> q_init, std::string device);
 public:
 
-    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, Propagators *propagators);
+    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
     ~CudaPseudoReduceMemoryContinuous();
 
     void update_bond_function() override;

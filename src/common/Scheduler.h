@@ -11,7 +11,7 @@
 
 #include "Exception.h"
 #include "Molecules.h"
-#include "Propagators.h"
+#include "PropagatorsAnalyzer.h"
 
 class Scheduler
 {

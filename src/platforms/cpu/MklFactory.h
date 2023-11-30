@@ -32,7 +32,7 @@ public :
     Molecules* create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;
 
-    Solver* create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, Propagators* propagators) override;
+    Solver* create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer) override;
 
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

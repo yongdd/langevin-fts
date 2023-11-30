@@ -11,6 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
+#include "PropagatorsAnalyzer.h"
 #include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -50,14 +51,14 @@ int main()
         int max_scft_iter = 20;
         double tolerance = 1e-9;
 
-        double f = 0.3;
-        double chi_n = 25.0;
-        std::vector<int> nx = {263};
-        std::vector<double> lx = {4.0};
+        double f = 2.0/7.0;
+        double chi_n = 20.0;
+        std::vector<int> nx = {31,49,23};
+        std::vector<double> lx = {4.0,3.0,2.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
-        double ds = 1.0/50;
+        double ds = 1.0/49;
 
-        int am_n_var = 2*nx[0];  // A and B
+        int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
         int am_max_hist = 20;
         double am_start_error = 8e-1;
         double am_mix_min = 0.1;
@@ -79,9 +80,10 @@ int main()
 
             // Create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
-            Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, false);
+            Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
             molecules->add_polymer(1.0, blocks, {});
-            Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
+            PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, false);
+            Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -93,16 +95,16 @@ int main()
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
             std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
             std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
-            std::cout << "Nx: " << cb->get_nx(0) << std::endl;
-            std::cout << "Lx: " << cb->get_lx(0) << std::endl;
-            std::cout << "dx: " << cb->get_dx(0) << std::endl;
+            std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
+            std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
+            std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
             sum = 0.0;
             for(int i=0; i<M; i++)
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-            molecules->display_blocks();
-            molecules->display_propagators();
+            propagators_analyzer->display_blocks();
+            propagators_analyzer->display_propagators();
 
             //-------------- Allocate array ------------
             w       = new double[M*2];
@@ -123,11 +125,13 @@ int main()
             //   end do
 
             std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
-            for(int k=0; k<cb->get_nx(0); k++)
-            {
-                idx = k;
-                phi_a[idx]= cos(2.0*PI*0/4.68)*cos(2.0*PI*0/3.48)*cos(2.0*PI*k/2.74)*0.1;
-            }
+            for(int i=0; i<cb->get_nx(0); i++)
+                for(int j=0; j<cb->get_nx(1); j++)
+                    for(int k=0; k<cb->get_nx(2); k++)
+                    {
+                        idx = i*cb->get_nx(1)*cb->get_nx(2) + j*cb->get_nx(2) + k;
+                        phi_a[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
+                    }
 
             for(int i=0; i<M; i++)
             {
@@ -231,7 +235,7 @@ int main()
             delete am;
             delete factory;
 
-            if (!std::isfinite(error_level) || std::abs(error_level-0.018584567) > 1e-4)
+            if (!std::isfinite(error_level) || std::abs(error_level-0.011080773) > 1e-4)
                 return -1;
         }
         return 0;

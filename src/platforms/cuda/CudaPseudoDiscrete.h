@@ -109,7 +109,7 @@ private:
         std::map<std::string, const double*> w_input,
         std::map<std::string, const double*> q_init, std::string device);
 public:
-    CudaPseudoDiscrete(ComputationBox *cb, Molecules *molecules, Propagators *propagators);
+    CudaPseudoDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer *propagators_analyzer);
     ~CudaPseudoDiscrete();
 
     void update_bond_function() override;

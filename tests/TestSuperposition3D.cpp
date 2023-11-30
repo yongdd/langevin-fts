@@ -11,6 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
+#include "PropagatorsAnalyzer.h"
 #include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -131,9 +132,10 @@ int main()
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
-                        Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
+                        Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
-                        Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
+                        PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
+                        Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

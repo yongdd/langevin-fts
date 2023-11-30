@@ -112,7 +112,7 @@ private:
         std::map<std::string, const double*> q_init, std::string device);
 public:
 
-    CudaPseudoContinuous(ComputationBox *cb, Molecules *pc, Propagators *propagators);
+    CudaPseudoContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
     ~CudaPseudoContinuous();
 
     void update_bond_function() override;
