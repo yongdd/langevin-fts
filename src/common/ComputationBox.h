@@ -1,6 +1,6 @@
 /*-------------------------------------------------------------
 * This is an abstract ComputationBox class.
-* This class defines Computation Grids and Lengths parameters, and provide
+* This class defines computation grids and Lengths parameters, and provide
 * methods that compute inner product in a given geometry.
 *--------------------------------------------------------------*/
 #ifndef COMPUTATION_BOX_H_

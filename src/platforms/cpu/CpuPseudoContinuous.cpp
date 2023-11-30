@@ -6,21 +6,21 @@
 CpuPseudoContinuous::CpuPseudoContinuous(
     ComputationBox *cb,
     Molecules *molecules,
-    Propagators *propagators,
+    PropagatorsAnalyzer *propagators_analyzer,
     FFT *fft)
-    : Solver(cb, molecules, propagators)
+    : Solver(cb, molecules, propagators_analyzer)
 {
     try
     {
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
-        this->propagators = propagators;
+        this->propagators_analyzer = propagators_analyzer;
         this->fft = fft;
 
         // Allocate memory for propagators
-        if( propagators->get_essential_propagator_codes().size() == 0)
+        if( propagators_analyzer->get_essential_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagators->get_essential_propagator_codes())
+        for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
         {
             std::string dep = item.first;
             int max_n_segment = item.second.max_n_segment;
@@ -34,9 +34,9 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         }
 
         // Allocate memory for concentrations
-        if( propagators->get_essential_blocks().size() == 0)
+        if( propagators_analyzer->get_essential_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
-        for(const auto& item: propagators->get_essential_blocks())
+        for(const auto& item: propagators_analyzer->get_essential_blocks())
         {
             block_phi[item.first] = new double[M];
         }
@@ -73,14 +73,14 @@ CpuPseudoContinuous::CpuPseudoContinuous(
                 continue;
 
             int n_aggregated;
-            int n_segment_offset    = propagators->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = propagators->get_essential_block(key).n_segment_original;
+            int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_aggregated = 1;
             else
-                n_aggregated = propagators->get_essential_block(key).v_u.size();
+                n_aggregated = propagators_analyzer->get_essential_block(key).v_u.size();
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -92,7 +92,7 @@ CpuPseudoContinuous::CpuPseudoContinuous(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagators->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
+        sc = new Scheduler(propagators_analyzer->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         update_bond_function();
     }
@@ -159,7 +159,7 @@ void CpuPseudoContinuous::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = molecules->get_ds();
 
-        for(const auto& item: propagators->get_essential_propagator_codes())
+        for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -209,8 +209,8 @@ void CpuPseudoContinuous::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagators->get_essential_propagator_code(key).deps;
-                auto monomer_type = propagators->get_essential_propagator_code(key).monomer_type;
+                auto& deps = propagators_analyzer->get_essential_propagator_code(key).deps;
+                auto monomer_type = propagators_analyzer->get_essential_propagator_code(key).monomer_type;
 
                 // Check key
                 #ifndef NDEBUG
@@ -381,9 +381,9 @@ void CpuPseudoContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = propagators->get_essential_block(key).n_segment_allocated;
-            int n_segment_offset    = propagators->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = propagators->get_essential_block(key).n_segment_original;
+            int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
+            int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
+            int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
 
             // If there is no segment
             if(n_segment_allocated == 0)
@@ -395,7 +395,7 @@ void CpuPseudoContinuous::compute_statistics(
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagators->get_essential_block(key).v_u.size();
+                n_repeated = propagators_analyzer->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -532,7 +532,7 @@ void CpuPseudoContinuous::get_total_concentration(std::string monomer_type, doub
         for(const auto& block: block_phi)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = propagators->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_allocated = propagators_analyzer->get_essential_block(block.first).n_segment_allocated;
             if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
@@ -564,7 +564,7 @@ void CpuPseudoContinuous::get_total_concentration(int p, std::string monomer_typ
         {
             int polymer_idx = std::get<0>(block.first);
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_allocated = propagators->get_essential_block(block.first).n_segment_allocated;
+            int n_segment_allocated = propagators_analyzer->get_essential_block(block.first).n_segment_allocated;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
             {
                 for(int i=0; i<M; i++)
@@ -587,7 +587,7 @@ void CpuPseudoContinuous::get_block_concentration(int p, double *phi)
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (propagators->is_using_propagator_aggregation())
+        if (propagators_analyzer->is_using_propagator_aggregation())
             throw_with_line_number("Disable 'aggregation' option to invoke 'get_block_concentration'.");
 
         Polymer& pc = molecules->get_polymer(p);
@@ -645,10 +645,10 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
 
-            const int N           = propagators->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = propagators->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = propagators->get_essential_block(key).n_segment_original;
-            std::string monomer_type = propagators->get_essential_block(key).monomer_type;
+            const int N           = propagators_analyzer->get_essential_block(key).n_segment_allocated;
+            const int N_OFFSET    = propagators_analyzer->get_essential_block(key).n_segment_offset;
+            const int N_ORIGINAL  = propagators_analyzer->get_essential_block(key).n_segment_original;
+            std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
 
             // If there is no segment
             if(N == 0)
@@ -657,7 +657,7 @@ std::vector<double> CpuPseudoContinuous::compute_stress()
             // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagators->get_essential_block(key).v_u.size();
+                n_repeated = propagators_analyzer->get_essential_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -744,10 +744,10 @@ void CpuPseudoContinuous::get_chain_propagator(double *q_out, int polymer, int v
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagators->get_essential_propagator_codes().find(dep) == propagators->get_essential_propagator_codes().end())
-            throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagators.");
+        if (propagators_analyzer->get_essential_propagator_codes().find(dep) == propagators_analyzer->get_essential_propagator_codes().end())
+            throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagators_analyzer.");
 
-        const int N = propagators->get_essential_propagator_codes()[dep].max_n_segment;
+        const int N = propagators_analyzer->get_essential_propagator_codes()[dep].max_n_segment;
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 

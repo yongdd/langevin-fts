@@ -208,17 +208,20 @@ class SCFT:
         cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # (C++ class) Molecules list
-        if "aggregate_propagator_computation" in params:
-            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
-        else:
-            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
+        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
+        # (C++ class) Propagator Analyzer
+        if "aggregate_propagator_computation" in params:
+            propagators_analyzer = factory.create_propagators_analyzer(molecules, params["aggregate_propagator_computation"])
+        else:
+            propagators_analyzer = factory.create_propagators_analyzer(molecules, True)
+
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
 
         # Total number of variables to be adjusted to minimize the Hamiltonian
         if params["box_is_altering"] : 
@@ -291,8 +294,8 @@ class SCFT:
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        molecules.display_blocks()
-        molecules.display_propagators()
+        propagators_analyzer.display_blocks()
+        propagators_analyzer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -305,7 +308,8 @@ class SCFT:
 
         self.cb = cb
         self.molecules = molecules
-        self.solver = solver 
+        self.propagators_analyzer = propagators_analyzer
+        self.solver = solver
 
     def save_results(self, path):
         

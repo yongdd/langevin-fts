@@ -12,7 +12,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Propagators.h"
+#include "PropagatorsAnalyzer.h"
 #include "Solver.h"
 #include "FFT.h"
 #include "Scheduler.h"
@@ -63,7 +63,7 @@ private:
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-    CpuPseudoDiscrete(ComputationBox *cb, Molecules *molecules, Propagators* propagators, FFT *fft);
+    CpuPseudoDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer, FFT *fft);
     ~CpuPseudoDiscrete();
     
     void update_bond_function() override;

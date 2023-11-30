@@ -1,9 +1,9 @@
 /*----------------------------------------------------------
-* This class defines class for information of propagators
+* This class defines analyzer of propagators to minimize the computational cost
 *-----------------------------------------------------------*/
 
-#ifndef PROPAGATORS_H_
-#define PROPAGATORS_H_
+#ifndef PROPAGATORS_ANALYZER_H_
+#define PROPAGATORS_ANALYZER_H_
 
 #include <string>
 #include <vector>
@@ -41,7 +41,7 @@ struct ComparePropagatorKey
     bool operator()(const std::string& str1, const std::string& str2);
 };
 
-class Propagators
+class PropagatorsAnalyzer
 {
 private:
     std::string model_name; // "continuous": continuous standard Gaussian model
@@ -58,8 +58,8 @@ private:
     void update_essential_propagator_code(std::map<std::string, ComputationEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment);
 
 public:
-    Propagators(Molecules* molecules, bool aggregate_propagator_computation);
-    // ~Propagators() {};
+    PropagatorsAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);
+    // ~PropagatorsAnalyzer() {};
 
     // Add new polymers
     void add_polymer(Polymer& pc, int polymer_count);

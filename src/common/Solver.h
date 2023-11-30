@@ -15,7 +15,7 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "PropagatorCode.h"
-#include "Propagators.h"
+#include "PropagatorsAnalyzer.h"
 #include "Exception.h"
 
 class Solver
@@ -23,7 +23,7 @@ class Solver
 protected:
     ComputationBox *cb;
     Molecules *molecules;
-    Propagators* propagators;
+    PropagatorsAnalyzer *propagators_analyzer;
 
     int n_complex_grid;
 
@@ -34,7 +34,7 @@ protected:
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
 public:
-    Solver(ComputationBox *cb, Molecules *molecules, Propagators* propagators);
+    Solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer);
     virtual ~Solver() {};
 
     int get_n_grid() {return cb->get_n_grid();};

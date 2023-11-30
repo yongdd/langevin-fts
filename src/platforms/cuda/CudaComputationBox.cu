@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This class defines Simulation Grids and Lengths parameters and provide
+* This class defines simulation grids and Lengths parameters and provide
 * methods that compute inner product in a given geometry.
 *--------------------------------------------------------------*/
 #include <iostream>

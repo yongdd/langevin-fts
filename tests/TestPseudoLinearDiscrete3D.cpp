@@ -7,6 +7,7 @@
 
 #include "Exception.h"
 #include "CpuComputationBox.h"
+#include "PropagatorsAnalyzer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
@@ -173,18 +174,20 @@ int main()
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
-        Molecules* molecules = new Molecules("Discrete", 1.0/N, bond_lengths, false);
+        Molecules* molecules = new Molecules("Discrete", 1.0/N, bond_lengths);
         molecules->add_polymer(1.0, blocks, {});
-        molecules->display_blocks();
-        molecules->display_propagators();
+        PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, false);
+
+        propagators_analyzer->display_blocks();
+        propagators_analyzer->display_propagators();
 
         std::vector<Solver*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
-        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
+        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
+        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
         #endif
 
         // For each platform    

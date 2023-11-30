@@ -33,7 +33,7 @@ factory.display_info()
 # Create an instance for computation box
 cb = factory.create_computation_box(nx, lx) 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
-molecules = factory.create_molecules_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
+molecules = factory.create_molecules_information("continuous", ds, stat_seg_length)
 
 molecules.add_polymer(
      1.0,
@@ -42,10 +42,13 @@ molecules.add_polymer(
      ],
      grafting_point,
 )
-solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 
-molecules.display_blocks()
-molecules.display_propagators()
+propagator_info = factory.create_propagators_analyzer(molecules, aggregate_propagator_computation)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagator_info)
+
+# Print blocks and branches
+propagator_info.display_blocks()
+propagator_info.display_propagators()
 
 # Fields
 w = {"A": np.zeros(np.prod(nx))}

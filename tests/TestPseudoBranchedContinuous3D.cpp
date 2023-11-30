@@ -9,6 +9,7 @@
 #include "Exception.h"
 #include "CpuComputationBox.h"
 #include "Polymer.h"
+#include "PropagatorsAnalyzer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
 #include "CpuPseudoContinuous.h"
@@ -189,27 +190,27 @@ int main()
 
         double phi_a[M]={0.0}, phi_b[M]={0.0};
 
+        Molecules* molecules = new Molecules("Continuous", 0.15, bond_lengths);
+        molecules->add_polymer(1.0, blocks, {});
+
+        PropagatorsAnalyzer* propagators_analyzer_1 = new PropagatorsAnalyzer(molecules, false);
+        propagators_analyzer_1->display_blocks();
+        propagators_analyzer_1->display_propagators();
+
+        PropagatorsAnalyzer* propagators_analyzer_2 = new PropagatorsAnalyzer(molecules, true);
+        propagators_analyzer_2->display_blocks();
+        propagators_analyzer_2->display_propagators();
+
         std::vector<Solver*> solver_list;
-
-        Molecules* molecules1 = new Molecules("Continuous", 0.15, bond_lengths, false);
-        molecules1->add_polymer(1.0, blocks, {});
-        molecules1->display_blocks();
-        molecules1->display_propagators();
-
-        Molecules* molecules2 = new Molecules("Continuous", 0.15, bond_lengths, true);
-        molecules2->add_polymer(1.0, blocks, {});
-        molecules2->display_blocks();
-        molecules2->display_propagators();
-
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1, new MklFFT3D({II,JJ,KK})));
-        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
-        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
-        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules1));
-        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules2));
+        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
@@ -237,7 +238,7 @@ int main()
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             
             const int p = 0;
-            Polymer& pc = molecules1->get_polymer(p);
+            Polymer& pc = molecules->get_polymer(p);
             solver->get_chain_propagator(q_1_4_last, p, 1, 4, pc.get_block(1,4).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q_1_4_last[i] - q_1_4_last_ref[i],2);

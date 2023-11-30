@@ -2,7 +2,7 @@
 #include <cmath>
 
 #include "Molecules.h"
-#include "Propagators.h"
+#include "PropagatorsAnalyzer.h"
 #include "Scheduler.h"
 
 int main()
@@ -44,11 +44,11 @@ int main()
         Molecules molecules("Continuous", 0.1, {{"A",1.0}, {"B",2.0}});
         molecules.add_polymer(1.0, blocks, {});
 
-        Propagators propagators(molecules, false);
+        PropagatorsAnalyzer propagators_analyzer(&molecules, false);
 
-        Scheduler sc(propagators.get_essential_propagator_codes(), 4);
+        Scheduler sc(propagators_analyzer.get_essential_propagator_codes(), 4);
 
-        sc.display(propagators.get_essential_propagator_codes());
+        sc.display(propagators_analyzer.get_essential_propagator_codes());
 
         return 0;
     }
