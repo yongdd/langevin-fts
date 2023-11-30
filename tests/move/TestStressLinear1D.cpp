@@ -11,7 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -102,10 +102,10 @@ int main()
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
-                    Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
+                    Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
                     molecules->add_polymer(0.7, blocks_1, {});
                     molecules->add_polymer(0.3, blocks_2, {});
-                    Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
+                    Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -168,9 +168,9 @@ int main()
                     for(int iter=0; iter<max_scft_iter; iter++)
                     {
                         // For the given fields find the polymer statistics
-                        pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                        pseudo->get_total_concentration("A", phi_a);
-                        pseudo->get_total_concentration("B", phi_b);
+                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->get_total_concentration("A", phi_a);
+                        solver->get_total_concentration("B", phi_b);
 
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
@@ -183,7 +183,7 @@ int main()
                         energy_total -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
                             Polymer& pc = molecules->get_polymer(p);
-                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                         }
 
                         for(int i=0; i<M; i++)
@@ -244,12 +244,12 @@ int main()
                     //----------- Compute derivate of H: lx + delta ----------------
                     lx[0] = old_lx + dL/2;
                     cb->set_lx(lx);
-                    pseudo->update_bond_function();
+                    solver->update_bond_function();
 
                     // For the given fields find the polymer statistics
-                    pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                    pseudo->get_total_concentration("A", phi_a);
-                    pseudo->get_total_concentration("B", phi_b);
+                    solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                    solver->get_total_concentration("A", phi_a);
+                    solver->get_total_concentration("B", phi_b);
 
                     // Calculate the total energy
                     for(int i=0; i<M; i++)
@@ -262,18 +262,18 @@ int main()
                     energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<molecules->get_n_polymer_types(); p++){
                         Polymer& pc = molecules->get_polymer(p);
-                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                        energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                     }
 
                     //----------- Compute derivate of H: lx - delta ----------------
                     lx[0] = old_lx - dL/2;
                     cb->set_lx(lx);
-                    pseudo->update_bond_function();
+                    solver->update_bond_function();
 
                     // For the given fields find the polymer statistics
-                    pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                    pseudo->get_total_concentration("A", phi_a);
-                    pseudo->get_total_concentration("B", phi_b);
+                    solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                    solver->get_total_concentration("A", phi_a);
+                    solver->get_total_concentration("B", phi_b);
 
                     // Calculate the total energy
                     for(int i=0; i<M; i++)
@@ -286,12 +286,12 @@ int main()
                     energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                     for(int p=0; p<molecules->get_n_polymer_types(); p++){
                         Polymer& pc = molecules->get_polymer(p);
-                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                        energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                     }
 
                     // Compute stress
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
-                    auto stress = pseudo->compute_stress();
+                    auto stress = solver->compute_stress();
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
                     std:: cout << "Stress : " << stress[0] << std::endl;
                     double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
@@ -302,7 +302,7 @@ int main()
                     //------------- Finalize -------------
                     delete molecules;
                     delete cb;
-                    delete pseudo;
+                    delete solver;
                     delete am;
                     delete factory;
                 }

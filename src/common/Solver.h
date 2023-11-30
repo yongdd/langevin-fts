@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is an abstract Pseudo class
+* This is an abstract Solver class
 *------------------------------------------------------------*/
 
-#ifndef PSEUDO_H_
-#define PSEUDO_H_
+#ifndef SOLVER_H_
+#define SOLVER_H_
 
 #include <iostream>
 #include <cassert>
@@ -15,13 +15,15 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "PropagatorCode.h"
+#include "Propagators.h"
 #include "Exception.h"
 
-class Pseudo
+class Solver
 {
 protected:
     ComputationBox *cb;
     Molecules *molecules;
+    Propagators* propagators;
 
     int n_complex_grid;
 
@@ -32,8 +34,8 @@ protected:
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
 public:
-    Pseudo(ComputationBox *cb, Molecules *molecules);
-    virtual ~Pseudo() {};
+    Solver(ComputationBox *cb, Molecules *molecules, Propagators* propagators);
+    virtual ~Solver() {};
 
     int get_n_grid() {return cb->get_n_grid();};
     int get_n_blocks(int polymer) { Polymer& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};

@@ -178,17 +178,17 @@ int main()
         molecules->display_blocks();
         molecules->display_propagators();
 
-        std::vector<Pseudo*> pseudo_list;
+        std::vector<Solver*> solver_list;
         #ifdef USE_CPU_MKL
-        pseudo_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        pseudo_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
-        pseudo_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
+        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
+        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules));
         #endif
 
         // For each platform    
-        for(Pseudo* pseudo : pseudo_list)
+        for(Solver* solver: solver_list)
         {
             for(int i=0; i<M; i++)
             {
@@ -200,9 +200,9 @@ int main()
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            pseudo->compute_statistics({{"A",w_a},{"B",w_b}},{});
-            pseudo->get_total_concentration("A", phi_a);
-            pseudo->get_total_concentration("B", phi_b);
+            solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver->get_total_concentration("A", phi_a);
+            solver->get_total_concentration("B", phi_b);
 
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
@@ -210,7 +210,7 @@ int main()
             
             const int p = 0;
             Polymer& pc = molecules->get_polymer(p);
-            pseudo->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
+            solver->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q1_last[i] - q1_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -218,7 +218,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            pseudo->get_chain_propagator(q2_last, p, 1, 0, pc.get_block(1,0).n_segment);
+            solver->get_chain_propagator(q2_last, p, 1, 0, pc.get_block(1,0).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q2_last[i] - q2_last_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
@@ -226,7 +226,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
-            double QQ = pseudo->get_total_partition(p);
+            double QQ = solver->get_total_partition(p);
             error = std::abs(QQ-14.9276505263205/(Lx*Ly*Lz));
             std::cout<< "Total Propagator error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
@@ -246,7 +246,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
             
-            std::vector<double> stress = pseudo->compute_stress();
+            std::vector<double> stress = solver->compute_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
             error = std::abs(stress[0] + 0.000473764);
@@ -264,7 +264,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
                 
-            delete pseudo;
+            delete solver;
         }
         return 0;
     }

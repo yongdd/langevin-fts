@@ -32,7 +32,7 @@ factory.display_info()
 # Create an instance for computation box
 cb = factory.create_computation_box(nx, lx) 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
-molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
+molecules = factory.create_molecules_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
 
 # First Polymer (homopolymer)
 molecules.add_polymer(
@@ -61,13 +61,14 @@ molecules.add_polymer(
      ]
 )
 
-pseudo = factory.create_pseudo(cb, molecules)
+propagator_info = factory.create_propagator_info(molecules)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagator_info)
 
 # Print blocks and branches
-molecules.display_blocks()
-molecules.display_propagators()
+propagator_info.display_blocks()
+propagator_info.display_propagators()
 
-print(type(pseudo))
+print(type(solver))
 
 # External fields
 w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
@@ -75,12 +76,12 @@ w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
      "C": np.random.normal(0.0, 1.0, np.prod(nx))}
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-pseudo.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
+solver.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
 
 # Compute total concentration for each monomer type
-phi_a = pseudo.get_total_concentration("A")
-phi_b = pseudo.get_total_concentration("B")
-phi_c = pseudo.get_total_concentration("C")
+phi_a = solver.get_total_concentration("A")
+phi_b = solver.get_total_concentration("B")
+phi_c = solver.get_total_concentration("C")
 
 print(phi_a, phi_b, phi_c)
 print("Total phi:", np.mean(phi_a) + np.mean(phi_b) + np.mean(phi_c))
@@ -91,19 +92,19 @@ for p in range(molecules.get_n_polymer_types()):
      print(f"\nPolymer: {p}")
 
      # Total partition function
-     Q = pseudo.get_total_partition(p)
+     Q = solver.get_total_partition(p)
      print(f"Q({p}):", Q)
 
      # Compute total concentration for a given polymer type index and monomer type
-     phi_p_a = pseudo.get_total_concentration(p, "A")
-     phi_p_b = pseudo.get_total_concentration(p, "B")
-     phi_p_c = pseudo.get_total_concentration(p, "C")
+     phi_p_a = solver.get_total_concentration(p, "A")
+     phi_p_b = solver.get_total_concentration(p, "B")
+     phi_p_c = solver.get_total_concentration(p, "C")
 
      print(f"Total phi({p}):", np.mean(phi_p_a), np.mean(phi_p_b), np.mean(phi_p_c))
      print(phi_p_a, phi_p_b, phi_p_c)
 
      # Compute concentration of each block for a given polymer type index
-     phi = pseudo.get_block_concentration(p)
+     phi = solver.get_block_concentration(p)
      print(f"Block phi({p}):", np.mean(np.sum(phi, axis=0)))
      for b in range(molecules.get_polymer(p).get_n_blocks()):
           print(phi[b])

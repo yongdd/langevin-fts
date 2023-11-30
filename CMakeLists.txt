@@ -45,7 +45,7 @@ ADD_LIBRARY(common
     src/common/Molecules.cpp
     src/common/Propagators.cpp
     src/common/CircularBuffer.cpp
-    src/common/Pseudo.cpp
+    src/common/Solver.cpp
     src/common/AndersonMixing.cpp
     src/common/Scheduler.cpp
 )

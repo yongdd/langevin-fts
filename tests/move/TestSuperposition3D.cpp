@@ -11,7 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -131,9 +131,9 @@ int main()
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
-                        Molecules* molecules        = factory->create_molecule_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
+                        Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths, aggregate_propagator_computation);
                         molecules->add_polymer(1.0, blocks, {});
-                        Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
+                        Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -182,12 +182,12 @@ int main()
                         for(int iter=0; iter<max_scft_iter; iter++)
                         {
                             // For the given fields find the polymer statistics
-                            pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                            pseudo->get_total_concentration("A", phi_a);
-                            pseudo->get_total_concentration("B", phi_b);
+                            solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                            solver->get_total_concentration("A", phi_a);
+                            solver->get_total_concentration("B", phi_b);
 
                             // Compute stress
-                            std::vector<double> stress = pseudo->compute_stress();
+                            std::vector<double> stress = solver->compute_stress();
 
                             // Calculate the total energy
                             for(int i=0; i<M; i++)
@@ -200,7 +200,7 @@ int main()
                             energy_total -= cb->integral(w_plus)/cb->get_volume();
                             for(int p=0; p<molecules->get_n_polymer_types(); p++){
                                 Polymer& pc = molecules->get_polymer(p);
-                                energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                                energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                             }
 
                             for(int i=0; i<M; i++)
@@ -226,9 +226,9 @@ int main()
                             sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                             std::cout<< std::setw(8) << iter;
                             std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                            std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
+                            std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
                             for(int p=1; p<molecules->get_n_polymer_types(); p++)
-                                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
+                                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
                             std::cout<< "]"; 
                             std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
                             std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
@@ -257,14 +257,14 @@ int main()
                                 lx[d] = w[2*M+d];
                             
                             cb->set_lx(lx);
-                            pseudo->update_bond_function();
+                            solver->update_bond_function();
                         }
                         energy_total_list.push_back(energy_total);
                         
                         delete factory;
                         delete cb;
                         delete molecules;
-                        delete pseudo;
+                        delete solver;
                         delete am;
                     }
                 }

@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "Molecules.h"
+#include "Propagators.h"
 #include "Polymer.h"
 
 int main()
@@ -25,12 +26,13 @@ int main()
             {"A", 0.2, 7,13},
         };
 
-        Molecules molecules("discrete", 0.1, {{"A",1.0}, {"B",1.0}}, false);
+        Molecules molecules("discrete", 0.1, {{"A",1.0}, {"B",1.0}});
         molecules.add_polymer(1.0, blocks, {});
+        Propagators propagators(&molecules, false);
 
         // Display all blocks and branches
-        molecules.display_blocks();
-        molecules.display_propagators();
+        propagators.display_blocks();
+        propagators.display_propagators();
 
         // Test get_deps_from_key
         std::string key;

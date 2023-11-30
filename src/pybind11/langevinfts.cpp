@@ -8,8 +8,9 @@
 
 #include "Array.h"
 #include "Polymer.h"
+#include "Propagators.h"
 #include "ComputationBox.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -115,7 +116,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_propagator_key", &Polymer::get_propagator_key);
 
     py::class_<Molecules>(m, "Molecules")
-        .def(py::init<std::string, double, std::map<std::string, double>, bool>())
+        .def(py::init<std::string, double, std::map<std::string, double>>())
         .def("get_model_name", &Molecules::get_model_name)
         .def("get_ds", &Molecules::get_ds)
         .def("get_bond_lengths", &Molecules::get_bond_lengths)
@@ -148,17 +149,19 @@ PYBIND11_MODULE(langevinfts, m)
         })
         .def("get_polymer", &Molecules::get_polymer)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
-        .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key)
-        .def("get_essential_propagator_codes", &Molecules::get_essential_propagator_codes)
-        .def("get_essential_propagator_code", &Molecules::get_essential_propagator_code)
-        .def("get_essential_blocks", &Molecules::get_essential_blocks)
-        .def("get_essential_block", &Molecules::get_essential_block)
-        .def("display_propagators", &Molecules::display_propagators)
-        .def("display_blocks", &Molecules::display_blocks);
+        .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
-    py::class_<Pseudo>(m, "Pseudo")
-        .def("update_bond_function", &Pseudo::update_bond_function)
-        .def("compute_statistics", [](Pseudo& obj, std::map<std::string,py::array_t<const double>> w_input, std::map<std::string,py::array_t<const double>> q_init)
+    py::class_<Propagators>(m, "Propagators")
+        .def("get_essential_propagator_codes", &Propagators::get_essential_propagator_codes)
+        .def("get_essential_propagator_code", &Propagators::get_essential_propagator_code)
+        .def("get_essential_blocks", &Propagators::get_essential_blocks)
+        .def("get_essential_block", &Propagators::get_essential_block)
+        .def("display_propagators", &Propagators::display_propagators)
+        .def("display_blocks", &Propagators::display_blocks);
+
+    py::class_<Solver>(m, "Solver")
+        .def("update_bond_function", &Solver::update_bond_function)
+        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, std::map<std::string,py::array_t<const double>> q_init)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -197,7 +200,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         })
-        .def("compute_statistics", [] (Pseudo& obj, std::map<std::string,py::array_t<const double>> w_input)
+        .def("compute_statistics", [] (Solver& obj, std::map<std::string,py::array_t<const double>> w_input)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -223,7 +226,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         })
-        .def("compute_statistics_device", [](Pseudo& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
+        .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
         {
             try{
                 std::map<std::string, const double*> map_buf_w_input;
@@ -249,7 +252,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         })
-        .def("compute_statistics_device", [](Pseudo& obj, std::map<std::string, const long int> d_w_input)
+        .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input)
         {
             try{
                 std::map<std::string, const double*> map_buf_w_input;
@@ -268,7 +271,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         })
-        .def("get_total_concentration", [](Pseudo& obj, std::string monomer_type)
+        .def("get_total_concentration", [](Solver& obj, std::string monomer_type)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -282,7 +285,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_concentration", [](Pseudo& obj, int polymer, std::string monomer_type)
+        .def("get_total_concentration", [](Solver& obj, int polymer, std::string monomer_type)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -296,7 +299,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_block_concentration", [](Pseudo& obj, int polymer)
+        .def("get_block_concentration", [](Solver& obj, int polymer)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -312,8 +315,8 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_partition", &Pseudo::get_total_partition)
-        .def("get_chain_propagator", [](Pseudo& obj, int polymer, int v, int u, int n)
+        .def("get_total_partition", &Solver::get_total_partition)
+        .def("get_chain_propagator", [](Solver& obj, int polymer, int v, int u, int n)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -327,7 +330,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("compute_stress", &Pseudo::compute_stress);
+        .def("compute_stress", &Solver::compute_stress);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)
@@ -363,8 +366,8 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<AbstractFactory>(m, "AbstractFactory")
         .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
         .def("create_computation_box", &AbstractFactory::create_computation_box)
-        .def("create_molecule_information", &AbstractFactory::create_molecule_information)
-        .def("create_pseudo", &AbstractFactory::create_pseudo)
+        .def("create_molecules_information", &AbstractFactory::create_molecules_information)
+        .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)
         .def("get_model_name", &AbstractFactory::get_model_name);

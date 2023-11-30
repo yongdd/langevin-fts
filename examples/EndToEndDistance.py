@@ -33,7 +33,7 @@ factory.display_info()
 # Create an instance for computation box
 cb = factory.create_computation_box(nx, lx) 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
-molecules = factory.create_molecule_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
+molecules = factory.create_molecules_information("continuous", ds, stat_seg_length, aggregate_propagator_computation)
 
 molecules.add_polymer(
      1.0,
@@ -42,7 +42,7 @@ molecules.add_polymer(
      ],
      grafting_point,
 )
-pseudo = factory.create_pseudo(cb, molecules)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 
 molecules.display_blocks()
 molecules.display_propagators()
@@ -53,12 +53,12 @@ q_init = {"G":np.zeros(np.prod(nx))}
 q_init["G"][0] = 1.0/cb.get_dv(0)
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-pseudo.compute_statistics({"A":w["A"]}, q_init)
+solver.compute_statistics({"A":w["A"]}, q_init)
 
 N = round(1.0/ds)
 for n in range(10, round(N)+1, 10):
                                        # p, v ,u, n
-     q_out = pseudo.get_chain_propagator(0, 0, 1, n)
+     q_out = solver.get_chain_propagator(0, 0, 1, n)
      sum = 0.0
      x_square = 0.0
      for i in range(nx[0]):

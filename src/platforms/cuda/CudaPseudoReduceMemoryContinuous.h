@@ -18,14 +18,13 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoReduceMemoryContinuous : public Pseudo
+class CudaPseudoReduceMemoryContinuous : public Solver
 {
 private:
-
     // Two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
@@ -77,7 +76,7 @@ private:
     // Total partition function
     double *single_partitions; 
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, n_superposed)
+    // (polymer id, propagator forward, propagator backward, n_aggregated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
 
     // Host pinned space to store concentration, key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
@@ -112,7 +111,7 @@ private:
         std::map<std::string, const double*> q_init, std::string device);
 public:
 
-    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Molecules *pc);
+    CudaPseudoReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, Propagators *propagators);
     ~CudaPseudoReduceMemoryContinuous();
 
     void update_bond_function() override;

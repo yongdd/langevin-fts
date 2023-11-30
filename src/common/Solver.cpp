@@ -1,10 +1,11 @@
 #include <iostream>
 #include <cmath>
-#include "Pseudo.h"
+#include "Solver.h"
 
-Pseudo::Pseudo(
+Solver::Solver(
     ComputationBox *cb,
-    Molecules *molecules)
+    Molecules *molecules,
+    Propagators *propagators)
 {
     if (cb == nullptr)
         throw_with_line_number("ComputationBox *cb is null pointer");
@@ -13,6 +14,7 @@ Pseudo::Pseudo(
 
     this->cb = cb;
     this->molecules = molecules;
+    this->propagators = propagators;
 
     if (cb->get_dim() == 3)
         this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
@@ -22,7 +24,7 @@ Pseudo::Pseudo(
         this->n_complex_grid = cb->get_nx(0)/2+1;
 }
 //----------------- get_boltz_bond -------------------
-void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
+void Solver::get_boltz_bond(double *boltz_bond, double bond_length_variance,
                             std::vector<int> nx, std::vector<double> dx, double ds)
 {
     int itemp, jtemp, ktemp, idx;
@@ -64,7 +66,7 @@ void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
     }
 }
 
-void Pseudo::get_weighted_fourier_basis(
+void Solver::get_weighted_fourier_basis(
     double *fourier_basis_x,
     double *fourier_basis_y,
     double *fourier_basis_z,

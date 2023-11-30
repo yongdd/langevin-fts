@@ -35,7 +35,7 @@ factory = PlatformSelector.create_factory(platform, chain_model)
 # create instances
 pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
-pseudo = factory.create_pseudo(cb, pc)
+solver = factory.create_pseudospectral_solver(cb, pc)
 
 # -------------- print simulation parameters ------------
 print("---------- Simulation Parameters ----------")
@@ -68,11 +68,11 @@ norm_segment = (f*eps**2 + (1-f))
 
 print("---------- Statistical Segment Length <x^2> ----------")
 print("n'th segment, theory, caculation")
-phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
+phi, Q = solver.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
 pred_mean_squared_x = 0
 if(pc.get_model_name().lower() == "continuous"):
     for n in range(0, pc.get_n_segment_total()+1):
-        q1_out, _ = pseudo.get_chain_propagator(n, 0)
+        q1_out, _ = solver.get_chain_propagator(n, 0)
         q1_out = np.reshape(q1_out, cb.get_nx())
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
                     
@@ -88,7 +88,7 @@ if(pc.get_model_name().lower() == "continuous"):
             
 elif(pc.get_model_name().lower() == "discrete"):
     for n in range(1, pc.get_n_segment_total()+1):
-        q1_out, _ = pseudo.get_chain_propagator(n, 1)
+        q1_out, _ = solver.get_chain_propagator(n, 1)
         q1_out = np.reshape(q1_out, cb.get_nx())
 
         mean_squared_x = np.sum(q1_out*squared_x)/np.sum(q1_out)
