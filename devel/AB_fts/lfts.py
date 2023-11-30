@@ -119,9 +119,9 @@ class LFTS:
 
         # (C++ class) Molecules list
         if "aggregate_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
+            molecules = factory.create_molecules_information(params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
         else:
-            molecules = factory.create_molecule_information(params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecules_information(params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
@@ -129,7 +129,7 @@ class LFTS:
             molecules.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solver using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, molecules)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
@@ -195,7 +195,7 @@ class LFTS:
 
         self.cb = cb
         self.molecules = molecules
-        self.pseudo = pseudo
+        self.solver = solver 
         self.am = am
 
     def save_simulation_data(self, path, w_plus, w_minus, phi):
@@ -295,15 +295,15 @@ class LFTS:
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             # for the given fields compute the polymer statistics
             if self.random_copolymer_exist:
-                self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus,"R":w_minus*(2*self.random_A_fraction-1)+w_plus})
+                self.solver.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus,"R":w_minus*(2*self.random_A_fraction-1)+w_plus})
             else:
-                self.pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
+                self.solver.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
 
-            phi["A"] = self.pseudo.get_total_concentration("A")
-            phi["B"] = self.pseudo.get_total_concentration("B")
+            phi["A"] = self.solver.get_total_concentration("A")
+            phi["B"] = self.solver.get_total_concentration("B")
 
             if self.random_copolymer_exist:
-                phi["R"] = self.pseudo.get_total_concentration("R")
+                phi["R"] = self.solver.get_total_concentration("R")
                 phi["A"] += phi["R"]*self.random_A_fraction
                 phi["B"] += phi["R"]*(1.0-self.random_A_fraction)
 
@@ -321,13 +321,13 @@ class LFTS:
                 for p in range(self.molecules.get_n_polymer_types()):
                     energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
                                     self.molecules.get_polymer(p).get_alpha() * \
-                                    np.log(self.pseudo.get_total_partition(p))
+                                    np.log(self.solver.get_total_partition(p))
 
                 # check the mass conservation
                 mass_error = np.mean(g_plus)
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # conditions to end the iteration

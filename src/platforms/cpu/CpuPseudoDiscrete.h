@@ -12,11 +12,12 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Propagators.h"
+#include "Solver.h"
 #include "FFT.h"
 #include "Scheduler.h"
 
-class CpuPseudoDiscrete : public Pseudo
+class CpuPseudoDiscrete : public Solver
 {
 private:
     FFT *fft;
@@ -42,7 +43,7 @@ private:
     // Total partition functions for each polymer
     double* single_partitions;
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, monomer_type, n_superposed)
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_aggregated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
@@ -62,7 +63,7 @@ private:
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-    CpuPseudoDiscrete(ComputationBox *cb, Molecules *molecules, FFT *fft);
+    CpuPseudoDiscrete(ComputationBox *cb, Molecules *molecules, Propagators* propagators, FFT *fft);
     ~CpuPseudoDiscrete();
     
     void update_bond_function() override;

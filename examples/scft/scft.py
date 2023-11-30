@@ -209,16 +209,16 @@ class SCFT:
 
         # (C++ class) Molecules list
         if "aggregate_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
+            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
         else:
-            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
-        # (C++ class) Solvers using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, molecules)
+        # (C++ class) Solver using Pseudo-spectral method
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 
         # Total number of variables to be adjusted to minimize the Hamiltonian
         if params["box_is_altering"] : 
@@ -305,7 +305,7 @@ class SCFT:
 
         self.cb = cb
         self.molecules = molecules
-        self.pseudo = pseudo
+        self.solver = solver 
 
     def save_results(self, path):
         
@@ -381,16 +381,16 @@ class SCFT:
                     w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
             # For the given fields find the polymer statistics
-            self.pseudo.compute_statistics(w_input)
+            self.solver.compute_statistics(w_input)
 
             # Compute total concentration for each monomer type
             phi = {}
             for monomer_type in self.monomer_types:
-                phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
+                phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
 
             # Add random copolymer concentration to each monomer type
             for random_polymer_name, random_fraction in self.random_fraction.items():
-                phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
+                phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
@@ -409,7 +409,7 @@ class SCFT:
             for p in range(self.molecules.get_n_polymer_types()):
                 energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
                                 self.molecules.get_polymer(p).get_alpha() * \
-                                np.log(self.pseudo.get_total_partition(p))
+                                np.log(self.solver.get_total_partition(p))
 
             # Calculate self-consistency error
             w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
@@ -438,19 +438,19 @@ class SCFT:
             
             if (self.box_is_altering):
                 # Calculate stress
-                stress_array = np.array(self.pseudo.compute_stress())
+                stress_array = np.array(self.solver.compute_stress())
                 error_level += np.sqrt(np.sum(stress_array**2))
 
                 print("%8d %12.3E " %
                 (scft_iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
             else:
                 print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # Conditions to end the iteration
@@ -476,7 +476,7 @@ class SCFT:
                 self.cb.set_lx(new_lx)
 
                 # Update bond parameters using new lx
-                self.pseudo.update_bond_function()
+                self.solver.update_bond_function()
             else:
                 w = self.field_optimizer.calculate_new_fields(
                 np.reshape(w,      S*self.cb.get_n_grid()),

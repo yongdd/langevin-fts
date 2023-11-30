@@ -11,14 +11,13 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoReduceMemoryDiscrete : public Pseudo
+class CudaPseudoReduceMemoryDiscrete : public Solver
 {
 private:
-
     // Two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
@@ -75,7 +74,7 @@ private:
     // Total partition functions for each polymer
     double* single_partitions;
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, monomer_type, n_superposed)
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_aggregated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
@@ -116,7 +115,7 @@ private:
         std::map<std::string, const double*> w_input,
         std::map<std::string, const double*> q_init, std::string device);
 public:
-    CudaPseudoReduceMemoryDiscrete(ComputationBox *cb, Molecules *molecules);
+    CudaPseudoReduceMemoryDiscrete(ComputationBox *cb, Molecules *molecules, Propagators *propagators);
     ~CudaPseudoReduceMemoryDiscrete();
 
     void update_bond_function() override;

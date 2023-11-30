@@ -11,7 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -27,7 +27,7 @@ int main()
         std::chrono::duration<double> time_duration;
 
         double energy_total;
-        // Error_level = variable to check convergence of the iteration
+        // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
         // Input and output fields, xi is temporary storage for pressures
         double *w, *w_out, *w_diff;  // n_comp * M
@@ -46,18 +46,18 @@ int main()
 
         // -------------- Initialize ------------
         // Platform type, [cuda, cpu-mkl]
-    
+        
         int max_scft_iter = 20;
         double tolerance = 1e-9;
 
         double f = 2.0/7.0;
-        double chi_n = 25.0;
-        std::vector<int> nx = {49, 63};
-        std::vector<double> lx = {4.0,3.0};
+        double chi_n = 20.0;
+        std::vector<int> nx = {31,49,23};
+        std::vector<double> lx = {4.0,3.0,2.0};
         std::string chain_model = "Continuous";  // choose among [Continuous, Discrete]
         double ds = 1.0/49;
 
-        int am_n_var = 2*nx[0]*nx[1];  // A and B
+        int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
         int am_max_hist = 20;
         double am_start_error = 8e-1;
         double am_mix_min = 0.1;
@@ -79,9 +79,9 @@ int main()
 
             // Create instances and assign to the variables of base classes for the dynamic binding
             ComputationBox *cb = factory->create_computation_box(nx, lx);
-            Molecules* molecules        = factory->create_molecule_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, false);
+            Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}}, false);
             molecules->add_polymer(1.0, blocks, {});
-            Pseudo *pseudo     = factory->create_pseudo(cb, molecules);
+            Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -93,9 +93,9 @@ int main()
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
             std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
             std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
-            std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << std::endl;
-            std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << std::endl;
-            std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << std::endl;
+            std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
+            std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
+            std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
             sum = 0.0;
             for(int i=0; i<M; i++)
                 sum += cb->get_dv(i);
@@ -104,7 +104,7 @@ int main()
             molecules->display_blocks();
             molecules->display_propagators();
 
-            //-------------- allocate array ------------
+            //-------------- Allocate array ------------
             w       = new double[M*2];
             w_out   = new double[M*2];
             w_diff  = new double[M*2];
@@ -123,12 +123,13 @@ int main()
             //   end do
 
             std::cout<< "w_a and w_b are initialized to a given test fields." << std::endl;
-            for(int j=0; j<cb->get_nx(0); j++)
-                for(int k=0; k<cb->get_nx(1); k++)
-                {
-                    idx = j*cb->get_nx(1) + k;
-                    phi_a[idx]= cos(2.0*PI*0/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
-                }
+            for(int i=0; i<cb->get_nx(0); i++)
+                for(int j=0; j<cb->get_nx(1); j++)
+                    for(int k=0; k<cb->get_nx(2); k++)
+                    {
+                        idx = i*cb->get_nx(1)*cb->get_nx(2) + j*cb->get_nx(2) + k;
+                        phi_a[idx]= cos(2.0*PI*i/4.68)*cos(2.0*PI*j/3.48)*cos(2.0*PI*k/2.74)*0.1;
+                    }
 
             for(int i=0; i<M; i++)
             {
@@ -153,9 +154,9 @@ int main()
             for(int iter=0; iter<max_scft_iter; iter++)
             {
                 // For the given fields find the polymer statistics
-                pseudo->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
-                pseudo->get_total_concentration("A", phi_a);
-                pseudo->get_total_concentration("B", phi_b);
+                solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                solver->get_total_concentration("A", phi_a);
+                solver->get_total_concentration("B", phi_b);
 
                 // Calculate the total energy
                 for(int i=0; i<M; i++)
@@ -169,7 +170,7 @@ int main()
                 // energy_total += cb->inner_product(ext_w_minus,ext_w_minus)/chi_b/cb->get_volume();
                 for(int p=0; p<molecules->get_n_polymer_types(); p++){
                     Polymer& pc = molecules->get_polymer(p);
-                    energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(pseudo->get_total_partition(p));
+                    energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                 }
 
                 for(int i=0; i<M; i++)
@@ -194,9 +195,9 @@ int main()
                 sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
                 std::cout<< std::setw(8) << iter;
                 std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                std::cout<< "\t[" << std::setprecision(7) << std::scientific << pseudo->get_total_partition(0);
+                std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
                 for(int p=1; p<molecules->get_n_polymer_types(); p++)
-                    std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << pseudo->get_total_partition(p);
+                    std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
                 std::cout<< "]"; 
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
                 std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
@@ -228,11 +229,11 @@ int main()
 
             delete molecules;
             delete cb;
-            delete pseudo;
+            delete solver;
             delete am;
             delete factory;
 
-            if (!std::isfinite(error_level) || std::abs(error_level-0.007263398) > 1e-4)
+            if (!std::isfinite(error_level) || std::abs(error_level-0.011080773) > 1e-4)
                 return -1;
         }
         return 0;

@@ -26,9 +26,9 @@ def find_saddle_point(cb, molecules, pseudo, am, chi_n,
     for saddle_iter in range(1,saddle_max_iter+1):
 
         # for the given fields compute the polymer statistics
-        pseudo.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
-        phi_a = pseudo.get_total_concentration("A")
-        phi_b = pseudo.get_total_concentration("B")
+        solver.compute_statistics({"A":w_plus+w_minus,"B":w_plus-w_minus})
+        phi_a = solver.get_total_concentration("A")
+        phi_b = solver.get_total_concentration("B")
         
         # calculate incompressibility error
         old_error_level = error_level
@@ -45,13 +45,13 @@ def find_saddle_point(cb, molecules, pseudo, am, chi_n,
             energy_total += chi_n/4
             energy_total -= np.mean(w_plus)
             for p in range(molecules.get_n_polymer_types()):
-                energy_total  -= np.log(pseudo.get_total_partition(p))
+                energy_total  -= np.log(solver.get_total_partition(p))
 
             # check the mass conservation
             mass_error = np.mean(g_plus)
             print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
             for p in range(molecules.get_n_polymer_types()):
-                print("%13.7E " % (pseudo.get_total_partition(p)), end=" ")
+                print("%13.7E " % (solver.get_total_partition(p)), end=" ")
             print("] %15.9f %15.7E " % (energy_total, error_level))
 
         # conditions to end the iteration
@@ -64,7 +64,7 @@ def find_saddle_point(cb, molecules, pseudo, am, chi_n,
     w_plus -= np.mean(w_plus)
     Q = []
     for p in range(molecules.get_n_polymer_types()):
-        Q.append(pseudo.get_total_partition(p))
+        Q.append(solver.get_total_partition(p))
 
     return phi_a, phi_b, Q, energy_total
 
@@ -157,9 +157,9 @@ factory = PlatformSelector.create_factory(platform, chain_model, reduce_gpu_memo
 
 # create instances
 cb = factory.create_computation_box(nx, lx)
-molecules = factory.create_molecule_information(chain_model, ds, dict_a_n, aggregate_propagator_computation)
+molecules = factory.create_molecules_information(chain_model, ds, dict_a_n, aggregate_propagator_computation)
 molecules.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
-pseudo = factory.create_pseudo(cb, molecules)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -239,7 +239,7 @@ for langevin_step in range(1, langevin_max_step+1):
         savemat("fields_%06d.mat" % (langevin_step), mdic, do_compression=True)
         
     # caculate stress
-    dlogQ_dl = -np.array(pseudo.compute_stress())
+    dlogQ_dl = -np.array(solver.compute_stress())
     dfield_dchin = 1/4 - np.dot(w_minus,w_minus)/chi_n**2/cb.get_n_grid()
     dfield_dl = -dfield_dchin*chi_n/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
@@ -253,7 +253,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # change box size
     cb.set_lx(new_lx)
     # update bond parameters using new lx
-    pseudo.update_bond_function()
+    solver.update_bond_function()
 
 # estimate execution time
 time_duration = time.time() - time_start

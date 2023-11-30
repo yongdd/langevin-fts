@@ -11,11 +11,11 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "Pseudo.h"
+#include "Solver.h"
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoDiscrete : public Pseudo
+class CudaPseudoDiscrete : public Solver
 {
 private:
     // Two streams for each gpu
@@ -65,7 +65,7 @@ private:
     // Total partition functions for each polymer
     double* single_partitions;
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, monomer_type, n_superposed)
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_aggregated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // gpu memory space to store concentration, key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
@@ -109,7 +109,7 @@ private:
         std::map<std::string, const double*> w_input,
         std::map<std::string, const double*> q_init, std::string device);
 public:
-    CudaPseudoDiscrete(ComputationBox *cb, Molecules *molecules);
+    CudaPseudoDiscrete(ComputationBox *cb, Molecules *molecules, Propagators *propagators);
     ~CudaPseudoDiscrete();
 
     void update_bond_function() override;

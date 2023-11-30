@@ -38,23 +38,23 @@ ComputationBox* CudaFactory::create_computation_box(
 {
     return new CudaComputationBox(nx, lx);
 }
-Molecules* CudaFactory::create_molecule_information(
-    std::string chain_model, double ds, std::map<std::string, double> bond_lengths, bool aggregate_propagator_computation) 
+Molecules* CudaFactory::create_molecules_information(
+    std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
-    return new Molecules(chain_model, ds, bond_lengths, aggregate_propagator_computation);
+    return new Molecules(chain_model, ds, bond_lengths);
 }
-Pseudo* CudaFactory::create_pseudo(ComputationBox *cb, Molecules *molecules)
+Solver* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, Propagators* propagators)
 {
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaPseudoContinuous(cb, molecules);
+        return new CudaPseudoContinuous(cb, molecules, propagators);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryContinuous(cb, molecules);
+        return new CudaPseudoReduceMemoryContinuous(cb, molecules, propagators);
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaPseudoDiscrete(cb, molecules);
+        return new CudaPseudoDiscrete(cb, molecules, propagators);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryDiscrete(cb, molecules);
+        return new CudaPseudoReduceMemoryDiscrete(cb, molecules, propagators);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

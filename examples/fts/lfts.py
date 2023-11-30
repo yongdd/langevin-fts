@@ -173,16 +173,16 @@ class LFTS:
 
         # (C++ class) Molecules list
         if "aggregate_propagator_computation" in params:
-            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
+            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], params["aggregate_propagator_computation"])
         else:
-            molecules = factory.create_molecule_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
+            molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"], True)
 
         # Add polymer chains
         for polymer in params["distinct_polymers"]:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
         # (C++ class) Solver using Pseudo-spectral method
-        pseudo = factory.create_pseudo(cb, molecules)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagators)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
@@ -270,7 +270,7 @@ class LFTS:
 
         self.cb = cb
         self.molecules = molecules
-        self.pseudo = pseudo
+        self.solver = solver 
         self.am = am
 
     def compute_eigen_system(self, chi_n):
@@ -397,19 +397,19 @@ class LFTS:
 
         # For the given fields, compute the polymer statistics
         time_p_start = time.time()
-        self.pseudo.compute_statistics(w_input)
+        self.solver.compute_statistics(w_input)
         elapsed_time["pseudo"] = time.time() - time_p_start
 
         # Compute total concentration for each monomer type
         phi = {}
         time_phi_start = time.time()
         for monomer_type in self.monomer_types:
-            phi[monomer_type] = self.pseudo.get_total_concentration(monomer_type)
+            phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
         elapsed_time["phi"] = time.time() - time_phi_start
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            phi[random_polymer_name] = self.pseudo.get_total_concentration(random_polymer_name)
+            phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
         
@@ -744,14 +744,14 @@ class LFTS:
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
             
                 # Calculate Hamiltonian
-                total_partitions = [self.pseudo.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
+                total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
                 hamiltonian = self.compute_hamiltonian(w_exchange, total_partitions)
 
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.pseudo.get_total_partition(p)), end=" ")
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f   [" % (hamiltonian), end="")
                 for i in range(I):
                     print("%13.7E" % (error_level_array[i]), end=" ")

@@ -71,7 +71,7 @@ for dim in [1,2,3]:
             # create instances
             pc     = factory.create_polymer_chain(["A","B"], block_lengths, dict_a_n, ds)
             cb     = factory.create_computation_box(nx, lx)
-            pseudo = factory.create_pseudo(cb, pc)
+            solver = factory.create_pseudospectral_solver(cb, pc)
             am     = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
                         am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -105,7 +105,7 @@ for dim in [1,2,3]:
             # iteration begins here
             for scft_iter in range(1,max_scft_iter+1):
                 # for the given fields find the polymer statistics
-                phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
+                phi, Q = solver.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
                 
                 # calculate the total energy
                 energy_old = energy_total
@@ -145,7 +145,7 @@ for dim in [1,2,3]:
                     np.reshape(w_diff, 2*cb.get_n_grid()),
                     old_error_level, error_level)
             
-            dqdl = np.linalg.norm(np.array(pseudo.compute_stress()[-cb.get_dim():]))/Q
+            dqdl = np.linalg.norm(np.array(solver.compute_stress()[-cb.get_dim():]))/Q
             test_output.append(error_level)
             test_dqdl.append(dqdl)
             

@@ -10,7 +10,7 @@ def find_saddle_point(lx):
     # set box size
     cb.set_lx(lx)
     # update bond parameters using new lx
-    pseudo.update_bond_function()
+    solver.update_bond_function()
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20
@@ -23,7 +23,7 @@ def find_saddle_point(lx):
     print("iteration, mass error, total_partition, energy_total, error_level")
     for scft_iter in range(1,max_scft_iter+1):
         # for the given fields find the polymer statistics
-        phi, Q = pseudo.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
+        phi, Q = solver.compute_statistics(q1_init,q2_init,{"A":w[0],"B":w[1]})
 
         # calculate the total energy
         energy_old = energy_total
@@ -66,7 +66,7 @@ def find_saddle_point(lx):
             old_error_level, error_level)
     
     if use_stress:
-        stress_array = np.array(pseudo.compute_stress()[-cb.get_dim():])/Q
+        stress_array = np.array(solver.compute_stress()[-cb.get_dim():])/Q
         return stress_array
     else:
         return energy_total
@@ -115,7 +115,7 @@ factory = PlatformSelector.create_factory(platform, chain_model)
 # create instances
 pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
-pseudo = factory.create_pseudo(cb, pc)
+solver = factory.create_pseudospectral_solver(cb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
