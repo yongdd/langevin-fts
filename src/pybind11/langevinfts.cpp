@@ -161,116 +161,104 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<Solver>(m, "Solver")
         .def("update_bond_function", &Solver::update_bond_function)
-        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, std::map<std::string,py::array_t<const double>> q_init)
+        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init, py::object q_mask)
         {
             try{
                 const int M = obj.get_n_grid();
                 std::map<std::string, const double*> map_buf_w_input;
                 std::map<std::string, const double*> map_buf_q_init;
+                py::buffer_info buf_q_mask;
 
-                for (auto it=w_input.begin(); it!=w_input.end(); ++it)
+                //buf_w_input
+                for (auto it = w_input.begin(); it != w_input.end(); ++it)
                 {
-                    //buf_w_input
                     py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.size != M){
+                    if (buf_w_input.size != M) {
                         throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
                     {
-                        map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *)buf_w_input.ptr));
+                        map_buf_w_input.insert(std::pair<std::string, const double*>(it->first, (const double*)buf_w_input.ptr));
                     }
                 }
 
-                for (auto it=q_init.begin(); it!=q_init.end(); ++it)
-                {
-                    //buf_q_init
-                    py::buffer_info buf_q_init = it->second.request();
-                    if (buf_q_init.size != M){
-                        throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
-                    }
-                    else
+                //buf_q_init
+                if (!q_init.is_none()) {
+                    std::map<std::string, py::array_t<const double>> q_init_map = q_init.cast<std::map<std::string, py::array_t<const double>>>();
+
+                    for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
                     {
-                        map_buf_q_init.insert(std::pair<std::string, const double*>(it->first,(const double *)buf_q_init.ptr));
+                        py::buffer_info buf_q_init = it->second.request();
+                        if (buf_q_init.size != M) {
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                        }
+                        else
+                        {
+                            map_buf_q_init.insert(std::pair<std::string, const double*>(it->first, (const double*)buf_q_init.ptr));
+                        }
                     }
                 }
-                obj.compute_statistics(map_buf_w_input, map_buf_q_init);
-            }
-            catch(std::exception& exc)
-            {
-                throw_without_line_number(exc.what());
-            }
-        })
-        .def("compute_statistics", [] (Solver& obj, std::map<std::string,py::array_t<const double>> w_input)
-        {
-            try{
-                const int M = obj.get_n_grid();
-                std::map<std::string, const double*> map_buf_w_input;
-                std::map<std::string, const double*> map_buf_q_init;
 
-                for (auto it=w_input.begin(); it!=w_input.end(); ++it)
-                {
-                    //buf_w_input
-                    py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.size != M){
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
-                    }
-                    else
-                    {
-                        map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *)buf_w_input.ptr));
+                //buf_q_mask
+                if (!q_mask.is_none()) {
+                    py::array_t<const double> q_mask_cast = q_mask.cast<py::array_t<const double>>();
+                    buf_q_mask = q_mask_cast.request();
+                    if (buf_q_mask.size != M) {
+                        throw_with_line_number("Size of input (" + std::to_string(buf_q_mask.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                 }
-                obj.compute_statistics(map_buf_w_input, {});
+                obj.compute_statistics(map_buf_w_input, map_buf_q_init, (double*) buf_q_mask.ptr);
             }
             catch(std::exception& exc)
             {
                 throw_without_line_number(exc.what());
             }
-        })
-        .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
-        {
-            try{
-                std::map<std::string, const double*> map_buf_w_input;
-                std::map<std::string, const double*> map_buf_q_init;
+        }, py::arg("w_input"), py::arg("q_init") = py::none(), py::arg("q_mask") = py::none() )
+        // .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
+        // {
+        //     try{
+        //         std::map<std::string, const double*> map_buf_w_input;
+        //         std::map<std::string, const double*> map_buf_q_init;
 
-                for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
-                {
-                    //buf_w_input
-                    const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
-                    map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
-                }
+        //         for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
+        //         {
+        //             //buf_w_input
+        //             const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
+        //             map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
+        //         }
 
-                for (auto it=d_q_init.begin(); it!=d_q_init.end(); ++it)
-                {
-                    //buf_q_init
-                    const double* q_init_ptr = reinterpret_cast<const double*>(it->second);
-                    map_buf_q_init.insert(std::pair<std::string, const double*>(it->first,(const double *) q_init_ptr));
-                }
-                obj.compute_statistics_device(map_buf_w_input, map_buf_q_init);
-            }
-            catch(std::exception& exc)
-            {
-                throw_without_line_number(exc.what());
-            }
-        })
-        .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input)
-        {
-            try{
-                std::map<std::string, const double*> map_buf_w_input;
-                std::map<std::string, const double*> map_buf_q_init;
+        //         for (auto it=d_q_init.begin(); it!=d_q_init.end(); ++it)
+        //         {
+        //             //buf_q_init
+        //             const double* q_init_ptr = reinterpret_cast<const double*>(it->second);
+        //             map_buf_q_init.insert(std::pair<std::string, const double*>(it->first,(const double *) q_init_ptr));
+        //         }
+        //         obj.compute_statistics_device(map_buf_w_input, map_buf_q_init);
+        //     }
+        //     catch(std::exception& exc)
+        //     {
+        //         throw_without_line_number(exc.what());
+        //     }
+        // })
+        // .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input)
+        // {
+        //     try{
+        //         std::map<std::string, const double*> map_buf_w_input;
+        //         std::map<std::string, const double*> map_buf_q_init;
 
-                for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
-                {
-                    //buf_w_input
-                    const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
-                    map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
-                }
-                obj.compute_statistics_device(map_buf_w_input, {});
-            }
-            catch(std::exception& exc)
-            {
-                throw_without_line_number(exc.what());
-            }
-        })
+        //         for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
+        //         {
+        //             //buf_w_input
+        //             const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
+        //             map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
+        //         }
+        //         obj.compute_statistics_device(map_buf_w_input, {});
+        //     }
+        //     catch(std::exception& exc)
+        //     {
+        //         throw_without_line_number(exc.what());
+        //     }
+        // })
         .def("get_total_concentration", [](Solver& obj, std::string monomer_type)
         {
             try{

@@ -167,7 +167,8 @@ void CpuPseudoDiscrete::update_bond_function()
 }
 void CpuPseudoDiscrete::compute_statistics(
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init)
+    std::map<std::string, const double*> q_init,
+    double* q_mask)
 {
     try
     {
@@ -217,9 +218,9 @@ void CpuPseudoDiscrete::compute_statistics(
                 double *_propagator = propagator[key];
 
                 // Calculate one block end
-                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                if (n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                     // Q_init
+                     // q_init
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
@@ -263,10 +264,12 @@ void CpuPseudoDiscrete::compute_statistics(
                             for(int i=0; i<M; i++)
                                 _propagator[i] += _propagator_sub_dep[(sub_n_segment-1)*M+i]*sub_n_repeated;
                         }
+
                         advance_propagator(&_propagator[0],
                             &_propagator[0],
                             boltz_bond[monomer_type],
-                            exp_dw[monomer_type]);
+                            exp_dw[monomer_type],
+                            q_mask);
 
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -333,6 +336,13 @@ void CpuPseudoDiscrete::compute_statistics(
                     n_segment_from--;
                 }
 
+                // Multiply mask
+                if (q_mask != nullptr)
+                {
+                    for(int i=0; i<M; i++)
+                        _propagator[i] *= q_mask[i];
+                }
+
                 // Advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
@@ -344,7 +354,8 @@ void CpuPseudoDiscrete::compute_statistics(
                     advance_propagator(&_propagator[(n-1)*M],
                             &_propagator[n*M],
                             boltz_bond[monomer_type],
-                            exp_dw[monomer_type]);
+                            exp_dw[monomer_type],
+                            q_mask);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
@@ -423,7 +434,8 @@ void CpuPseudoDiscrete::compute_statistics(
     }
 }
 void CpuPseudoDiscrete::advance_propagator(double *q_in, double *q_out,
-                                 double *boltz_bond, double *exp_dw)
+                                 double *boltz_bond, double *exp_dw,
+                                 double *q_mask)
 {
     try
     {
@@ -441,6 +453,13 @@ void CpuPseudoDiscrete::advance_propagator(double *q_in, double *q_out,
         // Normalization calculation and evaluate exp(-w*ds) in real space
         for(int i=0; i<M; i++)
             q_out[i] *= exp_dw[i];
+        
+        // Multiply mask
+        if (q_mask != nullptr)
+        {
+            for(int i=0; i<M; i++)
+                q_out[i] *= q_mask[i];
+        }
     }
     catch(std::exception& exc)
     {

@@ -43,8 +43,8 @@ int main()
 
         double f = 0.2;
         double chi_n = 15.0;
-        std::vector<int> nx = {16,16,16};
-        std::vector<double> lx = {2.9,2.9,2.9};
+        std::vector<int> nx = {512,512};
+        std::vector<double> lx = {6.0,5.0};
         std::vector<double> lx_backup = lx;
         double ds = 1.0/10;
 
@@ -91,7 +91,7 @@ int main()
         // std::vector<int> v = {0,1,2,3,4, 1,2, 6,7, 6,7};
         // std::vector<int> u = {1,2,3,4,5, 6,7, 10,12, 11,13};
 
-        const int M = nx[0]*nx[1]*nx[2];
+        const int M = nx[0]*nx[1];
 
         int am_n_var = 2*M+nx.size();  // A and B
         int am_max_hist = 20;
@@ -108,6 +108,25 @@ int main()
         double phi_b  [M];
         double w_plus [M];
         double w_minus[M];
+        double q_mask [M];
+
+        // Set a mask to set q(r,s) = 0
+        double nano_particle_radius = 1.5;
+        for(int i=0;i<nx[0];i++)
+        {
+            for(int j=0;j<nx[1];j++)
+            {
+                if (sqrt(pow(i*lx[0]/nx[0]-3.0,2) + pow(j*lx[1]/nx[1]-2.5,2)) < nano_particle_radius)
+                    q_mask[i + j*nx[0]] = 0.0;
+                else
+                    q_mask[i + j*nx[0]] = 1.0;
+            }
+        }
+        sum = 0.0;
+        for(int i=0; i<M; i++)
+             sum += q_mask[i]/M;
+        // std::cout << "Mean of q_mask, volume fraction of sphere: " << 1.0 - sum << ", " << 4.0/3.0*PI*pow(nano_particle_radius,3)/(lx[0]*lx[1]) << std::endl;
+        std::cout << "Mean of q_mask, volume fraction of disk: " << 1.0 - sum << ", " << PI*pow(nano_particle_radius,2)/(lx[0]*lx[1]) << std::endl;
 
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
@@ -150,26 +169,11 @@ int main()
                         // PropagatorsAnalyzer->display_blocks();
                         // PropagatorsAnalyzer->display_propagators();
 
-                        // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
-                        double xx, yy, zz, c1, c2;
-                        for(int i=0; i<nx[0]; i++)
+                        // std::cout<< "w_a and w_b are initialized to a zero." << std::endl;
+                        for(int i=0; i<M; i++)
                         {
-                            xx = (i+1)*2*PI/nx[0];
-                            for(int j=0; j<nx[1]; j++)
-                            {
-                                yy = (j+1)*2*PI/nx[1];
-                                for(int k=0; k<nx[2]; k++)
-                                {
-                                    zz = (k+1)*2*PI/nx[2];
-                                    c1 = sqrt(8.0/3.0)*(cos(xx)*sin(yy)*sin(2.0*zz) +
-                                        cos(yy)*sin(zz)*sin(2.0*xx)+cos(zz)*sin(xx)*sin(2.0*yy));
-                                    c2 = sqrt(4.0/3.0)*(cos(2.0*xx)*cos(2.0*yy)+
-                                        cos(2.0*yy)*cos(2.0*zz)+cos(2.0*zz)*cos(2.0*xx));
-                                    idx = i*nx[1]*nx[2] + j*nx[2] + k;
-                                    w[idx] = -0.3164*c1 +0.1074*c2;
-                                    w[idx+M] = 0.3164*c1 -0.1074*c2;
-                                }
-                            }
+                            w[i]   = 0.0;
+                            w[i+M] = 0.0;
                         }
 
                         // Keep the level of field value
@@ -185,7 +189,7 @@ int main()
                         for(int iter=0; iter<max_scft_iter; iter++)
                         {
                             // For the given fields find the polymer statistics
-                            solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                            solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {}, q_mask);
                             solver->get_total_concentration("A", phi_a);
                             solver->get_total_concentration("B", phi_b);
 

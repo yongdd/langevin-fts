@@ -152,7 +152,8 @@ void CpuPseudoContinuous::update_bond_function()
 }
 void CpuPseudoContinuous::compute_statistics(
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init)
+    std::map<std::string, const double*> q_init,
+    double* q_mask)
 {
     try
     {
@@ -223,7 +224,7 @@ void CpuPseudoContinuous::compute_statistics(
                 // If it is leaf node
                 if(n_segment_from == 1 && deps.size() == 0) 
                 {
-                     // Q_init
+                     // q_init
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
@@ -306,6 +307,13 @@ void CpuPseudoContinuous::compute_statistics(
                     }
                 }
         
+                // Multiply mask
+                if (q_mask != nullptr)
+                {
+                    for(int i=0; i<M; i++)
+                        _propagator[i] *= q_mask[i];
+                }
+
                 // Advance propagator successively
                 for(int n=n_segment_from; n<=n_segment_to; n++)
                 {
@@ -319,7 +327,8 @@ void CpuPseudoContinuous::compute_statistics(
                             boltz_bond[monomer_type],
                             boltz_bond_half[monomer_type],
                             exp_dw[monomer_type],
-                            exp_dw_half[monomer_type]);
+                            exp_dw_half[monomer_type],
+                            q_mask);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
@@ -430,7 +439,8 @@ void CpuPseudoContinuous::compute_statistics(
 }
 void CpuPseudoContinuous::advance_propagator(double *q_in, double *q_out,
                                  double *boltz_bond, double *boltz_bond_half,
-                                 double *exp_dw, double *exp_dw_half)
+                                 double *exp_dw, double *exp_dw_half,
+                                 double *q_mask)
 {
     try
     {
@@ -480,6 +490,13 @@ void CpuPseudoContinuous::advance_propagator(double *q_in, double *q_out,
 
         for(int i=0; i<M; i++)
             q_out[i] = (4.0*q_out2[i] - q_out1[i])/3.0;
+
+        // Multiply mask
+        if (q_mask != nullptr)
+        {
+            for(int i=0; i<M; i++)
+                q_out[i] *= q_mask[i];
+        }
     }
     catch(std::exception& exc)
     {

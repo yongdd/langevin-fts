@@ -55,7 +55,7 @@ private:
     std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
 
     // Advance propagator by one segment step
-    void advance_propagator(double *q_in, double *q_out, double *boltz_bond, double *exp_dw);
+    void advance_propagator(double *q_in, double *q_out, double *boltz_bond, double *exp_dw, double* q_mask);
 
     // Advance propagator by half bond step
     void advance_propagator_half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
@@ -69,12 +69,14 @@ public:
     void update_bond_function() override;
     void compute_statistics(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init) override;
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr) override;
     void compute_statistics_device(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init) override
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr) override
     {
-        compute_statistics(w_block, q_init);
+        compute_statistics(w_block, q_init, q_mask);
     };
     double get_total_partition(int polymer) override;
     void get_total_concentration(std::string monomer_type, double *phi) override;
