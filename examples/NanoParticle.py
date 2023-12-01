@@ -1,5 +1,5 @@
-# This example script computes end-to-end distance of polymer chain
-
+# This example script computes propagators and concentrations of polymer chains with a nano particle at center
+# Propagators inside of the nano particle is zero, e.g., q(r,s) = 0.
 import os
 import numpy as np
 from langevinfts import *
@@ -20,27 +20,35 @@ lx = [6.0,6.0,6.0]            # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
 
+# Set a mask to set q(r,s) = 0
+x = np.linspace(-lx[0]/2, lx[0]/2, num=nx[0], endpoint=False)
+y = np.linspace(-lx[1]/2, lx[1]/2, num=nx[1], endpoint=False)
+z = np.linspace(-lx[2]/2, lx[2]/2, num=nx[2], endpoint=False)
+xv, yv, zv = np.meshgrid(x, y, z, indexing='ij')
+nano_particle_radius = 1.0
+q_mask = np.ones(nx)
+q_mask[np.sqrt(xv**2 + yv**2 + zv**2) < nano_particle_radius] = 0.0
+print(np.mean(q_mask), (4/3*np.pi*nano_particle_radius**3)/np.prod(lx))
+
 aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
-
-# Grafting points
-grafting_point = {0:"G"}  # vertex 0 will be initialized with q_init["G"]
 
 # Select platform ("cuda" or "cpu-mkl")
 factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box
-cb = factory.create_computation_box(nx, lx) 
+cb = factory.create_computation_box(nx, lx) #, impenetrable_region)
+
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
 molecules = factory.create_molecules_information("continuous", ds, stat_seg_length)
 
+# Add polymer
 molecules.add_polymer(
      1.0,
      [
      ["A", 1.0, 0, 1],  # first block (type, length, starting node, ending node)
      ],
-     grafting_point,
 )
 
 # Propagators analyzer for optimal propagator computation
@@ -53,31 +61,8 @@ solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyze
 
 # Fields
 w = {"A": np.zeros(np.prod(nx))}
-q_init = {"G":np.zeros(np.prod(nx))}
-q_init["G"][0] = 1.0/cb.get_dv(0)
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+solver.compute_statistics({"A":w["A"]}, q_mask=q_mask)
 
-N = round(1.0/ds)
-for n in range(10, round(N)+1, 10):
-                                       # p, v ,u, n
-     q_out = solver.get_chain_propagator(0, 0, 1, n)
-     sum = 0.0
-     x_square = 0.0
-     for i in range(nx[0]):
-          xx = cb.get_dx(0)*min([i, nx[0]-i])
-          for j in range(nx[1]):
-               yy = cb.get_dx(1)*min([j, nx[1]-j])
-               for k in range(nx[2]):
-                    zz = cb.get_dx(2)*min([k, nx[2]-k])
-                    idx = i*nx[1]*nx[2] + j*nx[2] + k
-                    x_square += q_out[idx]*cb.get_dv(idx)*(xx*xx + yy*yy + zz*zz)
-                    sum += q_out[idx]*cb.get_dv(idx)
-                    
-     if molecules.get_model_name() == "continuous":
-          x_square *= N/n
-          print("n, <x^2>N/n:", n, x_square)
-     elif molecules.get_model_name() == "discrete":
-          x_square *= N/(n-1)
-          print("n, <x^2>N/(n-1):", n, x_square)
+# q_out = solver.get_chain_propagator(0, 0, 1, n)

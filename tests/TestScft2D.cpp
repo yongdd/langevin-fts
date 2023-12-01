@@ -91,6 +91,7 @@ int main()
 
             // -------------- Print simulation parameters ------------
             std::cout << std::setprecision(default_precision);
+            std::cout << std::boolalpha;
             std::cout<< "---------- Simulation Parameters ----------" << std::endl;
             std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
             std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
@@ -135,7 +136,7 @@ int main()
             for(int i=0; i<M; i++)
             {
                 phi_b[i] = 1.0 - phi_a[i];
-                w[i]                  = chi_n*phi_b[i];
+                w[i]   = chi_n*phi_b[i];
                 w[i+M] = chi_n*phi_a[i];
             }
 
@@ -229,6 +230,7 @@ int main()
             delete[] w_minus;
 
             delete molecules;
+            delete propagators_analyzer;
             delete cb;
             delete solver;
             delete am;

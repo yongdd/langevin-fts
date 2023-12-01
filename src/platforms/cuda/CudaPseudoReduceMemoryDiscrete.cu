@@ -426,8 +426,10 @@ void CudaPseudoReduceMemoryDiscrete::update_bond_function()
     }
 }
 void CudaPseudoReduceMemoryDiscrete::compute_statistics(
+    std::string device,
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init, std::string device)
+    std::map<std::string, const double*> q_init,
+    double* q_mask)
 {
     try
     {
@@ -516,7 +518,7 @@ void CudaPseudoReduceMemoryDiscrete::compute_statistics(
                 // Calculate one block end
                 if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
                 {
-                    // Q_init
+                    // q_init
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);

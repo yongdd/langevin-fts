@@ -56,7 +56,8 @@ private:
     // Advance propagator by one contour step
     void advance_propagator(double *q_in, double *q_out, 
                   double *boltz_bond, double *boltz_bond_half,
-                  double *exp_dw, double *exp_dw_half);
+                  double *exp_dw, double *exp_dw_half,
+                  double *q_mask);
 
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
@@ -67,12 +68,14 @@ public:
     void update_bond_function() override;
     void compute_statistics(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init) override;
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr) override;
     void compute_statistics_device(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init) override
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr) override
     {
-        compute_statistics(w_block, q_init);
+        compute_statistics(w_block, q_init, q_mask);
     };
     double get_total_partition(int polymer) override;
     void get_total_concentration(std::string monomer_type, double *phi) override;

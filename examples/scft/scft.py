@@ -273,7 +273,7 @@ class SCFT:
         for monomer_pair in itertools.combinations(self.monomer_types,2):
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
 
-        print("chiN: ")
+        print("χN: ")
         for pair in self.chi_n:
             print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
 

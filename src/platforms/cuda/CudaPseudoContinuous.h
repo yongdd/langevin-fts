@@ -107,9 +107,10 @@ private:
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
 
     // Compute statistics with inputs from selected device arrays
-    void compute_statistics(
+    void compute_statistics(std::string device,
         std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init, std::string device);
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr);
 public:
 
     CudaPseudoContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
@@ -117,16 +118,18 @@ public:
 
     void update_bond_function() override;
     void compute_statistics(
-        std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init) override
+        std::map<std::string, const double*> w_block,
+        std::map<std::string, const double*> q_init = {},
+        double* q_mask=nullptr) override
     {
-        compute_statistics(w_input, q_init, "cpu");
+        compute_statistics("cpu", w_block, q_init, q_mask);
     };
     void compute_statistics_device(
-        std::map<std::string, const double*> d_w_input,
-        std::map<std::string, const double*> d_q_init) override
+        std::map<std::string, const double*> d_w_block,
+        std::map<std::string, const double*> d_q_init = {},
+        double* d_q_mask=nullptr) override
     {
-        compute_statistics(d_w_input, d_q_init, "gpu");
+        compute_statistics("gpu", d_w_block, d_q_init, d_q_mask);
     };
     double get_total_partition(int polymer) override;
     void get_total_concentration(std::string monomer_type, double *phi) override;

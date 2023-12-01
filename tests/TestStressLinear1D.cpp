@@ -113,6 +113,7 @@ int main()
 
                     // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
+                    std::cout << std::boolalpha;
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
@@ -303,6 +304,7 @@ int main()
 
                     //------------- Finalize -------------
                     delete molecules;
+                    delete propagators_analyzer;
                     delete cb;
                     delete solver;
                     delete am;
