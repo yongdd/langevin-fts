@@ -29,6 +29,9 @@ private:
     double *d_q_step_1_two[MAX_GPUS];
     ftsComplex *d_qk_in_1_one[MAX_GPUS];
     ftsComplex *d_qk_in_1_two[MAX_GPUS];
+    
+    // q_mask to make impenetrable region for nano particles
+    double *d_q_mask[MAX_GPUS];
 
     // For stress calculation: compute_stress()
     double *d_fourier_basis_x[MAX_GPUS];
@@ -84,19 +87,21 @@ private:
 
     // Advance one propagator by one segment step
     void advance_one_propagator(const int GPU,
-            double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw);
+            double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw, double *d_q_mask);
 
     // Advance two propagators by one segment step
     void advance_two_propagators(double *d_q_in_1, double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             double *d_boltz_bond_1, double *d_boltz_bond_2,  
-            double *d_exp_dw_1, double *d_exp_dw_2);
+            double *d_exp_dw_1, double *d_exp_dw_2,
+            double *d_q_mask);
 
     // Advance two propagators by one segment step in two GPUs
     void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             double *d_boltz_bond_1, double *d_boltz_bond_2,  
-            double *d_exp_dw_1, double *d_exp_dw_2);
+            double *d_exp_dw_1, double *d_exp_dw_2,
+            double **d_q_mask);
 
     // Advance propagator by half bond step
     void advance_propagator_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, double *d_boltz_bond_half);

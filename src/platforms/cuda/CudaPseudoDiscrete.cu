@@ -236,6 +236,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[gpu], sizeof(double)*2*M));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[gpu], sizeof(ftsComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[gpu], sizeof(ftsComplex)*2*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_q_mask[gpu], sizeof(double)*M));
         }
         if (N_GPUS > 1)
         {
@@ -334,6 +335,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
         cudaFree(d_q_step_1_two[gpu]);
         cudaFree(d_qk_in_1_one[gpu]);
         cudaFree(d_qk_in_1_two[gpu]);
+        cudaFree(d_q_mask[gpu]);
     }
 
     if (N_GPUS > 1)
@@ -448,6 +450,20 @@ void CudaPseudoDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
         }
 
+        // Copy q_mask to d_q_mask
+        for(int gpu=0; gpu<N_GPUS; gpu++)
+        {
+            gpu_error_check(cudaSetDevice(gpu));
+            if (q_mask != nullptr)
+            {
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], q_mask, sizeof(double)*M, cudaMemcpyInputToDevice));
+            }
+            else
+            {
+                d_q_mask[gpu] = nullptr;
+            }
+        }
+
         // Compute exp_dw
         for(const auto& item: w_input)
         {
@@ -552,7 +568,8 @@ void CudaPseudoDiscrete::compute_statistics(
                             _d_propagator[0],
                             _d_propagator[0],
                             d_boltz_bond[0][monomer_type],
-                            d_exp_dw[0][monomer_type]);
+                            d_exp_dw[0][monomer_type],
+                            d_q_mask[0]);
 
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -621,12 +638,18 @@ void CudaPseudoDiscrete::compute_statistics(
                         _d_propagator[n-1],
                         _d_propagator[n],
                         d_boltz_bond[0][monomer_type],
-                        d_exp_dw[0][monomer_type]);
+                        d_exp_dw[0][monomer_type],
+                        d_q_mask[0]);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
                     #endif
                 }
+
+                // Multiply mask
+                if (d_q_mask[0] != nullptr)
+                    multi_real<<<N_BLOCKS, N_THREADS>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
+
                 cudaDeviceSynchronize();
             }
 
@@ -658,7 +681,8 @@ void CudaPseudoDiscrete::compute_statistics(
                         _d_propagator_key[n-1],
                         _d_propagator_key[n],
                         d_boltz_bond[0][monomer_type],
-                        d_exp_dw[0][monomer_type]);
+                        d_exp_dw[0][monomer_type],
+                        d_q_mask[0]);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
@@ -714,7 +738,8 @@ void CudaPseudoDiscrete::compute_statistics(
                             d_boltz_bond[0][monomer_types[0]],
                             d_boltz_bond[1][monomer_types[1]],
                             d_exp_dw[0][monomer_types[0]],
-                            d_exp_dw[1][monomer_types[1]]);
+                            d_exp_dw[1][monomer_types[1]],
+                            d_q_mask);
 
                         // DEVICE 1, STREAM 1: copy memory from device 1 to device 0
                         if (n > 0)
@@ -764,7 +789,8 @@ void CudaPseudoDiscrete::compute_statistics(
                             d_boltz_bond[0][monomer_types[0]],
                             d_boltz_bond[0][monomer_types[1]],
                             d_exp_dw[0][monomer_types[0]],
-                            d_exp_dw[0][monomer_types[1]]);
+                            d_exp_dw[0][monomer_types[1]],
+                            d_q_mask[0]);
 
                         #ifndef NDEBUG
                         propagator_finished[keys[0]][n+n_segment_froms[0]] = true;
@@ -852,7 +878,8 @@ void CudaPseudoDiscrete::compute_statistics(
 void CudaPseudoDiscrete::advance_one_propagator(
     const int GPU,
     double *d_q_in, double *d_q_out,
-    double *d_boltz_bond, double *d_exp_dw)
+    double *d_boltz_bond, double *d_exp_dw,
+    double *d_q_mask)
 {
     try
     {
@@ -873,6 +900,10 @@ void CudaPseudoDiscrete::advance_one_propagator(
 
         // Evaluate exp(-w*ds) in real space
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, d_exp_dw, 1.0/((double)M), M);
+
+        // Multiply mask
+        if (d_q_mask != nullptr)
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
@@ -883,7 +914,8 @@ void CudaPseudoDiscrete::advance_two_propagators(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2,  
-    double *d_exp_dw_1, double *d_exp_dw_2)
+    double *d_exp_dw_1, double *d_exp_dw_2,
+    double *d_q_mask)
 {
     try
     {
@@ -912,6 +944,13 @@ void CudaPseudoDiscrete::advance_two_propagators(
             d_q_out_1, &d_q_step_1_two[0][0], d_exp_dw_1,
             d_q_out_2, &d_q_step_1_two[0][M], d_exp_dw_2, 1.0/((double)M), M);
 
+        // Multiply mask
+        if (d_q_mask != nullptr)
+        {
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask, 1.0, M);
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, d_q_out_2, d_q_mask, 1.0, M);
+        }
+
     }
     catch(std::exception& exc)
     {
@@ -922,7 +961,8 @@ void CudaPseudoDiscrete::advance_two_propagators_two_gpus(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2,  
-    double *d_exp_dw_1, double *d_exp_dw_2)
+    double *d_exp_dw_1, double *d_exp_dw_2,
+    double **d_q_mask)
 {
     try
     {
@@ -955,6 +995,15 @@ void CudaPseudoDiscrete::advance_two_propagators_two_gpus(
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_exp_dw_1, 1.0/((double)M), M);
         gpu_error_check(cudaSetDevice(1));
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_out_2, d_exp_dw_2, 1.0/((double)M), M);
+
+        // Multiply mask
+        if (d_q_mask[0] != nullptr && d_q_mask[1] != nullptr)
+        {
+            gpu_error_check(cudaSetDevice(0));
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask[0], 1.0, M);
+            gpu_error_check(cudaSetDevice(1));
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_out_2, d_q_mask[1], 1.0, M);
+        }
     }
     catch(std::exception& exc)
     {

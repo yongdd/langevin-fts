@@ -163,6 +163,7 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[gpu], sizeof(double)*2*M));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[gpu], sizeof(ftsComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[gpu], sizeof(ftsComplex)*2*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_q_mask[gpu], sizeof(double)*M));
         }
 
         gpu_error_check(cudaSetDevice(0));
@@ -262,6 +263,7 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
         cudaFree(d_q_step_1_two[gpu]);
         cudaFree(d_qk_in_2_one[gpu]);
         cudaFree(d_qk_in_1_two[gpu]);
+        cudaFree(d_q_mask[gpu]);
     }
     cudaFree(d_q_unity);
 
@@ -377,6 +379,20 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
         }
 
+        // Copy q_mask to d_q_mask
+        for(int gpu=0; gpu<N_GPUS; gpu++)
+        {
+            gpu_error_check(cudaSetDevice(gpu));
+            if (q_mask != nullptr)
+            {
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], q_mask, sizeof(double)*M, cudaMemcpyInputToDevice));
+            }
+            else
+            {
+                d_q_mask[gpu] = nullptr;
+            }
+        }
+
         // Exp_dw and exp_dw_half
         for(const auto& item: w_input)
         {
@@ -449,6 +465,11 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                     {
                         gpu_error_check(cudaMemcpy(d_q_one[0][0], d_q_unity, sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     }
+
+                    // Multiply mask
+                    if (d_q_mask[0] != nullptr)
+                        multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[0][0], d_q_one[0][0], d_q_mask[0], 1.0, M);
+
                     gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
 
                     #ifndef NDEBUG
@@ -507,6 +528,11 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             std::swap(prev, next);
                             cudaDeviceSynchronize();
                         }
+
+                        // Multiply mask
+                        if (d_q_mask[0] != nullptr)
+                            multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[0][0], d_q_one[0][0], d_q_mask[0], 1.0, M);
+
                         gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
                         
                         #ifndef NDEBUG
@@ -558,6 +584,11 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             std::swap(prev, next);
                             cudaDeviceSynchronize();
                         }
+
+                        // Multiply mask
+                        if (d_q_mask[0] != nullptr)
+                            multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[0][0], d_q_one[0][0], d_q_mask[0], 1.0, M);
+
                         gpu_error_check(cudaMemcpy(_propagator_0, d_q_one[0][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -634,7 +665,8 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                         d_exp_dw[0][monomer_types[0]],
                         d_exp_dw[1][monomer_types[1]],
                         d_exp_dw_half[0][monomer_types[0]],
-                        d_exp_dw_half[1][monomer_types[1]]);
+                        d_exp_dw_half[1][monomer_types[1]],
+                        d_q_mask);
 
                     // STREAM 1: copy propagators from device to host
                     for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -709,7 +741,8 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
                             d_boltz_bond[0][monomer_types[j]],
                             d_boltz_bond_half[0][monomer_types[j]],
                             d_exp_dw[0][monomer_types[j]],
-                            d_exp_dw_half[0][monomer_types[j]]);
+                            d_exp_dw_half[0][monomer_types[j]],
+                            d_q_mask[0]);
 
                         // STREAM 1: copy propagators from device to host
                         if (n > n_segment_froms[j])
@@ -811,7 +844,8 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
 void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
-    double *d_exp_dw, double *d_exp_dw_half)
+    double *d_exp_dw, double *d_exp_dw_half,
+    double *d_q_mask)
 {
     // Overlapping computations for 1/2 step and 1/4 step
     try
@@ -862,6 +896,10 @@ void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
 
         // Compute linear combination with 4/3 and -1/3 ratio
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[GPU], -1.0/3.0, d_q_step_1_one[GPU], M);
+
+        // Multiply mask
+        if (d_q_mask != nullptr)
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
@@ -874,7 +912,8 @@ void CudaPseudoReduceMemoryContinuous::advance_two_propagators_two_gpus(
     double *d_boltz_bond_1, double *d_boltz_bond_2, 
     double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
     double *d_exp_dw_1, double *d_exp_dw_2,
-    double *d_exp_dw_half_1, double *d_exp_dw_half_2)
+    double *d_exp_dw_half_1, double *d_exp_dw_half_2,
+    double **d_q_mask)
 {
     // Overlapping computations for 1/2 step and 1/4 step
     try
@@ -962,6 +1001,15 @@ void CudaPseudoReduceMemoryContinuous::advance_two_propagators_two_gpus(
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, 4.0/3.0, d_q_step_2_one[0], -1.0/3.0, d_q_step_1_one[0], M);
         gpu_error_check(cudaSetDevice(1));
         lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, 4.0/3.0, d_q_step_2_one[1], -1.0/3.0, d_q_step_1_one[1], M);
+
+        // Multiply mask
+        if (d_q_mask[0] != nullptr && d_q_mask[1] != nullptr)
+        {
+            gpu_error_check(cudaSetDevice(0));
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask[0], 1.0, M);
+            gpu_error_check(cudaSetDevice(1));
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_out_2, d_q_mask[1], 1.0, M);
+        }
     }
     catch(std::exception& exc)
     {

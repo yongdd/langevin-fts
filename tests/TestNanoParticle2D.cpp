@@ -43,7 +43,7 @@ int main()
 
         double f = 0.2;
         double chi_n = 15.0;
-        std::vector<int> nx = {512,512};
+        std::vector<int> nx = {64,64};
         std::vector<double> lx = {6.0,5.0};
         std::vector<double> lx_backup = lx;
         double ds = 1.0/10;
@@ -161,9 +161,10 @@ int main()
                         // -------------- Print simulation parameters ------------
                         std::cout << std::setprecision(default_precision);
                         std::cout << std::boolalpha;
-                        std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                        std::cout << std::endl << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
+                        std::cout << "Using GPU Memory Usage: " << reduce_memory_usage << std::endl;
 
                         // // display branches
                         // PropagatorsAnalyzer->display_blocks();

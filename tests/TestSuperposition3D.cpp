@@ -142,9 +142,10 @@ int main()
                         // -------------- Print simulation parameters ------------
                         std::cout << std::setprecision(default_precision);
                         std::cout << std::boolalpha;
-                        std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                        std::cout << std::endl << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
+                        std::cout << "Using GPU Memory Usage: " << reduce_memory_usage << std::endl;
 
                         // // display branches
                         // PropagatorsAnalyzer->display_blocks();
