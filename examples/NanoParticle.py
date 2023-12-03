@@ -13,6 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 # GPU environment variables
 os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
 os.environ["LFTS_GPU_NUM_THREADS"] = "256"
+os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
 
 # Simulation parameters
 nx = [32,32,32]               # grid number

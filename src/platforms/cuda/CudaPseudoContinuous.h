@@ -36,6 +36,9 @@ private:
     ftsComplex *d_qk_in_2_two[MAX_GPUS];
     ftsComplex *d_qk_in_1_four;
 
+    // q_mask to make impenetrable region for nano particles
+    double *d_q_mask[MAX_GPUS];
+
     // For stress calculation: compute_stress()
     double *d_fourier_basis_x[MAX_GPUS];
     double *d_fourier_basis_y[MAX_GPUS];
@@ -85,7 +88,8 @@ private:
     void advance_one_propagator(const int GPU,
             double *d_q_in, double *d_q_out,
             double *d_boltz_bond, double *d_boltz_bond_half,
-            double *d_exp_dw, double *d_exp_dw_half);
+            double *d_exp_dw, double *d_exp_dw_half,
+            double *d_q_mask);
 
     // Advance two propagators by one contour step
     void advance_two_propagators(double *d_q_in_1, double *d_q_in_2,
@@ -93,7 +97,8 @@ private:
             double *d_boltz_bond_1, double *d_boltz_bond_2, 
             double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
             double *d_exp_dw_1, double *d_exp_dw_2,
-            double *d_exp_dw_half_1, double *d_exp_dw_half_2);
+            double *d_exp_dw_half_1, double *d_exp_dw_half_2,
+            double *d_q_mask);
 
     // Advance two propagators by one segment step in two GPUs
     void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
@@ -101,7 +106,8 @@ private:
             double *d_boltz_bond_1, double *d_boltz_bond_2, 
             double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
             double *d_exp_dw_1, double *d_exp_dw_2,
-            double *d_exp_dw_half_1, double *d_exp_dw_half_2);
+            double *d_exp_dw_half_1, double *d_exp_dw_half_2,
+            double **d_q_mask);
 
     // Calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);

@@ -42,6 +42,9 @@ private:
     double *d_q_one[MAX_GPUS][2];     // one for prev, the other for next
     double *d_propagator_sub_dep[2];  // one for prev, the other for next
 
+    // q_mask to make impenetrable region for nano particles
+    double *d_q_mask[MAX_GPUS];
+
     // For concentration computation
     double *d_q_block_v[2];    // one for prev, the other for next
     double *d_q_block_u[2];    // one for prev, the other for next
@@ -92,7 +95,8 @@ private:
     void advance_one_propagator(const int GPU,
             double *d_q_in, double *d_q_out,
             double *d_boltz_bond, double *d_boltz_bond_half,
-            double *d_exp_dw, double *d_exp_dw_half);
+            double *d_exp_dw, double *d_exp_dw_half,
+            double *d_q_mask);
 
     // Advance two propagators by one segment step in two GPUs
     void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
@@ -100,7 +104,8 @@ private:
             double *d_boltz_bond_1, double *d_boltz_bond_2, 
             double *d_boltz_bond_half_1, double *d_boltz_bond_half_2,         
             double *d_exp_dw_1, double *d_exp_dw_2,
-            double *d_exp_dw_half_1, double *d_exp_dw_half_2);
+            double *d_exp_dw_half_1, double *d_exp_dw_half_2,
+            double **d_q_mask);
 
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM);
