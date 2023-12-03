@@ -16,20 +16,20 @@ os.environ["LFTS_GPU_NUM_THREADS"] = "256"
 os.environ["LFTS_NUM_GPUS"] = "1" # 1 ~ 2
 
 # Simulation parameters
-nx = [32,32,32]               # grid number
-lx = [6.0,6.0,6.0]            # box size
+nx = [128,128]                # grid number
+lx = [6.0,6.0]                # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
 
 # Set a mask to set q(r,s) = 0
 x = np.linspace(-lx[0]/2, lx[0]/2, num=nx[0], endpoint=False)
 y = np.linspace(-lx[1]/2, lx[1]/2, num=nx[1], endpoint=False)
-z = np.linspace(-lx[2]/2, lx[2]/2, num=nx[2], endpoint=False)
-xv, yv, zv = np.meshgrid(x, y, z, indexing='ij')
+
+xv, yv = np.meshgrid(x, y, indexing='ij')
 nano_particle_radius = 1.0
 q_mask = np.ones(nx)
-q_mask[np.sqrt(xv**2 + yv**2 + zv**2) < nano_particle_radius] = 0.0
-print(np.mean(q_mask), (4/3*np.pi*nano_particle_radius**3)/np.prod(lx))
+q_mask[np.sqrt(xv**2 + yv**2) < nano_particle_radius] = 0.0
+print(1.0-np.mean(q_mask), (np.pi*nano_particle_radius**2)/np.prod(lx))
 
 aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
@@ -67,3 +67,6 @@ w = {"A": np.zeros(np.prod(nx))}
 solver.compute_statistics({"A":w["A"]}, q_mask=q_mask)
 
 # q_out = solver.get_chain_propagator(0, 0, 1, n)
+
+# 
+solver.check_total_partition()

@@ -240,25 +240,6 @@ PYBIND11_MODULE(langevinfts, m)
         //         throw_without_line_number(exc.what());
         //     }
         // })
-        // .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input)
-        // {
-        //     try{
-        //         std::map<std::string, const double*> map_buf_w_input;
-        //         std::map<std::string, const double*> map_buf_q_init;
-
-        //         for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
-        //         {
-        //             //buf_w_input
-        //             const double* w_input_ptr = reinterpret_cast<const double*>(it->second);
-        //             map_buf_w_input.insert(std::pair<std::string, const double*>(it->first,(const double *) w_input_ptr));
-        //         }
-        //         obj.compute_statistics_device(map_buf_w_input, {});
-        //     }
-        //     catch(std::exception& exc)
-        //     {
-        //         throw_without_line_number(exc.what());
-        //     }
-        // })
         .def("get_total_concentration", [](Solver& obj, std::string monomer_type)
         {
             try{
@@ -318,7 +299,8 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("compute_stress", &Solver::compute_stress);
+        .def("compute_stress", &Solver::compute_stress)
+        .def("check_total_partition", &Solver::check_total_partition);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)

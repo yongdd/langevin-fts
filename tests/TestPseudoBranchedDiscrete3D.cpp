@@ -265,6 +265,9 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
+            if (solver->check_total_partition() == false)
+                return -1;
+
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(phi_a[i] - phi_a_ref[i],2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));

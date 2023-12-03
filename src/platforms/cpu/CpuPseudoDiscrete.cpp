@@ -99,9 +99,9 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 &propagator[dep_v][(n_segment_original-n_segment_offset-1)*M],  // q
-                &propagator[dep_u][0],                                        // Q_dagger
+                &propagator[dep_u][0],                                        // q_dagger
                 monomer_type,       
-                n_aggregated                   // How many propagators are aggregated
+                n_aggregated                   // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -810,4 +810,68 @@ void CpuPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v, 
     {
         throw_without_line_number(exc.what());
     }
+}
+bool CpuPseudoDiscrete::check_total_partition()
+{
+    const int M = cb->get_n_grid();
+    int n_polymer_types = molecules->get_n_polymer_types();
+    std::vector<std::vector<double>> total_partitions;
+    for(int p=0;p<n_polymer_types;p++)
+    {
+        std::vector<double> total_partitions_p;
+        total_partitions.push_back(total_partitions_p);
+    }
+
+    for(const auto& block: block_phi)
+    {
+        const auto& key = block.first;
+        int p                = std::get<0>(key);
+        std::string dep_v    = std::get<1>(key);
+        std::string dep_u    = std::get<2>(key);
+
+        int n_aggregated;
+        int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
+        int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
+        int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
+        std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
+
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_offset << ", " << n_segment_allocated << std::endl;
+
+        // Contains no '['
+        if (dep_u.find('[') == std::string::npos)
+            n_aggregated = 1;
+        else
+            n_aggregated = propagators_analyzer->get_essential_block(key).v_u.size();
+
+        for(int n=0;n<n_segment_allocated;n++)
+        {
+            double total_partition = cb->inner_product_inverse_weight(
+                &propagator[dep_v][(n_segment_original-n_segment_offset-n-1)*M],
+                &propagator[dep_u][n*M], exp_dw[monomer_type])/n_aggregated/cb->get_volume();
+
+            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            total_partitions[p].push_back(total_partition);
+        }
+    }
+
+    // Find minimum and maximum of total_partitions
+    std::cout<< "Polymer id: maximum,  minimum, and difference of total partitions" << std::endl;
+    for(size_t p=0;p<total_partitions.size();p++)
+    {
+        double max_partition = -1e20;
+        double min_partition =  1e20;
+        for(size_t n=0;n<total_partitions[p].size();n++)
+        {
+            if (total_partitions[p][n] > max_partition)
+                max_partition = total_partitions[p][n];
+            if (total_partitions[p][n] < min_partition)
+                min_partition = total_partitions[p][n];
+        }
+        double diff_partition = abs(max_partition - min_partition);
+
+        std::cout<< "\t" << p << ": " << max_partition << ", " << min_partition << ", " << diff_partition << std::endl;
+        if (diff_partition > 1e-7)
+            return false;
+    }
+    return true;
 }

@@ -24,16 +24,13 @@ int main()
         // Math constants
         const double PI = 3.14159265358979323846;
 
-        double energy_total;
-        // error_level = variable to check convergence of the iteration
-        double error_level, old_error_level;
-
         // String to output file and print stream
         std::streamsize default_precision = std::cout.precision();
 
         // Temp
         int idx;
         double sum;
+        double sum_total_partition;
 
         // -------------- initialize ------------
         // Platform type, [cuda, cpu-mkl]
@@ -135,7 +132,7 @@ int main()
         std::vector<bool> reduce_memory_usages = {false, true};
         for(std::string chain_model : chain_models)
         {
-            std::vector<double> energy_total_list;
+            std::vector<double> total_partition_list;
             for(std::string platform : avail_platforms)
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
@@ -181,93 +178,28 @@ int main()
                         cb->zero_mean(&w[0]);
                         cb->zero_mean(&w[M]);
 
-                        // Assign large initial value for the energy and error
-                        energy_total = 1.0e20;
-                        error_level = 1.0e20;
+                        // For the given fields find the polymer statistics
+                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {}, q_mask);
+                        solver->get_total_concentration("A", phi_a);
+                        solver->get_total_concentration("B", phi_b);
 
-                        //------------------ Run ----------------------
-                        // Iteration begins here
-                        for(int iter=0; iter<max_scft_iter; iter++)
+                        if (solver->check_total_partition() == false)
+                            return -1;
+
+                        // Print iteration # and error levels and check the mass conservation
+                        sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
+                        std::cout<< "Mass error, total partitions" << std::endl;
+                        std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
+                        std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
+                        sum_total_partition = 0.0;
+                        for(int p=1; p<molecules->get_n_polymer_types(); p++)
                         {
-                            // For the given fields find the polymer statistics
-                            solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {}, q_mask);
-                            solver->get_total_concentration("A", phi_a);
-                            solver->get_total_concentration("B", phi_b);
-
-                            // Compute stress
-                            std::vector<double> stress = solver->compute_stress();
-
-                            // Calculate the total energy
-                            for(int i=0; i<M; i++)
-                            {
-                                w_minus[i] = (w[i]-w[i+M])/2;
-                                w_plus[i]  = (w[i]+w[i+M])/2;
-                            }
-
-                            energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                            energy_total -= cb->integral(w_plus)/cb->get_volume();
-                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                                Polymer& pc = molecules->get_polymer(p);
-                                energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
-                            }
-
-                            for(int i=0; i<M; i++)
-                            {
-                                // Calculate pressure field for the new field calculation
-                                xi[i] = 0.5*(w[i]+w[i+M]-chi_n);
-                                // Calculate output fields
-                                w_out[i]   = chi_n*phi_b[i] + xi[i];
-                                w_out[i+M] = chi_n*phi_a[i] + xi[i];
-                            }
-                            cb->zero_mean(&w_out[0]);
-                            cb->zero_mean(&w_out[M]);
-
-                            // Error_level measures the "relative distance" between the input and output fields
-                            old_error_level = error_level;
-                            for(int i=0; i<2*M; i++)
-                                w_diff[i] = w_out[i]- w[i];
-                            error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
-                                            (cb->multi_inner_product(2,w,w)+1.0));
-                            error_level += sqrt(stress[0]*stress[0] + stress[1]*stress[1] + stress[2]*stress[2]);
-
-                            // Print iteration # and error levels and check the mass conservation
-                            sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
-                            std::cout<< std::setw(8) << iter;
-                            std::cout<< std::setw(13) << std::setprecision(3) << std::scientific << sum ;
-                            std::cout<< "\t[" << std::setprecision(7) << std::scientific << solver->get_total_partition(0);
-                            for(int p=1; p<molecules->get_n_polymer_types(); p++)
-                                std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
-                            std::cout<< "]"; 
-                            std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << energy_total;
-                            std::cout<< std::setw(15) << std::setprecision(9) << std::fixed << error_level << std::endl;
-
-                            // std::cout<< " [";
-                            // std::cout<< std::setw(10) << std::setprecision(7) << lx[0] << ", " << lx[1] << ", " << lx[2];
-                            // std::cout<< "]" << std::endl;
-
-                            // std::cout<< " [";
-                            // std::cout<< std::setw(10) << std::setprecision(7) << stress[0] << ", " << stress[1] << ", " << stress[2];
-                            // std::cout<< "]" << std::endl;
-
-                            // Conditions to end the iteration
-                            if(error_level < tolerance) break;
-
-                            // Calculate new fields using simple and Anderson mixing  //w_new, w_current, w_diff
-                            for(int d=0; d<cb->get_dim(); d++)
-                            {
-                                w[2*M+d] = cb->get_lx(d);
-                                w_diff[2*M+d] = -stress[d];
-                            }
-                            am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
-
-                            // Update lx
-                            for(int d=0; d<cb->get_dim(); d++)
-                                lx[d] = w[2*M+d];
-                            
-                            cb->set_lx(lx);
-                            solver->update_bond_function();
+                            sum_total_partition += solver->get_total_partition(p);
+                            std::cout<< std::setw(17) << std::setprecision(7) << std::scientific << solver->get_total_partition(p);
                         }
-                        energy_total_list.push_back(energy_total);
+                        std::cout<< "]" << std::endl;
+
+                        total_partition_list.push_back(sum_total_partition);
                         
                         delete factory;
                         delete cb;
@@ -278,10 +210,10 @@ int main()
                     }
                 }
             }
-            double mean = std::accumulate(energy_total_list.begin(), energy_total_list.end(), 0.0)/energy_total_list.size();
-            double sq_sum = std::inner_product(energy_total_list.begin(), energy_total_list.end(), energy_total_list.begin(), 0.0);
-            double stddev = std::sqrt( std::abs(sq_sum / energy_total_list.size() - mean * mean ));
-            std::cout << "Std. of energy_level: " << stddev << std::endl;
+            double mean = std::accumulate(total_partition_list.begin(), total_partition_list.end(), 0.0)/total_partition_list.size();
+            double sq_sum = std::inner_product(total_partition_list.begin(), total_partition_list.end(), total_partition_list.begin(), 0.0);
+            double stddev = std::sqrt( std::abs(sq_sum / total_partition_list.size() - mean * mean ));
+            std::cout << "Std. of sum_total_partition: " << stddev << std::endl;
             if (stddev > 1e-7)
                 return -1;
         }
