@@ -146,6 +146,9 @@ public:
     void get_block_concentration(int polymer, double *phi) override;
     std::vector<double> compute_stress() override;
     void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
+
+    // For tests
+    bool check_total_partition() override;
 };
 
 #endif
