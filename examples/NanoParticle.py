@@ -68,5 +68,4 @@ solver.compute_statistics({"A":w["A"]}, q_mask=q_mask)
 
 # q_out = solver.get_chain_propagator(0, 0, 1, n)
 
-# 
-solver.check_total_partition()
+# solver.check_total_partition()

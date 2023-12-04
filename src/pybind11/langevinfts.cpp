@@ -148,16 +148,18 @@ PYBIND11_MODULE(langevinfts, m)
             obj.add_polymer(volume_fraction, block_inputs, chain_end_to_q_init);
         })
         .def("get_polymer", &Molecules::get_polymer)
-        .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
-        .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
-
-    py::class_<PropagatorsAnalyzer>(m, "Propagators")
+        .def("get_n_solvent_types", &Molecules::get_n_solvent_types)
+        .def("add_solvent", &Molecules::add_solvent);
+        
+    py::class_<PropagatorsAnalyzer>(m, "PropagatorsAnalyzer")
         .def("get_essential_propagator_codes", &PropagatorsAnalyzer::get_essential_propagator_codes)
         .def("get_essential_propagator_code", &PropagatorsAnalyzer::get_essential_propagator_code)
         .def("get_essential_blocks", &PropagatorsAnalyzer::get_essential_blocks)
         .def("get_essential_block", &PropagatorsAnalyzer::get_essential_block)
         .def("display_propagators", &PropagatorsAnalyzer::display_propagators)
-        .def("display_blocks", &PropagatorsAnalyzer::display_blocks);
+        .def("display_blocks", &PropagatorsAnalyzer::display_blocks)
+        .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
+        .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
     py::class_<Solver>(m, "Solver")
         .def("update_bond_function", &Solver::update_bond_function)
@@ -285,6 +287,22 @@ PYBIND11_MODULE(langevinfts, m)
             }
         })
         .def("get_total_partition", &Solver::get_total_partition)
+        .def("get_solvent_partition", &Solver::get_solvent_partition)
+        .def("get_solvent_concentration", [](Solver& obj, int s)
+        {
+            try{
+                const int M = obj.get_n_grid();
+
+                py::array_t<double> phi = py::array_t<double>({M});
+                py::buffer_info buf_phi = phi.request();
+                obj.get_solvent_concentration(s, (double*) buf_phi.ptr);
+                return phi;
+            }
+            catch(std::exception& exc)
+            {
+                throw_with_line_number(exc.what());
+            }
+        })
         .def("get_chain_propagator", [](Solver& obj, int polymer, int v, int u, int n)
         {
             try{

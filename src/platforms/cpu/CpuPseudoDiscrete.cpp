@@ -52,7 +52,7 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: propagators_analyzer->get_essential_blocks())
         {
-            block_phi[item.first] = new double[M];
+            phi_block[item.first] = new double[M];
         }
 
         // Create boltz_bond, boltz_bond_half, and exp_dw
@@ -70,11 +70,11 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
         fourier_basis_z = new double[M_COMPLEX];
 
         // Total partition functions for each polymer
-        single_partitions = new double[molecules->get_n_polymer_types()];
+        single_polymer_partitions = new double[molecules->get_n_polymer_types()];
 
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
-        for(const auto& block: block_phi)
+        for(const auto& block: phi_block)
         {
             const auto& key = block.first;
             int p                = std::get<0>(key);
@@ -106,6 +106,13 @@ CpuPseudoDiscrete::CpuPseudoDiscrete(
             current_p++;
         }
 
+        // Total partition functions for each solvent
+        single_solvent_partitions = new double[molecules->get_n_solvent_types()];
+        
+        // Concentrations for each solvent
+        for(int s=0;s<molecules->get_n_solvent_types();s++)
+            phi_solvent.push_back(new double[M]);
+
         // Create scheduler for computation of propagator
         sc = new Scheduler(propagators_analyzer->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
@@ -125,7 +132,8 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
     delete[] fourier_basis_y;
     delete[] fourier_basis_z;
         
-    delete[] single_partitions;
+    delete[] single_polymer_partitions;
+    delete[] single_solvent_partitions;
 
     for(const auto& item: boltz_bond)
         delete[] item.second;
@@ -135,10 +143,12 @@ CpuPseudoDiscrete::~CpuPseudoDiscrete()
         delete[] item.second;
     for(const auto& item: propagator)
         delete[] item.second;
-    for(const auto& item: block_phi)
+    for(const auto& item: phi_block)
         delete[] item.second;
     for(const auto& item: propagator_junction)
         delete[] item.second;
+    for(const auto& item: phi_solvent)
+        delete[] item; 
 
     #ifndef NDEBUG
     for(const auto& item: propagator_finished)
@@ -375,15 +385,15 @@ void CpuPseudoDiscrete::compute_statistics(
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
 
-            single_partitions[p]= cb->inner_product_inverse_weight(
+            single_polymer_partitions[p]= cb->inner_product_inverse_weight(
                 propagator_v, propagator_u, exp_dw[monomer_type])/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
         #pragma omp parallel for
-        for(size_t b=0; b<block_phi.size();b++)
+        for(size_t b=0; b<phi_block.size();b++)
         {
-            auto block = block_phi.begin();
+            auto block = phi_block.begin();
             advance(block, b);
             const auto& key = block->first;
 
@@ -423,9 +433,21 @@ void CpuPseudoDiscrete::compute_statistics(
             
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
-            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p]*n_repeated;
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
+        }
+
+        // Calculate partition functions and concentrations of solvents
+        for(size_t s=0; s<molecules->get_n_solvent_types(); s++)
+        {
+            double *phi_ = phi_solvent[s];
+            double volume_fraction = std::get<0>(molecules->get_solvent(s));
+            std::string monomer_type = std::get<1>(molecules->get_solvent(s));
+
+            single_solvent_partitions[s] = cb->integral(exp_dw[monomer_type])/cb->get_volume();
+            for(int i=0; i<M; i++)
+                phi_[i] = exp_dw[monomer_type][i]*volume_fraction/single_solvent_partitions[s];
         }
     }
     catch(std::exception& exc)
@@ -514,7 +536,7 @@ double CpuPseudoDiscrete::get_total_partition(int polymer)
 {
     try
     {
-        return single_partitions[polymer];
+        return single_polymer_partitions[polymer];
     }
     catch(std::exception& exc)
     {
@@ -531,7 +553,7 @@ void CpuPseudoDiscrete::get_total_concentration(std::string monomer_type, double
             phi[i] = 0.0;
 
         // For each block
-        for(const auto& block: block_phi)
+        for(const auto& block: phi_block)
         {
             std::string dep_v = std::get<1>(block.first);
             int n_segment_allocated = propagators_analyzer->get_essential_block(block.first).n_segment_allocated;
@@ -539,6 +561,17 @@ void CpuPseudoDiscrete::get_total_concentration(std::string monomer_type, double
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
+            }
+        }
+
+        // For each solvent
+        for(int s=0;s<molecules->get_n_solvent_types();s++)
+        {
+            if (std::get<1>(molecules->get_solvent(s)) == monomer_type)
+            {
+                double *phi_solvent_ = phi_solvent[s];
+                for(int i=0; i<M; i++)
+                    phi[i] += phi_solvent_[i];
             }
         }
     }
@@ -562,7 +595,7 @@ void CpuPseudoDiscrete::get_total_concentration(int p, std::string monomer_type,
             phi[i] = 0.0;
 
         // For each block
-        for(const auto& block: block_phi)
+        for(const auto& block: phi_block)
         {
             int polymer_idx = std::get<0>(block.first);
             std::string dep_v = std::get<1>(block.first);
@@ -602,10 +635,40 @@ void CpuPseudoDiscrete::get_block_concentration(int p, double *phi)
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
 
-            double* _essential_block_phi = block_phi[std::make_tuple(p, dep_v, dep_u)];
+            double* _essential_phi_block = phi_block[std::make_tuple(p, dep_v, dep_u)];
             for(int i=0; i<M; i++)
-                phi[i+b*M] = _essential_block_phi[i]; 
+                phi[i+b*M] = _essential_phi_block[i]; 
         }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+double CpuPseudoDiscrete::get_solvent_partition(int s)
+{
+    try
+    {
+        return single_solvent_partitions[s];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CpuPseudoDiscrete::get_solvent_concentration(int s, double *phi_out)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        const int S = molecules->get_n_solvent_types();
+
+        if (s < 0 || s > S-1)
+            throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
+
+        double *phi_solvent_ = phi_solvent[s];
+        for(int i=0; i<M; i++)
+            phi_out[i] = phi_solvent_[i];
     }
     catch(std::exception& exc)
     {
@@ -630,7 +693,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // Reset stress map
-        for(const auto& item: block_phi)
+        for(const auto& item: phi_block)
         {
             for(int d=0; d<3; d++)
                 block_dq_dl[item.first][d] = 0.0;
@@ -638,9 +701,9 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
 
         // Compute stress for each block
         #pragma omp parallel for
-        for(size_t b=0; b<block_phi.size();b++)
+        for(size_t b=0; b<phi_block.size();b++)
         {
-            auto block = block_phi.begin();
+            auto block = phi_block.begin();
             advance(block, b);
             const auto& key   = block->first;
 
@@ -762,7 +825,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
         // Compute total stress
         for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
-        for(const auto& block: block_phi)
+        for(const auto& block: phi_block)
         {
             const auto& key      = block.first;
             int p                = std::get<0>(key);
@@ -771,7 +834,7 @@ std::vector<double> CpuPseudoDiscrete::compute_stress()
             Polymer& pc = molecules->get_polymer(p);
 
             for(int d=0; d<DIM; d++)
-                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
         }
         for(int d=0; d<DIM; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
@@ -822,7 +885,7 @@ bool CpuPseudoDiscrete::check_total_partition()
         total_partitions.push_back(total_partitions_p);
     }
 
-    for(const auto& block: block_phi)
+    for(const auto& block: phi_block)
     {
         const auto& key = block.first;
         int p                = std::get<0>(key);

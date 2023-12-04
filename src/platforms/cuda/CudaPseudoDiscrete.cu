@@ -61,8 +61,8 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: propagators_analyzer->get_essential_blocks())
         {
-            d_block_phi[item.first] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_block_phi[item.first], sizeof(double)*M));
+            d_phi_block[item.first] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_phi_block[item.first], sizeof(double)*M));
         }
 
         // Create boltz_bond, boltz_bond_half, and exp_dw
@@ -83,11 +83,11 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
         // Total partition functions for each polymer
-        single_partitions = new double[molecules->get_n_polymer_types()];
+        single_polymer_partitions = new double[molecules->get_n_polymer_types()];
 
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
-        for(const auto& d_block: d_block_phi)
+        for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             int p                = std::get<0>(key);
@@ -120,7 +120,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         }
 
        // Find propagators and bond length for each segment to prepare stress computation
-        for(const auto& block: d_block_phi)
+        for(const auto& block: d_phi_block)
         {
             const auto& key = block.first;
             int p                = std::get<0>(key);
@@ -183,6 +183,17 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
                 }
                 _block_stress_info_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
             }
+        }
+
+        // Total partition functions for each solvent
+        single_solvent_partitions = new double[molecules->get_n_solvent_types()];
+
+        // Concentrations for each solvent
+        for(int s=0;s<molecules->get_n_solvent_types();s++)
+        {
+            double *d_phi_;
+            gpu_error_check(cudaMalloc((void**)&d_phi_, sizeof(double)*M));
+            d_phi_solvent.push_back(d_phi_);
         }
 
         // Create scheduler for computation of propagator
@@ -301,7 +312,8 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
 
     delete sc;
 
-    delete[] single_partitions;
+    delete[] single_polymer_partitions;
+    delete[] single_solvent_partitions;
 
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
@@ -319,10 +331,12 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
             cudaFree(item.second[i]);
         delete[] item.second;
     }
-    for(const auto& item: d_block_phi)
+    for(const auto& item: d_phi_block)
         cudaFree(item.second);
     for(const auto& item: d_propagator_junction)
         cudaFree(item.second);
+    for(const auto& item: d_phi_solvent)
+        cudaFree(item);
 
     #ifndef NDEBUG
     for(const auto& item: propagator_finished)
@@ -819,14 +833,14 @@ void CudaPseudoDiscrete::compute_statistics(
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
 
-            single_partitions[p] = cb->inner_product_inverse_weight_device(
+            single_polymer_partitions[p] = cb->inner_product_inverse_weight_device(
                 d_propagator_v,  // q
                 d_propagator_u, // q^dagger
                 d_exp_dw[0][monomer_type])/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
-        for(const auto& block: d_block_phi)
+        for(const auto& block: d_phi_block)
         {
             const auto& key = block.first;
             int p                = std::get<0>(key);
@@ -865,8 +879,19 @@ void CudaPseudoDiscrete::compute_statistics(
             
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
-            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p]*n_repeated;
+            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p]*n_repeated;
             lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
+        }
+
+        // Calculate partition functions and concentrations of solvents
+        for(size_t s=0; s<molecules->get_n_solvent_types(); s++)
+        {
+            double *d_phi_ = d_phi_solvent[s];
+            double volume_fraction = std::get<0>(molecules->get_solvent(s));
+            std::string monomer_type = std::get<1>(molecules->get_solvent(s));
+
+            single_solvent_partitions[s] = cb->integral_device(d_exp_dw[0][monomer_type])/cb->get_volume();
+            linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_phi_, d_exp_dw[0][monomer_type], volume_fraction/single_solvent_partitions[s], 0.0, M);
         }
         gpu_error_check(cudaSetDevice(0));
     }
@@ -1060,7 +1085,7 @@ double CudaPseudoDiscrete::get_total_partition(int polymer)
 {
     try
     {
-        return single_partitions[polymer];
+        return single_polymer_partitions[polymer];
     }
     catch(std::exception& exc)
     {
@@ -1081,13 +1106,20 @@ void CudaPseudoDiscrete::get_total_concentration(std::string monomer_type, doubl
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         // For each block
-        for(const auto& d_block: d_block_phi)
+        for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
             int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
             if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
+        }
+
+        // For each solvent
+        for(int s=0;s<molecules->get_n_solvent_types();s++)
+        {
+            if (std::get<1>(molecules->get_solvent(s)) == monomer_type)
+                lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_phi_solvent[s], M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
     }
@@ -1115,7 +1147,7 @@ void CudaPseudoDiscrete::get_total_concentration(int p, std::string monomer_type
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
 
         // For each block
-        for(const auto& d_block: d_block_phi)
+        for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
@@ -1162,9 +1194,41 @@ void CudaPseudoDiscrete::get_block_concentration(int p, double *phi)
             if (dep_v < dep_u)
                 dep_v.swap(dep_u);
 
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_block_phi[std::make_tuple(p, dep_v, dep_u)], M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, dep_v, dep_u)], M);
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+double CudaPseudoDiscrete::get_solvent_partition(int s)
+{
+    try
+    {
+        return single_solvent_partitions[s];
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudoDiscrete::get_solvent_concentration(int s, double *phi)
+{
+    try
+    {
+        gpu_error_check(cudaSetDevice(0));
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        const int S = molecules->get_n_solvent_types();
+
+        if (s < 0 || s > S-1)
+            throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
+
+        gpu_error_check(cudaMemcpy(phi, d_phi_solvent[s], sizeof(double)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -1193,7 +1257,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         double stress_sum_out[MAX_GPUS][3];
 
         // Compute stress for each block
-        for(const auto& d_block: d_block_phi)
+        for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             int p                = std::get<0>(key);
@@ -1400,7 +1464,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         // Compute total stress
         for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
-        for(const auto& d_block: d_block_phi)
+        for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
             int p             = std::get<0>(key);
@@ -1410,7 +1474,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
 
             for(int gpu=0; gpu<N_GPUS; gpu++)
                 for(int d=0; d<DIM; d++)
-                    stress[d] += block_dq_dl[gpu][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_partitions[p];
+                    stress[d] += block_dq_dl[gpu][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
         }
         for(int d=0; d<DIM; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
@@ -1459,7 +1523,7 @@ bool CudaPseudoDiscrete::check_total_partition()
         total_partitions.push_back(total_partitions_p);
     }
 
-    for(const auto& block: d_block_phi)
+    for(const auto& block: d_phi_block)
     {
         const auto& key = block.first;
         int p                = std::get<0>(key);
