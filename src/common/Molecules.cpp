@@ -46,7 +46,12 @@ void Molecules::add_polymer(
     // Add new polymer type
     polymer_types.push_back(Polymer(ds, bond_lengths, 
         volume_fraction, block_inputs, chain_end_to_q_init));
-    Polymer& pc = polymer_types.back();
+}
+void Molecules::add_solvent(
+    double volume_fraction, std::string monomer_type)
+{
+    // Add new polymer type
+    solvent_types.push_back(std::make_tuple(volume_fraction, monomer_type));
 }
 std::string Molecules::get_model_name() const
 {
@@ -67,4 +72,12 @@ Polymer& Molecules::get_polymer(const int p)
 const std::map<std::string, double>& Molecules::get_bond_lengths() const
 {
     return bond_lengths;
+}
+int Molecules::get_n_solvent_types() const
+{
+    return solvent_types.size();
+}
+std::tuple<double, std::string> Molecules::get_solvent(const int s)
+{
+    return solvent_types[s];
 }

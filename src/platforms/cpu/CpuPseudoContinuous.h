@@ -39,13 +39,20 @@ private:
     #endif
 
     // Total partition functions for each polymer
-    double* single_partitions;
+    double* single_polymer_partitions;
+
     // Remember one segment for each polymer chain to compute total partition function
     // (polymer id, propagator forward, propagator backward, n_aggregated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> block_phi;
+    std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
+
+    // Total partition functions for each solvent
+    double* single_solvent_partitions;
+
+    // Solvent concentrations
+    std::vector<double *> phi_solvent;
 
     // Arrays for pseudo-spectral
     std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
@@ -81,6 +88,10 @@ public:
     void get_total_concentration(std::string monomer_type, double *phi) override;
     void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
     void get_block_concentration(int polymer, double *phi) override;
+
+    double get_solvent_partition(int s) override;
+    void get_solvent_concentration(int s, double *phi) override;
+
     std::vector<double> compute_stress() override;
     void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 

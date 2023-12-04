@@ -25,6 +25,9 @@ private:
 
     // Polymer types
     std::vector<Polymer> polymer_types;
+
+    // Solvent types  (volume fraction, monomer type)
+    std::vector<std::tuple<double, std::string>> solvent_types;
 public:
 
     Molecules(std::string model_name, double ds, std::map<std::string, double> bond_lengths);
@@ -52,8 +55,15 @@ public:
         add_polymer(volume_fraction, block_inputs, {});
     }
 
+    // Add solvent
+    void add_solvent(double volume_fraction, std::string monomer_type);
+
     // Get polymers
     int get_n_polymer_types() const;
     Polymer& get_polymer(const int p);
+
+    // Get solvents
+    int get_n_solvent_types() const;
+    std::tuple<double, std::string> get_solvent(const int s);
 };
 #endif
