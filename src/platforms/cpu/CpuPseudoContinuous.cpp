@@ -196,6 +196,15 @@ void CpuPseudoContinuous::compute_statistics(
             }
         }
 
+        if(q_mask == nullptr)
+        {
+            this->accessible_volume = cb->get_volume();
+        }
+        else
+        {
+            this->accessible_volume = cb->integral(q_mask);
+        }
+
         auto& branch_schedule = sc->get_schedule();
         // // display all jobs
         // For (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
@@ -384,7 +393,7 @@ void CpuPseudoContinuous::compute_statistics(
             int n_aggregated     = std::get<3>(segment_info);
 
             single_polymer_partitions[p]= cb->inner_product(
-                propagator_v, propagator_u)/n_aggregated/cb->get_volume();
+                propagator_v, propagator_u)/n_aggregated/this->accessible_volume;
         }
 
         // Calculate segment concentrations
@@ -449,7 +458,7 @@ void CpuPseudoContinuous::compute_statistics(
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
 
-            single_solvent_partitions[s] = cb->inner_product(exp_dw[monomer_type], exp_dw[monomer_type])/cb->get_volume();
+            single_solvent_partitions[s] = cb->inner_product(exp_dw[monomer_type], exp_dw[monomer_type])/this->accessible_volume;
             for(int i=0; i<M; i++)
                 phi_[i] = (exp_dw[monomer_type][i]*exp_dw[monomer_type][i])*volume_fraction/single_solvent_partitions[s];
         }

@@ -478,6 +478,16 @@ void CudaPseudoDiscrete::compute_statistics(
             }
         }
 
+        gpu_error_check(cudaSetDevice(0));
+        if(q_mask == nullptr)
+        {
+            this->accessible_volume = cb->get_volume();
+        }
+        else
+        {
+            this->accessible_volume = cb->integral_device(d_q_mask[0]);
+        }
+
         // Compute exp_dw
         for(const auto& item: w_input)
         {
@@ -836,7 +846,7 @@ void CudaPseudoDiscrete::compute_statistics(
             single_polymer_partitions[p] = cb->inner_product_inverse_weight_device(
                 d_propagator_v,  // q
                 d_propagator_u, // q^dagger
-                d_exp_dw[0][monomer_type])/n_aggregated/cb->get_volume();
+                d_exp_dw[0][monomer_type])/n_aggregated/this->accessible_volume;
         }
 
         // Calculate segment concentrations
@@ -890,7 +900,7 @@ void CudaPseudoDiscrete::compute_statistics(
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
 
-            single_solvent_partitions[s] = cb->integral_device(d_exp_dw[0][monomer_type])/cb->get_volume();
+            single_solvent_partitions[s] = cb->integral_device(d_exp_dw[0][monomer_type])/this->accessible_volume;
             linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_phi_, d_exp_dw[0][monomer_type], volume_fraction/single_solvent_partitions[s], 0.0, M);
         }
         gpu_error_check(cudaSetDevice(0));
@@ -1548,7 +1558,7 @@ bool CudaPseudoDiscrete::check_total_partition()
         {
             double total_partition = cb->inner_product_inverse_weight_device(
                 d_propagator[dep_v][(n_segment_original-n_segment_offset-n-1)],
-                d_propagator[dep_u][n], d_exp_dw[0][monomer_type])/n_aggregated/cb->get_volume();
+                d_propagator[dep_u][n], d_exp_dw[0][monomer_type])/n_aggregated/this->accessible_volume;
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);

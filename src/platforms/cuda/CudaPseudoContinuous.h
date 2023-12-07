@@ -84,6 +84,9 @@ private:
     // Solvent concentrations
     std::vector<double *> d_phi_solvent;
 
+    // Accessible volume of polymers excluding mask region
+    double accessible_volume;
+
     // GPU arrays for pseudo-spectral
     std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // Boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // Boltzmann factor for the half bond

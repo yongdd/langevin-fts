@@ -205,6 +205,15 @@ void CpuPseudoDiscrete::compute_statistics(
                 exp_dw[monomer_type][i] = exp(-w[i]*ds);
         }
 
+        if(q_mask == nullptr)
+        {
+            this->accessible_volume = cb->get_volume();
+        }
+        else
+        {
+            this->accessible_volume = cb->integral(q_mask);
+        }
+
         // For each time span
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
@@ -386,7 +395,7 @@ void CpuPseudoDiscrete::compute_statistics(
             int n_aggregated         = std::get<4>(segment_info);
 
             single_polymer_partitions[p]= cb->inner_product_inverse_weight(
-                propagator_v, propagator_u, exp_dw[monomer_type])/n_aggregated/cb->get_volume();
+                propagator_v, propagator_u, exp_dw[monomer_type])/n_aggregated/this->accessible_volume;
         }
 
         // Calculate segment concentrations
@@ -445,7 +454,7 @@ void CpuPseudoDiscrete::compute_statistics(
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
 
-            single_solvent_partitions[s] = cb->integral(exp_dw[monomer_type])/cb->get_volume();
+            single_solvent_partitions[s] = cb->integral(exp_dw[monomer_type])/this->accessible_volume;
             for(int i=0; i<M; i++)
                 phi_[i] = exp_dw[monomer_type][i]*volume_fraction/single_solvent_partitions[s];
         }
@@ -910,7 +919,7 @@ bool CpuPseudoDiscrete::check_total_partition()
         {
             double total_partition = cb->inner_product_inverse_weight(
                 &propagator[dep_v][(n_segment_original-n_segment_offset-n-1)*M],
-                &propagator[dep_u][n*M], exp_dw[monomer_type])/n_aggregated/cb->get_volume();
+                &propagator[dep_u][n*M], exp_dw[monomer_type])/n_aggregated/this->accessible_volume;
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
