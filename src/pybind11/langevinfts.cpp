@@ -58,10 +58,10 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_dv", &ComputationBox::get_dv)
         .def("get_n_grid", &ComputationBox::get_n_grid)
         .def("get_volume", &ComputationBox::get_volume)
-        .def("set_lx", &ComputationBox::set_lx);
-        // .def("integral", overload_cast_<py::array_t<double>>()(&ComputationBox::integral))
-        // .def("inner_product", overload_cast_<py::array_t<double>,py::array_t<double>>()(&ComputationBox::inner_product))
-        // .def("multi_inner_product", overload_cast_<int,py::array_t<double>,py::array_t<double>>()(&ComputationBox::multi_inner_product))
+        .def("set_lx", &ComputationBox::set_lx)
+        .def("integral", &ComputationBox::integral)
+        .def("inner_product", &ComputationBox::inner_product)
+        .def("multi_inner_product", &ComputationBox::multi_inner_product);
         // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
         // // Methods for pybind11
         // double integral(py::array_t<double> g) {

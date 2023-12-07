@@ -50,7 +50,7 @@ class Adam:
         return w_new
 
 class SCFT:
-    def __init__(self, params, phi_target=None):
+    def __init__(self, params):
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -58,74 +58,69 @@ class SCFT:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
-        # Flory-Huggins parameters, χN
-        self.chi_n = {}
-        for pair_chi_n in params["chi_n"]:
-            assert(pair_chi_n[0] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[0]}' is not in 'segment_lengths'."
-            assert(pair_chi_n[1] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
-            assert(len(set(pair_chi_n[0:2])) == 2), \
-                "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
-            assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
-                f"There are duplicated χN ({pair_chi_n[0:2]}) parameters."
-            self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
+        # # Flory-Huggins parameters, χN
+        # self.chi_n = {}
+        # for pair_chi_n in params["chi_n"]:
+        #     assert(pair_chi_n[0] in params["segment_lengths"]), \
+        #         f"Monomer type '{pair_chi_n[0]}' is not in 'segment_lengths'."
+        #     assert(pair_chi_n[1] in params["segment_lengths"]), \
+        #         f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
+        #     assert(len(set(pair_chi_n[0:2])) == 2), \
+        #         "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
+        #     assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
+        #         f"There are duplicated χN ({pair_chi_n[0:2]}) parameters."
+        #     self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
 
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            if not frozenset(list(monomer_pair)) in self.chi_n:
-                self.chi_n[frozenset(list(monomer_pair))] = 0.0
+        # for monomer_pair in itertools.combinations(self.monomer_types, 2):
+        #     if not frozenset(list(monomer_pair)) in self.chi_n:
+        #         self.chi_n[frozenset(list(monomer_pair))] = 0.0
 
         # Exchange mapping matrix.
         # See paper *J. Chem. Phys.* **2014**, 141, 174103
         S = len(self.monomer_types)
-        self.matrix_o = np.zeros((S-1,S-1))
-        self.matrix_a = np.zeros((S,S))
-        self.matrix_a_inv = np.zeros((S,S))
-        self.vector_s = np.zeros(S-1)
+        # self.matrix_o = np.zeros((S-1,S-1))
+        # self.matrix_a = np.zeros((S,S))
+        # self.matrix_a_inv = np.zeros((S,S))
+        # self.vector_s = np.zeros(S-1)
 
-        for i in range(S-1):
-            key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
-            self.vector_s[i] = self.chi_n[key]
+        # for i in range(S-1):
+        #     key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
+        #     self.vector_s[i] = self.chi_n[key]
 
-        matrix_chi = np.zeros((S,S))
-        matrix_chin = np.zeros((S-1,S-1))
+        # matrix_chi = np.zeros((S,S))
+        # matrix_chin = np.zeros((S-1,S-1))
 
-        for i in range(S):
-            for j in range(i+1,S):
-                key = frozenset([self.monomer_types[i], self.monomer_types[j]])
-                if key in self.chi_n:
-                    matrix_chi[i,j] = self.chi_n[key]
-                    matrix_chi[j,i] = self.chi_n[key]
+        # for i in range(S):
+        #     for j in range(i+1,S):
+        #         key = frozenset([self.monomer_types[i], self.monomer_types[j]])
+        #         if key in self.chi_n:
+        #             matrix_chi[i,j] = self.chi_n[key]
+        #             matrix_chi[j,i] = self.chi_n[key]
         
-        for i in range(S-1):
-            for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
+        # for i in range(S-1):
+        #     for j in range(S-1):
+        #         matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
 
-        self.matrix_chi = matrix_chi
+        # self.matrix_chi = matrix_chi
 
-        # print(matrix_chi)
-        # print(matrix_chin)
+        # # print(matrix_chi)
+        # # print(matrix_chin)
 
-        self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
+        # self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
 
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
-        self.matrix_a[:,S-1] = 1
-        self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
-        for i in range(S-1):
-            self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
-            self.matrix_a_inv[S-1,S-1] = 1
+        # # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
+        # self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
+        # self.matrix_a[:,S-1] = 1
+        # self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
+        # for i in range(S-1):
+        #     self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
+        #     self.matrix_a_inv[S-1,S-1] = 1
 
-        # Matrix for field residuals.
-        # See *J. Chem. Phys.* **2017**, 146, 244902
-        if phi_target is None:
-            phi_target = np.ones(params["nx"])
-        self.phi_target = np.reshape(phi_target, (-1))
-        
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        self.residual_phi_target = self.phi_target/np.sum(matrix_chi_inv)
-        # print(self.matrix_p)
+        # # Matrix for field residuals.
+        # # See *J. Chem. Phys.* **2017**, 146, 244902
+        # matrix_chi_inv = np.linalg.inv(matrix_chi)
+        # self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        # # print(self.matrix_p)
 
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -280,9 +275,9 @@ class SCFT:
         for monomer_pair in itertools.combinations(self.monomer_types,2):
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
 
-        print("χN: ")
-        for pair in self.chi_n:
-            print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
+        # print("χN: ")
+        # for pair in self.chi_n:
+        #     print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
 
         for p in range(molecules.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
@@ -291,15 +286,15 @@ class SCFT:
                  molecules.get_polymer(p).get_alpha(),
                  molecules.get_polymer(p).get_n_segment_total()))
 
-        print("------- Matrices and Vectors for chin parameters -------")
-        print("X matrix for chin:\n\t", str(self.matrix_chi).replace("\n", "\n\t"))
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Vector chi_iS:\n\t", str(self.vector_s).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+        # print("------- Matrices and Vectors for chin parameters -------")
+        # print("X matrix for chin:\n\t", str(self.matrix_chi).replace("\n", "\n\t"))
+        # print("Eigenvalues:\n\t", self.exchange_eigenvalues)
+        # print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
+        # print("Vector chi_iS:\n\t", str(self.vector_s).replace("\n", "\n\t"))
+        # print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
+        # print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
+        # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         propagators_analyzer.display_blocks()
         propagators_analyzer.display_propagators()
@@ -318,7 +313,7 @@ class SCFT:
         self.propagators_analyzer = propagators_analyzer
         self.solver = solver
 
-    def save_results(self, path, q_mask=None, phi_target=None):
+    def save_results(self, path, q_mask=None):
         
         # Make a dictionary for w fields
         w_species = {}
@@ -327,14 +322,14 @@ class SCFT:
     
         # Make a dictionary for chi_n
         chi_n_mat = {}
-        for pair_chi_n in self.params["chi_n"]:
-            sorted_name_pair = sorted(pair_chi_n[0:2])
-            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+        # for pair_chi_n in self.params["chi_n"]:
+        #     sorted_name_pair = sorted(pair_chi_n[0:2])
+        #     chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
             
         # Make a dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds, "initial_params": self.params,
-            "eigenvalues": self.exchange_eigenvalues, "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv,
+            # "eigenvalues": self.exchange_eigenvalues, "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv,
             "monomer_types":self.monomer_types}
 
         # Add w fields to the dictionary
@@ -347,8 +342,6 @@ class SCFT:
 
         if q_mask is not None:
             mdic["q_mask"] = q_mask
-        if phi_target is not None:
-            mdic["phi_target"] = phi_target
 
         # phi_total = np.zeros(self.cb.get_n_grid())
         # for name in self.monomer_types:
@@ -361,7 +354,7 @@ class SCFT:
     def run(self, initial_fields, q_init=None, q_mask=None):
 
         # The number of components
-        S = len(self.monomer_types)
+        S = 1 # len(self.monomer_types)
 
         # Assign large initial value for the energy and error
         energy_total = 1.0e20
@@ -372,7 +365,10 @@ class SCFT:
         
         # Scaling rate of total polymer concentration
         q_mask = np.reshape(q_mask, np.prod(self.cb.get_nx()))
-        total_polymer_volume_ratio = np.mean((self.phi_target*q_mask)[np.isclose(q_mask,1.0)])
+        # total_polymer_volume_ratio = np.mean((self.phi_target*q_mask)[np.isclose(q_mask,1.0)])
+        
+        L0 = 2.0
+        lamb = L0**3*np.pi**2/4
         
         #------------------ run ----------------------
         print("---------- Run ----------")
@@ -420,54 +416,71 @@ class SCFT:
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
             # Scaling phi
+            T_mask = 1.0
+            L = self.params["lx"][0] - 2*T_mask
             for monomer_type in self.monomer_types:
-                phi[monomer_type] *= total_polymer_volume_ratio
+                phi[monomer_type] /= L/2
 
-            # Exchange-mapped chemical potential fields
-            w_exchange = np.matmul(self.matrix_a_inv, w)
+            # q_1 = self.solver.get_chain_propagator(0,0,1,0)
+            # q_2 = self.solver.get_chain_propagator(0,1,0,400)
+            
+            # print(np.mean(q_1))
+            # print(np.mean(q_2))
+            # self.solver.check_total_partition()
 
-            # Calculate the total energy
-            energy_total = -np.mean(self.phi_target*q_mask*w_exchange[S-1])
-            for i in range(S-1):
-                energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i]*q_mask,w_exchange[i])/self.cb.get_n_grid()
-            for i in range(S-1):
-                for j in range(S-1):
-                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i]*q_mask)
+            # # Exchange-mapped chemical potential fields
+            # w_exchange = np.matmul(self.matrix_a_inv, w)
 
+            # # # Calculate the total energy
+            # energy_total = -np.mean(self.phi_target*q_mask*w_exchange[S-1])
+            # for i in range(S-1):
+            #     energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i]*q_mask,w_exchange[i])/self.cb.get_n_grid()
+            # for i in range(S-1):
+            #     for j in range(S-1):
+            #         energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i]*q_mask)
+
+            # for p in range(self.molecules.get_n_polymer_types()):
+            #     energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
+            #                     self.molecules.get_polymer(p).get_alpha() * \
+            #                     np.log(self.solver.get_total_partition(p))
+
+            energy_total = -np.mean(q_mask*w[0]*phi["A"])/2
             for p in range(self.molecules.get_n_polymer_types()):
                 energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
                                 self.molecules.get_polymer(p).get_alpha() * \
-                                np.log(self.solver.get_total_partition(p))
+                                np.log(self.solver.get_total_partition(p))   
 
-            # Calculate difference between current total density and target density
+            # # Calculate difference between current total density and target density
             phi_total = np.zeros(self.cb.get_n_grid())
             for i in range(S):
                 phi_total += phi[self.monomer_types[i]]
-            phi_diff = phi_total-self.phi_target
+            # phi_diff = phi_total-self.phi_target
+            # print(np.mean(phi_total))
 
-            # Calculate self-consistency error
+            # # Calculate self-consistency error
             w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
-            for i in range(S):
-                for j in range(S):
-                    w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
-                w_diff[i,:] -= self.residual_phi_target
+            # for i in range(S):
+            #     for j in range(S):
+            #         w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
+            #     w_diff[i,:] -= self.residual_phi_target
 
-            # Keep the level of functional derivatives
-            for i in range(S):
-                w_diff[i] *= q_mask
-                w_diff[i] -= np.mean(w_diff[i]*q_mask)
+            # # Keep the level of functional derivatives
+            # for i in range(S):
+            #     w_diff[i] *= q_mask
+            #     w_diff[i] -= np.mean(w_diff[i]*q_mask)
+            w_diff[0,:] = (lamb*phi["A"] - w[0,:])*q_mask
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
-                error_level += np.dot(w_diff[i],w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
-                error_normal += np.dot(w[i],w[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_level += np.dot(w_diff[i]*q_mask,w_diff[i]*q_mask)*self.cb.get_volume()/self.cb.get_n_grid()
+                error_normal += np.dot(w[i]*q_mask,w[i]*q_mask)*self.cb.get_volume()/self.cb.get_n_grid()
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
-            mass_error = np.mean(phi_diff)
+            mass_error = 0.0 # np.mean(phi_diff)
             
             if (self.box_is_altering):
                 # Calculate stress
