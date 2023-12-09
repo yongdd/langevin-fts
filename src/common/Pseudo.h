@@ -11,12 +11,20 @@
 
 #include "Exception.h"
 #include "ComputationBox.h"
+#include "Molecules.h"
 
 class Pseudo
 {
-private:
-    ComputationBox *cb;
+protected:
     int n_complex_grid;
+
+    ComputationBox *cb;
+    Molecules *molecules;
+
+public:
+    Pseudo(ComputationBox *cb);
+    virtual ~Pseudo() {};
+    virtual void update_bond_function() = 0;
 
     void get_boltz_bond(double *boltz_bond, double bond_length_variance,
         std::vector<int> nx, std::vector<double> dx, double ds);
@@ -24,9 +32,5 @@ private:
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
 
-public:
-    Pseudo(ComputationBox *cb);
-    virtual ~Pseudo() {};
-    virtual void update_bond_function() = 0;
 };
 #endif

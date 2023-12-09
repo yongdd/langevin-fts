@@ -53,7 +53,7 @@ void CudaComputationBox::set_lx(std::vector<double> new_lx)
     gpu_error_check(cudaMemcpy(d_dv, dv,  sizeof(double)*n_grid,cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------
-double CudaComputationBox::integral_device(double *d_g)
+double CudaComputationBox::integral_device(const double *d_g)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -65,7 +65,7 @@ double CudaComputationBox::integral_device(double *d_g)
     return sum;
 }
 //-----------------------------------------------------------
-double CudaComputationBox::inner_product_device(double* d_g, double* d_h)
+double CudaComputationBox::inner_product_device(const double* d_g, const double* d_h)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -78,7 +78,7 @@ double CudaComputationBox::inner_product_device(double* d_g, double* d_h)
     return sum;
 }
 //-----------------------------------------------------------
-double CudaComputationBox::inner_product_inverse_weight_device(double* d_g, double* d_h, double* d_w)
+double CudaComputationBox::inner_product_inverse_weight_device(const double* d_g, const double* d_h, const double* d_w)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
@@ -92,7 +92,7 @@ double CudaComputationBox::inner_product_inverse_weight_device(double* d_g, doub
     return sum;
 }
 //-----------------------------------------------------------
-double CudaComputationBox::multi_inner_product_device(int n_comp, double* d_g, double* d_h)
+double CudaComputationBox::multi_inner_product_device(int n_comp, const double* d_g, const double* d_h)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();

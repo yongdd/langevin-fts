@@ -34,10 +34,10 @@ public:
     void set_lx(std::vector<double> new_lx) override;
 
     // Methods with device array
-    double integral_device(double *d_g) override;
-    double inner_product_device(double *d_g, double *d_h) override;
-    double inner_product_inverse_weight_device(double *d_g, double *d_h, double *d_w) override;
-    double multi_inner_product_device(int n_comp, double *d_g, double *d_h) override;
+    double integral_device(const double *d_g) override;
+    double inner_product_device(const double *d_g, const double *d_h) override;
+    double inner_product_inverse_weight_device(const double *d_g, const double *d_h, const double *d_w) override;
+    double multi_inner_product_device(int n_comp, const double *d_g, const double *d_h) override;
     void zero_mean_device(double *d_g) override;
 };
 #endif

@@ -148,7 +148,7 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
 }
 //-----------------------------------------------------------
 // This method calculates integral of g
-double ComputationBox::integral(double *g)
+double ComputationBox::integral(const double *g)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
@@ -156,7 +156,7 @@ double ComputationBox::integral(double *g)
     return sum;
 }
 // This method calculates inner product g and h
-double ComputationBox::inner_product(double *g, double *h)
+double ComputationBox::inner_product(const double *g, const double *h)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
@@ -164,7 +164,7 @@ double ComputationBox::inner_product(double *g, double *h)
     return sum;
 }
 // This method calculates inner product g and h with weight 1/w
-double ComputationBox::inner_product_inverse_weight(double *g, double *h, double *w)
+double ComputationBox::inner_product_inverse_weight(const double *g, const double *h, const double *w)
 {
     double sum{0.0};
     for(int i=0; i<n_grid; i++)
@@ -172,7 +172,7 @@ double ComputationBox::inner_product_inverse_weight(double *g, double *h, double
     return sum;
 }
 //-----------------------------------------------------------
-double ComputationBox::multi_inner_product(int n_comp, double *g, double *h)
+double ComputationBox::multi_inner_product(int n_comp, const double *g, const double *h)
 {
     double sum{0.0};
     for(int n=0; n < n_comp; n++)
