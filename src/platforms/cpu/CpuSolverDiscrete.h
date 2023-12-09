@@ -14,19 +14,14 @@
 #include "Molecules.h"
 #include "PropagatorsAnalyzer.h"
 #include "Solver.h"
-#include "FFT.h"
+#include "CpuPseudo.h"
 #include "Scheduler.h"
 
 class CpuSolverDiscrete : public Solver
 {
 private:
-    FFT *fft;
-
-    // For stress calculation: compute_stress()
-    double *fourier_basis_x;
-    double *fourier_basis_y;
-    double *fourier_basis_z;
-
+    // Pseudo-spectral integral solver
+    CpuPseudo *propagator_solver;
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
@@ -58,21 +53,10 @@ private:
     // Accessible volume of polymers excluding mask region
     double accessible_volume;
 
-    // Arrays for pseudo-spectral
-    std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
-    std::map<std::string, double*> boltz_bond_half;   // Boltzmann factor for the half bond
-    std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
-
-    // Advance propagator by one segment step
-    void advance_propagator(double *q_in, double *q_out, double *boltz_bond, double *exp_dw, double* q_mask);
-
-    // Advance propagator by half bond step
-    void advance_propagator_half_bond_step(double *q_in, double *q_out, double *boltz_bond_half);
-
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double *q_1, double *q_2, double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
+    void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-    CpuSolverDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer, FFT *fft);
+    CpuSolverDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer);
     ~CpuSolverDiscrete();
     
     void update_bond_function() override;

@@ -113,7 +113,7 @@ void CudaCommon::set_idx(int process_idx)
 }
 
 __global__ void linear_scaling_real(
-            double* dst, double* src, double a, double b, const int M)
+            double* dst, const double* src, double a, double b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -124,7 +124,7 @@ __global__ void linear_scaling_real(
 }
 
 __global__ void exp_real(double* dst,
-                        double* src,
+                        const double* src,
                         double  a, 
                         double  exp_b, const int M)
 {
@@ -137,8 +137,8 @@ __global__ void exp_real(double* dst,
 }
 
 __global__ void multi_real(double* dst,
-                          double* src1,
-                          double* src2,
+                          const double* src1,
+                          const double* src2,
                           double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -151,8 +151,8 @@ __global__ void multi_real(double* dst,
 
 __global__ void mutiple_multi_real(int n_comp,
                           double* dst,
-                          double* src1,
-                          double* src2,
+                          const double* src1,
+                          const double* src2,
                           double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -166,8 +166,8 @@ __global__ void mutiple_multi_real(int n_comp,
 }
 
 __global__ void divide_real(double* dst,
-                          double* src1,
-                          double* src2,
+                          const double* src1,
+                          const double* src2,
                           double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -178,8 +178,8 @@ __global__ void divide_real(double* dst,
     }
 }
 __global__ void add_multi_real(double* dst,
-                             double* src1,
-                             double* src2,
+                             const double* src1,
+                             const double* src2,
                              double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -192,9 +192,9 @@ __global__ void add_multi_real(double* dst,
 
 __global__ void lin_comb(double* dst,
                         double a,
-                        double* src1,
+                        const double* src1,
                         double b,
-                        double* src2,
+                        const double* src2,
                         const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -207,9 +207,9 @@ __global__ void lin_comb(double* dst,
 
 __global__ void add_lin_comb(double* dst,
                            double a,
-                           double* src1,
+                           const double* src1,
                            double b,
-                           double* src2,
+                           const double* src2,
                            const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -221,7 +221,7 @@ __global__ void add_lin_comb(double* dst,
 }
 
 __global__ void multi_complex_real(ftsComplex* dst,
-                                 double* src, const int M)
+                                   const double* src, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -233,7 +233,7 @@ __global__ void multi_complex_real(ftsComplex* dst,
 }
 
 __global__ void multi_complex_real(ftsComplex* dst,
-                                 double* src, double a, const int M)
+                                  const double* src, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -245,8 +245,8 @@ __global__ void multi_complex_real(ftsComplex* dst,
 }
 
 __global__ void multi_complex_conjugate(double* dst,
-                                 ftsComplex* src1,
-                                 ftsComplex* src2, const int M)
+                                 const ftsComplex* src1,
+                                 const ftsComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -257,8 +257,8 @@ __global__ void multi_complex_conjugate(double* dst,
 }
 
 __global__ void real_multi_exp_dw_two(
-                        double* dst1, double* src1, double* exp_dw1,
-                        double* dst2, double* src2, double* exp_dw2,
+                        double* dst1, const double* src1, const double* exp_dw1,
+                        double* dst2, const double* src2, const double* exp_dw2,
                         double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -271,10 +271,10 @@ __global__ void real_multi_exp_dw_two(
 }
 
 __global__ void real_multi_exp_dw_four(
-                        double* dst1, double* src1, double* exp_dw1,
-                        double* dst2, double* src2, double* exp_dw2,
-                        double* dst3, double* src3, double* exp_dw3,
-                        double* dst4, double* src4, double* exp_dw4,
+                        double* dst1, const double* src1, const double* exp_dw1,
+                        double* dst2, const double* src2, const double* exp_dw2,
+                        double* dst3, const double* src3, const double* exp_dw3,
+                        double* dst4, const double* src4, const double* exp_dw4,
                         double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -289,8 +289,8 @@ __global__ void real_multi_exp_dw_four(
 }
 
 __global__ void complex_real_multi_bond_two(
-                        ftsComplex* dst1, double* boltz_bond1,
-                        ftsComplex* dst2, double* boltz_bond2,
+                        ftsComplex* dst1, const double* boltz_bond1,
+                        ftsComplex* dst2, const double* boltz_bond2,
                         const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -305,10 +305,10 @@ __global__ void complex_real_multi_bond_two(
 }
 
 __global__ void complex_real_multi_bond_four(
-                        ftsComplex* dst1, double* boltz_bond1,
-                        ftsComplex* dst2, double* boltz_bond2,
-                        ftsComplex* dst3, double* boltz_bond3,
-                        ftsComplex* dst4, double* boltz_bond4,
+                        ftsComplex* dst1, const double* boltz_bond1,
+                        ftsComplex* dst2, const double* boltz_bond2,
+                        ftsComplex* dst3, const double* boltz_bond3,
+                        ftsComplex* dst4, const double* boltz_bond4,
                         const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

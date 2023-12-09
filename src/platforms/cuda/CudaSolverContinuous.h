@@ -2,8 +2,8 @@
 * This is a derived CudaSolverContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_CONTINUOUS_H_
-#define CUDA_PSEUDO_CONTINUOUS_H_
+#ifndef CUDA_SOLVER_CONTINUOUS_H_
+#define CUDA_SOLVER_CONTINUOUS_H_
 
 #include <array>
 #include <cufft.h>

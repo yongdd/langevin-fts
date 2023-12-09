@@ -1,13 +1,13 @@
 #include <cmath>
 
 #include "CpuSolverContinuous.h"
+#include "CpuPseudo.h"
 #include "SimpsonRule.h"
 
 CpuSolverContinuous::CpuSolverContinuous(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorsAnalyzer *propagators_analyzer,
-    FFT *fft)
+    PropagatorsAnalyzer *propagators_analyzer)
     : Solver(cb, molecules, propagators_analyzer)
 {
     try
@@ -15,7 +15,7 @@ CpuSolverContinuous::CpuSolverContinuous(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
         this->propagators_analyzer = propagators_analyzer;
-        this->fft = fft;
+        this->propagator_solver = new CpuPseudo(cb, molecules);
 
         // Allocate memory for propagators
         if( propagators_analyzer->get_essential_propagator_codes().size() == 0)
@@ -40,21 +40,6 @@ CpuSolverContinuous::CpuSolverContinuous(
         {
             phi_block[item.first] = new double[M];
         }
-
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
-        for(const auto& item: molecules->get_bond_lengths())
-        {
-            std::string monomer_type = item.first;
-            boltz_bond     [monomer_type] = new double[M_COMPLEX];
-            boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
-            exp_dw         [monomer_type] = new double[M];
-            exp_dw_half    [monomer_type] = new double[M]; 
-        }
-
-        // Allocate memory for stress calculation: compute_stress()
-        fourier_basis_x = new double[M_COMPLEX];
-        fourier_basis_y = new double[M_COMPLEX];
-        fourier_basis_z = new double[M_COMPLEX];
 
         // Total partition functions for each polymer
         single_polymer_partitions = new double[molecules->get_n_polymer_types()];
@@ -101,7 +86,7 @@ CpuSolverContinuous::CpuSolverContinuous(
         // Create scheduler for computation of propagator
         sc = new Scheduler(propagators_analyzer->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
 
-        update_bond_function();
+        propagator_solver->update_bond_function();
     }
     catch(std::exception& exc)
     {
@@ -110,24 +95,12 @@ CpuSolverContinuous::CpuSolverContinuous(
 }
 CpuSolverContinuous::~CpuSolverContinuous()
 {
-    delete fft;
+    delete propagator_solver;
     delete sc;
-
-    delete[] fourier_basis_x;
-    delete[] fourier_basis_y;
-    delete[] fourier_basis_z;
 
     delete[] single_polymer_partitions;
     delete[] single_solvent_partitions;
 
-    for(const auto& item: boltz_bond)
-        delete[] item.second;
-    for(const auto& item: boltz_bond_half)
-        delete[] item.second;
-    for(const auto& item: exp_dw)
-        delete[] item.second;
-    for(const auto& item: exp_dw_half)
-        delete[] item.second;
     for(const auto& item: propagator)
         delete[] item.second;
     for(const auto& item: phi_block)
@@ -144,16 +117,7 @@ void CpuSolverContinuous::update_bond_function()
 {
     try
     {
-        for(const auto& item: molecules->get_bond_lengths())
-        {
-            std::string monomer_type = item.first;
-            double bond_length_sq = item.second*item.second;
-            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
-            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
-
-            // For stress calculation: compute_stress()
-            get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
-        }
+        propagator_solver->update_bond_function();
     }
     catch(std::exception& exc)
     {
@@ -168,7 +132,6 @@ void CpuSolverContinuous::compute_statistics(
     try
     {
         const int M = cb->get_n_grid();
-        const double ds = molecules->get_ds();
 
         for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
         {
@@ -176,25 +139,10 @@ void CpuSolverContinuous::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        for(const auto& item: w_input)
-        {
-            if( exp_dw.find(item.first) == exp_dw.end())
-                throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");     
-        }
-
         // If( q_init.size() > 0)
         //     throw_with_line_number("Currently, \'q_init\' is not supported.");
 
-        for(const auto& item: w_input)
-        {
-            std::string monomer_type = item.first;
-            const double *w = item.second;
-            for(int i=0; i<M; i++)
-            { 
-                exp_dw     [monomer_type][i] = exp(-w[i]*ds*0.5);
-                exp_dw_half[monomer_type][i] = exp(-w[i]*ds*0.25);
-            }
-        }
+        propagator_solver->initialize(w_input);
 
         if(q_mask == nullptr)
         {
@@ -341,13 +289,10 @@ void CpuSolverContinuous::compute_statistics(
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                     #endif
                     
-                    advance_propagator(&_propagator[(n-1)*M],
+                    propagator_solver->advance_propagator_continuous(
+                            &_propagator[(n-1)*M],
                             &_propagator[n*M],
-                            boltz_bond[monomer_type],
-                            boltz_bond_half[monomer_type],
-                            exp_dw[monomer_type],
-                            exp_dw_half[monomer_type],
-                            q_mask);
+                            monomer_type, q_mask);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
@@ -437,7 +382,7 @@ void CpuSolverContinuous::compute_statistics(
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
-                block->second,             // Phi
+                block->second,             // phi
                 propagator[dep_v],  // dependency v
                 propagator[dep_u],  // dependency u
                 n_segment_allocated,
@@ -454,81 +399,21 @@ void CpuSolverContinuous::compute_statistics(
         // Calculate partition functions and concentrations of solvents
         for(size_t s=0; s<molecules->get_n_solvent_types(); s++)
         {
-            double *phi_ = phi_solvent[s];
+            const double ds = molecules->get_ds();
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
 
-            single_solvent_partitions[s] = cb->inner_product(exp_dw[monomer_type], exp_dw[monomer_type])/this->accessible_volume;
+            double exp_dw[M];
+            double *_phi = phi_solvent[s];
+            const double *w_input_ = w_input[monomer_type];
             for(int i=0; i<M; i++)
-                phi_[i] = (exp_dw[monomer_type][i]*exp_dw[monomer_type][i])*volume_fraction/single_solvent_partitions[s];
+                exp_dw[i] = exp(-w_input_[i]*ds);
+
+            single_solvent_partitions[s] = cb->integral(exp_dw)/this->accessible_volume;
+            for(int i=0; i<M; i++)
+                _phi[i] = exp_dw[i]*volume_fraction/single_solvent_partitions[s];
         }
 
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CpuSolverContinuous::advance_propagator(double *q_in, double *q_out,
-                                 double *boltz_bond, double *boltz_bond_half,
-                                 double *exp_dw, double *exp_dw_half,
-                                 double *q_mask)
-{
-    try
-    {
-        const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
-        double q_out1[M], q_out2[M];
-        std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
-
-        // step 1
-        for(int i=0; i<M; i++)
-            q_out1[i] = exp_dw[i]*q_in[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out1,k_q_in1);
-        // Multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in1[i] *= boltz_bond[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in1,q_out1);
-        // Normalization calculation and evaluate exp(-w*ds/2) in real space
-        for(int i=0; i<M; i++)
-            q_out1[i] *= exp_dw[i];
-
-        // step 2
-        // Evaluate exp(-w*ds/4) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] = exp_dw_half[i]*q_in[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out2,k_q_in2);
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in2[i] *= boltz_bond_half[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in2,q_out2);
-        // Normalization calculation and evaluate exp(-w*ds/2) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] *= exp_dw[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out2,k_q_in2);
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in2[i] *= boltz_bond_half[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in2,q_out2);
-        // Normalization calculation and evaluate exp(-w*ds/4) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] *= exp_dw_half[i];
-
-        for(int i=0; i<M; i++)
-            q_out[i] = (4.0*q_out2[i] - q_out1[i])/3.0;
-
-        // Multiply mask
-        if (q_mask != nullptr)
-        {
-            for(int i=0; i<M; i++)
-                q_out[i] *= q_mask[i];
-        }
     }
     catch(std::exception& exc)
     {
@@ -711,7 +596,6 @@ std::vector<double> CpuSolverContinuous::compute_stress()
     {
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
 
         auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
@@ -751,48 +635,20 @@ std::vector<double> CpuSolverContinuous::compute_stress()
             else
                 n_repeated = 1;
 
-            std::complex<double> qk_1[M_COMPLEX];
-            std::complex<double> qk_2[M_COMPLEX];
-
             double *q_1 = propagator[dep_v];    // dependency v
             double *q_2 = propagator[dep_u];    // dependency u
 
-            double coeff;
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
             double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-    
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // Compute
             for(int n=0; n<=N; n++)
             {
-                fft->forward(&q_1[(N_ORIGINAL-N_OFFSET-n)*M], qk_1);
-                fft->forward(&q_2[n*M], qk_2);
-
-                if ( DIM == 3 )
-                {
-                    for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _block_dq_dl[0] += coeff*fourier_basis_x[i];
-                        _block_dq_dl[1] += coeff*fourier_basis_y[i];
-                        _block_dq_dl[2] += coeff*fourier_basis_z[i];
-                    }
-                }
-                if ( DIM == 2 )
-                {
-                    for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _block_dq_dl[0] += coeff*fourier_basis_y[i];
-                        _block_dq_dl[1] += coeff*fourier_basis_z[i];
-                    }
-                }
-                if ( DIM == 1 )
-                {
-                    for(int i=0; i<M_COMPLEX; i++){
-                        coeff = s_coeff[n]*bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real()*n_repeated;
-                        _block_dq_dl[0] += coeff*fourier_basis_z[i];
-                    }
-                }
+                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_continuous(
+                    &q_1[(N_ORIGINAL-N_OFFSET-n)*M], &q_2[n*M], bond_length_sq);
+                for(int d=0; d<DIM; d++)
+                    _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
             }
             block_dq_dl[key] = _block_dq_dl;
         }

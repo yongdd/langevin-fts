@@ -498,7 +498,7 @@ void CudaSolverReduceMemoryDiscrete::compute_statistics(
             this->accessible_volume = cb->integral_device(d_q_mask[0]);
         }
 
-        // Exp_dw
+        // exp_dw
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
@@ -1021,7 +1021,7 @@ void CudaSolverReduceMemoryDiscrete::compute_statistics(
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
-                block.second,               // Phi
+                block.second,               // phi
                 propagator[dep_v],          // dependency v
                 propagator[dep_u],          // dependency u
                 d_exp_dw[0][monomer_type],  // exp_dw

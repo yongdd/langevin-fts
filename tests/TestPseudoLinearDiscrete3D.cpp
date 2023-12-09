@@ -11,7 +11,6 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
-#include "MklFFT3D.h"
 #include "CpuSolverDiscrete.h"
 #endif
 #ifdef USE_CUDA
@@ -183,7 +182,7 @@ int main()
 
         std::vector<Solver*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuSolverDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuSolverDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
         #endif
         #ifdef USE_CUDA
         solver_list.push_back(new CudaSolverDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));

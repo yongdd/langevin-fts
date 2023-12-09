@@ -879,7 +879,7 @@ void CudaSolverDiscrete::compute_statistics(
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
-                block.second,              // Phi
+                block.second,              // phi
                 d_propagator[dep_v],       // dependency v
                 d_propagator[dep_u],       // dependency u
                 d_exp_dw[0][monomer_type], // exp_dw
