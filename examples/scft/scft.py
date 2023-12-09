@@ -50,7 +50,7 @@ class Adam:
         return w_new
 
 class SCFT:
-    def __init__(self, params, phi_target=None):
+    def __init__(self, params, phi_target=None, q_mask=None):
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -121,12 +121,18 @@ class SCFT:
         if phi_target is None:
             phi_target = np.ones(params["nx"])
         self.phi_target = np.reshape(phi_target, (-1))
-        
+
         matrix_chi_inv = np.linalg.inv(matrix_chi)
         self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        self.residual_phi_target = self.phi_target/np.sum(matrix_chi_inv)
+        self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
         # print(self.matrix_p)
 
+        # Scaling rate of total polymer concentration
+        if q_mask is None:
+            self.q_mask = np.ones(params["nx"])
+        self.q_mask = np.reshape(self.q_mask, (-1))
+        self.phi_rescaling = np.mean((self.phi_target*self.q_mask)[np.isclose(self.q_mask, 1.0)])
+        
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
             "There is no polymer chain."
@@ -318,7 +324,7 @@ class SCFT:
         self.propagators_analyzer = propagators_analyzer
         self.solver = solver
 
-    def save_results(self, path, q_mask=None, phi_target=None):
+    def save_results(self, path):
         
         # Make a dictionary for w fields
         w_species = {}
@@ -345,10 +351,10 @@ class SCFT:
         for name in self.monomer_types:
             mdic["phi_" + name] = self.phi[name]
 
-        if q_mask is not None:
-            mdic["q_mask"] = q_mask
-        if phi_target is not None:
-            mdic["phi_target"] = phi_target
+        if self.q_mask is not None:
+            mdic["q_mask"] = self.q_mask
+        if self.phi_target is not None:
+            mdic["phi_target"] = self.phi_target
 
         # phi_total = np.zeros(self.cb.get_n_grid())
         # for name in self.monomer_types:
@@ -358,7 +364,7 @@ class SCFT:
         # Save data with matlab format
         savemat(path, mdic, do_compression=True)
 
-    def run(self, initial_fields, q_init=None, q_mask=None):
+    def run(self, initial_fields, q_init=None):
 
         # The number of components
         S = len(self.monomer_types)
@@ -369,10 +375,6 @@ class SCFT:
 
         # Reset Optimizer
         self.field_optimizer.reset_count()
-        
-        # Scaling rate of total polymer concentration
-        q_mask = np.reshape(q_mask, np.prod(self.cb.get_nx()))
-        total_polymer_volume_ratio = np.mean((self.phi_target*q_mask)[np.isclose(q_mask,1.0)])
         
         #------------------ run ----------------------
         print("---------- Run ----------")
@@ -406,7 +408,7 @@ class SCFT:
                     w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
             # For the given fields find the polymer statistics
-            self.solver.compute_statistics(w_input, q_init=q_init, q_mask=q_mask)
+            self.solver.compute_statistics(w_input, q_init=q_init, q_mask=self.q_mask)
 
             # Compute total concentration for each monomer type
             phi = {}
@@ -421,18 +423,18 @@ class SCFT:
 
             # Scaling phi
             for monomer_type in self.monomer_types:
-                phi[monomer_type] *= total_polymer_volume_ratio
+                phi[monomer_type] *= self.phi_rescaling
 
             # Exchange-mapped chemical potential fields
             w_exchange = np.matmul(self.matrix_a_inv, w)
 
             # Calculate the total energy
-            energy_total = -np.mean(self.phi_target*q_mask*w_exchange[S-1])
+            energy_total = -np.mean(self.phi_target*self.q_mask*w_exchange[S-1])
             for i in range(S-1):
-                energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i]*q_mask,w_exchange[i])/self.cb.get_n_grid()
+                energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i]*self.q_mask,w_exchange[i])/self.cb.get_n_grid()
             for i in range(S-1):
                 for j in range(S-1):
-                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i]*q_mask)
+                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i]*self.q_mask)
 
             for p in range(self.molecules.get_n_polymer_types()):
                 energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
@@ -450,20 +452,20 @@ class SCFT:
             for i in range(S):
                 for j in range(S):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
-                w_diff[i,:] -= self.residual_phi_target
+                w_diff[i,:] -= self.phi_target_pressure
 
             # Keep the level of functional derivatives
             for i in range(S):
-                w_diff[i] *= q_mask
-                w_diff[i] -= np.mean(w_diff[i]*q_mask)
+                w_diff[i] *= self.q_mask
+                w_diff[i] -= np.mean(w_diff[i]*self.q_mask)
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
-                error_level += np.dot(w_diff[i],w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
-                error_normal += np.dot(w[i],w[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_level += np.dot(w_diff[i]*self.q_mask,w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_normal += np.dot(w[i]*self.q_mask,w[i])*self.cb.get_volume()/self.cb.get_n_grid()
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
@@ -518,7 +520,8 @@ class SCFT:
                         
             # Keep the level of field value
             for i in range(S):
-                w[i] -= np.mean(w[i])
+                w[i] *= self.q_mask
+                w[i] -= np.mean(w[i]*self.q_mask)
             
         # Store phi and w
         self.phi = phi

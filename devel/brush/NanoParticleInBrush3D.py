@@ -12,15 +12,15 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[360,300,300],          # Simulation grid numbers
+    "nx":[240,200,200],          # Simulation grid numbers
     "lx":[12,10,10],           # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                               # where "a_Ref" is reference statistical segment length
                               # and "N_Ref" is the number of segments of reference linear homopolymer chain.
                               
-    "reduce_gpu_memory_usage":True, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
+    "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
     "box_is_altering":False,    # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "ds":1/30,                 # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0},

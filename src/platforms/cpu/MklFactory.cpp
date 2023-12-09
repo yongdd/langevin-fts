@@ -14,8 +14,8 @@
 #include "MklFFT1D.h"
 #include "CpuArray.h"
 #include "CpuComputationBox.h"
-#include "CpuPseudoContinuous.h"
-#include "CpuPseudoDiscrete.h"
+#include "CpuSolverContinuous.h"
+#include "CpuSolverDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -55,25 +55,25 @@ Solver* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *
     if ( chain_model == "continuous" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoContinuous(cb, molecules, propagators_analyzer,
+            return new CpuSolverContinuous(cb, molecules, propagators_analyzer,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoContinuous(cb, molecules, propagators_analyzer,
+            return new CpuSolverContinuous(cb, molecules, propagators_analyzer,
                 new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoContinuous(cb, molecules, propagators_analyzer,
+            return new CpuSolverContinuous(cb, molecules, propagators_analyzer,
                 new MklFFT1D(cb->get_nx(0)));
     }
     else if ( chain_model == "discrete" )
     {
         if (cb->get_dim() == 3)
-            return new CpuPseudoDiscrete(cb, molecules, propagators_analyzer,
+            return new CpuSolverDiscrete(cb, molecules, propagators_analyzer,
                 new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)}));
         else if (cb->get_dim() == 2)
-            return new CpuPseudoDiscrete(cb, molecules, propagators_analyzer,
+            return new CpuSolverDiscrete(cb, molecules, propagators_analyzer,
                 new MklFFT2D({cb->get_nx(0),cb->get_nx(1)}));
         else if (cb->get_dim() == 1)
-            return new CpuPseudoDiscrete(cb, molecules, propagators_analyzer,
+            return new CpuSolverDiscrete(cb, molecules, propagators_analyzer,
                 new MklFFT1D(cb->get_nx(0)));
     }
     return NULL;
