@@ -475,8 +475,8 @@ class SCFT:
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
-                error_level += np.dot(w_diff[i]*q_mask,w_diff[i]*q_mask)*self.cb.get_volume()/self.cb.get_n_grid()
-                error_normal += np.dot(w[i]*q_mask,w[i]*q_mask)*self.cb.get_volume()/self.cb.get_n_grid()
+                error_level += np.dot(w_diff[i]*q_mask,w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_normal += np.dot(w[i]*q_mask,w[i])*self.cb.get_volume()/self.cb.get_n_grid()
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation

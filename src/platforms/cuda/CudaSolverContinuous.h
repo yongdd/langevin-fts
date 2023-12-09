@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------
-* This is a derived CudaPseudoContinuous class
+* This is a derived CudaSolverContinuous class
 *------------------------------------------------------------*/
 
 #ifndef CUDA_PSEUDO_CONTINUOUS_H_
@@ -15,7 +15,7 @@
 #include "CudaCommon.h"
 #include "Scheduler.h"
 
-class CudaPseudoContinuous : public Solver
+class CudaSolverContinuous : public Solver
 {
 private:
     // Two streams for each gpu
@@ -128,8 +128,8 @@ private:
         double* q_mask=nullptr);
 public:
 
-    CudaPseudoContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
-    ~CudaPseudoContinuous();
+    CudaSolverContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
+    ~CudaSolverContinuous();
 
     void update_bond_function() override;
     void compute_statistics(

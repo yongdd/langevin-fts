@@ -1,10 +1,10 @@
 #include <complex>
 #include <thrust/reduce.h>
 #include <iostream>
-#include "CudaPseudoDiscrete.h"
+#include "CudaSolverDiscrete.h"
 #include "CudaComputationBox.h"
 
-CudaPseudoDiscrete::CudaPseudoDiscrete(
+CudaSolverDiscrete::CudaSolverDiscrete(
     ComputationBox *cb,
     Molecules *molecules,
     PropagatorsAnalyzer *propagators_analyzer)
@@ -298,7 +298,7 @@ CudaPseudoDiscrete::CudaPseudoDiscrete(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoDiscrete::~CudaPseudoDiscrete()
+CudaSolverDiscrete::~CudaSolverDiscrete()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
@@ -385,7 +385,7 @@ CudaPseudoDiscrete::~CudaPseudoDiscrete()
     }
 }
 
-void CudaPseudoDiscrete::update_bond_function()
+void CudaSolverDiscrete::update_bond_function()
 {
     try
     {
@@ -427,7 +427,7 @@ void CudaPseudoDiscrete::update_bond_function()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::compute_statistics(
+void CudaSolverDiscrete::compute_statistics(
     std::string device,
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init,
@@ -910,7 +910,7 @@ void CudaPseudoDiscrete::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::advance_one_propagator(
+void CudaSolverDiscrete::advance_one_propagator(
     const int GPU,
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_exp_dw,
@@ -945,7 +945,7 @@ void CudaPseudoDiscrete::advance_one_propagator(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::advance_two_propagators(
+void CudaSolverDiscrete::advance_two_propagators(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2,  
@@ -992,7 +992,7 @@ void CudaPseudoDiscrete::advance_two_propagators(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::advance_two_propagators_two_gpus(
+void CudaSolverDiscrete::advance_two_propagators_two_gpus(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2,  
@@ -1045,7 +1045,7 @@ void CudaPseudoDiscrete::advance_two_propagators_two_gpus(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::advance_propagator_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, double *d_boltz_bond_half)
+void CudaSolverDiscrete::advance_propagator_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, double *d_boltz_bond_half)
 {
     try
     {
@@ -1067,7 +1067,7 @@ void CudaPseudoDiscrete::advance_propagator_half_bond_step(const int GPU, double
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::calculate_phi_one_block(
+void CudaSolverDiscrete::calculate_phi_one_block(
     double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL)
 {
     try
@@ -1091,7 +1091,7 @@ void CudaPseudoDiscrete::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CudaPseudoDiscrete::get_total_partition(int polymer)
+double CudaSolverDiscrete::get_total_partition(int polymer)
 {
     try
     {
@@ -1102,7 +1102,7 @@ double CudaPseudoDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_total_concentration(std::string monomer_type, double *phi)
+void CudaSolverDiscrete::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -1138,7 +1138,7 @@ void CudaPseudoDiscrete::get_total_concentration(std::string monomer_type, doubl
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
+void CudaSolverDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -1173,7 +1173,7 @@ void CudaPseudoDiscrete::get_total_concentration(int p, std::string monomer_type
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_block_concentration(int p, double *phi)
+void CudaSolverDiscrete::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -1213,7 +1213,7 @@ void CudaPseudoDiscrete::get_block_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-double CudaPseudoDiscrete::get_solvent_partition(int s)
+double CudaSolverDiscrete::get_solvent_partition(int s)
 {
     try
     {
@@ -1224,7 +1224,7 @@ double CudaPseudoDiscrete::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_solvent_concentration(int s, double *phi)
+void CudaSolverDiscrete::get_solvent_concentration(int s, double *phi)
 {
     try
     {
@@ -1245,7 +1245,7 @@ void CudaPseudoDiscrete::get_solvent_concentration(int s, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CudaPseudoDiscrete::compute_stress()
+std::vector<double> CudaSolverDiscrete::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -1496,7 +1496,7 @@ std::vector<double> CudaPseudoDiscrete::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+void CudaSolverDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 { 
     // This method should be invoked after invoking compute_statistics()
 
@@ -1522,7 +1522,7 @@ void CudaPseudoDiscrete::get_chain_propagator(double *q_out, int polymer, int v,
         throw_without_line_number(exc.what());
     }
 }
-bool CudaPseudoDiscrete::check_total_partition()
+bool CudaSolverDiscrete::check_total_partition()
 {
     const int M = cb->get_n_grid();
     int n_polymer_types = molecules->get_n_polymer_types();

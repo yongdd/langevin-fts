@@ -60,25 +60,31 @@ q_init["G"][0] = 1.0/cb.get_dv(0)
 # Compute ensemble average concentration (phi) and total partition function (Q)
 solver.compute_statistics({"A":w["A"]}, q_init=q_init)
 
+# Distance array
+dx = np.array(lx)/np.array(nx)
+x = []
+for i in range(3):
+     x.append(np.min(np.abs(np.stack((np.linspace(0.0, lx[i], num=nx[i], endpoint=False), np.linspace(-lx[i], 0.0, num=nx[i], endpoint=False)))), axis=0))
+xv, yv, zv = np.meshgrid(x[0], x[1], x[2], indexing='ij')
+distance_square = np.reshape(xv**2+yv**2+zv**2, np.prod(nx))
+
+# Compute <x^2>
 N = round(1.0/ds)
 for n in range(10, round(N)+1, 10):
                                        # p, v, u, n
      q_out = solver.get_chain_propagator(0, 0, 1, n)
-     sum = 0.0
-     x_square = 0.0
-     for i in range(nx[0]):
-          xx = cb.get_dx(0)*min([i, nx[0]-i])
-          for j in range(nx[1]):
-               yy = cb.get_dx(1)*min([j, nx[1]-j])
-               for k in range(nx[2]):
-                    zz = cb.get_dx(2)*min([k, nx[2]-k])
-                    idx = i*nx[1]*nx[2] + j*nx[2] + k
-                    x_square += q_out[idx]*cb.get_dv(idx)*(xx*xx + yy*yy + zz*zz)
-                    sum += q_out[idx]*cb.get_dv(idx)
-                    
+     x_square = np.sum(q_out*distance_square)/np.sum(q_out)
+     
      if molecules.get_model_name() == "continuous":
           x_square *= N/n
           print("n, <x^2>N/n:", n, x_square)
      elif molecules.get_model_name() == "discrete":
           x_square *= N/(n-1)
           print("n, <x^2>N/(n-1):", n, x_square)
+          
+# q_out = solver.get_chain_propagator(0, 0, 1, round(N/2))
+# x_square_1 = np.sum(q_out*distance_square)/np.sum(q_out)
+# q_out = solver.get_chain_propagator(0, 0, 1, N)
+# x_square_2 = np.sum(q_out*distance_square)/np.sum(q_out)
+# exponent = np.log(x_square_2/x_square_1)/np.log(2)/2
+# print(exponent)

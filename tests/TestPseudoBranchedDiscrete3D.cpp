@@ -12,12 +12,12 @@
 #include "PropagatorsAnalyzer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "CpuPseudoDiscrete.h"
+#include "CpuSolverDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaPseudoDiscrete.h"
-#include "CudaPseudoReduceMemoryDiscrete.h"
+#include "CudaSolverDiscrete.h"
+#include "CudaSolverReduceMemoryDiscrete.h"
 #endif
 
 int main()
@@ -207,14 +207,14 @@ int main()
 
         std::vector<Solver*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
-        solver_list.push_back(new CpuPseudoDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuSolverDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
+        solver_list.push_back(new CpuSolverDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
-        solver_list.push_back(new CudaPseudoDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
-        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
-        solver_list.push_back(new CudaPseudoReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CudaSolverDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaSolverDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CudaSolverReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
+        solver_list.push_back(new CudaSolverReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};

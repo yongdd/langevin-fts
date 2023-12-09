@@ -12,12 +12,12 @@
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
 #include "MklFFT3D.h"
-#include "CpuPseudoContinuous.h"
+#include "CpuSolverContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaPseudoContinuous.h"
-#include "CudaPseudoReduceMemoryContinuous.h"
+#include "CudaSolverContinuous.h"
+#include "CudaSolverReduceMemoryContinuous.h"
 #endif
 
 int main()
@@ -101,19 +101,19 @@ int main()
         std::vector<Solver*> solver_2_list;
 
         #ifdef USE_CPU_MKL
-        solver_1_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
+        solver_1_list.push_back(new CpuSolverContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_1_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1));
-        solver_1_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1));
+        solver_1_list.push_back(new CudaSolverContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1));
+        solver_1_list.push_back(new CudaSolverReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_1, propagators_analyzer_1));
         #endif
 
         #ifdef USE_CPU_MKL
-        solver_2_list.push_back(new CpuPseudoContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
+        solver_2_list.push_back(new CpuSolverContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2, new MklFFT3D({II,JJ,KK})));
         #endif
         #ifdef USE_CUDA
-        solver_2_list.push_back(new CudaPseudoContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2));
-        solver_2_list.push_back(new CudaPseudoReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2));
+        solver_2_list.push_back(new CudaSolverContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2));
+        solver_2_list.push_back(new CudaSolverReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules_2, propagators_analyzer_2));
         #endif
 
         // For each platform    

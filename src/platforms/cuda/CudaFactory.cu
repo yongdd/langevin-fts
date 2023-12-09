@@ -7,10 +7,10 @@
 #include <string>
 
 #include "CudaComputationBox.h"
-#include "CudaPseudoContinuous.h"
-#include "CudaPseudoDiscrete.h"
-#include "CudaPseudoReduceMemoryContinuous.h"
-#include "CudaPseudoReduceMemoryDiscrete.h"
+#include "CudaSolverContinuous.h"
+#include "CudaSolverDiscrete.h"
+#include "CudaSolverReduceMemoryContinuous.h"
+#include "CudaSolverReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
@@ -48,13 +48,13 @@ Solver* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules 
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaPseudoContinuous(cb, molecules, propagators_analyzer);
+        return new CudaSolverContinuous(cb, molecules, propagators_analyzer);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryContinuous(cb, molecules, propagators_analyzer);
+        return new CudaSolverReduceMemoryContinuous(cb, molecules, propagators_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaPseudoDiscrete(cb, molecules, propagators_analyzer);
+        return new CudaSolverDiscrete(cb, molecules, propagators_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaPseudoReduceMemoryDiscrete(cb, molecules, propagators_analyzer);
+        return new CudaSolverReduceMemoryDiscrete(cb, molecules, propagators_analyzer);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

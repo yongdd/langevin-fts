@@ -1,10 +1,10 @@
 #include <complex>
 #include <thrust/reduce.h>
-#include "CudaPseudoReduceMemoryContinuous.h"
+#include "CudaSolverReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
 #include "SimpsonRule.h"
 
-CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
+CudaSolverReduceMemoryContinuous::CudaSolverReduceMemoryContinuous(
     ComputationBox *cb,
     Molecules *molecules,
     PropagatorsAnalyzer *propagators_analyzer)
@@ -219,7 +219,7 @@ CudaPseudoReduceMemoryContinuous::CudaPseudoReduceMemoryContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
+CudaSolverReduceMemoryContinuous::~CudaSolverReduceMemoryContinuous()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
@@ -310,7 +310,7 @@ CudaPseudoReduceMemoryContinuous::~CudaPseudoReduceMemoryContinuous()
     }
 }
 
-void CudaPseudoReduceMemoryContinuous::update_bond_function()
+void CudaSolverReduceMemoryContinuous::update_bond_function()
 {
     try{
         // For pseudo-spectral: advance_one_propagator()
@@ -353,7 +353,7 @@ void CudaPseudoReduceMemoryContinuous::update_bond_function()
         throw_with_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::compute_statistics(
+void CudaSolverReduceMemoryContinuous::compute_statistics(
     std::string device,
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init,
@@ -871,7 +871,7 @@ void CudaPseudoReduceMemoryContinuous::compute_statistics(
 }
 
 // Advance propagator using Richardson extrapolation
-void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
+void CudaSolverReduceMemoryContinuous::advance_one_propagator(const int GPU,
     double *d_q_in, double *d_q_out,
     double *d_boltz_bond, double *d_boltz_bond_half,
     double *d_exp_dw, double *d_exp_dw_half,
@@ -936,7 +936,7 @@ void CudaPseudoReduceMemoryContinuous::advance_one_propagator(const int GPU,
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::advance_two_propagators_two_gpus(
+void CudaSolverReduceMemoryContinuous::advance_two_propagators_two_gpus(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     double *d_boltz_bond_1, double *d_boltz_bond_2, 
@@ -1046,7 +1046,7 @@ void CudaPseudoReduceMemoryContinuous::advance_two_propagators_two_gpus(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
+void CudaSolverReduceMemoryContinuous::calculate_phi_one_block(
     double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM)
 {
     try
@@ -1093,7 +1093,7 @@ void CudaPseudoReduceMemoryContinuous::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CudaPseudoReduceMemoryContinuous::get_total_partition(int polymer)
+double CudaSolverReduceMemoryContinuous::get_total_partition(int polymer)
 {
     try
     {
@@ -1104,7 +1104,7 @@ double CudaPseudoReduceMemoryContinuous::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::get_total_concentration(std::string monomer_type, double *phi)
+void CudaSolverReduceMemoryContinuous::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -1140,7 +1140,7 @@ void CudaPseudoReduceMemoryContinuous::get_total_concentration(std::string monom
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::get_total_concentration(int p, std::string monomer_type, double *phi)
+void CudaSolverReduceMemoryContinuous::get_total_concentration(int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -1172,7 +1172,7 @@ void CudaPseudoReduceMemoryContinuous::get_total_concentration(int p, std::strin
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::get_block_concentration(int p, double *phi)
+void CudaSolverReduceMemoryContinuous::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -1205,7 +1205,7 @@ void CudaPseudoReduceMemoryContinuous::get_block_concentration(int p, double *ph
         throw_without_line_number(exc.what());
     }
 }
-double CudaPseudoReduceMemoryContinuous::get_solvent_partition(int s)
+double CudaSolverReduceMemoryContinuous::get_solvent_partition(int s)
 {
     try
     {
@@ -1216,7 +1216,7 @@ double CudaPseudoReduceMemoryContinuous::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::get_solvent_concentration(int s, double *phi)
+void CudaSolverReduceMemoryContinuous::get_solvent_concentration(int s, double *phi)
 {
     try
     {
@@ -1235,7 +1235,7 @@ void CudaPseudoReduceMemoryContinuous::get_solvent_concentration(int s, double *
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
+std::vector<double> CudaSolverReduceMemoryContinuous::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -1426,7 +1426,7 @@ std::vector<double> CudaPseudoReduceMemoryContinuous::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudoReduceMemoryContinuous::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+void CudaSolverReduceMemoryContinuous::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 
@@ -1454,7 +1454,7 @@ void CudaPseudoReduceMemoryContinuous::get_chain_propagator(double *q_out, int p
         throw_without_line_number(exc.what());
     }
 }
-bool CudaPseudoReduceMemoryContinuous::check_total_partition()
+bool CudaSolverReduceMemoryContinuous::check_total_partition()
 {
     const int M = cb->get_n_grid();
     int n_polymer_types = molecules->get_n_polymer_types();

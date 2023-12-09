@@ -2,8 +2,8 @@
 * This class defines a derived class for pseudo-spectral method
 *-----------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_CONTINUOUS_H_
-#define CPU_PSEUDO_CONTINUOUS_H_
+#ifndef CUDA_PSEUDO_H_
+#define CUDA_PSEUDO_H_
 
 #include <string>
 #include <vector>
@@ -13,13 +13,13 @@
 #include "ComputationBox.h"
 #include "Pseudo.h"
 
-class CpuPseudoContinuous : public Pseudo
+class CudaSolver : public Pseudo
 {
 private:
 
 public:
-    CpuPseudoContinuous(ComputationBox *cb);
-    ~CpuPseudoContinuous();
-    void update_bond_function() override;
+    CudaSolver(ComputationBox *cb);
+    ~CudaSolver() {};
+    virtual void update_bond_function() = 0;
 };
 #endif
