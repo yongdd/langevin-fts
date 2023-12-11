@@ -158,7 +158,8 @@ void CpuSolverDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        propagator_solver->initialize(w_input);
+        // Update dw or exp_dw
+        propagator_solver->update_dw(w_input);
 
         if(q_mask == nullptr)
         {
@@ -644,7 +645,7 @@ std::vector<double> CpuSolverDiscrete::compute_stress()
             double *q_segment_2;
 
             double coeff;
-            bool is_half_bond;
+            bool is_half_bond_length;
             // std::cout << "dep_v, dep_u, N_ORIGINAL, N_OFFSET, N: "
             //      << dep_v << ", " << dep_u << ", " << N_ORIGINAL << ", "<< N_OFFSET << ", " << N << std::endl;
 
@@ -662,7 +663,7 @@ std::vector<double> CpuSolverDiscrete::compute_stress()
                         continue;
                     q_segment_1 = propagator_junction[dep_v];
                     q_segment_2 = &q_2[(N-1)*M];
-                    is_half_bond = true;
+                    is_half_bond_length = true;
                 }
                 // At u
                 else if (n + N_OFFSET == 0){
@@ -671,7 +672,7 @@ std::vector<double> CpuSolverDiscrete::compute_stress()
                         continue;
                     q_segment_1 = &q_1[(N_ORIGINAL-1)*M];
                     q_segment_2 = propagator_junction[dep_u];
-                    is_half_bond = true;
+                    is_half_bond_length = true;
                 }
                 // At aggregation junction
                 else if (n == 0)
@@ -694,15 +695,17 @@ std::vector<double> CpuSolverDiscrete::compute_stress()
                     // std::cout << "\t" << temp_sum1 << ", " << temp_sum2 << std::endl;
                     q_segment_1 = &q_1[(N_ORIGINAL-N_OFFSET-n-1)*M];
                     q_segment_2 = &q_2[(n-1)*M];
-                    is_half_bond = false;
+                    is_half_bond_length = false;
 
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
                 // Compute 
                 std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_discrete(
-                    q_segment_1, q_segment_2, monomer_type, is_half_bond);
+                    q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*n_repeated;
+
+                // std::cout << "n: " << n << ", " << is_half_bond_length << ", " << segment_stress[0] << std::endl;
                 // std::cout << "n: " << n << ", " << block_dq_dl[key][0] << std::endl;
             }
             block_dq_dl[key] = _block_dq_dl;

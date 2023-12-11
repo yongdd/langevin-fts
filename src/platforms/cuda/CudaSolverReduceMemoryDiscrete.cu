@@ -1061,7 +1061,7 @@ void CudaSolverReduceMemoryDiscrete::advance_one_propagator(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        // Execute a Forward FFT
+        // Execute a forward FFT
         cufftExecD2Z(plan_for_one[GPU], d_q_in, d_qk_in_1_one[GPU]);
 
         // Multiply exp(-k^2 ds/6) in fourier space
@@ -1096,7 +1096,7 @@ void CudaSolverReduceMemoryDiscrete::advance_two_propagators(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        // Execute a Forward FFT
+        // Execute a forward FFT
         cufftExecD2Z(plan_for_two[0], d_q_in_two, d_qk_in_1_two[0]);
 
         // Multiply exp(-k^2 ds/6) in fourier space
@@ -1140,7 +1140,7 @@ void CudaSolverReduceMemoryDiscrete::advance_two_propagators_two_gpus(
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
 
-        // Execute a Forward FFT
+        // Execute a forward FFT
         gpu_error_check(cudaSetDevice(0));
         cufftExecD2Z(plan_for_one[0], d_q_in_1, d_qk_in_1_one[0]);
         gpu_error_check(cudaSetDevice(1));
@@ -1539,7 +1539,7 @@ std::vector<double> CudaSolverReduceMemoryDiscrete::compute_stress()
 
                         if (propagator_v != nullptr)
                         {
-                            // Execute a Forward FFT
+                            // Execute a forward FFT
                             cufftExecD2Z(plan_for_two[gpu], d_stress_q[gpu][prev], d_qk_in_1_two[gpu]);
                             // Multiply two propagators in the fourier spaces
                             multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[gpu][0]>>>(d_q_multi[gpu], &d_qk_in_1_two[gpu][0], &d_qk_in_1_two[gpu][M_COMPLEX], M_COMPLEX);

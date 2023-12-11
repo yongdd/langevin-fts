@@ -892,8 +892,8 @@ void CudaSolverReduceMemoryContinuous::advance_one_propagator(const int GPU,
             &d_q_step_1_two[GPU][0], d_q_in, d_exp_dw,
             &d_q_step_1_two[GPU][M], d_q_in, d_exp_dw_half, 1.0, M);
 
-        // step 1/2: Execute a Forward FFT
-        // step 1/4: Execute a Forward FFT
+        // step 1/2: Execute a forward FFT
+        // step 1/4: Execute a forward FFT
         cufftExecD2Z(plan_for_two[GPU], d_q_step_1_two[GPU], d_qk_in_1_two[GPU]);
 
         // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
@@ -912,7 +912,7 @@ void CudaSolverReduceMemoryContinuous::advance_one_propagator(const int GPU,
             d_q_step_1_one[GPU], &d_q_step_1_two[GPU][0], d_exp_dw,
             d_q_step_2_one[GPU], &d_q_step_1_two[GPU][M], d_exp_dw, 1.0/((double)M), M);
 
-        // step 1/4: Execute a Forward FFT
+        // step 1/4: Execute a forward FFT
         cufftExecD2Z(plan_for_one[GPU], d_q_step_2_one[GPU], d_qk_in_2_one[GPU]);
 
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
@@ -966,8 +966,8 @@ void CudaSolverReduceMemoryContinuous::advance_two_propagators_two_gpus(
             &d_q_step_1_two[1][0], d_q_in_2, d_exp_dw_2,
             &d_q_step_1_two[1][M], d_q_in_2, d_exp_dw_half_2, 1.0, M);
 
-        // step 1/2: Execute a Forward FFT
-        // step 1/4: Execute a Forward FFT
+        // step 1/2: Execute a forward FFT
+        // step 1/4: Execute a forward FFT
         gpu_error_check(cudaSetDevice(0));
         cufftExecD2Z(plan_for_two[0], d_q_step_1_two[0], d_qk_in_1_two[0]);
         gpu_error_check(cudaSetDevice(1));
@@ -1002,7 +1002,7 @@ void CudaSolverReduceMemoryContinuous::advance_two_propagators_two_gpus(
             d_q_step_1_one[1], &d_q_step_1_two[1][0], d_exp_dw_2,
             d_q_step_2_one[1], &d_q_step_1_two[1][M], d_exp_dw_2, 1.0/((double)M), M);
 
-        // step 1/4: Execute a Forward FFT
+        // step 1/4: Execute a forward FFT
         gpu_error_check(cudaSetDevice(0));
         cufftExecD2Z(plan_for_one[0], d_q_step_2_one[0], d_qk_in_2_one[0]);
         gpu_error_check(cudaSetDevice(1));
@@ -1329,7 +1329,7 @@ std::vector<double> CudaSolverReduceMemoryContinuous::compute_stress()
                     }
                 }
                 // STREAM 0: execute kernels
-                // Execute a Forward FFT
+                // Execute a forward FFT
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
                     const int idx = n + gpu;

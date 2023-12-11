@@ -1,5 +1,4 @@
 1. Parallel Tempering
-2. Neutral Boundary Condition
 6. Packaging with Conda, including scft.py and lfts.py
 8. GPU bandwidth test
 9. UnitTest: Anderson Mixing
@@ -9,7 +8,6 @@
 24. Draw network graph image for given polymer architecture
 27. Syntax check of Keys in Molecules 
 31. Throws Exception in openMP block
-34. Detach Superposition Part from Molecules
 35. Write UnitTest: TestComparePropagatorKey
 37. Reduce the number of split in scheduler
 40. Figure out why two GPUs performance keeps changing in A100
@@ -19,4 +17,4 @@
 46. Replace "new" keyword to a safe memory allocation
 47. Add tests for example files
 48. Check if CUDA can be installed using Conda
-50. 
+50. Check if cuFFT callback function is applicable

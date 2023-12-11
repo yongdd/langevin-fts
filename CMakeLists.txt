@@ -63,9 +63,9 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT3D.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
+        src/platforms/cpu/CpuPseudo.cpp
         src/platforms/cpu/CpuSolverContinuous.cpp
         src/platforms/cpu/CpuSolverDiscrete.cpp
-        src/platforms/cpu/CpuPseudo.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
@@ -83,6 +83,7 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaCommon.cu
         src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
+        src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaSolverContinuous.cu
         src/platforms/cuda/CudaSolverDiscrete.cu
         src/platforms/cuda/CudaSolverReduceMemoryContinuous.cu

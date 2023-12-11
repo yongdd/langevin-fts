@@ -13,38 +13,26 @@
 #include "Molecules.h"
 #include "Solver.h"
 #include "CudaCommon.h"
+#include "CudaPseudo.h"
 #include "Scheduler.h"
 
 class CudaSolverDiscrete : public Solver
 {
 private:
+    // Pseudo-spectral PDE solver
+    CudaPseudo *propagator_solver;
+
     // Two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
 
-    // For pseudo-spectral: advance_propagator()
-    double *d_q_unity; // All elements are 1 for initializing propagators
-    cufftHandle plan_for_one[MAX_GPUS], plan_bak_one[MAX_GPUS];
-    cufftHandle plan_for_two[MAX_GPUS], plan_bak_two[MAX_GPUS];
+    // All elements are 1 for initializing propagators
+    double *d_q_unity; 
 
-    double *d_q_step_1_two[MAX_GPUS];
-    ftsComplex *d_qk_in_1_one[MAX_GPUS];
-    ftsComplex *d_qk_in_1_two[MAX_GPUS];
-    
     // q_mask to make impenetrable region for nano particles
     double *d_q_mask[MAX_GPUS];
 
     // For stress calculation: compute_stress()
-    double *d_fourier_basis_x[MAX_GPUS];
-    double *d_fourier_basis_y[MAX_GPUS];
-    double *d_fourier_basis_z[MAX_GPUS];
     double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
-    double *d_q_multi[MAX_GPUS];
-
-    // Variables for cub reduction sum
-    size_t temp_storage_bytes[MAX_GPUS];
-    double *d_temp_storage[MAX_GPUS];
-    double *d_stress_sum[MAX_GPUS];
-    double *d_stress_sum_out[MAX_GPUS];
 
     // Scheduler for propagator computation 
     Scheduler *sc;
@@ -77,7 +65,7 @@ private:
     double *d_phi;
     
     // Remember propagators and bond length for each segment to prepare stress computation
-    // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond)
+    // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond_length)
     std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_info;
 
     // Total partition functions for each solvent
@@ -88,32 +76,6 @@ private:
 
     // Accessible volume of polymers excluding mask region
     double accessible_volume;
-
-    // GPU arrays for pseudo-spectral
-    std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // Boltzmann factor for the single bond
-    std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // Boltzmann factor for the half bond
-    std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // Boltzmann factor for the single segment
-
-    // Advance one propagator by one segment step
-    void advance_one_propagator(const int GPU,
-            double *d_q_in, double *d_q_out, double *d_boltz_bond, double *d_exp_dw, double *d_q_mask);
-
-    // Advance two propagators by one segment step
-    void advance_two_propagators(double *d_q_in_1, double *d_q_in_2,
-            double *d_q_out_1, double *d_q_out_2,
-            double *d_boltz_bond_1, double *d_boltz_bond_2,  
-            double *d_exp_dw_1, double *d_exp_dw_2,
-            double *d_q_mask);
-
-    // Advance two propagators by one segment step in two GPUs
-    void advance_two_propagators_two_gpus(double *d_q_in_1, double *d_q_in_2,
-            double *d_q_out_1, double *d_q_out_2,
-            double *d_boltz_bond_1, double *d_boltz_bond_2,  
-            double *d_exp_dw_1, double *d_exp_dw_2,
-            double **d_q_mask);
-
-    // Advance propagator by half bond step
-    void advance_propagator_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, double *d_boltz_bond_half);
 
     // Calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
