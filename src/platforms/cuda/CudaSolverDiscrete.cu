@@ -23,7 +23,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
             gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
-        this->propagator_solver = new CudaPseudo(cb, molecules, streams);
+        this->propagator_solver = new CudaPseudo(cb, molecules, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -221,6 +221,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_stress_q[gpu][0],     sizeof(double)*2*M)); // prev
             gpu_error_check(cudaMalloc((void**)&d_stress_q[gpu][1],     sizeof(double)*2*M)); // next
         }
+        
         propagator_solver->update_bond_function();
         gpu_error_check(cudaSetDevice(0));
     }
@@ -548,7 +549,6 @@ void CudaSolverDiscrete::compute_statistics(
             }
             else if(parallel_job->size()==2)
             {
-
                 const int N_JOBS = 2;
                 std::string keys[N_JOBS];
                 int n_segment_froms[N_JOBS];
@@ -1008,7 +1008,6 @@ std::vector<double> CudaSolverDiscrete::compute_stress()
                 {
                     const int idx = n + gpu;
                     const int idx_next = idx + N_GPUS;
-                    
                     gpu_error_check(cudaSetDevice(gpu));
                     if (idx_next <= N)
                     {
@@ -1135,6 +1134,7 @@ bool CudaSolverDiscrete::check_total_partition()
         total_partitions.push_back(total_partitions_p);
     }
 
+    gpu_error_check(cudaSetDevice(0));
     for(const auto& block: d_phi_block)
     {
         const auto& key = block.first;

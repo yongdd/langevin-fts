@@ -19,6 +19,7 @@ class CudaPseudo : public Pseudo
 {
 private:
     std::string chain_model;
+    bool reduce_gpu_memory_usage;
 
     // Two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
@@ -61,7 +62,7 @@ public:
     std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // Boltzmann factor for the single segment
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // Boltzmann factor for the half segment
 
-    CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2]);
+    CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
     ~CudaPseudo();
     void update_bond_function() override;
 
@@ -86,7 +87,7 @@ public:
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
             double **d_q_mask);
-    
+
     //---------- Discrete chain model -------------
     // Advance one propagator by one segment step
     void advance_one_propagator_discrete(const int GPU,
@@ -95,6 +96,12 @@ public:
     // Advance two propagators by one segment step
     void advance_two_propagators_discrete(double *d_q_in_1, double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
+            std::string monomer_type_1, std::string monomer_type_2,
+            double *d_q_mask);
+
+    // Advance two propagators by one segment step
+    void advance_two_propagators_discrete_without_copy(
+            double *d_q_two_in, double *d_q_two_out,
             std::string monomer_type_1, std::string monomer_type_2,
             double *d_q_mask);
 

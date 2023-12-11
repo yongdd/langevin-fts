@@ -3,7 +3,7 @@
 #include <thrust/reduce.h>
 #include "CudaPseudo.h"
 
-CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2]) : Pseudo(cb)
+CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage) : Pseudo(cb)
 {
     try{
         if (cb->get_dim() == 3)
@@ -16,6 +16,7 @@ CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t st
         this->cb = cb;
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
+        this->reduce_gpu_memory_usage = reduce_gpu_memory_usage;
 
         const int M = cb->get_n_grid();
         const int M_COMPLEX = this->n_complex_grid;
@@ -90,7 +91,7 @@ CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t st
         cufftSetStream(plan_bak_four, streams[0][0]);
 
         // Allocate memory for pseudo-spectral: advance_propagator()
-        if(chain_model == "continuous")
+        if(chain_model == "continuous" && !reduce_gpu_memory_usage)
         {
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
@@ -108,6 +109,18 @@ CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t st
             gpu_error_check(cudaSetDevice(0));
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_four, sizeof(double)*4*M));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_four,  sizeof(ftsComplex)*4*M_COMPLEX));
+        }
+        else if(chain_model == "continuous" && reduce_gpu_memory_usage)
+        {
+            for(int gpu=0; gpu<N_GPUS; gpu++)
+            {
+                gpu_error_check(cudaSetDevice(gpu));
+                gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[gpu], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[gpu], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[gpu], sizeof(double)*2*M));
+                gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[gpu], sizeof(ftsComplex)*M_COMPLEX));
+                gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[gpu], sizeof(ftsComplex)*2*M_COMPLEX));
+            }
         }
         else if(chain_model == "discrete")
         {
@@ -171,7 +184,7 @@ CudaPseudo::~CudaPseudo()
     }
 
     // For pseudo-spectral: advance_propagator()
-    if(chain_model == "continuous")
+    if(chain_model == "continuous" && !reduce_gpu_memory_usage)
     {
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
@@ -184,6 +197,17 @@ CudaPseudo::~CudaPseudo()
             cudaFree(d_qk_in_2_two[gpu]);
         }
         cudaFree(d_qk_in_1_four);
+    }
+    if(chain_model == "continuous" && reduce_gpu_memory_usage)
+    {
+        for(int gpu=0; gpu<N_GPUS; gpu++)
+        {
+            cudaFree(d_q_step_1_one[gpu]);
+            cudaFree(d_q_step_2_one[gpu]);
+            cudaFree(d_q_step_1_two[gpu]);
+            cudaFree(d_qk_in_2_one[gpu]);
+            cudaFree(d_qk_in_1_two[gpu]);
+        }
     }
     else if(chain_model == "discrete")
     {
@@ -703,6 +727,53 @@ void CudaPseudo::advance_two_propagators_discrete(
         {
             multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask, 1.0, M);
             multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, d_q_out_2, d_q_mask, 1.0, M);
+        }
+
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaPseudo::advance_two_propagators_discrete_without_copy(
+    double *d_q_in_two, double *d_q_out_two,
+    std::string monomer_type_1, std::string monomer_type_2,
+    double *d_q_mask)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+
+        const int M = cb->get_n_grid();
+        const int M_COMPLEX = this->n_complex_grid;
+
+        double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
+        double *_d_boltz_bond_1 = d_boltz_bond[0][monomer_type_1];
+        double *_d_exp_dw_2 = d_exp_dw[0][monomer_type_2];
+        double *_d_boltz_bond_2 = d_boltz_bond[0][monomer_type_2];
+
+        // Execute a forward FFT
+        cufftExecD2Z(plan_for_two[0], d_q_in_two, d_qk_in_1_two[0]);
+
+        // Multiply exp(-k^2 ds/6) in fourier space
+        complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            &d_qk_in_1_two[0][0],         _d_boltz_bond_1, 
+            &d_qk_in_1_two[0][M_COMPLEX], _d_boltz_bond_2, M_COMPLEX);
+
+        // Execute a backward FFT
+        cufftExecZ2D(plan_bak_two[0], d_qk_in_1_two[0], d_q_step_1_two[0]);
+
+        // Evaluate exp(-w*ds) in real space
+        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            &d_q_out_two[0], &d_q_step_1_two[0][0], _d_exp_dw_1,
+            &d_q_out_two[M], &d_q_step_1_two[0][M], _d_exp_dw_2, 1.0/((double)M), M);
+
+        // Multiply mask
+        if (d_q_mask != nullptr)
+        {
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(&d_q_out_two[0], &d_q_out_two[0], d_q_mask, 1.0, M);
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(&d_q_out_two[M], &d_q_out_two[M], d_q_mask, 1.0, M);
         }
 
     }

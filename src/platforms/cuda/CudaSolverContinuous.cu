@@ -23,7 +23,7 @@ CudaSolverContinuous::CudaSolverContinuous(
             gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
-        this->propagator_solver = new CudaPseudo(cb, molecules, streams);
+        this->propagator_solver = new CudaPseudo(cb, molecules, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -135,6 +135,7 @@ CudaSolverContinuous::CudaSolverContinuous(
         }
 
         propagator_solver->update_bond_function();
+        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -251,9 +252,9 @@ void CudaSolverContinuous::compute_statistics(
         }
 
         // Update dw or d_exp_dw
-        gpu_error_check(cudaSetDevice(0));
         propagator_solver->update_dw(device, w_input);
 
+        gpu_error_check(cudaSetDevice(0));
         if(q_mask == nullptr)
         {
             this->accessible_volume = cb->get_volume();
@@ -821,7 +822,6 @@ std::vector<double> CudaSolverContinuous::compute_stress()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
 
-        auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[MAX_GPUS];
 
@@ -904,9 +904,7 @@ std::vector<double> CudaSolverContinuous::compute_stress()
                     const int idx = n + gpu;
                     gpu_error_check(cudaSetDevice(gpu));
                     if (idx <= N)
-                    {
                         propagator_solver->compute_single_segment_stress_fourier(gpu, d_stress_q[gpu][prev]);
-                    }
                 }
                 // STREAM 0: execute kernels
                 // Multiply two propagators in the fourier spaces
@@ -997,6 +995,7 @@ bool CudaSolverContinuous::check_total_partition()
         total_partitions.push_back(total_partitions_p);
     }
 
+    gpu_error_check(cudaSetDevice(0));
     for(const auto& block: d_phi_block)
     {
         const auto& key = block.first;
