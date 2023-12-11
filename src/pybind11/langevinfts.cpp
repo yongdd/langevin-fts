@@ -59,27 +59,30 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_n_grid", &ComputationBox::get_n_grid)
         .def("get_volume", &ComputationBox::get_volume)
         .def("set_lx", &ComputationBox::set_lx)
-        .def("integral", &ComputationBox::integral)
-        .def("inner_product", &ComputationBox::inner_product)
-        .def("multi_inner_product", &ComputationBox::multi_inner_product);
+        .def("integral", [](ComputationBox& obj, py::array_t<double> g)
+        {
+            const int M = obj.get_n_grid();
+            py::buffer_info buf_g = g.request();
+            if (buf_g.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+            }
+            return obj.integral((double*) buf_g.ptr);
+        })
+        .def("inner_product", [](ComputationBox& obj, py::array_t<double> g, py::array_t<double> h)
+        {
+            const int M = obj.get_n_grid();
+            py::buffer_info buf_g = g.request();
+            py::buffer_info buf_h = h.request();
+            if (buf_g.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+            }
+            if (buf_h.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+            }
+            return obj.inner_product((double*) buf_g.ptr, (double*) buf_h.ptr);
+        });
+        // .def("multi_inner_product", &ComputationBox::multi_inner_product);
         // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
-        // // Methods for pybind11
-        // double integral(py::array_t<double> g) {
-        //     py::buffer_info buf = g.request();
-        //     if (buf.size != n_grid) {
-        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
-        //     }
-        //     return integral((double*) buf.ptr);
-        // };
-        // double inner_product(py::array_t<double> g, py::array_t<double> h) {
-        //     py::buffer_info buf1 = g.request();
-        //     py::buffer_info buf2 = h.request();
-        //     if (buf1.size != n_grid) 
-        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
-        //     if (buf2.size != n_grid)
-        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
-        //     return inner_product((double*) buf1.ptr, (double*) buf2.ptr);
-        // };
         // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
         //     py::buffer_info buf1 = g.request();
         //     py::buffer_info buf2 = h.request();
@@ -163,13 +166,12 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<Solver>(m, "Solver")
         .def("update_bond_function", &Solver::update_bond_function)
-        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init, py::object q_mask)
+        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
                 const int M = obj.get_n_grid();
                 std::map<std::string, const double*> map_buf_w_input;
                 std::map<std::string, const double*> map_buf_q_init;
-                py::buffer_info buf_q_mask;
 
                 //buf_w_input
                 for (auto it = w_input.begin(); it != w_input.end(); ++it)
@@ -201,21 +203,13 @@ PYBIND11_MODULE(langevinfts, m)
                     }
                 }
 
-                //buf_q_mask
-                if (!q_mask.is_none()) {
-                    py::array_t<const double> q_mask_cast = q_mask.cast<py::array_t<const double>>();
-                    buf_q_mask = q_mask_cast.request();
-                    if (buf_q_mask.size != M) {
-                        throw_with_line_number("Size of input (" + std::to_string(buf_q_mask.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
-                    }
-                }
-                obj.compute_statistics(map_buf_w_input, map_buf_q_init, (double*) buf_q_mask.ptr);
+                obj.compute_statistics(map_buf_w_input, map_buf_q_init);
             }
             catch(std::exception& exc)
             {
                 throw_without_line_number(exc.what());
             }
-        }, py::arg("w_input"), py::arg("q_init") = py::none(), py::arg("q_mask") = py::none() )
+        }, py::arg("w_input"), py::arg("q_init") = py::none())
         // .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
         // {
         //     try{
@@ -353,7 +347,31 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<AbstractFactory>(m, "AbstractFactory")
         .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
-        .def("create_computation_box", &AbstractFactory::create_computation_box)
+        // .def("create_computation_box", &AbstractFactory::create_computation_box)
+        .def("create_computation_box", [](AbstractFactory& obj, std::vector<int> nx, std::vector<double> lx, py::object mask)
+        {
+            try{
+                int M = 1;
+                for(size_t d=0; d<nx.size(); d++)
+                    M *= nx[d];
+
+                py::buffer_info buf_mask;
+
+                //buf_q_mask
+                if (!mask.is_none()) {
+                    py::array_t<const double> q_mask_cast = mask.cast<py::array_t<const double>>();
+                    buf_mask = q_mask_cast.request();
+                    if (buf_mask.size != M) {
+                        throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                    }
+                }
+                return obj.create_computation_box(nx, lx, (const double *) buf_mask.ptr);
+            }
+            catch(std::exception& exc)
+            {
+                throw_without_line_number(exc.what());
+            }
+        }, py::arg("nx"), py::arg("lx"), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory::create_molecules_information)
         .def("create_propagators_analyzer", &AbstractFactory::create_propagators_analyzer)
         .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)

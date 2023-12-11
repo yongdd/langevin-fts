@@ -74,7 +74,7 @@ q_init["G"][offset_grafting,:,:] = 1.0/dx
 q_init["G"][params["nx"][0]-offset_grafting-1,:,:] = 1.0/dx
 
 # Mask for Nano Particle
-q_mask = np.ones(params["nx"])
+mask = np.ones(params["nx"])
 nano_particle_radius = 0.7
 
 x = np.linspace(0.0-T-1.0, params["lx"][0]-T-1.0,      num=params["nx"][0], endpoint=False)
@@ -82,29 +82,29 @@ y = np.linspace(-params["lx"][1]/2, params["lx"][1]/2, num=params["nx"][1], endp
 z = np.linspace(-params["lx"][2]/2, params["lx"][2]/2, num=params["nx"][2], endpoint=False)
 xv, yv, zv = np.meshgrid(x, y, z, indexing='ij')
 
-q_mask[np.sqrt(xv**2+yv**2+zv**2) < nano_particle_radius] = 0.0
-q_mask[np.isclose(phi_target, 0.0)] = 0.0
-# print(q_mask[:,0])
+mask[np.sqrt(xv**2+yv**2+zv**2) < nano_particle_radius] = 0.0
+mask[np.isclose(phi_target, 0.0)] = 0.0
+# print(mask[:,0])
 # print(q_init["G"][:])
-print(q_mask[20:40,0])
+print(mask[20:40,0])
 print(q_init["G"][20:40,0])
 
-q_mask = q_mask*np.flip(q_mask, axis=0)
-phi_target = phi_target*q_mask
+mask = mask*np.flip(mask, axis=0)
+phi_target = phi_target*mask
 
 # Initialize calculation
-calculation = scft.SCFT(params=params)
+calculation = scft.SCFT(params=params, mask=mask)
 
 # Set a timer
 time_start = time.time()
 
 # Run
-calculation.run(initial_fields={"A": w_A}, q_init=q_init, q_mask=q_mask)
+calculation.run(initial_fields={"A": w_A}, q_init=q_init)
 
 # Estimate execution time
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results
-calculation.save_results("fields.mat", q_mask=q_mask)
+calculation.save_results("fields.mat")
     

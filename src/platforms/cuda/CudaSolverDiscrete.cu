@@ -303,8 +303,7 @@ void CudaSolverDiscrete::update_bond_function()
 void CudaSolverDiscrete::compute_statistics(
     std::string device,
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init,
-    double* q_mask)
+    std::map<std::string, const double*> q_init)
 {
     try
     {
@@ -331,13 +330,13 @@ void CudaSolverDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        // Copy q_mask to d_q_mask
+        // Copy mask to d_q_mask
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            if (q_mask != nullptr)
+            if (cb->get_mask() != nullptr)
             {
-                gpu_error_check(cudaMemcpy(d_q_mask[gpu], q_mask, sizeof(double)*M, cudaMemcpyInputToDevice));
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyInputToDevice));
             }
             else
             {
@@ -347,16 +346,6 @@ void CudaSolverDiscrete::compute_statistics(
 
         // Update dw or d_exp_dw
         propagator_solver->update_dw(device, w_input);
-
-        gpu_error_check(cudaSetDevice(0));
-        if(q_mask == nullptr)
-        {
-            this->accessible_volume = cb->get_volume();
-        }
-        else
-        {
-            this->accessible_volume = cb->integral_device(d_q_mask[0]);
-        }
 
         // For each time span
         auto& branch_schedule = sc->get_schedule();
@@ -674,7 +663,7 @@ void CudaSolverDiscrete::compute_statistics(
             single_polymer_partitions[p] = cb->inner_product_inverse_weight_device(
                 d_propagator_v,  // q
                 d_propagator_u,  // q^dagger
-                _d_exp_dw)/n_aggregated/this->accessible_volume;
+                _d_exp_dw)/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -730,7 +719,7 @@ void CudaSolverDiscrete::compute_statistics(
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-            single_solvent_partitions[s] = cb->integral_device(_d_exp_dw)/this->accessible_volume;
+            single_solvent_partitions[s] = cb->integral_device(_d_exp_dw)/cb->get_volume();
             linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_phi_, _d_exp_dw, volume_fraction/single_solvent_partitions[s], 0.0, M);
         }
         gpu_error_check(cudaSetDevice(0));
@@ -1161,7 +1150,7 @@ bool CudaSolverDiscrete::check_total_partition()
         {
             double total_partition = cb->inner_product_inverse_weight_device(
                 d_propagator[dep_v][(n_segment_original-n_segment_offset-n-1)],
-                d_propagator[dep_u][n], _d_exp_dw)/n_aggregated/this->accessible_volume;
+                d_propagator[dep_u][n], _d_exp_dw)/n_aggregated/cb->get_volume();
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);

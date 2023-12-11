@@ -21,7 +21,7 @@ load("fields.mat");
 % image(data,'CDataMapping','scaled');
 % set(gca,'DataAspectRatio',[1 1 1])
 figure(3);
-data = reshape(q_mask,[nx(1),nx(2)]);
+data = reshape(mask,[nx(1),nx(2)]);
 data = permute(data,[2 1]);
 image(data,'CDataMapping','scaled');
 set(gca,'DataAspectRatio',[1 1 1])

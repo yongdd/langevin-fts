@@ -125,7 +125,7 @@ void CpuPseudo::update_dw(std::map<std::string, const double*> w_input)
     }
 }
 void CpuPseudo::advance_propagator_continuous(
-    double *q_in, double *q_out, std::string monomer_type, double *q_mask)
+    double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
     {
@@ -194,7 +194,7 @@ void CpuPseudo::advance_propagator_continuous(
     }
 }
 void CpuPseudo::advance_propagator_discrete(
-    double *q_in, double *q_out, std::string monomer_type, double *q_mask)
+    double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
     {

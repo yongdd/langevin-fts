@@ -16,7 +16,7 @@ private:
     // Temporal storage for mutiple_inner_product_gpu
     double *d_multiple;
     // dV for GPU
-    double *d_dv; 
+    double *d_dv;
 
     // Temporal arrays
     double *d_g, *d_h, *d_w; 
@@ -28,7 +28,7 @@ private:
 
     void initialize();
 public:
-    CudaComputationBox(std::vector<int> nx, std::vector<double> lx);
+    CudaComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
     ~CudaComputationBox() override;
 
     void set_lx(std::vector<double> new_lx) override;

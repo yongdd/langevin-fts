@@ -20,12 +20,13 @@ protected:
     std::vector<double> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::vector<double> dx;  // grid interval in each direction
     int n_grid;  // the number of grid
+    double *mask; // mask, impenetrable region
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
 
 public:
 
-    ComputationBox(std::vector<int> nx, std::vector<double> lx);
+    ComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
     virtual ~ComputationBox();
 
     int get_dim();
@@ -38,6 +39,7 @@ public:
     double get_dv(int i);
     int get_n_grid();
     double get_volume();
+    const double* get_mask() ;
 
     virtual void set_lx(std::vector<double> new_lx);
 

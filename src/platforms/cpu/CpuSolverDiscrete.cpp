@@ -144,8 +144,7 @@ void CpuSolverDiscrete::update_bond_function()
 }
 void CpuSolverDiscrete::compute_statistics(
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init,
-    double* q_mask)
+    std::map<std::string, const double*> q_init)
 {
     try
     {
@@ -161,14 +160,8 @@ void CpuSolverDiscrete::compute_statistics(
         // Update dw or exp_dw
         propagator_solver->update_dw(w_input);
 
-        if(q_mask == nullptr)
-        {
-            this->accessible_volume = cb->get_volume();
-        }
-        else
-        {
-            this->accessible_volume = cb->integral(q_mask);
-        }
+        // Assign a pointer for mask
+        const double *q_mask = cb->get_mask();
 
         // For each time span
         auto& branch_schedule = sc->get_schedule();
@@ -355,7 +348,7 @@ void CpuSolverDiscrete::compute_statistics(
             const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
             single_polymer_partitions[p]= cb->inner_product_inverse_weight(
-                propagator_v, propagator_u, _exp_dw)/n_aggregated/this->accessible_volume;
+                propagator_v, propagator_u, _exp_dw)/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -417,7 +410,7 @@ void CpuSolverDiscrete::compute_statistics(
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
             const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
-            single_solvent_partitions[s] = cb->integral(_exp_dw)/this->accessible_volume;
+            single_solvent_partitions[s] = cb->integral(_exp_dw)/cb->get_volume();
             for(int i=0; i<M; i++)
                 _phi[i] = _exp_dw[i]*volume_fraction/single_solvent_partitions[s];
         }
@@ -801,7 +794,7 @@ bool CpuSolverDiscrete::check_total_partition()
         {
             double total_partition = cb->inner_product_inverse_weight(
                 &propagator[dep_v][(n_segment_original-n_segment_offset-n-1)*M],
-                &propagator[dep_u][n*M], _exp_dw)/n_aggregated/this->accessible_volume;
+                &propagator[dep_u][n*M], _exp_dw)/n_aggregated/cb->get_volume();
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);

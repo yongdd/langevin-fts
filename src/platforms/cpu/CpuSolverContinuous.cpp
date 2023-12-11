@@ -126,8 +126,7 @@ void CpuSolverContinuous::update_bond_function()
 }
 void CpuSolverContinuous::compute_statistics(
     std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init,
-    double* q_mask)
+    std::map<std::string, const double*> q_init)
 {
     try
     {
@@ -145,14 +144,8 @@ void CpuSolverContinuous::compute_statistics(
         // Update dw or exp_dw
         propagator_solver->update_dw(w_input);
 
-        if(q_mask == nullptr)
-        {
-            this->accessible_volume = cb->get_volume();
-        }
-        else
-        {
-            this->accessible_volume = cb->integral(q_mask);
-        }
+        // Assign a pointer for mask
+        const double *q_mask = cb->get_mask();
 
         auto& branch_schedule = sc->get_schedule();
         // // display all jobs
@@ -339,7 +332,7 @@ void CpuSolverContinuous::compute_statistics(
             int n_aggregated     = std::get<3>(segment_info);
 
             single_polymer_partitions[p]= cb->inner_product(
-                propagator_v, propagator_u)/n_aggregated/this->accessible_volume;
+                propagator_v, propagator_u)/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -407,7 +400,7 @@ void CpuSolverContinuous::compute_statistics(
             double *_phi = phi_solvent[s];
             double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
-            single_solvent_partitions[s] = cb->inner_product(_exp_dw, _exp_dw)/this->accessible_volume;
+            single_solvent_partitions[s] = cb->inner_product(_exp_dw, _exp_dw)/cb->get_volume();
             for(int i=0; i<M; i++)
                 _phi[i] = _exp_dw[i]*_exp_dw[i]*volume_fraction/single_solvent_partitions[s];
         }

@@ -14,7 +14,7 @@ x = linspace(-1,11,nx);
 % hold on;
 % plot(phi_target);
 % hold on;
-% plot(q_mask);
+% plot(mask);
 % hold off;
 
 figure(2);

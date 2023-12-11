@@ -50,7 +50,7 @@ class Adam:
         return w_new
 
 class SCFT:
-    def __init__(self, params, phi_target=None, q_mask=None):
+    def __init__(self, params, phi_target=None, mask=None):
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -128,10 +128,10 @@ class SCFT:
         # print(self.matrix_p)
 
         # Scaling rate of total polymer concentration
-        if q_mask is None:
-            self.q_mask = np.ones(params["nx"])
-        self.q_mask = np.reshape(self.q_mask, (-1))
-        self.phi_rescaling = np.mean((self.phi_target*self.q_mask)[np.isclose(self.q_mask, 1.0)])
+        if mask is None:
+            mask = np.ones(params["nx"])
+        self.mask = np.reshape(mask, (-1))
+        self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
         
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -215,7 +215,7 @@ class SCFT:
         factory.display_info()
 
         # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"])
+        cb = factory.create_computation_box(params["nx"], params["lx"], mask=mask)
 
         # (C++ class) Molecules list
         molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
@@ -351,8 +351,9 @@ class SCFT:
         for name in self.monomer_types:
             mdic["phi_" + name] = self.phi[name]
 
-        if self.q_mask is not None:
-            mdic["q_mask"] = self.q_mask
+        if self.mask is not None:
+            mdic["mask"] = self.mask
+            
         if self.phi_target is not None:
             mdic["phi_target"] = self.phi_target
 
@@ -394,7 +395,7 @@ class SCFT:
 
         # Keep the level of field value
         for i in range(S):
-            w[i] -= np.mean(w[i])
+            w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
         for scft_iter in range(1, self.max_iter+1):
 
@@ -408,7 +409,7 @@ class SCFT:
                     w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
             # For the given fields find the polymer statistics
-            self.solver.compute_statistics(w_input, q_init=q_init, q_mask=self.q_mask)
+            self.solver.compute_statistics(w_input, q_init=q_init)
 
             # Compute total concentration for each monomer type
             phi = {}
@@ -429,12 +430,12 @@ class SCFT:
             w_exchange = np.matmul(self.matrix_a_inv, w)
 
             # Calculate the total energy
-            energy_total = -np.mean(self.phi_target*self.q_mask*w_exchange[S-1])
+            energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
             for i in range(S-1):
-                energy_total -= 0.5/self.exchange_eigenvalues[i]*np.dot(w_exchange[i]*self.q_mask,w_exchange[i])/self.cb.get_n_grid()
+                energy_total -= 0.5/self.exchange_eigenvalues[i]*self.cb.inner_product(w_exchange[i],w_exchange[i])/self.cb.get_volume()
             for i in range(S-1):
                 for j in range(S-1):
-                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*np.mean(w_exchange[i]*self.q_mask)
+                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*self.cb.integral(w_exchange[i])/self.cb.get_volume()
 
             for p in range(self.molecules.get_n_polymer_types()):
                 energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
@@ -456,20 +457,20 @@ class SCFT:
 
             # Keep the level of functional derivatives
             for i in range(S):
-                w_diff[i] *= self.q_mask
-                w_diff[i] -= np.mean(w_diff[i]*self.q_mask)
+                w_diff[i] *= self.mask
+                w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
-                error_level += np.dot(w_diff[i]*self.q_mask,w_diff[i])*self.cb.get_volume()/self.cb.get_n_grid()
-                error_normal += np.dot(w[i]*self.q_mask,w[i])*self.cb.get_volume()/self.cb.get_n_grid()
+                error_level += self.cb.inner_product(w_diff[i],w_diff[i])
+                error_normal += self.cb.inner_product(w[i],w[i])
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
-            mass_error = np.mean(phi_diff)
+            mass_error = self.cb.integral(phi_diff)/self.cb.get_volume()
             
             if (self.box_is_altering):
                 # Calculate stress
@@ -520,8 +521,8 @@ class SCFT:
                         
             # Keep the level of field value
             for i in range(S):
-                w[i] *= self.q_mask
-                w[i] -= np.mean(w[i]*self.q_mask)
+                w[i] *= self.mask
+                w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
         # Store phi and w
         self.phi = phi
