@@ -84,7 +84,7 @@ private:
     std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
 
     // Remember propagators and bond length for each segment to prepare stress computation
-    // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond)
+    // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond_length)
     std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_info;
 
     // Total partition functions for each solvent

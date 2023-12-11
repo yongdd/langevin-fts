@@ -142,7 +142,8 @@ void CpuSolverContinuous::compute_statistics(
         // If( q_init.size() > 0)
         //     throw_with_line_number("Currently, \'q_init\' is not supported.");
 
-        propagator_solver->initialize(w_input);
+        // Update dw or exp_dw
+        propagator_solver->update_dw(w_input);
 
         if(q_mask == nullptr)
         {
@@ -402,16 +403,13 @@ void CpuSolverContinuous::compute_statistics(
             const double ds = molecules->get_ds();
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
-
-            double exp_dw[M];
+            
             double *_phi = phi_solvent[s];
-            const double *w_input_ = w_input[monomer_type];
-            for(int i=0; i<M; i++)
-                exp_dw[i] = exp(-w_input_[i]*ds);
+            double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
-            single_solvent_partitions[s] = cb->integral(exp_dw)/this->accessible_volume;
+            single_solvent_partitions[s] = cb->inner_product(_exp_dw, _exp_dw)/this->accessible_volume;
             for(int i=0; i<M; i++)
-                _phi[i] = exp_dw[i]*volume_fraction/single_solvent_partitions[s];
+                _phi[i] = _exp_dw[i]*_exp_dw[i]*volume_fraction/single_solvent_partitions[s];
         }
 
     }
@@ -597,7 +595,6 @@ std::vector<double> CpuSolverContinuous::compute_stress()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
 
-        auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
@@ -639,14 +636,13 @@ std::vector<double> CpuSolverContinuous::compute_stress()
             double *q_2 = propagator[dep_u];    // dependency u
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
-            double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // Compute
             for(int n=0; n<=N; n++)
             {
                 std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_continuous(
-                    &q_1[(N_ORIGINAL-N_OFFSET-n)*M], &q_2[n*M], bond_length_sq);
+                    &q_1[(N_ORIGINAL-N_OFFSET-n)*M], &q_2[n*M], monomer_type);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
             }

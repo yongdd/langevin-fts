@@ -19,6 +19,7 @@ class CpuPseudo : public Pseudo
 {
 private:
     FFT *fft;
+    std::string chain_model;
 
     // For stress calculation: compute_stress()
     double *fourier_basis_x;
@@ -36,7 +37,7 @@ public:
     ~CpuPseudo();
     void update_bond_function() override;
 
-    void initialize(std::map<std::string, const double*> w_input);
+    void update_dw(std::map<std::string, const double*> w_input);
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
@@ -45,7 +46,7 @@ public:
     
     // Compute stress of single segment
     std::vector<double> compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, double bond_length_sq);
+                double *q_1, double *q_2, std::string monomer_type);
 
     //---------- Discrete chain model -------------
     // Advance propagator by one segment step
@@ -56,6 +57,6 @@ public:
 
     // Compute stress of single segment
     std::vector<double> compute_single_segment_stress_discrete(
-                double *q_1, double *q_2, std::string monomer_type, bool is_half_bond);
+                double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length);
 };
 #endif
