@@ -50,9 +50,6 @@ private:
     // Solvent concentrations
     std::vector<double *> phi_solvent;
 
-    // Accessible volume of polymers excluding mask region
-    double accessible_volume;
-
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
@@ -62,14 +59,12 @@ public:
     void update_bond_function() override;
     void compute_statistics(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {},
-        double* q_mask=nullptr) override;
+        std::map<std::string, const double*> q_init = {}) override;
     void compute_statistics_device(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {},
-        double* q_mask=nullptr) override
+        std::map<std::string, const double*> q_init = {}) override
     {
-        compute_statistics(w_block, q_init, q_mask);
+        compute_statistics(w_block, q_init);
     };
     double get_total_partition(int polymer) override;
     void get_total_concentration(std::string monomer_type, double *phi) override;

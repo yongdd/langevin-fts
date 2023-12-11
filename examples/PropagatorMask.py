@@ -30,9 +30,9 @@ y = np.linspace(-lx[1]/2, lx[1]/2, num=nx[1], endpoint=False)
 
 xv, yv = np.meshgrid(x, y, indexing='ij')
 nano_particle_radius = 1.0
-q_mask = np.ones(nx)
-q_mask[np.sqrt(xv**2 + yv**2) < nano_particle_radius] = 0.0
-print(1.0-np.mean(q_mask), (np.pi*nano_particle_radius**2)/np.prod(lx))
+mask = np.ones(nx)
+mask[np.sqrt(xv**2 + yv**2) < nano_particle_radius] = 0.0
+print(1.0-np.mean(mask), (np.pi*nano_particle_radius**2)/np.prod(lx))
 
 aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
@@ -42,7 +42,7 @@ factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box
-cb = factory.create_computation_box(nx, lx)
+cb = factory.create_computation_box(nx, lx, mask=mask)
 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
 molecules = factory.create_molecules_information("continuous", ds, stat_seg_length)
@@ -70,7 +70,7 @@ q_init = {"G":np.zeros(nx)}
 q_init["G"][30,:] = 1.0/(lx[0]/nx[0])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-solver.compute_statistics({"A":w["A"]}, q_mask=q_mask, q_init=q_init)
+solver.compute_statistics({"A":w["A"]}, q_init=q_init)
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
 file_name = "phi"

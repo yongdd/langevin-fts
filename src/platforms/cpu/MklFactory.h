@@ -27,7 +27,8 @@ public :
 
     ComputationBox* create_computation_box(
         std::vector<int> nx,
-        std::vector<double> lx) override;
+        std::vector<double> lx,
+        const double* mask=nullptr) override;
 
     Molecules* create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;

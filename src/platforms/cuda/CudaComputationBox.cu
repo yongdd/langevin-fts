@@ -9,8 +9,8 @@
 
 //----------------- Constructor -----------------------------
 CudaComputationBox::CudaComputationBox(
-    std::vector<int> nx, std::vector<double> lx)
-    : ComputationBox(nx, lx)
+    std::vector<int> nx, std::vector<double> lx, const double* mask)
+    : ComputationBox(nx, lx, mask)
 {
     initialize();
 }

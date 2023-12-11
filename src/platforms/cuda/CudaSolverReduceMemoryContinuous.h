@@ -76,17 +76,13 @@ private:
     // Solvent concentrations
     std::vector<double *> phi_solvent;
 
-    // Accessible volume of polymers excluding mask region
-    double accessible_volume;
-
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const int N_ORIGINAL, const double NORM);
 
     // Compute statistics with inputs from selected device arrays
     void compute_statistics(std::string device,
         std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init = {},
-        double* q_mask=nullptr);
+        std::map<std::string, const double*> q_init = {});
 public:
 
     CudaSolverReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, PropagatorsAnalyzer *propagators_analyzer);
@@ -95,17 +91,15 @@ public:
     void update_bond_function() override;
     void compute_statistics(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {},
-        double* q_mask=nullptr) override
+        std::map<std::string, const double*> q_init = {}) override
     {
-        compute_statistics("cpu", w_block, q_init, q_mask);
+        compute_statistics("cpu", w_block, q_init);
     };
     void compute_statistics_device(
         std::map<std::string, const double*> d_w_block,
-        std::map<std::string, const double*> d_q_init = {},
-        double* d_q_mask=nullptr) override
+        std::map<std::string, const double*> d_q_init = {}) override
     {
-        compute_statistics("gpu", d_w_block, d_q_init, d_q_mask);
+        compute_statistics("gpu", d_w_block, d_q_init);
     };
     double get_total_partition(int polymer) override;
     void get_total_concentration(std::string monomer_type, double *phi) override;

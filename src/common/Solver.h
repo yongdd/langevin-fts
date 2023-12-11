@@ -43,13 +43,11 @@ public:
     // Inputs are in main memory
     virtual void compute_statistics(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {},
-        double *q_mask = nullptr) = 0;
+        std::map<std::string, const double*> q_init = {}) = 0;
     // Inputs are in platform memory (cpu or gpu)
     virtual void compute_statistics_device(
         std::map<std::string, const double*> d_w_block,
-        std::map<std::string, const double*> d_q_init = {},
-        double *d_q_mask = nullptr) = 0;
+        std::map<std::string, const double*> d_q_init = {}) = 0;
 
     virtual double get_total_partition(int polymer) = 0;
     virtual void get_total_concentration(std::string monomer_type, double *phi) = 0;

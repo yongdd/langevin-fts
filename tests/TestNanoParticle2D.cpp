@@ -105,7 +105,7 @@ int main()
         double phi_b  [M];
         double w_plus [M];
         double w_minus[M];
-        double q_mask [M];
+        double mask   [M];
 
         // Set a mask to set q(r,s) = 0
         double nano_particle_radius = 1.5;
@@ -114,16 +114,16 @@ int main()
             for(int j=0;j<nx[1];j++)
             {
                 if (sqrt(pow(i*lx[0]/nx[0]-3.0,2) + pow(j*lx[1]/nx[1]-2.5,2)) < nano_particle_radius)
-                    q_mask[i + j*nx[0]] = 0.0;
+                    mask[i+j*nx[0]] = 0.0;
                 else
-                    q_mask[i + j*nx[0]] = 1.0;
+                    mask[i+j*nx[0]] = 1.0;
             }
         }
         sum = 0.0;
         for(int i=0; i<M; i++)
-             sum += q_mask[i]/M;
-        // std::cout << "Mean of q_mask, volume fraction of sphere: " << 1.0 - sum << ", " << 4.0/3.0*PI*pow(nano_particle_radius,3)/(lx[0]*lx[1]) << std::endl;
-        std::cout << "Mean of q_mask, volume fraction of disk: " << 1.0 - sum << ", " << PI*pow(nano_particle_radius,2)/(lx[0]*lx[1]) << std::endl;
+             sum += mask[i]/M;
+        // std::cout << "Mean of mask, volume fraction of sphere: " << 1.0 - sum << ", " << 4.0/3.0*PI*pow(nano_particle_radius,3)/(lx[0]*lx[1]) << std::endl;
+        std::cout << "Mean of mask, volume fraction of disk: " << 1.0 - sum << ", " << PI*pow(nano_particle_radius,2)/(lx[0]*lx[1]) << std::endl;
 
         // Choose platform
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
@@ -147,7 +147,7 @@ int main()
                         // factory->display_info();
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
-                        ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
+                        ComputationBox *cb = factory->create_computation_box(nx, lx_backup, mask);
                         Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
                         PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
@@ -179,7 +179,7 @@ int main()
                         cb->zero_mean(&w[M]);
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {}, q_mask);
+                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 

@@ -42,7 +42,7 @@ public:
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
     void advance_propagator_continuous(
-                double *q_in, double *q_out, std::string monomer_type, double *q_mask);
+                double *q_in, double *q_out, std::string monomer_type, const double *q_mask);
     
     // Compute stress of single segment
     std::vector<double> compute_single_segment_stress_continuous(
@@ -50,7 +50,7 @@ public:
 
     //---------- Discrete chain model -------------
     // Advance propagator by one segment step
-    void advance_propagator_discrete(double *q_in, double *q_out, std::string monomer_type, double* q_mask);
+    void advance_propagator_discrete(double *q_in, double *q_out, std::string monomer_type, const double* q_mask);
 
     // Advance propagator by half bond step
     void advance_propagator_discrete_half_bond_step(double *q_in, double *q_out, std::string monomer_type);

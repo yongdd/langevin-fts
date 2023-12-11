@@ -6,7 +6,7 @@
 #include "ComputationBox.h"
 
 //----------------- Constructor -----------------------------
-ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx)
+ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx, const double* mask)
 {
     if ( new_nx.size() != new_lx.size() )
         throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
@@ -42,6 +42,25 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
         for(int d=0; d<dim; d++)
             n_grid *= nx[d];
 
+        // Mask
+        // Penetrable region == 1.0 
+        // Impenetrable region == 0.0
+        if (mask != nullptr)
+        {
+            this->mask = new double[n_grid];
+            for(int i=0; i<n_grid; i++)
+            {
+                if(abs(mask[i]) < 1e-7)
+                    this->mask[i] = 0.0;
+                else if(abs(mask[i]-1.0) < 1e-7)
+                    this->mask[i] = 1.0;
+                else
+                    throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
+            }
+        }
+        else
+            this->mask = nullptr;
+
         // Weight factor for integral
         dv = new double[n_grid];
         for(int i=0; i<n_grid; i++)
@@ -50,11 +69,14 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             for(int d=0; d<dim; d++)
                 dv[i] *= dx[d];
         }
+        if (this->mask != nullptr)
+            for(int i=0; i<n_grid; i++)
+                dv[i] *= this->mask[i];
 
         // Volume of simulation box
-        volume = 1.0;
-        for(int d=0; d<dim; d++)
-            volume *= lx[d];
+        volume = 0.0;
+        for(int i=0; i<n_grid; i++)
+            volume += dv[i];
     }
     catch(std::exception& exc)
     {
@@ -65,6 +87,8 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
 ComputationBox::~ComputationBox()
 {
     delete[] dv;
+    if (mask != nullptr)
+        delete[] mask;
 }
 //----------------- get methods-------------------------------------
 int ComputationBox::get_dim()
@@ -113,6 +137,10 @@ double ComputationBox::get_volume()
 {
     return volume;
 }
+const double* ComputationBox::get_mask()
+{
+    return mask;
+}
 //----------------- set methods-------------------------------------
 void ComputationBox::set_lx(std::vector<double> new_lx)
 {
@@ -128,7 +156,6 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
     }
 
     lx = new_lx;
-
     // Grid interval
     for(int d=0; d<dim; d++)
         dx[d] = lx[d]/nx[d];
@@ -140,11 +167,14 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
         for(int d=0; d<dim; d++)
             dv[i] *= dx[d];
     }
+    if (this->mask != nullptr)
+        for(int i=0; i<n_grid; i++)
+            dv[i] *= this->mask[i]; 
 
     // Volume of simulation box
-    volume = 1.0;
-    for(int d=0; d<dim; d++)
-        volume *= lx[d];
+    volume = 0.0;
+    for(int i=0; i<n_grid; i++)
+        volume += dv[i];
 }
 //-----------------------------------------------------------
 // This method calculates integral of g

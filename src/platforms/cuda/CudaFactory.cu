@@ -34,9 +34,9 @@ Array* CudaFactory::create_array(
     return new CudaArray(data, size);
 }
 ComputationBox* CudaFactory::create_computation_box(
-    std::vector<int> nx, std::vector<double>  lx)
+    std::vector<int> nx, std::vector<double> lx, const double* mask)
 {
-    return new CudaComputationBox(nx, lx);
+    return new CudaComputationBox(nx, lx, mask);
 }
 Molecules* CudaFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
