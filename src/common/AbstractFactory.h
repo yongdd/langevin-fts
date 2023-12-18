@@ -11,8 +11,8 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
-#include "Solver.h"
+#include "PropagatorAnalyzer.h"
+#include "PropagatorComputation.h"
 #include "AndersonMixing.h" 
 #include "Array.h" 
 
@@ -41,13 +41,13 @@ public :
     virtual Molecules* create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) = 0;
 
-    PropagatorsAnalyzer* create_propagators_analyzer(Molecules* molecules, bool aggregate_propagator_computation)
+    PropagatorAnalyzer* create_propagator_analyzer(Molecules* molecules, bool aggregate_propagator_computation)
     {
-        return new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
+        return new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
     };
 
-    virtual Solver* create_pseudospectral_solver(
-        ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer) = 0; 
+    virtual PropagatorComputation* create_pseudospectral_solver(
+        ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

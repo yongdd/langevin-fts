@@ -11,7 +11,7 @@
 
 #include "Exception.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 
 class Scheduler
 {
@@ -26,12 +26,12 @@ private:
 
     // Methods
     std::vector<std::vector<std::string>> make_propagator_hierarchies(
-        std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes);
+        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes);
 public:
 
-    Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes, const int N_STREAM);
+    Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes, const int N_STREAM);
     ~Scheduler() {};
     std::vector<std::vector<std::tuple<std::string, int, int>>>& get_schedule();
-    void display(std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes);
+    void display(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes);
 };
 #endif

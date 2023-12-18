@@ -228,12 +228,12 @@ class SCFT:
 
         # (C++ class) Propagator Analyzer
         if "aggregate_propagator_computation" in params:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, params["aggregate_propagator_computation"])
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, params["aggregate_propagator_computation"])
         else:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, True)
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
         # Total number of variables to be adjusted to minimize the Hamiltonian
         if params["box_is_altering"] : 
@@ -306,8 +306,8 @@ class SCFT:
         # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        propagators_analyzer.display_blocks()
-        propagators_analyzer.display_propagators()
+        propagator_analyzer.display_blocks()
+        propagator_analyzer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -320,7 +320,7 @@ class SCFT:
 
         self.cb = cb
         self.molecules = molecules
-        self.propagators_analyzer = propagators_analyzer
+        self.propagator_analyzer = propagator_analyzer
         self.solver = solver
 
     def save_results(self, path):
@@ -378,7 +378,28 @@ class SCFT:
         
         L0 = 2.0
         lamb = L0**3*np.pi**2/4
+
+        T_mask = 1.0
+        L = self.params["lx"][0] - 2*T_mask
+        alpha = self.molecules.get_polymer(0).get_alpha()
         
+        if self.cb.get_dim()==3:
+            polymer_volume = 2*alpha*self.params["lx"][1]*self.params["lx"][2]
+            box_volume = self.params["lx"][0]*self.params["lx"][1]*self.params["lx"][2]
+        elif self.cb.get_dim()==2:
+            polymer_volume = 2*alpha*self.params["lx"][1]
+            box_volume = self.params["lx"][0]*self.params["lx"][1]
+        elif self.cb.get_dim()==1:
+            polymer_volume = 2*alpha
+            box_volume = self.params["lx"][0]
+            
+        available_volume = self.cb.get_volume()
+        
+        volume_scaling = 2*alpha/self.params["lx"][0]
+        # print(available_volume, box_volume)
+        # print(volume_scaling_partition)
+        # print(np.log(volume_scaling_partition))
+
         #------------------ run ----------------------
         print("---------- Run ----------")
 
@@ -425,10 +446,8 @@ class SCFT:
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
             # Scaling phi
-            T_mask = 1.0
-            L = self.params["lx"][0] - 2*T_mask
             for monomer_type in self.monomer_types:
-                phi[monomer_type] /= L/2
+                phi[monomer_type] *= volume_scaling
 
             # q_1 = self.solver.get_chain_propagator(0,0,1,0)
             # q_2 = self.solver.get_chain_propagator(0,1,0,400)
@@ -453,7 +472,7 @@ class SCFT:
             #                     self.molecules.get_polymer(p).get_alpha() * \
             #                     np.log(self.solver.get_total_partition(p))
 
-            energy_total = - self.cb.integral(w[0]*phi["A"])/self.cb.get_volume()/2
+            energy_total = - self.cb.integral(w[0]*phi["A"])/polymer_volume/2
             for p in range(self.molecules.get_n_polymer_types()):
                 energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
                                 self.molecules.get_polymer(p).get_alpha() * \
@@ -531,7 +550,7 @@ class SCFT:
                 self.cb.set_lx(new_lx)
 
                 # Update bond parameters using new lx
-                self.solver.update_bond_function()
+                self.solver.update_laplacian_operator()
             else:
                 w = self.field_optimizer.calculate_new_fields(
                 np.reshape(w,      S*self.cb.get_n_grid()),

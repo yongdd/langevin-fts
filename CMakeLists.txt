@@ -43,10 +43,10 @@ ADD_LIBRARY(common
     src/common/PropagatorCode.cpp
     src/common/Polymer.cpp
     src/common/Molecules.cpp
-    src/common/PropagatorsAnalyzer.cpp
+    src/common/PropagatorAnalyzer.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
-    src/common/Solver.cpp
+    src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
     src/common/Scheduler.cpp
 )
@@ -63,9 +63,9 @@ IF(MKL_FOUND)
         src/platforms/cpu/MklFFT3D.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
-        src/platforms/cpu/CpuPseudo.cpp
-        src/platforms/cpu/CpuSolverContinuous.cpp
-        src/platforms/cpu/CpuSolverDiscrete.cpp
+        src/platforms/cpu/CpuSolverPseudo.cpp
+        src/platforms/cpu/CpuComputationContinuous.cpp
+        src/platforms/cpu/CpuComputationDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
@@ -83,11 +83,11 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaCommon.cu
         src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
-        src/platforms/cuda/CudaPseudo.cu
-        src/platforms/cuda/CudaSolverContinuous.cu
-        src/platforms/cuda/CudaSolverDiscrete.cu
-        src/platforms/cuda/CudaSolverReduceMemoryContinuous.cu
-        src/platforms/cuda/CudaSolverReduceMemoryDiscrete.cu
+        src/platforms/cuda/CudaSolverPseudo.cu
+        src/platforms/cuda/CudaComputationContinuous.cu
+        src/platforms/cuda/CudaComputationDiscrete.cu
+        src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu
+        src/platforms/cuda/CudaComputationReduceMemoryDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu

@@ -8,9 +8,9 @@
 
 #include "Array.h"
 #include "Polymer.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #include "ComputationBox.h"
-#include "Solver.h"
+#include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -154,19 +154,19 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_n_solvent_types", &Molecules::get_n_solvent_types)
         .def("add_solvent", &Molecules::add_solvent);
         
-    py::class_<PropagatorsAnalyzer>(m, "PropagatorsAnalyzer")
-        .def("get_essential_propagator_codes", &PropagatorsAnalyzer::get_essential_propagator_codes)
-        .def("get_essential_propagator_code", &PropagatorsAnalyzer::get_essential_propagator_code)
-        .def("get_essential_blocks", &PropagatorsAnalyzer::get_essential_blocks)
-        .def("get_essential_block", &PropagatorsAnalyzer::get_essential_block)
-        .def("display_propagators", &PropagatorsAnalyzer::display_propagators)
-        .def("display_blocks", &PropagatorsAnalyzer::display_blocks)
+    py::class_<PropagatorAnalyzer>(m, "PropagatorAnalyzer")
+        .def("get_computation_propagator_codes()", &PropagatorAnalyzer::get_computation_propagator_codes)
+        .def("get_computation_propagator_code", &PropagatorAnalyzer::get_computation_propagator_code)
+        .def("get_computation_blocks", &PropagatorAnalyzer::get_computation_blocks)
+        .def("get_computation_block", &PropagatorAnalyzer::get_computation_block)
+        .def("display_propagators", &PropagatorAnalyzer::display_propagators)
+        .def("display_blocks", &PropagatorAnalyzer::display_blocks)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
-    py::class_<Solver>(m, "Solver")
-        .def("update_bond_function", &Solver::update_bond_function)
-        .def("compute_statistics", [](Solver& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
+    py::class_<PropagatorComputation>(m, "PropagatorComputation")
+        .def("update_laplacian_operator", &PropagatorComputation::update_laplacian_operator)
+        .def("compute_statistics", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -210,7 +210,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
-        // .def("compute_statistics_device", [](Solver& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
+        // .def("compute_statistics_device", [](PropagatorComputation& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
         // {
         //     try{
         //         std::map<std::string, const double*> map_buf_w_input;
@@ -236,7 +236,7 @@ PYBIND11_MODULE(langevinfts, m)
         //         throw_without_line_number(exc.what());
         //     }
         // })
-        .def("get_total_concentration", [](Solver& obj, std::string monomer_type)
+        .def("get_total_concentration", [](PropagatorComputation& obj, std::string monomer_type)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -250,7 +250,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_concentration", [](Solver& obj, int polymer, std::string monomer_type)
+        .def("get_total_concentration", [](PropagatorComputation& obj, int polymer, std::string monomer_type)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -264,7 +264,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_block_concentration", [](Solver& obj, int polymer)
+        .def("get_block_concentration", [](PropagatorComputation& obj, int polymer)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -280,9 +280,9 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_partition", &Solver::get_total_partition)
-        .def("get_solvent_partition", &Solver::get_solvent_partition)
-        .def("get_solvent_concentration", [](Solver& obj, int s)
+        .def("get_total_partition", &PropagatorComputation::get_total_partition)
+        .def("get_solvent_partition", &PropagatorComputation::get_solvent_partition)
+        .def("get_solvent_concentration", [](PropagatorComputation& obj, int s)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -297,7 +297,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_chain_propagator", [](Solver& obj, int polymer, int v, int u, int n)
+        .def("get_chain_propagator", [](PropagatorComputation& obj, int polymer, int v, int u, int n)
         {
             try{
                 const int M = obj.get_n_grid();
@@ -311,8 +311,8 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("compute_stress", &Solver::compute_stress)
-        .def("check_total_partition", &Solver::check_total_partition);
+        .def("compute_stress", &PropagatorComputation::compute_stress)
+        .def("check_total_partition", &PropagatorComputation::check_total_partition);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)
@@ -373,7 +373,7 @@ PYBIND11_MODULE(langevinfts, m)
             }
         }, py::arg("nx"), py::arg("lx"), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory::create_molecules_information)
-        .def("create_propagators_analyzer", &AbstractFactory::create_propagators_analyzer)
+        .def("create_propagator_analyzer", &AbstractFactory::create_propagator_analyzer)
         .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)

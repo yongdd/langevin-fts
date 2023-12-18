@@ -2,8 +2,8 @@
 * This class defines a derived class for pseudo-spectral method
 *-----------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_H_
-#define CPU_PSEUDO_H_
+#ifndef CPU_SOLVER_PSEUDO_H_
+#define CPU_SOLVER_PSEUDO_H_
 
 #include <string>
 #include <vector>
@@ -15,9 +15,12 @@
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuPseudo : public Pseudo
+class CpuSolverPseudo : public Pseudo
 {
 private:
+    ComputationBox *cb;
+    Molecules *molecules;
+    
     FFT *fft;
     std::string chain_model;
 
@@ -33,10 +36,9 @@ public:
     std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
     std::map<std::string, double*> exp_dw_half;       // Boltzmann factor for the half segment
 
-    CpuPseudo(ComputationBox *cb, Molecules *molecules);
-    ~CpuPseudo();
-    void update_bond_function() override;
-
+    CpuSolverPseudo(ComputationBox *cb, Molecules *molecules);
+    ~CpuSolverPseudo();
+    void update_laplacian_operator();
     void update_dw(std::map<std::string, const double*> w_input);
 
     //---------- Continuous chain model -------------

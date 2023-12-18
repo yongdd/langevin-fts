@@ -1,21 +1,14 @@
 #include <iostream>
 #include <cmath>
-#include "CpuPseudo.h"
+#include "CpuSolverPseudo.h"
 
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
 
-CpuPseudo::CpuPseudo(ComputationBox *cb, Molecules *molecules) : Pseudo(cb)
+CpuSolverPseudo::CpuSolverPseudo(ComputationBox *cb, Molecules *molecules)
 {
     try{
-        if (cb->get_dim() == 3)
-            this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
-        else if (cb->get_dim() == 2)
-            this->n_complex_grid = cb->get_nx(0)*(cb->get_nx(1)/2+1);
-        else if (cb->get_dim() == 1)
-            this->n_complex_grid = cb->get_nx(0)/2+1;
-
         if (cb->get_dim() == 3)
             this->fft = new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
         else if (cb->get_dim() == 2)
@@ -28,7 +21,7 @@ CpuPseudo::CpuPseudo(ComputationBox *cb, Molecules *molecules) : Pseudo(cb)
         this->chain_model = molecules->get_model_name();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
         for(const auto& item: molecules->get_bond_lengths())
@@ -46,14 +39,14 @@ CpuPseudo::CpuPseudo(ComputationBox *cb, Molecules *molecules) : Pseudo(cb)
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
 
-        update_bond_function();
+        update_laplacian_operator();
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-CpuPseudo::~CpuPseudo()
+CpuSolverPseudo::~CpuSolverPseudo()
 {
     delete fft;
 
@@ -73,7 +66,7 @@ CpuPseudo::~CpuPseudo()
             delete[] item.second;
     }
 }
-void CpuPseudo::update_bond_function()
+void CpuSolverPseudo::update_laplacian_operator()
 {
     try
     {
@@ -81,11 +74,11 @@ void CpuPseudo::update_bond_function()
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds() );
-            get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds() );
+            Pseudo::get_boltz_bond(boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds() );
+            Pseudo::get_boltz_bond(boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds() );
 
             // For stress calculation: compute_stress()
-            get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+            Pseudo::get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         }
     }
     catch(std::exception& exc)
@@ -93,7 +86,7 @@ void CpuPseudo::update_bond_function()
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudo::update_dw(std::map<std::string, const double*> w_input)
+void CpuSolverPseudo::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = cb->get_n_grid();
     const double ds = molecules->get_ds();
@@ -124,13 +117,13 @@ void CpuPseudo::update_dw(std::map<std::string, const double*> w_input)
         }
     }
 }
-void CpuPseudo::advance_propagator_continuous(
+void CpuSolverPseudo::advance_propagator_continuous(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
     {
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         double q_out1[M], q_out2[M];
         std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
 
@@ -193,13 +186,13 @@ void CpuPseudo::advance_propagator_continuous(
         throw_without_line_number(exc.what());
     }
 }
-void CpuPseudo::advance_propagator_discrete(
+void CpuSolverPseudo::advance_propagator_discrete(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
     {
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         std::complex<double> k_q_in[M_COMPLEX];
 
         double *_exp_dw = exp_dw[monomer_type];
@@ -229,13 +222,13 @@ void CpuPseudo::advance_propagator_discrete(
     }
 }
 
-void CpuPseudo::advance_propagator_discrete_half_bond_step(
+void CpuSolverPseudo::advance_propagator_discrete_half_bond_step(
     double *q_in, double *q_out, std::string monomer_type)
 {
     try
     {
         // Const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         std::complex<double> k_q_in[M_COMPLEX];
 
         double *_boltz_bond_half = boltz_bond_half[monomer_type];
@@ -254,12 +247,12 @@ void CpuPseudo::advance_propagator_discrete_half_bond_step(
     }
 }
 
-std::vector<double> CpuPseudo::compute_single_segment_stress_continuous(
+std::vector<double> CpuSolverPseudo::compute_single_segment_stress_continuous(
                 double *q_1, double *q_2, std::string monomer_type)
 {
     const int DIM  = cb->get_dim();
     const int M    = cb->get_n_grid();
-    const int M_COMPLEX = this->n_complex_grid;
+    const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
     auto bond_lengths = molecules->get_bond_lengths();
     double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
     double coeff;
@@ -302,12 +295,12 @@ std::vector<double> CpuPseudo::compute_single_segment_stress_continuous(
     return stress;
 }
 
-std::vector<double> CpuPseudo::compute_single_segment_stress_discrete(
+std::vector<double> CpuSolverPseudo::compute_single_segment_stress_discrete(
                 double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     const int DIM  = cb->get_dim();
     const int M    = cb->get_n_grid();
-    const int M_COMPLEX = this->n_complex_grid;
+    const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
     double coeff;
 
     std::vector<double> stress(DIM);

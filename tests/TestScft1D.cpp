@@ -11,8 +11,8 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
-#include "Solver.h"
+#include "PropagatorAnalyzer.h"
+#include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -82,8 +82,8 @@ int main()
             ComputationBox *cb = factory->create_computation_box(nx, lx);
             Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
             molecules->add_polymer(1.0, blocks, {});
-            PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, false);
-            Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
+            PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, false);
+            PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -104,8 +104,8 @@ int main()
                 sum += cb->get_dv(i);
             std::cout << "volume, sum(dv):  " << cb->get_volume() << " " << sum << std::endl;
 
-            propagators_analyzer->display_blocks();
-            propagators_analyzer->display_propagators();
+            propagator_analyzer->display_blocks();
+            propagator_analyzer->display_propagators();
 
             //-------------- Allocate array ------------
             w       = new double[M*2];
@@ -229,7 +229,7 @@ int main()
             delete[] w_minus;
 
             delete molecules;
-            delete propagators_analyzer;
+            delete propagator_analyzer;
             delete cb;
             delete solver;
             delete am;

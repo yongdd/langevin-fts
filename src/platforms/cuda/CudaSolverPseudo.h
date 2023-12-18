@@ -2,8 +2,8 @@
 * This class defines a derived class for pseudo-spectral method
 *-----------------------------------------------------------*/
 
-#ifndef CUDA_PSEUDO_H_
-#define CUDA_PSEUDO_H_
+#ifndef CUDA_SOLVER_PSEUDO_H_
+#define CUDA_SOLVER_PSEUDO_H_
 
 #include <string>
 #include <vector>
@@ -15,9 +15,12 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaPseudo : public Pseudo
+class CudaSolverPseudo : public Pseudo
 {
 private:
+    ComputationBox *cb;
+    Molecules *molecules;
+
     std::string chain_model;
     bool reduce_gpu_memory_usage;
 
@@ -62,9 +65,9 @@ public:
     std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // Boltzmann factor for the single segment
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // Boltzmann factor for the half segment
 
-    CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
-    ~CudaPseudo();
-    void update_bond_function() override;
+    CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
+    ~CudaSolverPseudo();
+    void update_laplacian_operator();
 
     void update_dw(std::string device, std::map<std::string, const double*> w_input);
 

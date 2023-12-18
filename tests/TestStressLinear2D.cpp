@@ -12,8 +12,8 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
-#include "Solver.h"
+#include "PropagatorAnalyzer.h"
+#include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -119,8 +119,8 @@ int main()
                     ComputationBox *cb = factory->create_computation_box(nx, lx);
                     Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
-                    PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
-                    Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
+                    PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
+                    PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
                     AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -268,7 +268,7 @@ int main()
                         //----------- Compute derivate of H: lx + delta ----------------
                         lx[0] = old_lx + dL/2;
                         cb->set_lx(lx);
-                        solver->update_bond_function();
+                        solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
                         solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
@@ -292,7 +292,7 @@ int main()
                         //----------- Compute derivate of H: lx - delta ----------------
                         lx[0] = old_lx - dL/2;
                         cb->set_lx(lx);
-                        solver->update_bond_function();
+                        solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
                         solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
@@ -329,7 +329,7 @@ int main()
                         //----------- Compute derivate of H: ly + delta ----------------
                         lx[1] = old_ly + dL/2;
                         cb->set_lx(lx);
-                        solver->update_bond_function();
+                        solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
                         solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
@@ -353,7 +353,7 @@ int main()
                         //----------- Compute derivate of H: ly - delta ----------------
                         lx[1] = old_ly - dL/2;
                         cb->set_lx(lx);
-                        solver->update_bond_function();
+                        solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
                         solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
@@ -385,7 +385,7 @@ int main()
                             return -1;
                     }
                     delete molecules;
-                    delete propagators_analyzer;
+                    delete propagator_analyzer;
                     delete cb;
                     delete solver;
                     delete am;

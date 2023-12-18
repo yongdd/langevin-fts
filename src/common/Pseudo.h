@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class contains methods and attributes for pseudo-spectral Method
+* This class contains static methods for pseudo-spectral Method
 *-----------------------------------------------------------*/
 
 #ifndef PSEUDO_H_
@@ -15,22 +15,12 @@
 
 class Pseudo
 {
-protected:
-    int n_complex_grid;
-
-    ComputationBox *cb;
-    Molecules *molecules;
-
 public:
-    Pseudo(ComputationBox *cb);
-    virtual ~Pseudo() {};
-    virtual void update_bond_function() = 0;
-
-    void get_boltz_bond(double *boltz_bond, double bond_length_variance,
+    static void get_boltz_bond(double *boltz_bond, double bond_length_variance,
         std::vector<int> nx, std::vector<double> dx, double ds);
-    void get_weighted_fourier_basis(
+    static void get_weighted_fourier_basis(
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
-
+    static int get_n_complex_grid(std::vector<int> dx);
 };
 #endif

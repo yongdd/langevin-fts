@@ -229,12 +229,12 @@ class SCFT:
 
         # (C++ class) Propagator Analyzer
         if "aggregate_propagator_computation" in params:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, params["aggregate_propagator_computation"])
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, params["aggregate_propagator_computation"])
         else:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, True)
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
         # Total number of variables to be adjusted to minimize the Hamiltonian
         if params["box_is_altering"] : 
@@ -307,8 +307,8 @@ class SCFT:
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        propagators_analyzer.display_blocks()
-        propagators_analyzer.display_propagators()
+        propagator_analyzer.display_blocks()
+        propagator_analyzer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -321,7 +321,7 @@ class SCFT:
 
         self.cb = cb
         self.molecules = molecules
-        self.propagators_analyzer = propagators_analyzer
+        self.propagator_analyzer = propagator_analyzer
         self.solver = solver
 
     def save_results(self, path):
@@ -512,7 +512,7 @@ class SCFT:
                 self.cb.set_lx(new_lx)
 
                 # Update bond parameters using new lx
-                self.solver.update_bond_function()
+                self.solver.update_laplacian_operator()
             else:
                 w = self.field_optimizer.calculate_new_fields(
                 np.reshape(w,      S*self.cb.get_n_grid()),

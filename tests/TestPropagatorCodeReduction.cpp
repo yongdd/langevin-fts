@@ -2,7 +2,7 @@
 #include <cmath>
 
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #include "Polymer.h"
 
 int main()
@@ -28,11 +28,11 @@ int main()
 
         Molecules molecules("discrete", 0.1, {{"A",1.0}, {"B",1.0}});
         molecules.add_polymer(1.0, blocks, {});
-        PropagatorsAnalyzer propagators_analyzer(&molecules, false);
+        PropagatorAnalyzer propagator_analyzer(&molecules, false);
 
         // Display all blocks and branches
-        propagators_analyzer.display_blocks();
-        propagators_analyzer.display_propagators();
+        propagator_analyzer.display_blocks();
+        propagator_analyzer.display_propagators();
 
         // Test get_deps_from_key
         std::string key;

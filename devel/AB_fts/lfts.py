@@ -129,7 +129,7 @@ class LFTS:
             molecules.add_polymer(polymer["volume_fraction"], polymer["block_monomer_types"], polymer["block_lengths"], polymer["v"] ,polymer["u"])
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(

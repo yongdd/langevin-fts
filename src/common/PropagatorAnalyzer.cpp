@@ -6,7 +6,7 @@
 #include <stack>
 #include <set>
 
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #include "Exception.h"
@@ -26,7 +26,7 @@ bool ComparePropagatorKey::operator()(const std::string& str1, const std::string
     return str1 < str2;
 }
 
-PropagatorsAnalyzer::PropagatorsAnalyzer(Molecules* molecules, bool aggregate_propagator_computation)
+PropagatorAnalyzer::PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation)
 {
     if(molecules->get_n_polymer_types() == 0)
         throw_with_line_number("There is no chain. Add polymers first.");
@@ -38,12 +38,12 @@ PropagatorsAnalyzer::PropagatorsAnalyzer(Molecules* molecules, bool aggregate_pr
         add_polymer(molecules->get_polymer(p), p);
     }
 }
-void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
+void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 {
     // Temporary map for the new polymer
-    std::map<std::tuple<int, std::string>, std::map<std::string, ComputationBlock >> essential_blocks_new_polymer;
+    std::map<std::tuple<int, std::string>, std::map<std::string, ComputationBlock >> computation_blocks_new_polymer;
 
-    // Find essential_blocks in new_polymer
+    // Find computation_blocks in new_polymer
     std::vector<Block> blocks = pc.get_blocks();
     for(size_t b=0; b<blocks.size(); b++)
     {
@@ -58,18 +58,18 @@ void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
         }
 
         auto key1 = std::make_tuple(polymer_count, dep_v);
-        essential_blocks_new_polymer[key1][dep_u].monomer_type = blocks[b].monomer_type;
-        essential_blocks_new_polymer[key1][dep_u].n_segment_allocated = blocks[b].n_segment;
-        essential_blocks_new_polymer[key1][dep_u].n_segment_offset    = 0;
-        essential_blocks_new_polymer[key1][dep_u].n_segment_original  = blocks[b].n_segment;
-        essential_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
+        computation_blocks_new_polymer[key1][dep_u].monomer_type = blocks[b].monomer_type;
+        computation_blocks_new_polymer[key1][dep_u].n_segment_allocated = blocks[b].n_segment;
+        computation_blocks_new_polymer[key1][dep_u].n_segment_offset    = 0;
+        computation_blocks_new_polymer[key1][dep_u].n_segment_original  = blocks[b].n_segment;
+        computation_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
 
     if (this->aggregate_propagator_computation)
     {
-        // Find aggregated branches in essential_blocks_new_polymer
+        // Find aggregated branches in computation_blocks_new_polymer
         std::map<std::tuple<int, std::string>, std::map<std::string, ComputationBlock >> aggregated_blocks;
-        for(auto& item : essential_blocks_new_polymer)
+        for(auto& item : computation_blocks_new_polymer)
         {
             
             std::vector<std::tuple<int, int>> total_v_u_list;
@@ -83,7 +83,7 @@ void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
                 }
             }
 
-            // Remove keys of second map in essential_blocks_new_polymer, which exist in aggregated_blocks.
+            // Remove keys of second map in computation_blocks_new_polymer, which exist in aggregated_blocks.
             for(auto it = item.second.cbegin(); it != item.second.cend();) // map <tuple, v_u_vector>
             {
                 bool removed = false;
@@ -102,25 +102,25 @@ void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 
             // After the removal is done, add the aggregated branches
             for(auto& second_key : aggregated_blocks[item.first]) 
-                essential_blocks_new_polymer[item.first][second_key.first] = second_key.second;
+                computation_blocks_new_polymer[item.first][second_key.first] = second_key.second;
 
             // Aggregate propagators for given key
             // If the number of elements in the second map is only 1, it will return the map without aggregation.
             // Not all elements of aggregated_second_map are aggregated.
             std::map<std::string, ComputationBlock> aggregated_second_map;
             if (model_name == "continuous")
-                aggregated_second_map = PropagatorsAnalyzer::aggregate_propagator_continuous_chain(item.second);
+                aggregated_second_map = PropagatorAnalyzer::aggregate_propagator_continuous_chain(item.second);
             else if (model_name == "discrete")
-                aggregated_second_map = PropagatorsAnalyzer::aggregate_propagator_discrete_chain(item.second);
+                aggregated_second_map = PropagatorAnalyzer::aggregate_propagator_discrete_chain(item.second);
             else if (model_name == "")
                 std::cout << "Chain model name is not set!" << std::endl;
             else
                 std::cout << "Invalid model name: " << model_name << "!" << std::endl;
 
-            // Replace the second map of essential_blocks_new_polymer with aggregated_second_map
-            essential_blocks_new_polymer[item.first].clear();
+            // Replace the second map of computation_blocks_new_polymer with aggregated_second_map
+            computation_blocks_new_polymer[item.first].clear();
             for(auto& aggregated_propagator_code : aggregated_second_map)
-                essential_blocks_new_polymer[item.first][aggregated_propagator_code.first] = aggregated_propagator_code.second;
+                computation_blocks_new_polymer[item.first][aggregated_propagator_code.first] = aggregated_propagator_code.second;
 
             // For each aggregated_propagator_code
             for(auto& aggregated_propagator_code : aggregated_second_map)
@@ -180,8 +180,8 @@ void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
         }
     }
 
-    // Add results to essential_blocks and essential_propagator_codes
-    for(const auto& v_item : essential_blocks_new_polymer)
+    // Add results to computation_blocks and computation_propagator_codes
+    for(const auto& v_item : computation_blocks_new_polymer)
     {
         for(const auto& u_item : v_item.second)
         {
@@ -197,19 +197,19 @@ void PropagatorsAnalyzer::add_polymer(Polymer& pc, int polymer_count)
             // Add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
-            essential_blocks[key].monomer_type = PropagatorCode::get_monomer_type_from_key(key_v);
-            essential_blocks[key].n_segment_allocated = n_segment_allocated;
-            essential_blocks[key].n_segment_offset    = n_segment_offset;
-            essential_blocks[key].n_segment_original  = n_segment_original;
-            essential_blocks[key].v_u = u_item.second.v_u;
+            computation_blocks[key].monomer_type = PropagatorCode::get_monomer_type_from_key(key_v);
+            computation_blocks[key].n_segment_allocated = n_segment_allocated;
+            computation_blocks[key].n_segment_offset    = n_segment_offset;
+            computation_blocks[key].n_segment_original  = n_segment_original;
+            computation_blocks[key].v_u = u_item.second.v_u;
 
             // Update propagators
-            update_essential_propagator_code(essential_propagator_codes, key_v, n_segment_original);
-            update_essential_propagator_code(essential_propagator_codes, key_u, n_segment_allocated);
+            update_computation_propagator_map(computation_propagator_codes, key_v, n_segment_original);
+            update_computation_propagator_map(computation_propagator_codes, key_u, n_segment_allocated);
         }
     }
 }
-std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> not_aggregated_yet_second_map)
+std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> not_aggregated_yet_second_map)
 {
     // Example)
     // 0, B:
@@ -265,7 +265,7 @@ std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagato
     return aggregated_second_map_total;
 
 }
-std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> not_aggregated_yet_second_map)
+std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> not_aggregated_yet_second_map)
 {
 
     // Example)
@@ -301,7 +301,7 @@ std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagato
     return aggregate_propagator_common(not_aggregated_yet_second_map, 1);
 }
 
-std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment)
+std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment)
 {
     int current_n_segment;
     int n_segment_allocated;
@@ -472,53 +472,53 @@ std::map<std::string, ComputationBlock> PropagatorsAnalyzer::aggregate_propagato
     }
     return aggregated_second_map;
 }
-bool PropagatorsAnalyzer::is_using_propagator_aggregation() const
+bool PropagatorAnalyzer::is_aggregated() const
 {
     return aggregate_propagator_computation;
 }
-void PropagatorsAnalyzer::update_essential_propagator_code(std::map<std::string, ComputationEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment)
+void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment)
 {
-    if (essential_propagator_codes.find(new_key) == essential_propagator_codes.end())
+    if (computation_propagator_codes.find(new_key) == computation_propagator_codes.end())
     {
-        essential_propagator_codes[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
-        essential_propagator_codes[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
-        essential_propagator_codes[new_key].max_n_segment = new_n_segment;
-        essential_propagator_codes[new_key].height = PropagatorCode::get_height_from_key(new_key);
+        computation_propagator_codes[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
+        computation_propagator_codes[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
+        computation_propagator_codes[new_key].max_n_segment = new_n_segment;
+        computation_propagator_codes[new_key].height = PropagatorCode::get_height_from_key(new_key);
     }
     else
     {
-        if (essential_propagator_codes[new_key].max_n_segment < new_n_segment)
-            essential_propagator_codes[new_key].max_n_segment = new_n_segment;
+        if (computation_propagator_codes[new_key].max_n_segment < new_n_segment)
+            computation_propagator_codes[new_key].max_n_segment = new_n_segment;
     }
 }
-int PropagatorsAnalyzer::get_n_essential_propagator_codes() const
+int PropagatorAnalyzer::get_n_computation_propagator_codes() const
 {
-    return essential_propagator_codes.size();
+    return computation_propagator_codes.size();
 }
-std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorsAnalyzer::get_essential_propagator_codes()
+std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorAnalyzer::get_computation_propagator_codes()
 {
-    return essential_propagator_codes;
+    return computation_propagator_codes;
 }
-ComputationEdge& PropagatorsAnalyzer::get_essential_propagator_code(std::string key)
+ComputationEdge& PropagatorAnalyzer::get_computation_propagator_code(std::string key)
 {
-    if (essential_propagator_codes.find(key) == essential_propagator_codes.end())
+    if (computation_propagator_codes.find(key) == computation_propagator_codes.end())
         throw_with_line_number("There is no such key (" + key + ").");
 
-    return essential_propagator_codes[key];
+    return computation_propagator_codes[key];
 }
-std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorsAnalyzer::get_essential_blocks()
+std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorAnalyzer::get_computation_blocks()
 {
-    return essential_blocks;
+    return computation_blocks;
 }
-ComputationBlock& PropagatorsAnalyzer::get_essential_block(std::tuple<int, std::string, std::string> key)
+ComputationBlock& PropagatorAnalyzer::get_computation_block(std::tuple<int, std::string, std::string> key)
 {
-    if (essential_blocks.find(key) == essential_blocks.end())
+    if (computation_blocks.find(key) == computation_blocks.end())
         throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
             std::get<1>(key) + ", " + std::get<2>(key) + ").");
 
-    return essential_blocks[key];
+    return computation_blocks[key];
 }
-void PropagatorsAnalyzer::display_blocks() const
+void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
@@ -527,7 +527,7 @@ void PropagatorsAnalyzer::display_blocks() const
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
 
-    for(const auto& item : essential_blocks)
+    for(const auto& item : computation_blocks)
     {
         // Print polymer id, key1
         const std::string v_string = std::get<1>(item.first);
@@ -569,7 +569,7 @@ void PropagatorsAnalyzer::display_blocks() const
     }
     std::cout << "------------------------------------" << std::endl;
 }
-void PropagatorsAnalyzer::display_propagators() const
+void PropagatorAnalyzer::display_propagators() const
 {
     // Print propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
@@ -578,7 +578,7 @@ void PropagatorsAnalyzer::display_propagators() const
     std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\taggregated, max_n_segment, height" << std::endl;
     
-    for(const auto& item : essential_propagator_codes)
+    for(const auto& item : computation_propagator_codes)
     {
         total_segments += item.second.max_n_segment;
 
@@ -600,7 +600,7 @@ void PropagatorsAnalyzer::display_propagators() const
     std::cout << "------------------------------------" << std::endl;
 }
 
-void PropagatorsAnalyzer::display_sub_propagators() const
+void PropagatorAnalyzer::display_sub_propagators() const
 {
     // Print sub propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
@@ -608,7 +608,7 @@ void PropagatorsAnalyzer::display_sub_propagators() const
     std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\taggregated, max_n_segment, height, deps," << std::endl;
     
-    for(const auto& item : essential_propagator_codes)
+    for(const auto& item : computation_propagator_codes)
     {
         total_segments += item.second.max_n_segment;
 

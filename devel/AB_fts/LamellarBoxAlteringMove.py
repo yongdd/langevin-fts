@@ -159,7 +159,7 @@ factory = PlatformSelector.create_factory(platform, chain_model, reduce_gpu_memo
 cb = factory.create_computation_box(nx, lx)
 molecules = factory.create_molecules_information(chain_model, ds, dict_a_n, aggregate_propagator_computation)
 molecules.add_polymer(1.0, ["A","B"], [f, 1-f], [0, 1], [1, 2])
-solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 am = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 
@@ -253,7 +253,7 @@ for langevin_step in range(1, langevin_max_step+1):
     # change box size
     cb.set_lx(new_lx)
     # update bond parameters using new lx
-    solver.update_bond_function()
+    solver.update_laplacian_operator()
 
 # estimate execution time
 time_duration = time.time() - time_start

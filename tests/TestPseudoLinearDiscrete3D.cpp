@@ -7,16 +7,16 @@
 
 #include "Exception.h"
 #include "CpuComputationBox.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
-#include "CpuSolverDiscrete.h"
+#include "CpuComputationDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaSolverDiscrete.h"
-#include "CudaSolverReduceMemoryDiscrete.h"
+#include "CudaComputationDiscrete.h"
+#include "CudaComputationReduceMemoryDiscrete.h"
 #endif
 
 int main()
@@ -175,22 +175,22 @@ int main()
 
         Molecules* molecules = new Molecules("Discrete", 1.0/N, bond_lengths);
         molecules->add_polymer(1.0, blocks, {});
-        PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, false);
+        PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, false);
 
-        propagators_analyzer->display_blocks();
-        propagators_analyzer->display_propagators();
+        propagator_analyzer->display_blocks();
+        propagator_analyzer->display_propagators();
 
-        std::vector<Solver*> solver_list;
+        std::vector<PropagatorComputation*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuSolverDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
+        solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaSolverDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
-        solver_list.push_back(new CudaSolverReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer));
+        solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
+        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
         #endif
 
         // For each platform    
-        for(Solver* solver: solver_list)
+        for(PropagatorComputation* solver: solver_list)
         {
             for(int i=0; i<M; i++)
             {
