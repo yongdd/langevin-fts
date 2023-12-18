@@ -1,9 +1,9 @@
 /*----------------------------------------------------------
-* This class defines analyzer of propagators to minimize the computational cost
+* This class defines analyzer of propagators to optimize the propagator computation
 *-----------------------------------------------------------*/
 
-#ifndef PROPAGATORS_ANALYZER_H_
-#define PROPAGATORS_ANALYZER_H_
+#ifndef PROPAGATOR_ANALYZER_H_
+#define PROPAGATOR_ANALYZER_H_
 
 #include <string>
 #include <vector>
@@ -41,7 +41,7 @@ struct ComparePropagatorKey
     bool operator()(const std::string& str1, const std::string& str2);
 };
 
-class PropagatorsAnalyzer
+class PropagatorAnalyzer
 {
 private:
     std::string model_name; // "continuous": continuous standard Gaussian model
@@ -49,17 +49,17 @@ private:
     bool aggregate_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
     // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
-    std::map<std::tuple<int, std::string, std::string>, ComputationBlock> essential_blocks;
+    std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}
-    std::map<std::string, ComputationEdge, ComparePropagatorKey> essential_propagator_codes; 
+    std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes; 
 
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
-    void update_essential_propagator_code(std::map<std::string, ComputationEdge, ComparePropagatorKey>& essential_propagator_codes, std::string new_key, int new_n_segment);
+    void update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment);
 
 public:
-    PropagatorsAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);
-    // ~PropagatorsAnalyzer() {};
+    PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);
+    // ~PropagatorAnalyzer() {};
 
     // Add new polymers
     void add_polymer(Polymer& pc, int polymer_count);
@@ -69,13 +69,13 @@ public:
     static std::map<std::string, ComputationBlock> aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> u_map);
     static std::map<std::string, ComputationBlock> aggregate_propagator_discrete_chain  (std::map<std::string, ComputationBlock> u_map);
 
-    // Get information of essential propagators and blocks
-    bool is_using_propagator_aggregation() const;
-    int get_n_essential_propagator_codes() const;
-    std::map<std::string, ComputationEdge, ComparePropagatorKey>& get_essential_propagator_codes(); 
-    ComputationEdge& get_essential_propagator_code(std::string key);
-    std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& get_essential_blocks(); 
-    ComputationBlock& get_essential_block(std::tuple<int, std::string, std::string> key);
+    // Get information of computation propagators and blocks
+    bool is_aggregated() const;
+    int get_n_computation_propagator_codes() const;
+    std::map<std::string, ComputationEdge, ComparePropagatorKey>& get_computation_propagator_codes(); 
+    ComputationEdge& get_computation_propagator_code(std::string key);
+    std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& get_computation_blocks(); 
+    ComputationBlock& get_computation_block(std::tuple<int, std::string, std::string> key);
 
     // Display
     void display_propagators() const;

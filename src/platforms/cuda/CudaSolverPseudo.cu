@@ -1,25 +1,18 @@
 #include <iostream>
 #include <cmath>
 #include <thrust/reduce.h>
-#include "CudaPseudo.h"
+#include "CudaSolverPseudo.h"
 
-CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage) : Pseudo(cb)
+CudaSolverPseudo::CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage)
 {
     try{
-        if (cb->get_dim() == 3)
-            this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
-        else if (cb->get_dim() == 2)
-            this->n_complex_grid = cb->get_nx(0)*(cb->get_nx(1)/2+1);
-        else if (cb->get_dim() == 1)
-            this->n_complex_grid = cb->get_nx(0)/2+1;
-
         this->cb = cb;
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
         this->reduce_gpu_memory_usage = reduce_gpu_memory_usage;
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // Copy streams
@@ -153,7 +146,7 @@ CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t st
             cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_stress_sum[gpu], d_stress_sum_out[gpu], M_COMPLEX, streams[gpu][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[gpu], temp_storage_bytes[gpu]));
         }
-        update_bond_function();
+        update_laplacian_operator();
         gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
@@ -161,7 +154,7 @@ CudaPseudo::CudaPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t st
         throw_without_line_number(exc.what());
     }
 }
-CudaPseudo::~CudaPseudo()
+CudaSolverPseudo::~CudaSolverPseudo()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
@@ -238,11 +231,11 @@ CudaPseudo::~CudaPseudo()
         cudaStreamDestroy(streams[gpu][1]);
     }
 }
-void CudaPseudo::update_bond_function()
+void CudaSolverPseudo::update_laplacian_operator()
 {
     try{
         // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
@@ -251,8 +244,8 @@ void CudaPseudo::update_bond_function()
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
             
-            get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
-            get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            Pseudo::get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            Pseudo::get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
         
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
@@ -266,7 +259,7 @@ void CudaPseudo::update_bond_function()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
-        get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+        Pseudo::get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -281,7 +274,7 @@ void CudaPseudo::update_bond_function()
         throw_with_line_number(exc.what());
     }
 }
-void CudaPseudo::update_dw(std::string device, std::map<std::string, const double*> w_input)
+void CudaSolverPseudo::update_dw(std::string device, std::map<std::string, const double*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -372,7 +365,7 @@ void CudaPseudo::update_dw(std::string device, std::map<std::string, const doubl
     }
 }
 // Advance propagator using Richardson extrapolation
-void CudaPseudo::advance_one_propagator_continuous(
+void CudaSolverPseudo::advance_one_propagator_continuous(
         const int GPU, double *d_q_in, double *d_q_out,
         std::string monomer_type, double *d_q_mask)
 {
@@ -382,7 +375,7 @@ void CudaPseudo::advance_one_propagator_continuous(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
         double *_d_exp_dw_half = d_exp_dw_half[GPU][monomer_type];
@@ -439,7 +432,7 @@ void CudaPseudo::advance_one_propagator_continuous(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_two_propagators_continuous(
+void CudaSolverPseudo::advance_two_propagators_continuous(
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
@@ -452,7 +445,7 @@ void CudaPseudo::advance_two_propagators_continuous(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
         double *_d_exp_dw_half_1 = d_exp_dw_half[0][monomer_type_1];
@@ -528,7 +521,7 @@ void CudaPseudo::advance_two_propagators_continuous(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_two_propagators_continuous_two_gpus(
+void CudaSolverPseudo::advance_two_propagators_continuous_two_gpus(
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
@@ -542,7 +535,7 @@ void CudaPseudo::advance_two_propagators_continuous_two_gpus(
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
         double *_d_exp_dw_half_1 = d_exp_dw_half[0][monomer_type_1];
@@ -645,7 +638,7 @@ void CudaPseudo::advance_two_propagators_continuous_two_gpus(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_one_propagator_discrete(
+void CudaSolverPseudo::advance_one_propagator_discrete(
     const int GPU,
     double *d_q_in, double *d_q_out,
     std::string monomer_type,
@@ -657,7 +650,7 @@ void CudaPseudo::advance_one_propagator_discrete(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
         double *_d_boltz_bond = d_boltz_bond[GPU][monomer_type];
@@ -683,7 +676,7 @@ void CudaPseudo::advance_one_propagator_discrete(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_two_propagators_discrete(
+void CudaSolverPseudo::advance_two_propagators_discrete(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     std::string monomer_type_1, std::string monomer_type_2,
@@ -695,7 +688,7 @@ void CudaPseudo::advance_two_propagators_discrete(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
         double *_d_boltz_bond_1 = d_boltz_bond[0][monomer_type_1];
@@ -735,7 +728,7 @@ void CudaPseudo::advance_two_propagators_discrete(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_two_propagators_discrete_without_copy(
+void CudaSolverPseudo::advance_two_propagators_discrete_without_copy(
     double *d_q_in_two, double *d_q_out_two,
     std::string monomer_type_1, std::string monomer_type_2,
     double *d_q_mask)
@@ -746,7 +739,7 @@ void CudaPseudo::advance_two_propagators_discrete_without_copy(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
         double *_d_boltz_bond_1 = d_boltz_bond[0][monomer_type_1];
@@ -782,7 +775,7 @@ void CudaPseudo::advance_two_propagators_discrete_without_copy(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_two_propagators_discrete_two_gpus(
+void CudaSolverPseudo::advance_two_propagators_discrete_two_gpus(
     double *d_q_in_1, double *d_q_in_2,
     double *d_q_out_1, double *d_q_out_2,
     std::string monomer_type_1, std::string monomer_type_2,
@@ -794,7 +787,7 @@ void CudaPseudo::advance_two_propagators_discrete_two_gpus(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
         double *_d_boltz_bond_1 = d_boltz_bond[0][monomer_type_1];
@@ -840,7 +833,7 @@ void CudaPseudo::advance_two_propagators_discrete_two_gpus(
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::advance_propagator_discrete_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
+void CudaSolverPseudo::advance_propagator_discrete_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
     {
@@ -848,7 +841,7 @@ void CudaPseudo::advance_propagator_discrete_half_bond_step(const int GPU, doubl
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         double *_d_boltz_bond_half = d_boltz_bond_half[GPU][monomer_type];
 
@@ -864,12 +857,12 @@ void CudaPseudo::advance_propagator_discrete_half_bond_step(const int GPU, doubl
         throw_without_line_number(exc.what());
     }
 }
-void CudaPseudo::compute_single_segment_stress_fourier(const int GPU, double *d_q)
+void CudaSolverPseudo::compute_single_segment_stress_fourier(const int GPU, double *d_q)
 {
     // Execute a forward FFT
     cufftExecD2Z(plan_for_two[GPU], d_q, d_qk_in_1_two[GPU]);
 }
-std::vector<double> CudaPseudo::compute_single_segment_stress_continuous(
+std::vector<double> CudaSolverPseudo::compute_single_segment_stress_continuous(
     const int GPU, std::string monomer_type)
 {
     try{
@@ -879,7 +872,7 @@ std::vector<double> CudaPseudo::compute_single_segment_stress_continuous(
 
         const int DIM = cb->get_dim();
         const int M   = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
@@ -938,7 +931,7 @@ std::vector<double> CudaPseudo::compute_single_segment_stress_continuous(
     }
 }
 
-std::vector<double> CudaPseudo::compute_single_segment_stress_discrete(
+std::vector<double> CudaSolverPseudo::compute_single_segment_stress_discrete(
     const int GPU, std::string monomer_type, bool is_half_bond_length)
 {
     try{
@@ -948,7 +941,7 @@ std::vector<double> CudaPseudo::compute_single_segment_stress_discrete(
 
         const int DIM = cb->get_dim();
         const int M   = cb->get_n_grid();
-        const int M_COMPLEX = this->n_complex_grid;
+        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
 
         auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);

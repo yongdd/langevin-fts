@@ -7,10 +7,10 @@
 #include <string>
 
 #include "CudaComputationBox.h"
-#include "CudaSolverContinuous.h"
-#include "CudaSolverDiscrete.h"
-#include "CudaSolverReduceMemoryContinuous.h"
-#include "CudaSolverReduceMemoryDiscrete.h"
+#include "CudaComputationContinuous.h"
+#include "CudaComputationDiscrete.h"
+#include "CudaComputationReduceMemoryContinuous.h"
+#include "CudaComputationReduceMemoryDiscrete.h"
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
@@ -43,18 +43,18 @@ Molecules* CudaFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-Solver* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer)
+PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
 {
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaSolverContinuous(cb, molecules, propagators_analyzer);
+        return new CudaComputationContinuous(cb, molecules, propagator_analyzer);
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaSolverReduceMemoryContinuous(cb, molecules, propagators_analyzer);
+        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaSolverDiscrete(cb, molecules, propagators_analyzer);
+        return new CudaComputationDiscrete(cb, molecules, propagator_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaSolverReduceMemoryDiscrete(cb, molecules, propagators_analyzer);
+        return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_analyzer);
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

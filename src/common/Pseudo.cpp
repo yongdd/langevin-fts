@@ -2,20 +2,16 @@
 #include <cmath>
 #include "Pseudo.h"
 
-Pseudo::Pseudo(
-    ComputationBox *cb)
+int Pseudo::get_n_complex_grid(std::vector<int> nx)
 {
-    if (cb == nullptr)
-        throw_with_line_number("ComputationBox *cb is null pointer");
-
-    this->cb = cb;
-
-    if (cb->get_dim() == 3)
-        this->n_complex_grid = cb->get_nx(0)*cb->get_nx(1)*(cb->get_nx(2)/2+1);
-    else if (cb->get_dim() == 2)
-        this->n_complex_grid = cb->get_nx(0)*(cb->get_nx(1)/2+1);
-    else if (cb->get_dim() == 1)
-        this->n_complex_grid = cb->get_nx(0)/2+1;
+    int n_complex_grid;
+    if (nx.size() == 3)
+        n_complex_grid = nx[0]*nx[1]*(nx[2]/2+1);
+    else if (nx.size() == 2)
+        n_complex_grid = nx[0]*(nx[1]/2+1);
+    else if (nx.size() == 1)
+        n_complex_grid = nx[0]/2+1;
+    return n_complex_grid;
 }
 //----------------- get_boltz_bond -------------------
 void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
@@ -25,12 +21,13 @@ void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
     const double PI{3.14159265358979323846};
     double xfactor[3];
 
+    const int DIM = nx.size();
     std::vector<int> tnx = {1,  1,  1};
     std::vector<double> tdx = {1.0,1.0,1.0};
-    for(int d=0; d<cb->get_dim(); d++)
+    for(int d=0; d<DIM; d++)
     {
-        tnx[3-cb->get_dim()+d] = nx[d];
-        tdx[3-cb->get_dim()+d] = dx[d];
+        tnx[3-DIM+d] = nx[d];
+        tdx[3-DIM+d] = dx[d];
     }
 
     // Calculate the exponential factor
@@ -71,12 +68,13 @@ void Pseudo::get_weighted_fourier_basis(
     const double PI{3.14159265358979323846};
     double xfactor[3];
     
+    const int DIM = nx.size();
     std::vector<int> tnx = {1,  1,  1};
     std::vector<double> tdx = {1.0,1.0,1.0};
-    for(int d=0; d<cb->get_dim(); d++)
+    for(int d=0; d<DIM; d++)
     {
-        tnx[3-cb->get_dim()+d] = nx[d];
-        tdx[3-cb->get_dim()+d] = dx[d];
+        tnx[3-DIM+d] = nx[d];
+        tdx[3-DIM+d] = dx[d];
     }
 
     // Calculate the exponential factor

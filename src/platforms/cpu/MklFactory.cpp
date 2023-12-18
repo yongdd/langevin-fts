@@ -11,8 +11,8 @@
 
 #include "CpuArray.h"
 #include "CpuComputationBox.h"
-#include "CpuSolverContinuous.h"
-#include "CpuSolverDiscrete.h"
+#include "CpuComputationContinuous.h"
+#include "CpuComputationDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -46,16 +46,16 @@ Molecules* MklFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-Solver* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer)
+PropagatorComputation* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
 {
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
     {
-        return new CpuSolverContinuous(cb, molecules, propagators_analyzer);
+        return new CpuComputationContinuous(cb, molecules, propagator_analyzer);
     }
     else if ( chain_model == "discrete" )
     {
-        return new CpuSolverDiscrete(cb, molecules, propagators_analyzer);
+        return new CpuComputationDiscrete(cb, molecules, propagator_analyzer);
     }
     return NULL;
 }

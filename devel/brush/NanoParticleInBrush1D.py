@@ -9,6 +9,22 @@ import scft
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
+
+
+linear_polymer =[{"type":"A", "length":1.0, "v":0, "u":1}]
+
+n_backbone_node = 4
+# Backbone chain
+branched_polymer = [{"type":"A", "length":0.6, "v":0, "u":1}]
+for i in range(1,n_backbone_node+1):
+    branched_polymer.append({"type":"A", "length":0.4/n_backbone_node, "v":i, "u":i+1})
+
+# Side chain
+for i in range(1, n_backbone_node):
+    branched_polymer.append({"type":"A", "length":0.3, "v":i+1, "u":n_backbone_node+i+1})
+print(branched_polymer)
+
+
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
@@ -19,7 +35,7 @@ params = {
 
     "box_is_altering":False,    # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "ds":1/60,                 # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0},
@@ -27,7 +43,7 @@ params = {
     "distinct_polymers":[  # Distinct Polymers
         {   # A Grafted Brush
             "volume_fraction":1.0,
-            "blocks":[{"type":"A", "length":1.0, "v":0, "u":1}],
+            "blocks":branched_polymer,
             "initial_conditions":{0:"G"}},
         ],
 
@@ -39,7 +55,7 @@ params = {
         "mix_init":0.1,        # Initial mixing rate of simple mixing
     },
 
-    "max_iter":200,     # The maximum relaxation iterations
+    "max_iter":80,     # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
@@ -140,12 +156,12 @@ molecules.add_polymer(
 )
 
 # Propagators analyzer for optimal propagator computation
-propagators_analyzer = factory.create_propagators_analyzer(molecules, aggregate_propagator_computation)
-propagators_analyzer.display_blocks()
-propagators_analyzer.display_propagators()
+propagator_analyzer = factory.create_propagator_analyzer(molecules, aggregate_propagator_computation)
+propagator_analyzer.display_blocks()
+propagator_analyzer.display_propagators()
 
 # Create Solver
-solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
 # Fields
 input_data = loadmat("fields.mat", squeeze_me=True)

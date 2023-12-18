@@ -11,8 +11,8 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
-#include "Solver.h"
+#include "PropagatorAnalyzer.h"
+#include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
@@ -134,8 +134,8 @@ int main()
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup);
                         Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
-                        PropagatorsAnalyzer* propagators_analyzer= new PropagatorsAnalyzer(molecules, aggregate_propagator_computation);
-                        Solver *solver     = factory->create_pseudospectral_solver(cb, molecules, propagators_analyzer);
+                        PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
+                        PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -145,11 +145,11 @@ int main()
                         std::cout << std::endl << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
-                        std::cout << "Using GPU Memory Usage: " << reduce_memory_usage << std::endl;
+                        std::cout << "Reducing GPU Memory Usage: " << reduce_memory_usage << std::endl;
 
                         // // display branches
-                        // PropagatorsAnalyzer->display_blocks();
-                        // PropagatorsAnalyzer->display_propagators();
+                        // PropagatorAnalyzer->display_blocks();
+                        // PropagatorAnalyzer->display_propagators();
 
                         // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
                         double xx, yy, zz, c1, c2;
@@ -261,14 +261,14 @@ int main()
                                 lx[d] = w[2*M+d];
                             
                             cb->set_lx(lx);
-                            solver->update_bond_function();
+                            solver->update_laplacian_operator();
                         }
                         energy_total_list.push_back(energy_total);
                         
                         delete factory;
                         delete cb;
                         delete molecules;
-                        delete propagators_analyzer;
+                        delete propagator_analyzer;
                         delete solver;
                         delete am;
                     }

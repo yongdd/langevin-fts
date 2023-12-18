@@ -10,7 +10,7 @@ def find_saddle_point(lx):
     # set box size
     cb.set_lx(lx)
     # update bond parameters using new lx
-    solver.update_bond_function()
+    solver.update_laplacian_operator()
 
     # assign large initial value for the energy and error
     energy_total = 1.0e20

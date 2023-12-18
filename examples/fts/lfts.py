@@ -180,12 +180,12 @@ class LFTS:
 
         # (C++ class) Propagator Analyzer
         if "aggregate_propagator_computation" in params:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, params["aggregate_propagator_computation"])
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, params["aggregate_propagator_computation"])
         else:
-            propagators_analyzer = factory.create_propagators_analyzer(molecules, True)
+            propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
@@ -257,8 +257,8 @@ class LFTS:
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        propagators_analyzer.display_blocks()
-        propagators_analyzer.display_propagators()
+        propagator_analyzer.display_blocks()
+        propagator_analyzer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -273,7 +273,7 @@ class LFTS:
 
         self.cb = cb
         self.molecules = molecules
-        self.propagators_analyzer = propagators_analyzer
+        self.propagator_analyzer = propagator_analyzer
         self.solver = solver 
         self.am = am
 

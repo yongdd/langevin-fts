@@ -57,12 +57,12 @@ molecules.add_polymer(
 )
 
 # Propagators analyzer for optimal propagator computation
-propagators_analyzer = factory.create_propagators_analyzer(molecules, aggregate_propagator_computation)
-propagators_analyzer.display_blocks()
-propagators_analyzer.display_propagators()
+propagator_analyzer = factory.create_propagator_analyzer(molecules, aggregate_propagator_computation)
+propagator_analyzer.display_blocks()
+propagator_analyzer.display_propagators()
 
 # Create Solver
-solver = factory.create_pseudospectral_solver(cb, molecules, propagators_analyzer)
+solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
 # Fields
 w = {"A": np.zeros(nx)}

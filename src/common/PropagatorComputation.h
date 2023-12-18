@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is an abstract Solver class
+* This is an abstract PropagatorComputation class
 *------------------------------------------------------------*/
 
-#ifndef SOLVER_H_
-#define SOLVER_H_
+#ifndef PROPAGATOR_COMPUTATION_H_
+#define PROPAGATOR_COMPUTATION_H_
 
 #include <iostream>
 #include <cassert>
@@ -15,31 +15,23 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "PropagatorCode.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #include "Exception.h"
 
-class Solver
+class PropagatorComputation
 {
 protected:
     ComputationBox *cb;
     Molecules *molecules;
-    PropagatorsAnalyzer *propagators_analyzer;
+    PropagatorAnalyzer *propagator_analyzer;
 
-    int n_complex_grid;
-
-    void get_boltz_bond(double *boltz_bond, double bond_length_variance,
-        std::vector<int> nx, std::vector<double> dx, double ds);
-
-    void get_weighted_fourier_basis(
-        double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
-        std::vector<int> nx, std::vector<double> dx);
 public:
-    Solver(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer);
-    virtual ~Solver() {};
+    PropagatorComputation(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer);
+    virtual ~PropagatorComputation() {};
 
     int get_n_grid() {return cb->get_n_grid();};
     int get_n_blocks(int polymer) { Polymer& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};
-    virtual void update_bond_function() = 0;
+    virtual void update_laplacian_operator() = 0;
     // Inputs are in main memory
     virtual void compute_statistics(
         std::map<std::string, const double*> w_block,

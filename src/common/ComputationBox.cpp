@@ -74,9 +74,14 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
                 dv[i] *= this->mask[i];
 
         // Volume of simulation box
-        volume = 0.0;
+        volume = 1.0;
+        for(int d=0; d<dim; d++)
+            volume *= lx[d];
+
+        // Accessible volume
+        accessible_volume = 0.0;
         for(int i=0; i<n_grid; i++)
-            volume += dv[i];
+            accessible_volume += dv[i];
     }
     catch(std::exception& exc)
     {
@@ -136,6 +141,10 @@ int ComputationBox::get_n_grid()
 double ComputationBox::get_volume()
 {
     return volume;
+}
+double ComputationBox::get_accessible_volume()
+{
+    return accessible_volume;
 }
 const double* ComputationBox::get_mask()
 {

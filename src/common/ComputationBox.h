@@ -23,7 +23,8 @@ protected:
     double *mask; // mask, impenetrable region
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
-
+    double accessible_volume; // accessible volume excluding mask region
+    
 public:
 
     ComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
@@ -39,6 +40,7 @@ public:
     double get_dv(int i);
     int get_n_grid();
     double get_volume();
+    double get_accessible_volume();
     const double* get_mask() ;
 
     virtual void set_lx(std::vector<double> new_lx);

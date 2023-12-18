@@ -1,20 +1,19 @@
 #include <complex>
 #include <thrust/reduce.h>
 #include <iostream>
-#include "CudaSolverDiscrete.h"
+#include "CudaComputationDiscrete.h"
 #include "CudaComputationBox.h"
 
-CudaSolverDiscrete::CudaSolverDiscrete(
+CudaComputationDiscrete::CudaComputationDiscrete(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorsAnalyzer *propagators_analyzer)
-    : Solver(cb, molecules, propagators_analyzer)
+    PropagatorAnalyzer *propagator_analyzer)
+    : PropagatorComputation(cb, molecules, propagator_analyzer)
 {
     try
     {
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-        this->propagators_analyzer = propagators_analyzer;
 
         // Create streams
         for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -23,13 +22,13 @@ CudaSolverDiscrete::CudaSolverDiscrete(
             gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
-        this->propagator_solver = new CudaPseudo(cb, molecules, streams, false);
+        this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
-        if( propagators_analyzer->get_essential_propagator_codes().size() == 0)
+        if( propagator_analyzer->get_computation_propagator_codes().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
         {
              // There are N segments
 
@@ -57,7 +56,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
         }
 
         // Allocate memory for propagator_junction, which contain propagator at junction of discrete chain
-        for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
         {
             std::string key = item.first;
             d_propagator_junction[key] = nullptr;
@@ -65,9 +64,9 @@ CudaSolverDiscrete::CudaSolverDiscrete(
         }
 
         // Allocate memory for concentrations
-        if( propagators_analyzer->get_essential_blocks().size() == 0)
+        if( propagator_analyzer->get_computation_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
-        for(const auto& item: propagators_analyzer->get_essential_blocks())
+        for(const auto& item: propagator_analyzer->get_computation_blocks())
         {
             d_phi_block[item.first] = nullptr;
             gpu_error_check(cudaMalloc((void**)&d_phi_block[item.first], sizeof(double)*M));
@@ -90,15 +89,15 @@ CudaSolverDiscrete::CudaSolverDiscrete(
                 continue;
 
             int n_aggregated;
-            int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
-            std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
+            int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
                 n_aggregated = 1;
             else
-                n_aggregated = propagators_analyzer->get_essential_block(key).v_u.size();
+                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -118,9 +117,9 @@ CudaSolverDiscrete::CudaSolverDiscrete(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = propagators_analyzer->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = propagators_analyzer->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = propagators_analyzer->get_essential_block(key).n_segment_original;
+            const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
+            const int N_OFFSET    = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
 
             double **d_q_1 = d_propagator[dep_v];    // dependency v
             double **d_q_2 = d_propagator[dep_u];    // dependency u
@@ -137,7 +136,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
                 // At v
                 if (n + N_OFFSET == N_ORIGINAL)
                 {
-                    if (propagators_analyzer->get_essential_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
+                    if (propagator_analyzer->get_computation_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
                     {
                         _block_stress_info_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
                         continue;
@@ -149,7 +148,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
                 }
                 // At u
                 else if (n + N_OFFSET == 0){
-                    if (propagators_analyzer->get_essential_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
+                    if (propagator_analyzer->get_computation_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_info_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
                         continue;
@@ -188,7 +187,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagators_analyzer->get_essential_propagator_codes(), N_SCHEDULER_STREAMS); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), N_SCHEDULER_STREAMS); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -222,7 +221,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_stress_q[gpu][1],     sizeof(double)*2*M)); // next
         }
         
-        propagator_solver->update_bond_function();
+        propagator_solver->update_laplacian_operator();
         gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
@@ -230,7 +229,7 @@ CudaSolverDiscrete::CudaSolverDiscrete(
         throw_without_line_number(exc.what());
     }
 }
-CudaSolverDiscrete::~CudaSolverDiscrete()
+CudaComputationDiscrete::~CudaComputationDiscrete()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
@@ -289,18 +288,18 @@ CudaSolverDiscrete::~CudaSolverDiscrete()
     }
 }
 
-void CudaSolverDiscrete::update_bond_function()
+void CudaComputationDiscrete::update_laplacian_operator()
 {
     try
     {
-        propagator_solver->update_bond_function();
+        propagator_solver->update_laplacian_operator();
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::compute_statistics(
+void CudaComputationDiscrete::compute_statistics(
     std::string device,
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
@@ -324,7 +323,7 @@ void CudaSolverDiscrete::compute_statistics(
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        for(const auto& item: propagators_analyzer->get_essential_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -358,8 +357,8 @@ void CudaSolverDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagators_analyzer->get_essential_propagator_code(key).deps;
-                auto monomer_type = propagators_analyzer->get_essential_propagator_code(key).monomer_type;
+                auto& deps = propagator_analyzer->get_computation_propagator_code(key).deps;
+                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
 
                 // Check key
                 #ifndef NDEBUG
@@ -459,7 +458,7 @@ void CudaSolverDiscrete::compute_statistics(
 
                             propagator_solver->advance_propagator_discrete_half_bond_step(0,
                                 d_propagator[sub_dep][sub_n_segment-1],
-                                d_q_half_step, propagators_analyzer->get_essential_propagator_code(sub_dep).monomer_type);
+                                d_q_half_step, propagator_analyzer->get_computation_propagator_code(sub_dep).monomer_type);
 
                             multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_junction, d_q_junction, d_q_half_step, 1.0, M);
                         }
@@ -516,7 +515,7 @@ void CudaSolverDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[0]);
                 int n_segment_from = std::get<1>((*parallel_job)[0]);
                 int n_segment_to = std::get<2>((*parallel_job)[0]);
-                auto monomer_type = propagators_analyzer->get_essential_propagator_code(key).monomer_type;
+                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
                 double **_d_propagator_key = d_propagator[key];
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
@@ -550,7 +549,7 @@ void CudaSolverDiscrete::compute_statistics(
                     keys[j] = std::get<0>((*parallel_job)[j]);
                     n_segment_froms[j] = std::get<1>((*parallel_job)[j]);
                     n_segment_tos[j] = std::get<2>((*parallel_job)[j]);
-                    monomer_types[j] = propagators_analyzer->get_essential_propagator_code(keys[j]).monomer_type;
+                    monomer_types[j] = propagator_analyzer->get_computation_propagator_code(keys[j]).monomer_type;
                     _d_propagator_keys[j] = d_propagator[keys[j]];
                 }
 
@@ -675,15 +674,15 @@ void CudaSolverDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
-            int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
-            int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
-            std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
+            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
+            int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagators_analyzer->get_essential_block(key).v_u.size();
+                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -729,7 +728,7 @@ void CudaSolverDiscrete::compute_statistics(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::calculate_phi_one_block(
+void CudaComputationDiscrete::calculate_phi_one_block(
     double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL)
 {
     try
@@ -753,7 +752,7 @@ void CudaSolverDiscrete::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CudaSolverDiscrete::get_total_partition(int polymer)
+double CudaComputationDiscrete::get_total_partition(int polymer)
 {
     try
     {
@@ -764,7 +763,7 @@ double CudaSolverDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::get_total_concentration(std::string monomer_type, double *phi)
+void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -782,7 +781,7 @@ void CudaSolverDiscrete::get_total_concentration(std::string monomer_type, doubl
         {
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
+            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
             if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
@@ -800,7 +799,7 @@ void CudaSolverDiscrete::get_total_concentration(std::string monomer_type, doubl
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
+void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -824,7 +823,7 @@ void CudaSolverDiscrete::get_total_concentration(int p, std::string monomer_type
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
+            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
@@ -835,7 +834,7 @@ void CudaSolverDiscrete::get_total_concentration(int p, std::string monomer_type
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::get_block_concentration(int p, double *phi)
+void CudaComputationDiscrete::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -850,7 +849,7 @@ void CudaSolverDiscrete::get_block_concentration(int p, double *phi)
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (propagators_analyzer->is_using_propagator_aggregation())
+        if (propagator_analyzer->is_aggregated())
             throw_with_line_number("Disable 'aggregation' option to obtain concentration of each block.");
 
         // Initialize to zero
@@ -875,7 +874,7 @@ void CudaSolverDiscrete::get_block_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-double CudaSolverDiscrete::get_solvent_partition(int s)
+double CudaComputationDiscrete::get_solvent_partition(int s)
 {
     try
     {
@@ -886,7 +885,7 @@ double CudaSolverDiscrete::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::get_solvent_concentration(int s, double *phi)
+void CudaComputationDiscrete::get_solvent_concentration(int s, double *phi)
 {
     try
     {
@@ -907,7 +906,7 @@ void CudaSolverDiscrete::get_solvent_concentration(int s, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CudaSolverDiscrete::compute_stress()
+std::vector<double> CudaComputationDiscrete::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -933,15 +932,15 @@ std::vector<double> CudaSolverDiscrete::compute_stress()
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = propagators_analyzer->get_essential_block(key).n_segment_allocated;
-            const int N_OFFSET    = propagators_analyzer->get_essential_block(key).n_segment_offset;
-            const int N_ORIGINAL  = propagators_analyzer->get_essential_block(key).n_segment_original;
-            std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
+            const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
+            const int N_OFFSET    = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
             // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagators_analyzer->get_essential_block(key).v_u.size();
+                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
             else
                 n_repeated = 1;
 
@@ -1086,7 +1085,7 @@ std::vector<double> CudaSolverDiscrete::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 { 
     // This method should be invoked after invoking compute_statistics()
 
@@ -1098,10 +1097,10 @@ void CudaSolverDiscrete::get_chain_propagator(double *q_out, int polymer, int v,
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagators_analyzer->get_essential_propagator_codes().find(dep) == propagators_analyzer->get_essential_propagator_codes().end())
-            throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagators_analyzer.");
+        if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
+            throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
 
-        const int N = propagators_analyzer->get_essential_propagator_codes()[dep].max_n_segment;
+        const int N = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
         if (n < 1 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
 
@@ -1112,7 +1111,7 @@ void CudaSolverDiscrete::get_chain_propagator(double *q_out, int polymer, int v,
         throw_without_line_number(exc.what());
     }
 }
-bool CudaSolverDiscrete::check_total_partition()
+bool CudaComputationDiscrete::check_total_partition()
 {
     const int M = cb->get_n_grid();
     int n_polymer_types = molecules->get_n_polymer_types();
@@ -1132,10 +1131,10 @@ bool CudaSolverDiscrete::check_total_partition()
         std::string dep_u    = std::get<2>(key);
 
         int n_aggregated;
-        int n_segment_allocated = propagators_analyzer->get_essential_block(key).n_segment_allocated;
-        int n_segment_offset    = propagators_analyzer->get_essential_block(key).n_segment_offset;
-        int n_segment_original  = propagators_analyzer->get_essential_block(key).n_segment_original;
-        std::string monomer_type = propagators_analyzer->get_essential_block(key).monomer_type;
+        int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
+        int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
+        int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+        std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
         double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
         // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_offset << ", " << n_segment_allocated << std::endl;
@@ -1144,7 +1143,7 @@ bool CudaSolverDiscrete::check_total_partition()
         if (dep_u.find('[') == std::string::npos)
             n_aggregated = 1;
         else
-            n_aggregated = propagators_analyzer->get_essential_block(key).v_u.size();
+            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
 
         for(int n=0;n<n_segment_allocated;n++)
         {

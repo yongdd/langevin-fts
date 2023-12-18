@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CpuSolverContinuous class
+* This is a derived CpuComputationDiscrete class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_CONTINUOUS_H_
-#define CPU_PSEUDO_CONTINUOUS_H_
+#ifndef CPU_PSEUDO_DISCRETE_H_
+#define CPU_PSEUDO_DISCRETE_H_
 
 #include <string>
 #include <vector>
@@ -12,20 +12,22 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorsAnalyzer.h"
-#include "Solver.h"
-#include "CpuPseudo.h"
+#include "PropagatorAnalyzer.h"
+#include "PropagatorComputation.h"
+#include "CpuSolverPseudo.h"
 #include "Scheduler.h"
 
-class CpuSolverContinuous : public Solver
+class CpuComputationDiscrete : public PropagatorComputation
 {
 private:
-    // Pseudo-spectral PDE solver
-    CpuPseudo *propagator_solver;
+    // Pseudo-spectral integral solver
+    CpuSolverPseudo *propagator_solver;
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
     const int N_SCHEDULER_STREAMS = 4;
+    // key: (dep), value: array pointer
+    std::map<std::string, double*> propagator_junction;
     // key: (dep) + monomer_type, value: propagator
     std::map<std::string, double *> propagator;
     // Check if computation of propagator is finished
@@ -35,10 +37,9 @@ private:
 
     // Total partition functions for each polymer
     double* single_polymer_partitions;
-
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, n_aggregated)
-    std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_aggregated)
+    std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
@@ -50,12 +51,12 @@ private:
     std::vector<double *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL);
+    void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
 public:
-    CpuSolverContinuous(ComputationBox *cb, Molecules *molecules, PropagatorsAnalyzer* propagators_analyzer);
-    ~CpuSolverContinuous();
+    CpuComputationDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer);
+    ~CpuComputationDiscrete();
     
-    void update_bond_function() override;
+    void update_laplacian_operator() override;
     void compute_statistics(
         std::map<std::string, const double*> w_block,
         std::map<std::string, const double*> q_init = {}) override;
@@ -79,4 +80,4 @@ public:
     // For tests
     bool check_total_partition() override;
 };
-#endif
+#endif    

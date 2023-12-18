@@ -9,14 +9,14 @@
 #include "Exception.h"
 #include "CpuComputationBox.h"
 #include "Polymer.h"
-#include "PropagatorsAnalyzer.h"
+#include "PropagatorAnalyzer.h"
 #ifdef USE_CPU_MKL
-#include "CpuSolverContinuous.h"
+#include "CpuComputationContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
-#include "CudaSolverContinuous.h"
-#include "CudaSolverReduceMemoryContinuous.h"
+#include "CudaComputationContinuous.h"
+#include "CudaComputationReduceMemoryContinuous.h"
 #endif
 
 int main()
@@ -192,30 +192,30 @@ int main()
         Molecules* molecules = new Molecules("Continuous", 0.15, bond_lengths);
         molecules->add_polymer(1.0, blocks, {});
 
-        PropagatorsAnalyzer* propagators_analyzer_1 = new PropagatorsAnalyzer(molecules, false);
-        propagators_analyzer_1->display_blocks();
-        propagators_analyzer_1->display_propagators();
+        PropagatorAnalyzer* propagator_analyzer_1 = new PropagatorAnalyzer(molecules, false);
+        propagator_analyzer_1->display_blocks();
+        propagator_analyzer_1->display_propagators();
 
-        PropagatorsAnalyzer* propagators_analyzer_2 = new PropagatorsAnalyzer(molecules, true);
-        propagators_analyzer_2->display_blocks();
-        propagators_analyzer_2->display_propagators();
+        PropagatorAnalyzer* propagator_analyzer_2 = new PropagatorAnalyzer(molecules, true);
+        propagator_analyzer_2->display_blocks();
+        propagator_analyzer_2->display_propagators();
 
-        std::vector<Solver*> solver_list;
+        std::vector<PropagatorComputation*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuSolverContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
-        solver_list.push_back(new CpuSolverContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_1));
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_2));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaSolverContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
-        solver_list.push_back(new CudaSolverContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
-        solver_list.push_back(new CudaSolverReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_1));
-        solver_list.push_back(new CudaSolverReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagators_analyzer_2));
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_1));
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_2));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_1));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer_2));
         #endif
 
         std::vector<std::vector<int>> stress_list {{},{},{}};
 
         // For each platform    
-        for(Solver* solver: solver_list)
+        for(PropagatorComputation* solver: solver_list)
         {
             for(int i=0; i<M; i++)
             {
