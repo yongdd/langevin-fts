@@ -16,26 +16,19 @@
 
 class CpuSolver
 {
-private:
-    ComputationBox *cb;
-    Molecules *molecules;
 public:
-    // Arrays for operator splitting
-    std::map<std::string, double*> exp_dw;       // Boltzmann factor for the single segment
-    std::map<std::string, double*> exp_dw_half;  // Boltzmann factor for the half segment
-
-    CpuSolver(ComputationBox *cb, Molecules *molecules);
-    ~CpuSolver();
-    void update_laplacian_operator();
-    void update_dw(std::map<std::string, const double*> w_input);
+    // CpuSolver(ComputationBox *cb, Molecules *molecules);
+    ~CpuSolver() {};
+    virtual void update_laplacian_operator() = 0;
+    virtual void update_dw(std::map<std::string, const double*> w_input) = 0;
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
-    void advance_propagator_continuous(
-                double *q_in, double *q_out, std::string monomer_type, const double *q_mask);
+    virtual void advance_propagator_continuous(
+                double *q_in, double *q_out, std::string monomer_type, const double *q_mask) = 0;
     
     // Compute stress of single segment
-    std::vector<double> compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, std::string monomer_type);
+    virtual std::vector<double> compute_single_segment_stress_continuous(
+                double *q_1, double *q_2, std::string monomer_type) = 0;
 };
 #endif

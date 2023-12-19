@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines a derived class for pseudo-spectral method
+* This class defines a class for pseudo-spectral method
 *-----------------------------------------------------------*/
 
 #ifndef CUDA_SOLVER_PSEUDO_H_
@@ -15,7 +15,7 @@
 #include "Pseudo.h"
 #include "CudaCommon.h"
 
-class CudaSolverPseudo : public Pseudo
+class CudaSolverPseudo
 {
 private:
     ComputationBox *cb;

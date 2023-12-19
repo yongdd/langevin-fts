@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines a derived class for pseudo-spectral method
+* This class defines a class for pseudo-spectral method
 *-----------------------------------------------------------*/
 
 #ifndef CPU_SOLVER_PSEUDO_H_
@@ -12,10 +12,11 @@
 #include "Exception.h"
 #include "Molecules.h"
 #include "ComputationBox.h"
+#include "CpuSolver.h"
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuSolverPseudo : public Pseudo
+class CpuSolverPseudo : public CpuSolver
 {
 private:
     ComputationBox *cb;
@@ -38,17 +39,17 @@ public:
 
     CpuSolverPseudo(ComputationBox *cb, Molecules *molecules);
     ~CpuSolverPseudo();
-    void update_laplacian_operator();
-    void update_dw(std::map<std::string, const double*> w_input);
+    void update_laplacian_operator() override;
+    void update_dw(std::map<std::string, const double*> w_input) override;
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
     void advance_propagator_continuous(
-                double *q_in, double *q_out, std::string monomer_type, const double *q_mask);
+                double *q_in, double *q_out, std::string monomer_type, const double *q_mask) override;
     
     // Compute stress of single segment
     std::vector<double> compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, std::string monomer_type);
+                double *q_1, double *q_2, std::string monomer_type) override;
 
     //---------- Discrete chain model -------------
     // Advance propagator by one segment step

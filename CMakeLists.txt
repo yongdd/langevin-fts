@@ -46,6 +46,7 @@ ADD_LIBRARY(common
     src/common/PropagatorAnalyzer.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
+    src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
     src/common/Scheduler.cpp
@@ -64,6 +65,7 @@ IF(MKL_FOUND)
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudo.cpp
+        src/platforms/cpu/CpuSolverReal.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp
