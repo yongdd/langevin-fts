@@ -32,11 +32,18 @@ int main()
                               1.0383434746621,  -1.28686656279112,   1.49787004664211,
                               1.86337898208832, -0.212765480943989, -0.645339592235395,
                               2.93627107620712};
+        double x_periodic_answer[M] = {-37.7095597725768, -8.90673671271047, 29.7658392801646,
+                                       -8.54639948044212, -28.0428600017516, 31.1409611959355,
+                                        10.6262549404399, -12.4810831844606, 10.1475079039034,
+                                        10.526436777743};
+
         double x[M] = {0.0};
         std::array<double,M> diff_sq;
         double error;
 
+        // Tridiagonal
         CpuSolverReal::tridiagonal(a, b, c, x, y, M);
+        std::cout << "Tridiagonal" << std::endl;
         std::cout << "i: x_answer[i], x[i]" << std::endl;
         for(int i=0; i<M; i++)
             std::cout << i << ": " << x_answer[i] << ", " << x[i] << std::endl;
@@ -44,6 +51,21 @@ int main()
         for(int i=0; i<M; i++)
             diff_sq[i] = pow(x_answer[i] - x[i],2);
         error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
+
+        std::cout<< "Inverse error: "<< error << std::endl;
+        if (!std::isfinite(error) || error > 1e-7)
+            return -1;
+
+        // Tridiagonal with periodic boundary
+        CpuSolverReal::tridiagonal_periodic(a, b, c, x, y, M);
+        std::cout << "Tridiagonal with periodic boundary" << std::endl;
+        std::cout << "i: x_periodic_answer[i], x[i]" << std::endl;
+        for(int i=0; i<M; i++)
+            std::cout << i << ": " << x_periodic_answer[i] << ", " << x[i] << std::endl;
+
+        for(int i=0; i<M; i++)
+            diff_sq[i] = pow(x_periodic_answer[i] - x[i],2);
+        error = sqrt(*std::max_element(diff_sq.begin(), diff_sq.end()));
 
         std::cout<< "Inverse error: "<< error << std::endl;
         if (!std::isfinite(error) || error > 1e-7)

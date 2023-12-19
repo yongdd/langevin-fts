@@ -150,10 +150,10 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
     }
 }
 
-// this method solves CX=Y, where C is a tridiagonal matrix 
+// This method solves CX=Y, where C is a tridiagonal matrix 
 void CpuSolverReal::tridiagonal(
-    double *cu, double *cd, double *cl,
-    double *x,  double *y,  const int M)
+    const double *cu, const double *cd, const double *cl,
+    double *x,  const double *d,  const int M)
 {
     // cu: a
     // cd: b
@@ -165,62 +165,60 @@ void CpuSolverReal::tridiagonal(
     // Forward sweep
     temp = cd[0];
     c_star[0] = cl[0]/cd[0];
-    x[0] = y[0]/cd[0];
+    x[0] = d[0]/cd[0];
 
     for(int i=1; i<M; i++)
     {
         c_star[i-1] = cl[i-1]/temp;
         temp = cd[i]-cu[i]*c_star[i-1];
-        x[i] = (y[i]-cu[i]*x[i-1])/temp;
+        x[i] = (d[i]-cu[i]*x[i-1])/temp;
     }
 
     // Backward substitution
-    for(int j=M-2;j>=0; j--)
-        x[j] = x[j] - c_star[j]*x[j+1];
+    for(int i=M-2;i>=0; i--)
+        x[i] = x[i] - c_star[i]*x[i+1];
 }
 
-// // this method solves CX=Y, where C is a near-tridiagonal nm by nm symmetric
-// // matrix (indices from 1 to nm) with periodic boundary condition.
-// // The off-diagonal terms are normalized to 1, and y are also pre-normalized
-// // cd is the 1d array of diagonal terms
-// void CpuSolverReal::periodic_tridiagonal(
-//     double *cd,
-//     double *x,
-//     double *y,
-//     const int nm)
-// {
-//   implicit none
-//   integer, intent(in) :: nm
-//   double precision, intent(in) :: cd(1:nm), y(1:nm)
-//   double precision, intent(out) :: x(1:nm)
-//   double precision :: l(1:nm), w(1:nm-1)
-//   integer :: i
-// !
-//     ! Boisvert's method (see page 431 of his 1991 paper)
-//     ! factorization
-//     l(1) = 1.0d0/cd(1)
-//     do i=2,nm-1
-//     l(i) = 1.0d0/(cd(i)-l(i-1))
-//     end do
-//     !
-//     w(1) = l(1)
-//     do i=2,nm-2
-//     w(i) = -w(i-1)*l(i)
-//     end do
-//     w(nm-1) = (1.0d0-w(nm-2))*l(nm-1)
-//     !
-//     l(nm) = 1.0d0/(cd(nm)-w(1)+sum(w(1:nm-3)*w(2:nm-2))-(1.0d0-w(nm-2))*w(nm-1))
-//     !
-//     ! forward substitution
-//     x(1)=y(1)
-//     do i=2,nm-1
-//     x(i) = y(i)-l(i-1)*x(i-1)
-//     end do
-//     x(nm) = l(nm)*(y(nm)-sum(w(1:nm-1)*x(1:nm-1)))
-//     !
-//     ! backward substitution
-//     x(nm-1) = l(nm-1)*(x(nm-1)-(1.0d0-w(nm-2))*x(nm))
-//     do i=nm-2,1,-1
-//     x(i) = l(i)*(x(i)-x(i+1))-w(i)*x(nm)
-//     end do
-// }
+// This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
+void CpuSolverReal::tridiagonal_periodic(
+    const double *cu, const double *cd, const double *cl,
+    double *x,  const double *d,  const int M)
+{
+    // cu: a
+    // cd: b
+    // cl: c
+    // gamma = 1.0
+
+    double c_star[M-1];
+    double q[M];
+    double temp, value;
+
+    // Forward sweep
+    temp = cd[0] - 1.0 ; 
+    c_star[0] = cl[0]/temp;
+    x[0] = d[0]/temp;
+    q[0] =  1.0/temp;
+
+    for(int i=1; i<M-1; i++)
+    {
+        c_star[i-1] = cl[i-1]/temp;
+        temp = cd[i]-cu[i]*c_star[i-1];
+        x[i] = (d[i]-cu[i]*x[i-1])/temp;
+        q[i] =     (-cu[i]*q[i-1])/temp;
+    }
+    c_star[M-2] = cl[M-2]/temp;
+    temp = cd[M-1]-cl[M-1]*cu[0] - cu[M-1]*c_star[M-2];
+    x[M-1] = ( d[M-1]-cu[M-1]*x[M-2])/temp;
+    q[M-1] = (cl[M-1]-cu[M-1]*q[M-2])/temp;
+
+    // Backward substitution
+    for(int i=M-2;i>=0; i--)
+    {
+        x[i] = x[i] - c_star[i]*x[i+1];
+        q[i] = q[i] - c_star[i]*q[i+1];
+    }
+
+    value = (x[0]+cu[0]*x[M-1])/(1.0+q[0]+cu[0]*q[M-1]);
+    for(int i=0; i<M; i++)
+        x[i] = x[i] - q[i]*value;
+}
