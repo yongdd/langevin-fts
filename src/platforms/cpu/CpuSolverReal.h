@@ -38,8 +38,12 @@ public:
     void update_dw(std::map<std::string, const double*> w_input) override;
 
     static void tridiagonal(
-        double *cu, double *cd, double *cl,
-        double *x,  double *y,  const int M);
+        const double *cu, const double *cd, const double *cl,
+        double *x,  const double *d,  const int M);
+
+    static void tridiagonal_periodic(
+        const double *cu, const double *cd, const double *cl,
+        double *x,  const double *d,  const int M);
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
