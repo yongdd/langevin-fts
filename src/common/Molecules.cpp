@@ -14,13 +14,14 @@
 Molecules::Molecules(
     std::string model_name, double ds, std::map<std::string, double> bond_lengths)
 {
-    // Checking chain model
+    // Transform into lower cases
     std::transform(model_name.begin(), model_name.end(), model_name.begin(),
                    [](unsigned char c)
     {
         return std::tolower(c);
     });
 
+    // Check chain model
     if (model_name != "continuous" && model_name != "discrete")
     {
         throw_with_line_number(model_name + " is an invalid chain model. This must be 'Continuous' or 'Discrete'.");

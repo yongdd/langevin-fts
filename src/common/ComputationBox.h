@@ -12,6 +12,13 @@
 
 #include "Exception.h"
 
+enum class BoundaryCondition
+{
+	PERIODIC,
+	REFLECTING,
+	ABSORBING,
+};
+
 class ComputationBox
 {
 protected:
@@ -25,9 +32,18 @@ protected:
     double volume; // volume of the system.
     double accessible_volume; // accessible volume excluding mask region
     
-public:
+    // boundary conditions 
+    // "xl": bc at x = 0
+    // "xh": bc at x = Lx
+    // "yl": bc at y = 0
+    // "yh": bc at y = Ly
+    // "zl": bc at z = 0
+    // "zh": bc at z = Lz
+    std::vector<BoundaryCondition> bc;
 
+public:
     ComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
+    ComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr);
     virtual ~ComputationBox();
 
     int get_dim();
@@ -42,6 +58,8 @@ public:
     double get_volume();
     double get_accessible_volume();
     const double* get_mask() ;
+    const std::vector<BoundaryCondition> get_boundary_conditions();
+    BoundaryCondition get_boundary_condition(int i);
 
     virtual void set_lx(std::vector<double> new_lx);
 

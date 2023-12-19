@@ -244,8 +244,8 @@ void CudaSolverPseudo::update_laplacian_operator()
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
             
-            Pseudo::get_boltz_bond(boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
-            Pseudo::get_boltz_bond(boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            Pseudo::get_boltz_bond(cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            Pseudo::get_boltz_bond(cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
         
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
@@ -259,7 +259,7 @@ void CudaSolverPseudo::update_laplacian_operator()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
-        Pseudo::get_weighted_fourier_basis(fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+        Pseudo::get_weighted_fourier_basis(cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));

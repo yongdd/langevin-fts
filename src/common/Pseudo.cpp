@@ -14,50 +14,75 @@ int Pseudo::get_n_complex_grid(std::vector<int> nx)
     return n_complex_grid;
 }
 //----------------- get_boltz_bond -------------------
-void Pseudo::get_boltz_bond(double *boltz_bond, double bond_length_variance,
-                            std::vector<int> nx, std::vector<double> dx, double ds)
+void Pseudo::get_boltz_bond(
+    std::vector<BoundaryCondition> bc,
+    double *boltz_bond, double bond_length_variance,
+    std::vector<int> nx, std::vector<double> dx, double ds)
 {
-    int itemp, jtemp, ktemp, idx;
-    const double PI{3.14159265358979323846};
-    double xfactor[3];
-
-    const int DIM = nx.size();
-    std::vector<int> tnx = {1,  1,  1};
-    std::vector<double> tdx = {1.0,1.0,1.0};
-    for(int d=0; d<DIM; d++)
+    try
     {
-        tnx[3-DIM+d] = nx[d];
-        tdx[3-DIM+d] = dx[d];
-    }
+        int itemp, jtemp, ktemp, idx;
+        const double PI{3.14159265358979323846};
+        double xfactor[3];
 
-    // Calculate the exponential factor
-    for(int d=0; d<3; d++)
-        xfactor[d] = -std::pow(2*PI/(tnx[d]*tdx[d]),2)*ds/6.0;
-
-    for(int i=0; i<tnx[0]; i++)
-    {
-        if( i > tnx[0]/2)
-            itemp = tnx[0]-i;
-        else
-            itemp = i;
-        for(int j=0; j<tnx[1]; j++)
+        const int DIM = nx.size();
+        std::vector<int> tnx;
+        std::vector<double> tdx;
+        if (DIM == 3)
         {
-            if( j > tnx[1]/2)
-                jtemp = tnx[1]-j;
+            tnx = {nx[0], nx[1], nx[2]};
+            tdx = {dx[0], dx[1], dx[2]};
+        }
+        else if (DIM == 2)
+        {
+            tnx = {1,   nx[0], nx[1]};
+            tdx = {1.0, dx[0], dx[1]};
+        }
+        else if (DIM == 1)
+        {
+            tnx = {1,   1,   nx[0]};
+            tdx = {1.0, 1.0, dx[0]};
+        }
+
+        for(size_t i=0; i<bc.size(); i++)
+        {
+            if (bc[i] != BoundaryCondition::PERIODIC)
+                throw_with_line_number("Currently, pseudo-spectral method only supports periodic boundary conditions");
+        }
+
+        // Calculate the exponential factor
+        for(int d=0; d<3; d++)
+            xfactor[d] = -bond_length_variance*std::pow(2*PI/(tnx[d]*tdx[d]),2)*ds/6.0;
+
+        for(int i=0; i<tnx[0]; i++)
+        {
+            if( i > tnx[0]/2)
+                itemp = tnx[0]-i;
             else
-                jtemp = j;
-            for(int k=0; k<tnx[2]/2+1; k++)
+                itemp = i;
+            for(int j=0; j<tnx[1]; j++)
             {
-                ktemp = k;
-                idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
-                boltz_bond[idx] = exp(bond_length_variance*
-                    (itemp*itemp*xfactor[0]+jtemp*jtemp*xfactor[1]+ktemp*ktemp*xfactor[2]));
+                if( j > tnx[1]/2)
+                    jtemp = tnx[1]-j;
+                else
+                    jtemp = j;
+                for(int k=0; k<tnx[2]/2+1; k++)
+                {
+                    ktemp = k;
+                    idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
+                    boltz_bond[idx] = exp(itemp*itemp*xfactor[0]+jtemp*jtemp*xfactor[1]+ktemp*ktemp*xfactor[2]);
+                }
             }
         }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
     }
 }
 
 void Pseudo::get_weighted_fourier_basis(
+    std::vector<BoundaryCondition> bc,
     double *fourier_basis_x,
     double *fourier_basis_y,
     double *fourier_basis_z,
@@ -69,12 +94,28 @@ void Pseudo::get_weighted_fourier_basis(
     double xfactor[3];
     
     const int DIM = nx.size();
-    std::vector<int> tnx = {1,  1,  1};
-    std::vector<double> tdx = {1.0,1.0,1.0};
-    for(int d=0; d<DIM; d++)
+    std::vector<int> tnx;
+    std::vector<double> tdx;
+    if (DIM == 3)
     {
-        tnx[3-DIM+d] = nx[d];
-        tdx[3-DIM+d] = dx[d];
+        tnx = {nx[0], nx[1], nx[2]};
+        tdx = {dx[0], dx[1], dx[2]};
+    }
+    else if (DIM == 2)
+    {
+        tnx = {1,   nx[0], nx[1]};
+        tdx = {1.0, dx[0], dx[1]};
+    }
+    else if (DIM == 1)
+    {
+        tnx = {1,   1,   nx[0]};
+        tdx = {1.0, 1.0, dx[0]};
+    }
+
+    for(size_t i=0; i<bc.size(); i++)
+    {
+        if (bc[i] != BoundaryCondition::PERIODIC)
+            throw_with_line_number("Currently, pseudo-spectral method only supports periodic boundary conditions");
     }
 
     // Calculate the exponential factor
