@@ -29,6 +29,7 @@ private:
     void initialize();
 public:
     CudaComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
+    CudaComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr);
     ~CudaComputationBox() override;
 
     void set_lx(std::vector<double> new_lx) override;

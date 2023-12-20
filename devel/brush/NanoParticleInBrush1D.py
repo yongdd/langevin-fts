@@ -9,8 +9,6 @@ import scft
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
-
-
 linear_polymer =[{"type":"A", "length":1.0, "v":0, "u":1}]
 
 n_backbone_node = 4

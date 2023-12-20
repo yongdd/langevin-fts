@@ -182,7 +182,7 @@ int main()
 
         std::vector<PropagatorComputation*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer, "pseudospectral"));
         #endif
         #ifdef USE_CUDA
         solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));

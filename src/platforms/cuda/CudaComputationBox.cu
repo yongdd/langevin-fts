@@ -14,6 +14,12 @@ CudaComputationBox::CudaComputationBox(
 {
     initialize();
 }
+CudaComputationBox::CudaComputationBox(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
+    : ComputationBox(nx, lx, bc, mask)
+{
+    initialize();
+}
 void CudaComputationBox::initialize()
 {
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*n_grid));

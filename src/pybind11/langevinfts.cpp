@@ -348,7 +348,11 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<AbstractFactory>(m, "AbstractFactory")
         .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
         // .def("create_computation_box", &AbstractFactory::create_computation_box)
-        .def("create_computation_box", [](AbstractFactory& obj, std::vector<int> nx, std::vector<double> lx, py::object mask)
+        .def("create_computation_box", [](
+            AbstractFactory& obj,
+            std::vector<int> nx, std::vector<double> lx,
+            py::object bc,
+            py::object mask)
         {
             try{
                 int M = 1;
@@ -357,24 +361,35 @@ PYBIND11_MODULE(langevinfts, m)
 
                 py::buffer_info buf_mask;
 
-                //buf_q_mask
-                if (!mask.is_none()) {
-                    py::array_t<const double> q_mask_cast = mask.cast<py::array_t<const double>>();
-                    buf_mask = q_mask_cast.request();
+                // Check if bc is not None
+                std::vector<std::string> bc_vec;
+                if (!bc.is_none())
+                {
+                    py::list bc_list = py::cast<py::list>(bc);
+                    for (size_t i = 0; i < py::len(bc_list); ++i)
+                        bc_vec.push_back(py::cast<std::string>(bc_list[i]));
+                }
+
+                // Check if mask is not None
+                if (!mask.is_none())
+                {
+                    py::array_t<const double> mask_cast = mask.cast<py::array_t<const double>>();
+                    buf_mask = mask_cast.request();
                     if (buf_mask.size != M) {
                         throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
                     }
                 }
-                return obj.create_computation_box(nx, lx, (const double *) buf_mask.ptr);
+                return obj.create_computation_box(nx, lx, bc_vec, (const double *) buf_mask.ptr);
             }
             catch(std::exception& exc)
             {
                 throw_without_line_number(exc.what());
             }
-        }, py::arg("nx"), py::arg("lx"), py::arg("mask") = py::none())
+        }, py::arg("nx"), py::arg("lx"), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory::create_molecules_information)
         .def("create_propagator_analyzer", &AbstractFactory::create_propagator_analyzer)
         .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
+        .def("create_realspace_solver", &AbstractFactory::create_realspace_solver)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
         .def("display_info", &AbstractFactory::display_info)
         .def("get_model_name", &AbstractFactory::get_model_name);

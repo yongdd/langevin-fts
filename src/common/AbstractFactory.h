@@ -38,6 +38,12 @@ public :
         std::vector<double> lx,
         const double* mask=nullptr) = 0;
 
+    virtual ComputationBox* create_computation_box(
+        std::vector<int> nx,
+        std::vector<double> lx,
+        std::vector<std::string> bc,
+        const double* mask=nullptr) = 0;
+
     virtual Molecules* create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) = 0;
 
@@ -47,6 +53,9 @@ public :
     };
 
     virtual PropagatorComputation* create_pseudospectral_solver(
+        ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer) = 0; 
+
+    virtual PropagatorComputation* create_realspace_solver(
         ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
