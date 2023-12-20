@@ -14,8 +14,6 @@
 class CpuComputationBox : public ComputationBox
 {
 public:
-    CpuComputationBox(std::vector<int> nx, std::vector<double> lx, const double *mask=nullptr)
-        : ComputationBox(nx, lx, mask) {};
     CpuComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr)
         : ComputationBox(nx, lx, bc, mask) {};
     virtual ~CpuComputationBox() {};
