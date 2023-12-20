@@ -86,6 +86,7 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaSolverPseudo.cu
+        src/platforms/cuda/CudaSolverReal.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu
         src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu

@@ -48,9 +48,9 @@ PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox 
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaComputationContinuous(cb, molecules, propagator_analyzer);
+        return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer);
+        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
     else if( model_name == "discrete" && reduce_memory_usage == false )
         return new CudaComputationDiscrete(cb, molecules, propagator_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
@@ -60,6 +60,10 @@ PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox 
 PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
 {
     std::string model_name = molecules->get_model_name();
+    if( model_name == "continuous" && reduce_memory_usage == false)
+        return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+    else if( model_name == "continuous" && reduce_memory_usage == true)
+        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "realspace");
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

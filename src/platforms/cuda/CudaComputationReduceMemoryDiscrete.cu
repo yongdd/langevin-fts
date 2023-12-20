@@ -239,7 +239,8 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
 CudaComputationReduceMemoryDiscrete::~CudaComputationReduceMemoryDiscrete()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-    
+
+    delete propagator_solver;
     delete sc;
 
     delete[] single_polymer_partitions;

@@ -3,7 +3,11 @@
 #include <thrust/reduce.h>
 #include "CudaSolverPseudo.h"
 
-CudaSolverPseudo::CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage)
+CudaSolverPseudo::CudaSolverPseudo(
+    ComputationBox *cb,
+    Molecules *molecules,
+    cudaStream_t streams[MAX_GPUS][2],
+    bool reduce_gpu_memory_usage)
 {
     try{
         this->cb = cb;
@@ -223,13 +227,6 @@ CudaSolverPseudo::~CudaSolverPseudo()
         cudaFree(d_q_multi[gpu]);
         cudaFree(d_temp_storage[gpu]);
     }
-
-    // Destroy streams
-    for(int gpu=0; gpu<N_GPUS; gpu++)
-    {
-        cudaStreamDestroy(streams[gpu][0]);
-        cudaStreamDestroy(streams[gpu][1]);
-    }
 }
 void CudaSolverPseudo::update_laplacian_operator()
 {
@@ -320,7 +317,7 @@ void CudaSolverPseudo::update_dw(std::string device, std::map<std::string, const
                         sizeof(double)*M, cudaMemcpyInputToDevice, streams[gpu][1]));
                 }
 
-                // Compute exp_dw and exp_dw_half
+                // Compute d_exp_dw and d_exp_dw_half
                 for(int gpu=0; gpu<N_GPUS; gpu++)
                 {
                     gpu_error_check(cudaSetDevice(gpu));
