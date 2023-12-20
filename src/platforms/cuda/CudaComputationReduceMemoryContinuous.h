@@ -20,14 +20,14 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 #include "Molecules.h"
 #include "PropagatorComputation.h"
 #include "CudaCommon.h"
-#include "CudaSolverPseudo.h"
+#include "CudaSolver.h"
 #include "Scheduler.h"
 
 class CudaComputationReduceMemoryContinuous : public PropagatorComputation
 {
 private:
     // Pseudo-spectral PDE solver
-    CudaSolverPseudo *propagator_solver;
+    CudaSolver *propagator_solver;
 
     // Two streams for each gpu
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
@@ -85,7 +85,7 @@ private:
         std::map<std::string, const double*> q_init = {});
 public:
 
-    CudaComputationReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, PropagatorAnalyzer *propagator_analyzer);
+    CudaComputationReduceMemoryContinuous(ComputationBox *cb, Molecules *pc, PropagatorAnalyzer *propagator_analyzer, std::string method);
     ~CudaComputationReduceMemoryContinuous();
 
     void update_laplacian_operator() override;

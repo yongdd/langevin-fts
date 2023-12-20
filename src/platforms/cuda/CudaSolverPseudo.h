@@ -13,9 +13,10 @@
 #include "Molecules.h"
 #include "ComputationBox.h"
 #include "Pseudo.h"
+#include "CudaSolver.h"
 #include "CudaCommon.h"
 
-class CudaSolverPseudo
+class CudaSolverPseudo : public CudaSolver
 {
 private:
     ComputationBox *cb;
@@ -62,34 +63,35 @@ public:
     // GPU arrays for pseudo-spectral
     std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // Boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // Boltzmann factor for the half bond
-    std::map<std::string, double*> d_exp_dw[MAX_GPUS];            // Boltzmann factor for the single segment
-    std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];       // Boltzmann factor for the half segment
 
     CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverPseudo();
-    void update_laplacian_operator();
 
-    void update_dw(std::string device, std::map<std::string, const double*> w_input);
+    void update_laplacian_operator() override;
+    void update_dw(std::string device, std::map<std::string, const double*> w_input) override;
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
     void advance_one_propagator_continuous(const int GPU,
             double *d_q_in, double *d_q_out,
-            std::string monomer_type, double *d_q_mask);
+            std::string monomer_type, double *d_q_mask) override;
 
     // Advance two propagators by one contour step
     void advance_two_propagators_continuous(
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
-            double *d_q_mask);
+            double *d_q_mask) override;
 
     // Advance two propagators by one segment step in two GPUs
     void advance_two_propagators_continuous_two_gpus(
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
-            double **d_q_mask);
+            double **d_q_mask) override;
+
+    void compute_single_segment_stress_fourier(const int GPU, double *d_q) override;
+    std::vector<double> compute_single_segment_stress_continuous(const int GPU, std::string monomer_type) override;
 
     //---------- Discrete chain model -------------
     // Advance one propagator by one segment step
@@ -118,8 +120,6 @@ public:
     void advance_propagator_discrete_half_bond_step(const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
 
     // Compute stress of single segment
-    void compute_single_segment_stress_fourier(const int GPU, double *d_q);
-    std::vector<double> compute_single_segment_stress_continuous(const int GPU, std::string monomer_type);
     std::vector<double> compute_single_segment_stress_discrete(const int GPU, std::string monomer_type, bool is_half_bond_length);
 };
 #endif

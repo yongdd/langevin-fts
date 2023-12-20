@@ -2,12 +2,15 @@
 #include <thrust/reduce.h>
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
+#include "CudaSolverPseudo.h"
+#include "CudaSolverReal.h"
 #include "SimpsonRule.h"
 
 CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorAnalyzer *propagator_analyzer)
+    PropagatorAnalyzer *propagator_analyzer,
+    std::string method)
     : PropagatorComputation(cb, molecules, propagator_analyzer)
 {
     try{
@@ -21,7 +24,11 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
             gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
-        this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, true);
+
+        if(method == "pseudospectral")
+            this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, true);
+        else if(method == "realspace")
+            this->propagator_solver = new CudaSolverReal(cb, molecules, streams, true);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -149,6 +156,7 @@ CudaComputationReduceMemoryContinuous::~CudaComputationReduceMemoryContinuous()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
+    delete propagator_solver;
     delete sc;
 
     delete[] single_polymer_partitions;

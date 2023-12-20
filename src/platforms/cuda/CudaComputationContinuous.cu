@@ -3,12 +3,14 @@
 #include "CudaComputationContinuous.h"
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudo.h"
+#include "CudaSolverReal.h"
 #include "SimpsonRule.h"
 
 CudaComputationContinuous::CudaComputationContinuous(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorAnalyzer *propagator_analyzer)
+    PropagatorAnalyzer *propagator_analyzer,
+    std::string method)
     : PropagatorComputation(cb, molecules, propagator_analyzer)
 {
     try{
@@ -22,7 +24,10 @@ CudaComputationContinuous::CudaComputationContinuous(
             gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
         }
-        this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
+        if(method == "pseudospectral")
+            this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
+        else if(method == "realspace")
+            this->propagator_solver = new CudaSolverReal(cb, molecules, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -145,6 +150,7 @@ CudaComputationContinuous::~CudaComputationContinuous()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
+    delete propagator_solver;
     delete sc;
 
     delete[] single_polymer_partitions;

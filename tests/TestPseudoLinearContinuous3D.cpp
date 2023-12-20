@@ -185,8 +185,8 @@ int main()
         solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "pseudospectral"));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "pseudospectral"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "pseudospectral"));
         #endif
 
         // For each platform    
