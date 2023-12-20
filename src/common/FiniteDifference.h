@@ -22,6 +22,6 @@ public:
         double *xl, double *xd, double *xh,
         double *yl, double *yd, double *yh,
         double *zl, double *zd, double *zh,
-        double ds);
+        double bond_length_sq, double ds);
 };
 #endif

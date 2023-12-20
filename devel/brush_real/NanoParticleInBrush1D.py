@@ -156,6 +156,7 @@ solver.compute_statistics({"A":w["A"]}, q_init=q_init)
 x = np.linspace(0.0, lx[0], num=nx[0], endpoint=False)
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
+phi = phi*molecules.get_polymer(0).get_alpha()/params["lx"][0]
 file_name = "phi"
 plt.plot(x, phi)
 # plt.xlim([2, 4])

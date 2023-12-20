@@ -21,11 +21,21 @@ private:
     ComputationBox *cb;
     Molecules *molecules;
     
-    double *xl, *xd, *xh;        // trigonal matrix for x direction
-    double *yl, *yd, *yh;        // trigonal matrix for y direction
-    double *zl, *zd, *zh;        // trigonal matrix for z direction
+    // Trigonal matrix for x direction
+    std::map<std::string, double*> xl;
+    std::map<std::string, double*> xd;
+    std::map<std::string, double*> xh;
 
-    std::map<std::string, double*> bond_length_variance;   // square of kuhn length
+    // Trigonal matrix for y direction
+    std::map<std::string, double*> yl;
+    std::map<std::string, double*> yd;
+    std::map<std::string, double*> yh;
+
+    // Trigonal matrix for z direction
+    std::map<std::string, double*> zl;
+    std::map<std::string, double*> zd;
+    std::map<std::string, double*> zh;
+
     int max_of_two(int x, int y);
     int min_of_two(int x, int y);
 
@@ -44,11 +54,11 @@ public:
 
     static void tridiagonal(
         const double *xl, const double *xd, const double *xh,
-        double *x,  const double *d,  const int M);
+        double *x, const int OFFSET, const double *d, const int M);
 
     static void tridiagonal_periodic(
         const double *xl, const double *xd, const double *xh,
-        double *x,  const double *d,  const int M);
+        double *x, const int OFFSET, const double *d, const int M);
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step

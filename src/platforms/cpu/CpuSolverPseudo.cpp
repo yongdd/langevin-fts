@@ -142,7 +142,7 @@ void CpuSolverPseudo::advance_propagator_continuous(
             k_q_in1[i] *= _boltz_bond[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in1,q_out1);
-        // Normalization calculation and evaluate exp(-w*ds/2) in real space
+        // Evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
             q_out1[i] *= _exp_dw[i];
 
@@ -167,7 +167,7 @@ void CpuSolverPseudo::advance_propagator_continuous(
             k_q_in2[i] *= _boltz_bond_half[i];
         // 3D fourier discrete transform, backward and inplace
         fft->backward(k_q_in2,q_out2);
-        // Normalization calculation and evaluate exp(-w*ds/4) in real space
+        // Evaluate exp(-w*ds/4) in real space
         for(int i=0; i<M; i++)
             q_out2[i] *= _exp_dw_half[i];
 
