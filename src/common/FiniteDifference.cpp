@@ -9,7 +9,7 @@ void FiniteDifference::get_laplacian_matrix(
         double *xl, double *xd, double *xh,
         double *yl, double *yd, double *yh,
         double *zl, double *zd, double *zh,
-        double ds)
+        double bond_length_sq, double ds)
 {
     try
     {
@@ -26,7 +26,7 @@ void FiniteDifference::get_laplacian_matrix(
 
         // Calculate the exponential factor
         for(int d=0; d<DIM; d++)
-            xfactor[d] = ds/(std::pow(dx[d],2)*6.0);
+            xfactor[d] = bond_length_sq*ds/(std::pow(dx[d],2)*6.0);
         
         if(DIM >= 1)
         {
