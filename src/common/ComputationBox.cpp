@@ -7,7 +7,8 @@
 #include "ComputationBox.h"
 
 //----------------- Constructor -----------------------------
-ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx, const double* mask)
+ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
+    std::vector<std::string> bc, const double* mask)
 {
     if ( new_nx.size() != new_lx.size() )
         throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
@@ -87,22 +88,6 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             accessible_volume += dv[i];
 
         // Set boundary conditions
-        // Default is periodic boundary
-        for(int i=0; i<2*DIM; i++)
-            bc.push_back(BoundaryCondition::PERIODIC);
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
-    std::vector<std::string> bc, const double* mask)
-    : ComputationBox(new_nx, new_lx, mask)
-{
-    try
-    {
-        const int DIM = this->dim;
         if(2*DIM != bc.size() && 0 != bc.size())
         {
             throw_with_line_number(
@@ -110,8 +95,39 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
                 ". For each dimension, two boundary conditions (top and bottom) are required.");
         }
 
-        if(bc.size() > 0)
+        if(bc.size() == 0)
         {
+            // Default is periodic boundary
+            for(int i=0; i<2*DIM; i++)
+                this->bc.push_back(BoundaryCondition::PERIODIC);
+        }
+        else
+        {
+            for(int i=0; i<2*DIM; i+=2)
+            {
+                std::string bc_name_l = bc[i];
+                std::string bc_name_h = bc[i+1];
+                // Transform into lower cases
+                std::transform(bc_name_l.begin(), bc_name_l.end(), bc_name_l.begin(),
+                            [](unsigned char c)
+                {
+                    return std::tolower(c);
+                });
+
+                std::transform(bc_name_h.begin(), bc_name_h.end(), bc_name_h.begin(),
+                            [](unsigned char c)
+                {
+                    return std::tolower(c);
+                });
+
+                if((bc_name_l == "periodic" && bc_name_h != "periodic") ||
+                   (bc_name_l != "periodic" && bc_name_h == "periodic"))
+                {
+                   throw_with_line_number(bc_name_l + " and "  + bc_name_h + " are an invalid boundary condition combination. Both sides must be 'periodic' or 'non-periodic.");
+                }
+
+            }
+
             for(int i=0; i<2*DIM; i++)
             {
                 std::string bc_name = bc[i];
@@ -123,11 +139,11 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
                 });
 
                 if(bc_name == "periodic")
-                    this->bc[i] = BoundaryCondition::PERIODIC;
+                    this->bc.push_back(BoundaryCondition::PERIODIC);
                 else if(bc_name == "reflecting")
-                    this->bc[i] = BoundaryCondition::REFLECTING;
+                    this->bc.push_back(BoundaryCondition::REFLECTING);
                 else if(bc_name == "absorbing")
-                    this->bc[i] = BoundaryCondition::ABSORBING;
+                    this->bc.push_back(BoundaryCondition::ABSORBING);
                 else
                     throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']");
             }

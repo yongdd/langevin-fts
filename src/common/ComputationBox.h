@@ -42,7 +42,6 @@ protected:
     std::vector<BoundaryCondition> bc;
 
 public:
-    ComputationBox(std::vector<int> nx, std::vector<double> lx, const double* mask=nullptr);
     ComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr);
     virtual ~ComputationBox();
 

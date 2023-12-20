@@ -182,11 +182,11 @@ int main()
 
         std::vector<PropagatorComputation*> solver_list;
         #ifdef USE_CPU_MKL
-        solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
+        solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
         #endif
         #ifdef USE_CUDA
-        solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}), molecules, propagator_analyzer));
+        solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
+        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
         #endif
 
         // For each platform    

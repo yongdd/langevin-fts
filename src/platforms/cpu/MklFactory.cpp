@@ -37,11 +37,6 @@ Array* MklFactory::create_array(
     return new CpuArray(data, size);
 }
 ComputationBox* MklFactory::create_computation_box(
-    std::vector<int> nx, std::vector<double> lx, const double *mask)
-{
-    return new CpuComputationBox(nx, lx, mask);
-}
-ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
     return new CpuComputationBox(nx, lx, bc, mask);

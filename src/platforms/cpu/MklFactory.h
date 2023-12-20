@@ -28,11 +28,6 @@ public :
     ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
-        const double* mask=nullptr) override;
-
-    ComputationBox* create_computation_box(
-        std::vector<int> nx,
-        std::vector<double> lx,
         std::vector<std::string> bc,
         const double* mask=nullptr) override;
 

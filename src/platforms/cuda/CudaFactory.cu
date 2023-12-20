@@ -34,11 +34,6 @@ Array* CudaFactory::create_array(
     return new CudaArray(data, size);
 }
 ComputationBox* CudaFactory::create_computation_box(
-    std::vector<int> nx, std::vector<double> lx, const double* mask)
-{
-    return new CudaComputationBox(nx, lx, mask);
-}
-ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
     return new CudaComputationBox(nx, lx, bc, mask);
