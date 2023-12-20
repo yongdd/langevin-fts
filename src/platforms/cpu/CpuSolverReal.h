@@ -26,11 +26,16 @@ private:
     double *zl, *zd, *zh;        // trigonal matrix for z direction
 
     std::map<std::string, double*> bond_length_variance;   // square of kuhn length
+    int max_of_two(int x, int y);
+    int min_of_two(int x, int y);
 
+    void advance_propagator_3d(
+        double *q_in, double *q_out, std::string monomer_type);
+    void advance_propagator_2d(
+        double *q_in, double *q_out, std::string monomer_type);
+    void advance_propagator_1d(
+        double *q_in, double *q_out, std::string monomer_type);
 public:
-    // Arrays for real-space method with operator spliting
-    std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
-    std::map<std::string, double*> exp_dw_half;       // Boltzmann factor for the half segment
 
     CpuSolverReal(ComputationBox *cb, Molecules *molecules);
     ~CpuSolverReal();
@@ -38,11 +43,11 @@ public:
     void update_dw(std::map<std::string, const double*> w_input) override;
 
     static void tridiagonal(
-        const double *cu, const double *cd, const double *cl,
+        const double *xl, const double *xd, const double *xh,
         double *x,  const double *d,  const int M);
 
     static void tridiagonal_periodic(
-        const double *cu, const double *cd, const double *cl,
+        const double *xl, const double *xd, const double *xh,
         double *x,  const double *d,  const int M);
 
     //---------- Continuous chain model -------------

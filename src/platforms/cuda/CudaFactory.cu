@@ -38,6 +38,11 @@ ComputationBox* CudaFactory::create_computation_box(
 {
     return new CudaComputationBox(nx, lx, mask);
 }
+ComputationBox* CudaFactory::create_computation_box(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
+{
+    return new CudaComputationBox(nx, lx, bc, mask);
+}
 Molecules* CudaFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
@@ -55,6 +60,11 @@ PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox 
         return new CudaComputationDiscrete(cb, molecules, propagator_analyzer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
         return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_analyzer);
+    return NULL;
+}
+PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+{
+    std::string model_name = molecules->get_model_name();
     return NULL;
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(

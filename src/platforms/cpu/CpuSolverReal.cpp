@@ -62,6 +62,14 @@ CpuSolverReal::~CpuSolverReal()
     delete[] zd;
     delete[] zh;
 }
+int CpuSolverReal::max_of_two(int x, int y)
+{
+   return (x > y) ? x : y;
+}
+int CpuSolverReal::min_of_two(int x, int y)
+{
+   return (x < y) ? x : y;
+}
 void CpuSolverReal::update_laplacian_operator()
 {
     try
@@ -114,17 +122,79 @@ void CpuSolverReal::advance_propagator_continuous(
     try
     {
         const int M = cb->get_n_grid();
-        double q_out1[M], q_out2[M];
-
-        double *_exp_dw = exp_dw[monomer_type];
-        double *_exp_dw_half = exp_dw_half[monomer_type];
+        const int DIM = cb->get_dim();
+        if(DIM == 3)
+            advance_propagator_3d(q_in, q_out, monomer_type);
+        else if(DIM == 2)
+            advance_propagator_2d(q_in, q_out, monomer_type);
+        else if(DIM ==1 )
+            advance_propagator_1d(q_in, q_out, monomer_type);
 
         // Multiply mask
-        if (q_mask != nullptr)
+        if(q_mask != nullptr)
         {
             for(int i=0; i<M; i++)
                 q_out[i] *= q_mask[i];
         }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverReal::advance_propagator_3d(
+    double *q_in, double *q_out, std::string monomer_type)
+{
+    try
+    {
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CpuSolverReal::advance_propagator_2d(
+    double *q_in, double *q_out, std::string monomer_type)
+{
+    try
+    {
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CpuSolverReal::advance_propagator_1d(
+    double *q_in, double *q_out, std::string monomer_type)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        const std::vector<int> nx = cb->get_nx();
+        double q_star[nx[0]];
+
+        double *_exp_dw = exp_dw[monomer_type];
+        double *_exp_dw_half = exp_dw_half[monomer_type];
+        int im, ip;
+
+        // calculate q_star
+        for(int i=0; i<M; i++)
+            q_out[i] = _exp_dw[i]*q_in[i];
+
+        for(int i=0;i<nx[0];i++)
+        {
+            im = max_of_two(0,i-1);
+            ip = min_of_two(nx[0]-1,i+1);
+
+            // B part of Ax=B matrix equation
+            q_star[i] = (2.0-xd[i])*q_out[i] - xl[i]*q_out[im] - xh[i]*q_out[ip];
+        }
+        tridiagonal(xl, xd, xh, q_out, q_star, nx[0]);
+
+        for(int i=0; i<M; i++)
+            q_out[i] *= _exp_dw[i];
+
     }
     catch(std::exception& exc)
     {
@@ -152,26 +222,26 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
 
 // This method solves CX=Y, where C is a tridiagonal matrix 
 void CpuSolverReal::tridiagonal(
-    const double *cu, const double *cd, const double *cl,
+    const double *xl, const double *xd, const double *xh,
     double *x,  const double *d,  const int M)
 {
-    // cu: a
-    // cd: b
-    // cl: c
+    // xl: a
+    // xd: b
+    // xh: c
 
     double c_star[M-1];
     double temp;
 
     // Forward sweep
-    temp = cd[0];
-    c_star[0] = cl[0]/cd[0];
-    x[0] = d[0]/cd[0];
+    temp = xd[0];
+    c_star[0] = xh[0]/xd[0];
+    x[0] = d[0]/xd[0];
 
     for(int i=1; i<M; i++)
     {
-        c_star[i-1] = cl[i-1]/temp;
-        temp = cd[i]-cu[i]*c_star[i-1];
-        x[i] = (d[i]-cu[i]*x[i-1])/temp;
+        c_star[i-1] = xh[i-1]/temp;
+        temp = xd[i]-xl[i]*c_star[i-1];
+        x[i] = (d[i]-xl[i]*x[i-1])/temp;
     }
 
     // Backward substitution
@@ -181,12 +251,12 @@ void CpuSolverReal::tridiagonal(
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
 void CpuSolverReal::tridiagonal_periodic(
-    const double *cu, const double *cd, const double *cl,
+    const double *xl, const double *xd, const double *xh,
     double *x,  const double *d,  const int M)
 {
-    // cu: a
-    // cd: b
-    // cl: c
+    // xl: a
+    // xd: b
+    // xh: c
     // gamma = 1.0
 
     double c_star[M-1];
@@ -194,22 +264,22 @@ void CpuSolverReal::tridiagonal_periodic(
     double temp, value;
 
     // Forward sweep
-    temp = cd[0] - 1.0 ; 
-    c_star[0] = cl[0]/temp;
+    temp = xd[0] - 1.0 ; 
+    c_star[0] = xh[0]/temp;
     x[0] = d[0]/temp;
     q[0] =  1.0/temp;
 
     for(int i=1; i<M-1; i++)
     {
-        c_star[i-1] = cl[i-1]/temp;
-        temp = cd[i]-cu[i]*c_star[i-1];
-        x[i] = (d[i]-cu[i]*x[i-1])/temp;
-        q[i] =     (-cu[i]*q[i-1])/temp;
+        c_star[i-1] = xh[i-1]/temp;
+        temp = xd[i]-xl[i]*c_star[i-1];
+        x[i] = (d[i]-xl[i]*x[i-1])/temp;
+        q[i] =     (-xl[i]*q[i-1])/temp;
     }
-    c_star[M-2] = cl[M-2]/temp;
-    temp = cd[M-1]-cl[M-1]*cu[0] - cu[M-1]*c_star[M-2];
-    x[M-1] = ( d[M-1]-cu[M-1]*x[M-2])/temp;
-    q[M-1] = (cl[M-1]-cu[M-1]*q[M-2])/temp;
+    c_star[M-2] = xh[M-2]/temp;
+    temp = xd[M-1]-xh[M-1]*xl[0] - xl[M-1]*c_star[M-2];
+    x[M-1] = ( d[M-1]-xl[M-1]*x[M-2])/temp;
+    q[M-1] = (xh[M-1]-xl[M-1]*q[M-2])/temp;
 
     // Backward substitution
     for(int i=M-2;i>=0; i--)
@@ -218,7 +288,7 @@ void CpuSolverReal::tridiagonal_periodic(
         q[i] = q[i] - c_star[i]*q[i+1];
     }
 
-    value = (x[0]+cu[0]*x[M-1])/(1.0+q[0]+cu[0]*q[M-1]);
+    value = (x[0]+xl[0]*x[M-1])/(1.0+q[0]+xl[0]*q[M-1]);
     for(int i=0; i<M; i++)
         x[i] = x[i] - q[i]*value;
 }

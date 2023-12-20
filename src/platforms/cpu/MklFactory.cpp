@@ -41,6 +41,11 @@ ComputationBox* MklFactory::create_computation_box(
 {
     return new CpuComputationBox(nx, lx, mask);
 }
+ComputationBox* MklFactory::create_computation_box(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
+{
+    return new CpuComputationBox(nx, lx, bc, mask);
+}
 Molecules* MklFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
@@ -51,11 +56,20 @@ PropagatorComputation* MklFactory::create_pseudospectral_solver(ComputationBox *
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
     {
-        return new CpuComputationContinuous(cb, molecules, propagator_analyzer);
+        return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
     }
     else if ( chain_model == "discrete" )
     {
         return new CpuComputationDiscrete(cb, molecules, propagator_analyzer);
+    }
+    return NULL;
+}
+PropagatorComputation* MklFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+{
+    std::string chain_model = molecules->get_model_name();
+    if ( chain_model == "continuous" )
+    {
+        return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
     }
     return NULL;
 }

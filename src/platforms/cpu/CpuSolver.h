@@ -17,6 +17,10 @@
 class CpuSolver
 {
 public:
+    // Arrays for real-space method with operator spliting
+    std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
+    std::map<std::string, double*> exp_dw_half;       // Boltzmann factor for the half segment
+
     // CpuSolver(ComputationBox *cb, Molecules *molecules);
     ~CpuSolver() {};
     virtual void update_laplacian_operator() = 0;

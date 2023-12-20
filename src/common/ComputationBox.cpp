@@ -103,31 +103,34 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
     try
     {
         const int DIM = this->dim;
-        if(DIM != 2*bc.size())
+        if(2*DIM != bc.size() && 0 != bc.size())
         {
             throw_with_line_number(
-                "We expect " + std::to_string(2*DIM) + " boundary conditions, but we get " + std::to_string(bc.size()) +
+                "We expect 0 or " + std::to_string(2*DIM) + " boundary conditions, but we get " + std::to_string(bc.size()) +
                 ". For each dimension, two boundary conditions (top and bottom) are required.");
         }
 
-        for(int i=0; i<2*DIM; i++)
+        if(bc.size() > 0)
         {
-            std::string bc_name = bc[i];
-            // Transform into lower cases
-            std::transform(bc_name.begin(), bc_name.end(), bc_name.begin(),
-                        [](unsigned char c)
+            for(int i=0; i<2*DIM; i++)
             {
-                return std::tolower(c);
-            });
+                std::string bc_name = bc[i];
+                // Transform into lower cases
+                std::transform(bc_name.begin(), bc_name.end(), bc_name.begin(),
+                            [](unsigned char c)
+                {
+                    return std::tolower(c);
+                });
 
-            if(bc_name == "periodic")
-                this->bc[i] = BoundaryCondition::PERIODIC;
-            else if(bc_name == "reflecting")
-                this->bc[i] = BoundaryCondition::REFLECTING;
-            else if(bc_name == "absorbing")
-                this->bc[i] = BoundaryCondition::ABSORBING;
-            else
-                throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']");
+                if(bc_name == "periodic")
+                    this->bc[i] = BoundaryCondition::PERIODIC;
+                else if(bc_name == "reflecting")
+                    this->bc[i] = BoundaryCondition::REFLECTING;
+                else if(bc_name == "absorbing")
+                    this->bc[i] = BoundaryCondition::ABSORBING;
+                else
+                    throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']");
+            }
         }
     }
     catch(std::exception& exc)

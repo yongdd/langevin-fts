@@ -2,18 +2,23 @@
 
 #include "CpuComputationContinuous.h"
 #include "CpuSolverPseudo.h"
+#include "CpuSolverReal.h"
 #include "SimpsonRule.h"
 
 CpuComputationContinuous::CpuComputationContinuous(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorAnalyzer *propagator_analyzer)
+    PropagatorAnalyzer *propagator_analyzer,
+    std::string method)
     : PropagatorComputation(cb, molecules, propagator_analyzer)
 {
     try
     {
         const int M = cb->get_n_grid();
-        this->propagator_solver = new CpuSolverPseudo(cb, molecules);
+        if(method == "pseudospectral")
+            this->propagator_solver = new CpuSolverPseudo(cb, molecules);
+        else if(method == "realspace")
+            this->propagator_solver = new CpuSolverReal(cb, molecules);
 
         // Allocate memory for propagators
         if( propagator_analyzer->get_computation_propagator_codes().size() == 0)

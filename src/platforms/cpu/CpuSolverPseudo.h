@@ -34,8 +34,6 @@ public:
     // Arrays for pseudo-spectral
     std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // Boltzmann factor for the half bond
-    std::map<std::string, double*> exp_dw;            // Boltzmann factor for the single segment
-    std::map<std::string, double*> exp_dw_half;       // Boltzmann factor for the half segment
 
     CpuSolverPseudo(ComputationBox *cb, Molecules *molecules);
     ~CpuSolverPseudo();
