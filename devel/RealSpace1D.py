@@ -30,7 +30,7 @@ aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cpu-mkl", reduce_gpu_memory_usage)
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box

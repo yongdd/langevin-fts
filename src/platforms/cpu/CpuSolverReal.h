@@ -54,11 +54,11 @@ public:
 
     static void tridiagonal(
         const double *xl, const double *xd, const double *xh,
-        double *x, const int OFFSET, const double *d, const int M);
+        double *x, const int INTERVAL, const double *d, const int M);
 
     static void tridiagonal_periodic(
         const double *xl, const double *xd, const double *xh,
-        double *x, const int OFFSET, const double *d, const int M);
+        double *x, const int INTERVAL, const double *d, const int M);
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step

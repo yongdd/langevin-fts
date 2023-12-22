@@ -2,6 +2,7 @@
 # Propagators inside of the nano particle is zero, e.g., q(r,s) = 0.
 
 import os
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -74,11 +75,14 @@ q_init["G"][30,:] = 1.0/(lx[0]/nx[0])
 q_init["G"][:,30] = 1.0/(lx[1]/nx[1])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
+time_start = time.time()
 solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+elapsed_time = time.time() - time_start
+print("Elapsed time: ", elapsed_time)
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
 file_name = "phi"
-plt.imshow(phi, extent=[0, lx[0], 0, lx[1]], interpolation='nearest')
+plt.imshow(phi, extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
 plt.colorbar()
 plt.savefig(file_name)
 print("phi(r) is written to file '%s'." % (file_name))
@@ -89,7 +93,7 @@ for n in range(0, round(N)+1, round(N/5)):
      file_name = "q_forward_%03d.png" % (n)
                                                   # p, v, u, n
      q_out = np.reshape(solver.get_chain_propagator(0, 0, 1, n), nx)
-     plt.imshow(q_out, extent=[0, lx[0], 0, lx[1]], interpolation='nearest')
+     plt.imshow(q_out, extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
      plt.colorbar()
      plt.savefig(file_name)
      print("q(%3.1f,r) is written to file '%s'." % (n*ds, file_name))

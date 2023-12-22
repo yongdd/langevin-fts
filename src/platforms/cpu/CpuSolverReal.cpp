@@ -220,7 +220,6 @@ void CpuSolverReal::advance_propagator_3d(
                             - _zl[k]*q_in[i_j_km] - _zh[k]*q_in[i_j_kp]
                             - _yl[j]*q_in[i_jm_k] - _yh[j]*q_in[i_jp_k])
                             - _xl[i]*q_in[im_j_k] - _xh[i]*q_in[ip_j_k];
-
                 }
                 int j_k = j*nx[2] + k;
                 tridiagonal(_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
@@ -240,8 +239,8 @@ void CpuSolverReal::advance_propagator_3d(
                     int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
                     int i_jp_k = i*nx[1]*nx[2] + jp*nx[2] + k;
 
-                    temp2[j] = q_star[i_j_k] + (_yd[j]-1.0)*q_out[i_j_k]
-                        + _yl[j]*q_out[i_jm_k] + _yh[j]*q_out[i_jp_k];
+                    temp2[j] = q_star[i_j_k] + (_yd[j]-1.0)*q_in[i_j_k]
+                        + _yl[j]*q_in[i_jm_k] + _yh[j]*q_in[i_jp_k];
                 }
                 int i_k = i*nx[1]*nx[2] + k;
                 tridiagonal(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
@@ -262,8 +261,8 @@ void CpuSolverReal::advance_propagator_3d(
                     int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
                     int i_j_kp = i*nx[1]*nx[2] + j*nx[2] + kp;
 
-                    temp3[k] = q_dstar[i_j_k] + (_zd[k]-1.0)*q_out[i_j_k]
-                        + _zl[k]*q_out[i_j_km] + _zh[k]*q_out[i_j_kp];
+                    temp3[k] = q_dstar[i_j_k] + (_zd[k]-1.0)*q_in[i_j_k]
+                        + _zl[k]*q_in[i_j_km] + _zh[k]*q_in[i_j_kp];
                 }
                 int i_j = i*nx[1]*nx[2] + j*nx[2];
                 tridiagonal(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
@@ -333,8 +332,8 @@ void CpuSolverReal::advance_propagator_2d(
                 int i_jm = i*nx[1] + jm;
                 int i_jp = i*nx[1] + jp;
 
-                temp2[j] = q_star[i_j] + (_yd[j]-1.0)*q_out[i_j]
-                    + _yl[j]*q_out[i_jm] + _yh[j]*q_out[i_jp];
+                temp2[j] = q_star[i_j] + (_yd[j]-1.0)*q_in[i_j]
+                    + _yl[j]*q_in[i_jm] + _yh[j]*q_in[i_jp];
             }
             tridiagonal(_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
         }
@@ -397,7 +396,7 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
 // This method solves CX=Y, where C is a tridiagonal matrix 
 void CpuSolverReal::tridiagonal(
     const double *xl, const double *xd, const double *xh,
-    double *x, const int OFFSET, const double *d, const int M)
+    double *x, const int INTERVAL, const double *d, const int M)
 {
     // xl: a
     // xd: b
@@ -415,18 +414,18 @@ void CpuSolverReal::tridiagonal(
     {
         c_star[i-1] = xh[i-1]/temp;
         temp = xd[i]-xl[i]*c_star[i-1];
-        x[i*OFFSET] = (d[i]-xl[i]*x[(i-1)*OFFSET])/temp;
+        x[i*INTERVAL] = (d[i]-xl[i]*x[(i-1)*INTERVAL])/temp;
     }
 
     // Backward substitution
     for(int i=M-2;i>=0; i--)
-        x[i*OFFSET] = x[i*OFFSET] - c_star[i]*x[(i+1)*OFFSET];
+        x[i*INTERVAL] = x[i*INTERVAL] - c_star[i]*x[(i+1)*INTERVAL];
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
 void CpuSolverReal::tridiagonal_periodic(
     const double *xl, const double *xd, const double *xh,
-    double *x, const int OFFSET, const double *d, const int M)
+    double *x, const int INTERVAL, const double *d, const int M)
 {
     // xl: a
     // xd: b
@@ -447,22 +446,22 @@ void CpuSolverReal::tridiagonal_periodic(
     {
         c_star[i-1] = xh[i-1]/temp;
         temp = xd[i]-xl[i]*c_star[i-1];
-        x[i*OFFSET] = (d[i]-xl[i]*x[(i-1)*OFFSET])/temp;
+        x[i*INTERVAL] = (d[i]-xl[i]*x[(i-1)*INTERVAL])/temp;
         q[i]        =     (-xl[i]*q[i-1])         /temp;
     }
     c_star[M-2] = xh[M-2]/temp;
     temp = xd[M-1]-xh[M-1]*xl[0] - xl[M-1]*c_star[M-2];
-    x[(M-1)*OFFSET] = ( d[M-1]-xl[M-1]*x[(M-2)*OFFSET])/temp;
+    x[(M-1)*INTERVAL] = ( d[M-1]-xl[M-1]*x[(M-2)*INTERVAL])/temp;
     q[M-1]          = (xh[M-1]-xl[M-1]*q[M-2])         /temp;
 
     // Backward substitution
     for(int i=M-2;i>=0; i--)
     {
-        x[i*OFFSET] = x[i*OFFSET] - c_star[i]*x[(i+1)*OFFSET];
+        x[i*INTERVAL] = x[i*INTERVAL] - c_star[i]*x[(i+1)*INTERVAL];
         q[i]        = q[i]        - c_star[i]*q[i+1];
     }
 
-    value = (x[0]+xl[0]*x[(M-1)*OFFSET])/(1.0+q[0]+xl[0]*q[M-1]);
+    value = (x[0]+xl[0]*x[(M-1)*INTERVAL])/(1.0+q[0]+xl[0]*q[M-1]);
     for(int i=0; i<M; i++)
-        x[i*OFFSET] = x[i*OFFSET] - q[i]*value;
+        x[i*INTERVAL] = x[i*INTERVAL] - q[i]*value;
 }

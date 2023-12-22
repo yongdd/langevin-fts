@@ -44,9 +44,6 @@ private:
     ftsComplex *d_qk_in_2_two[MAX_GPUS];
     ftsComplex *d_qk_in_1_four;
 
-    // q_mask to make impenetrable region for nano particles
-    double *d_q_mask[MAX_GPUS];
-
     // For stress calculation: compute_stress()
     double *d_fourier_basis_x[MAX_GPUS];
     double *d_fourier_basis_y[MAX_GPUS];
