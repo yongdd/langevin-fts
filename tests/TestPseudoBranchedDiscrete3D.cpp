@@ -7,10 +7,10 @@
 #include <map>
 
 #include "Exception.h"
-#include "CpuComputationBox.h"
 #include "Polymer.h"
 #include "PropagatorAnalyzer.h"
 #ifdef USE_CPU_MKL
+#include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
 #endif
 #ifdef USE_CUDA

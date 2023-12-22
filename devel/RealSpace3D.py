@@ -2,6 +2,7 @@
 # Propagators inside of the nano particle is zero, e.g., q(r,s) = 0.
 
 import os
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -43,7 +44,7 @@ aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cpu-mkl", reduce_gpu_memory_usage)
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box
@@ -77,11 +78,14 @@ q_init["G"][:,30,:] = 1.0/(lx[1]/nx[1])
 q_init["G"][:,:,30] = 1.0/(lx[2]/nx[2])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
+time_start = time.time()
 solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+elapsed_time = time.time() - time_start
+print("Elapsed time: ", elapsed_time)
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
 file_name = "phi"
-plt.imshow(phi[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], interpolation='nearest')
+plt.imshow(phi[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
 plt.colorbar()
 plt.savefig(file_name)
 print("phi(r) is written to file '%s'." % (file_name))
@@ -91,21 +95,21 @@ N = round(1.0/ds)
 for n in range(0, round(N)+1, round(N/5)):
                                                   # p, v, u, n
      q_out = np.reshape(solver.get_chain_propagator(0, 0, 1, n), nx)
-     plt.imshow(q_out[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], interpolation='nearest')
+     plt.imshow(q_out[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
      plt.colorbar()
      file_name = "q_forward_%03d_xy.png" % (n)
      plt.savefig(file_name)
      print("q(%3.1f,x,y,Lz/2) is written to file '%s'." % (n*ds, file_name))
      plt.close()
      
-     plt.imshow(q_out[:,round(nx[1]/2),:], extent=[0, lx[0], 0, lx[2]], interpolation='nearest')
+     plt.imshow(q_out[:,round(nx[1]/2),:], extent=[0, lx[0], 0, lx[2]], aspect='auto', interpolation='nearest')
      plt.colorbar()
      file_name = "q_forward_%03d_xz.png" % (n)
      plt.savefig(file_name)
      print("q(%3.1f,x,Ly/2,z) is written to file '%s'." % (n*ds, file_name))
      plt.close()
 
-     plt.imshow(q_out[round(nx[0]/2),:,:], extent=[0, lx[1], 0, lx[2]], interpolation='nearest')
+     plt.imshow(q_out[round(nx[0]/2),:,:], extent=[0, lx[1], 0, lx[2]], aspect='auto', interpolation='nearest')
      plt.colorbar()
      file_name = "q_forward_%03d_yz.png" % (n)
      plt.savefig(file_name)

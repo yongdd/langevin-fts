@@ -16,6 +16,46 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 
+__device__ int d_max_of_two(int x, int y);
+__device__ int d_min_of_two(int x, int y);
+
+__global__ void compute_crank_1d(
+    const double *d_xl, const double *d_xd, const double *d_xh,
+    double *d_q_out, const double *d_q_in, const int M);
+
+__global__ void compute_crank_2d_step_1(
+    const double *d_xl, const double *d_xd, const double *d_xh, const int I,
+    const double *d_yl, const double *d_yd, const double *d_yh, const int J,
+    double *d_q_out, const double *d_q_in, const int M);
+
+__global__ void compute_crank_2d_step_2(
+    const double *d_yl, const double *d_yd, const double *d_yh, const int J,
+    double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
+
+__global__ void compute_crank_3d_step_1(
+    const double *d_xl, const double *d_xd, const double *d_xh, const int I,
+    const double *d_yl, const double *d_yd, const double *d_yh, const int J,
+    const double *d_zl, const double *d_zd, const double *d_zh, const int K,
+    double *d_q_out, const double *d_q_in, const int M);
+
+__global__ void compute_crank_3d_step_2(
+    const double *d_yl, const double *d_yd, const double *d_yh, const int J, const int K,
+    double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
+
+__global__ void compute_crank_3d_step_3(
+    const double *d_zl, const double *d_zd, const double *d_zh, const int J, const int K,
+    double *d_q_out, const double *d_q_dstar, const double *d_q_in, const int M);
+
+__global__ void tridiagonal(
+    const double *d_xl, const double *d_xd, const double *d_xh,
+    double *d_c_star, double *d_x, const double *d_d, 
+    const int *d_offset, const int REPEAT,
+    const int INTERVAL, const int M);
+
+// __global__  void tridiagonal_periodic(
+//     const double *d_xl, const double *d_xd, const double *d_xh,
+//     double *d_x, const int INTERVAL, const double *d_d, const int M);    
+
 class CudaSolverReal : public CudaSolver
 {
 private:
@@ -29,29 +69,37 @@ private:
     cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
     
     // Trigonal matrix for x direction
-    std::map<std::string, double*> xl;
-    std::map<std::string, double*> xd;
-    std::map<std::string, double*> xh;
+    std::map<std::string, double*> d_xl[MAX_GPUS];
+    std::map<std::string, double*> d_xd[MAX_GPUS];
+    std::map<std::string, double*> d_xh[MAX_GPUS];
 
     // Trigonal matrix for y direction
-    std::map<std::string, double*> yl;
-    std::map<std::string, double*> yd;
-    std::map<std::string, double*> yh;
+    std::map<std::string, double*> d_yl[MAX_GPUS];
+    std::map<std::string, double*> d_yd[MAX_GPUS];
+    std::map<std::string, double*> d_yh[MAX_GPUS];
 
     // Trigonal matrix for z direction
-    std::map<std::string, double*> zl;
-    std::map<std::string, double*> zd;
-    std::map<std::string, double*> zh;
+    std::map<std::string, double*> d_zl[MAX_GPUS];
+    std::map<std::string, double*> d_zd[MAX_GPUS];
+    std::map<std::string, double*> d_zh[MAX_GPUS];
 
-    int max_of_two(int x, int y);
-    int min_of_two(int x, int y);
+    // Offset arrays for tridiagonal computation
+    // For 3D
+    int* d_offset_xy[MAX_GPUS];
+    int* d_offset_yz[MAX_GPUS];
+    int* d_offset_xz[MAX_GPUS];
+    // For 2D
+    int* d_offset_x[MAX_GPUS];
+    int* d_offset_y[MAX_GPUS];
+    // For 1D
+    int* d_offset[MAX_GPUS];
 
     void advance_propagator_3d(
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_2d(
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_1d(
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
     CudaSolverReal(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
@@ -59,14 +107,6 @@ public:
 
     void update_laplacian_operator() override;
     void update_dw(std::string device, std::map<std::string, const double*> d_w_input) override;
-
-    static void tridiagonal(
-        const double *d_xl, const double *d_xd, const double *d_xh,
-        double *d_x, const int OFFSET, const double *d_d, const int M);
-
-    static void tridiagonal_periodic(
-        const double *d_xl, const double *d_xd, const double *d_xh,
-        double *d_x, const int OFFSET, const double *d_d, const int M);
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
@@ -79,14 +119,14 @@ public:
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
-            double *d_q_mask) override {};
+            double *d_q_mask) override;
 
     // Advance two propagators by one segment step in two GPUs
     void advance_two_propagators_continuous_two_gpus(
             double *d_q_in_1,  double *d_q_in_2,
             double *d_q_out_1, double *d_q_out_2,
             std::string monomer_type_1, std::string monomer_type_2,
-            double **d_q_mask) override {};
+            double **d_q_mask) override;
 
     void compute_single_segment_stress_fourier(const int GPU, double *d_q) override;
     std::vector<double> compute_single_segment_stress_continuous(const int GPU, std::string monomer_type) override;
