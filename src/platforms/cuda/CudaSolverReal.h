@@ -20,41 +20,53 @@ __device__ int d_max_of_two(int x, int y);
 __device__ int d_min_of_two(int x, int y);
 
 __global__ void compute_crank_1d(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
     const double *d_xl, const double *d_xd, const double *d_xh,
     double *d_q_out, const double *d_q_in, const int M);
 
 __global__ void compute_crank_2d_step_1(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_xl, const double *d_xd, const double *d_xh, const int I,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_in, const int M);
 
 __global__ void compute_crank_2d_step_2(
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
 
 __global__ void compute_crank_3d_step_1(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
     const double *d_xl, const double *d_xd, const double *d_xh, const int I,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     const double *d_zl, const double *d_zd, const double *d_zh, const int K,
     double *d_q_out, const double *d_q_in, const int M);
 
 __global__ void compute_crank_3d_step_2(
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J, const int K,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
 
 __global__ void compute_crank_3d_step_3(
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
     const double *d_zl, const double *d_zd, const double *d_zh, const int J, const int K,
     double *d_q_out, const double *d_q_dstar, const double *d_q_in, const int M);
 
 __global__ void tridiagonal(
     const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star, double *d_x, const double *d_d, 
+    double *d_c_star,  const double *d_d, double *d_x,
     const int *d_offset, const int REPEAT,
     const int INTERVAL, const int M);
 
-// __global__  void tridiagonal_periodic(
-//     const double *d_xl, const double *d_xd, const double *d_xh,
-//     double *d_x, const int INTERVAL, const double *d_d, const int M);    
+__global__  void tridiagonal_periodic(
+    const double *d_xl, const double *d_xd, const double *d_xh,
+    double *d_c_star, double *d_q_sparse, 
+     const double *d_d, double *d_x,
+    const int *d_offset, const int REPEAT,
+    const int INTERVAL, const int M);
 
 class CudaSolverReal : public CudaSolver
 {
@@ -95,10 +107,13 @@ private:
     int* d_offset[MAX_GPUS];
 
     void advance_propagator_3d(
+        std::vector<BoundaryCondition> bc,      
         const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_2d(
+        std::vector<BoundaryCondition> bc,
         const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_1d(
+        std::vector<BoundaryCondition> bc,
         const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 

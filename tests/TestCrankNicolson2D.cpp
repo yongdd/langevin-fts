@@ -61,10 +61,20 @@ int main()
             {"B",1.0-f, 1, 2},
         };
 
-        std::vector<std::string> bc = 
+        std::vector<std::string> bc_abs = 
         {
-            "absorbing", "reflecting",
-            "absorbing", "reflecting",
+            "absorbing", "absorbing",
+            "reflecting", "reflecting",
+        };
+        std::vector<std::string> bc_rfl = 
+        {
+            "reflecting", "reflecting",
+            "periodic", "periodic",
+        };
+        std::vector<std::string> bc_prd = 
+        {
+            "periodic", "periodic",
+            "absorbing", "absorbing",
         };
 
         Molecules* molecules = new Molecules("Continuous", 1.0/NN, bond_lengths);
@@ -76,15 +86,45 @@ int main()
 
         std::vector<PropagatorComputation*> solver_list;
         std::vector<std::string> solver_name_list;
+        
+        int repeat = 0;
+
         #ifdef USE_CPU_MKL
-        solver_name_list.push_back("cpu-mkl");
-        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ}, {Lx,Ly}, bc), molecules, propagator_analyzer, "realspace"));
+        repeat += 1;
+        solver_name_list.push_back("cpu-mkl, absorbing");
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_analyzer, "realspace"));
         #endif
+
         #ifdef USE_CUDA
-        solver_name_list.push_back("cuda");
-        solver_name_list.push_back("cuda_reduce_memory_usage");
-        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc), molecules, propagator_analyzer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc), molecules, propagator_analyzer, "realspace"));
+        repeat += 2;
+        solver_name_list.push_back("cuda, absorbing");
+        solver_name_list.push_back("cuda_reduce_memory_usage, absorbing");
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_analyzer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_analyzer, "realspace"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl, reflecting");
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_analyzer, "realspace"));
+        #endif
+        
+        #ifdef USE_CUDA
+        solver_name_list.push_back("cuda, reflecting");
+        solver_name_list.push_back("cuda_reduce_memory_usage, reflecting");
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_analyzer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_analyzer, "realspace"));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl, periodic");
+        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_analyzer, "realspace"));
+        #endif
+        
+        #ifdef USE_CUDA
+        solver_name_list.push_back("cuda, periodic");
+        solver_name_list.push_back("cuda_reduce_memory_usage, periodic");
+        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_analyzer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_analyzer, "realspace"));
         #endif
 
         // For each platform
@@ -96,12 +136,12 @@ int main()
                 q_next[i] = 0.0;
 
             //---------------- run --------------------
-            std::cout<< std::endl << "Running Pseudo: " << solver_name_list[n] << std::endl;
+            std::cout<< std::endl << "Running Pseudo: " << n << ", " << solver_name_list[n] << std::endl;
             solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
 
             Polymer& pc = molecules->get_polymer(0);
             solver->get_chain_propagator(q_next, 0, 1, 2, 1);
-            if (n > 0)
+            if (n % repeat != 0)
             {
                 //--------------- check --------------------
                 std::cout<< "Checking"<< std::endl;

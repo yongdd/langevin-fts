@@ -335,11 +335,11 @@ void CudaSolverReal::advance_one_propagator_continuous(
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
 
         if(DIM == 3)           // input, output
-            advance_propagator_3d(GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_3d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_2d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
         else if(DIM ==1 )
-            advance_propagator_1d(GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_1d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
@@ -376,18 +376,18 @@ void CudaSolverReal::advance_two_propagators_continuous(
 
         if(DIM == 3)           // input, output
         {
-            advance_propagator_3d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_3d(0, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
         }
         else if(DIM == 2)
         {
-            advance_propagator_2d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_2d(0, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
         }
         else if(DIM ==1 )
         {
-            advance_propagator_1d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_1d(0, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
         }
 
         // Evaluate exp(-w*ds/2) in real space
@@ -429,18 +429,18 @@ void CudaSolverReal::advance_two_propagators_continuous_two_gpus(
 
         if(DIM == 3)           // input, output
         {
-            advance_propagator_3d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_3d(1, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_3d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
         }
         else if(DIM == 2)
         {
-            advance_propagator_2d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_2d(1, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_2d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
         }
         else if(DIM ==1 )
         {
-            advance_propagator_1d(0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_1d(1, d_q_out_2, d_q_out_2, monomer_type_2);
+            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
+            advance_propagator_1d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
         }
 
         // Evaluate exp(-w*ds/2) in real space
@@ -460,6 +460,7 @@ void CudaSolverReal::advance_two_propagators_continuous_two_gpus(
     }
 }
 void CudaSolverReal::advance_propagator_3d(
+    std::vector<BoundaryCondition> bc,
     const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
@@ -472,11 +473,13 @@ void CudaSolverReal::advance_propagator_3d(
         double *d_q_star;
         double *d_q_dstar;
         double *d_c_star;
+        double *d_q_sparse;
         double *d_temp;
 
         gpu_error_check(cudaMalloc((void**)&d_q_star, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_dstar, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_c_star, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_temp, sizeof(double)*M));
 
         double *_d_xl = d_xl[GPU][monomer_type];
@@ -493,39 +496,73 @@ void CudaSolverReal::advance_propagator_3d(
 
         // Calculate q_star
         compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[0], bc[1], bc[2], bc[3], bc[4], bc[5], 
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
             _d_zl, _d_zd, _d_zh, nx[2],
             d_temp, d_q_in, M);
 
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
-            _d_xl, _d_xd, _d_xh,
-            d_c_star, d_q_star, d_temp,
-            d_offset_yz[GPU], nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+        if (bc[0] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star, d_q_sparse, d_temp, d_q_star,
+                d_offset_yz[GPU], nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star, d_temp, d_q_star,
+                d_offset_yz[GPU], nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+        }
 
         // Calculate q_dstar
         compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[2], bc[3], 
             _d_yl, _d_yd, _d_yh, nx[1], nx[2],
             d_temp, d_q_star, d_q_in, M);
 
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
-            _d_yl, _d_yd, _d_yh,
-            d_c_star, d_q_dstar, d_temp,
-            d_offset_xz[GPU], nx[0]*nx[2], nx[2], nx[1]);
+        if (bc[2] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star, d_q_sparse, d_temp, d_q_dstar,
+                d_offset_xz[GPU], nx[0]*nx[2], nx[2], nx[1]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star, d_temp, d_q_dstar,
+                d_offset_xz[GPU], nx[0]*nx[2], nx[2], nx[1]);
+        }
 
         // Calculate q^(n+1)
         compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[4], bc[5], 
             _d_zl, _d_zd, _d_zh, nx[1], nx[2],
             d_temp, d_q_dstar, d_q_in, M);
 
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
-            _d_zl, _d_zd, _d_zh,
-            d_c_star, d_q_out, d_temp,
-            d_offset_xy[GPU], nx[0]*nx[1], 1, nx[2]);
+        if (bc[4] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+                _d_zl, _d_zd, _d_zh,
+                d_c_star, d_q_sparse, d_temp, d_q_out,
+                d_offset_xy[GPU], nx[0]*nx[1], 1, nx[2]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_zl, _d_zd, _d_zh,
+                d_c_star, d_temp, d_q_out,
+                d_offset_xy[GPU], nx[0]*nx[1], 1, nx[2]);
+        }
 
         cudaFree(d_q_star);
         cudaFree(d_q_dstar);
         cudaFree(d_c_star);
+        cudaFree(d_q_sparse);
         cudaFree(d_temp);
     }
     catch(std::exception& exc)
@@ -534,6 +571,7 @@ void CudaSolverReal::advance_propagator_3d(
     }
 }
 void CudaSolverReal::advance_propagator_2d(
+    std::vector<BoundaryCondition> bc,
     const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
@@ -545,11 +583,13 @@ void CudaSolverReal::advance_propagator_2d(
 
         double *d_q_star;
         double *d_c_star;
+        double *d_q_sparse;
         double *d_temp;
 
         gpu_error_check(cudaMalloc((void**)&d_q_star, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_c_star, sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_temp, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
 
         double *_d_xl = d_xl[GPU][monomer_type];
         double *_d_xd = d_xd[GPU][monomer_type];
@@ -561,28 +601,53 @@ void CudaSolverReal::advance_propagator_2d(
 
         // Calculate q_star
         compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[0], bc[1], bc[2], bc[3],
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp, d_q_in, M);
 
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
-            _d_xl, _d_xd, _d_xh,
-            d_c_star, d_q_star, d_temp,
-            d_offset_y[GPU], nx[1], nx[1], nx[0]);
+        // gpu_error_check(cudaMemcpy(d_q_out, d_q_star, sizeof(double)*M, cudaMemcpyDeviceToDevice));
+
+        if (bc[0] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star, d_q_sparse, d_temp, d_q_star,
+                d_offset_y[GPU], nx[1], nx[1], nx[0]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star, d_temp, d_q_star,
+                d_offset_y[GPU], nx[1], nx[1], nx[0]);
+        }
 
         // Calculate q_dstar
         compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp, d_q_star, d_q_in, M);
 
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
-            _d_yl, _d_yd, _d_yh,
-            d_c_star, d_q_out, d_temp,
-            d_offset_x[GPU], nx[0], 1, nx[1]);
+        if (bc[2] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star, d_q_sparse, d_temp, d_q_out,
+                d_offset_x[GPU], nx[0], 1, nx[1]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star, d_temp, d_q_out,
+                d_offset_x[GPU], nx[0], 1, nx[1]);
+        }
 
         cudaFree(d_q_star);
         cudaFree(d_c_star);
         cudaFree(d_temp);
+        cudaFree(d_q_sparse);
     }
     catch(std::exception& exc)
     {
@@ -590,6 +655,7 @@ void CudaSolverReal::advance_propagator_2d(
     }
 }
 void CudaSolverReal::advance_propagator_1d(
+    std::vector<BoundaryCondition> bc,
     const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
@@ -601,20 +667,31 @@ void CudaSolverReal::advance_propagator_1d(
 
         double *d_q_star;
         double *d_c_star;
+        double *d_q_sparse;
 
         double *_d_xl = d_xl[GPU][monomer_type];
         double *_d_xd = d_xd[GPU][monomer_type];
         double *_d_xh = d_xh[GPU][monomer_type];
 
-        gpu_error_check(cudaMalloc((void**)&d_q_star, sizeof(double)*M));
-        gpu_error_check(cudaMalloc((void**)&d_c_star, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_star,   sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_c_star,   sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
 
-        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(_d_xl, _d_xd, _d_xh, d_q_star, d_q_in, nx[0]);
-        tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(_d_xl, _d_xd, _d_xh, d_c_star, d_q_out, d_q_star, d_offset[GPU], 1, 1, nx[0]);
+        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            bc[0], bc[1],
+            _d_xl, _d_xd, _d_xh,
+            d_q_star, d_q_in, nx[0]);
+
+        if (bc[0] == BoundaryCondition::PERIODIC)
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh, d_c_star, d_q_sparse, d_q_star, d_q_out, d_offset[GPU], 1, 1, nx[0]);
+        else
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+                _d_xl, _d_xd, _d_xh, d_c_star, d_q_star, d_q_out, d_offset[GPU], 1, 1, nx[0]);
 
         cudaFree(d_q_star);
         cudaFree(d_c_star);
-
+        cudaFree(d_q_sparse);
     }
     catch(std::exception& exc)
     {
@@ -625,7 +702,7 @@ void CudaSolverReal::compute_single_segment_stress_fourier(const int GPU, double
 {
     try
     {
-        throw_with_line_number("Currently, real-space does not support stress computation.");   
+        throw_with_line_number("Currently, real-space method does not support stress computation.");   
 
     }
     catch(std::exception& exc)
@@ -642,7 +719,7 @@ std::vector<double> CudaSolverReal::compute_single_segment_stress_continuous(
         const int M    = cb->get_n_grid();
         std::vector<double> stress(DIM);
 
-        throw_with_line_number("Currently, real-space does not support stress computation.");   
+        throw_with_line_number("Currently, real-space method does not support stress computation.");   
 
         return stress;
     }
@@ -662,6 +739,9 @@ __device__ int d_min_of_two(int x, int y)
 }
 
 __global__ void compute_crank_3d_step_1(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
     const double *d_xl, const double *d_xd, const double *d_xh, const int I,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     const double *d_zl, const double *d_zd, const double *d_zh, const int K,
@@ -676,14 +756,32 @@ __global__ void compute_crank_3d_step_1(
         int j = (n-i*J*K) / K;
         int k = n % K;
 
-        im = d_max_of_two(0,i-1);
-        ip = d_min_of_two(I-1,i+1);
+        if (bc_xl == BoundaryCondition::PERIODIC)
+            im = (I+i-1) % I;
+        else
+            im = d_max_of_two(0,i-1);
+        if (bc_xh == BoundaryCondition::PERIODIC)
+            ip = (i+1) % I;
+        else
+            ip = d_min_of_two(I-1,i+1);
 
-        jm = d_max_of_two(0,j-1);
-        jp = d_min_of_two(J-1,j+1);
+        if (bc_yl == BoundaryCondition::PERIODIC)
+            jm = (J+j-1) % J;
+        else
+            jm = d_max_of_two(0,j-1);
+        if (bc_yh == BoundaryCondition::PERIODIC)
+            jp = (j+1) % J;
+        else
+            jp = d_min_of_two(J-1,j+1);
 
-        km = d_max_of_two(0,k-1);
-        kp = d_min_of_two(K-1,k+1);
+        if (bc_zl == BoundaryCondition::PERIODIC)
+            km = (K+k-1) % K;
+        else
+            km = d_max_of_two(0,k-1);
+        if (bc_zh == BoundaryCondition::PERIODIC)
+            kp = (k+1) % K;
+        else
+            kp = d_min_of_two(K-1,k+1);
 
         int im_j_k = im*J*K + j*K + k;
         int ip_j_k = ip*J*K + j*K + k;
@@ -702,6 +800,7 @@ __global__ void compute_crank_3d_step_1(
 }
 
 __global__ void compute_crank_3d_step_2(
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J, const int K,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M)
 {
@@ -714,8 +813,14 @@ __global__ void compute_crank_3d_step_2(
         int j = (n-i*J*K) / K;
         int k = n % K;
 
-        jm = d_max_of_two(0,j-1);
-        jp = d_min_of_two(J-1,j+1);
+        if (bc_yl == BoundaryCondition::PERIODIC)
+            jm = (J+j-1) % J;
+        else
+            jm = d_max_of_two(0,j-1);
+        if (bc_yh == BoundaryCondition::PERIODIC)
+            jp = (j+1) % J;
+        else
+            jp = d_min_of_two(J-1,j+1);
 
         int i_jm_k = i*J*K + jm*K + k;
         int i_jp_k = i*J*K + jp*K + k;
@@ -728,6 +833,7 @@ __global__ void compute_crank_3d_step_2(
 }
 
 __global__ void compute_crank_3d_step_3(
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
     const double *d_zl, const double *d_zd, const double *d_zh, const int J, const int K,
     double *d_q_out, const double *d_q_dstar, const double *d_q_in, const int M)
 {
@@ -740,8 +846,14 @@ __global__ void compute_crank_3d_step_3(
         int j = (n-i*J*K) / K;
         int k = n % K;
 
-        km = d_max_of_two(0,k-1);
-        kp = d_min_of_two(K-1,k+1);
+        if (bc_zl == BoundaryCondition::PERIODIC)
+            km = (K+k-1) % K;
+        else
+            km = d_max_of_two(0,k-1);
+        if (bc_zh == BoundaryCondition::PERIODIC)
+            kp = (k+1) % K;
+        else
+            kp = d_min_of_two(K-1,k+1);
 
         int i_j_km = i*J*K + j*K + km;
         int i_j_kp = i*J*K + j*K + kp;
@@ -754,6 +866,8 @@ __global__ void compute_crank_3d_step_3(
 }
 
 __global__ void compute_crank_2d_step_1(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_xl, const double *d_xd, const double *d_xh, const int I,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_in, const int M)
@@ -766,11 +880,23 @@ __global__ void compute_crank_2d_step_1(
         int i = n / J;
         int j = n % J;
 
-        im = d_max_of_two(0,i-1);
-        ip = d_min_of_two(I-1,i+1);
+        if (bc_xl == BoundaryCondition::PERIODIC)
+            im = (I+i-1) % I;
+        else
+            im = d_max_of_two(0,i-1);
+        if (bc_xh == BoundaryCondition::PERIODIC)
+            ip = (i+1) % I;
+        else
+            ip = d_min_of_two(I-1,i+1);
 
-        jm = d_max_of_two(0,j-1);
-        jp = d_min_of_two(J-1,j+1);
+        if (bc_yl == BoundaryCondition::PERIODIC)
+            jm = (J+j-1) % J;
+        else
+            jm = d_max_of_two(0,j-1);
+        if (bc_yh == BoundaryCondition::PERIODIC)
+            jp = (j+1) % J;
+        else
+            jp = d_min_of_two(J-1,j+1);
 
         int i_jm = i*J + jm;
         int i_jp = i*J + jp;
@@ -786,6 +912,7 @@ __global__ void compute_crank_2d_step_1(
 }
 
 __global__ void compute_crank_2d_step_2(
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M)
 {
@@ -797,8 +924,14 @@ __global__ void compute_crank_2d_step_2(
         int i = n/J;
         int j = n%J;
 
-        jm = d_max_of_two(0,j-1);
-        jp = d_min_of_two(J-1,j+1);
+        if (bc_yl == BoundaryCondition::PERIODIC)
+            jm = (J+j-1) % J;
+        else
+            jm = d_max_of_two(0,j-1);
+        if (bc_yh == BoundaryCondition::PERIODIC)
+            jp = (j+1) % J;
+        else
+            jp = d_min_of_two(J-1,j+1);
 
         int i_jm = i*J + jm;
         int i_jp = i*J + jp;
@@ -811,6 +944,7 @@ __global__ void compute_crank_2d_step_2(
 }
 
 __global__ void compute_crank_1d(
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
     const double *d_xl, const double *d_xd, const double *d_xh,
     double *d_q_out, const double *d_q_in, const int M)
 {
@@ -819,8 +953,14 @@ __global__ void compute_crank_1d(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while(i < M)
     {
-        im = d_max_of_two(0,i-1);
-        ip = d_min_of_two(M-1,i+1);
+        if (bc_xl == BoundaryCondition::PERIODIC)
+            im = (M+i-1) % M;
+        else
+            im = d_max_of_two(0,i-1);
+        if (bc_xh == BoundaryCondition::PERIODIC)
+            ip = (i+1) % M;
+        else
+            ip = d_min_of_two(M-1,i+1);
 
         // B part of Ax=B matrix equation
         d_q_out[i] = (2.0-d_xd[i])*d_q_in[i] - d_xl[i]*d_q_in[im] - d_xh[i]*d_q_in[ip];
@@ -832,7 +972,7 @@ __global__ void compute_crank_1d(
 // This method solves CX=Y, where C is a tridiagonal matrix 
 __global__ void tridiagonal(
     const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star, double *d_x, const double *d_d, 
+    double *d_c_star,  const double *d_d, double *d_x,
     const int *d_offset, const int REPEAT,
     const int INTERVAL, const int M)
 {
@@ -869,46 +1009,59 @@ __global__ void tridiagonal(
     }
 }
 
-// // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
-// __global__ void CudaSolverReal::tridiagonal_periodic(
-//     const double *xl, const double *xd, const double *xh,
-//     double *x, const int INTERVAL, const double *d, const int M)
-// {
-//     // xl: a
-//     // xd: b
-//     // xh: c
-//     // gamma = 1.0
+// This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
+__global__ void tridiagonal_periodic(
+    const double *d_xl, const double *d_xd, const double *d_xh,
+    double *d_c_star, double *d_q_sparse, 
+    const double *d_d, double *d_x,
+    const int *d_offset, const int REPEAT,
+    const int INTERVAL, const int M)
+{
+    // xl: a
+    // xd: b
+    // xh: c
+    // gamma = 1.0
 
-//     double c_star[M-1];
-//     double q[M];
-//     double temp, value;
+    double temp, value;
 
-//     // Forward sweep
-//     temp = xd[0] - 1.0 ; 
-//     c_star[0] = xh[0]/temp;
-//     x[0] = d[0]/temp;
-//     q[0] =  1.0/temp;
+    int n = blockIdx.x * blockDim.x + threadIdx.x;
+    while (n < REPEAT)
+    {
+        const double *_d_d = &d_d[d_offset[n]];
+        double       *_d_x = &d_x[d_offset[n]];
+        double  *_d_c_star = &d_c_star[d_offset[n]];
+        double *_d_q_sparse = &d_q_sparse[d_offset[n]];
 
-//     for(int i=1; i<M-1; i++)
-//     {
-//         c_star[i-1] = xh[i-1]/temp;
-//         temp = xd[i]-xl[i]*c_star[i-1];
-//         x[i*INTERVAL] = (d[i]-xl[i]*x[(i-1)*INTERVAL])/temp;
-//         q[i]        =     (-xl[i]*q[i-1])         /temp;
-//     }
-//     c_star[M-2] = xh[M-2]/temp;
-//     temp = xd[M-1]-xh[M-1]*xl[0] - xl[M-1]*c_star[M-2];
-//     x[(M-1)*INTERVAL] = ( d[M-1]-xl[M-1]*x[(M-2)*INTERVAL])/temp;
-//     q[M-1]          = (xh[M-1]-xl[M-1]*q[M-2])         /temp;
+        // Forward sweep
+        temp = d_xd[0] - 1.0 ;
+        _d_c_star[0] = d_xh[0]/temp;
+        _d_x[0] = _d_d[0]/temp;
+        _d_q_sparse[0] =  1.0/temp;
 
-//     // Backward substitution
-//     for(int i=M-2;i>=0; i--)
-//     {
-//         x[i*INTERVAL] = x[i*INTERVAL] - c_star[i]*x[(i+1)*INTERVAL];
-//         q[i]        = q[i]        - c_star[i]*q[i+1];
-//     }
+        for(int i=1; i<M-1; i++)
+        {
+            _d_c_star[(i-1)*INTERVAL] = d_xh[i-1]/temp;
+            temp = d_xd[i]-d_xl[i]*_d_c_star[(i-1)*INTERVAL];
+            _d_x[i*INTERVAL] = (_d_d[i*INTERVAL]-d_xl[i]*_d_x[(i-1)*INTERVAL])/temp;
+            _d_q_sparse[i*INTERVAL] =   (-d_xl[i]*_d_q_sparse[(i-1)*INTERVAL])/temp;
+        }
 
-//     value = (x[0]+xl[0]*x[(M-1)*INTERVAL])/(1.0+q[0]+xl[0]*q[M-1]);
-//     for(int i=0; i<M; i++)
-//         x[i*INTERVAL] = x[i*INTERVAL] - q[i]*value;
-// }
+        _d_c_star[(M-2)*INTERVAL] = d_xh[M-2]/temp;
+        temp = d_xd[M-1]-d_xh[M-1]*d_xl[0] - d_xl[M-1]*_d_c_star[(M-2)*INTERVAL];
+        _d_x[(M-1)*INTERVAL] =    (_d_d[(M-1)*INTERVAL]-d_xl[M-1]*_d_x[(M-2)*INTERVAL])/temp;
+        _d_q_sparse[(M-1)*INTERVAL] = (d_xh[M-1]-d_xl[M-1]*_d_q_sparse[(M-2)*INTERVAL])/temp;
+
+        // Backward substitution
+        for(int i=M-2;i>=0; i--)
+        {
+            _d_x[i*INTERVAL] = _d_x[i*INTERVAL] - _d_c_star[i*INTERVAL]*_d_x[(i+1)*INTERVAL];
+            _d_q_sparse[i*INTERVAL] = _d_q_sparse[i*INTERVAL] - _d_c_star[i*INTERVAL]*_d_q_sparse[(i+1)*INTERVAL];
+        }
+
+        value = (_d_x[0]+d_xl[0]*_d_x[(M-1)*INTERVAL])/(1.0+_d_q_sparse[0]+d_xl[0]*_d_q_sparse[(M-1)*INTERVAL]);
+        for(int i=0; i<M; i++)
+            _d_x[i*INTERVAL] = _d_x[i*INTERVAL] - _d_q_sparse[i*INTERVAL]*value;
+
+        n += blockDim.x * gridDim.x;
+    }
+}

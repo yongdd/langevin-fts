@@ -40,10 +40,13 @@ private:
     int min_of_two(int x, int y);
 
     void advance_propagator_3d(
+        std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out, std::string monomer_type);
     void advance_propagator_2d(
+        std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out, std::string monomer_type);
     void advance_propagator_1d(
+        std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out, std::string monomer_type);
 public:
 

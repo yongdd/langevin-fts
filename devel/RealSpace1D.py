@@ -2,6 +2,7 @@
 # Propagators inside of the nano particle is zero, e.g., q(r,s) = 0.
 
 import os
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -23,14 +24,16 @@ nx = [128]                # grid number
 lx = [6.0]                # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
-boundary_conditions = ["reflecting", "reflecting"]
+
+boundary_conditions = ["periodic", "periodic"]
+# boundary_conditions = ["reflecting", "reflecting"]
 # boundary_conditions = ["absorbing", "absorbing"]
 
 aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
+factory = PlatformSelector.create_factory("cpu-mkl", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box
@@ -62,7 +65,10 @@ q_init = {"G":np.zeros(nx)}
 q_init["G"][0] = 1.0/(lx[0]/nx[0])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
+time_start = time.time()
 solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+elapsed_time = time.time() - time_start
+print("Elapsed time: ", elapsed_time)
 
 file_name = "phi"
 phi = np.reshape(solver.get_total_concentration("A"), nx)
@@ -78,9 +84,9 @@ for n in range(0, round(N)+1, round(N/5)):
                                                   # p, v, u, n
     q_out = np.reshape(solver.get_chain_propagator(0, 0, 1, n), nx)
     dev = 4*(n*ds+1e-9)/6
-    y = 2.0/np.sqrt(dev*np.pi)*np.exp(-(x)**2/dev)
+    y = 1.0/np.sqrt(dev*np.pi)*np.exp(-(x)**2/dev) + 1.0/np.sqrt(dev*np.pi)*np.exp(-(x-lx[0])**2/dev)
     plt.plot(x, q_out)
-#     plt.plot(x, y)
+    plt.plot(x, y)
     plt.savefig(file_name)
     print("q(%3.1f,r) is written to file '%s'." % (n*ds, file_name))
     plt.close()

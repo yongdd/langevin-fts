@@ -14,6 +14,13 @@ CpuSolverReal::CpuSolverReal(ComputationBox *cb, Molecules *molecules)
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");     
+
+        // for(size_t i=0; i<cb->get_boundary_conditions().size(); i++)
+        // {
+        //     if (cb->get_boundary_condition(i) == BoundaryCondition::PERIODIC)
+        //         throw_with_line_number("Currently, we do not support periodic boundary conditions in real-space method");
+        // }
+
         const int M = cb->get_n_grid();
 
         // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
@@ -135,17 +142,18 @@ void CpuSolverReal::advance_propagator_continuous(
 
         double *_exp_dw = exp_dw[monomer_type];
         double *_exp_dw_half = exp_dw_half[monomer_type];
+        double q_exp[M];
 
         // Evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
-            q_out[i] = _exp_dw[i]*q_in[i];
+            q_exp[i] = _exp_dw[i]*q_in[i];
 
-        if(DIM == 3)           // input, output
-            advance_propagator_3d(q_out, q_out, monomer_type);
+        if(DIM == 3)                                          // input, output
+            advance_propagator_3d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(q_out, q_out, monomer_type);
+            advance_propagator_2d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
         else if(DIM ==1 )
-            advance_propagator_1d(q_out, q_out, monomer_type);
+            advance_propagator_1d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
@@ -165,6 +173,7 @@ void CpuSolverReal::advance_propagator_continuous(
 }
 
 void CpuSolverReal::advance_propagator_3d(
+    std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
     try
@@ -194,19 +203,37 @@ void CpuSolverReal::advance_propagator_3d(
         // Calculate q_star
         for(int j=0;j<nx[1];j++)
         {
-            jm = max_of_two(0,j-1);
-            jp = min_of_two(nx[1]-1,j+1);
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                jm = (nx[1]+j-1) % nx[1];
+            else
+                jm = max_of_two(0,j-1);
+            if (bc[3] == BoundaryCondition::PERIODIC)
+                jp = (j+1) % nx[1];
+            else
+                jp = min_of_two(nx[1]-1,j+1);
 
             for(int k=0;k<nx[2];k++)
             {
-                km = max_of_two(0,k-1);
-                kp = min_of_two(nx[2]-1,k+1);
+                if (bc[4] == BoundaryCondition::PERIODIC)
+                    km = (nx[2]+k-1) % nx[2];
+                else
+                    km = max_of_two(0,k-1);
+                if (bc[5] == BoundaryCondition::PERIODIC)
+                    kp = (k+1) % nx[2];
+                else
+                    kp = min_of_two(nx[2]-1,k+1);
 
                 // B part of Ax=B matrix equation
                 for(int i=0;i<nx[0];i++)
                 {
-                    im = max_of_two(0,i-1);
-                    ip = min_of_two(nx[0]-1,i+1);
+                    if (bc[0] == BoundaryCondition::PERIODIC)
+                        im = (nx[0]+i-1) % nx[0];
+                    else
+                        im = max_of_two(0,i-1);
+                    if (bc[1] == BoundaryCondition::PERIODIC)
+                        ip = (i+1) % nx[0];
+                    else
+                        ip = min_of_two(nx[0]-1,i+1);
 
                     int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
                     int im_j_k = im*nx[1]*nx[2] + j*nx[2] + k;
@@ -222,7 +249,10 @@ void CpuSolverReal::advance_propagator_3d(
                             - _xl[i]*q_in[im_j_k] - _xh[i]*q_in[ip_j_k];
                 }
                 int j_k = j*nx[2] + k;
-                tridiagonal(_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
+                if (bc[0] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
+                else
+                    tridiagonal         (_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
             }
         }
         // Calculate q_dstar
@@ -232,8 +262,14 @@ void CpuSolverReal::advance_propagator_3d(
             {
                 for(int j=0;j<nx[1];j++)
                 {
-                    jm = max_of_two(0,j-1);
-                    jp = min_of_two(nx[1]-1,j+1);
+                    if (bc[2] == BoundaryCondition::PERIODIC)
+                        jm = (nx[1]+j-1) % nx[1];
+                    else
+                        jm = max_of_two(0,j-1);
+                    if (bc[3] == BoundaryCondition::PERIODIC)
+                        jp = (j+1) % nx[1];
+                    else
+                        jp = min_of_two(nx[1]-1,j+1);
 
                     int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
                     int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
@@ -243,7 +279,10 @@ void CpuSolverReal::advance_propagator_3d(
                         + _yl[j]*q_in[i_jm_k] + _yh[j]*q_in[i_jp_k];
                 }
                 int i_k = i*nx[1]*nx[2] + k;
-                tridiagonal(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
+                if (bc[2] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
+                else
+                    tridiagonal         (_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
             }
         }
 
@@ -254,8 +293,14 @@ void CpuSolverReal::advance_propagator_3d(
             {
                 for(int k=0;k<nx[2];k++)
                 {
-                    km = max_of_two(0,k-1);
-                    kp = min_of_two(nx[2]-1,k+1);
+                    if (bc[4] == BoundaryCondition::PERIODIC)
+                        km = (nx[2]+k-1) % nx[2];
+                    else
+                        km = max_of_two(0,k-1);
+                    if (bc[5] == BoundaryCondition::PERIODIC)
+                        kp = (k+1) % nx[2];
+                    else
+                        kp = min_of_two(nx[2]-1,k+1);
 
                     int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
                     int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
@@ -265,7 +310,10 @@ void CpuSolverReal::advance_propagator_3d(
                         + _zl[k]*q_in[i_j_km] + _zh[k]*q_in[i_j_kp];
                 }
                 int i_j = i*nx[1]*nx[2] + j*nx[2];
-                tridiagonal(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
+                if (bc[4] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
+                else
+                    tridiagonal         (_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
             }
         }
     }
@@ -275,6 +323,7 @@ void CpuSolverReal::advance_propagator_3d(
     }
 }
 void CpuSolverReal::advance_propagator_2d(
+    std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
     try
@@ -298,14 +347,26 @@ void CpuSolverReal::advance_propagator_2d(
         // Calculate q_star
         for(int j=0;j<nx[1];j++)
         {
-            jm = max_of_two(0,j-1);
-            jp = min_of_two(nx[1]-1,j+1);
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                jm = (nx[1]+j-1) % nx[1];
+            else
+                jm = max_of_two(0,j-1);
+            if (bc[3] == BoundaryCondition::PERIODIC)
+                jp = (j+1) % nx[1];
+            else
+                jp = min_of_two(nx[1]-1,j+1);
 
             // B part of Ax=B matrix equation
             for(int i=0;i<nx[0];i++)
             {
-                im = max_of_two(0,i-1);
-                ip = min_of_two(nx[0]-1,i+1);
+                if (bc[0] == BoundaryCondition::PERIODIC)
+                    im = (nx[0]+i-1) % nx[0];
+                else
+                    im = max_of_two(0,i-1);
+                if (bc[1] == BoundaryCondition::PERIODIC)
+                    ip = (i+1) % nx[0];
+                else
+                    ip = min_of_two(nx[0]-1,i+1);
 
                 int i_j = i*nx[1] + j;
                 int i_jm = i*nx[1] + jm;
@@ -317,16 +378,28 @@ void CpuSolverReal::advance_propagator_2d(
                           - _yl[j]*q_in[i_jm] - _yh[j]*q_in[i_jp])
                           - _xl[i]*q_in[im_j] - _xh[i]*q_in[ip_j];
             }
-            tridiagonal(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
+            if (bc[0] == BoundaryCondition::PERIODIC)
+                tridiagonal_periodic(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
+            else
+                tridiagonal         (_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
         }
+        
+        // for(int i=0;i<M; i++)
+        //     q_out[i] = q_star[i];
 
         // Calculate q_dstar
         for(int i=0;i<nx[0];i++)
         {
             for(int j=0;j<nx[1];j++)
             {
-                jm = max_of_two(0,j-1);
-                jp = min_of_two(nx[1]-1,j+1);
+                if (bc[2] == BoundaryCondition::PERIODIC)
+                    jm = (nx[1]+j-1) % nx[1];
+                else
+                    jm = max_of_two(0,j-1);
+                if (bc[3] == BoundaryCondition::PERIODIC)
+                    jp = (j+1) % nx[1];
+                else
+                    jp = min_of_two(nx[1]-1,j+1);
 
                 int i_j = i*nx[1] + j;
                 int i_jm = i*nx[1] + jm;
@@ -335,7 +408,10 @@ void CpuSolverReal::advance_propagator_2d(
                 temp2[j] = q_star[i_j] + (_yd[j]-1.0)*q_in[i_j]
                     + _yl[j]*q_in[i_jm] + _yh[j]*q_in[i_jp];
             }
-            tridiagonal(_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                tridiagonal_periodic(_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
+            else
+                tridiagonal         (_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
         }
     }
     catch(std::exception& exc)
@@ -344,6 +420,7 @@ void CpuSolverReal::advance_propagator_2d(
     }
 }
 void CpuSolverReal::advance_propagator_1d(
+    std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
     try
@@ -360,13 +437,22 @@ void CpuSolverReal::advance_propagator_1d(
 
         for(int i=0;i<nx[0];i++)
         {
-            im = max_of_two(0,i-1);
-            ip = min_of_two(nx[0]-1,i+1);
+            if (bc[0] == BoundaryCondition::PERIODIC)
+                im = (nx[0]+i-1) % nx[0];
+            else
+                im = max_of_two(0,i-1);
+            if (bc[1] == BoundaryCondition::PERIODIC)
+                ip = (i+1) % nx[0];
+            else
+                ip = min_of_two(nx[0]-1,i+1);
 
             // B part of Ax=B matrix equation
             q_star[i] = (2.0-_xd[i])*q_in[i] - _xl[i]*q_in[im] - _xh[i]*q_in[ip];
         }
-        tridiagonal(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+        if (bc[0] == BoundaryCondition::PERIODIC)
+            tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+        else
+            tridiagonal         (_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
 
     }
     catch(std::exception& exc)
@@ -383,7 +469,7 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
         const int M    = cb->get_n_grid();
         std::vector<double> stress(DIM);
 
-        throw_with_line_number("Currently, real-space does not support stress computation.");   
+        throw_with_line_number("Currently, real-space method does not support stress computation.");   
 
         return stress;
     }
