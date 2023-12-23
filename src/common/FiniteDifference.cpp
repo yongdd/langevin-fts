@@ -18,12 +18,6 @@ void FiniteDifference::get_laplacian_matrix(
 
         const int DIM = nx.size();
 
-        for(size_t i=0; i<bc.size(); i++)
-        {
-            if (bc[i] == BoundaryCondition::PERIODIC)
-                throw_with_line_number("Currently, we do not support periodic boundary conditions in real-space method");
-        }
-
         // Calculate the exponential factor
         for(int d=0; d<DIM; d++)
             xfactor[d] = bond_length_sq*ds/(std::pow(dx[d],2)*6.0);

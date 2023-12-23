@@ -25,8 +25,14 @@ lx = [4.0,5.0]                # box size
 ds = 0.01                     # contour step interval
 stat_seg_length = {"A":1.0}   # statistical segment lengths
 
-boundary_conditions = ["absorbing", "absorbing",
-                       "reflecting", "reflecting"]
+# boundary_conditions = [ "absorbing", "reflecting",
+#                         "periodic", "periodic",]
+
+boundary_conditions = ["periodic", "periodic",
+                       "absorbing", "reflecting"]
+
+# boundary_conditions = ["absorbing", "absorbing",
+#                        "reflecting", "reflecting"]
 
 # Set a mask to set q(r,s) = 0
 x = np.linspace(-lx[0]/2, lx[0]/2, num=nx[0], endpoint=False)
@@ -71,8 +77,8 @@ solver = factory.create_realspace_solver(cb, molecules, propagator_analyzer)
 # Fields
 w = {"A": np.zeros(nx)}
 q_init = {"G":np.zeros(nx)}
-q_init["G"][30,:] = 1.0/(lx[0]/nx[0])
-q_init["G"][:,30] = 1.0/(lx[1]/nx[1])
+q_init["G"][30,:-30] = 1.0/(lx[0]/nx[0])
+q_init["G"][:-30,30] = 1.0/(lx[1]/nx[1])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
 time_start = time.time()

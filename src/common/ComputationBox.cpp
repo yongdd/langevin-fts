@@ -123,7 +123,8 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
                 if((bc_name_l == "periodic" && bc_name_h != "periodic") ||
                    (bc_name_l != "periodic" && bc_name_h == "periodic"))
                 {
-                   throw_with_line_number(bc_name_l + " and "  + bc_name_h + " are an invalid boundary condition combination. Both sides must be 'periodic' or 'non-periodic.");
+                   throw_with_line_number(bc_name_l + " and "  + bc_name_h + " are an invalid boundary condition combination. " +
+                    + "If one side imposes a periodic boundary condition, the other side must also be a periodic boundary condition.");
                 }
 
             }

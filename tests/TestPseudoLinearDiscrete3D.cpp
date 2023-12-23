@@ -181,17 +181,25 @@ int main()
         propagator_analyzer->display_propagators();
 
         std::vector<PropagatorComputation*> solver_list;
+        std::vector<std::string> solver_name_list;
+
         #ifdef USE_CPU_MKL
+        solver_name_list.push_back("cpu-mkl");
         solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
         #endif
+        
         #ifdef USE_CUDA
+        solver_name_list.push_back("cuda");
+        solver_name_list.push_back("cuda_reduce_memory_usage");
         solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
         solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
         #endif
 
-        // For each platform    
-        for(PropagatorComputation* solver: solver_list)
+        // For each platform
+        for(size_t n=0; n<solver_list.size(); n++)
         {
+            PropagatorComputation* solver = solver_list[n];
+
             for(int i=0; i<M; i++)
             {
                 phi_a[i] = 0.0;
@@ -201,7 +209,7 @@ int main()
             }
 
             //---------------- run --------------------
-            std::cout<< "Running Pseudo " << std::endl;
+            std::cout<< std::endl << "Running Pseudo: " << solver_name_list[n] << std::endl;
             solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
             solver->get_total_concentration("A", phi_a);
             solver->get_total_concentration("B", phi_b);
