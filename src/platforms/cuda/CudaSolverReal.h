@@ -77,8 +77,10 @@ private:
     std::string chain_model;
     bool reduce_gpu_memory_usage;
 
+    static const int N_STREAMS = 2;
+
     // Two streams for each gpu
-    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
     
     // Trigonal matrix for x direction
     std::map<std::string, double*> d_xl[MAX_GPUS];
@@ -108,16 +110,19 @@ private:
 
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,      
-        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, const int STREAM,
+        double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
-        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, const int STREAM,
+        double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
-        const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type);
+        const int GPU, const int STREAM,
+        double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
-    CudaSolverReal(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[MAX_GPUS][2], bool reduce_gpu_memory_usage);
+    CudaSolverReal(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[N_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverReal();
 
     void update_laplacian_operator() override;
@@ -125,25 +130,14 @@ public:
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
-    void advance_one_propagator_continuous(const int GPU,
+    void advance_propagator_continuous(
+            const int GPU, const int STREAM,
             double *d_q_in, double *d_q_out,
             std::string monomer_type, double *d_q_mask) override;
 
-    // Advance two propagators by one contour step
-    void advance_two_propagators_continuous(
-            double *d_q_in_1,  double *d_q_in_2,
-            double *d_q_out_1, double *d_q_out_2,
-            std::string monomer_type_1, std::string monomer_type_2,
-            double *d_q_mask) override;
-
-    // Advance two propagators by one segment step in two GPUs
-    void advance_two_propagators_continuous_two_gpus(
-            double *d_q_in_1,  double *d_q_in_2,
-            double *d_q_out_1, double *d_q_out_2,
-            std::string monomer_type_1, std::string monomer_type_2,
-            double **d_q_mask) override;
-
-    void compute_single_segment_stress_fourier(const int GPU, double *d_q) override;
-    std::vector<double> compute_single_segment_stress_continuous(const int GPU, std::string monomer_type) override;
+    // void compute_single_segment_stress_fourier(const int GPU, double *d_q) override;
+    void compute_single_segment_stress_continuous(
+        const int GPU, const int STREAM,
+        double *d_q_pair, double *d_segment_stress, std::string monomer_type) override;
 };
 #endif

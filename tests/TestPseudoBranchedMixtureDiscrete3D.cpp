@@ -323,11 +323,19 @@ int main()
         propagator_analyzer_2->display_propagators();
 
         std::vector<PropagatorComputation*> solver_list;
+        std::vector<std::string> solver_name_list;
+
         #ifdef USE_CPU_MKL
+        solver_name_list.push_back("pseudo, cpu-mkl");
+        solver_name_list.push_back("pseudo, cpu-mkl, aggregated");
         solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer_1));
         solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer_2));
         #endif
         #ifdef USE_CUDA
+        solver_name_list.push_back("pseudo, cuda");
+        solver_name_list.push_back("pseudo, cuda, aggregated");
+        solver_name_list.push_back("pseudo, cuda_reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cuda_reduce_memory_usage, aggregated");
         solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer_1));
         solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer_2));
         solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer_1));
@@ -337,8 +345,10 @@ int main()
         std::vector<std::vector<int>> stress_list {{},{},{}};
 
         // For each platform    
-        for(PropagatorComputation* solver: solver_list)
+        for(size_t n=0; n<solver_list.size(); n++)
         {
+            PropagatorComputation* solver = solver_list[n];
+
             for(int i=0; i<M; i++)
             {
                 phi_a[i] = 0.0;
@@ -347,7 +357,7 @@ int main()
             }
 
             //---------------- run --------------------
-            std::cout<< "Running Pseudo " << std::endl;
+            std::cout<< std::endl << "Running: " << solver_name_list[n] << std::endl;
             solver->compute_statistics({{"A",w_a},{"B",w_b}, {"C",w_c}},{});
             solver->get_total_concentration("A", phi_a);
             solver->get_total_concentration("B", phi_b);

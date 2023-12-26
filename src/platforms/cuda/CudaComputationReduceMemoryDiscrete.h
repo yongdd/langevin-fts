@@ -22,34 +22,36 @@ private:
     // Pseudo-spectral PDE solver
     CudaSolverPseudo *propagator_solver;
 
+    // The number of parallel streams
+    static const int N_STREAMS = 2;
+
     // Two streams for each gpu
-    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
 
-    // For pseudo-spectral: advance_propagator()
-    double *d_q_unity; // All elements are 1 for initializing propagators
+    // All elements are 1 for initializing propagators
+    double *d_q_unity[MAX_GPUS]; 
 
-    double *d_q_one[MAX_GPUS][2];     // one for prev, the other for next
-    double *d_q_two[2];               // one for prev, the other for next
-    double *d_propagator_sub_dep[2];  // one for prev, the other for next
+    // q_mask to make impenetrable region for nano particles
+    double *d_q_mask[MAX_GPUS];
+
+    // One for prev, the other for next
+    double *d_q_pair[N_STREAMS][2];
+
+    // For pseudo-spectral: advance_one propagator()
+    double *d_q_one[N_STREAMS][2];               // one for prev, the other for next
+    double *d_propagator_sub_dep[N_STREAMS][2];  // one for prev, the other for next
 
     // For concentration computation
     double *d_q_block_v[2];    // one for prev, the other for next
     double *d_q_block_u[2];    // one for prev, the other for next
     double *d_phi;
 
-    // For pseudo-spectral: advance_one_propagator()
-    double *d_q_half_step, *d_q_junction;
-    
-    // q_mask to make impenetrable region for nano particles
-    double *d_q_mask[MAX_GPUS];
-
-    // For stress calculation: compute_stress()
-    double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
-
     // Scheduler for propagator computation 
     Scheduler *sc;
-    // The number of parallel streams
-    const int N_SCHEDULER_STREAMS = 2;
+
+    // Temporary arrays for compute segment at junction
+    double *d_q_half_step[N_STREAMS], *d_q_junction[N_STREAMS];
+
     // key: (dep), value: array pointer
     std::map<std::string, double*> propagator_junction;
     // Host pinned memory space to store propagator, key: (dep) + monomer_type, value: propagator
@@ -72,7 +74,7 @@ private:
 
     // Remember propagators and bond length for each segment to prepare stress computation
     // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond_length)
-    std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_info;
+    std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_computation_plan;
 
     // Total partition functions for each solvent
     double* single_solvent_partitions;

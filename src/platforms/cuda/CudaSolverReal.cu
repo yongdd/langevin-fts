@@ -29,10 +29,10 @@ CudaSolverReal::CudaSolverReal(
             nx = {cb->get_nx(0), 1, 1};
 
         // Copy streams
-        for(int gpu=0; gpu<N_GPUS; gpu++)
+        for(int i=0; i<N_STREAMS; i++)
         {
-            this->streams[gpu][0] = streams[gpu][0];
-            this->streams[gpu][1] = streams[gpu][1];
+            this->streams[i][0] = streams[i][0];
+            this->streams[i][1] = streams[i][1];
         }
 
         // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
@@ -316,8 +316,8 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_one_propagator_continuous(
-    const int GPU,
+void CudaSolverReal::advance_propagator_continuous(
+    const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out,
     std::string monomer_type, double *d_q_mask) 
 {
@@ -332,127 +332,21 @@ void CudaSolverReal::advance_one_propagator_continuous(
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
 
         // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
 
         if(DIM == 3)           // input, output
-            advance_propagator_3d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_3d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_2d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
         else if(DIM ==1 )
-            advance_propagator_1d(cb->get_boundary_conditions(), GPU, d_q_out, d_q_out, monomer_type);
+            advance_propagator_1d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
 
         // Multiply mask
         if (d_q_mask != nullptr)
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CudaSolverReal::advance_two_propagators_continuous(
-    double *d_q_in_1,  double *d_q_in_2,
-    double *d_q_out_1, double *d_q_out_2,
-    std::string monomer_type_1, std::string monomer_type_2,
-    double *d_q_mask)
-{
-    try
-    {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = cb->get_n_grid();
-        const int DIM = cb->get_dim();
-
-        double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
-        double *_d_exp_dw_2 = d_exp_dw[0][monomer_type_2];
-
-        // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_in_1, _d_exp_dw_1, 1.0, M);
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, d_q_in_2, _d_exp_dw_2, 1.0, M);
-
-        if(DIM == 3)           // input, output
-        {
-            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-        else if(DIM == 2)
-        {
-            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-        else if(DIM ==1 )
-        {
-            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-
-        // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, _d_exp_dw_1, 1.0, M);
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, d_q_out_2, _d_exp_dw_2, 1.0, M);
-
-        // Multiply mask
-        if (d_q_mask != nullptr)
-        {
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask, 1.0, M);
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_2, d_q_out_2, d_q_mask, 1.0, M);
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CudaSolverReal::advance_two_propagators_continuous_two_gpus(
-    double *d_q_in_1,  double *d_q_in_2,
-    double *d_q_out_1, double *d_q_out_2,
-    std::string monomer_type_1, std::string monomer_type_2,
-    double **d_q_mask)
-{
-    try
-    {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-        const int M = cb->get_n_grid();
-        const int DIM = cb->get_dim();
-
-        double *_d_exp_dw_1 = d_exp_dw[0][monomer_type_1];
-        double *_d_exp_dw_2 = d_exp_dw[1][monomer_type_2];
-
-        // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_in_1, _d_exp_dw_1, 1.0, M);
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_in_2, _d_exp_dw_2, 1.0, M);
-
-        if(DIM == 3)           // input, output
-        {
-            advance_propagator_3d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_3d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-        else if(DIM == 2)
-        {
-            advance_propagator_2d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_2d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-        else if(DIM ==1 )
-        {
-            advance_propagator_1d(cb->get_boundary_conditions(), 0, d_q_out_1, d_q_out_1, monomer_type_1);
-            advance_propagator_1d(cb->get_boundary_conditions(), 1, d_q_out_2, d_q_out_2, monomer_type_2);
-        }
-
-        // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, _d_exp_dw_1, 1.0, M);
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_out_2, _d_exp_dw_2, 1.0, M);
-
-        // Multiply mask
-        if (d_q_mask != nullptr)
-        {
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_q_out_1, d_q_out_1, d_q_mask[0], 1.0, M);
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_q_out_2, d_q_out_2, d_q_mask[1], 1.0, M);
-        }
+            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
@@ -461,7 +355,8 @@ void CudaSolverReal::advance_two_propagators_continuous_two_gpus(
 }
 void CudaSolverReal::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
-    const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
+    const int GPU, const int STREAM,
+    double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
     {
@@ -495,7 +390,7 @@ void CudaSolverReal::advance_propagator_3d(
         double *_d_zh = d_zh[GPU][monomer_type];
 
         // Calculate q_star
-        compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[0], bc[1], bc[2], bc[3], bc[4], bc[5], 
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
@@ -504,56 +399,56 @@ void CudaSolverReal::advance_propagator_3d(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star, d_q_sparse, d_temp, d_q_star,
                 d_offset_yz[GPU], nx[1]*nx[2], nx[1]*nx[2], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star, d_temp, d_q_star,
                 d_offset_yz[GPU], nx[1]*nx[2], nx[1]*nx[2], nx[0]);
         }
 
         // Calculate q_dstar
-        compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[2], bc[3], 
             _d_yl, _d_yd, _d_yh, nx[1], nx[2],
             d_temp, d_q_star, d_q_in, M);
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star, d_q_sparse, d_temp, d_q_dstar,
                 d_offset_xz[GPU], nx[0]*nx[2], nx[2], nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star, d_temp, d_q_dstar,
                 d_offset_xz[GPU], nx[0]*nx[2], nx[2], nx[1]);
         }
 
         // Calculate q^(n+1)
-        compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[4], bc[5], 
             _d_zl, _d_zd, _d_zh, nx[1], nx[2],
             d_temp, d_q_dstar, d_q_in, M);
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star, d_q_sparse, d_temp, d_q_out,
                 d_offset_xy[GPU], nx[0]*nx[1], 1, nx[2]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star, d_temp, d_q_out,
                 d_offset_xy[GPU], nx[0]*nx[1], 1, nx[2]);
@@ -572,7 +467,8 @@ void CudaSolverReal::advance_propagator_3d(
 }
 void CudaSolverReal::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
-    const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
+    const int GPU, const int STREAM,
+    double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
     {
@@ -600,7 +496,7 @@ void CudaSolverReal::advance_propagator_2d(
         double *_d_yh = d_yh[GPU][monomer_type];
 
         // Calculate q_star
-        compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[0], bc[1], bc[2], bc[3],
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
@@ -610,35 +506,35 @@ void CudaSolverReal::advance_propagator_2d(
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star, d_q_sparse, d_temp, d_q_star,
                 d_offset_y[GPU], nx[1], nx[1], nx[0]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star, d_temp, d_q_star,
                 d_offset_y[GPU], nx[1], nx[1], nx[0]);
         }
 
         // Calculate q_dstar
-        compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp, d_q_star, d_q_in, M);
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star, d_q_sparse, d_temp, d_q_out,
                 d_offset_x[GPU], nx[0], 1, nx[1]);
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star, d_temp, d_q_out,
                 d_offset_x[GPU], nx[0], 1, nx[1]);
@@ -656,7 +552,8 @@ void CudaSolverReal::advance_propagator_2d(
 }
 void CudaSolverReal::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
-    const int GPU, double *d_q_in, double *d_q_out, std::string monomer_type)
+    const int GPU, const int STREAM,
+    double *d_q_in, double *d_q_out, std::string monomer_type)
 {
     try
     {
@@ -677,16 +574,16 @@ void CudaSolverReal::advance_propagator_1d(
         gpu_error_check(cudaMalloc((void**)&d_c_star,   sizeof(double)*M));
         gpu_error_check(cudaMalloc((void**)&d_q_sparse, sizeof(double)*M));
 
-        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
             bc[0], bc[1],
             _d_xl, _d_xd, _d_xh,
             d_q_star, d_q_in, nx[0]);
 
         if (bc[0] == BoundaryCondition::PERIODIC)
-            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh, d_c_star, d_q_sparse, d_q_star, d_q_out, d_offset[GPU], 1, 1, nx[0]);
         else
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[GPU][STREAM]>>>(
                 _d_xl, _d_xd, _d_xh, d_c_star, d_q_star, d_q_out, d_offset[GPU], 1, 1, nx[0]);
 
         cudaFree(d_q_star);
@@ -698,20 +595,21 @@ void CudaSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::compute_single_segment_stress_fourier(const int GPU, double *d_q)
-{
-    try
-    {
-        throw_with_line_number("Currently, real-space method does not support stress computation.");   
+// void CudaSolverReal::compute_single_segment_stress_fourier(const int GPU, double *d_q)
+// {
+//     try
+//     {
+//         throw_with_line_number("Currently, real-space method does not support stress computation.");   
 
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-std::vector<double> CudaSolverReal::compute_single_segment_stress_continuous(
-                const int GPU, std::string monomer_type)
+//     }
+//     catch(std::exception& exc)
+//     {
+//         throw_without_line_number(exc.what());
+//     }
+// }
+void CudaSolverReal::compute_single_segment_stress_continuous(
+        const int GPU, const int STREAM,
+        double *d_q_pair, double *d_segment_stress, std::string monomer_type)
 {
     try
     {
@@ -721,7 +619,6 @@ std::vector<double> CudaSolverReal::compute_single_segment_stress_continuous(
 
         throw_with_line_number("Currently, real-space method does not support stress computation.");   
 
-        return stress;
     }
     catch(std::exception& exc)
     {

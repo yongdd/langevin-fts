@@ -241,7 +241,7 @@ void CpuComputationContinuous::compute_statistics(
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else
-                    { 
+                    {
                         for(int i=0; i<M; i++)
                             _propagator[i] = 1.0;
                         
@@ -272,7 +272,7 @@ void CpuComputationContinuous::compute_statistics(
                 }
         
                 // Multiply mask
-                if (q_mask != nullptr)
+                if (n_segment_from == 1 && q_mask != nullptr)
                 {
                     for(int i=0; i<M; i++)
                         _propagator[i] *= q_mask[i];

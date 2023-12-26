@@ -29,13 +29,18 @@ private:
     // Pseudo-spectral PDE solver
     CudaSolver *propagator_solver;
 
+    // The number of parallel streams
+    static const int N_STREAMS = 2;
+
     // Two streams for each gpu
-    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // For pseudo-spectral: advance_one propagator()
-    double *d_q_unity;      // All elements are 1 for initializing propagators
-    double *d_q_one[MAX_GPUS][2];     // one for prev, the other for next
-    double *d_propagator_sub_dep[2];  // one for prev, the other for next
+    double *d_q_one[N_STREAMS][2];               // one for prev, the other for next
+    double *d_propagator_sub_dep[N_STREAMS][2];  // one for prev, the other for next
+
+    // All elements are 1 for initializing propagators
+    double *d_q_unity[MAX_GPUS];
 
     // q_mask to make impenetrable region for nano particles
     double *d_q_mask[MAX_GPUS];
@@ -46,12 +51,11 @@ private:
     double *d_phi;
 
     // For stress calculation: compute_stress()
-    double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
+    double *d_q_pair[N_STREAMS][2];  // one for prev, the other for next
 
     // Scheduler for propagator computation 
     Scheduler *sc;
-    // The number of parallel streams
-    const int N_SCHEDULER_STREAMS = 2;
+
     // Host pinned memory space to store propagator, key: (dep) + monomer_type, value: propagator
     std::map<std::string, double **> propagator;
     // Map for deallocation of d_propagator

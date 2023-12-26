@@ -22,32 +22,35 @@ private:
     // Pseudo-spectral PDE solver
     CudaSolverPseudo *propagator_solver;
 
+    // The number of parallel streams
+    static const int N_STREAMS = 2;
+
     // Two streams for each gpu
-    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // All elements are 1 for initializing propagators
-    double *d_q_unity; 
+    double *d_q_unity[MAX_GPUS]; 
 
     // q_mask to make impenetrable region for nano particles
     double *d_q_mask[MAX_GPUS];
 
-    // For stress calculation: compute_stress()
-    double *d_stress_q[MAX_GPUS][2];  // one for prev, the other for next
+    // One for prev, the other for next
+    double *d_q_pair[N_STREAMS][2];
 
     // Scheduler for propagator computation 
     Scheduler *sc;
-    // The number of parallel streams
-    const int N_SCHEDULER_STREAMS = 2;
+
+    // Temporary arrays for compute segment at junction
+    double *d_q_half_step[N_STREAMS], *d_q_junction[N_STREAMS];
+
     // key: (dep), value: array pointer
     std::map<std::string, double*> d_propagator_junction;
-    // Temporary arrays for compute segment at junction
-    double *d_q_half_step, *d_q_junction;
     // gpu memory space to store propagator, key: (dep) + monomer_type, value: propagator
     std::map<std::string, double **> d_propagator;
     // Map for deallocation of d_propagator
     std::map<std::string, int> propagator_size;
     // Temporary arrays for device_1, one for prev, the other for next
-    double *d_propagator_device_1[2];
+    double *d_propagator_device[MAX_GPUS][2];
     // Check if computation of propagator is finished
     #ifndef NDEBUG  
     std::map<std::string, bool *> propagator_finished;
@@ -66,7 +69,7 @@ private:
     
     // Remember propagators and bond length for each segment to prepare stress computation
     // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond_length)
-    std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_info;
+    std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_computation_plan;
 
     // Total partition functions for each solvent
     double* single_solvent_partitions;

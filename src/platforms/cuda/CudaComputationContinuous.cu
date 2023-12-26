@@ -1,5 +1,6 @@
 #include <complex>
 #include <thrust/reduce.h>
+#include <omp.h>
 #include "CudaComputationContinuous.h"
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudo.h"
@@ -17,13 +18,21 @@ CudaComputationContinuous::CudaComputationContinuous(
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        // Create streams
-        for(int gpu=0; gpu<N_GPUS; gpu++)
+        // Copy streams
+        for(int i=0; i<N_STREAMS; i++)
         {
-            gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
-            gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
+            if (N_GPUS == 1)
+            {
+                gpu_error_check(cudaSetDevice(0));
+            }
+            else
+            {
+                gpu_error_check(cudaSetDevice(i));
+            }
+            gpu_error_check(cudaStreamCreate(&streams[i][0])); // for kernel execution
+            gpu_error_check(cudaStreamCreate(&streams[i][1])); // for memcpy
         }
+
         if(method == "pseudospectral")
             this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
         else if(method == "realspace")
@@ -106,36 +115,57 @@ CudaComputationContinuous::CudaComputationContinuous(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), N_SCHEDULER_STREAMS); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), N_STREAMS); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
+        double q_unity[M];
+        for(int i=0; i<M; i++)
+            q_unity[i] = 1.0;
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
             gpu_error_check(cudaMalloc((void**)&d_q_mask[gpu], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_unity[gpu], sizeof(double)*M));
+            gpu_error_check(cudaMemcpy(d_q_unity[gpu], q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
         }
-        if (N_GPUS > 1)
+
+        for(int gpu=1; gpu<N_GPUS; gpu++)
         {
-            gpu_error_check(cudaSetDevice(1));
-            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[0], sizeof(double)*M));  // prev
-            gpu_error_check(cudaMalloc((void**)&d_propagator_device_1[1], sizeof(double)*M));  // next
+            gpu_error_check(cudaSetDevice(gpu));
+            gpu_error_check(cudaMalloc((void**)&d_propagator_device[gpu][0], sizeof(double)*M));  // prev
+            gpu_error_check(cudaMalloc((void**)&d_propagator_device[gpu][1], sizeof(double)*M));  // next
         }
 
         gpu_error_check(cudaSetDevice(0));
         gpu_error_check(cudaMalloc((void**)&d_phi,           sizeof(double)*M));
-        
-        double q_unity[M];
-        for(int i=0; i<M; i++)
-            q_unity[i] = 1.0;
-        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(double)*M));
-        gpu_error_check(cudaMemcpy(d_q_unity, q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
 
         // Allocate memory for stress calculation: compute_stress()
+        for(int i=0; i<N_STREAMS; i++)
+        {
+            if (N_GPUS == 1)
+            {
+                gpu_error_check(cudaSetDevice(0));
+            }
+            else
+            {
+                gpu_error_check(cudaSetDevice(i));
+            }
+            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0], sizeof(double)*2*M)); // prev
+            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1], sizeof(double)*2*M)); // next
+        }
+
+        // Copy mask to d_q_mask
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMalloc((void**)&d_stress_q[gpu][0],     sizeof(double)*2*M)); // prev
-            gpu_error_check(cudaMalloc((void**)&d_stress_q[gpu][1],     sizeof(double)*2*M)); // next
+            if (cb->get_mask() != nullptr)
+            {
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
+            }
+            else
+            {
+                d_q_mask[gpu] = nullptr;
+            }
         }
 
         propagator_solver->update_laplacian_operator();
@@ -173,32 +203,32 @@ CudaComputationContinuous::~CudaComputationContinuous()
     #endif
 
     cudaFree(d_phi);
-    cudaFree(d_q_unity);
 
     // For pseudo-spectral: advance_propagator()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
         cudaFree(d_q_mask[gpu]);
+        cudaFree(d_q_unity[gpu]);
     }
-
-    if (N_GPUS > 1)
+    
+    for(int gpu=1; gpu<N_GPUS; gpu++)
     {
-        cudaFree(d_propagator_device_1[0]);
-        cudaFree(d_propagator_device_1[1]);
+        cudaFree(d_propagator_device[gpu][0]);
+        cudaFree(d_propagator_device[gpu][1]);
     }
 
     // For stress calculation: compute_stress()
-    for(int gpu=0; gpu<N_GPUS; gpu++)
+    for(int i=0; i<N_STREAMS; i++)
     {
-        cudaFree(d_stress_q[gpu][0]);
-        cudaFree(d_stress_q[gpu][1]);
+        cudaFree(d_q_pair[i][0]);
+        cudaFree(d_q_pair[i][1]);
     }
-    
+
     // Destroy streams
-    for(int gpu=0; gpu<N_GPUS; gpu++)
+    for(int i=0; i<N_STREAMS; i++)
     {
-        cudaStreamDestroy(streams[gpu][0]);
-        cudaStreamDestroy(streams[gpu][1]);
+        cudaStreamDestroy(streams[i][0]);
+        cudaStreamDestroy(streams[i][1]);
     }
 }
 
@@ -241,47 +271,32 @@ void CudaComputationContinuous::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
-        // Copy mask to d_q_mask
-        for(int gpu=0; gpu<N_GPUS; gpu++)
-        {
-            gpu_error_check(cudaSetDevice(gpu));
-            if (cb->get_mask() != nullptr)
-            {
-                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyInputToDevice));
-            }
-            else
-            {
-                d_q_mask[gpu] = nullptr;
-            }
-        }
-
         // Update dw or d_exp_dw
         propagator_solver->update_dw(device, w_input);
        
         auto& branch_schedule = sc->get_schedule();
-        // // display all jobs
-        // int time_span_count=0;
-        // For (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
-        // {
-        //     std::cout << "jobs: " << time_span_count << std::endl;
-        //     for(int job=0; job<parallel_job->size(); job++)
-        //     {
-        //         auto& key = std::get<0>((*parallel_job)[job]);
-        //         int n_segment_from = std::get<1>((*parallel_job)[job]);
-        //         int n_segment_to = std::get<2>((*parallel_job)[job]);
-        //         std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
-        //     }
-        //     time_span_count++;
-        // }
-        // Time_span_count=0;
 
         // For each time span
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            gpu_error_check(cudaSetDevice(0));
             // For each propagator
+            #pragma omp parallel for num_threads(N_STREAMS) 
             for(size_t job=0; job<parallel_job->size(); job++)
             {
+                int gpu;
+                const int STREAM = omp_get_thread_num();
+                if (N_GPUS == 1)
+                {
+                    gpu = 0;
+                }
+                else
+                {
+                    gpu = omp_get_thread_num();
+                }
+                gpu_error_check(cudaSetDevice(gpu));
+
+                // printf("gpu, STREAM: %d, %d\n ", gpu, STREAM);
+
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
@@ -310,7 +325,7 @@ void CudaComputationContinuous::compute_statistics(
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity,
+                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity[0],
                             sizeof(double)*M, cudaMemcpyDeviceToDevice));
                     }
 
@@ -354,7 +369,7 @@ void CudaComputationContinuous::compute_statistics(
                     else
                     {
                         // Initialize to one
-                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity,
+                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity[0],
                             sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
                         // Multiply all propagators at junction if necessary 
@@ -383,157 +398,100 @@ void CudaComputationContinuous::compute_statistics(
                 }
 
                 // Multiply mask
-                if (d_q_mask[0] != nullptr)
+                if (n_segment_from == 1 && d_q_mask[0] != nullptr)
                     multi_real<<<N_BLOCKS, N_THREADS>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
 
-                cudaDeviceSynchronize();
-            }
-            
-            // Synchronize all GPUs
-            for(int gpu=0; gpu<N_GPUS; gpu++)
-            {
-                gpu_error_check(cudaSetDevice(gpu));
-                gpu_error_check(cudaDeviceSynchronize());
-            }
-
-            // Copy jobs that have non-zero segments
-            std::vector<std::tuple<std::string, int, int>> non_zero_segment_jobs;
-            for (auto it = parallel_job->begin(); it != parallel_job->end(); it++)
-            {
-                int n_segment_from = std::get<1>(*it);
-                int n_segment_to = std::get<2>(*it);
-                if(n_segment_to-n_segment_from >= 0)
-                    non_zero_segment_jobs.push_back(*it);
-            }
-
-            // Advance propagator successively
-            if(non_zero_segment_jobs.size()==1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-                auto& key = std::get<0>(non_zero_segment_jobs[0]);
-                int n_segment_from = std::get<1>(non_zero_segment_jobs[0]);
-                int n_segment_to = std::get<2>(non_zero_segment_jobs[0]);
-                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
-                double **_d_propagator_key = d_propagator[key];
-
-                for(int n=n_segment_from; n<=n_segment_to; n++)
+                if (gpu == 0)
                 {
-                    #ifndef NDEBUG
-                    if (!propagator_finished[key][n-1])
-                        throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
-                    #endif
+                    for(int n=n_segment_from; n<=n_segment_to; n++)
+                    {
+                        #ifndef NDEBUG
+                        if (!propagator_finished[key][n-1])
+                            throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                        #endif
 
-                    propagator_solver->advance_one_propagator_continuous(0, 
-                        _d_propagator_key[n-1],
-                        _d_propagator_key[n],
-                        monomer_type, d_q_mask[0]);
+                        propagator_solver->advance_propagator_continuous(
+                            gpu, STREAM, 
+                            _d_propagator[n-1],
+                            _d_propagator[n],
+                            monomer_type, d_q_mask[gpu]);
 
-                    #ifndef NDEBUG
-                    propagator_finished[key][n] = true;
-                    #endif
+                        #ifndef NDEBUG
+                        propagator_finished[key][n] = true;
+                        #endif
+                    }
                 }
-            }
-            else if(non_zero_segment_jobs.size()==2)
-            {
-                const int N_JOBS = 2;
-                std::string keys[N_JOBS];
-                int n_segment_froms[N_JOBS];
-                int n_segment_tos[N_JOBS];
-                std::string monomer_types[N_JOBS];
-                double **_d_propagator_keys[N_JOBS];
-                
-                for(int j=0; j<N_JOBS; j++)
-                {
-                    keys[j] = std::get<0>(non_zero_segment_jobs[j]);
-                    n_segment_froms[j] = std::get<1>(non_zero_segment_jobs[j]);
-                    n_segment_tos[j] = std::get<2>(non_zero_segment_jobs[j]);
-                    monomer_types[j] = propagator_analyzer->get_computation_propagator_code(keys[j]).monomer_type;
-                    _d_propagator_keys[j] = d_propagator[keys[j]];
-                }
-
-                if (N_GPUS > 1)
+                else if(gpu >= 1)
                 {
                     int prev, next;
                     prev = 0;
                     next = 1;
 
-                    // Copy propagator of key1 from device0 to device1
-                    gpu_error_check(cudaMemcpy(
-                        d_propagator_device_1[prev],
-                        _d_propagator_keys[1][n_segment_froms[1]-1],
-                        sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                    // Create events
+                    cudaEvent_t kernel_done;
+                    cudaEvent_t memcpy_done;
+                    gpu_error_check(cudaEventCreate(&kernel_done));
+                    gpu_error_check(cudaEventCreate(&memcpy_done));
 
-                    for(int n=0; n<=n_segment_tos[0]-n_segment_froms[0]; n++)
+                    // Copy propagator copy memory from device 1 to device
+                    gpu_error_check(cudaMemcpyAsync(
+                        d_propagator_device[gpu][prev],
+                        _d_propagator[n_segment_from-1],
+                        sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+
+                    gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
+                    gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
+
+                    for(int n=n_segment_from; n<=n_segment_to; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[keys[0]][n-1+n_segment_froms[0]])
-                            throw_with_line_number("unfinished, key: " + keys[0] + ", " + std::to_string(n-1+n_segment_froms[0]));
-                        if (!propagator_finished[keys[1]][n-1+n_segment_froms[1]])
-                            throw_with_line_number("unfinished, key: " + keys[1] + ", " + std::to_string(n-1+n_segment_froms[1]));
+                        if (!propagator_finished[key][n-1])
+                            throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
                         #endif
 
-                        // DEVICE 0,1, STREAM 0: calculate propagators 
-                        propagator_solver->advance_two_propagators_continuous_two_gpus(
-                            _d_propagator_keys[0][n-1+n_segment_froms[0]],
-                            d_propagator_device_1[prev],
-                            _d_propagator_keys[0][n+n_segment_froms[0]],
-                            d_propagator_device_1[next],
-                            monomer_types[0], monomer_types[1], d_q_mask);
+                        // DEVICE 1, STREAM 0: calculate propagators
+                        propagator_solver->advance_propagator_continuous(
+                            gpu, STREAM, 
+                            d_propagator_device[gpu][prev],
+                            d_propagator_device[gpu][next],
+                            monomer_type, d_q_mask[gpu]);
+                        gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
 
                         // DEVICE 1, STREAM 1: copy memory from device 1 to device 0
-                        if (n > 0)
+                        if (n > n_segment_from)
                         {
                             gpu_error_check(cudaMemcpyAsync(
-                                _d_propagator_keys[1][n-1+n_segment_froms[1]],
-                                d_propagator_device_1[prev],
-                                sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[1][1]));
+                                _d_propagator[n-1],
+                                d_propagator_device[gpu][prev],
+                                sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                            gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                         }
 
-                        // Synchronize all GPUs
-                        for(int gpu=0; gpu<N_GPUS; gpu++)
-                        {
-                            gpu_error_check(cudaSetDevice(gpu));
-                            gpu_error_check(cudaDeviceSynchronize());
-                        }
+                        // Wait until computation and memory copy are done
+                        gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
+                        gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
                         std::swap(prev, next);
 
                         #ifndef NDEBUG
-                        propagator_finished[keys[0]][n+n_segment_froms[0]] = true;
-                        propagator_finished[keys[1]][n+n_segment_froms[1]] = true;
+                        propagator_finished[key][n] = true;
                         #endif
                     }
-                    gpu_error_check(cudaMemcpy(
-                        _d_propagator_keys[1][n_segment_tos[1]],
-                        d_propagator_device_1[prev],
-                        sizeof(double)*M, cudaMemcpyDeviceToDevice));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                    for(int n=0; n<=n_segment_tos[0]-n_segment_froms[0]; n++)
-                    {
-                        #ifndef NDEBUG
-                        if (!propagator_finished[keys[0]][n-1+n_segment_froms[0]])
-                            throw_with_line_number("unfinished, key: " + keys[0] + ", " + std::to_string(n-1+n_segment_froms[0]));
-                        if (!propagator_finished[keys[1]][n-1+n_segment_froms[1]])
-                            throw_with_line_number("unfinished, key: " + keys[1] + ", " + std::to_string(n-1+n_segment_froms[1]));
-                        #endif
 
-                        propagator_solver->advance_two_propagators_continuous(
-                            _d_propagator_keys[0][n-1+n_segment_froms[0]],
-                            _d_propagator_keys[1][n-1+n_segment_froms[1]],
-                            _d_propagator_keys[0][n+n_segment_froms[0]],
-                            _d_propagator_keys[1][n+n_segment_froms[1]],
-                            monomer_types[0], monomer_types[1],
-                            d_q_mask[0]);
+                    // Copy memory from device 1 to device 0
+                    gpu_error_check(cudaMemcpyAsync(
+                        _d_propagator[n_segment_to],
+                        d_propagator_device[gpu][prev],
+                        sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
 
-                        #ifndef NDEBUG
-                        propagator_finished[keys[0]][n+n_segment_froms[0]] = true;
-                        propagator_finished[keys[1]][n+n_segment_froms[1]] = true;
-                        #endif
-                    }
+                    gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
+                    gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
+                
+                    gpu_error_check(cudaEventDestroy(kernel_done));
+                    gpu_error_check(cudaEventDestroy(memcpy_done));
                 }
+                gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
+                gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
             }
             // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)
@@ -542,8 +500,8 @@ void CudaComputationContinuous::compute_statistics(
                 gpu_error_check(cudaDeviceSynchronize());
             }
         }
-        gpu_error_check(cudaSetDevice(0));
 
+        gpu_error_check(cudaSetDevice(0));
         // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
         {
@@ -813,16 +771,42 @@ std::vector<double> CudaComputationContinuous::compute_stress()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int DIM  = cb->get_dim();
-        const int M    = cb->get_n_grid();
+        const int DIM = cb->get_dim();
+        const int M   = cb->get_n_grid();
 
         std::vector<double> stress(DIM);
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[MAX_GPUS];
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[N_STREAMS];
+
+        // Reset stress map
+        for(const auto& item: d_phi_block)
+        {
+            for(int i=0; i<N_STREAMS; i++)
+                for(int d=0; d<3; d++)
+                    block_dq_dl[i][item.first][d] = 0.0;
+        }
 
         // Compute stress for each block
-        for(const auto& block: d_phi_block)
+        #pragma omp parallel for num_threads(N_STREAMS) 
+        for(size_t b=0; b<d_phi_block.size();b++)
         {
-            const auto& key = block.first;
+            int gpu;
+            const int STREAM = omp_get_thread_num();
+            if (N_GPUS == 1)
+            {
+                gpu = 0;
+            }
+            else
+            {
+                gpu = omp_get_thread_num();
+            }
+            gpu_error_check(cudaSetDevice(gpu));
+
+            auto block = d_phi_block.begin();
+            advance(block, b);
+            const auto& key   = block->first;
+
+            // printf("start, b, gpu, STREAM: %2d, %2d, %2d\n", b, gpu, STREAM);
+
             int p                = std::get<0>(key);
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
@@ -836,6 +820,8 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             if(N == 0)
                 continue;
 
+            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_OFFSET << ", " << N_ORIGINAL << std::endl;
+
             // Contains no '['
             int n_repeated;
             if (dep_u.find('[') == std::string::npos)
@@ -847,86 +833,78 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             double** d_q_1 = d_propagator[dep_v];    // dependency v
             double** d_q_2 = d_propagator[dep_u];    // dependency u
 
-            std::array<double,3> _block_dq_dl[MAX_GPUS];
-            std::vector<double> segment_stress[MAX_GPUS];
-            for(int gpu=0; gpu<N_GPUS; gpu++)
-                for(int d=0; d<3; d++)
-                    _block_dq_dl[gpu][d] = 0.0;
+            std::array<double,3> _block_dq_dl = {0.0, 0.0, 0.0};
+            
+            double *d_segment_stress;
+            double segment_stress[DIM];
+            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(double)*3));
 
             int prev, next;
             prev = 0;
             next = 1;
 
-            // Copy memory from device to device
-            for(int gpu=0; gpu<N_GPUS; gpu++)
-            {
-                // Index
-                int idx = gpu;
-                gpu_error_check(cudaSetDevice(gpu));
-                if (idx <= N)
-                {
-                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][0], d_q_1[N_ORIGINAL-N_OFFSET-idx],
-                            sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                    gpu_error_check(cudaMemcpy(&d_stress_q[gpu][prev][M], d_q_2[idx],
-                            sizeof(double)*M,cudaMemcpyDeviceToDevice));
-                }
-            }
+            // Create events
+            cudaEvent_t kernel_done;
+            cudaEvent_t memcpy_done;
+            gpu_error_check(cudaEventCreate(&kernel_done));
+            gpu_error_check(cudaEventCreate(&memcpy_done));
 
-            // Compute
-            for(int n=0; n<=N; n+=N_GPUS)
-            {
-                // STREAM 1: copy data from device to device
-                for(int gpu=0; gpu<N_GPUS; gpu++)
-                {
-                    // Index
-                    const int idx = n + gpu;
-                    const int idx_next = idx + N_GPUS;
+            gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], d_q_1[N_ORIGINAL-N_OFFSET],
+                    sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+            gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][M], d_q_2[0],
+                    sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
 
-                    gpu_error_check(cudaSetDevice(gpu));
-                    if (idx_next <= N)
-                    {
-                        gpu_error_check(cudaMemcpyAsync(&d_stress_q[gpu][next][0], d_q_1[N_ORIGINAL-N_OFFSET-idx_next],
-                                sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[gpu][1]));
-                        gpu_error_check(cudaMemcpyAsync(&d_stress_q[gpu][next][M], d_q_2[idx_next],
-                                sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[gpu][1]));
-                    }
-                }
-                // STREAM 0: execute kernels
-                // Execute a forward FFT
-                for(int gpu=0; gpu<N_GPUS; gpu++)
+            gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
+            gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
+
+            for(int n=0; n<=N; n++)
+            {
+                // STREAM 1: Copy data
+                if (n+1 <= N)
                 {
-                    const int idx = n + gpu;
-                    gpu_error_check(cudaSetDevice(gpu));
-                    if (idx <= N)
-                        propagator_solver->compute_single_segment_stress_fourier(gpu, d_stress_q[gpu][prev]);
+                    gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], d_q_1[N_ORIGINAL-N_OFFSET-n-1],
+                            sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                    gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][M], d_q_2[n+1],
+                            sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                    gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                 }
-                // STREAM 0: execute kernels
-                // Multiply two propagators in the fourier spaces
-                for(int gpu=0; gpu<N_GPUS; gpu++)
-                {
-                    const int idx = n + gpu;
-                    gpu_error_check(cudaSetDevice(gpu));
-                    if (idx <= N)
-                    {
-                        segment_stress[gpu] = propagator_solver->compute_single_segment_stress_continuous(gpu, monomer_type);
-                        for(int d=0; d<DIM; d++)
-                            _block_dq_dl[gpu][d] += s_coeff[idx]*segment_stress[gpu][d]*n_repeated;
-                    }
-                }
-                // Synchronize all GPUs
-                for(int gpu=0; gpu<N_GPUS; gpu++)
-                {
-                    gpu_error_check(cudaSetDevice(gpu));
-                    gpu_error_check(cudaDeviceSynchronize());
-                }
+
+                // STREAM 0: Compute stress
+                propagator_solver->compute_single_segment_stress_continuous(
+                    gpu, STREAM, d_q_pair[STREAM][prev], d_segment_stress, monomer_type);   
+                gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
+
+                // Wait until computation and memory copy are done
+                gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
+                gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
+
+                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(double)*DIM, cudaMemcpyDeviceToHost));
+                for(int d=0; d<DIM; d++)
+                    _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
+
                 std::swap(prev, next);
             }
-            // Copy stress data
-            for(int gpu=0; gpu<N_GPUS; gpu++)
-                block_dq_dl[gpu][key] = _block_dq_dl[gpu];
-        }
-        gpu_error_check(cudaSetDevice(0));
+            gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
+            gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
+            gpu_error_check(cudaEventDestroy(kernel_done));
+            gpu_error_check(cudaEventDestroy(memcpy_done));
 
+            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_OFFSET << ", " << N_ORIGINAL << std::endl;
+            // std::cout << "STREAM, _block_dq_dl[0] " << STREAM  << ", " << _block_dq_dl[0] << std::endl;
+
+            for(int d=0; d<DIM; d++)
+                block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
+                
+            cudaFree(d_segment_stress);
+        }
+        // Synchronize all GPUs
+        for(int gpu=0; gpu<N_GPUS; gpu++)
+        {
+            gpu_error_check(cudaSetDevice(gpu));
+            gpu_error_check(cudaDeviceSynchronize());
+        }
+
+        gpu_error_check(cudaSetDevice(0));
         // Compute total stress
         for(int d=0; d<DIM; d++)
             stress[d] = 0.0;
@@ -938,9 +916,9 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             std::string dep_u = std::get<2>(key);
             Polymer& pc  = molecules->get_polymer(p);
 
-            for(int gpu=0; gpu<N_GPUS; gpu++)
+            for(int i=0; i<N_STREAMS; i++)
                 for(int d=0; d<DIM; d++)
-                    stress[d] += block_dq_dl[gpu][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
+                    stress[d] += block_dq_dl[i][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
         }
         for(int d=0; d<DIM; d++)
             stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
