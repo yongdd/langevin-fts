@@ -307,7 +307,7 @@ void CpuComputationDiscrete::compute_statistics(
                 }
 
                 // Multiply mask
-                if (q_mask != nullptr)
+                if (n_segment_from == 1 && q_mask != nullptr)
                 {
                     for(int i=0; i<M; i++)
                         _propagator[i] *= q_mask[i];
@@ -630,7 +630,6 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
 
             double *q_1 = propagator[dep_v];    // dependency v
             double *q_2 = propagator[dep_u];    // dependency u
-
 
             double *q_segment_1;
             double *q_segment_2;

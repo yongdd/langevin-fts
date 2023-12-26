@@ -6,7 +6,7 @@ This is not just an application, but it contains a library for polymer field the
   * Any number of monomer types
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers
-  * Arbitrary initial conditions of propagators at chain ends (**beta**)
+  * Arbitrary initial conditions of propagators at chain ends
   * Access to chain propagators
   * Conformational asymmetry
   * Chain models: continuous, discrete
@@ -16,8 +16,8 @@ This is not just an application, but it contains a library for polymer field the
   * Pseudo-spectral method (4th-order method for continuous chain)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
-  * GPU memory saving option (**beta**)
-  * Parallel computations of propagators with multi-core CPUs, batched cuFFT, or two GPUs (**beta**)
+  * GPU memory saving option
+  * Parallel computations of propagators with multi-core CPUs, batched cuFFT, or two GPUs
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
 Using the above python shared library, SCFT and L-FTS are implemented. They support following features:
