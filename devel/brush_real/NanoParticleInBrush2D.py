@@ -9,6 +9,8 @@ import scft
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
+boundary_conditions = ["absorbing", "reflecting", "reflecting", "reflecting"]
+
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
@@ -16,6 +18,8 @@ params = {
     "lx":[12,10],           # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                               # where "a_Ref" is reference statistical segment length
                               # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+
+    "boundary_conditions": boundary_conditions,
 
     "box_is_altering":False,      # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
@@ -44,50 +48,34 @@ params = {
 }
 
 # Target density profile for film
-T = 1.0
-t = 0.4
-T_mask = 1.0
-L = params["lx"][0] - 2*T_mask
+L = params["lx"][0]
 dx = params["lx"][0]/params["nx"][0]
-I_range = round(L/dx)-3
-offset = round(T_mask/dx)+1
-offset_grafting = np.max([round((T_mask+0.05)/dx), round((T_mask)/dx)+1])
 
-phi_target = np.zeros(params["nx"])
-for i in range(I_range):
-    phi_target[i+offset,:] = 1.0
-    phi_target[params["nx"][0]-offset-i-1,:] = 1.0
-print(phi_target[:30,0])
-print(phi_target[-30:,0])
+offset_grafting = np.max([round((0.05)/dx), 1])
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 print("w_A and w_B are initialized to lamellar phase.")
-for i in range(I_range):
-    w_A[i+offset,:] = -np.cos(2*np.pi*i/I_range)
-# w_A = np.random.normal(0.0, 0.1, params["nx"])
+for i in range(params["nx"][0]):
+    w_A[i,:] = -np.cos(2*np.pi*i/params["nx"][0])
 
 # Initial condition of q (grafting point)
 q_init = {"G":np.zeros(list(params["nx"]), dtype=np.float64)}
 q_init["G"][offset_grafting,:] = 1.0/dx
-q_init["G"][params["nx"][0]-offset_grafting-1,:] = 1.0/dx
 
 # Mask for Nano Particle
 mask = np.ones(params["nx"])
-nano_particle_radius = 0.7
+nano_particle_radius = 1.0
+dis_from_sub = 0.1
 
-# x = np.linspace(0.0-T-1.0, params["lx"][0]-T-1.0,      num=params["nx"][0], endpoint=False)
-# y = np.linspace(-params["lx"][1]/2, params["lx"][1]/2, num=params["nx"][1], endpoint=False)
-# xv, yv = np.meshgrid(x, y, indexing='ij')
-# mask[np.sqrt(xv**2+yv**2) < nano_particle_radius] = 0.0
-mask[np.isclose(phi_target, 0.0)] = 0.0
-# print(mask[:,0])
-# print(q_init["G"][:])
-print(mask[20:40,0])
-print(q_init["G"][20:40,0])
+x = np.linspace(0.0-nano_particle_radius-dis_from_sub, params["lx"][0]-nano_particle_radius-dis_from_sub, num=params["nx"][0], endpoint=False)
+y = np.linspace(-params["lx"][1]/2, params["lx"][1]/2, num=params["nx"][1], endpoint=False)
+xv, yv = np.meshgrid(x, y, indexing='ij')
+mask[np.sqrt(xv**2+yv**2) < nano_particle_radius] = 0.0
+print(mask[:20,0])
+print(q_init["G"][:20,0])
 
-mask = mask*np.flip(mask, axis=0)
-phi_target = phi_target*mask
+mask = mask*np.flip(mask, axis=1)
 
 # Initialize calculation
 calculation = scft.SCFT(params=params, mask=mask)
@@ -123,7 +111,7 @@ factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box
-cb = factory.create_computation_box(nx, lx, mask=mask)
+cb = factory.create_computation_box(nx, lx, bc=boundary_conditions, mask=mask)
 
 # Create an instance for molecule information with block segment information and chain model ("continuous" or "discrete")
 molecules = factory.create_molecules_information("continuous", ds, stat_seg_length)
@@ -143,7 +131,7 @@ propagator_analyzer.display_blocks()
 propagator_analyzer.display_propagators()
 
 # Create Solver
-solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
+solver = factory.create_realspace_solver(cb, molecules, propagator_analyzer)
 
 # Fields
 input_data = loadmat("fields.mat", squeeze_me=True)
@@ -153,7 +141,7 @@ w = {"A": w_A}
 # Compute ensemble average concentration (phi) and total partition function (Q)
 solver.compute_statistics({"A":w["A"]}, q_init=q_init)
 
-x = np.linspace(-T_mask, lx[0]-T_mask, num=nx[0], endpoint=False)
+x = np.linspace(0.0, lx[0], num=nx[0], endpoint=False)
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
 file_name = "phi"
@@ -166,7 +154,7 @@ print("phi(r) is written to file '%s'." % (file_name))
 plt.close()
 
 N = round(1.0/ds)
-for n in range(0, round(N)+1, 1):
+for n in range(0, round(N)+1, round(N/5)):
     file_name = "q_forward_%03d.png" % (n)
                                                   # p, v, u, n
     q_out = np.reshape(solver.get_chain_propagator(0, 0, 1, n), nx)

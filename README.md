@@ -2,25 +2,32 @@
 Langevin Field-Theoretic Simulation (L-FTS) for Python
 
 # Features
-This is not just an application, but it contains a library for polymer field theory simulations. The most time-consuming and common routines in polymer field theory simulations are the computation of stresses, partition functions and concentrations of polymers in external fields. These routines are written in C++/CUDA and provided as python classes in this library. These classes allow you to write your own programs using python language, and your applications can be easily customized and extended by adopting numerous useful python libraries. This library automatically optimize the computation of chain propagators for mixtures of arbitrary acyclic branched polymers. You no longer need to change your CUDA code depending on the polymer architecture to optimize propagator calculations for branched polymers. This library supports following features:
+This repository contains a library for polymer field theory simulations as well as their applications such as SCFT and L-FTS. The most time-consuming and common routines in polymer field theory simulations are the computation of stresses, partition functions and concentrations of polymers in external fields. These routines are written in C++/CUDA and provided as python classes in this library. These classes allow you to write your own programs using python language, and your applications can be easily customized and extended by adopting numerous useful python libraries. This library automatically optimize the computation of chain propagators for mixtures of arbitrary acyclic branched polymers. You no longer need to change your CUDA code depending on the polymer architecture to optimize propagator calculations for branched polymers. This library supports following features:
   * Any number of monomer types
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers
   * Arbitrary initial conditions of propagators at chain ends
   * Access to chain propagators
   * Conformational asymmetry
-  * Chain models: continuous, discrete
   * Simulation box dimension: 3D, 2D and 1D
-  * Periodic boundaries
-  * Automatic optimization to compute chain propagators with minimal iterations (**beta**)
-  * Pseudo-spectral method (4th-order method for continuous chain)
+  * Automatic optimization to compute chain propagators with minimal iterations
+  * Chain models: continuous, discrete
+  * Pseudo-spectral method
+    * 4th-order Richardson extrapolation method for continuous chain
+    * Support continuous and discrete chains
+    * Periodic boundaries only
+  * Real-space method (**beta**)
+    * 2th-order Crank-Nicolson method
+    * Support only continuous chain
+    * Support periodic, reflecting, absorbing boundaries
+  * Can set impenetrable region using a mask (**beta**)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
   * GPU memory saving option
-  * Parallel computations of propagators with multi-core CPUs, batched cuFFT, or two GPUs
+  * Parallel computations of propagators with multi-core CPUs, or two GPUs
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
-Using the above python shared library, SCFT and L-FTS are implemented. They support following features:
+Using the above python shared library with the pseudo-spectral method, SCFT and L-FTS are implemented. They support following features:
   * Polymer melts in bulk
   * Any number of monomer types
   * Arbitrary acyclic branched polymers

@@ -17,15 +17,14 @@ load("fields.mat");
 % image(data,'CDataMapping','scaled');
 % set(gca,'DataAspectRatio',[1 1 1])
 
-L_mask = 1.0;
 radius = 1.0;
 dis_from_sub = 0.1;
 dx = lx./double(nx);
-range_x = round(L_mask/dx(1)+1):round(nx(2)*0.4);
+range_x = 1:round(nx(1)*1.0);
 range_y = round(nx(2)*0.2)+1:round(nx(2)*0.8);
 [Y,X] = meshgrid(range_y,range_x);
 Y = double(Y)*dx(2) - lx(2)/2-dx(2);
-X = double(X)*dx(1)-L_mask-dx(1);
+X = double(X)*dx(1)-2*dx(1);
 
 figure(2);
 data = reshape(phi_A,[nx(3), nx(2), nx(1)]);

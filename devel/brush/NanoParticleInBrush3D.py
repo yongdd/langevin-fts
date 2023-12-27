@@ -9,8 +9,15 @@ from scipy.io import savemat
 import scft
 
 # OpenMP environment variables
+os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
+
+# GPU environment variables
+os.environ["LFTS_GPU_NUM_BLOCKS"]  = "256"
+os.environ["LFTS_GPU_NUM_THREADS"] = "256"
+os.environ["LFTS_NUM_GPUS"] = "2" # 1 ~ 2
 
 linear_polymer =[{"type":"A", "length":1.0, "v":0, "u":1}]
 
@@ -57,7 +64,7 @@ params = {
         "mix_init":0.1,        # Initial mixing rate of simple mixing
     },
 
-    "max_iter":80,     # The maximum relaxation iterations
+    "max_iter":80,       # The maximum relaxation iterations
     "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
