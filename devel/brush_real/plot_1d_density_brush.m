@@ -6,7 +6,6 @@ data = phi_A;
 disp(max(max(max(data))))
 disp(min(min(min(data))))
 mean(phi_A)
-
 x = linspace(0,5,nx);
 
 % figure(1);

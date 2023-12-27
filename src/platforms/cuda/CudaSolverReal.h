@@ -97,7 +97,14 @@ private:
     std::map<std::string, double*> d_zd[MAX_GPUS];
     std::map<std::string, double*> d_zh[MAX_GPUS];
 
-    // Offset arrays for tridiagonal computation
+    // Arrays for tridiagonal computation
+    double *d_q_star  [N_STREAMS];
+    double *d_q_dstar [N_STREAMS];
+    double *d_c_star  [N_STREAMS];
+    double *d_q_sparse[N_STREAMS];
+    double *d_temp    [N_STREAMS];
+
+    // Offset 
     // For 3D
     int* d_offset_xy[MAX_GPUS];
     int* d_offset_yz[MAX_GPUS];

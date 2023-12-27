@@ -35,7 +35,7 @@ params = {
 
     "box_is_altering":False,     # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",  # "discrete" or "continuous" chain model
-    "ds":1/500,                  # Contour step interval, which is equal to 1/N_Ref.
+    "ds":1/200,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0},
@@ -60,14 +60,9 @@ params = {
 }
 
 # Target density profile for film
-T = 1.0
-t = 0.4
 L = params["lx"][0]
 dx = params["lx"][0]/params["nx"][0]
-
 offset_grafting = np.max([round((0.05)/dx), 1])
-
-mask = np.ones(params["nx"])
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
