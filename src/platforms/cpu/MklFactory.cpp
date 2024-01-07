@@ -61,12 +61,23 @@ PropagatorComputation* MklFactory::create_pseudospectral_solver(ComputationBox *
 }
 PropagatorComputation* MklFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
 {
-    std::string chain_model = molecules->get_model_name();
-    if ( chain_model == "continuous" )
+    try
     {
-        return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+        std::string chain_model = molecules->get_model_name();
+        if ( chain_model == "continuous" )
+        {
+            return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+        }
+        else if ( chain_model == "discrete" )
+        {
+            throw_with_line_number("The real-space solver does not support discrete chain model.");
+        }
+        return NULL;
     }
-    return NULL;
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }
 AndersonMixing* MklFactory::create_anderson_mixing(
     int n_var, int max_hist, double start_error,

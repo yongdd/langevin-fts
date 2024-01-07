@@ -29,6 +29,8 @@ private:
     // Pseudo-spectral PDE solver
     CudaSolver *propagator_solver;
 
+    std::string method;
+
     // The number of parallel streams
     static const int N_STREAMS = 2;
 

@@ -325,12 +325,6 @@ class SCFT:
         self.solver = solver
 
     def save_results(self, path):
-        
-        # Make a dictionary for w fields
-        w_species = {}
-        for i, name in enumerate(self.monomer_types):
-            w_species[name] = self.w[i]
-    
         # Make a dictionary for chi_n
         chi_n_mat = {}
         for pair_chi_n in self.params["chi_n"]:
@@ -363,7 +357,7 @@ class SCFT:
         # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
 
         # Save data with matlab format
-        savemat(path, mdic, do_compression=True)
+        savemat(path, mdic, long_field_names=True, do_compression=True)
 
     def run(self, initial_fields, q_init=None):
 

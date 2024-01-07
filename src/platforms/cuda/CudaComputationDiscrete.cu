@@ -583,7 +583,7 @@ void CudaComputationDiscrete::compute_statistics(
                         #endif
 
                         // DEVICE 1, STREAM 0: calculate propagators
-                        propagator_solver->advance_propagator_continuous(
+                        propagator_solver->advance_propagator_discrete(
                             gpu, STREAM, 
                             d_propagator_device[gpu][prev],
                             d_propagator_device[gpu][next],
