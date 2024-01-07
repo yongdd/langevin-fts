@@ -596,7 +596,7 @@ void PropagatorAnalyzer::display_propagators() const
             std::cout << "O, ";
         std::cout << item.second.max_n_segment << ", " << item.second.height << std::endl;
     }
-    std::cout << "Total number of modified diffusion equation (or an integral equation for discrete chain model) steps to compute propagators: " << total_segments << std::endl;
+    std::cout << "Total number of modified diffusion equation (or integral equation for discrete chain model) steps to compute propagators: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
 }
 
@@ -627,6 +627,6 @@ void PropagatorAnalyzer::display_sub_propagators() const
         }
         std::cout << std::endl;
     }
-    std::cout << "Total number of modified diffusion equation (or an integral equation for discrete chain model) steps to compute propagators: " << total_segments << std::endl;
+    std::cout << "Total number of modified diffusion equation (or integral equation for discrete chain model) steps to compute propagators: " << total_segments << std::endl;
     std::cout << "------------------------------------" << std::endl;
 }

@@ -476,11 +476,6 @@ class LFTS:
         return dH
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
-        
-        # Make dictionary for w fields
-        w_species = {}
-        for i, name in enumerate(self.monomer_types):
-            w_species[name] = w[i]
 
         # Make a dictionary for chi_n
         chi_n_mat = {}
@@ -509,7 +504,7 @@ class LFTS:
             mdic["phi_" + name] = phi[name]
 
         # Save data with matlab format
-        savemat(path, mdic, do_compression=True)
+        savemat(path, mdic, long_field_names=True, do_compression=True)
 
     def continue_run(self, file_name):
 
@@ -654,7 +649,7 @@ class LFTS:
                     dH_history[key] = np.array(dH_history[key])
                     monomer_pair = sorted(key.split(","))
                     mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_history[key]
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, do_compression=True)
+                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset dictionary
                 H_history = []
                 for key in self.chi_n:
@@ -692,7 +687,7 @@ class LFTS:
                             self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, do_compression=True)
+                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
                     sf_average[key][:,:,:] = 0.0

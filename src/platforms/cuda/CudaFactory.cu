@@ -59,12 +59,23 @@ PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox 
 }
 PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
 {
-    std::string model_name = molecules->get_model_name();
-    if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
-    else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "realspace");
-    return NULL;
+    try
+    {
+        std::string model_name = molecules->get_model_name();
+        if( model_name == "continuous" && reduce_memory_usage == false)
+            return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+        else if( model_name == "continuous" && reduce_memory_usage == true)
+            return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "realspace");
+        else if ( model_name == "discrete" )
+        {
+            throw_with_line_number("The real-space solver does not support discrete chain model.");
+        }
+        return NULL;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }
 AndersonMixing* CudaFactory::create_anderson_mixing(
     int n_var, int max_hist, double start_error,

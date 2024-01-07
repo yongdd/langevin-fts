@@ -461,16 +461,16 @@ void CpuSolverReal::advance_propagator_1d(
     }
 }
 std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, std::string monomer_type)
+    double *q_1, double *q_2, std::string monomer_type)
 {
     try
     {
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
-        std::vector<double> stress(DIM);
+        std::vector<double> stress(DIM); 
 
-        throw_with_line_number("Currently, real-space method does not support stress computation.");   
-
+        throw_with_line_number("Currently, the real-space method does not support stress computation.");   
+        
         return stress;
     }
     catch(std::exception& exc)

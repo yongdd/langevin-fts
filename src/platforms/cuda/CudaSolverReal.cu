@@ -616,8 +616,6 @@ void CudaSolverReal::advance_propagator_1d(
             tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset[GPU], 1, 1, nx[0]);
-
-
     }
     catch(std::exception& exc)
     {
@@ -630,7 +628,7 @@ void CudaSolverReal::compute_single_segment_stress_continuous(
 {
     try
     {
-        throw_with_line_number("Currently, real-space method does not support stress computation.");   
+        throw_with_line_number("Currently, the real-space method does not support stress computation.");
     }
     catch(std::exception& exc)
     {

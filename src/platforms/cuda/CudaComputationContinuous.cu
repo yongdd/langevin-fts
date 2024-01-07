@@ -33,6 +33,7 @@ CudaComputationContinuous::CudaComputationContinuous(
             gpu_error_check(cudaStreamCreate(&streams[i][1])); // for memcpy
         }
 
+        this->method = method;
         if(method == "pseudospectral")
             this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
         else if(method == "realspace")
@@ -766,7 +767,11 @@ std::vector<double> CudaComputationContinuous::compute_stress()
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // We only need the real part of stress calculation.
 
-    try{
+    try
+    {
+        if (this->method == "realspace")
+            throw_with_line_number("Currently, the real-space method does not support stress computation.");
+
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
