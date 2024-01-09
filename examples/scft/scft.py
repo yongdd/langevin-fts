@@ -50,7 +50,7 @@ class Adam:
         return w_new
 
 class SCFT:
-    def __init__(self, params, phi_target=None, mask=None):
+    def __init__(self, params): #, phi_target=None, mask=None):
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
@@ -118,20 +118,20 @@ class SCFT:
 
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902
-        if phi_target is None:
-            phi_target = np.ones(params["nx"])
-        self.phi_target = np.reshape(phi_target, (-1))
+        # if phi_target is None:
+        #     phi_target = np.ones(params["nx"])
+        # self.phi_target = np.reshape(phi_target, (-1))
 
         matrix_chi_inv = np.linalg.inv(matrix_chi)
         self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
-        self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
+        # self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
         # print(self.matrix_p)
 
-        # Scaling rate of total polymer concentration
-        if mask is None:
-            mask = np.ones(params["nx"])
-        self.mask = np.reshape(mask, (-1))
-        self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
+        # # Scaling rate of total polymer concentration
+        # if mask is None:
+        #     mask = np.ones(params["nx"])
+        # self.mask = np.reshape(mask, (-1))
+        # self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
         
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -215,7 +215,7 @@ class SCFT:
         factory.display_info()
 
         # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"], mask=mask)
+        cb = factory.create_computation_box(params["nx"], params["lx"]) #, mask=mask)
 
         # (C++ class) Molecules list
         molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
@@ -345,11 +345,11 @@ class SCFT:
         for name in self.monomer_types:
             mdic["phi_" + name] = self.phi[name]
 
-        if self.mask is not None:
-            mdic["mask"] = self.mask
+        # if self.mask is not None:
+        #     mdic["mask"] = self.mask
             
-        if self.phi_target is not None:
-            mdic["phi_target"] = self.phi_target
+        # if self.phi_target is not None:
+        #     mdic["phi_target"] = self.phi_target
 
         # phi_total = np.zeros(self.cb.get_n_grid())
         # for name in self.monomer_types:
@@ -416,15 +416,16 @@ class SCFT:
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
 
-            # Scaling phi
-            for monomer_type in self.monomer_types:
-                phi[monomer_type] *= self.phi_rescaling
+            # # Scaling phi
+            # for monomer_type in self.monomer_types:
+            #     phi[monomer_type] *= self.phi_rescaling
 
             # Exchange-mapped chemical potential fields
             w_exchange = np.matmul(self.matrix_a_inv, w)
 
             # Calculate the total energy
-            energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
+            # energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
+            energy_total = - self.cb.integral(w_exchange[S-1])/self.cb.get_volume()
             for i in range(S-1):
                 energy_total -= 0.5/self.exchange_eigenvalues[i]*self.cb.inner_product(w_exchange[i],w_exchange[i])/self.cb.get_volume()
             for i in range(S-1):
@@ -440,18 +441,19 @@ class SCFT:
             phi_total = np.zeros(self.cb.get_n_grid())
             for i in range(S):
                 phi_total += phi[self.monomer_types[i]]
-            phi_diff = phi_total-self.phi_target
+            # phi_diff = phi_total-self.phi_target
+            phi_diff = phi_total-1.0
 
             # Calculate self-consistency error
             w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
             for i in range(S):
                 for j in range(S):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
-                w_diff[i,:] -= self.phi_target_pressure
+                # w_diff[i,:] -= self.phi_target_pressure
 
             # Keep the level of functional derivatives
             for i in range(S):
-                w_diff[i] *= self.mask
+                # w_diff[i] *= self.mask
                 w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
 
             # error_level measures the "relative distance" between the input and output fields
@@ -515,7 +517,7 @@ class SCFT:
                         
             # Keep the level of field value
             for i in range(S):
-                w[i] *= self.mask
+                # w[i] *= self.mask
                 w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
         # Store phi and w
