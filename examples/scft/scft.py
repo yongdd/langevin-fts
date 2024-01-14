@@ -3,6 +3,8 @@ import string
 import numpy as np
 import sys
 import itertools
+import networkx as nx
+import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
 from langevinfts import *
 
@@ -195,6 +197,51 @@ class SCFT:
             polymer["block_monomer_types"] = [random_type_string]
             params["segment_lengths"].update({random_type_string:statistical_segment_length})
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
+
+        # Make a monomer color dictionary
+        dict_color= {}
+        colors = ["red", "blue", "green", "cyan", "magenta", "yellow"]
+        for count, type in enumerate(params["segment_lengths"].keys()):
+            if count < len(colors):
+                dict_color[type] = colors[count]
+            else:
+                dict_color[type] = np.random.rand(3,)
+        print("Monomer color: ", dict_color)
+            
+        # Draw network structures
+        for idx, polymer in enumerate(params["distinct_polymers"]):
+        
+            # Make a graph
+            G = nx.Graph()
+            for block in polymer["blocks_input"]:
+                type = block[0]
+                length = round(block[1]/params["ds"])
+                v = block[2]
+                u = block[3]
+                G.add_edge(v, u, weight=length, monomer_type=type)
+
+            # Set node colors
+            color_map = []
+            for node in G:
+                if len(G.edges(node)) == 1:
+                    color_map.append('yellow')
+                else: 
+                    color_map.append('gray')
+
+            labels = nx.get_edge_attributes(G, 'weight')
+            pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='twopi')
+            colors = [dict_color[G[u][v]['monomer_type']] for u,v in G.edges()]
+
+            plt.figure(figsize=(20,20))
+            title = "Polymer ID: %2d," % (idx)
+            title += "\nColors of monomers: " + str(dict_color) + ","
+            title += "\nColor of chain ends: 'yellow',"
+            title += "\nColor of junctions: 'gray',"
+            title += "\nPlease note that the length of each edge is not proportional to the number of monomers because of a technical issue."
+            plt.title(title)
+            nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True) #, node_size=100, font_size=15)
+            nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
+            plt.savefig("polymer_%01d.png" % (idx))
 
         # Choose platform among [cuda, cpu-mkl]
         avail_platforms = PlatformSelector.avail_platforms()
