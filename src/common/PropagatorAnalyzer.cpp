@@ -59,8 +59,8 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 
         auto key1 = std::make_tuple(polymer_count, dep_v);
         computation_blocks_new_polymer[key1][dep_u].monomer_type = blocks[b].monomer_type;
-        computation_blocks_new_polymer[key1][dep_u].n_segment_allocated = blocks[b].n_segment;
-        computation_blocks_new_polymer[key1][dep_u].n_segment_original  = blocks[b].n_segment;
+        computation_blocks_new_polymer[key1][dep_u].n_segment_compute = blocks[b].n_segment;
+        computation_blocks_new_polymer[key1][dep_u].n_segment_offset = blocks[b].n_segment;
         computation_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
 
@@ -124,12 +124,12 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
             // For each aggregated_propagator_code
             for(auto& aggregated_propagator_code : aggregated_second_map)
             {
-                int n_segment_allocated = aggregated_propagator_code.second.n_segment_allocated;
+                int n_segment_compute = aggregated_propagator_code.second.n_segment_compute;
                 std::string dep_key = aggregated_propagator_code.first;
-                int n_segment_original = aggregated_propagator_code.second.n_segment_original;
+                int n_segment_offset = aggregated_propagator_code.second.n_segment_offset;
 
                 // Skip, if it is not aggregated
-                if ( dep_key[0] != '[' || n_segment_allocated != n_segment_original)
+                if ( dep_key[0] != '[' || n_segment_compute != n_segment_offset)
                     continue;
 
                 // For each v_u 
@@ -155,7 +155,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 
                             // Make new key
                             std::string new_u_key = "(" + dep_key
-                                + std::to_string(n_segment_allocated);
+                                + std::to_string(n_segment_compute);
 
                             for(auto& v_adj_node_dep : v_adj_nodes)
                             {
@@ -167,8 +167,8 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 
                             // Add the new key
                             aggregated_blocks[key][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
-                            aggregated_blocks[key][new_u_key].n_segment_allocated = pc.get_block(v,u).n_segment;
-                            aggregated_blocks[key][new_u_key].n_segment_original = pc.get_block(v,u).n_segment;
+                            aggregated_blocks[key][new_u_key].n_segment_compute = pc.get_block(v,u).n_segment;
+                            aggregated_blocks[key][new_u_key].n_segment_offset = pc.get_block(v,u).n_segment;
                             aggregated_blocks[key][new_u_key].v_u.push_back(std::make_tuple(v,u));
                         }
                     }
@@ -187,20 +187,20 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
             std::string key_v = std::get<1>(v_item.first);
             std::string key_u = u_item.first;
 
-            int n_segment_allocated = u_item.second.n_segment_allocated;
-            int n_segment_original = u_item.second.n_segment_original;
+            int n_segment_compute = u_item.second.n_segment_compute;
+            int n_segment_offset = u_item.second.n_segment_offset;
 
             // Add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
             computation_blocks[key].monomer_type = PropagatorCode::get_monomer_type_from_key(key_v);
-            computation_blocks[key].n_segment_allocated = n_segment_allocated;
-            computation_blocks[key].n_segment_original  = n_segment_original;
+            computation_blocks[key].n_segment_compute = n_segment_compute;
+            computation_blocks[key].n_segment_offset = n_segment_offset;
             computation_blocks[key].v_u = u_item.second.v_u;
 
             // Update propagators
-            update_computation_propagator_map(computation_propagator_codes, key_v, n_segment_original);
-            update_computation_propagator_map(computation_propagator_codes, key_u, n_segment_allocated);
+            update_computation_propagator_map(computation_propagator_codes, key_v, n_segment_offset);
+            update_computation_propagator_map(computation_propagator_codes, key_u, n_segment_compute);
         }
     }
 }
@@ -240,7 +240,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     // For even number
     for(const auto& item : not_aggregated_yet_second_map)
     {
-        if (item.second.n_segment_allocated % 2 == 0)
+        if (item.second.n_segment_compute % 2 == 0)
             remaining_keys[item.first] = item.second;
     }
     aggregated_second_map_total = aggregate_propagator_common(remaining_keys, 0);
@@ -249,7 +249,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     remaining_keys.clear();
     for(const auto& item : not_aggregated_yet_second_map)
     {
-        if (item.second.n_segment_allocated % 2 == 1)
+        if (item.second.n_segment_compute % 2 == 1)
             remaining_keys[item.first] = item.second;
     }
     aggregated_second_map = aggregate_propagator_common(remaining_keys, 0);
@@ -299,22 +299,22 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
 std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment)
 {
     int current_n_segment;
-    int n_segment_allocated;
-    int n_segment_original;
+    int n_segment_compute;
+    int n_segment_offset;
 
     std::string aggregated_propagator_code;
     std::vector<std::tuple<int ,int>> v_u_total;
 
     std::map<std::string, ComputationBlock> aggregated_second_map;
-    // Tuple <n_segment_allocated, key, n_segment_original, v_u_list>
+    // Tuple <n_segment_compute, key, n_segment_offset, v_u_list>
     std::vector<std::tuple<int, std::string, int, std::vector<std::tuple<int ,int>>>> same_aggregation_level_list;
 
     // std::cout << "---------map------------" << std::endl;
     // for(const auto& item : remaining_keys)
     // {
-    //     std::cout << item.second.n_segment_allocated << ", " <<
+    //     std::cout << item.second.n_segment_compute << ", " <<
     //                  item.first << ", " <<
-    //                  item.second.n_segment_original << ", ";
+    //                  item.second.n_segment_offset << ", ";
     //     for(const auto& v_u : item.second.v_u)
     //     {
     //         std::cout << "("
@@ -328,7 +328,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     // int count = 0;
     current_n_segment = 0;
     for(const auto& item: remaining_keys)
-        current_n_segment = std::max(current_n_segment, item.second.n_segment_allocated);
+        current_n_segment = std::max(current_n_segment, item.second.n_segment_compute);
     while(!remaining_keys.empty())
     {
         // Count ++;
@@ -337,9 +337,9 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         // std::cout << "------remaining_keys------" << std::endl;
         // for(const auto& item: remaining_keys)
         // {
-        //     std::cout << item.second.n_segment_allocated << ", "  
+        //     std::cout << item.second.n_segment_compute << ", "  
         //               << item.first << ", " 
-        //               << item.second.n_segment_original << ", " << std::endl;
+        //               << item.second.n_segment_offset << ", " << std::endl;
         // }
         // std::cout << "-------------" << std::endl;
 
@@ -348,7 +348,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         for (auto it = remaining_keys.cbegin(); it != remaining_keys.cend(); )
         {
             bool erased = false;
-            if (it->second.n_segment_allocated <= 1)
+            if (it->second.n_segment_compute <= 1)
             {
                 aggregated_second_map[it->first] = it->second;
                 remaining_keys.erase(it++);
@@ -357,14 +357,14 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
 
             if (!erased)
             {
-                if (current_n_segment <= it->second.n_segment_allocated)
+                if (current_n_segment <= it->second.n_segment_compute)
                     same_aggregation_level_list.push_back(std::make_tuple(
-                        it->second.n_segment_allocated,
+                        it->second.n_segment_compute,
                         it->first,
-                        it->second.n_segment_original,
+                        it->second.n_segment_offset,
                         it->second.v_u));
                 else
-                    n_segment_set.insert(it->second.n_segment_allocated);
+                    n_segment_set.insert(it->second.n_segment_compute);
                 ++it;
             }
         }
@@ -387,8 +387,8 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 {
                     // Add to map
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].monomer_type = PropagatorCode::get_monomer_type_from_key(std::get<1>(same_aggregation_level_list[0]));
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_allocated = std::get<0>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_original  = std::get<2>(same_aggregation_level_list[0]);
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_compute = std::get<0>(same_aggregation_level_list[0]);
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_offset  = std::get<2>(same_aggregation_level_list[0]);
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].v_u                 = std::get<3>(same_aggregation_level_list[0]);
 
                     // Erase element
@@ -412,42 +412,42 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 // Add one by one
                 std::string dep_key;
                 std::vector<std::tuple<int ,int>> dep_v_u ;
-                int n_segment_allocated_max = 0;
-                int n_segment_original_max = 0;
+                int n_segment_compute_max = 0;
+                int n_segment_from_left_max = 0;
 
                 for(size_t i=0; i<same_aggregation_level_list.size(); i++)
                 {
-                    n_segment_allocated = std::get<0>(same_aggregation_level_list[i]) - current_n_segment + minimum_n_segment;
+                    n_segment_compute = std::get<0>(same_aggregation_level_list[i]) - current_n_segment + minimum_n_segment;
 
                     dep_key = std::get<1>(same_aggregation_level_list[i]);
-                    n_segment_original = std::get<2>(same_aggregation_level_list[i]);
+                    n_segment_offset = std::get<2>(same_aggregation_level_list[i]);
                     dep_v_u = std::get<3>(same_aggregation_level_list[i]);
 
-                    n_segment_allocated_max = std::max(n_segment_allocated_max, n_segment_allocated);
-                    n_segment_original_max = std::max(n_segment_original_max, n_segment_original);
+                    n_segment_compute_max = std::max(n_segment_compute_max, n_segment_compute);
+                    n_segment_from_left_max = std::max(n_segment_from_left_max, n_segment_offset);
 
                     v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
                     if (i==0)
-                        aggregated_propagator_code = "[" + dep_key + std::to_string(n_segment_allocated);
+                        aggregated_propagator_code = "[" + dep_key + std::to_string(n_segment_compute);
                     else
-                        aggregated_propagator_code += "," + dep_key + std::to_string(n_segment_allocated);
+                        aggregated_propagator_code += "," + dep_key + std::to_string(n_segment_compute);
 
                     if (dep_key.find('[') == std::string::npos)
                         aggregated_propagator_code += ":" + std::to_string(dep_v_u.size());
 
                     // Add to map
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_allocated = n_segment_allocated;
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_original  = n_segment_original;
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_compute = n_segment_compute;
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_offset  = n_segment_offset;
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].v_u                 = dep_v_u;
                 }
                 aggregated_propagator_code += "]" + PropagatorCode::get_monomer_type_from_key(dep_key);
-                n_segment_allocated = current_n_segment - minimum_n_segment;
+                n_segment_compute = current_n_segment - minimum_n_segment;
 
                 // Add to remaining_keys
                 remaining_keys[aggregated_propagator_code].monomer_type = PropagatorCode::get_monomer_type_from_key(aggregated_propagator_code);
-                remaining_keys[aggregated_propagator_code].n_segment_allocated = n_segment_allocated;
-                remaining_keys[aggregated_propagator_code].n_segment_original  = n_segment_original_max-n_segment_allocated_max;
+                remaining_keys[aggregated_propagator_code].n_segment_compute = n_segment_compute;
+                remaining_keys[aggregated_propagator_code].n_segment_offset  = n_segment_from_left_max-n_segment_compute_max;
                 remaining_keys[aggregated_propagator_code].v_u                 = v_u_total;
 
                 // Erase elements
@@ -509,7 +509,7 @@ void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
-    std::cout << "Polymer id, key1:\n\taggregated, n_segment (original, allocated), key2, {v, u} list" << std::endl;
+    std::cout << "Polymer id, key1:\n\taggregated, n_segment (offset, compute), key2, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
@@ -536,8 +536,8 @@ void PropagatorAnalyzer::display_blocks() const
             std::cout << "X, ";
         else
             std::cout << "O, ";
-        // Print n_segment (original, allocated)
-        std::cout << "(" + std::to_string(item.second.n_segment_original) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
+        // Print n_segment (offset, compute)
+        std::cout << "(" + std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_compute) + "), ";
 
         // Print key2
         if (u_string.size() <= MAX_PRINT_LENGTH)

@@ -98,7 +98,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                 continue;
 
             int n_aggregated;
-            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
             // Contains no '['
@@ -109,7 +109,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                d_propagator[dep_v][n_segment_original-1],  // q
+                d_propagator[dep_v][n_segment_offset-1],  // q
                 d_propagator[dep_u][0],                                      // q_dagger
                 monomer_type,       
                 n_aggregated                   // how many propagators are aggregated
@@ -125,8 +125,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
             double **d_q_1 = d_propagator[dep_v];    // dependency v
             double **d_q_2 = d_propagator[dep_u];    // dependency u
@@ -141,7 +141,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                 bool is_half_bond_length = false;
 
                 // At v
-                if (n == N_ORIGINAL)
+                if (n == N_OFFSET)
                 {
                     if (propagator_analyzer->get_computation_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
                     {
@@ -161,7 +161,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                         continue;
                     }
 
-                    d_propagator_v = d_q_1[N_ORIGINAL-1];
+                    d_propagator_v = d_q_1[N_OFFSET-1];
                     d_propagator_u = d_propagator_junction[dep_u];
                     is_half_bond_length = true;
                 }
@@ -174,7 +174,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                 // Within the blocks
                 else
                 {
-                    d_propagator_v = d_q_1[N_ORIGINAL-n-1];
+                    d_propagator_v = d_q_1[N_OFFSET-n-1];
                     d_propagator_u = d_q_2[n-1];
                     is_half_bond_length = false;
                 }
@@ -658,8 +658,8 @@ void CudaComputationDiscrete::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
@@ -683,8 +683,8 @@ void CudaComputationDiscrete::compute_statistics(
                 d_propagator[dep_v],       // dependency v
                 d_propagator[dep_u],       // dependency u
                 _d_exp_dw,                 // exp_dw
-                n_segment_allocated,
-                n_segment_original);
+                n_segment_compute,
+                n_segment_offset);
             
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
@@ -711,7 +711,7 @@ void CudaComputationDiscrete::compute_statistics(
     }
 }
 void CudaComputationDiscrete::calculate_phi_one_block(
-    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_ORIGINAL)
+    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET)
 {
     try
     {
@@ -722,10 +722,10 @@ void CudaComputationDiscrete::calculate_phi_one_block(
 
         const int M = cb->get_n_grid();
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_ORIGINAL-1], d_q_2[0], 1.0, M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_OFFSET-1], d_q_2[0], 1.0, M);
         for(int n=1; n<N; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-n-1], d_q_2[n], 1.0, M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_OFFSET-n-1], d_q_2[n], 1.0, M);
         }
         divide_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
     }
@@ -763,8 +763,8 @@ void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, 
         {
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
 
@@ -805,8 +805,8 @@ void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -938,8 +938,8 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
             // Contains no '['
@@ -1121,12 +1121,12 @@ bool CudaComputationDiscrete::check_total_partition()
         std::string dep_u    = std::get<2>(key);
 
         int n_aggregated;
-        int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-        int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+        int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+        int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
         std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
         double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_allocated << std::endl;
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << std::endl;
 
         // Contains no '['
         if (dep_u.find('[') == std::string::npos)
@@ -1134,10 +1134,10 @@ bool CudaComputationDiscrete::check_total_partition()
         else
             n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
 
-        for(int n=0;n<n_segment_allocated;n++)
+        for(int n=0;n<n_segment_compute;n++)
         {
             double total_partition = cb->inner_product_inverse_weight_device(
-                d_propagator[dep_v][(n_segment_original-n-1)],
+                d_propagator[dep_v][(n_segment_offset-n-1)],
                 d_propagator[dep_u][n], _d_exp_dw)/n_aggregated/cb->get_volume();
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;

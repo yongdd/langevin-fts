@@ -21,15 +21,15 @@ struct ComputationEdge{
 struct ComputationBlock{
     std::string monomer_type;  // monomer_type
 
-    // When the 'aggregate_propagator_computation' is on, original block can be sliced to smaller block pieces.
-    // For example, suppose one block is composed of 5'A' monomers. -> -A-A-A-A-A-
+    // When the 'aggregate_propagator_computation' is on, one block can be sliced to smaller block pieces.
+    // For example, suppose the block is composed of 5'A' monomers. -> -A-A-A-A-A-
     // , and this block is sliced into 3'A' monomers and 2'A' monomers -> -A-A-A-,  -A-A-
-    // For the first slice, n_segment_allocated, and n_segment_original are 3, and 5, respectively.
-    // For the second slice, n_segment_allocated, and n_segment_original are 2, and 2, respectively.
+    // For the first slice, n_segment_compute, and n_segment_offset are 2, and 5, respectively.
+    // For the second slice, n_segment_compute, and n_segment_offset are 3, and 3, respectively.
     // If the 'aggregate_propagator_computation' is off, original block is not sliced to smaller block pieces.
-    // In this case, n_segment_allocated, and n_segment_original are 5, and 5, respectively.
-    int n_segment_allocated;
-    int n_segment_original;
+    // In this case, n_segment_compute, and n_segment_offset are 5, and 5, respectively.
+    int n_segment_offset;
+    int n_segment_compute;
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
 };
 
