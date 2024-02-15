@@ -412,9 +412,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 // Add one by one
                 std::string dep_key;
                 std::vector<std::tuple<int ,int>> dep_v_u ;
-                int n_segment_compute_max = 0;
-                int n_segment_from_left_max = 0;
-
+                
                 for(size_t i=0; i<same_aggregation_level_list.size(); i++)
                 {
                     n_segment_compute = std::get<0>(same_aggregation_level_list[i]) - current_n_segment + minimum_n_segment;
@@ -422,9 +420,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                     dep_key = std::get<1>(same_aggregation_level_list[i]);
                     n_segment_offset = std::get<2>(same_aggregation_level_list[i]);
                     dep_v_u = std::get<3>(same_aggregation_level_list[i]);
-
-                    n_segment_compute_max = std::max(n_segment_compute_max, n_segment_compute);
-                    n_segment_from_left_max = std::max(n_segment_from_left_max, n_segment_offset);
 
                     v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
                     if (i==0)
@@ -447,7 +442,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 // Add to remaining_keys
                 remaining_keys[aggregated_propagator_code].monomer_type = PropagatorCode::get_monomer_type_from_key(aggregated_propagator_code);
                 remaining_keys[aggregated_propagator_code].n_segment_compute = n_segment_compute;
-                remaining_keys[aggregated_propagator_code].n_segment_offset  = n_segment_from_left_max-n_segment_compute_max;
+                remaining_keys[aggregated_propagator_code].n_segment_offset  = n_segment_compute;
                 remaining_keys[aggregated_propagator_code].v_u                 = v_u_total;
 
                 // Erase elements
