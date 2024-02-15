@@ -60,7 +60,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
         auto key1 = std::make_tuple(polymer_count, dep_v);
         computation_blocks_new_polymer[key1][dep_u].monomer_type = blocks[b].monomer_type;
         computation_blocks_new_polymer[key1][dep_u].n_segment_allocated = blocks[b].n_segment;
-        computation_blocks_new_polymer[key1][dep_u].n_segment_offset    = 0;
         computation_blocks_new_polymer[key1][dep_u].n_segment_original  = blocks[b].n_segment;
         computation_blocks_new_polymer[key1][dep_u].v_u.push_back(std::make_tuple(v,u));
     }
@@ -127,11 +126,10 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
             {
                 int n_segment_allocated = aggregated_propagator_code.second.n_segment_allocated;
                 std::string dep_key = aggregated_propagator_code.first;
-                int n_segment_offset = aggregated_propagator_code.second.n_segment_offset;
                 int n_segment_original = aggregated_propagator_code.second.n_segment_original;
 
                 // Skip, if it is not aggregated
-                if ( dep_key[0] != '[' || n_segment_offset+n_segment_allocated != n_segment_original)
+                if ( dep_key[0] != '[' || n_segment_allocated != n_segment_original)
                     continue;
 
                 // For each v_u 
@@ -170,7 +168,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
                             // Add the new key
                             aggregated_blocks[key][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
                             aggregated_blocks[key][new_u_key].n_segment_allocated = pc.get_block(v,u).n_segment;
-                            aggregated_blocks[key][new_u_key].n_segment_offset = 0;
                             aggregated_blocks[key][new_u_key].n_segment_original = pc.get_block(v,u).n_segment;
                             aggregated_blocks[key][new_u_key].v_u.push_back(std::make_tuple(v,u));
                         }
@@ -191,7 +188,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
             std::string key_u = u_item.first;
 
             int n_segment_allocated = u_item.second.n_segment_allocated;
-            int n_segment_offset = u_item.second.n_segment_offset;
             int n_segment_original = u_item.second.n_segment_original;
 
             // Add blocks
@@ -199,7 +195,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_count)
 
             computation_blocks[key].monomer_type = PropagatorCode::get_monomer_type_from_key(key_v);
             computation_blocks[key].n_segment_allocated = n_segment_allocated;
-            computation_blocks[key].n_segment_offset    = n_segment_offset;
             computation_blocks[key].n_segment_original  = n_segment_original;
             computation_blocks[key].v_u = u_item.second.v_u;
 
@@ -305,22 +300,20 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
 {
     int current_n_segment;
     int n_segment_allocated;
-    int n_segment_offset;
     int n_segment_original;
 
     std::string aggregated_propagator_code;
     std::vector<std::tuple<int ,int>> v_u_total;
 
     std::map<std::string, ComputationBlock> aggregated_second_map;
-    // Tuple <n_segment_allocated, key, n_segment_offset, n_segment_original, v_u_list>
-    std::vector<std::tuple<int, std::string, int, int, std::vector<std::tuple<int ,int>>>> same_aggregation_level_list;
+    // Tuple <n_segment_allocated, key, n_segment_original, v_u_list>
+    std::vector<std::tuple<int, std::string, int, std::vector<std::tuple<int ,int>>>> same_aggregation_level_list;
 
     // std::cout << "---------map------------" << std::endl;
     // for(const auto& item : remaining_keys)
     // {
     //     std::cout << item.second.n_segment_allocated << ", " <<
     //                  item.first << ", " <<
-    //                  item.second.n_segment_offset << ", " <<
     //                  item.second.n_segment_original << ", ";
     //     for(const auto& v_u : item.second.v_u)
     //     {
@@ -346,7 +339,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         // {
         //     std::cout << item.second.n_segment_allocated << ", "  
         //               << item.first << ", " 
-        //               << item.second.n_segment_offset << ", "
         //               << item.second.n_segment_original << ", " << std::endl;
         // }
         // std::cout << "-------------" << std::endl;
@@ -369,7 +361,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                     same_aggregation_level_list.push_back(std::make_tuple(
                         it->second.n_segment_allocated,
                         it->first,
-                        it->second.n_segment_offset,
                         it->second.n_segment_original,
                         it->second.v_u));
                 else
@@ -397,9 +388,8 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                     // Add to map
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].monomer_type = PropagatorCode::get_monomer_type_from_key(std::get<1>(same_aggregation_level_list[0]));
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_allocated = std::get<0>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_offset    = std::get<2>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_original  = std::get<3>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].v_u                 = std::get<4>(same_aggregation_level_list[0]);
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_original  = std::get<2>(same_aggregation_level_list[0]);
+                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].v_u                 = std::get<3>(same_aggregation_level_list[0]);
 
                     // Erase element
                     remaining_keys.erase(std::get<1>(same_aggregation_level_list[0]));
@@ -422,7 +412,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 // Add one by one
                 std::string dep_key;
                 std::vector<std::tuple<int ,int>> dep_v_u ;
-                int n_segment_offset_max = 0;
+                int n_segment_allocated_max = 0;
                 int n_segment_original_max = 0;
 
                 for(size_t i=0; i<same_aggregation_level_list.size(); i++)
@@ -430,11 +420,10 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                     n_segment_allocated = std::get<0>(same_aggregation_level_list[i]) - current_n_segment + minimum_n_segment;
 
                     dep_key = std::get<1>(same_aggregation_level_list[i]);
-                    n_segment_offset = std::get<2>(same_aggregation_level_list[i]);
-                    n_segment_original = std::get<3>(same_aggregation_level_list[i]);
-                    dep_v_u = std::get<4>(same_aggregation_level_list[i]);
+                    n_segment_original = std::get<2>(same_aggregation_level_list[i]);
+                    dep_v_u = std::get<3>(same_aggregation_level_list[i]);
 
-                    n_segment_offset_max = std::max(n_segment_offset_max, n_segment_offset + n_segment_allocated);
+                    n_segment_allocated_max = std::max(n_segment_allocated_max, n_segment_allocated);
                     n_segment_original_max = std::max(n_segment_original_max, n_segment_original);
 
                     v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
@@ -449,7 +438,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                     // Add to map
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_allocated = n_segment_allocated;
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_offset    = n_segment_offset;
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_original  = n_segment_original;
                     aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].v_u                 = dep_v_u;
                 }
@@ -459,8 +447,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 // Add to remaining_keys
                 remaining_keys[aggregated_propagator_code].monomer_type = PropagatorCode::get_monomer_type_from_key(aggregated_propagator_code);
                 remaining_keys[aggregated_propagator_code].n_segment_allocated = n_segment_allocated;
-                remaining_keys[aggregated_propagator_code].n_segment_offset    = n_segment_offset_max;
-                remaining_keys[aggregated_propagator_code].n_segment_original  = n_segment_original_max;
+                remaining_keys[aggregated_propagator_code].n_segment_original  = n_segment_original_max-n_segment_allocated_max;
                 remaining_keys[aggregated_propagator_code].v_u                 = v_u_total;
 
                 // Erase elements
@@ -522,7 +509,7 @@ void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
-    std::cout << "Polymer id, key1:\n\taggregated, n_segment (original, offset, allocated), key2, {v, u} list" << std::endl;
+    std::cout << "Polymer id, key1:\n\taggregated, n_segment (original, allocated), key2, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
@@ -549,8 +536,8 @@ void PropagatorAnalyzer::display_blocks() const
             std::cout << "X, ";
         else
             std::cout << "O, ";
-        // Print n_segment (original, offset, allocated)
-        std::cout << "(" + std::to_string(item.second.n_segment_original) + ", "+ std::to_string(item.second.n_segment_offset) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
+        // Print n_segment (original, allocated)
+        std::cout << "(" + std::to_string(item.second.n_segment_original) + ", " + std::to_string(item.second.n_segment_allocated) + "), ";
 
         // Print key2
         if (u_string.size() <= MAX_PRINT_LENGTH)

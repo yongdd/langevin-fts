@@ -59,7 +59,6 @@ std::pair<std::string, int> PropagatorCode::generate_edge_code(
     int in_node, int out_node)
 {
     std::vector<std::string> edge_text;
-    std::vector<std::pair<std::string,int>> edge_dict;
     std::pair<std::string,int> text_and_segments;
 
     // If it is already computed
@@ -85,7 +84,6 @@ std::pair<std::string, int> PropagatorCode::generate_edge_code(
                 memory[v_u_pair] = text_and_segments;
             }
             edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
-            edge_dict.push_back(text_and_segments);
             //std::cout << text_and_segments.first << " " << text_and_segments.second << std::endl;
         }
     }
@@ -121,9 +119,10 @@ std::pair<std::string, int> PropagatorCode::generate_edge_code(
 }
 std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key(std::string key)
 {
+    // sub_key, sub_n_segment, sub_n_repeated
     std::vector<std::tuple<std::string, int, int>> sub_deps;
-    int sub_n_segment;
     std::string sub_key;
+    int sub_n_segment;
     int sub_n_repeated;
 
     bool is_reading_key = true;
@@ -135,81 +134,84 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
 
     for(size_t i=0; i<key.size();i++)
     {
-        // It was reading key and have found a digit
-        if( isdigit(key[i]) && is_reading_key && brace_count == 1 )
+        if(brace_count == 1)
         {
-            // std::cout << "key_to_deps1" << std::endl;
-            sub_key = key.substr(key_start, i-key_start);
-            // std::cout << sub_key << "= " << key_start << ", " << i  << std::endl;
+            // It was reading key and have found a digit
+            if( isdigit(key[i]) && is_reading_key)
+            {
+                // std::cout << "key_to_deps1" << std::endl;
+                sub_key = key.substr(key_start, i-key_start);
+                // std::cout << sub_key << "= " << key_start << ", " << i  << std::endl;
 
-            is_reading_key = false;
-            is_reading_n_segment = true;
+                is_reading_key = false;
+                is_reading_n_segment = true;
 
-            key_start = i;
-        }
-        // It was reading n_segment and have found a ':'
-        else if( key[i]==':' && is_reading_n_segment && brace_count == 1 )
-        {
-            // std::cout << "key_to_deps2" << std::endl;
-            sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-            // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                key_start = i;
+            }
+            // It was reading n_segment and have found a ':'
+            else if(key[i]==':' && is_reading_n_segment)
+            {
+                // std::cout << "key_to_deps2" << std::endl;
+                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
+                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
 
-            is_reading_n_segment = false;
-            is_reading_n_repeated = true;
+                is_reading_n_segment = false;
+                is_reading_n_repeated = true;
 
-            key_start = i+1;
-        }
-        // It was reading n_segment and have found a comma
-        else if( key[i]==',' && is_reading_n_segment && brace_count == 1 )
-        {
-            // std::cout << "key_to_deps3" << std::endl;
-            sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-            // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-            sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
+                key_start = i+1;
+            }
+            // It was reading n_segment and have found a comma
+            else if(key[i]==',' && is_reading_n_segment)
+            {
+                // std::cout << "key_to_deps3" << std::endl;
+                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
+                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
 
-            is_reading_n_segment = false;
-            is_reading_key = true;
+                is_reading_n_segment = false;
+                is_reading_key = true;
 
-            key_start = i+1;
-        }
-        // It was reading n_repeated and have found a comma
-        else if( key[i]==',' && is_reading_n_repeated && brace_count == 1 )
-        {
-            // std::cout << "key_to_deps4" << std::endl;
-            sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
-            // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-            sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
+                key_start = i+1;
+            }
+            // It was reading n_repeated and have found a comma
+            else if(key[i]==',' && is_reading_n_repeated)
+            {
+                // std::cout << "key_to_deps4" << std::endl;
+                sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
+                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
 
-            is_reading_n_repeated = false;
-            is_reading_key = true;
+                is_reading_n_repeated = false;
+                is_reading_key = true;
 
-            key_start = i+1;
-        }
-        // It was reading n_repeated and have found a non-digit
-        else if( !isdigit(key[i]) && is_reading_n_repeated && brace_count == 1)
-        {
-            // std::cout << "key_to_deps5" << std::endl;
-            sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
-            // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-            sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
+                key_start = i+1;
+            }
+            // It was reading n_repeated and have found a non-digit
+            else if(!isdigit(key[i]) && is_reading_n_repeated)
+            {
+                // std::cout << "key_to_deps5" << std::endl;
+                sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
+                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
 
-            is_reading_n_repeated = false;
-            is_reading_key = true;
+                is_reading_n_repeated = false;
+                is_reading_key = true;
 
-            key_start = i;
-        }
-        // It was reading n_segment and have found a non-digit
-        else if( !isdigit(key[i]) && is_reading_n_segment && brace_count == 1)
-        {
-            // std::cout << "key_to_deps6" << std::endl;
-            sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-            // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-            sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
+                key_start = i;
+            }
+            // It was reading n_segment and have found a non-digit
+            else if(!isdigit(key[i]) && is_reading_n_segment)
+            {
+                // std::cout << "key_to_deps6" << std::endl;
+                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
+                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
 
-            is_reading_n_segment = false;
-            is_reading_key = true;
+                is_reading_n_segment = false;
+                is_reading_key = true;
 
-            key_start = i;
+                key_start = i;
+            }
         }
         if(key[i] == '(' || key[i] == '[')
             brace_count++;

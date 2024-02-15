@@ -61,7 +61,6 @@ CpuComputationContinuous::CpuComputationContinuous(
                 continue;
 
             int n_aggregated;
-            int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
             int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
 
             // Contains no '['
@@ -72,7 +71,7 @@ CpuComputationContinuous::CpuComputationContinuous(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                &propagator[dep_v][(n_segment_original-n_segment_offset)*M],   // q
+                &propagator[dep_v][(n_segment_original)*M],   // q
                 &propagator[dep_u][0],                                   // q_dagger
                 n_aggregated                    // how many propagators are aggregated
                 ));
@@ -305,7 +304,6 @@ void CpuComputationContinuous::compute_statistics(
         //     std::string dep_v    = std::get<1>(block.first);
         //     std::string dep_u    = std::get<2>(block.first);
         //     int n_segment        = std::get<3>(block.first);
-        //     int n_segment_offset = std::get<4>(block.first);
 
         //     // Check keys
         //     if (propagator.find(dep_v) == propagator.end())
@@ -313,7 +311,7 @@ void CpuComputationContinuous::compute_statistics(
         //     if (propagator.find(dep_u) == propagator.end())
         //         throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
 
-        //     for(int i=0; i<=n_segment+n_segment_offset; i++)
+        //     for(int i=0; i<=n_segment; i++)
         //     {
         //         if (!propagator_finished[dep_v][i])
         //             throw_with_line_number("unfinished, dep_v, n'" + dep_v + ", " + std::to_string(i) + "'. ");
@@ -352,7 +350,6 @@ void CpuComputationContinuous::compute_statistics(
 
             int n_repeated;
             int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
             int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
 
             // If there is no segment
@@ -383,7 +380,6 @@ void CpuComputationContinuous::compute_statistics(
                 propagator[dep_v],  // dependency v
                 propagator[dep_u],  // dependency u
                 n_segment_allocated,
-                n_segment_offset,
                 n_segment_original);
 
             // Normalize concentration
@@ -415,7 +411,7 @@ void CpuComputationContinuous::compute_statistics(
     }
 }
 void CpuComputationContinuous::calculate_phi_one_block(
-    double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET, const int N_ORIGINAL)
+    double *phi, double *q_1, double *q_2, const int N, const int N_ORIGINAL)
 {
     try
     {
@@ -424,11 +420,11 @@ void CpuComputationContinuous::calculate_phi_one_block(
 
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_ORIGINAL-N_OFFSET)*M]*q_2[i];
+            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_ORIGINAL)*M]*q_2[i];
         for(int n=1; n<=N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_ORIGINAL-N_OFFSET-n)*M]*q_2[i+n*M];
+                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_ORIGINAL-n)*M]*q_2[i+n*M];
         }
     }
     catch(std::exception& exc)
@@ -613,7 +609,6 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             std::string dep_u = std::get<2>(key);
 
             const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            const int N_OFFSET    = propagator_analyzer->get_computation_block(key).n_segment_offset;
             const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
@@ -638,7 +633,7 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             for(int n=0; n<=N; n++)
             {
                 std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_continuous(
-                    &q_1[(N_ORIGINAL-N_OFFSET-n)*M], &q_2[n*M], monomer_type);
+                    &q_1[(N_ORIGINAL-n)*M], &q_2[n*M], monomer_type);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
             }
@@ -718,10 +713,9 @@ bool CpuComputationContinuous::check_total_partition()
 
         int n_aggregated;
         int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-        int n_segment_offset    = propagator_analyzer->get_computation_block(key).n_segment_offset;
         int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_offset << ", " << n_segment_allocated << std::endl;
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_allocated << std::endl;
 
         // Contains no '['
         if (dep_u.find('[') == std::string::npos)
@@ -732,7 +726,7 @@ bool CpuComputationContinuous::check_total_partition()
         for(int n=0;n<=n_segment_allocated;n++)
         {
             double total_partition = cb->inner_product(
-                &propagator[dep_v][(n_segment_original-n_segment_offset-n)*M],
+                &propagator[dep_v][(n_segment_original-n)*M],
                 &propagator[dep_u][n*M])/n_aggregated/cb->get_volume();
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
