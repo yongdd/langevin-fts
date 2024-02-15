@@ -86,7 +86,7 @@ CudaComputationContinuous::CudaComputationContinuous(
                 continue;
 
             int n_aggregated;
-            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
             // Contains no '['
             if (dep_u.find('[') == std::string::npos)
@@ -96,7 +96,7 @@ CudaComputationContinuous::CudaComputationContinuous(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                d_propagator[dep_v][n_segment_original], // q
+                d_propagator[dep_v][n_segment_offset], // q
                 d_propagator[dep_u][0],                  // q_dagger
                 n_aggregated            // how many propagators are aggregated
                 ));
@@ -523,11 +523,11 @@ void CudaComputationContinuous::compute_statistics(
             std::string dep_u    = std::get<2>(key);
 
             int n_repeated;
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
             // If there is no segment
-            if(n_segment_allocated == 0)
+            if(n_segment_compute == 0)
             {
                 gpu_error_check(cudaMemset(d_block.second, 0, sizeof(double)*M));
                 continue;
@@ -552,8 +552,8 @@ void CudaComputationContinuous::compute_statistics(
                 d_block.second,       // phi
                 d_propagator[dep_v],  // dependency v
                 d_propagator[dep_u],  // dependency u
-                n_segment_allocated,
-                n_segment_original);
+                n_segment_compute,
+                n_segment_offset);
 
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
@@ -580,7 +580,7 @@ void CudaComputationContinuous::compute_statistics(
     }
 }
 void CudaComputationContinuous::calculate_phi_one_block(
-    double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_ORIGINAL)
+    double *d_phi, double **d_q_1, double **d_q_2, const int N, const int N_OFFSET)
 {
     try
     {
@@ -593,10 +593,10 @@ void CudaComputationContinuous::calculate_phi_one_block(
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N);
 
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL], d_q_2[0], simpson_rule_coeff[0], M);
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_OFFSET], d_q_2[0], simpson_rule_coeff[0], M);
         for(int n=1; n<=N; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_ORIGINAL-n], d_q_2[n], simpson_rule_coeff[n], M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_OFFSET-n], d_q_2[n], simpson_rule_coeff[n], M);
         }
     }
     catch(std::exception& exc)
@@ -633,8 +633,8 @@ void CudaComputationContinuous::get_total_concentration(std::string monomer_type
         {
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
 
@@ -675,8 +675,8 @@ void CudaComputationContinuous::get_total_concentration(int p, std::string monom
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
-            int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_allocated != 0)
+            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -813,15 +813,15 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            const int N           = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-            const int N_ORIGINAL  = propagator_analyzer->get_computation_block(key).n_segment_original;
+            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
+            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
             // If there is no segment
             if(N == 0)
                 continue;
 
-            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_ORIGINAL << std::endl;
+            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_OFFSET << std::endl;
 
             // Contains no '['
             int n_repeated;
@@ -850,7 +850,7 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             gpu_error_check(cudaEventCreate(&kernel_done));
             gpu_error_check(cudaEventCreate(&memcpy_done));
 
-            gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], d_q_1[N_ORIGINAL],
+            gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], d_q_1[N_OFFSET],
                     sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
             gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][M], d_q_2[0],
                     sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
@@ -863,7 +863,7 @@ std::vector<double> CudaComputationContinuous::compute_stress()
                 // STREAM 1: Copy data
                 if (n+1 <= N)
                 {
-                    gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], d_q_1[N_ORIGINAL-n-1],
+                    gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], d_q_1[N_OFFSET-n-1],
                             sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
                     gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][M], d_q_2[n+1],
                             sizeof(double)*M,cudaMemcpyDeviceToDevice, streams[STREAM][1]));
@@ -890,7 +890,7 @@ std::vector<double> CudaComputationContinuous::compute_stress()
             gpu_error_check(cudaEventDestroy(kernel_done));
             gpu_error_check(cudaEventDestroy(memcpy_done));
 
-            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_ORIGINAL << std::endl;
+            // std::cout << p << ", " << dep_v << ", " << dep_u << ", " << N << ", " << N_OFFSET << std::endl;
             // std::cout << "STREAM, _block_dq_dl[0] " << STREAM  << ", " << _block_dq_dl[0] << std::endl;
 
             for(int d=0; d<DIM; d++)
@@ -977,10 +977,10 @@ bool CudaComputationContinuous::check_total_partition()
         std::string dep_u    = std::get<2>(key);
 
         int n_aggregated;
-        int n_segment_allocated = propagator_analyzer->get_computation_block(key).n_segment_allocated;
-        int n_segment_original  = propagator_analyzer->get_computation_block(key).n_segment_original;
+        int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
+        int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_original << ", " << n_segment_allocated << std::endl;
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << std::endl;
 
         // Contains no '['
         if (dep_u.find('[') == std::string::npos)
@@ -988,10 +988,10 @@ bool CudaComputationContinuous::check_total_partition()
         else
             n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
 
-        for(int n=0;n<=n_segment_allocated;n++)
+        for(int n=0;n<=n_segment_compute;n++)
         {
             double total_partition = cb->inner_product_device(
-                d_propagator[dep_v][n_segment_original-n],
+                d_propagator[dep_v][n_segment_offset-n],
                 d_propagator[dep_u][n])/n_aggregated/cb->get_volume();
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
