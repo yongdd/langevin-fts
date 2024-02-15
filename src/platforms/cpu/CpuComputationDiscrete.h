@@ -51,7 +51,7 @@ private:
     std::vector<double *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
+    void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_ORIGINAL);
 public:
     CpuComputationDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer);
     ~CpuComputationDiscrete();

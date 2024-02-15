@@ -78,7 +78,7 @@ private:
     std::vector<double *> d_phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET, const int N_ORIGINAL);
+    void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_ORIGINAL);
 
     // Compute statistics with inputs from selected device arrays
     void compute_statistics(std::string device,
