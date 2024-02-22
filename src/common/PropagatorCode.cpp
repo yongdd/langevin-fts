@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstdio>
 #include <cctype>
 #include <cmath>
 #include <cassert>
@@ -125,98 +126,66 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     int sub_n_segment;
     int sub_n_repeated;
 
-    bool is_reading_key = true;
-    bool is_reading_n_segment = false;
-    bool is_reading_n_repeated = false;
-
-    int key_start = 1;
-    int brace_count = 0;
+    int pos_start = 1;
+    int brace_depth = 0;
+    int state = 0;
 
     for(size_t i=0; i<key.size();i++)
     {
-        if(brace_count == 1)
+        if(brace_depth == 1)
         {
             // It was reading key and have found a digit
-            if( isdigit(key[i]) && is_reading_key)
+            if(state==0 && isdigit(key[i]))
             {
-                // std::cout << "key_to_deps1" << std::endl;
-                sub_key = key.substr(key_start, i-key_start);
-                // std::cout << sub_key << "= " << key_start << ", " << i  << std::endl;
+                // Remove a comma
+                if (key[pos_start] == ',')
+                    pos_start += 1;
 
-                is_reading_key = false;
-                is_reading_n_segment = true;
+                sub_key = key.substr(pos_start, i-pos_start);
+                // printf("%5d,%5d=", pos_start, i);
+                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
 
-                key_start = i;
+                state = 1;
+                pos_start = i;
             }
             // It was reading n_segment and have found a ':'
-            else if(key[i]==':' && is_reading_n_segment)
+            else if(state==1 && key[i]==':')
             {
-                // std::cout << "key_to_deps2" << std::endl;
-                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
+                // printf("%5d,%5d=", pos_start, i);
+                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
 
-                is_reading_n_segment = false;
-                is_reading_n_repeated = true;
-
-                key_start = i+1;
-            }
-            // It was reading n_segment and have found a comma
-            else if(key[i]==',' && is_reading_n_segment)
-            {
-                // std::cout << "key_to_deps3" << std::endl;
-                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
-
-                is_reading_n_segment = false;
-                is_reading_key = true;
-
-                key_start = i+1;
-            }
-            // It was reading n_repeated and have found a comma
-            else if(key[i]==',' && is_reading_n_repeated)
-            {
-                // std::cout << "key_to_deps4" << std::endl;
-                sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
-                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
-
-                is_reading_n_repeated = false;
-                is_reading_key = true;
-
-                key_start = i+1;
-            }
-            // It was reading n_repeated and have found a non-digit
-            else if(!isdigit(key[i]) && is_reading_n_repeated)
-            {
-                // std::cout << "key_to_deps5" << std::endl;
-                sub_n_repeated = std::stoi(key.substr(key_start, i-key_start));
-                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
-                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
-
-                is_reading_n_repeated = false;
-                is_reading_key = true;
-
-                key_start = i;
+                state = 2;
+                pos_start = i+1;
             }
             // It was reading n_segment and have found a non-digit
-            else if(!isdigit(key[i]) && is_reading_n_segment)
+            else if(state==1 && !isdigit(key[i]))
             {
-                // std::cout << "key_to_deps6" << std::endl;
-                sub_n_segment = std::stoi(key.substr(key_start, i-key_start));
-                // std::cout << sub_key << "= " << key_start << ", " << i  << ", " << key.substr(key_start, i-key_start) << std::endl;
+                sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
+                // printf("%5d,%5d=", pos_start, i);
+                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
+
                 sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
 
-                is_reading_n_segment = false;
-                is_reading_key = true;
-
-                key_start = i;
+                state = 0;
+                pos_start = i;
+            }
+            // It was reading n_repeated and have found a non-digit
+            else if(state==2 && !isdigit(key[i]))
+            {
+                sub_n_repeated = std::stoi(key.substr(pos_start, i-pos_start));
+                // printf("%5d,%5d=", pos_start, i);
+                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
+                
+                sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
+                state = 0;
+                pos_start = i;
             }
         }
         if(key[i] == '(' || key[i] == '[')
-            brace_count++;
+            brace_depth++;
         else if(key[i] == ')' || key[i] == ']')
-            brace_count--;
+            brace_depth--;
     }
     return sub_deps;
 }
@@ -229,18 +198,18 @@ std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
     }
     else
     {
-        int brace_count = 0;
+        int brace_depth = 0;
         int species_idx = 0;
         for(size_t i=0; i<key.size();i++)
         {
             if (key[i] == '[' || key[i] == '(' || key[i] == '{')
             {
-                brace_count++;
+                brace_depth++;
             }
             else if (key[i] == ']' || key[i] == ')' || key[i] == '}')
             {
-                brace_count--;
-                if (brace_count == 0)
+                brace_depth--;
+                if (brace_depth == 0)
                 {
                     species_idx=i;
                     break;
@@ -254,35 +223,35 @@ std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
 
 std::string PropagatorCode::get_monomer_type_from_key(std::string key)
 {
-    int key_start = 0;
+    int pos_start = 0;
     for(int i=key.size()-1; i>=0;i--)
     {
         //std::cout << key[i] << std::endl;
         if(key[i] == ')' || key[i] == ']' || key[i] == '}')
         {
-            key_start=i+1;
+            pos_start=i+1;
             break;
         }
     }
-    //std::cout << key.substr(key_start, key.size()-key_start) << std::endl;
-    return key.substr(key_start, key.size()-key_start);
+    //std::cout << key.substr(pos_start, key.size()-pos_start) << std::endl;
+    return key.substr(pos_start, key.size()-pos_start);
 }
 std::string PropagatorCode::get_q_input_idx_from_key(std::string key)
 {
     if (key[0] != '{')
         throw_with_line_number("There is no related initial condition in key (" + key + ").");
 
-    int key_start = 0;
+    int pos_start = 0;
     for(int i=key.size()-1; i>=0;i--)
     {
         if(key[i] == '}')
         {
-            key_start=i;
+            pos_start=i;
             break;
         }
     }
-    // std::cout << key.substr(1, key_start-1) << std::endl;
-    return key.substr(1, key_start-1);
+    // std::cout << key.substr(1, pos_start-1) << std::endl;
+    return key.substr(1, pos_start-1);
 }
 int PropagatorCode::get_height_from_key(std::string key)
 {
