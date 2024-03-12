@@ -36,7 +36,7 @@ class LFTS:
         else:
             platform = avail_platforms[0]
 
-        # (c++ class) Create a factory for given platform and chain_model
+        # (C++ class) Create a factory for given platform and chain_model
         if "reduce_gpu_memory_usage" in params and platform == "cuda":
             factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"])
         else:
@@ -123,10 +123,10 @@ class LFTS:
         for polymer_counter, polymer in enumerate(params["distinct_polymers"]):
             blocks_input = []
             alpha = 0.0             # total_relative_contour_length
-            is_linear_chain = not "v" in polymer["blocks"][0]
+            has_node_number = not "v" in polymer["blocks"][0]
             for block in polymer["blocks"]:
                 alpha += block["length"]
-                if is_linear_chain:
+                if has_node_number:
                     assert(not "v" in block), \
                         "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
                     assert(not "u" in block), \
@@ -183,7 +183,7 @@ class LFTS:
                 dict_color[type] = np.random.rand(3,)
         print("Monomer color: ", dict_color)
             
-        # Draw network structures
+        # Draw polymer chain architectures
         for idx, polymer in enumerate(params["distinct_polymers"]):
         
             # Make a graph
@@ -212,7 +212,7 @@ class LFTS:
             title += "\nColors of monomers: " + str(dict_color) + ","
             title += "\nColor of chain ends: 'yellow',"
             title += "\nColor of junctions: 'gray',"
-            title += "\nPlease note that the length of each edge is not proportional to the number of monomers because of a technical issue."
+            title += "\nPlease note that the length of each edge is not proportional to the number of monomers in this image."
             plt.title(title)
             nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True) #, node_size=100, font_size=15)
             nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
@@ -259,7 +259,6 @@ class LFTS:
         # -------------- print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Statistical Segment Lengths:", params["segment_lengths"])
         print("Box Dimension: %d" % (cb.get_dim()))
         print("Nx:", cb.get_nx())
         print("Lx:", cb.get_lx())

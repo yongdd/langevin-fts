@@ -15,7 +15,7 @@ params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
     
     "nx":[256],         # Simulation grid numbers
-    "lx":[1.38],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[1.38],        # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                         # where "a_Ref" is reference statistical segment length
                         # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -27,7 +27,7 @@ params = {
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": [["A", "B", 9.5]],   # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 9.5},      # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain

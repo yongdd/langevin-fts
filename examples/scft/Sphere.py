@@ -14,7 +14,7 @@ f = 24/90       # A-fraction of major BCP chain, f
 
 params = {
     "nx":[48,48,48],            # Simulation grid numbers
-    "lx":[5.74,5.74,5.74],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[5.74,5.74,5.74],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -26,7 +26,7 @@ params = {
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": [["A", "B", 18.1]],   # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 18.1},     # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain

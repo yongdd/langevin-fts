@@ -28,7 +28,7 @@ params = {
         "A":eps,
         "B":1.0},
 
-    "chi_n": [["A", "B", 12]],   # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 12},       # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":0.8,  # volume fraction of polymer chain

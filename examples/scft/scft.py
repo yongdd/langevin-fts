@@ -1,5 +1,6 @@
 import os
-import string
+import time
+import re
 import numpy as np
 import sys
 import itertools
@@ -60,72 +61,71 @@ class SCFT:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
+        # Choose platform among [cuda, cpu-mkl]
+        avail_platforms = PlatformSelector.avail_platforms()
+        if "platform" in params:
+            platform = params["platform"]
+        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-mkl"
+        elif "cuda" in avail_platforms: # If cuda is available, use GPU
+            platform = "cuda"
+        else:
+            platform = avail_platforms[0]
+
+        # (C++ class) Create a factory for given platform and chain_model
+        if "reduce_gpu_memory_usage" in params and platform == "cuda":
+            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"])
+        else:
+            factory = PlatformSelector.create_factory(platform, False)
+        factory.display_info()
+
+        # (C++ class) Computation box
+        cb = factory.create_computation_box(params["nx"], params["lx"])
+
         # Flory-Huggins parameters, χN
         self.chi_n = {}
-        for pair_chi_n in params["chi_n"]:
-            assert(pair_chi_n[0] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[0]}' is not in 'segment_lengths'."
-            assert(pair_chi_n[1] in params["segment_lengths"]), \
-                f"Monomer type '{pair_chi_n[1]}' is not in 'segment_lengths'."
-            assert(len(set(pair_chi_n[0:2])) == 2), \
-                "Do not add self interaction parameter, " + str(pair_chi_n[0:3]) + "."
-            assert(not frozenset(pair_chi_n[0:2]) in self.chi_n), \
-                f"There are duplicated χN ({pair_chi_n[0:2]}) parameters."
-            self.chi_n[frozenset(pair_chi_n[0:2])] = pair_chi_n[2]
+        for monomer_pair_str, chin_value in params["chi_n"].items():
+            monomer_pair = re.split(',| |_|/', monomer_pair_str)
+            assert(monomer_pair[0] in params["segment_lengths"]), \
+                f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'."
+            assert(monomer_pair[1] in params["segment_lengths"]), \
+                f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'."
+            assert(monomer_pair[0] != monomer_pair[1]), \
+                "Do not add self interaction parameter, " + monomer_pair_str + "."
+            monomer_pair.sort()
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
+            assert(not sorted_monomer_pair in self.chi_n), \
+                f"There are duplicated χN ({sorted_monomer_pair}) parameters."
+            self.chi_n[sorted_monomer_pair] = chin_value
 
         for monomer_pair in itertools.combinations(self.monomer_types, 2):
-            if not frozenset(list(monomer_pair)) in self.chi_n:
-                self.chi_n[frozenset(list(monomer_pair))] = 0.0
+            monomer_pair = list(monomer_pair)
+            monomer_pair.sort()
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
+            if not sorted_monomer_pair in self.chi_n:
+                self.chi_n[sorted_monomer_pair] = 0.0
 
-        # Exchange mapping matrix.
-        # See paper *J. Chem. Phys.* **2014**, 141, 174103
+        # Matrix for field residuals.
+        # See *J. Chem. Phys.* **2017**, 146, 244902
         S = len(self.monomer_types)
-        self.matrix_o = np.zeros((S-1,S-1))
-        self.matrix_a = np.zeros((S,S))
-        self.matrix_a_inv = np.zeros((S,S))
-        self.vector_s = np.zeros(S-1)
-
-        for i in range(S-1):
-            key = frozenset([self.monomer_types[i], self.monomer_types[S-1]])
-            self.vector_s[i] = self.chi_n[key]
-
         matrix_chi = np.zeros((S,S))
-        matrix_chin = np.zeros((S-1,S-1))
-
         for i in range(S):
             for j in range(i+1,S):
-                key = frozenset([self.monomer_types[i], self.monomer_types[j]])
+                key = self.monomer_types[i] + "," + self.monomer_types[j]
                 if key in self.chi_n:
                     matrix_chi[i,j] = self.chi_n[key]
                     matrix_chi[j,i] = self.chi_n[key]
         
-        for i in range(S-1):
-            for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
-
         self.matrix_chi = matrix_chi
-
+        matrix_chi_inv = np.linalg.inv(matrix_chi)
+        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
         # print(matrix_chi)
         # print(matrix_chin)
 
-        self.exchange_eigenvalues, self.matrix_o = np.linalg.eig(matrix_chin)
-
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        self.matrix_a[0:S-1,0:S-1] = self.matrix_o[0:S-1,0:S-1]
-        self.matrix_a[:,S-1] = 1
-        self.matrix_a_inv[0:S-1,0:S-1] = np.transpose(self.matrix_o[0:S-1,0:S-1])
-        for i in range(S-1):
-            self.matrix_a_inv[i,S-1] =  -np.sum(self.matrix_o[:,i])
-            self.matrix_a_inv[S-1,S-1] = 1
-
-        # Matrix for field residuals.
-        # See *J. Chem. Phys.* **2017**, 146, 244902
         # if phi_target is None:
         #     phi_target = np.ones(params["nx"])
         # self.phi_target = np.reshape(phi_target, (-1))
 
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
         # self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
         # print(self.matrix_p)
 
@@ -134,7 +134,25 @@ class SCFT:
         #     mask = np.ones(params["nx"])
         # self.mask = np.reshape(mask, (-1))
         # self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
-        
+
+        # Exchange mapping matrix.
+        # See paper *J. Chem. Phys.* **2014**, 141, 174103
+        # Compute exchange mapping for given chiN set
+        # Initialize following variables:
+        #     self.exchange_eigenvalues,
+        #     self.matrix_o,
+        #     self.matrix_a,
+        #     self.matrix_a_inv,
+        #
+        #     self.h_const,
+        #     self.h_coef_mu1,
+        #     self.h_coef_mu2,
+        #
+        #     self.h_const_deriv_chin,
+        #     self.h_coef_mu1_deriv_chin,
+        #     self.h_coef_mu2_deriv_chin,
+        self.initialize_exchange_mapping(self.chi_n)
+
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
             "There is no polymer chain."
@@ -148,10 +166,10 @@ class SCFT:
         for polymer_counter, polymer in enumerate(params["distinct_polymers"]):
             blocks_input = []
             alpha = 0.0             # total_relative_contour_length
-            is_linear_chain = not "v" in polymer["blocks"][0]
+            has_node_number = not "v" in polymer["blocks"][0]
             for block in polymer["blocks"]:
                 alpha += block["length"]
-                if is_linear_chain:
+                if has_node_number:
                     assert(not "v" in block), \
                         "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
                     assert(not "u" in block), \
@@ -208,7 +226,7 @@ class SCFT:
                 dict_color[type] = np.random.rand(3,)
         print("Monomer color: ", dict_color)
             
-        # Draw network structures
+        # Draw polymer chain architectures
         for idx, polymer in enumerate(params["distinct_polymers"]):
         
             # Make a graph
@@ -237,32 +255,11 @@ class SCFT:
             title += "\nColors of monomers: " + str(dict_color) + ","
             title += "\nColor of chain ends: 'yellow',"
             title += "\nColor of junctions: 'gray',"
-            title += "\nPlease note that the length of each edge is not proportional to the number of monomers because of a technical issue."
+            title += "\nPlease note that the length of each edge is not proportional to the number of monomers in this image."
             plt.title(title)
             nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True) #, node_size=100, font_size=15)
             nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
             plt.savefig("polymer_%01d.png" % (idx))
-
-        # Choose platform among [cuda, cpu-mkl]
-        avail_platforms = PlatformSelector.avail_platforms()
-        if "platform" in params:
-            platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
-        elif "cuda" in avail_platforms: # If cuda is available, use GPU
-            platform = "cuda"
-        else:
-            platform = avail_platforms[0]
-
-        # (c++ class) Create a factory for given platform and chain_model
-        if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"])
-        else:
-            factory = PlatformSelector.create_factory(platform, False)
-        factory.display_info()
-
-        # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"]) #, mask=mask)
 
         # (C++ class) Molecules list
         molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
@@ -283,8 +280,14 @@ class SCFT:
         # (C++ class) Solver using Pseudo-spectral method
         solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
 
+        # Scaling factor for stress when the fields and box size are simultaneously computed
+        if "scale_stress" in params:
+            self.scale_stress = params["scale_stress"]
+        else:
+            self.scale_stress = 1
+
         # Total number of variables to be adjusted to minimize the Hamiltonian
-        if params["box_is_altering"] : 
+        if params["box_is_altering"]:
             n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
         else :
             n_var = len(self.monomer_types)*np.prod(params["nx"])
@@ -320,7 +323,6 @@ class SCFT:
         # -------------- print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Statistical Segment Lengths:", params["segment_lengths"])
         print("Box Dimension: %d" % (cb.get_dim()))
         print("Nx:", cb.get_nx())
         print("Lx:", cb.get_lx())
@@ -334,8 +336,20 @@ class SCFT:
             print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
 
         print("χN: ")
-        for pair in self.chi_n:
-            print("\t%s, %s: %f" % (list(pair)[0], list(pair)[1], self.chi_n[pair]))
+        for key in self.chi_n:
+            print("\t%s: %f" % (key, self.chi_n[key]))
+
+        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
+        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
+        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
+        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
+        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+
+        print("In Hamiltonian per chain:")
+        # print("\treference energy: ", self.h_const)
+        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
+        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
 
         for p in range(molecules.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
@@ -343,16 +357,6 @@ class SCFT:
                 (molecules.get_polymer(p).get_volume_fraction(),
                  molecules.get_polymer(p).get_alpha(),
                  molecules.get_polymer(p).get_n_segment_total()))
-
-        print("------- Matrices and Vectors for chin parameters -------")
-        print("X matrix for chin:\n\t", str(self.matrix_chi).replace("\n", "\n\t"))
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Vector chi_iS:\n\t", str(self.vector_s).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         propagator_analyzer.display_blocks()
         propagator_analyzer.display_propagators()
@@ -370,6 +374,135 @@ class SCFT:
         self.molecules = molecules
         self.propagator_analyzer = propagator_analyzer
         self.solver = solver
+
+    def compute_eigen_system(self, chi_n):
+        S = len(self.monomer_types)
+        matrix_chi = np.zeros((S,S))
+        matrix_chin = np.zeros((S-1,S-1))
+        for i in range(S):
+            for j in range(i+1,S):
+                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
+                monomer_pair.sort()
+                key = monomer_pair[0] + "," + monomer_pair[1]
+                if key in chi_n:
+                    matrix_chi[i,j] = chi_n[key]
+                    matrix_chi[j,i] = chi_n[key]
+        
+        for i in range(S-1):
+            for j in range(S-1):
+                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
+        
+        return np.linalg.eig(matrix_chin)
+
+    def compute_h_coef(self, chi_n, eigenvalues, matrix_o):
+        S = len(self.monomer_types)
+
+        # Compute vector X_iS
+        vector_s = np.zeros(S-1)
+        for i in range(S-1):
+            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
+            monomer_pair.sort()
+            key = monomer_pair[0] + "," + monomer_pair[1]            
+            vector_s[i] = chi_n[key]
+
+        # Compute reference part of Hamiltonian
+        h_const = 0.0
+        for i in range(S-1):
+            h_const -= 0.5*(np.sum(matrix_o[:,i]*vector_s[:]))**2/eigenvalues[i]
+
+        # Compute coefficients of integral of μ(r)/V
+        h_coef_mu1 = np.zeros((S-1,S-1))
+        for i in range(S-1):
+            for j in range(S-1):
+                h_coef_mu1[i][j] = matrix_o[j,i]*vector_s[j]/eigenvalues[i]
+
+        # Compute coefficients of integral of μ(r)^2/V
+        h_coef_mu2 = np.zeros(S-1)
+        for i in range(S-1):
+            h_coef_mu2[i] = -0.5/eigenvalues[i]
+
+        return h_const, h_coef_mu1, h_coef_mu2
+
+    def initialize_exchange_mapping(self, chi_n):
+        S = len(self.monomer_types)
+
+        # Compute eigenvalues and orthogonal matrix
+        eigenvalues, matrix_o = self.compute_eigen_system(chi_n)
+
+        # Compute coefficients for Hamiltonian computation
+        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, matrix_o)
+
+        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
+        matrix_a = np.zeros((S,S))
+        matrix_a_inv = np.zeros((S,S))
+        matrix_a[0:S-1,0:S-1] = matrix_o[0:S-1,0:S-1]
+        matrix_a[:,S-1] = 1
+        matrix_a_inv[0:S-1,0:S-1] = np.transpose(matrix_o[0:S-1,0:S-1])
+        for i in range(S-1):
+            matrix_a_inv[i,S-1] =  -np.sum(matrix_o[:,i])
+            matrix_a_inv[S-1,S-1] = 1
+
+        self.h_const = h_const
+        self.h_coef_mu1 = h_coef_mu1
+        self.h_coef_mu2 = h_coef_mu2
+
+        self.exchange_eigenvalues = eigenvalues
+        self.matrix_o = matrix_o
+        self.matrix_a = matrix_a
+        self.matrix_a_inv = matrix_a_inv
+        
+    def compute_concentrations(self, w):
+        S = len(self.monomer_types)
+        elapsed_time = {}
+
+        # Make a dictionary for input fields 
+        w_input = {}
+        for i in range(S):
+            w_input[self.monomer_types[i]] = w[i]
+        for random_polymer_name, random_fraction in self.random_fraction.items():
+            w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+            for monomer_type, fraction in random_fraction.items():
+                w_input[random_polymer_name] += w_input[monomer_type]*fraction
+
+        # For the given fields, compute the polymer statistics
+        time_p_start = time.time()
+        self.solver.compute_statistics(w_input)
+        elapsed_time["pseudo"] = time.time() - time_p_start
+
+        # Compute total concentration for each monomer type
+        phi = {}
+        time_phi_start = time.time()
+        for monomer_type in self.monomer_types:
+            phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
+        elapsed_time["phi"] = time.time() - time_phi_start
+
+        # Add random copolymer concentration to each monomer type
+        for random_polymer_name, random_fraction in self.random_fraction.items():
+            phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
+            for monomer_type, fraction in random_fraction.items():
+                phi[monomer_type] += phi[random_polymer_name]*fraction
+        
+        return phi, elapsed_time
+
+    # Compute total Hamiltonian
+    def compute_hamiltonian(self, w_exchange, total_partitions):
+        S = len(self.monomer_types)
+
+        # Compute Hamiltonian part that is related to fields
+        hamiltonian_fields = -np.mean(w_exchange[S-1])
+        for i in range(S-1):
+            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_exchange[i]**2)
+            for j in range(S-1):
+                hamiltonian_fields += self.h_coef_mu1[i,j]*np.mean(w_exchange[i])
+        
+        # Compute Hamiltonian part that total partition functions
+        hamiltonian_partition = 0.0
+        for p in range(self.molecules.get_n_polymer_types()):
+            hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
+                            self.molecules.get_polymer(p).get_alpha() * \
+                            np.log(total_partitions[p])
+
+        return hamiltonian_partition + hamiltonian_fields # + self.h_const
 
     def save_results(self, path):
         # Make a dictionary for chi_n
@@ -440,28 +573,8 @@ class SCFT:
             
         for scft_iter in range(1, self.max_iter+1):
 
-            # Make a dictionary for input fields 
-            w_input = {}
-            for i in range(S):
-                w_input[self.monomer_types[i]] = w[i,:]
-            for random_polymer_name, random_fraction in self.random_fraction.items():
-                w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
-                for monomer_type, fraction in random_fraction.items():
-                    w_input[random_polymer_name] += w_input[monomer_type]*fraction
-
-            # For the given fields find the polymer statistics
-            self.solver.compute_statistics(w_input, q_init=q_init)
-
             # Compute total concentration for each monomer type
-            phi = {}
-            for monomer_type in self.monomer_types:
-                phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
-
-            # Add random copolymer concentration to each monomer type
-            for random_polymer_name, random_fraction in self.random_fraction.items():
-                phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
-                for monomer_type, fraction in random_fraction.items():
-                    phi[monomer_type] += phi[random_polymer_name]*fraction
+            phi, _ = self.compute_concentrations(w)
 
             # # Scaling phi
             # for monomer_type in self.monomer_types:
@@ -472,17 +585,8 @@ class SCFT:
 
             # Calculate the total energy
             # energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
-            energy_total = - self.cb.integral(w_exchange[S-1])/self.cb.get_volume()
-            for i in range(S-1):
-                energy_total -= 0.5/self.exchange_eigenvalues[i]*self.cb.inner_product(w_exchange[i],w_exchange[i])/self.cb.get_volume()
-            for i in range(S-1):
-                for j in range(S-1):
-                    energy_total += 1.0/self.exchange_eigenvalues[i]*self.matrix_o[j,i]*self.vector_s[j]*self.cb.integral(w_exchange[i])/self.cb.get_volume()
-
-            for p in range(self.molecules.get_n_polymer_types()):
-                energy_total -= self.molecules.get_polymer(p).get_volume_fraction()/ \
-                                self.molecules.get_polymer(p).get_alpha() * \
-                                np.log(self.solver.get_total_partition(p))
+            total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
+            energy_total = self.compute_hamiltonian(w_exchange, total_partitions)
 
             # Calculate difference between current total density and target density
             phi_total = np.zeros(self.cb.get_n_grid())
@@ -540,7 +644,7 @@ class SCFT:
             if (self.box_is_altering):
                 dlx = -stress_array
                 am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_n_grid()), self.cb.get_lx()))
-                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), dlx))
+                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), self.scale_stress*dlx))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
