@@ -14,8 +14,8 @@ class PropagatorCode
 {
 private:
     // This method is invoked by generate_code()
-    static std::pair<std::string, int> generate_edge_code(
-        std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
+    static std::string generate_edge_code(
+        std::map<std::pair<int, int>, std::string>& memory,
         std::vector<Block>& blocks,
         std::map<int, std::vector<int>>& adjacent_nodes,
         std::map<std::pair<int, int>, int>& edge_to_block_index,
@@ -30,7 +30,8 @@ public:
     // This method is implemented using memoization (top-down dynamic programming approach).
     static std::vector<std::tuple<int, int, std::string>> generate_codes(Polymer& pc, std::map<int, std::string>& chain_end_to_q_init);
 
-    // Get information from key
+    // Get information from key or code
+    static std::string get_key_from_code(std::string code);
     static std::vector<std::tuple<std::string, int, int>> get_deps_from_key(std::string key);
     static std::string remove_monomer_type_from_key(std::string key);
     static std::string get_monomer_type_from_key(std::string key);

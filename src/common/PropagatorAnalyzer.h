@@ -1,5 +1,5 @@
 /*----------------------------------------------------------
-* This class defines analyzer of propagators to optimize the propagator computation
+* This class defines analyzer of propagator to optimize the propagator computation
 *-----------------------------------------------------------*/
 
 #ifndef PROPAGATOR_ANALYZER_H_
