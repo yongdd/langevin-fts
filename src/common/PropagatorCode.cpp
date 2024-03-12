@@ -20,10 +20,10 @@ std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes(
     Polymer& pc, std::map<int, std::string>& chain_end_to_q_init)
 {
     std::vector<std::tuple<int, int, std::string>> propagator_codes;    
-    std::pair<std::string, int> propagator_code; // code, n_segment
+    std::string propagator_code; // code, n_segment
 
     // Generate propagator code for each block and each direction
-    std::map<std::pair<int, int>, std::pair<std::string, int>> memory;
+    std::map<std::pair<int, int>, std::string> memory;
     for (size_t b=0; b<pc.get_blocks().size(); b++)
     {
         int v = pc.get_blocks()[b].v;
@@ -36,7 +36,7 @@ std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes(
             chain_end_to_q_init,
             v, u);
         
-        propagator_codes.push_back(std::make_tuple(v, u, propagator_code.first));
+        propagator_codes.push_back(std::make_tuple(v, u, propagator_code));
 
         propagator_code = PropagatorCode::generate_edge_code(
             memory,
@@ -46,27 +46,27 @@ std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes(
             chain_end_to_q_init,
             u, v);
             
-        propagator_codes.push_back(std::make_tuple(u, v, propagator_code.first));
+        propagator_codes.push_back(std::make_tuple(u, v, propagator_code));
     }
     return propagator_codes;
 }
 
-std::pair<std::string, int> PropagatorCode::generate_edge_code(
-    std::map<std::pair<int, int>, std::pair<std::string, int>>& memory,
+std::string PropagatorCode::generate_edge_code(
+    std::map<std::pair<int, int>, std::string>& memory,
     std::vector<Block>& blocks,
     std::map<int, std::vector<int>>& adjacent_nodes,
     std::map<std::pair<int, int>, int>& edge_to_block_index,
     std::map<int, std::string>& chain_end_to_q_init,
     int in_node, int out_node)
 {
-    std::vector<std::string> edge_text;
-    std::pair<std::string,int> text_and_segments;
+    std::vector<std::string> queue_sub_codes;
+    std::string sub_code;
 
     // If it is already computed
     if (memory.find(std::make_pair(in_node, out_node)) != memory.end())
         return memory[std::make_pair(in_node, out_node)];
 
-    // Explore child blocks
+    // Explore neighbor nodes
     //std::cout << "[" + std::to_string(in_node) + ", " +  std::to_string(out_node) + "]:";
     for(size_t i=0; i<adjacent_nodes[in_node].size(); i++)
     {
@@ -75,49 +75,60 @@ std::pair<std::string, int> PropagatorCode::generate_edge_code(
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             auto v_u_pair = std::make_pair(adjacent_nodes[in_node][i], in_node);
             if (memory.find(v_u_pair) != memory.end())
-                text_and_segments = memory[v_u_pair];
+                sub_code = memory[v_u_pair];
             else
             {
-                text_and_segments = generate_edge_code(
+                sub_code = generate_edge_code(
                     memory, blocks, adjacent_nodes,
                     edge_to_block_index, chain_end_to_q_init,
                     adjacent_nodes[in_node][i], in_node);
-                memory[v_u_pair] = text_and_segments;
+                memory[v_u_pair] = sub_code;
             }
-            edge_text.push_back(text_and_segments.first + std::to_string(text_and_segments.second));
-            //std::cout << text_and_segments.first << " " << text_and_segments.second << std::endl;
+            queue_sub_codes.push_back(sub_code);
         }
     }
 
-    // Merge code of child blocks
-    std::string text;
-    if(edge_text.size() == 0)
+    // Merge code of child propagators
+    std::string code = "";
+    if(queue_sub_codes.size() != 0)
     {
-        // If in_node does not exist in chain_end_to_q_init
-        if (chain_end_to_q_init.find(in_node) == chain_end_to_q_init.end())
-            text = "";
-
-        else
-        {
-            text = "{" + chain_end_to_q_init[in_node] + "}";
-        }
+        std::sort(queue_sub_codes.begin(), queue_sub_codes.end());
+        code += "(";
+        for(size_t i=0; i<queue_sub_codes.size(); i++)
+            code += queue_sub_codes[i];
+        code += ")";
     }
-    else
+    // If in_node exists in chain_end_to_q_init
+    else if (chain_end_to_q_init.find(in_node) != chain_end_to_q_init.end())
     {
-        std::sort(edge_text.begin(), edge_text.end());
-        text += "(";
-        for(size_t i=0; i<edge_text.size(); i++)
-            text += edge_text[i];
-        text += ")";
+        code = "{" + chain_end_to_q_init[in_node] + "}";
     }
 
-    // Add monomer_type at the end of text code
-    text += blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].monomer_type;
-    auto text_and_segments_total = std::make_pair(text, blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].n_segment);
-    memory[std::make_pair(in_node, out_node)] = text_and_segments_total;
+    // Add monomer_type at the end of code
+    code += blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].monomer_type;
+    code += std::to_string(blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].n_segment);
 
-    return text_and_segments_total;
+    // Save the result in memory
+    memory[std::make_pair(in_node, out_node)] = code;
+
+    return code;
 }
+
+std::string PropagatorCode::get_key_from_code(std::string code)
+{
+    int pos;
+    for(size_t i=code.size()-1; i>=0;i--)
+    {
+        if(isalpha(code[i]))
+        {
+            pos = i+1;
+            break;
+        }
+    }
+    //std::cout<<"code.substr(0, pos); " << code << "  " << pos << " " << code.substr(0, pos) << std::endl;
+    return code.substr(0, pos);
+}
+
 std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key(std::string key)
 {
     // sub_key, sub_n_segment, sub_n_repeated

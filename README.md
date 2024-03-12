@@ -23,9 +23,9 @@ This repository contains a library for polymer field theory simulations as well 
   * Can set impenetrable region using a mask (**beta**)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
+  * Parallel computations of propagators with multi-core CPUs (up to 4), or multi CUDA streams (up to 2) to maximize GPU usage
+  * Support double GPUs
   * GPU memory saving option
-  * Parallel computations of propagators with multi-core CPUs, or two GPUs
-  * Maximize GPU usage using double computation streams
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
 Using the above python shared library with the pseudo-spectral method, SCFT and L-FTS are implemented. They support following features:
@@ -85,6 +85,7 @@ conda env remove -n lfts
 ```
 # User Guide
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
++ Even CUDA version use 2 CPUs. Each of them is responsible for each computation CUDA stream. Allocate 2 CPUs when submitting a job.
 + The SCFT and L-FTS are implemented on the python shared library in `examples/scft` and `examples/fts`, respectively.
   + Set 'reduce_gpu_memory_usage=True' (default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
   + To use two GPUs, set `os.environ["LFTS_NUM_GPUS"]="2"`. This is useful if your GPUs do not support high performance in double precision, but only reduces simulation time by 5-40%. Simulation time may increase depending on the number of grids, number of segments, and GPU environment. Check the performance first. As an example, see 'examples/scft/A15.py'.

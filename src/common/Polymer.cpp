@@ -38,9 +38,7 @@ Polymer::Polymer(
             throw_with_line_number("block_inputs[" + std::to_string(i) + "].monomer_type (\"" + block_inputs[i].monomer_type + "\") is not in bond_lengths.");
     }
 
-    // // Check chain_end_to_q_init
-    // If( chain_end_to_q_init.size() > 0)
-    //     throw_with_line_number("Currently, \'chain_end_to_q_init\' is not supported.");
+    // chain_end_to_q_init
     this->chain_end_to_q_init = chain_end_to_q_init;
 
     // Save variables
@@ -182,8 +180,8 @@ Polymer::Polymer(
     {
         int v = std::get<0>(propagator_codes[i]);
         int u = std::get<1>(propagator_codes[i]);
-        std::string propagator_code = std::get<2>(propagator_codes[i]);
-        this->set_propagator_key(propagator_code, v, u);
+        std::string propagator_key = PropagatorCode::get_key_from_code(std::get<2>(propagator_codes[i]));
+        this->set_propagator_key(propagator_key, v, u);
     }
 
 }
