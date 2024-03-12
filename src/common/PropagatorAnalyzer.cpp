@@ -504,7 +504,7 @@ void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
-    std::cout << "Polymer id, key1:\n\taggregated, n_segment (offset, compute), key2, {v, u} list" << std::endl;
+    std::cout << "Polymer id, left key:\n\taggregated, n_segment (offset, compute), right key, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");

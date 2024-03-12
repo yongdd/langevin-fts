@@ -29,7 +29,7 @@ params = {
         "A":np.sqrt(eps*eps/(eps*eps*f1 + (1-f1))), 
         "B":np.sqrt(    1.0/(eps*eps*f1 + (1-f1))), },
 
-    "chi_n": [["A", "B", 14]],   # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 14},       # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":0.7,  # volume fraction of polymer chain

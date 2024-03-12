@@ -25,7 +25,7 @@ aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
 # Grafting points
-grafting_point = {0:"G"}  # vertex 0 will be initialized with q_init["G"]
+grafting_point = {0:"G"}  # node 0 will be initialized with q_init["G"]
 
 # Select platform ("cuda" or "cpu-mkl")
 factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
