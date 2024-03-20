@@ -137,40 +137,40 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     int sub_n_segment;
     int sub_n_repeated;
 
-    int pos_start = 1;
-    int brace_depth = 0;
-    int state = 0;
+    int pos_start = 1; // start from 1 to remove open parenthesis
+    std::stack<char> stack_brace;
+    int state = 1;
 
     for(size_t i=0; i<key.size();i++)
     {
-        if(brace_depth == 1)
+        if(stack_brace.size() == 1)
         {
             // It was reading key and have found a digit
-            if(state==0 && isdigit(key[i]))
+            if(state==1 && isdigit(key[i]))
             {
                 // Remove a comma
                 if (key[pos_start] == ',')
                     pos_start += 1;
 
                 sub_key = key.substr(pos_start, i-pos_start);
-                // printf("%5d,%5d=", pos_start, i);
-                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
+                // printf("%5d,%5d\n", pos_start, i);
+                // std::cout << key << "," << key.substr(pos_start, i-pos_start) << std::endl;
 
-                state = 1;
+                state = 2;
                 pos_start = i;
             }
             // It was reading n_segment and have found a ':'
-            else if(state==1 && key[i]==':')
+            else if(state==2 && key[i]==':')
             {
                 sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
                 // printf("%5d,%5d=", pos_start, i);
                 // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
 
-                state = 2;
+                state = 3;
                 pos_start = i+1;
             }
             // It was reading n_segment and have found a non-digit
-            else if(state==1 && !isdigit(key[i]))
+            else if(state==2 && !isdigit(key[i]))
             {
                 sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
                 // printf("%5d,%5d=", pos_start, i);
@@ -178,25 +178,37 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
 
                 sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
 
-                state = 0;
+                state = 1;
                 pos_start = i;
             }
             // It was reading n_repeated and have found a non-digit
-            else if(state==2 && !isdigit(key[i]))
+            else if(state==3 && !isdigit(key[i]))
             {
                 sub_n_repeated = std::stoi(key.substr(pos_start, i-pos_start));
                 // printf("%5d,%5d=", pos_start, i);
                 // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
                 
                 sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
-                state = 0;
+                state = 1;
                 pos_start = i;
             }
         }
         if(key[i] == '(' || key[i] == '[')
-            brace_depth++;
+        {
+            stack_brace.push(key[i]);
+        }
         else if(key[i] == ')' || key[i] == ']')
-            brace_depth--;
+        {
+            if((stack_brace.top() == '(' && key[i] == ')') ||
+               (stack_brace.top() == '[' && key[i] == ']'))
+            {
+                stack_brace.pop();
+            }
+            else
+            {
+                throw_with_line_number("Failed to match parentheses or braces.");
+            }
+        }
     }
     return sub_deps;
 }
