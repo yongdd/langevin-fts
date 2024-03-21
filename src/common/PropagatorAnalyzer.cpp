@@ -296,21 +296,12 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     return aggregate_propagator_common(not_aggregated_yet_second_map, 1);
 }
 
-std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment)
+std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> set_I, int minimum_n_segment)
 {
-    int current_n_segment;
-    int n_segment_compute;
-    int n_segment_offset;
-
-    std::string aggregated_propagator_code;
-    std::vector<std::tuple<int ,int>> v_u_total;
-
-    std::map<std::string, ComputationBlock> aggregated_second_map;
-    // Tuple <n_segment_compute, key, n_segment_offset, v_u_list>
-    std::vector<std::tuple<int, std::string, int, std::vector<std::tuple<int ,int>>>> same_aggregation_level_list;
+    std::map<std::string, ComputationBlock> set_final;;
 
     // std::cout << "---------map------------" << std::endl;
-    // for(const auto& item : remaining_keys)
+    // for(const auto& item : set_I)
     // {
     //     std::cout << item.second.n_segment_compute << ", " <<
     //                  item.first << ", " <<
@@ -325,134 +316,104 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     // }
     // std::cout << "-----------------------" << std::endl;
 
-    // int count = 0;
-    current_n_segment = 0;
-    for(const auto& item: remaining_keys)
-        current_n_segment = std::max(current_n_segment, item.second.n_segment_compute);
-    while(!remaining_keys.empty())
-    {
-        // Count ++;
-        // If (count == 10)
-        //     break;
-        // std::cout << "------remaining_keys------" << std::endl;
-        // for(const auto& item: remaining_keys)
-        // {
-        //     std::cout << item.second.n_segment_compute << ", "  
-        //               << item.first << ", " 
-        //               << item.second.n_segment_offset << ", " << std::endl;
-        // }
-        // std::cout << "-------------" << std::endl;
+    // Copy 
+    set_final = set_I;
 
-        // Find keys that have the same aggregation level from remaining_keys
-        std::set<int, std::greater<int>> n_segment_set; // for finding the largest n_segment that is not in same_aggregation_level_list.
-        for (auto it = remaining_keys.cbegin(); it != remaining_keys.cend(); )
-        {
-            bool erased = false;
-            if (it->second.n_segment_compute <= 1)
-            {
-                aggregated_second_map[it->first] = it->second;
-                remaining_keys.erase(it++);
-                erased = true;
-            }
-
-            if (!erased)
-            {
-                if (current_n_segment <= it->second.n_segment_compute)
-                    same_aggregation_level_list.push_back(std::make_tuple(
-                        it->second.n_segment_compute,
-                        it->first,
-                        it->second.n_segment_offset,
-                        it->second.v_u));
-                else
-                    n_segment_set.insert(it->second.n_segment_compute);
-                ++it;
-            }
-        }
-        // If it empty, decrease current_n_segment.
-        if (same_aggregation_level_list.empty())
-            current_n_segment = *std::next(n_segment_set.begin(), 0);
-        else
-        {
-            // std::cout << "------same_aggregation_level_list------" << std::endl;
-            // for(size_t i=0; i<same_aggregation_level_list.size(); i++)
-            //     std::cout << std::get<0>(same_aggregation_level_list[i]) << ", " << std::get<1>(same_aggregation_level_list[i]) << std::endl;
-            // std::cout << "------------------------------------" << std::endl;
-
-            v_u_total.clear();
-            // If there is only one element
-            if (same_aggregation_level_list.size() == 1)
-            {
-                //  No the second largest element
-                if (n_segment_set.size() == 0)
-                {
-                    // Add to map
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].monomer_type = PropagatorCode::get_monomer_type_from_key(std::get<1>(same_aggregation_level_list[0]));
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_compute = std::get<0>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].n_segment_offset  = std::get<2>(same_aggregation_level_list[0]);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[0])].v_u                 = std::get<3>(same_aggregation_level_list[0]);
-
-                    // Erase element
-                    remaining_keys.erase(std::get<1>(same_aggregation_level_list[0]));
-                }
-                // Lower 'current_n_segment' to the next level and repeat
-                else
-                    current_n_segment = *std::next(n_segment_set.begin(), 0);
-            }
-            // Superposition
-            else
-            {
-                // Sort same_aggregation_level_list with height in descending order
-                std::sort(same_aggregation_level_list.begin(), same_aggregation_level_list.end(),
-                    [](auto const &t1, auto const &t2)
-                        {
-                            return PropagatorCode::get_height_from_key(std::get<1>(t1)) > PropagatorCode::get_height_from_key(std::get<1>(t2));
-                        }
-                );
-
-                // Add one by one
-                std::string dep_key;
-                std::vector<std::tuple<int ,int>> dep_v_u ;
-                
-                for(size_t i=0; i<same_aggregation_level_list.size(); i++)
-                {
-                    n_segment_compute = std::get<0>(same_aggregation_level_list[i]) - current_n_segment + minimum_n_segment;
-
-                    dep_key = std::get<1>(same_aggregation_level_list[i]);
-                    n_segment_offset = std::get<2>(same_aggregation_level_list[i]);
-                    dep_v_u = std::get<3>(same_aggregation_level_list[i]);
-
-                    v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
-                    if (i==0)
-                        aggregated_propagator_code = "[" + dep_key + std::to_string(n_segment_compute);
-                    else
-                        aggregated_propagator_code += "," + dep_key + std::to_string(n_segment_compute);
-
-                    if (dep_key.find('[') == std::string::npos)
-                        aggregated_propagator_code += ":" + std::to_string(dep_v_u.size());
-
-                    // Add to map
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_compute = n_segment_compute;
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].n_segment_offset  = n_segment_offset;
-                    aggregated_second_map[std::get<1>(same_aggregation_level_list[i])].v_u                 = dep_v_u;
-                }
-                aggregated_propagator_code += "]" + PropagatorCode::get_monomer_type_from_key(dep_key);
-                n_segment_compute = current_n_segment - minimum_n_segment;
-
-                // Add to remaining_keys
-                remaining_keys[aggregated_propagator_code].monomer_type = PropagatorCode::get_monomer_type_from_key(aggregated_propagator_code);
-                remaining_keys[aggregated_propagator_code].n_segment_compute = n_segment_compute;
-                remaining_keys[aggregated_propagator_code].n_segment_offset  = n_segment_compute;
-                remaining_keys[aggregated_propagator_code].v_u                 = v_u_total;
-
-                // Erase elements
-                for(size_t i=0; i<same_aggregation_level_list.size(); i++)
-                    remaining_keys.erase(std::get<1>(same_aggregation_level_list[i]));
-            }
-            same_aggregation_level_list.clear();
-        }
+    // Minimum 'n_segment_largest' is 2 because of 1/3 Simpson rule and discrete chain
+    for(const auto& item: set_final)
+    {    
+        if (item.second.n_segment_compute <= 1)
+            set_I.erase(item.first);
     }
-    return aggregated_second_map;
+
+    while(set_I.size() > 1)
+    {
+        // Make a list of 'n_segment_compute'
+        std::vector<int> vector_n_segment_compute;
+        for(const auto& item: set_I)
+            vector_n_segment_compute.push_back(item.second.n_segment_compute);
+
+        // Sort the list in ascending order
+        std::sort(vector_n_segment_compute.rbegin(), vector_n_segment_compute.rend());
+
+        // Find the 'n_segment_largest'
+        int n_segment_largest = vector_n_segment_compute[1]; // The second largest element.
+
+        // Add elements into set_S
+        std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
+        for(const auto& item: set_I)
+        {
+            if (item.second.n_segment_compute >= n_segment_largest)
+                set_S[item.first] = item.second;
+        }
+
+        // Update 'n_segment_compute'
+        for(const auto& item: set_S)
+            set_final[item.first].n_segment_compute = set_final[item.first].n_segment_compute - n_segment_largest + minimum_n_segment;
+        
+        // New 'n_segment_compute' and 'n_segment_offset'
+        int n_segment_compute = n_segment_largest - minimum_n_segment;
+        int n_segment_offset  = n_segment_largest - minimum_n_segment;
+           
+        // New 'v_u' and propagator key
+        std::vector<std::tuple<int ,int>> v_u_total;
+        std::string propagator_code = "[";
+        bool is_first_sub_propagator = true;
+        std::string dep_key;
+        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        {
+            dep_key = it->first;
+            std::vector<std::tuple<int ,int>> dep_v_u = set_final[dep_key].v_u;
+
+            // Update propagator key
+            if(!is_first_sub_propagator)
+                propagator_code += ",";
+            else
+                is_first_sub_propagator = false;
+            propagator_code += dep_key + std::to_string(set_final[dep_key].n_segment_compute);
+
+            // The number of repeats
+            if (dep_key.find('[') == std::string::npos &&
+                dep_v_u.size() > 1)
+                propagator_code += ":" + std::to_string(dep_v_u.size());
+
+            // Compute the union of v_u; 
+            v_u_total.insert(v_u_total.end(), dep_v_u.begin(), dep_v_u.end());
+        }
+        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
+        propagator_code += "]" + monomer_type;
+
+        // Add new aggregated key to set_final
+        set_final[propagator_code].monomer_type = monomer_type;
+        set_final[propagator_code].n_segment_compute = n_segment_compute;
+        set_final[propagator_code].n_segment_offset = n_segment_offset;
+        set_final[propagator_code].v_u = v_u_total;
+
+        // Add new aggregated key to set_I
+        set_I[propagator_code] = set_final[propagator_code];
+
+        // set_I = set_I - set_S
+        for(const auto& item: set_S)
+            set_I.erase(item.first);
+    }
+
+    // std::cout << "---------map (final) -----------" << std::endl;
+    // for(const auto& item : set_final)
+    // {
+    //     std::cout << item.second.n_segment_compute << ", " <<
+    //                  item.first << ", " <<
+    //                  item.second.n_segment_offset << ", ";
+    //     for(const auto& v_u : item.second.v_u)
+    //     {
+    //         std::cout << "("
+    //         + std::to_string(std::get<0>(v_u)) + ","
+    //         + std::to_string(std::get<1>(v_u)) + ")" + ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << "-----------------------" << std::endl;
+
+    return set_final;
 }
 bool PropagatorAnalyzer::is_aggregated() const
 {
