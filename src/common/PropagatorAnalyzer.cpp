@@ -108,20 +108,20 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
 
                 // std::cout << "dep_key: " << dep_key << std::endl;
                 // For each v_u
-                for(auto& v_u : item.second.v_u)
+                for(auto& old_v_u : item.second.v_u)
                 {
-                    int old_v = std::get<0>(v_u);
-                    auto& v_adj_nodes = pc.get_adjacent_nodes()[old_v];
-                    int old_u = std::get<1>(v_u);
+                    // (old_u) -----  (old_v, u) ----- (v) 
+                    int old_v = std::get<0>(old_v_u);
+                    int old_u = std::get<1>(old_v_u);
+                    auto& vec_new_v = pc.get_adjacent_nodes()[old_v];
+
+                    // Remove 'old_u' from 'vec_new_v'
+                    vec_new_v.erase(std::remove(vec_new_v.begin(), vec_new_v.end(), old_u), vec_new_v.end());
+
                     // For each v_adj_node
-                    for(auto& adj_node : v_adj_nodes)
+                    for(auto& v : vec_new_v)
                     {
-                        if (adj_node == old_u)
-                        {
-                            continue;
-                        }
-                        // std::cout << "(v_u): " << adj_node <<  ", " << old_v << std::endl;
-                        int v = adj_node;
+                        // std::cout << "(old_v_u): " << v <<  ", " << old_v << std::endl;
                         int u = old_v;
 
                         std::string dep_v = pc.get_propagator_key(v, u);
@@ -133,9 +133,9 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
                             + std::to_string(n_segment_compute);
                         std::vector<std::string> sub_keys;
 
-                        for(auto& v_adj_node_dep : v_adj_nodes)
+                        for(auto& v_adj_node_dep : vec_new_v)
                         {
-                            if (v_adj_node_dep != v && v_adj_node_dep != old_u)
+                            if (v_adj_node_dep != v)
                                 sub_keys.push_back(pc.get_block(v_adj_node_dep,u).monomer_type + std::to_string(pc.get_block(v_adj_node_dep,u).n_segment));
                         }
                         std::sort(sub_keys.begin(),sub_keys.end());
@@ -146,7 +146,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
                         // Remove 'v_u' from 'computation_blocks_new_polymer'
                         computation_blocks_new_polymer[dep_v].erase(v_u_to_right_key[std::make_tuple(v,u)]);
 
-                        // Add the new key
+                        // Add new key
                         if (computation_blocks_new_polymer[dep_v].find(new_u_key) == computation_blocks_new_polymer[dep_v].end())
                         {
                             computation_blocks_new_polymer[dep_v][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
