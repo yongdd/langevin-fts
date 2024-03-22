@@ -54,9 +54,9 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             this->mask = new double[n_grid];
             for(int i=0; i<n_grid; i++)
             {
-                if(abs(mask[i]) < 1e-7)
+                if(std::abs(mask[i]) < 1e-7)
                     this->mask[i] = 0.0;
-                else if(abs(mask[i]-1.0) < 1e-7)
+                else if(std::abs(mask[i]-1.0) < 1e-7)
                     this->mask[i] = 1.0;
                 else
                     throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
@@ -88,7 +88,7 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             accessible_volume += dv[i];
 
         // Set boundary conditions
-        if(2*DIM != bc.size() && 0 != bc.size())
+        if((unsigned int) 2*DIM != bc.size() && 0 != bc.size())
         {
             throw_with_line_number(
                 "We expect 0 or " + std::to_string(2*DIM) + " boundary conditions, but we get " + std::to_string(bc.size()) +

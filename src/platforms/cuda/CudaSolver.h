@@ -22,7 +22,7 @@ public:
     std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];  // Boltzmann factor for the half segment
 
     // CudaSolver(ComputationBox *cb, Molecules *molecules);
-    ~CudaSolver() {};
+    virtual ~CudaSolver() {};
     virtual void update_laplacian_operator() = 0;
     virtual void update_dw(std::string device, std::map<std::string, const double*> d_w_input) = 0;
 

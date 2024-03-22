@@ -13,7 +13,6 @@ void FiniteDifference::get_laplacian_matrix(
 {
     try
     {
-        int itemp, jtemp, ktemp, idx;
         double xfactor[3] = {0.0};
 
         const int DIM = nx.size();

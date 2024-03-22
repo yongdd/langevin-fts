@@ -67,7 +67,10 @@ CpuComputationContinuous::CpuComputationContinuous(
             if (dep_u.find('[') == std::string::npos)
                 n_aggregated = 1;
             else
-                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
+            {
+                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+                               propagator_analyzer->get_computation_block(key).n_repeated;
+            }
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -330,10 +333,10 @@ void CpuComputationContinuous::compute_statistics(
             int p                = std::get<0>(segment_info);
             double *propagator_v = std::get<1>(segment_info);
             double *propagator_u = std::get<2>(segment_info);
-            int n_aggregated     = std::get<3>(segment_info);
+            int n_repeated       = std::get<3>(segment_info);
 
             single_polymer_partitions[p]= cb->inner_product(
-                propagator_v, propagator_u)/n_aggregated/cb->get_volume();
+                propagator_v, propagator_u)/n_repeated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -348,9 +351,9 @@ void CpuComputationContinuous::compute_statistics(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            int n_repeated;
             int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
             int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(n_segment_compute == 0)
@@ -359,12 +362,6 @@ void CpuComputationContinuous::compute_statistics(
                     block->second[i] = 0.0;
                 continue;
             }
-
-            // Contains no '['
-            if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
-            else
-                n_repeated = 1;
 
             // Check keys
             #ifndef NDEBUG
@@ -390,9 +387,8 @@ void CpuComputationContinuous::compute_statistics(
         }
 
         // Calculate partition functions and concentrations of solvents
-        for(size_t s=0; s<molecules->get_n_solvent_types(); s++)
+        for(int s=0; s<molecules->get_n_solvent_types(); s++)
         {
-            const double ds = molecules->get_ds();
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
             
@@ -611,17 +607,11 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
             const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
+            int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(N == 0)
                 continue;
-
-            // Contains no '['
-            int n_repeated;
-            if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
-            else
-                n_repeated = 1;
 
             double *q_1 = propagator[dep_v];    // dependency v
             double *q_2 = propagator[dep_u];    // dependency u
@@ -715,13 +705,17 @@ bool CpuComputationContinuous::check_total_partition()
         int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
         int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << std::endl;
-
         // Contains no '['
         if (dep_u.find('[') == std::string::npos)
+        // if (dep_u[0] != '[')
             n_aggregated = 1;
         else
-            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
+        {
+            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+                           propagator_analyzer->get_computation_block(key).n_repeated;
+        }
+
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_aggregated << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
 
         for(int n=0;n<=n_segment_compute;n++)
         {
@@ -747,7 +741,7 @@ bool CpuComputationContinuous::check_total_partition()
             if (total_partitions[p][n] < min_partition)
                 min_partition = total_partitions[p][n];
         }
-        double diff_partition = abs(max_partition - min_partition);
+        double diff_partition = std::abs(max_partition - min_partition);
 
         std::cout<< "\t" << p << ": " << max_partition << ", " << min_partition << ", " << diff_partition << std::endl;
         if (diff_partition > 1e-7)

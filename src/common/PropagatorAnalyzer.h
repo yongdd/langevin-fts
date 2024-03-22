@@ -30,6 +30,7 @@ struct ComputationBlock{
     // In this case, n_segment_compute, and n_segment_offset are 5, and 5, respectively.
     int n_segment_offset;
     int n_segment_compute;
+    int n_repeated;
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
 };
 
