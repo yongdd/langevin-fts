@@ -37,7 +37,7 @@ private:
     double* single_polymer_partitions;
 
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, n_aggregated)
+    // (polymer id, propagator forward, propagator backward, n_repeated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations

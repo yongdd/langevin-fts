@@ -141,7 +141,6 @@ void CpuSolverReal::advance_propagator_continuous(
         const int DIM = cb->get_dim();
 
         double *_exp_dw = exp_dw[monomer_type];
-        double *_exp_dw_half = exp_dw_half[monomer_type];
         double q_exp[M];
 
         // Evaluate exp(-w*ds/2) in real space
@@ -425,7 +424,6 @@ void CpuSolverReal::advance_propagator_1d(
 {
     try
     {
-        const int M = cb->get_n_grid();
         const std::vector<int> nx = cb->get_nx();
         double q_star[nx[0]];
 
@@ -466,7 +464,6 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
     try
     {
         const int DIM  = cb->get_dim();
-        const int M    = cb->get_n_grid();
         std::vector<double> stress(DIM); 
 
         throw_with_line_number("Currently, the real-space method does not support stress computation.");   

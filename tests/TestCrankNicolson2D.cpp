@@ -139,7 +139,6 @@ int main()
             std::cout<< std::endl << "Running Pseudo: " << n << ", " << solver_name_list[n] << std::endl;
             solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
 
-            Polymer& pc = molecules->get_polymer(0);
             solver->get_chain_propagator(q_next, 0, 1, 2, 1);
             if (n % repeat != 0)
             {

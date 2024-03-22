@@ -94,7 +94,10 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
             if (dep_u.find('[') == std::string::npos)
                 n_aggregated = 1;
             else
-                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
+            {
+                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+                               propagator_analyzer->get_computation_block(key).n_repeated;
+            }
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -553,10 +556,10 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
             int p                = std::get<0>(segment_info);
             double *propagator_v = std::get<1>(segment_info);
             double *propagator_u = std::get<2>(segment_info);
-            int n_aggregated     = std::get<3>(segment_info);
+            int n_repeated     = std::get<3>(segment_info);
 
             single_polymer_partitions[p]= cb->inner_product(
-                propagator_v, propagator_u)/n_aggregated/cb->get_volume();
+                propagator_v, propagator_u)/n_repeated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -567,9 +570,9 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            int n_repeated;
             int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
             int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(n_segment_compute == 0)
@@ -586,12 +589,6 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
             #endif
 
-            // Contains no '['
-            if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
-            else
-                n_repeated = 1;
-
             // Normalization constant
             Polymer& pc = molecules->get_polymer(p);
             double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p]*n_repeated;
@@ -606,7 +603,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 norm);
         }
         // Calculate partition functions and concentrations of solvents
-        for(size_t s=0; s<molecules->get_n_solvent_types(); s++)
+        for(int s=0; s<molecules->get_n_solvent_types(); s++)
         {
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(molecules->get_solvent(s));
@@ -869,17 +866,11 @@ std::vector<double> CudaComputationReduceMemoryContinuous::compute_stress()
             const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
             const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
+            int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(N == 0)
                 continue;
-
-            // Contains no '['
-            int n_repeated;
-            if (dep_u.find('[') == std::string::npos)
-                n_repeated = propagator_analyzer->get_computation_block(key).v_u.size();
-            else
-                n_repeated = 1;
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
             double** q_1 = propagator[dep_v];    // dependency v
@@ -1036,7 +1027,10 @@ bool CudaComputationReduceMemoryContinuous::check_total_partition()
         if (dep_u.find('[') == std::string::npos)
             n_aggregated = 1;
         else
-            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size();
+        {
+            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+                           propagator_analyzer->get_computation_block(key).n_repeated;
+        }
 
         for(int n=0;n<=n_segment_compute;n++)
         {
@@ -1062,7 +1056,7 @@ bool CudaComputationReduceMemoryContinuous::check_total_partition()
             if (total_partitions[p][n] < min_partition)
                 min_partition = total_partitions[p][n];
         }
-        double diff_partition = abs(max_partition - min_partition);
+        double diff_partition = std::abs(max_partition - min_partition);
 
         std::cout<< "\t" << p << ": " << max_partition << ", " << min_partition << ", " << diff_partition << std::endl;
         if (diff_partition > 1e-7)

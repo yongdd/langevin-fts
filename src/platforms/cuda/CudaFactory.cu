@@ -110,9 +110,9 @@ void CudaFactory::display_info()
 
     std::cout<< "========== CUDA Setting and Device Information ==========" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
-    std::cout<< "N_GPUS (selected gpus): " << N_GPUS << std::endl;
+    std::cout<< "N_GPUS (# of using GPUs): " << N_GPUS << std::endl;
 
-    std::cout<< "DeviceCount: " << devices_count << std::endl;
+    std::cout<< "DeviceCount (# of available GPUs): " << devices_count << std::endl;
     std::cout<< "Device " << device << ": \t\t\t\t" << prop.name << std::endl;
 
     std::cout<< "Compute capability version: \t\t" << prop.major << "." << prop.minor << std::endl;

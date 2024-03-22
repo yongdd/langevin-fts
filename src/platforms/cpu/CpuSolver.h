@@ -22,7 +22,7 @@ public:
     std::map<std::string, double*> exp_dw_half;       // Boltzmann factor for the half segment
 
     // CpuSolver(ComputationBox *cb, Molecules *molecules);
-    ~CpuSolver() {};
+    virtual ~CpuSolver() {};
     virtual void update_laplacian_operator() = 0;
     virtual void update_dw(std::map<std::string, const double*> w_input) = 0;
 

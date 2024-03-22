@@ -28,18 +28,12 @@ int main()
         std::streamsize default_precision = std::cout.precision();
 
         // Temp
-        int idx;
         double sum;
         double sum_total_partition;
 
         // -------------- initialize ------------
         // Platform type, [cuda, cpu-mkl]
-        
-        int max_scft_iter = 3;
-        double tolerance = 1e-9;
-
         double f = 0.2;
-        double chi_n = 15.0;
         std::vector<int> nx = {64,64};
         std::vector<double> lx = {6.0,5.0};
         std::vector<double> lx_backup = lx;
@@ -98,13 +92,8 @@ int main()
 
         //-------------- allocate array ------------
         double w      [2*M+nx.size()];
-        double w_out  [2*M+nx.size()];
-        double w_diff [2*M+nx.size()];
-        double xi     [M];
         double phi_a  [M];
         double phi_b  [M];
-        double w_plus [M];
-        double w_minus[M];
         double mask   [M];
 
         // Set a mask to set q(r,s) = 0

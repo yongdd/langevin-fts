@@ -59,7 +59,7 @@ private:
     // Total partition functions for each polymer
     double* single_polymer_partitions;
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, monomer_type, n_aggregated)
+    // (polymer id, propagator forward, propagator backward, monomer_type, n_repeated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
     // gpu memory space to store concentration, key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
