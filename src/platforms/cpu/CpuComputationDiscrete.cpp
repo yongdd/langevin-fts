@@ -69,25 +69,17 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             if (p != current_p)
                 continue;
 
-            int n_aggregated;
+            int n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+                               propagator_analyzer->get_computation_block(key).n_repeated;
             int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
-
-            // Contains no '['
-            if (dep_u.find('[') == std::string::npos)
-                n_aggregated = 1;
-            else
-            {
-                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
-                               propagator_analyzer->get_computation_block(key).n_repeated;
-            }
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 &propagator[dep_v][(n_segment_offset-1)*M],  // q
-                &propagator[dep_u][0],                                        // q_dagger
+                &propagator[dep_u][0],                       // q_dagger
                 monomer_type,       
-                n_aggregated                   // how many propagators are aggregated
+                n_aggregated                                 // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -342,11 +334,11 @@ void CpuComputationDiscrete::compute_statistics(
             double *propagator_v     = std::get<1>(segment_info);
             double *propagator_u     = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
-            int n_repeated           = std::get<4>(segment_info);
-            const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            int n_aggregated         = std::get<4>(segment_info);
+            const double *_exp_dw    = propagator_solver->exp_dw[monomer_type];
 
             single_polymer_partitions[p]= cb->inner_product_inverse_weight(
-                propagator_v, propagator_u, _exp_dw)/n_repeated/cb->get_volume();
+                propagator_v, propagator_u, _exp_dw)/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -754,30 +746,25 @@ bool CpuComputationDiscrete::check_total_partition()
         std::string dep_v    = std::get<1>(key);
         std::string dep_u    = std::get<2>(key);
 
-        int n_aggregated;
         int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
         int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+        int n_repeated        = propagator_analyzer->get_computation_block(key).n_repeated;
+        int n_propagators     = propagator_analyzer->get_computation_block(key).v_u.size();
+
         std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
         const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
-        // Contains no '['
-        if (dep_u.find('[') == std::string::npos)
-            n_aggregated = 1;
-        else
-        {
-            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
-                            propagator_analyzer->get_computation_block(key).n_repeated;
-        }
-
-        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_aggregated << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
 
         for(int n=0;n<n_segment_compute;n++)
         {
             double total_partition = cb->inner_product_inverse_weight(
                 &propagator[dep_v][(n_segment_offset-n-1)*M],
-                &propagator[dep_u][n*M], _exp_dw)/n_aggregated/cb->get_volume();
+                &propagator[dep_u][n*M], _exp_dw)*n_repeated/cb->get_volume();
+            
+            total_partition /= n_propagators;
 
-            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
         }
     }
