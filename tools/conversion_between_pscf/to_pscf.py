@@ -3,7 +3,9 @@ import ast
 import numpy as np
 
 # Read the parameter file
-fp = open("scft_example.py", 'r')
+file_name = "Star9ArmsGyroid.py"
+print("file_name: ", file_name)
+fp = open(file_name, 'r')
 code = fp.read()
 # tree = ast.parse(code)
 # print(ast.unparse(tree))
@@ -130,6 +132,6 @@ f = open("param", 'w')
 f.write(pscf_param)
 f.close()
 
-f = open("omega", 'w')
+f = open("in/omega", 'w')
 f.write(pscf_omega)
 f.close()

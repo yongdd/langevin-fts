@@ -85,23 +85,15 @@ CudaComputationContinuous::CudaComputationContinuous(
             if (p != current_p)
                 continue;
 
-            int n_aggregated;
-            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
-
-            // Contains no '['
-            if (dep_u.find('[') == std::string::npos)
-                n_aggregated = 1;
-            else
-            {
-                n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
+            int n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
                                propagator_analyzer->get_computation_block(key).n_repeated;
-            }
+            int n_segment_offset = propagator_analyzer->get_computation_block(key).n_segment_offset;
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 d_propagator[dep_v][n_segment_offset], // q
-                d_propagator[dep_u][0],                  // q_dagger
-                n_aggregated            // how many propagators are aggregated
+                d_propagator[dep_u][0],                // q_dagger
+                n_aggregated                           // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -511,10 +503,10 @@ void CudaComputationContinuous::compute_statistics(
             int p                  = std::get<0>(segment_info);
             double *d_propagator_v = std::get<1>(segment_info);
             double *d_propagator_u = std::get<2>(segment_info);
-            int n_repeated       = std::get<3>(segment_info);
+            int n_aggregated       = std::get<3>(segment_info);
 
             single_polymer_partitions[p] = cb->inner_product_device(
-                d_propagator_v, d_propagator_u)/n_repeated/cb->get_volume();
+                d_propagator_v, d_propagator_u)/n_aggregated/cb->get_volume();
         }
 
         // Calculate segment concentrations
@@ -967,26 +959,20 @@ bool CudaComputationContinuous::check_total_partition()
         std::string dep_v    = std::get<1>(key);
         std::string dep_u    = std::get<2>(key);
 
-        int n_aggregated;
         int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
         int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+        int n_repeated        = propagator_analyzer->get_computation_block(key).n_repeated;
+        int n_propagators     = propagator_analyzer->get_computation_block(key).v_u.size();
 
-        // Contains no '['
-        if (dep_u.find('[') == std::string::npos)
-            n_aggregated = 1;
-        else
-        {
-            n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
-                           propagator_analyzer->get_computation_block(key).n_repeated;
-        }
-
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_aggregated << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
 
         for(int n=0;n<=n_segment_compute;n++)
         {
             double total_partition = cb->inner_product_device(
                 d_propagator[dep_v][n_segment_offset-n],
-                d_propagator[dep_u][n])/n_aggregated/cb->get_volume();
+                d_propagator[dep_u][n])*n_repeated/cb->get_volume();
+            
+            total_partition /= n_propagators;
 
             // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
