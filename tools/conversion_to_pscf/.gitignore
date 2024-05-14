@@ -2,5 +2,6 @@
 omega
 rho
 test
+*.png
 *.mat
 *.m
