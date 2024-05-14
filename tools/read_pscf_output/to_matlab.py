@@ -1,10 +1,11 @@
 import sys
+import string
 import numpy as np
 from scipy.io import savemat, loadmat
 
 # Read omega and rho file
-fp_o = open("out_omega", 'r')
-fp_r = open("out_rho", 'r')
+fp_o = open("omega", 'r')
+fp_r = open("rho", 'r')
 lines_omega = fp_o.readlines()
 lines_rho = fp_r.readlines()
 
@@ -35,7 +36,7 @@ if params["crystal_system"] == "cubic":
 elif params["crystal_system"] == "tetragonal":
     params["cell_param"] = [params["cell_param"][0], params["cell_param"][0], params["cell_param"][1]]
     
-# Reverse orders
+# Reverse order of mesh
 params["mesh"].reverse()
 params["cell_param"].reverse()
 
@@ -54,8 +55,7 @@ print("np.prod(params['mesh']): ", np.prod(params["mesh"]))
 # print(phi)
 
 # Make a dictionary for data
-monomer_types = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
-monomer_types = monomer_types[:params["N_monomer"]]
+monomer_types = string.ascii_uppercase[:params["N_monomer"]]
 mdic = {"dim":params["dim"],
     "crystal_system":params["crystal_system"], "N_cell_param":params["N_cell_param"],
     "group_name":params["group_name"], 

@@ -507,9 +507,8 @@ class SCFT:
     def save_results(self, path):
         # Make a dictionary for chi_n
         chi_n_mat = {}
-        for pair_chi_n in self.params["chi_n"]:
-            sorted_name_pair = sorted(pair_chi_n[0:2])
-            chi_n_mat[sorted_name_pair[0] + "," + sorted_name_pair[1]] = pair_chi_n[2]
+        for key in self.chi_n:
+            chi_n_mat[key] = self.chi_n[key]
             
         # Make a dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),

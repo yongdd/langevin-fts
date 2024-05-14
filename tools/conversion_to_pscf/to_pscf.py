@@ -3,7 +3,11 @@ import ast
 import numpy as np
 
 # Read the parameter file
-file_name = "Star9ArmsGyroid.py"
+if len(sys.argv) != 2:
+    print("Usage: python to_pscft.py [file_name]")
+    exit(1)
+file_name = sys.argv[1] 
+#file_name = "Star9ArmsGyroid.py"
 print("file_name: ", file_name)
 fp = open(file_name, 'r')
 code = fp.read()
@@ -15,8 +19,10 @@ lines = code.splitlines()
 id = ""
 new_lines = []
 for line in lines:
+    # Remove import scft
     if "import scft" in line:
         continue
+    # Remove lines related to import scft
     elif "scft." in line or "lfts." in line:
         id = line.split()[0]
         continue
@@ -30,6 +36,9 @@ exec(read)
 
 # Print params
 print(params["segment_lengths"])
+
+# Print grid number
+print("nx: ", params["nx"])
 
 # Print fields
 for monomer_type in params["segment_lengths"]:
@@ -57,11 +66,24 @@ for polymer in params["distinct_polymers"]:
     pscf_param += 6*" " + "type    " + type +"\n"
     pscf_param += 6*" " + "nBlock  {0}\n".format(len(polymer["blocks"]))
     pscf_param += 6*" " + "blocks\n"
+
+    # Re-numbering vertices
+    if type == "branched":
+        indices = set()
+        for block in polymer["blocks"]:
+            indices.update([block["v"], block["u"]])
+        indices = sorted(list(indices))
+        vertex_to_index = {}
+        for idx, vertex in enumerate(indices):
+             vertex_to_index[vertex] = idx
+        print("vertex_to_index:", vertex_to_index)
+
     for block in polymer["blocks"]:
         if type == "linear":
             pscf_param   += 8*" " + "{0}  {1}\n".format(monomer_to_idx[block["type"]], block["length"])
         elif type == "branched":
-            pscf_param   += 8*" " + "{0}  {1} {2} {3}\n".format(monomer_to_idx[block["type"]], block["length"], block["v"], block["u"])
+            pscf_param   += 8*" " + "{0}  {1} {2} {3}\n".format(monomer_to_idx[block["type"]],
+                block["length"], vertex_to_index[block["v"]], vertex_to_index[block["u"]])
     pscf_param += 6*" " + "phi  {0}\n".format(polymer["volume_fraction"])
     pscf_param += 4*" " + "}\n"
 pscf_param += 4*" " + "ds  {0}".format(params["ds"])
@@ -87,6 +109,7 @@ pscf_param += """
     maxItr   1000
     maxHist  20
     isFlexible   {0}
+    scaleStress  1.0
   }}
 }}\n""".format(1 if params["box_is_altering"] == True else 0)
 # print(pscf_param)
@@ -135,3 +158,6 @@ f.close()
 f = open("in/omega", 'w')
 f.write(pscf_omega)
 f.close()
+
+print("parameter file : param")
+print("field file : in/omega")

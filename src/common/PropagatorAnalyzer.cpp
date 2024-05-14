@@ -23,7 +23,7 @@ bool ComparePropagatorKey::operator()(const std::string& str1, const std::string
         return false;
 
     // Second compare their strings
-    return str1 < str2;
+    return str1 > str2;
 }
 
 PropagatorAnalyzer::PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation)
@@ -457,7 +457,7 @@ void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
-    std::cout << "Polymer id, left key:\n\taggregated, n_segment (offset, compute), right key, {v, u} list" << std::endl;
+    std::cout << "Polymer id, left key:\n\taggregated, n_segment (offset, compute), right key, n_repeat, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
@@ -492,6 +492,9 @@ void PropagatorAnalyzer::display_blocks() const
             std::cout << u_string;
         else
             std::cout << u_string.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted>" ;
+
+        // Print n_repeat
+        std::cout << ", " + std::to_string(item.second.n_repeated);        
 
         // Print v_u list
         for(const auto& v_u : item.second.v_u)

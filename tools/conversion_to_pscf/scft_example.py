@@ -70,9 +70,6 @@ for i in range(0,params["nx"][0]):
             np.cos(2.0*yy)*np.cos(2.0*zz)+np.cos(2.0*zz)*np.cos(2.0*xx))
         w_A[i,j,:] = -0.3164*c1 +0.1074*c2
         w_B[i,j,:] =  0.3164*c1 -0.1074*c2
-# input_data = loadmat("fields.mat", squeeze_me=True)
-# w_A = input_data["w_A"]
-# w_B = input_data["w_B"]
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
