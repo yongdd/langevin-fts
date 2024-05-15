@@ -12,6 +12,7 @@
 
 //----------------- Constructor ----------------------------
 Polymer::Polymer(
+    int index, 
     double ds, std::map<std::string, double> bond_lengths, 
     double volume_fraction, std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
@@ -44,10 +45,21 @@ Polymer::Polymer(
     // Save variables
     try
     {
+        if(index >= 26)
+            throw_with_line_number("In this version, the maximum number of polymer types is 26.");
+
+        std::string str_polymer_idx = generateString(index);
+        std::cout<< "str_polymer_idx: " << str_polymer_idx << std::endl;
+
         this->volume_fraction = volume_fraction;
         for(size_t i=0; i<block_inputs.size(); i++){
+
+            std::string str_block_idx = generateString(i);
+            std::cout<< "str_block_idx: " << str_block_idx << std::endl;
+            std::string monomer_type = block_inputs[i].monomer_type + str_polymer_idx + str_block_idx;
+
             blocks.push_back({
-                block_inputs[i].monomer_type,                           // monomer_type
+                monomer_type,                                           // monomer_type
                 (int) std::lround(block_inputs[i].contour_length/ds),   // n_segment
                 block_inputs[i].contour_length,                         // contour_length
                 block_inputs[i].v,                                      // starting node

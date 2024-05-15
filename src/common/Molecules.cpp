@@ -45,7 +45,7 @@ void Molecules::add_polymer(
     std::map<int, std::string> chain_end_to_q_init)
 {
     // Add new polymer type
-    polymer_types.push_back(Polymer(ds, bond_lengths, 
+    polymer_types.push_back(Polymer(this->get_n_polymer_types(), ds, bond_lengths, 
         volume_fraction, block_inputs, chain_end_to_q_init));
 }
 void Molecules::add_solvent(

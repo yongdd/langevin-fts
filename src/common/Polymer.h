@@ -44,8 +44,24 @@ private:
     // The initial condition of chain end vertex 'a' will be given as 'initial[b]' in solver.compute_statistics()
     std::map<int, std::string> chain_end_to_q_init;
 
+    // Convert a number to a string of alphabets
+    std::string generateString(int number) {
+        std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        std::string result = "";
+
+        number++;
+        while (number > 0) {
+            int remainder = (number - 1) % 26;
+            result = alphabet[remainder] + result;
+            number = (number - 1) / 26;
+        }
+
+        return result;
+    }
+
 public:
     Polymer(
+        int index, 
         double ds, std::map<std::string, double> bond_lengths, 
         double volume_fraction, 
         std::vector<BlockInput> block_inputs,

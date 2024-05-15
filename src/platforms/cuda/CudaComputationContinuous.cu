@@ -262,8 +262,9 @@ void CudaComputationContinuous::compute_statistics(
 
         for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
         {
-            if( w_input.find(item.second.monomer_type) == w_input.end())
-                throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
+            std::string monomer_type = item.second.monomer_type.substr(0, 1);
+            if( w_input.find(monomer_type) == w_input.end())
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in w_input.");
         }
 
         // Update dw or d_exp_dw
@@ -296,7 +297,7 @@ void CudaComputationContinuous::compute_statistics(
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
                 auto& deps = propagator_analyzer->get_computation_propagator_code(key).deps;
-                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
+                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type.substr(0, 1);
 
                 // Check key
                 #ifndef NDEBUG
@@ -555,7 +556,7 @@ void CudaComputationContinuous::compute_statistics(
         {
             double *d_phi_ = d_phi_solvent[s];
             double volume_fraction = std::get<0>(molecules->get_solvent(s));
-            std::string monomer_type = std::get<1>(molecules->get_solvent(s));
+            std::string monomer_type = std::get<1>(molecules->get_solvent(s)).substr(0, 1);
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
             single_solvent_partitions[s] = cb->inner_product_device(_d_exp_dw, _d_exp_dw)/cb->get_volume();
@@ -623,7 +624,7 @@ void CudaComputationContinuous::get_total_concentration(std::string monomer_type
             const auto& key = d_block.first;
             std::string dep_v = std::get<1>(key);
             int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
+            if (PropagatorCode::get_monomer_type_from_key(dep_v).substr(0,1) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
 
@@ -665,7 +666,7 @@ void CudaComputationContinuous::get_total_concentration(int p, std::string monom
             int polymer_idx = std::get<0>(key);
             std::string dep_v = std::get<1>(key);
             int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v).substr(0,1) == monomer_type && n_segment_compute != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -804,7 +805,7 @@ std::vector<double> CudaComputationContinuous::compute_stress()
 
             const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
             const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
-            std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
+            std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type.substr(0,1);
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
