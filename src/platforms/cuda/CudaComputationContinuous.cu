@@ -316,13 +316,13 @@ void CudaComputationContinuous::compute_statistics(
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"].");
-                        gpu_error_check(cudaMemcpy(_d_propagator[0], q_init[g],
-                            sizeof(double)*M, cudaMemcpyInputToDevice));
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], q_init[g],
+                            sizeof(double)*M, cudaMemcpyInputToDevice, streams[STREAM][0]));
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity[0],
-                            sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], d_q_unity[0],
+                            sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
                     }
 
                     #ifndef NDEBUG
@@ -336,7 +336,7 @@ void CudaComputationContinuous::compute_statistics(
                     if (key[0] == '[')
                     {
                         // Initialize to zero
-                        gpu_error_check(cudaMemset(_d_propagator[0], 0, sizeof(double)*M));
+                        gpu_error_check(cudaMemsetAsync(_d_propagator[0], 0, sizeof(double)*M, streams[STREAM][0]));
 
                         // Add all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
@@ -353,7 +353,7 @@ void CudaComputationContinuous::compute_statistics(
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                             #endif
 
-                            lin_comb<<<N_BLOCKS, N_THREADS>>>(
+                            lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 _d_propagator[0], 1.0, _d_propagator[0],
                                 sub_n_repeated, d_propagator[sub_dep][sub_n_segment], M);
                         }
@@ -365,8 +365,8 @@ void CudaComputationContinuous::compute_statistics(
                     else
                     {
                         // Initialize to one
-                        gpu_error_check(cudaMemcpy(_d_propagator[0], d_q_unity[0],
-                            sizeof(double)*M, cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], d_q_unity[0],
+                            sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
                         // Multiply all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
@@ -382,7 +382,7 @@ void CudaComputationContinuous::compute_statistics(
                                 throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
                             #endif
 
-                            multi_real<<<N_BLOCKS, N_THREADS>>>(
+                            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 _d_propagator[0], _d_propagator[0],
                                 d_propagator[sub_dep][sub_n_segment], 1.0, M);
                         }
@@ -395,7 +395,7 @@ void CudaComputationContinuous::compute_statistics(
 
                 // Multiply mask
                 if (n_segment_from == 1 && d_q_mask[0] != nullptr)
-                    multi_real<<<N_BLOCKS, N_THREADS>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
+                    multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
 
                 if (gpu == 0)
                 {
@@ -428,6 +428,10 @@ void CudaComputationContinuous::compute_statistics(
                     cudaEvent_t memcpy_done;
                     gpu_error_check(cudaEventCreate(&kernel_done));
                     gpu_error_check(cudaEventCreate(&memcpy_done));
+
+                    // Wait until initialization process is done
+                    gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
+                    gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
 
                     // Copy propagator copy memory from device 1 to device
                     gpu_error_check(cudaMemcpyAsync(
