@@ -330,7 +330,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 double **_propagator = propagator[key];
 
                 // If it is leaf node
-                if(deps.size() == 0)
+                if(n_segment_from == 1 && deps.size() == 0)
                 {
                     // q_init
                     if (key[0] == '{')
