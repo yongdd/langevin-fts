@@ -554,7 +554,7 @@ class SCFT:
         print("---------- Run ----------")
 
         # Iteration begins here
-        print("iteration, mass error, total_partitions, energy_total, error_level", end="")
+        print("iteration, mass error, total_partitions, energy_total (F/CV), error_level", end="")
         if (self.box_is_altering):
             print(", box size")
         else:
