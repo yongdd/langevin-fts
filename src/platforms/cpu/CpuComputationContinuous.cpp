@@ -25,9 +25,13 @@ CpuComputationContinuous::CpuComputationContinuous(
             throw_with_line_number("There is no propagator code. Add polymers first.");
         for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
         {
-            std::string dep = item.first;
+            std::string key = item.first;
             int max_n_segment = item.second.max_n_segment;
-            propagator[dep] = new double[M*(max_n_segment+1)];
+
+            propagator_size[key] = max_n_segment+1;
+            propagator[key] = new double*[max_n_segment+1];
+            for(int i=0; i<propagator_size[key]; i++)
+                propagator[key][i] = new double[M];
 
             #ifndef NDEBUG
             propagator_finished[dep] = new bool[max_n_segment+1];
@@ -66,9 +70,9 @@ CpuComputationContinuous::CpuComputationContinuous(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                &propagator[dep_v][(n_segment_offset)*M],   // q
-                &propagator[dep_u][0],                      // q_dagger
-                n_aggregated                                // how many propagators are aggregated
+                propagator[dep_v][n_segment_offset],   // q
+                propagator[dep_u][0],                  // q_dagger
+                n_aggregated                           // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -99,7 +103,12 @@ CpuComputationContinuous::~CpuComputationContinuous()
     delete[] single_solvent_partitions;
 
     for(const auto& item: propagator)
+    {
+        for(int i=0; i<propagator_size[item.first]; i++)
+            delete[] item.second[i];
         delete[] item.second;
+    }
+
     for(const auto& item: phi_block)
         delete[] item.second;
     for(const auto& item: phi_solvent)
@@ -177,7 +186,7 @@ void CpuComputationContinuous::compute_statistics(
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
-                double *_propagator = propagator[key];
+                double **_propagator = propagator[key];
 
                 // If it is leaf node
                 if(n_segment_from == 1 && deps.size() == 0) 
@@ -189,12 +198,12 @@ void CpuComputationContinuous::compute_statistics(
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         for(int i=0; i<M; i++)
-                            _propagator[i] = q_init[g][i];
+                            _propagator[0][i] = q_init[g][i];
                     }
                     else
                     {
                         for(int i=0; i<M; i++)
-                            _propagator[i] = 1.0;
+                            _propagator[0][i] = 1.0;
                     }
 
                     #ifndef NDEBUG
@@ -208,7 +217,7 @@ void CpuComputationContinuous::compute_statistics(
                     if (key[0] == '[')
                     {
                         for(int i=0; i<M; i++)
-                            _propagator[i] = 0.0;
+                            _propagator[0][i] = 0.0;
                         
                         // Add all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
@@ -225,9 +234,9 @@ void CpuComputationContinuous::compute_statistics(
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_propagator_sub_dep = propagator[sub_dep];
+                            double **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _propagator[i] += _propagator_sub_dep[sub_n_segment*M+i]*sub_n_repeated;
+                                _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*sub_n_repeated;
                         }
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -237,7 +246,7 @@ void CpuComputationContinuous::compute_statistics(
                     else
                     {
                         for(int i=0; i<M; i++)
-                            _propagator[i] = 1.0;
+                            _propagator[0][i] = 1.0;
                         
                         // Multiply all propagators at junction if necessary 
                         for(size_t d=0; d<deps.size(); d++)
@@ -253,9 +262,9 @@ void CpuComputationContinuous::compute_statistics(
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double *_propagator_sub_dep = propagator[sub_dep];
+                            double **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _propagator[i] *= _propagator_sub_dep[sub_n_segment*M+i];
+                                _propagator[0][i] *= _propagator_sub_dep[sub_n_segment][i];
                         }
 
                         #ifndef NDEBUG
@@ -269,7 +278,7 @@ void CpuComputationContinuous::compute_statistics(
                 if (n_segment_from == 1 && q_mask != nullptr)
                 {
                     for(int i=0; i<M; i++)
-                        _propagator[i] *= q_mask[i];
+                        _propagator[0][i] *= q_mask[i];
                 }
 
                 // Advance propagator successively
@@ -281,8 +290,8 @@ void CpuComputationContinuous::compute_statistics(
                     #endif
                     
                     propagator_solver->advance_propagator_continuous(
-                            &_propagator[(n-1)*M],
-                            &_propagator[n*M],
+                            _propagator[n-1],
+                            _propagator[n],
                             monomer_type, q_mask);
 
                     #ifndef NDEBUG
@@ -399,7 +408,7 @@ void CpuComputationContinuous::compute_statistics(
     }
 }
 void CpuComputationContinuous::calculate_phi_one_block(
-    double *phi, double *q_1, double *q_2, const int N, const int N_OFFSET)
+    double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET)
 {
     try
     {
@@ -408,11 +417,11 @@ void CpuComputationContinuous::calculate_phi_one_block(
 
         // Compute segment concentration
         for(int i=0; i<M; i++)
-            phi[i] = simpson_rule_coeff[0]*q_1[i+(N_OFFSET)*M]*q_2[i];
+            phi[i] = simpson_rule_coeff[0]*q_1[N_OFFSET][i]*q_2[0][i];
         for(int n=1; n<=N; n++)
         {
             for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[n]*q_1[i+(N_OFFSET-n)*M]*q_2[i+n*M];
+                phi[i] += simpson_rule_coeff[n]*q_1[N_OFFSET-n][i]*q_2[n][i];
         }
     }
     catch(std::exception& exc)
@@ -605,8 +614,8 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             if(N == 0)
                 continue;
 
-            double *q_1 = propagator[dep_v];    // dependency v
-            double *q_2 = propagator[dep_u];    // dependency u
+            double **q_1 = propagator[dep_v];    // dependency v
+            double **q_2 = propagator[dep_u];    // dependency u
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N);
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
@@ -615,7 +624,7 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             for(int n=0; n<=N; n++)
             {
                 std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_continuous(
-                    &q_1[(N_OFFSET-n)*M], &q_2[n*M], monomer_type);
+                    q_1[N_OFFSET-n], q_2[n], monomer_type);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
             }
@@ -666,9 +675,9 @@ void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, 
         if (n < 0 || n > N)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N) + "]");
 
-        double* _partition = propagator[dep];
+        double **_partition = propagator[dep];
         for(int i=0; i<M; i++)
-            q_out[i] = _partition[n*M+i];
+            q_out[i] = _partition[n][i];
     }
     catch(std::exception& exc)
     {
@@ -703,8 +712,8 @@ bool CpuComputationContinuous::check_total_partition()
         for(int n=0;n<=n_segment_compute;n++)
         {
             double total_partition = cb->inner_product(
-                &propagator[dep_v][(n_segment_offset-n)*M],
-                &propagator[dep_u][n*M])*n_repeated/cb->get_volume();
+                propagator[dep_v][n_segment_offset-n],
+                propagator[dep_u][n])*n_repeated/cb->get_volume();
 
             total_partition /= n_propagators;
 
