@@ -28,9 +28,9 @@ CpuComputationDiscrete::CpuComputationDiscrete(
                 propagator[key][i] = new double[M];
 
             #ifndef NDEBUG
-            propagator_finished[dep] = new bool[max_n_segment];
+            propagator_finished[key] = new bool[max_n_segment];
             for(int i=0; i<max_n_segment;i++)
-                propagator_finished[dep][i] = false;
+                propagator_finished[key][i] = false;
             #endif
 
              // There are N segments

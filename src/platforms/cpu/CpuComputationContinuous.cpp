@@ -34,9 +34,9 @@ CpuComputationContinuous::CpuComputationContinuous(
                 propagator[key][i] = new double[M];
 
             #ifndef NDEBUG
-            propagator_finished[dep] = new bool[max_n_segment+1];
+            propagator_finished[key] = new bool[max_n_segment+1];
             for(int i=0; i<=max_n_segment;i++)
-                propagator_finished[dep][i] = false;
+                propagator_finished[key][i] = false;
             #endif
         }
 
