@@ -251,7 +251,7 @@ std::vector<double> CpuSolverPseudo::compute_single_segment_stress_continuous(
                 double *q_1, double *q_2, std::string monomer_type)
 {
     const int DIM  = cb->get_dim();
-    const int M    = cb->get_n_grid();
+    // const int M    = cb->get_n_grid();
     const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
     auto bond_lengths = molecules->get_bond_lengths();
     double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
@@ -299,7 +299,7 @@ std::vector<double> CpuSolverPseudo::compute_single_segment_stress_discrete(
                 double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     const int DIM  = cb->get_dim();
-    const int M    = cb->get_n_grid();
+    // const int M    = cb->get_n_grid();
     const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
     double coeff;
 

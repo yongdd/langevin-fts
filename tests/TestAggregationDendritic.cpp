@@ -41,7 +41,7 @@ int main()
         int max_scft_iter = 3;
         double tolerance = 1e-9;
 
-        double f = 0.2;
+        // double f = 0.2;
         double chi_n = 15.0;
         std::vector<int> nx = {16,16,16};
         std::vector<double> lx = {2.9,2.9,2.9};
@@ -192,9 +192,11 @@ int main()
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
                         std::cout << "Reducing GPU Memory Usage: " << reduce_memory_usage << std::endl;
 
-                        // // display branches
-                        // PropagatorAnalyzer->display_blocks();
-                        // PropagatorAnalyzer->display_propagators();
+                        // display branches
+                        #ifndef NDEBUG
+                        propagator_analyzer->display_blocks();
+                        propagator_analyzer->display_propagators();
+                        #endif
 
                         // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
                         double xx, yy, zz, c1, c2;
@@ -234,6 +236,12 @@ int main()
                             solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
                             solver->get_total_concentration("A", phi_a);
                             solver->get_total_concentration("B", phi_b);
+
+                            // Check the total partition function
+                            #ifndef NDEBUG
+                            if (iter == 0)
+                                solver->check_total_partition();
+                            #endif
 
                             // Compute stress
                             std::vector<double> stress = solver->compute_stress();

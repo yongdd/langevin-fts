@@ -69,6 +69,10 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
 
     if (this->aggregate_propagator_computation)
     {
+
+        // Aggregated keys
+        std::map<std::string, std::vector<std::string>> aggregated_blocks;
+
         // Find aggregated branches in computation_blocks_new_polymer
         for(auto& item : computation_blocks_new_polymer)
         {
@@ -92,23 +96,21 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             // Replace the second map of computation_blocks_new_polymer with 'set_final'
             computation_blocks_new_polymer[left_key] = set_final;
 
-            // Copy aggregated keys
-            std::map<std::string, ComputationBlock> aggregated_blocks;
             for(auto& item : set_final)
             {
                 if(item.first[0] == '[' && item.second.n_segment_compute == item.second.n_segment_offset)
-                    aggregated_blocks[item.first] = item.second;
+                    aggregated_blocks[left_key].push_back(item.first);
             }
 
             // Remove right keys from other left keys related to aggregated keys, and create new right keys
-            for(auto& item : aggregated_blocks)
+            for(auto& dep_key : aggregated_blocks[left_key])
             {
-                std::string dep_key = item.first;
-                int n_segment_compute = item.second.n_segment_compute;
+                auto& computation_block = computation_blocks_new_polymer[left_key][dep_key];
+                int n_segment_compute = computation_block.n_segment_compute;
 
                 // std::cout << "dep_key: " << dep_key << std::endl;
                 // For each v_u
-                for(auto& old_v_u : item.second.v_u)
+                for(auto& old_v_u : computation_block.v_u)
                 {
                     // (old_u) -----  (old_v, u) ----- (v) 
                     int old_v = std::get<0>(old_v_u);
@@ -136,7 +138,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
                         for(auto& v_adj_node_dep : vec_new_v)
                         {
                             if (v_adj_node_dep != v)
-                                sub_keys.push_back(pc.get_block(v_adj_node_dep,u).monomer_type + std::to_string(pc.get_block(v_adj_node_dep,u).n_segment));
+                                sub_keys.push_back(pc.get_propagator_key(v_adj_node_dep,u) + std::to_string(pc.get_block(v_adj_node_dep,u).n_segment));
                         }
                         std::sort(sub_keys.begin(),sub_keys.end());
                         for(auto& item : sub_keys)
@@ -144,6 +146,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
                         new_u_key += ")" + pc.get_block(v,u).monomer_type;
 
                         // Remove 'v_u' from 'computation_blocks_new_polymer'
+                        // std::cout << "v_u_to_right_key[std::make_tuple(v,u)]: " << v_u_to_right_key[std::make_tuple(v,u)] << std::endl; 
                         computation_blocks_new_polymer[dep_v].erase(v_u_to_right_key[std::make_tuple(v,u)]);
 
                         // Add new key
@@ -153,7 +156,13 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
                             computation_blocks_new_polymer[dep_v][new_u_key].n_segment_compute = pc.get_block(v,u).n_segment;
                             computation_blocks_new_polymer[dep_v][new_u_key].n_segment_offset = pc.get_block(v,u).n_segment;
                             computation_blocks_new_polymer[dep_v][new_u_key].v_u.push_back(std::make_tuple(v,u));
-                            computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = 1;
+
+                            if (dep_key[0] == '[')
+                                computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = 1;
+                            else
+                                computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = computation_block.n_repeated;
+
+                            aggregated_blocks[dep_v].push_back(new_u_key);
                         }
                         else
                         {

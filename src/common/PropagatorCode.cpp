@@ -117,7 +117,7 @@ std::string PropagatorCode::generate_edge_code(
 std::string PropagatorCode::get_key_from_code(std::string code)
 {
     int pos;
-    for(size_t i=code.size()-1; i>=0;i--)
+    for(int i=code.size()-1; i>=0;i--)
     {
         if(isalpha(code[i]))
         {

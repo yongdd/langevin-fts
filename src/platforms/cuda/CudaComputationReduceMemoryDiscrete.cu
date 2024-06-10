@@ -1167,8 +1167,10 @@ bool CudaComputationReduceMemoryDiscrete::check_total_partition()
         std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
         double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << std::endl;
-
+        #ifndef NDEBUG
+        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #endif
+        
         for(int n=0;n<n_segment_compute;n++)
         {
             // Copy propagators from host to device
@@ -1181,9 +1183,11 @@ bool CudaComputationReduceMemoryDiscrete::check_total_partition()
                 _d_exp_dw)*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;
-
-            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
+
+            #ifndef NDEBUG
+            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            #endif
         }
     }
 

@@ -738,7 +738,7 @@ void CpuComputationDiscrete::get_chain_propagator(double *q_out, int polymer, in
 }
 bool CpuComputationDiscrete::check_total_partition()
 {
-    const int M = cb->get_n_grid();
+    // const int M = cb->get_n_grid();
     int n_polymer_types = molecules->get_n_polymer_types();
     std::vector<std::vector<double>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
@@ -762,7 +762,9 @@ bool CpuComputationDiscrete::check_total_partition()
         std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
         const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #ifndef NDEBUG
+        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #endif
 
         for(int n=0;n<n_segment_compute;n++)
         {
@@ -771,9 +773,11 @@ bool CpuComputationDiscrete::check_total_partition()
                 propagator[dep_u][n], _exp_dw)*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;
-
-            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
+            
+            #ifndef NDEBUG
+            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            #endif
         }
     }
 
