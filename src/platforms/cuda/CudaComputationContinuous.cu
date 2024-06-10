@@ -969,7 +969,9 @@ bool CudaComputationContinuous::check_total_partition()
         int n_repeated        = propagator_analyzer->get_computation_block(key).n_repeated;
         int n_propagators     = propagator_analyzer->get_computation_block(key).v_u.size();
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #ifndef NDEBUG
+        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #endif
 
         for(int n=0;n<=n_segment_compute;n++)
         {
@@ -978,9 +980,11 @@ bool CudaComputationContinuous::check_total_partition()
                 d_propagator[dep_u][n])*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;
-
-            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
+
+            #ifndef NDEBUG
+            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            #endif
         }
     }
 
