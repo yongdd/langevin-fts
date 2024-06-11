@@ -103,78 +103,11 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             }
 
             // Remove right keys from other left keys related to aggregated keys, and create new right keys
-            for(auto& dep_key : aggregated_blocks[left_key])
-            {
-                auto& computation_block = computation_blocks_new_polymer[left_key][dep_key];
-                int n_segment_compute = computation_block.n_segment_compute;
 
-                // std::cout << "dep_key: " << dep_key << std::endl;
-                // For each v_u
-                for(auto& old_v_u : computation_block.v_u)
-                {
-                    // (old_u) -----  (old_v, u) ----- (v) 
-                    int old_v = std::get<0>(old_v_u);
-                    int old_u = std::get<1>(old_v_u);
-                    auto& vec_new_v = pc.get_adjacent_nodes()[old_v];
-
-                    // Remove 'old_u' from 'vec_new_v'
-                    vec_new_v.erase(std::remove(vec_new_v.begin(), vec_new_v.end(), old_u), vec_new_v.end());
-
-                    // For each v_adj_node
-                    for(auto& v : vec_new_v)
-                    {
-                        // std::cout << "(old_v_u): " << v <<  ", " << old_v << std::endl;
-                        int u = old_v;
-
-                        std::string dep_v = pc.get_propagator_key(v, u);
-                        std::string dep_u = pc.get_propagator_key(u, v);
-                        // std::cout << dep_v << ", " << dep_u << ", " << pc.get_block(v,u).n_segment << std::endl;
-
-                        // Make new key
-                        std::string new_u_key = "(" + dep_key
-                            + std::to_string(n_segment_compute);
-                        std::vector<std::string> sub_keys;
-
-                        for(auto& v_adj_node_dep : vec_new_v)
-                        {
-                            if (v_adj_node_dep != v)
-                                sub_keys.push_back(pc.get_propagator_key(v_adj_node_dep,u) + std::to_string(pc.get_block(v_adj_node_dep,u).n_segment));
-                        }
-                        std::sort(sub_keys.begin(),sub_keys.end());
-                        for(auto& item : sub_keys)
-                            new_u_key += item;
-                        new_u_key += ")" + pc.get_block(v,u).monomer_type;
-
-                        // Remove 'v_u' from 'computation_blocks_new_polymer'
-                        // std::cout << "v_u_to_right_key[std::make_tuple(v,u)]: " << v_u_to_right_key[std::make_tuple(v,u)] << std::endl; 
-                        computation_blocks_new_polymer[dep_v].erase(v_u_to_right_key[std::make_tuple(v,u)]);
-
-                        // Add new key
-                        if (computation_blocks_new_polymer[dep_v].find(new_u_key) == computation_blocks_new_polymer[dep_v].end())
-                        {
-                            computation_blocks_new_polymer[dep_v][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
-                            computation_blocks_new_polymer[dep_v][new_u_key].n_segment_compute = pc.get_block(v,u).n_segment;
-                            computation_blocks_new_polymer[dep_v][new_u_key].n_segment_offset = pc.get_block(v,u).n_segment;
-                            computation_blocks_new_polymer[dep_v][new_u_key].v_u.push_back(std::make_tuple(v,u));
-
-                            if (dep_key[0] == '[')
-                                computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = 1;
-                            else
-                                computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = computation_block.n_repeated;
-
-                            aggregated_blocks[dep_v].push_back(new_u_key);
-                        }
-                        else
-                        {
-                            computation_blocks_new_polymer[dep_v][new_u_key].v_u.push_back(std::make_tuple(v,u));
-                            int u0 = std::get<1>(computation_blocks_new_polymer[dep_v][new_u_key].v_u[0]);
-                            if(u0 == u)
-                                computation_blocks_new_polymer[dep_v][new_u_key].n_repeated++;
-                        }
-                        // std::cout << "dep_v, new_u_key, n_segment_compute, n_segment_offset : " << dep_v << ", " << new_u_key << ", " << n_segment_compute << ", " << n_segment_offset << std::endl;
-                    }
-                }
-            }
+            substitute_right_keys(
+                pc, v_u_to_right_key,
+                computation_blocks_new_polymer,
+                aggregated_blocks, left_key);
         }
     }
 
@@ -420,6 +353,87 @@ bool PropagatorAnalyzer::is_aggregated() const
 {
     return aggregate_propagator_computation;
 }
+
+void PropagatorAnalyzer::substitute_right_keys(
+    Polymer& pc, 
+    std::map<std::tuple<int, int>, std::string>& v_u_to_right_key,
+    std::map<std::string, std::map<std::string, ComputationBlock>> & computation_blocks_new_polymer,
+    std::map<std::string, std::vector<std::string>>& aggregated_blocks,
+    std::string left_key)
+{
+
+    for(auto& aggregated_key : aggregated_blocks[left_key])
+    {
+        auto& computation_block = computation_blocks_new_polymer[left_key][aggregated_key];
+
+        // std::cout << "aggregated_key: " << aggregated_key << std::endl;
+        // For each v_u
+        for(auto& old_v_u : computation_block.v_u)
+        {
+            // (old_u) -----  (old_v, u) ----- (v) 
+            int old_v = std::get<0>(old_v_u);
+            int old_u = std::get<1>(old_v_u);
+
+            auto& vec_new_v = pc.get_adjacent_nodes()[old_v];
+            // Remove 'old_u' from 'vec_new_v'
+            vec_new_v.erase(std::remove(vec_new_v.begin(), vec_new_v.end(), old_u), vec_new_v.end());
+            // std::cout << "(old_v_u): " << v <<  ", " << old_v << std::endl;
+
+            // For each v_adj_node
+            for(auto& v : vec_new_v)
+            {
+                int u = old_v;
+                std::string dep_v = pc.get_propagator_key(v, u);
+                std::string dep_u = pc.get_propagator_key(u, v);
+                // std::cout << dep_v << ", " << dep_u << ", " << pc.get_block(v,u).n_segment << std::endl;
+
+                // Make new key
+                std::string new_u_key = "(" + aggregated_key
+                    + std::to_string(computation_block.n_segment_compute);
+                std::vector<std::string> sub_keys;
+
+                for(auto& v_adj_node_dep : vec_new_v)
+                {
+                    if (v_adj_node_dep != v)
+                        sub_keys.push_back(pc.get_propagator_key(v_adj_node_dep,u) + std::to_string(pc.get_block(v_adj_node_dep,u).n_segment));
+                }
+                std::sort(sub_keys.begin(),sub_keys.end());
+                for(auto& item : sub_keys)
+                    new_u_key += item;
+                new_u_key += ")" + pc.get_block(v,u).monomer_type;
+
+                // Remove 'v_u' from 'computation_blocks_new_polymer'
+                // std::cout << "v_u_to_right_key[std::make_tuple(v,u)]: " << v_u_to_right_key[std::make_tuple(v,u)] << std::endl; 
+                computation_blocks_new_polymer[dep_v].erase(v_u_to_right_key[std::make_tuple(v,u)]);
+
+                // Add new key
+                if (computation_blocks_new_polymer[dep_v].find(new_u_key) == computation_blocks_new_polymer[dep_v].end())
+                {
+                    computation_blocks_new_polymer[dep_v][new_u_key].monomer_type = pc.get_block(v,u).monomer_type;
+                    computation_blocks_new_polymer[dep_v][new_u_key].n_segment_compute = pc.get_block(v,u).n_segment;
+                    computation_blocks_new_polymer[dep_v][new_u_key].n_segment_offset = pc.get_block(v,u).n_segment;
+                    computation_blocks_new_polymer[dep_v][new_u_key].v_u.push_back(std::make_tuple(v,u));
+
+                    if (aggregated_key[0] == '[')
+                        computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = 1;
+                    else
+                        computation_blocks_new_polymer[dep_v][new_u_key].n_repeated = computation_block.n_repeated;
+
+                    aggregated_blocks[dep_v].push_back(new_u_key);
+                }
+                else
+                {
+                    computation_blocks_new_polymer[dep_v][new_u_key].v_u.push_back(std::make_tuple(v,u));
+                    int u0 = std::get<1>(computation_blocks_new_polymer[dep_v][new_u_key].v_u[0]);
+                    if(u0 == u)
+                        computation_blocks_new_polymer[dep_v][new_u_key].n_repeated += computation_block.n_repeated;
+                }
+                // std::cout << "dep_v, new_u_key, n_segment_compute, n_segment_offset : " << dep_v << ", " << new_u_key << ", " << n_segment_compute << ", " << n_segment_offset << std::endl;
+            }
+        }
+    }
+}
+
 void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment)
 {
     if (computation_propagator_codes.find(new_key) == computation_propagator_codes.end())
