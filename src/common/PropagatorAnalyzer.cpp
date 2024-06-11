@@ -203,22 +203,24 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     std::cout << "-----------------------" << std::endl;
     #endif
 
+    // Make a set of n_compute
     std::set<int> set_n_compute;
     for(const auto& item: set_I)
         set_n_compute.insert(item.second.n_segment_compute);
 
+    // Aggregate right keys
     for(const int n_segment_current: set_n_compute)
     {
         // Add elements into set_S
         std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
         for(const auto& item: set_I)
         {
-            if (item.second.n_segment_compute == n_segment_current)
+            if (item.second.n_segment_compute == n_segment_current && item.second.n_segment_compute >= 2*minimum_n_segment)
                 set_S[item.first] = item.second;
         }
 
         // Skip if nothing to aggregate
-        if (set_S.size() == 1)
+        if (set_S.size() <= 1)
             continue;
 
         // Update 'n_segment_compute'
