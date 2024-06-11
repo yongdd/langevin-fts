@@ -215,12 +215,12 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
         for(const auto& item: set_I)
         {
-            if (item.second.n_segment_compute == n_segment_current && item.second.n_segment_compute >= 2*minimum_n_segment)
+            if (item.second.n_segment_compute == n_segment_current)
                 set_S[item.first] = item.second;
         }
 
         // Skip if nothing to aggregate
-        if (set_S.size() <= 1)
+        if (set_S.size() == 1 || n_segment_current < 2*minimum_n_segment)
             continue;
 
         // Update 'n_segment_compute'
