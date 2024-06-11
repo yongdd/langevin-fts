@@ -53,6 +53,14 @@ private:
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}
     std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes; 
 
+    // Substitute right keys of lower left key with aggregated keys
+    void substitute_right_keys(
+        Polymer& pc, 
+        std::map<std::tuple<int, int>, std::string>& v_u_to_right_key,
+        std::map<std::string, std::map<std::string, ComputationBlock>> & computation_blocks_new_polymer,
+        std::map<std::string, std::vector<std::string>>& aggregated_blocks,
+        std::string left_key);
+
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
     void update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment);
 

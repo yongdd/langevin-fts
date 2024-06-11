@@ -125,15 +125,51 @@ int main()
             {"A",0.2,12,39},
         };
 
-        // std::vector<std::string> block_species = {"A","A","A","A","A", "B","B","B","B", "B","B", "A","A"};
-        // std::vector<double> contour_lengths = {f,f,f,f,f, 1-f,1-f,(1-f)/2,(1-f)/4, 1-f,1-f, f,f};
-        // std::vector<int> v = {0,1,2,3,4, 1,2,3,4, 6,7, 6,7};
-        // std::vector<int> u = {1,2,3,4,5, 6,7,8,9, 10,12, 11,13};
-
-        // std::vector<std::string> block_species = {"A","A","A","A","A", "B","B", "B","B", "A","A"};
-        // std::vector<double> contour_lengths = {f,f,f,f,f, 0.8,0.4, 1-f,1-f, f,f};
-        // std::vector<int> v = {0,1,2,3,4, 1,2, 6,7, 6,7};
-        // std::vector<int> u = {1,2,3,4,5, 6,7, 10,12, 11,13};
+        std::vector<BlockInput> blocks_3 =
+        {
+            {"B",0.3,40,41},
+            {"B",0.3,41,42},
+            {"B",0.3,42,43},
+            {"A",0.3,40,1},
+            {"A",0.3,41,2},
+            {"A",0.3,42,3},
+            {"B",0.3,1,4},
+            {"B",0.3,1,5},
+            {"B",0.3,1,6},
+            {"B",0.3,2,7},
+            {"B",0.3,2,8},
+            {"B",0.3,2,9},
+            {"B",0.3,3,10},
+            {"B",0.3,3,11},
+            {"B",0.3,3,12},
+            {"A",0.2,4,13},
+            {"A",0.2,4,14},
+            {"A",0.2,4,15},
+            {"A",0.2,5,16},
+            {"A",0.2,5,17},
+            {"A",0.2,5,18},
+            {"A",0.2,6,19},
+            {"A",0.2,6,20},
+            {"A",0.2,6,21},
+            {"A",0.2,7,22},
+            {"A",0.2,7,23},
+            {"A",0.2,7,24},
+            {"A",0.2,8,25},
+            {"A",0.2,8,26},
+            {"A",0.2,8,27},
+            {"A",0.2,9,28},
+            {"A",0.2,9,29},
+            {"A",0.2,9,30},
+            {"A",0.2,10,31},
+            {"A",0.2,10,32},
+            {"A",0.2,10,33},
+            {"A",0.2,11,34},
+            {"A",0.2,11,35},
+            {"A",0.2,11,36},
+            {"A",0.2,12,37},
+            {"A",0.2,12,38},
+            {"A",0.2,12,39},
+        };
 
         const int M = nx[0]*nx[1]*nx[2];
 
@@ -177,8 +213,9 @@ int main()
                         // Create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup, {});
                         Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
-                        molecules->add_polymer(0.6, blocks_1, {});
-                        molecules->add_polymer(0.4, blocks_2, {});
+                        molecules->add_polymer(0.5, blocks_1, {});
+                        molecules->add_polymer(0.3, blocks_2, {});
+                        molecules->add_polymer(0.2, blocks_3, {});
                         PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
                         PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
