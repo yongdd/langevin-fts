@@ -66,11 +66,11 @@ CpuComputationContinuous::CpuComputationContinuous(
 
             int n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
                                propagator_analyzer->get_computation_block(key).n_repeated;
-            int n_segment_offset = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_left = propagator_analyzer->get_computation_block(key).n_segment_left;
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                propagator[dep_v][n_segment_offset],   // q
+                propagator[dep_v][n_segment_left],     // q
                 propagator[dep_u][0],                  // q_dagger
                 n_aggregated                           // how many propagators are aggregated
                 ));
@@ -352,12 +352,12 @@ void CpuComputationContinuous::compute_statistics(
             std::string dep_v    = std::get<1>(key);
             std::string dep_u    = std::get<2>(key);
 
-            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+            int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
             // If there is no segment
-            if(n_segment_compute == 0)
+            if(n_segment_right == 0)
             {
                 for(int i=0; i<M;i++)
                     block->second[i] = 0.0;
@@ -377,8 +377,8 @@ void CpuComputationContinuous::compute_statistics(
                 block->second,             // phi
                 propagator[dep_v],  // dependency v
                 propagator[dep_u],  // dependency u
-                n_segment_compute,
-                n_segment_offset);
+                n_segment_right,
+                n_segment_left);
 
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
@@ -453,8 +453,8 @@ void CpuComputationContinuous::get_total_concentration(std::string monomer_type,
         for(const auto& block: phi_block)
         {
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_compute = propagator_analyzer->get_computation_block(block.first).n_segment_compute;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
+            int n_segment_right = propagator_analyzer->get_computation_block(block.first).n_segment_right;
+            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -496,8 +496,8 @@ void CpuComputationContinuous::get_total_concentration(int p, std::string monome
         {
             int polymer_idx = std::get<0>(block.first);
             std::string dep_v = std::get<1>(block.first);
-            int n_segment_compute = propagator_analyzer->get_computation_block(block.first).n_segment_compute;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_compute != 0)
+            int n_segment_right = propagator_analyzer->get_computation_block(block.first).n_segment_right;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -605,8 +605,8 @@ std::vector<double> CpuComputationContinuous::compute_stress()
             std::string dep_v = std::get<1>(key);
             std::string dep_u = std::get<2>(key);
 
-            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            const int N        = propagator_analyzer->get_computation_block(key).n_segment_right;
+            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
@@ -702,19 +702,19 @@ bool CpuComputationContinuous::check_total_partition()
         std::string dep_v    = std::get<1>(key);
         std::string dep_u    = std::get<2>(key);
 
-        int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-        int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
-        int n_repeated        = propagator_analyzer->get_computation_block(key).n_repeated;
-        int n_propagators     = propagator_analyzer->get_computation_block(key).v_u.size();
+        int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+        int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
+        int n_repeated      = propagator_analyzer->get_computation_block(key).n_repeated;
+        int n_propagators   = propagator_analyzer->get_computation_block(key).v_u.size();
 
         #ifndef NDEBUG
-        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
         #endif
 
-        for(int n=0;n<=n_segment_compute;n++)
+        for(int n=0;n<=n_segment_right;n++)
         {
             double total_partition = cb->inner_product(
-                propagator[dep_v][n_segment_offset-n],
+                propagator[dep_v][n_segment_left-n],
                 propagator[dep_u][n])*n_repeated/cb->get_volume();
 
             total_partition /= n_propagators;
