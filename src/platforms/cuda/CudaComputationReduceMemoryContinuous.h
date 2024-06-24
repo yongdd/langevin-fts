@@ -73,7 +73,7 @@ private:
     // (polymer id, propagator forward, propagator backward, n_repeated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
 
-    // Host pinned space to store concentration, key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
+    // Host pinned space to store concentration, key: (polymer id, dep_left, dep_right) (assert(dep_left <= dep_right)), value: concentration
     std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
 
     // Total partition functions for each solvent

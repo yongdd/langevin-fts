@@ -65,9 +65,9 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         for(const auto& block: phi_block)
         {
             const auto& key = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string dep_left  = std::get<1>(key);
+            std::string dep_right = std::get<2>(key);
 
             // Skip if already found one segment
             if (p != current_p)
@@ -80,10 +80,10 @@ CpuComputationDiscrete::CpuComputationDiscrete(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                propagator[dep_v][n_segment_left-1],    // q
-                propagator[dep_u][0],                   // q_dagger
+                propagator[dep_left][n_segment_left-1],    // q
+                propagator[dep_right][0],                  // q_dagger
                 monomer_type,       
-                n_aggregated                            // how many propagators are aggregated
+                n_aggregated                               // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -357,9 +357,9 @@ void CpuComputationDiscrete::compute_statistics(
             advance(block, b);
             const auto& key = block->first;
 
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string dep_left  = std::get<1>(key);
+            std::string dep_right = std::get<2>(key);
 
             int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
             int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
@@ -369,18 +369,18 @@ void CpuComputationDiscrete::compute_statistics(
 
             // Check keys
             #ifndef NDEBUG
-            if (propagator.find(dep_v) == propagator.end())
-                std::cout << "Could not find dep_v key'" + dep_v + "'. " << std::endl;
-            if (propagator.find(dep_u) == propagator.end())
-                std::cout << "Could not find dep_u key'" + dep_u + "'. " << std::endl;
+            if (propagator.find(dep_left) == propagator.end())
+                std::cout << "Could not find dep_left key'" + dep_left + "'. " << std::endl;
+            if (propagator.find(dep_right) == propagator.end())
+                std::cout << "Could not find dep_right key'" + dep_right + "'. " << std::endl;
             #endif
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
-                block->second,      // phi
-                propagator[dep_v],  // dependency v
-                propagator[dep_u],  // dependency u
-                _exp_dw,            // exp_dw
+                block->second,          // phi
+                propagator[dep_left],   // dependency v
+                propagator[dep_right],  // dependency u
+                _exp_dw,                // exp_dw
                 n_segment_right,
                 n_segment_left);
             
@@ -454,9 +454,9 @@ void CpuComputationDiscrete::get_total_concentration(std::string monomer_type, d
         // For each block
         for(const auto& block: phi_block)
         {
-            std::string dep_v = std::get<1>(block.first);
+            std::string dep_left = std::get<1>(block.first);
             int n_segment_right = propagator_analyzer->get_computation_block(block.first).n_segment_right;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_right != 0)
+            if (PropagatorCode::get_monomer_type_from_key(dep_left) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -497,9 +497,9 @@ void CpuComputationDiscrete::get_total_concentration(int p, std::string monomer_
         for(const auto& block: phi_block)
         {
             int polymer_idx = std::get<0>(block.first);
-            std::string dep_v = std::get<1>(block.first);
+            std::string dep_left = std::get<1>(block.first);
             int n_segment_right = propagator_analyzer->get_computation_block(block.first).n_segment_right;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v) == monomer_type && n_segment_right != 0)
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_left) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]; 
@@ -529,12 +529,12 @@ void CpuComputationDiscrete::get_block_concentration(int p, double *phi)
 
         for(size_t b=0; b<blocks.size(); b++)
         {
-            std::string dep_v = pc.get_propagator_key(blocks[b].v, blocks[b].u);
-            std::string dep_u = pc.get_propagator_key(blocks[b].u, blocks[b].v);
-            if (dep_v < dep_u)
-                dep_v.swap(dep_u);
+            std::string dep_left  = pc.get_propagator_key(blocks[b].v, blocks[b].u);
+            std::string dep_right = pc.get_propagator_key(blocks[b].u, blocks[b].v);
+            if (dep_left < dep_right)
+                dep_left.swap(dep_right);
 
-            double* _essential_phi_block = phi_block[std::make_tuple(p, dep_v, dep_u)];
+            double* _essential_phi_block = phi_block[std::make_tuple(p, dep_left, dep_right)];
             for(int i=0; i<M; i++)
                 phi[i+b*M] = _essential_phi_block[i]; 
         }
@@ -604,23 +604,23 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
             advance(block, b);
             const auto& key   = block->first;
 
-            std::string dep_v = std::get<1>(key);
-            std::string dep_u = std::get<2>(key);
+            std::string dep_left  = std::get<1>(key);
+            std::string dep_right = std::get<2>(key);
 
             const int N        = propagator_analyzer->get_computation_block(key).n_segment_right;
             const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
-            double **q_1 = propagator[dep_v];    // dependency v
-            double **q_2 = propagator[dep_u];    // dependency u
+            double **q_1 = propagator[dep_left];     // dependency v
+            double **q_2 = propagator[dep_right];    // dependency u
 
             double *q_segment_1;
             double *q_segment_2;
 
             bool is_half_bond_length;
-            // std::cout << "dep_v, dep_u, N_OFFSET, N: "
-            //      << dep_v << ", " << dep_u << ", " << N_OFFSET << ", " << N << std::endl;
+            // std::cout << "dep_left, dep_right, N_OFFSET, N: "
+            //      << dep_left << ", " << dep_right << ", " << N_OFFSET << ", " << N << std::endl;
 
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
@@ -631,20 +631,20 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
                 // At v
                 if (n == N_OFFSET)
                 {
-                    // std::cout << "case 1: " << propagator_junction[dep_v][0] << ", " << q_2[(N-1)*M] << std::endl;
-                    if (propagator_analyzer->get_computation_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
+                    // std::cout << "case 1: " << propagator_junction[dep_left][0] << ", " << q_2[(N-1)*M] << std::endl;
+                    if (propagator_analyzer->get_computation_propagator_code(dep_left).deps.size() == 0) // if v is leaf node, skip
                         continue;
-                    q_segment_1 = propagator_junction[dep_v];
+                    q_segment_1 = propagator_junction[dep_left];
                     q_segment_2 = q_2[N-1];
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && dep_u.find('[') == std::string::npos){
-                    // std::cout << "case 2: " << q_1[(N_OFFSET-1)*M] << ", " << propagator_junction[dep_u][0] << std::endl;
-                    if (propagator_analyzer->get_computation_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
+                else if (n == 0 && dep_right.find('[') == std::string::npos){
+                    // std::cout << "case 2: " << q_1[(N_OFFSET-1)*M] << ", " << propagator_junction[dep_right][0] << std::endl;
+                    if (propagator_analyzer->get_computation_propagator_code(dep_right).deps.size() == 0) // if u is leaf node, skip
                         continue;
                     q_segment_1 = q_1[N_OFFSET-1];
-                    q_segment_2 = propagator_junction[dep_u];
+                    q_segment_2 = propagator_junction[dep_right];
                     is_half_bond_length = true;
                 }
                 // At aggregation junction
@@ -689,10 +689,10 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
             stress[d] = 0.0;
         for(const auto& block: phi_block)
         {
-            const auto& key      = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            const auto& key       = block.first;
+            int p                 = std::get<0>(key);
+            std::string dep_left  = std::get<1>(key);
+            std::string dep_right = std::get<2>(key);
             Polymer& pc = molecules->get_polymer(p);
 
             for(int d=0; d<DIM; d++)
@@ -750,9 +750,9 @@ bool CpuComputationDiscrete::check_total_partition()
     for(const auto& block: phi_block)
     {
         const auto& key = block.first;
-        int p                = std::get<0>(key);
-        std::string dep_v    = std::get<1>(key);
-        std::string dep_u    = std::get<2>(key);
+        int p                 = std::get<0>(key);
+        std::string dep_left  = std::get<1>(key);
+        std::string dep_right = std::get<2>(key);
 
         int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
         int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
@@ -763,14 +763,14 @@ bool CpuComputationDiscrete::check_total_partition()
         const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
         #ifndef NDEBUG
-        std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        std::cout<< p << ", " << dep_left << ", " << dep_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
         #endif
 
         for(int n=0;n<n_segment_right;n++)
         {
             double total_partition = cb->inner_product_inverse_weight(
-                propagator[dep_v][n_segment_left-n-1],
-                propagator[dep_u][n], _exp_dw)*n_repeated/cb->get_volume();
+                propagator[dep_left][n_segment_left-n-1],
+                propagator[dep_right][n], _exp_dw)*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);
