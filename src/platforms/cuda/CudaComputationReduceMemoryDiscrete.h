@@ -69,11 +69,11 @@ private:
     // (polymer id, propagator forward, propagator backward, monomer_type, n_repeated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
 
-    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
+    // key: (polymer id, dep_left, dep_right) (assert(dep_left <= dep_right)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
 
     // Remember propagators and bond length for each segment to prepare stress computation
-    // key: (polymer id, dep_v, dep_u), value (propagator forward, propagator backward, is_half_bond_length)
+    // key: (polymer id, dep_left, dep_right), value (propagator forward, propagator backward, is_half_bond_length)
     std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_computation_plan;
 
     // Total partition functions for each solvent
