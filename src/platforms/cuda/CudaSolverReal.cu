@@ -5,13 +5,15 @@
 CudaSolverReal::CudaSolverReal(
     ComputationBox *cb,
     Molecules *molecules,
-    cudaStream_t streams[MAX_GPUS][2],
+    int n_streams,
+    cudaStream_t streams[MAX_STREAMS][2],
     bool reduce_gpu_memory_usage)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
+        this->n_streams = n_streams;
         this->reduce_gpu_memory_usage = reduce_gpu_memory_usage;
 
         if(molecules->get_model_name() != "continuous")
@@ -29,7 +31,7 @@ CudaSolverReal::CudaSolverReal(
             nx = {cb->get_nx(0), 1, 1};
 
         // Copy streams
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
             this->streams[i][0] = streams[i][0];
             this->streams[i][1] = streams[i][1];
@@ -73,16 +75,10 @@ CudaSolverReal::CudaSolverReal(
 
         if(DIM == 3)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
-                if (N_GPUS == 1)
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(i));
-                }
+
+                gpu_error_check(cudaSetDevice(i % N_GPUS));
                 gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_dstar[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
@@ -124,16 +120,9 @@ CudaSolverReal::CudaSolverReal(
         }
         else if(DIM == 2)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
-                if (N_GPUS == 1)
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(i));
-                }
+                gpu_error_check(cudaSetDevice(i % N_GPUS));
                 gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
@@ -161,16 +150,9 @@ CudaSolverReal::CudaSolverReal(
         }
         else if(DIM == 1)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
-                if (N_GPUS == 1)
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(i));
-                }
+                gpu_error_check(cudaSetDevice(i % N_GPUS));
                 gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
@@ -227,7 +209,7 @@ CudaSolverReal::~CudaSolverReal()
 
         if(DIM == 3)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
                 cudaFree(d_q_star[i]);
                 cudaFree(d_q_dstar[i]);
@@ -241,7 +223,7 @@ CudaSolverReal::~CudaSolverReal()
         }
         else if(DIM == 2)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
                 cudaFree(d_q_star[i]);
                 cudaFree(d_c_star[i]);
@@ -253,7 +235,7 @@ CudaSolverReal::~CudaSolverReal()
         }
         else if(DIM == 1)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {
                 cudaFree(d_q_star[i]);
                 cudaFree(d_c_star[i]);

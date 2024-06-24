@@ -6,20 +6,22 @@
 CudaSolverPseudo::CudaSolverPseudo(
     ComputationBox *cb,
     Molecules *molecules,
-    cudaStream_t streams[N_STREAMS][2],
+    int n_streams,
+    cudaStream_t streams[MAX_STREAMS][2],
     bool reduce_gpu_memory_usage)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
-
+        this->n_streams = n_streams;
+        
         const int M = cb->get_n_grid();
         const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // Copy streams
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
             this->streams[i][0] = streams[i][0];
             this->streams[i][1] = streams[i][1];
@@ -68,16 +70,9 @@ CudaSolverPseudo::CudaSolverPseudo(
             n_grid[0] = cb->get_nx(0);
         }
 
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {  
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
                 
             cufftPlanMany(&plan_for_one[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
             cufftPlanMany(&plan_for_two[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
@@ -93,16 +88,9 @@ CudaSolverPseudo::CudaSolverPseudo(
         // Allocate memory for pseudo-spectral: advance_propagator()
         if(chain_model == "continuous")
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {  
-                if (N_GPUS == 1)
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(i));
-                }
+                gpu_error_check(cudaSetDevice(i % N_GPUS));
                     
                 gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(double)*M));
@@ -114,16 +102,9 @@ CudaSolverPseudo::CudaSolverPseudo(
         }
         else if(chain_model == "discrete")
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
             {  
-                if (N_GPUS == 1)
-                {
-                    gpu_error_check(cudaSetDevice(0));
-                }
-                else
-                {
-                    gpu_error_check(cudaSetDevice(i));
-                }
+                gpu_error_check(cudaSetDevice(i % N_GPUS));
 
                 gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(double)*2*M));
                 gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(ftsComplex)*M_COMPLEX));
@@ -140,16 +121,9 @@ CudaSolverPseudo::CudaSolverPseudo(
             gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z[gpu], sizeof(double)*M_COMPLEX));
         }
 
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {  
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
 
             gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(double)*1));
@@ -157,16 +131,9 @@ CudaSolverPseudo::CudaSolverPseudo(
         }
 
         // Allocate memory for cub reduction sum
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {  
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
             d_temp_storage[i] = nullptr;
             temp_storage_bytes[i] = 0;
             cub::DeviceReduce::Sum(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, streams[i][0]);
@@ -184,7 +151,7 @@ CudaSolverPseudo::~CudaSolverPseudo()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-    for(int i=0; i<N_STREAMS; i++)
+    for(int i=0; i<n_streams; i++)
     {
         cufftDestroy(plan_for_one[i]);
         cufftDestroy(plan_for_two[i]);
@@ -210,7 +177,7 @@ CudaSolverPseudo::~CudaSolverPseudo()
     // For pseudo-spectral: advance_propagator()
     if(chain_model == "continuous")
     {
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
             cudaFree(d_q_step_1_one[i]);
             cudaFree(d_q_step_2_one[i]);
@@ -221,7 +188,7 @@ CudaSolverPseudo::~CudaSolverPseudo()
     }
     else if(chain_model == "discrete")
     {
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
             cudaFree(d_q_step_1_two[i]);
             cudaFree(d_qk_in_1_one[i]);
@@ -236,7 +203,7 @@ CudaSolverPseudo::~CudaSolverPseudo()
         cudaFree(d_fourier_basis_y[gpu]);
         cudaFree(d_fourier_basis_z[gpu]);
     }
-    for(int i=0; i<N_STREAMS; i++)
+    for(int i=0; i<n_streams; i++)
     {
         cudaFree(d_stress_sum[i]);
         cudaFree(d_stress_sum_out[i]);
