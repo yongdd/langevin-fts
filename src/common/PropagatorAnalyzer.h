@@ -47,7 +47,7 @@ private:
                             // "discrete": discrete bead-spring model
     bool aggregate_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
-    // set{key: (polymer id, dep_left, dep_right) (assert(dep_left <= dep_right))}
+    // set{key: (polymer id, key_left, key_right) (assert(key_left <= key_right))}
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}

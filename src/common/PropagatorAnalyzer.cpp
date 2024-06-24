@@ -50,21 +50,21 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
     {
         int v = blocks[b].v;
         int u = blocks[b].u;
-        std::string dep_left  = pc.get_propagator_key(v, u);
-        std::string dep_right = pc.get_propagator_key(u, v);
+        std::string key_left  = pc.get_propagator_key(v, u);
+        std::string key_right = pc.get_propagator_key(u, v);
 
-        if (dep_left < dep_right){
-            dep_left.swap(dep_right);
+        if (key_left < key_right){
+            key_left.swap(key_right);
             std::swap(v,u);
         }
 
-        computation_blocks_new_polymer[dep_left][dep_right].monomer_type = blocks[b].monomer_type;
-        computation_blocks_new_polymer[dep_left][dep_right].n_segment_right = blocks[b].n_segment;
-        computation_blocks_new_polymer[dep_left][dep_right].n_segment_left = blocks[b].n_segment;
-        computation_blocks_new_polymer[dep_left][dep_right].v_u.push_back(std::make_tuple(v,u));
-        computation_blocks_new_polymer[dep_left][dep_right].n_repeated = computation_blocks_new_polymer[dep_left][dep_right].v_u.size();
+        computation_blocks_new_polymer[key_left][key_right].monomer_type = blocks[b].monomer_type;
+        computation_blocks_new_polymer[key_left][key_right].n_segment_right = blocks[b].n_segment;
+        computation_blocks_new_polymer[key_left][key_right].n_segment_left = blocks[b].n_segment;
+        computation_blocks_new_polymer[key_left][key_right].v_u.push_back(std::make_tuple(v,u));
+        computation_blocks_new_polymer[key_left][key_right].n_repeated = computation_blocks_new_polymer[key_left][key_right].v_u.size();
 
-        v_u_to_right_key[std::make_tuple(v,u)] = dep_right;
+        v_u_to_right_key[std::make_tuple(v,u)] = key_right;
     }
 
     // Total segment number

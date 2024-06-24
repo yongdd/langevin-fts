@@ -77,10 +77,11 @@ private:
     std::string chain_model;
     bool reduce_gpu_memory_usage;
 
-    static const int N_STREAMS = 2;
+    // The number of parallel streams for propagator computation
+    int n_streams;
 
     // Two streams for each gpu
-    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
     
     // Trigonal matrix for x direction
     std::map<std::string, double*> d_xl[MAX_GPUS];
@@ -98,11 +99,11 @@ private:
     std::map<std::string, double*> d_zh[MAX_GPUS];
 
     // Arrays for tridiagonal computation
-    double *d_q_star  [N_STREAMS];
-    double *d_q_dstar [N_STREAMS];
-    double *d_c_star  [N_STREAMS];
-    double *d_q_sparse[N_STREAMS];
-    double *d_temp    [N_STREAMS];
+    double *d_q_star  [MAX_STREAMS];
+    double *d_q_dstar [MAX_STREAMS];
+    double *d_c_star  [MAX_STREAMS];
+    double *d_q_sparse[MAX_STREAMS];
+    double *d_temp    [MAX_STREAMS];
 
     // Offset 
     // For 3D
@@ -129,7 +130,7 @@ private:
         double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
-    CudaSolverReal(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[N_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverReal(ComputationBox *cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverReal();
 
     void update_laplacian_operator() override;
