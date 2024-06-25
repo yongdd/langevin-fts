@@ -46,9 +46,9 @@ int main()
 
         PropagatorAnalyzer propagator_analyzer(&molecules, false);
 
-        Scheduler sc(propagator_analyzer.get_computation_propagator_codes(), 4);
+        Scheduler sc(propagator_analyzer.get_computation_propagators(), 4);
 
-        sc.display(propagator_analyzer.get_computation_propagator_codes());
+        sc.display(propagator_analyzer.get_computation_propagators());
 
         return 0;
     }

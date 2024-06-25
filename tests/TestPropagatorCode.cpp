@@ -84,8 +84,8 @@ int main()
             return -1;
 
         // Print sub propagator_codes
-        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes = propagator_analyzer.get_computation_propagator_codes();
-        for(const auto& item : computation_propagator_codes)
+        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators = propagator_analyzer.get_computation_propagators();
+        for(const auto& item : computation_propagators)
         {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";
@@ -100,63 +100,63 @@ int main()
             return -1;
 
         // Check max_n_segment
-        if(propagator_analyzer.get_computation_propagator_code("B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(B12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(B12)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("(B12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(A12B12)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(A12B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(A12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(A12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((A12B12)A9)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("((A12B12)A9)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
+        if(propagator_analyzer.get_computation_propagator("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
+        if(propagator_analyzer.get_computation_propagator("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
+        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator_code("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
+        if(propagator_analyzer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
             return -1;
         return 0;
     }
