@@ -24,9 +24,9 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         std::cout << "n_streams: " << n_streams << std::endl;
 
         // Allocate memory for propagators
-        if( propagator_analyzer->get_computation_propagator_codes().size() == 0)
+        if( propagator_analyzer->get_computation_propagators().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment;
@@ -53,7 +53,7 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         }
 
         // Allocate memory for propagator_junction, which contain partition function at junction of discrete chain
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             propagator_junction[item.first] = new double[M];
         }
@@ -105,7 +105,7 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             phi_solvent.push_back(new double[M]);
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), n_streams); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagators(), n_streams); 
 
         update_laplacian_operator();
     }
@@ -159,7 +159,7 @@ void CpuComputationDiscrete::compute_statistics(
     {
         const int M = cb->get_n_grid();
 
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -182,8 +182,8 @@ void CpuComputationDiscrete::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagator_analyzer->get_computation_propagator_code(key).deps;
-                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
+                auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
+                auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
 
                 // Check key
                 #ifndef NDEBUG
@@ -289,7 +289,7 @@ void CpuComputationDiscrete::compute_statistics(
                             propagator_solver->advance_propagator_discrete_half_bond_step(
                                 propagator[sub_dep][sub_n_segment-1],
                                 q_half_step, 
-                                propagator_analyzer->get_computation_propagator_code(sub_dep).monomer_type);
+                                propagator_analyzer->get_computation_propagator(sub_dep).monomer_type);
 
                             for(int i=0; i<M; i++)
                                 q_junction[i] *= q_half_step[i];
@@ -641,7 +641,7 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
                 if (n == N_LEFT)
                 {
                     // std::cout << "case 1: " << propagator_junction[key_left][0] << ", " << q_2[(N-1)*M] << std::endl;
-                    if (propagator_analyzer->get_computation_propagator_code(key_left).deps.size() == 0) // if v is leaf node, skip
+                    if (propagator_analyzer->get_computation_propagator(key_left).deps.size() == 0) // if v is leaf node, skip
                         continue;
                     q_segment_1 = propagator_junction[key_left];
                     q_segment_2 = q_2[N_RIGHT-1];
@@ -650,7 +650,7 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
                 // At u
                 else if (n == 0 && key_right.find('[') == std::string::npos){
                     // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction[key_right][0] << std::endl;
-                    if (propagator_analyzer->get_computation_propagator_code(key_right).deps.size() == 0) // if u is leaf node, skip
+                    if (propagator_analyzer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                         continue;
                     q_segment_1 = q_1[N_LEFT-1];
                     q_segment_2 = propagator_junction[key_right];
@@ -729,10 +729,10 @@ void CpuComputationDiscrete::get_chain_propagator(double *q_out, int polymer, in
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
+        if (propagator_analyzer->get_computation_propagators().find(dep) == propagator_analyzer->get_computation_propagators().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
             
-        const int N_RIGHT = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
+        const int N_RIGHT = propagator_analyzer->get_computation_propagator(dep).max_n_segment;
         if (n < 1 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 

@@ -121,7 +121,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
         }
     }
 
-    // Add results to computation_blocks and computation_propagator_codes
+    // Add results to computation_blocks and computation_propagators
     for(const auto& v_item : computation_blocks_new_polymer)
     {
         for(const auto& u_item : v_item.second)
@@ -145,8 +145,8 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             // std::cout << "computation_blocks[key].n_repeated: " << key_v << ", " << key_u  << ", " << computation_blocks[key].n_repeated << std::endl;
 
             // Update propagators
-            update_computation_propagator_map(computation_propagator_codes, key_v, n_segment_left);
-            update_computation_propagator_map(computation_propagator_codes, key_u, n_segment_right);
+            update_computation_propagator_map(computation_propagators, key_v, n_segment_left);
+            update_computation_propagator_map(computation_propagators, key_u, n_segment_right);
         }
     }
 }
@@ -380,35 +380,35 @@ void PropagatorAnalyzer::substitute_right_keys(
     }
 }
 
-void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment)
+void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators, std::string new_key, int new_n_segment)
 {
-    if (computation_propagator_codes.find(new_key) == computation_propagator_codes.end())
+    if (computation_propagators.find(new_key) == computation_propagators.end())
     {
-        computation_propagator_codes[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
-        computation_propagator_codes[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
-        computation_propagator_codes[new_key].max_n_segment = new_n_segment;
-        computation_propagator_codes[new_key].height = PropagatorCode::get_height_from_key(new_key);
+        computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
+        computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
+        computation_propagators[new_key].max_n_segment = new_n_segment;
+        computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
     }
     else
     {
-        if (computation_propagator_codes[new_key].max_n_segment < new_n_segment)
-            computation_propagator_codes[new_key].max_n_segment = new_n_segment;
+        if (computation_propagators[new_key].max_n_segment < new_n_segment)
+            computation_propagators[new_key].max_n_segment = new_n_segment;
     }
 }
 int PropagatorAnalyzer::get_n_computation_propagator_codes() const
 {
-    return computation_propagator_codes.size();
+    return computation_propagators.size();
 }
-std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorAnalyzer::get_computation_propagator_codes()
+std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorAnalyzer::get_computation_propagators()
 {
-    return computation_propagator_codes;
+    return computation_propagators;
 }
-ComputationEdge& PropagatorAnalyzer::get_computation_propagator_code(std::string key)
+ComputationEdge& PropagatorAnalyzer::get_computation_propagator(std::string key)
 {
-    if (computation_propagator_codes.find(key) == computation_propagator_codes.end())
+    if (computation_propagators.find(key) == computation_propagators.end())
         throw_with_line_number("There is no such key (" + key + ").");
 
-    return computation_propagator_codes[key];
+    return computation_propagators[key];
 }
 std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorAnalyzer::get_computation_blocks()
 {
@@ -491,7 +491,7 @@ void PropagatorAnalyzer::display_propagators() const
         total_mde_steps_without_reduction += 2*item;
     }
 
-    for(const auto& item : computation_propagator_codes)
+    for(const auto& item : computation_propagators)
     {
         reduced_mde_steps += item.second.max_n_segment;
 
@@ -527,7 +527,7 @@ void PropagatorAnalyzer::display_sub_propagators() const
     std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\taggregated, max_n_segment, height, deps," << std::endl;
     
-    for(const auto& item : computation_propagator_codes)
+    for(const auto& item : computation_propagators)
     {
         total_segments += item.second.max_n_segment;
 

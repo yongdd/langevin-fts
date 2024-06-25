@@ -43,9 +43,9 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
-        if( propagator_analyzer->get_computation_propagator_codes().size() == 0)
+        if( propagator_analyzer->get_computation_propagators().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment;
@@ -110,7 +110,7 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
             phi_solvent.push_back(new double[M]);
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), n_streams); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagators(), n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         double q_unity[M];
@@ -269,7 +269,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -295,8 +295,8 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagator_analyzer->get_computation_propagator_code(key).deps;
-                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type;
+                auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
+                auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
 
                 // if (STREAM == 0)
                 //     std::cout << gpu << ", " << STREAM << ", " << n_segment_from << ", " << n_segment_to << ", " << monomer_type << ", " << key << ", "  << std::endl;    
@@ -946,10 +946,10 @@ void CudaComputationReduceMemoryContinuous::get_chain_propagator(double *q_out, 
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
+        if (propagator_analyzer->get_computation_propagators().find(dep) == propagator_analyzer->get_computation_propagators().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
 
-        const int N_RIGHT = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
+        const int N_RIGHT = propagator_analyzer->get_computation_propagator(dep).max_n_segment;
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
