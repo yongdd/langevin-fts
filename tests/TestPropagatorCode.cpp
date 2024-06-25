@@ -84,7 +84,7 @@ int main()
             return -1;
 
         // Print sub propagator_codes
-        std::vector<std::pair<std::string, ComputationEdge>> computation_propagators = propagator_analyzer.get_computation_propagators();
+        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators = propagator_analyzer.get_computation_propagators();
         for(const auto& item : computation_propagators)
         {
             std::cout << item.first << ":\n\t";

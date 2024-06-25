@@ -45,8 +45,8 @@ Polymer::Polymer(
     // Save variables
     try
     {
-        if(index >= 26)
-            throw_with_line_number("In this version, the maximum number of polymer types is 26.");
+        if(index >= 25)
+            throw_with_line_number("In this version, the maximum number of polymer types is 25.");
 
         std::string str_polymer_idx = generateString(index);
         std::cout<< "str_polymer_idx: " << str_polymer_idx << std::endl;

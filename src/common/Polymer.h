@@ -46,14 +46,14 @@ private:
 
     // Convert a number to a string of alphabets
     std::string generateString(int number) {
-        std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXY"; // Z is reserved for the duplicated propagator keys
         std::string result = "";
 
         number++;
         while (number > 0) {
-            int remainder = (number - 1) % 26;
+            int remainder = (number - 1) % 25;
             result = alphabet[remainder] + result;
-            number = (number - 1) / 26;
+            number = (number - 1) / 25;
         }
 
         return result;
