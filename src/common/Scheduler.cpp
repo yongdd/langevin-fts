@@ -8,7 +8,7 @@
 
 #include "Scheduler.h"
 
-Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes, const int N_STREAM)
+Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes, const int N_STREAM)
 {
     try
     {
@@ -28,10 +28,10 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
             {
                 const auto& key = same_height_propagators[i];
                 int max_resolved_time = 0;
-                for(size_t j=0; j<computation_propagator_codes[key].deps.size(); j++)
+                for(size_t j=0; j<get_computation_propagator(computation_propagator_codes, key).deps.size(); j++)
                 {
-                    const auto& sub_key = std::get<0>(computation_propagator_codes[key].deps[j]);
-                    int sub_n_segment = std::max(std::get<1>(computation_propagator_codes[key].deps[j]),1); // add 1, if it is 0
+                    const auto& sub_key = std::get<0>(get_computation_propagator(computation_propagator_codes, key).deps[j]);
+                    int sub_n_segment = std::max(std::get<1>(get_computation_propagator(computation_propagator_codes, key).deps[j]),1); // add 1, if it is 0
                     #ifndef NDEBUG
                     if (stream_start_finish.find(sub_key) == stream_start_finish.end())
                         throw_with_line_number("Could not find [" + sub_key + "] in stream_start_finish.");
@@ -53,7 +53,7 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
             // {
             //     const auto& key = std::get<0>(Key_resolved_time[i]);
             //     std::cout << key << ":\n\t";
-            //     std::cout << "max_n_segment: " << computation_propagator_codes[key].max_n_segment;
+            //     std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
             //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
             // }
 
@@ -73,7 +73,7 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
                 }
                 // Add job at stream[min_stream]
                 const auto& key = std::get<0>(Key_resolved_time[i]);
-                int max_n_segment = std::max(computation_propagator_codes[key].max_n_segment, 1); // if max_n_segment is 0, add 1
+                int max_n_segment = std::max(get_computation_propagator(computation_propagator_codes, key).max_n_segment, 1); // if max_n_segment is 0, add 1
                 int job_start_time = std::max(job_finish_time[min_stream], resolved_time[key]);
                 // std::cout << key << ", " << min_stream << ", " << job_start_time << ", " << job_start_time+max_n_segment << std::endl;
                 stream_start_finish[key] = std::make_tuple(min_stream, job_start_time, job_start_time + max_n_segment);
@@ -102,9 +102,9 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
         {
             auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
             int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-            int finish_time = start_time + std::max(computation_propagator_codes[key].max_n_segment, 1); // if max_n_segment is 0, add 1
+            int finish_time = start_time + std::max(get_computation_propagator(computation_propagator_codes, key).max_n_segment, 1); // if max_n_segment is 0, add 1
             // std::cout << key << ":\n\t";
-            // std::cout << "max_n_segment: " << computation_propagator_codes[key].max_n_segment;
+            // std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
             // std::cout << ", start_time: " << start_time;
             // std::cout << ", finish_time: " << finish_time << std::endl;
             time_stamp_set.insert(start_time);
@@ -163,7 +163,7 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
                         int n_segment_from, n_segment_to;
 
                         // If max_n_segment is 0, skip propagator iterations 
-                        if(computation_propagator_codes[*iters[s]].max_n_segment == 0)
+                        if(get_computation_propagator(computation_propagator_codes, *iters[s]).max_n_segment == 0)
                         {
                             n_segment_from = 1;
                             n_segment_to = 0;
@@ -188,8 +188,19 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
         throw_without_line_number(exc.what());
     }
 }
+
+ComputationEdge& Scheduler::get_computation_propagator(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes, std::string key)
+{
+    for(auto& item : computation_propagator_codes)
+    {   
+        if (std::get<0>(item) == key)
+            return std::get<1>(item);
+    }
+    throw_with_line_number("There is no such key (" + key + ").");
+}
+
 std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
-    std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes)
+    std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes)
 {
     try
     {
@@ -256,15 +267,15 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 {
     return schedule;
 }
-void Scheduler::display(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes)
+void Scheduler::display(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes)
 {
     for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
     {
         auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
         int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-        int finish_time = start_time + computation_propagator_codes[key].max_n_segment;
+        int finish_time = start_time + get_computation_propagator(computation_propagator_codes, key).max_n_segment;
         std::cout << key << ":\n\t";
-        std::cout << "max_n_segment: " << computation_propagator_codes[key].max_n_segment;
+        std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
         std::cout << ", start_time: " << start_time;
         std::cout << ", finish_time: " << finish_time << std::endl;
     }

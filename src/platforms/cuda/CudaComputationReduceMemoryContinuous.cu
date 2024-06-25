@@ -296,8 +296,8 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagator_analyzer->get_computation_propagator_code(key).deps;
-                auto monomer_type = propagator_analyzer->get_computation_propagator_code(key).monomer_type.substr(0, 1);
+                auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
+                auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type.substr(0, 1);
 
                 // if (STREAM == 0)
                 //     std::cout << gpu << ", " << STREAM << ", " << n_segment_from << ", " << n_segment_to << ", " << monomer_type << ", " << key << ", "  << std::endl;    
@@ -947,10 +947,10 @@ void CudaComputationReduceMemoryContinuous::get_chain_propagator(double *q_out, 
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
-            throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
+        // if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
+        //     throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
 
-        const int N_RIGHT = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
+        const int N_RIGHT = propagator_analyzer->get_computation_propagator(dep).max_n_segment;
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 

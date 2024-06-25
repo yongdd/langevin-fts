@@ -51,7 +51,7 @@ private:
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}
-    std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes; 
+    std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes; 
 
     // Total segment number
     std::vector<int> total_segment_numbers;
@@ -65,7 +65,7 @@ private:
         std::string left_key);
 
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
-    void update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment);
+    void update_computation_propagator_map(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes, std::string new_key, int new_n_segment);
 
 public:
     PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);
@@ -82,8 +82,8 @@ public:
     // Get information of computation propagators and blocks
     bool is_aggregated() const;
     int get_n_computation_propagator_codes() const;
-    std::map<std::string, ComputationEdge, ComparePropagatorKey>& get_computation_propagator_codes(); 
-    ComputationEdge& get_computation_propagator_code(std::string key);
+    std::vector<std::pair<std::string, ComputationEdge>>& get_computation_propagator_codes(); 
+    ComputationEdge& get_computation_propagator(std::string key);
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& get_computation_blocks(); 
     ComputationBlock& get_computation_block(std::tuple<int, std::string, std::string> key);
 

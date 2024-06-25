@@ -156,7 +156,7 @@ PYBIND11_MODULE(langevinfts, m)
         
     py::class_<PropagatorAnalyzer>(m, "PropagatorAnalyzer")
         .def("get_computation_propagator_codes()", &PropagatorAnalyzer::get_computation_propagator_codes)
-        .def("get_computation_propagator_code", &PropagatorAnalyzer::get_computation_propagator_code)
+        .def("get_computation_propagator", &PropagatorAnalyzer::get_computation_propagator)
         .def("get_computation_blocks", &PropagatorAnalyzer::get_computation_blocks)
         .def("get_computation_block", &PropagatorAnalyzer::get_computation_block)
         .def("display_propagators", &PropagatorAnalyzer::display_propagators)

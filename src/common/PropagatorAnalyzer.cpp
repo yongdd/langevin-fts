@@ -308,7 +308,6 @@ void PropagatorAnalyzer::substitute_right_keys(
     std::map<std::string, std::vector<std::string>>& aggregated_blocks,
     std::string left_key)
 {
-
     for(auto& aggregated_key : aggregated_blocks[left_key])
     {
         auto& computation_block = computation_blocks_new_polymer[left_key][aggregated_key];
@@ -380,35 +379,34 @@ void PropagatorAnalyzer::substitute_right_keys(
     }
 }
 
-void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment)
+void PropagatorAnalyzer::update_computation_propagator_map(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes, std::string new_key, int new_n_segment)
 {
-    if (computation_propagator_codes.find(new_key) == computation_propagator_codes.end())
-    {
-        computation_propagator_codes[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
-        computation_propagator_codes[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
-        computation_propagator_codes[new_key].max_n_segment = new_n_segment;
-        computation_propagator_codes[new_key].height = PropagatorCode::get_height_from_key(new_key);
-    }
-    else
-    {
-        if (computation_propagator_codes[new_key].max_n_segment < new_n_segment)
-            computation_propagator_codes[new_key].max_n_segment = new_n_segment;
-    }
+    std::pair<std::string, ComputationEdge> new_item;
+    new_item.first = new_key;
+    new_item.second.deps = PropagatorCode::get_deps_from_key(new_key);
+    new_item.second.monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
+    new_item.second.max_n_segment = new_n_segment;
+    new_item.second.height = PropagatorCode::get_height_from_key(new_key);
+
+    computation_propagator_codes.push_back(new_item);
+
 }
 int PropagatorAnalyzer::get_n_computation_propagator_codes() const
 {
     return computation_propagator_codes.size();
 }
-std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorAnalyzer::get_computation_propagator_codes()
+std::vector<std::pair<std::string, ComputationEdge>>& PropagatorAnalyzer::get_computation_propagator_codes()
 {
     return computation_propagator_codes;
 }
-ComputationEdge& PropagatorAnalyzer::get_computation_propagator_code(std::string key)
+ComputationEdge& PropagatorAnalyzer::get_computation_propagator(std::string key)
 {
-    if (computation_propagator_codes.find(key) == computation_propagator_codes.end())
-        throw_with_line_number("There is no such key (" + key + ").");
-
-    return computation_propagator_codes[key];
+    for(auto& item : computation_propagator_codes)
+    {   
+        if (std::get<0>(item) == key)
+            return std::get<1>(item);
+    }
+    throw_with_line_number("There is no such key (" + key + ").");
 }
 std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorAnalyzer::get_computation_blocks()
 {
