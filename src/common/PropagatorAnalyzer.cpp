@@ -390,8 +390,9 @@ void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string,
     }
     else
     {
+        new_key += "Z";
         computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
-        computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key) + "Z";
+        computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
         computation_propagators[new_key].max_n_segment = new_n_segment;
         computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
     }
