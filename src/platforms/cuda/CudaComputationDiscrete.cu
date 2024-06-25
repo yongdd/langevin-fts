@@ -37,9 +37,9 @@ CudaComputationDiscrete::CudaComputationDiscrete(
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
-        if( propagator_analyzer->get_computation_propagator_codes().size() == 0)
+        if( propagator_analyzer->get_computation_propagators().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
              // There are N segments
 
@@ -67,7 +67,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         }
 
         // Allocate memory for propagator_junction, which contain propagator at junction of discrete chain
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string key = item.first;
             d_propagator_junction[key] = nullptr;
@@ -191,7 +191,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), n_streams); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagators(), n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         double q_unity[M];
@@ -336,7 +336,7 @@ void CudaComputationDiscrete::compute_statistics(
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        for(const auto& item: propagator_analyzer->get_computation_propagator_codes())
+        for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string monomer_type = item.second.monomer_type.substr(0, 1);
             if( w_input.find(monomer_type) == w_input.end())
@@ -1049,7 +1049,7 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        // if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
+        // if (propagator_analyzer->get_computation_propagators().find(dep) == propagator_analyzer->get_computation_propagators().end())
         //     throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
 
         const int N_RIGHT = propagator_analyzer->get_computation_propagator(dep).max_n_segment;

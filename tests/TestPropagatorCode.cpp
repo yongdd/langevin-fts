@@ -84,8 +84,8 @@ int main()
             return -1;
 
         // Print sub propagator_codes
-        std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes = propagator_analyzer.get_computation_propagator_codes();
-        for(const auto& item : computation_propagator_codes)
+        std::vector<std::pair<std::string, ComputationEdge>> computation_propagators = propagator_analyzer.get_computation_propagators();
+        for(const auto& item : computation_propagators)
         {
             std::cout << item.first << ":\n\t";
             std::cout << "{max_n_segment: " << item.second.max_n_segment << ",\n\tsub_deps: [";

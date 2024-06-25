@@ -8,7 +8,7 @@
 
 #include "Scheduler.h"
 
-Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes, const int N_STREAM)
+Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> computation_propagators, const int N_STREAM)
 {
     try
     {
@@ -16,7 +16,7 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
         int job_finish_time[N_STREAM] = {0,};
 
         std::vector<std::string> job_queue[N_STREAM];
-        auto propagator_hierarchies = make_propagator_hierarchies(computation_propagator_codes);
+        auto propagator_hierarchies = make_propagator_hierarchies(computation_propagators);
 
         // For height of propagator
         for(size_t current_height=0; current_height<propagator_hierarchies.size(); current_height++)
@@ -28,10 +28,10 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
             {
                 const auto& key = same_height_propagators[i];
                 int max_resolved_time = 0;
-                for(size_t j=0; j<get_computation_propagator(computation_propagator_codes, key).deps.size(); j++)
+                for(size_t j=0; j<get_computation_propagator(computation_propagators, key).deps.size(); j++)
                 {
-                    const auto& sub_key = std::get<0>(get_computation_propagator(computation_propagator_codes, key).deps[j]);
-                    int sub_n_segment = std::max(std::get<1>(get_computation_propagator(computation_propagator_codes, key).deps[j]),1); // add 1, if it is 0
+                    const auto& sub_key = std::get<0>(get_computation_propagator(computation_propagators, key).deps[j]);
+                    int sub_n_segment = std::max(std::get<1>(get_computation_propagator(computation_propagators, key).deps[j]),1); // add 1, if it is 0
                     #ifndef NDEBUG
                     if (stream_start_finish.find(sub_key) == stream_start_finish.end())
                         throw_with_line_number("Could not find [" + sub_key + "] in stream_start_finish.");
@@ -53,7 +53,7 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
             // {
             //     const auto& key = std::get<0>(Key_resolved_time[i]);
             //     std::cout << key << ":\n\t";
-            //     std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
+            //     std::cout << "max_n_segment: " << get_computation_propagator(computation_propagators, key).max_n_segment;
             //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
             // }
 
@@ -73,7 +73,7 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
                 }
                 // Add job at stream[min_stream]
                 const auto& key = std::get<0>(Key_resolved_time[i]);
-                int max_n_segment = std::max(get_computation_propagator(computation_propagator_codes, key).max_n_segment, 1); // if max_n_segment is 0, add 1
+                int max_n_segment = std::max(get_computation_propagator(computation_propagators, key).max_n_segment, 1); // if max_n_segment is 0, add 1
                 int job_start_time = std::max(job_finish_time[min_stream], resolved_time[key]);
                 // std::cout << key << ", " << min_stream << ", " << job_start_time << ", " << job_start_time+max_n_segment << std::endl;
                 stream_start_finish[key] = std::make_tuple(min_stream, job_start_time, job_start_time + max_n_segment);
@@ -102,9 +102,9 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
         {
             auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
             int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-            int finish_time = start_time + std::max(get_computation_propagator(computation_propagator_codes, key).max_n_segment, 1); // if max_n_segment is 0, add 1
+            int finish_time = start_time + std::max(get_computation_propagator(computation_propagators, key).max_n_segment, 1); // if max_n_segment is 0, add 1
             // std::cout << key << ":\n\t";
-            // std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
+            // std::cout << "max_n_segment: " << get_computation_propagator(computation_propagators, key).max_n_segment;
             // std::cout << ", start_time: " << start_time;
             // std::cout << ", finish_time: " << finish_time << std::endl;
             time_stamp_set.insert(start_time);
@@ -163,7 +163,7 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
                         int n_segment_from, n_segment_to;
 
                         // If max_n_segment is 0, skip propagator iterations 
-                        if(get_computation_propagator(computation_propagator_codes, *iters[s]).max_n_segment == 0)
+                        if(get_computation_propagator(computation_propagators, *iters[s]).max_n_segment == 0)
                         {
                             n_segment_from = 1;
                             n_segment_to = 0;
@@ -189,9 +189,9 @@ Scheduler::Scheduler(std::vector<std::pair<std::string, ComputationEdge>> comput
     }
 }
 
-ComputationEdge& Scheduler::get_computation_propagator(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes, std::string key)
+ComputationEdge& Scheduler::get_computation_propagator(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagators, std::string key)
 {
-    for(auto& item : computation_propagator_codes)
+    for(auto& item : computation_propagators)
     {   
         if (std::get<0>(item) == key)
             return std::get<1>(item);
@@ -200,7 +200,7 @@ ComputationEdge& Scheduler::get_computation_propagator(std::vector<std::pair<std
 }
 
 std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
-    std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes)
+    std::vector<std::pair<std::string, ComputationEdge>> computation_propagators)
 {
     try
     {
@@ -209,7 +209,7 @@ std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
         std::vector<std::string> same_height_propagators; // key
         std::vector<std::string> remaining_branches;
 
-        for(const auto& item : computation_propagator_codes)
+        for(const auto& item : computation_propagators)
             remaining_branches.push_back(item.first);
 
         while(!remaining_branches.empty())
@@ -236,7 +236,7 @@ std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
         //         std::cout << item << ": " << PropagatorCode::get_height_from_key(item) << std::endl;
         // }
 
-        // for(const auto& item: computation_propagator_codes)
+        // for(const auto& item: computation_propagators)
         // {
         //     auto& key = item.first;
 
@@ -267,15 +267,15 @@ std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_sche
 {
     return schedule;
 }
-void Scheduler::display(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes)
+void Scheduler::display(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagators)
 {
     for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
     {
         auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
         int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-        int finish_time = start_time + get_computation_propagator(computation_propagator_codes, key).max_n_segment;
+        int finish_time = start_time + get_computation_propagator(computation_propagators, key).max_n_segment;
         std::cout << key << ":\n\t";
-        std::cout << "max_n_segment: " << get_computation_propagator(computation_propagator_codes, key).max_n_segment;
+        std::cout << "max_n_segment: " << get_computation_propagator(computation_propagators, key).max_n_segment;
         std::cout << ", start_time: " << start_time;
         std::cout << ", finish_time: " << finish_time << std::endl;
     }

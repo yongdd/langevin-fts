@@ -155,7 +155,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("add_solvent", &Molecules::add_solvent);
         
     py::class_<PropagatorAnalyzer>(m, "PropagatorAnalyzer")
-        .def("get_computation_propagator_codes()", &PropagatorAnalyzer::get_computation_propagator_codes)
+        .def("get_computation_propagators()", &PropagatorAnalyzer::get_computation_propagators)
         .def("get_computation_propagator", &PropagatorAnalyzer::get_computation_propagator)
         .def("get_computation_blocks", &PropagatorAnalyzer::get_computation_blocks)
         .def("get_computation_block", &PropagatorAnalyzer::get_computation_block)

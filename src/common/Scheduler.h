@@ -26,14 +26,14 @@ private:
 
     // Methods
     std::vector<std::vector<std::string>> make_propagator_hierarchies(
-        std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes);
+        std::vector<std::pair<std::string, ComputationEdge>> computation_propagators);
 
-    ComputationEdge& get_computation_propagator(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes, std::string key);
+    ComputationEdge& get_computation_propagator(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagators, std::string key);
 public:
 
-    Scheduler(std::vector<std::pair<std::string, ComputationEdge>> computation_propagator_codes, const int N_STREAM);
+    Scheduler(std::vector<std::pair<std::string, ComputationEdge>> computation_propagators, const int N_STREAM);
     ~Scheduler() {};
     std::vector<std::vector<std::tuple<std::string, int, int>>>& get_schedule();
-    void display(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagator_codes);
+    void display(std::vector<std::pair<std::string, ComputationEdge>>& computation_propagators);
 };
 #endif
