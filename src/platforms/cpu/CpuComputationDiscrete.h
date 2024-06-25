@@ -25,11 +25,13 @@ private:
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
-    const int N_SCHEDULER_STREAMS = 4;
+    int n_streams;
     // key: (dep), value: array pointer
     std::map<std::string, double*> propagator_junction;
     // key: (dep) + monomer_type, value: propagator
-    std::map<std::string, double *> propagator;
+    std::map<std::string, double **> propagator; 
+    // Map for deallocation of propagator
+    std::map<std::string, int> propagator_size;
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
@@ -51,7 +53,7 @@ private:
     std::vector<double *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, const double *q_1, const double *q_2, const double *exp_dw, const int N, const int N_OFFSET);
+    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const double *exp_dw, const int N_RIGHT, const int N_LEFT);
 public:
     CpuComputationDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer);
     ~CpuComputationDiscrete();

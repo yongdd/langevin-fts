@@ -28,18 +28,17 @@ class CudaComputationReduceMemoryContinuous : public PropagatorComputation
 private:
     // Pseudo-spectral PDE solver
     CudaSolver *propagator_solver;
-
     std::string method;
 
-    // The number of parallel streams
-    static const int N_STREAMS = 2;
+    // The number of parallel streams for propagator computation
+    int n_streams;
 
     // Two streams for each gpu
-    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // For pseudo-spectral: advance_one propagator()
-    double *d_q_one[N_STREAMS][2];               // one for prev, the other for next
-    double *d_propagator_sub_dep[N_STREAMS][2];  // one for prev, the other for next
+    double *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
+    double *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
 
     // All elements are 1 for initializing propagators
     double *d_q_unity[MAX_GPUS];
@@ -53,7 +52,7 @@ private:
     double *d_phi;
 
     // For stress calculation: compute_stress()
-    double *d_q_pair[N_STREAMS][2];  // one for prev, the other for next
+    double *d_q_pair[MAX_STREAMS][2];  // one for prev, the other for next
 
     // Scheduler for propagator computation 
     Scheduler *sc;
@@ -73,7 +72,7 @@ private:
     // (polymer id, propagator forward, propagator backward, n_repeated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
 
-    // Host pinned space to store concentration, key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentration
+    // Host pinned space to store concentration, key: (polymer id, key_left, key_right) (assert(key_left <= key_right)), value: concentration
     std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
 
     // Total partition functions for each solvent
@@ -83,7 +82,7 @@ private:
     std::vector<double *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N, const int N_OFFSET, const double NORM);
+    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N_RIGHT, const int N_LEFT, const double NORM);
 
     // Compute statistics with inputs from selected device arrays
     void compute_statistics(std::string device,

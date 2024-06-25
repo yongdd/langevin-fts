@@ -41,55 +41,111 @@ int main()
         int max_scft_iter = 3;
         double tolerance = 1e-9;
 
-        double f = 0.2;
+        // double f = 0.2;
         double chi_n = 15.0;
         std::vector<int> nx = {16,16,16};
         std::vector<double> lx = {2.9,2.9,2.9};
         std::vector<double> lx_backup = lx;
         double ds = 1.0/10;
 
-        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
+        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",0.7}};
 
-        std::vector<BlockInput> blocks =
+        // Depth 1
+        std::vector<BlockInput> blocks_1 =
         {
-            {"A",  f, 0, 1},
-            {"A",  f, 1, 2},
-            {"A",  f, 2, 3},
-            {"A",  f, 3, 4},
-            {"A",  f, 4, 5},
-            {"A",  f, 5, 6},
-            {"A",  f, 6, 7},
-            {"A",  f, 7, 8},
-            {"B", 0.5, 1, 9},
-            {"B", 0.4, 2,10},
-            {"B", 0.8, 3,11},
-            {"B", 0.3, 4,12},
-            {"B", 0.4, 5,13},
-            {"B", 0.1, 6,14},
-            {"B", 0.5, 7,15},
-            {"B", 0.8, 9,16},
-            {"B", 0.8,10,17},
-            {"B", 0.8,11,18},
-            {"A",   f, 9,19},
-            {"A",   f,10,20},
-            {"A",   f,11,21},
-            {"B", 0.8, 9,22},
-            {"B", 0.8,10,23},
-            {"B", 0.1,11,24},
-            {"B", 0.3, 4,25},
-            {"B", 0.1, 6,27},
-            {"B", 0.5, 7,28},
+            {"A",0.3,1,2},
+            {"A",0.3,2,3},
+
+            {"B",0.3,1,4},
+            {"B",0.3,2,5},
+            {"B",0.3,3,6},
         };
 
-        // std::vector<std::string> block_species = {"A","A","A","A","A", "B","B","B","B", "B","B", "A","A"};
-        // std::vector<double> contour_lengths = {f,f,f,f,f, 1-f,1-f,(1-f)/2,(1-f)/4, 1-f,1-f, f,f};
-        // std::vector<int> v = {0,1,2,3,4, 1,2,3,4, 6,7, 6,7};
-        // std::vector<int> u = {1,2,3,4,5, 6,7,8,9, 10,12, 11,13};
+        // Depth 2
+        std::vector<BlockInput> blocks_2 =
+        {
+            {"A",0.3,1,2},
+            {"A",0.3,2,3},
 
-        // std::vector<std::string> block_species = {"A","A","A","A","A", "B","B", "B","B", "A","A"};
-        // std::vector<double> contour_lengths = {f,f,f,f,f, 0.8,0.4, 1-f,1-f, f,f};
-        // std::vector<int> v = {0,1,2,3,4, 1,2, 6,7, 6,7};
-        // std::vector<int> u = {1,2,3,4,5, 6,7, 10,12, 11,13};
+            {"B",0.3,1,4},
+            {"B",0.3,2,5},
+            {"B",0.3,3,6},
+
+            {"A",0.3,4,7},
+            {"A",0.3,5,8},
+            {"A",0.3,6,9},
+
+            {"A",0.3,4,10},
+            {"A",0.3,5,11},
+            {"A",0.3,6,12},
+        };
+
+        // Depth 3
+        std::vector<BlockInput> blocks_3 =
+        {
+            {"A",0.3,1,2},
+            {"A",0.3,2,3},
+
+            {"B",0.3,1,4},
+            {"B",0.3,2,5},
+            {"B",0.3,3,6},
+
+            // Repeat 1
+            {"A",0.3,4,7},
+            {"A",0.3,5,8},
+            {"A",0.3,6,9},
+
+            {"B",0.3,7,10},
+            {"B",0.3,8,11},
+            {"B",0.3,9,12},
+
+            // Repeat 2
+            {"A",0.3,4,13},
+            {"A",0.3,5,14},
+            {"A",0.3,6,15},
+
+            {"B",0.3,13,16},
+            {"B",0.3,14,17},
+            {"B",0.3,15,18},
+        };
+
+        // Mixed Depth
+        std::vector<BlockInput> blocks_4 =
+        {
+            {"A",0.3,1,2},
+            {"A",0.3,2,3},
+            {"A",0.3,3,23},
+
+            // Depth 1
+            {"B",0.3,1,4},
+
+            // Depth 2
+            {"A",0.3,2,20},
+            {"B",0.3,20,5},
+
+            // Depth 3
+            {"B",0.3,3,21},
+            {"A",0.3,21,22},
+            {"B",0.3,22,6},
+
+            // Repeat 1
+            {"A",0.3,4,7},
+            {"A",0.3,5,8},
+            {"A",0.3,6,9},
+
+            {"B",0.3,7,10},
+            {"B",0.3,8,11},
+            {"B",0.3,9,12},
+
+            // Repeat 2
+            {"A",0.3,4,13},
+            {"A",0.3,5,14},
+            {"A",0.3,6,15},
+
+            {"B",0.3,13,16},
+            {"B",0.3,14,17},
+            {"B",0.3,15,18},
+        };
 
         const int M = nx[0]*nx[1]*nx[2];
 
@@ -133,7 +189,10 @@ int main()
                         // Create instances and assign to the variables of base classes for the dynamic binding
                         ComputationBox *cb = factory->create_computation_box(nx, lx_backup, {});
                         Molecules* molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
-                        molecules->add_polymer(1.0, blocks, {});
+                        molecules->add_polymer(0.2, blocks_1, {});
+                        molecules->add_polymer(0.2, blocks_2, {});
+                        molecules->add_polymer(0.2, blocks_3, {});
+                        molecules->add_polymer(0.2, blocks_4, {});
                         PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
                         PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,

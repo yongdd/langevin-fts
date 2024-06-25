@@ -24,12 +24,12 @@ struct ComputationBlock{
     // When the 'aggregate_propagator_computation' is on, one block can be sliced to smaller block pieces.
     // For example, suppose the block is composed of 5'A' monomers. -> -A-A-A-A-A-
     // , and this block is sliced into 3'A' monomers and 2'A' monomers -> -A-A-A-,  -A-A-
-    // For the first slice, n_segment_compute, and n_segment_offset are 2, and 5, respectively.
-    // For the second slice, n_segment_compute, and n_segment_offset are 3, and 3, respectively.
+    // For the first slice, n_segment_right, and n_segment_left are 2, and 5, respectively.
+    // For the second slice, n_segment_right, and n_segment_left are 3, and 3, respectively.
     // If the 'aggregate_propagator_computation' is off, original block is not sliced to smaller block pieces.
-    // In this case, n_segment_compute, and n_segment_offset are 5, and 5, respectively.
-    int n_segment_offset;
-    int n_segment_compute;
+    // In this case, n_segment_right, and n_segment_left are 5, and 5, respectively.
+    int n_segment_left;
+    int n_segment_right;
     int n_repeated;
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
 };
@@ -47,11 +47,22 @@ private:
                             // "discrete": discrete bead-spring model
     bool aggregate_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
-    // set{key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u))}
+    // set{key: (polymer id, key_left, key_right) (assert(key_left <= key_right))}
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}
     std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagator_codes; 
+
+    // Total segment number
+    std::vector<int> total_segment_numbers;
+
+    // Substitute right keys of lower left key with aggregated keys
+    void substitute_right_keys(
+        Polymer& pc, 
+        std::map<std::tuple<int, int>, std::string>& v_u_to_right_key,
+        std::map<std::string, std::map<std::string, ComputationBlock>> & computation_blocks_new_polymer,
+        std::map<std::string, std::vector<std::string>>& aggregated_blocks,
+        std::string left_key);
 
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
     void update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagator_codes, std::string new_key, int new_n_segment);

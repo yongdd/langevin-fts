@@ -346,7 +346,7 @@ class SCFT:
         print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        print("In Hamiltonian per chain:")
+        print("In Hamiltonian:")
         # print("\treference energy: ", self.h_const)
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
@@ -669,7 +669,14 @@ class SCFT:
             for i in range(S):
                 # w[i] *= self.mask
                 w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
-            
+        
+        # Print free energy as per chain expression
+        print("Free energy per chain (for each chain type):")
+        for p in range(self.molecules.get_n_polymer_types()):
+            energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
+                                                  self.molecules.get_polymer(p).get_volume_fraction()
+            print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
+
         # Store phi and w
         self.phi = phi
         self.w = w

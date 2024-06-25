@@ -16,22 +16,24 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
+        // The number of parallel streams for propagator computation
+        const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
+        std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
+        if (env_omp_num_threads.empty())
+            n_streams = MAX_STREAMS;
+        else
+            n_streams =  std::min(std::stoi(env_omp_num_threads), MAX_STREAMS);
+        std::cout << "n_streams: " << n_streams << std::endl;
+
         // Copy streams
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
             gpu_error_check(cudaStreamCreate(&streams[i][0])); // for kernel execution
             gpu_error_check(cudaStreamCreate(&streams[i][1])); // for memcpy
         }
 
-        this->propagator_solver = new CudaSolverPseudo(cb, molecules, streams, false);
+        this->propagator_solver = new CudaSolverPseudo(cb, molecules, n_streams, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -89,9 +91,9 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string key_left  = std::get<1>(key);
+            std::string key_right = std::get<2>(key);
 
             // Skip if already found one segment
             if (p != current_p)
@@ -99,15 +101,15 @@ CudaComputationDiscrete::CudaComputationDiscrete(
 
             int n_aggregated = propagator_analyzer->get_computation_block(key).v_u.size()/
                                propagator_analyzer->get_computation_block(key).n_repeated;
-            int n_segment_offset = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_left = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type.substr(0,1);
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                d_propagator[dep_v][n_segment_offset-1],  // q
-                d_propagator[dep_u][0],                   // q_dagger
+                d_propagator[key_left][n_segment_left-1],    // q
+                d_propagator[key_right][0],                  // q_dagger
                 monomer_type,       
-                n_aggregated                              // how many propagators are aggregated
+                n_aggregated                                 // how many propagators are aggregated
                 ));
             current_p++;
         }
@@ -116,64 +118,64 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         for(const auto& block: d_phi_block)
         {
             const auto& key = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string key_left  = std::get<1>(key);
+            std::string key_right = std::get<2>(key);
 
-            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            const int N_RIGHT = propagator_analyzer->get_computation_block(key).n_segment_right;
+            const int N_LEFT  = propagator_analyzer->get_computation_block(key).n_segment_left;
 
-            double **d_q_1 = d_propagator[dep_v];    // dependency v
-            double **d_q_2 = d_propagator[dep_u];    // dependency u
+            double **d_q_1 = d_propagator[key_left];     // dependency v
+            double **d_q_2 = d_propagator[key_right];    // dependency u
 
             auto& _block_stress_compuation_key = block_stress_computation_plan[key];
 
             // Find propagators and bond length
-            for(int n=0; n<=N; n++)
+            for(int n=0; n<=N_RIGHT; n++)
             {
-                double *d_propagator_v = nullptr;
-                double *d_propagator_u = nullptr;
+                double *d_propagator_left = nullptr;
+                double *d_propagator_right = nullptr;
                 bool is_half_bond_length = false;
 
                 // At v
-                if (n == N_OFFSET)
+                if (n == N_LEFT)
                 {
-                    if (propagator_analyzer->get_computation_propagator_code(dep_v).deps.size() == 0) // if v is leaf node, skip
+                    if (propagator_analyzer->get_computation_propagator_code(key_left).deps.size() == 0) // if v is leaf node, skip
                     {
-                        _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
+                        _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
                         continue;
                     }
                     
-                    d_propagator_v = d_propagator_junction[dep_v];
-                    d_propagator_u = d_q_2[N-1];
+                    d_propagator_left  = d_propagator_junction[key_left];
+                    d_propagator_right = d_q_2[N_RIGHT-1];
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && dep_u.find('[') == std::string::npos){
-                    if (propagator_analyzer->get_computation_propagator_code(dep_u).deps.size() == 0) // if u is leaf node, skip
+                else if (n == 0 && key_right.find('[') == std::string::npos){
+                    if (propagator_analyzer->get_computation_propagator_code(key_right).deps.size() == 0) // if u is leaf node, skip
                     {
-                        _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
+                        _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
                         continue;
                     }
 
-                    d_propagator_v = d_q_1[N_OFFSET-1];
-                    d_propagator_u = d_propagator_junction[dep_u];
+                    d_propagator_left  = d_q_1[N_LEFT-1];
+                    d_propagator_right = d_propagator_junction[key_right];
                     is_half_bond_length = true;
                 }
                 // At aggregation junction
                 else if (n == 0)
                 {
-                    _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
+                    _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
                     continue;
                 }
                 // Within the blocks
                 else
                 {
-                    d_propagator_v = d_q_1[N_OFFSET-n-1];
-                    d_propagator_u = d_q_2[n-1];
+                    d_propagator_left  = d_q_1[N_LEFT-n-1];
+                    d_propagator_right = d_q_2[n-1];
                     is_half_bond_length = false;
                 }
-                _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_v, d_propagator_u, is_half_bond_length));
+                _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
             }
         }
 
@@ -189,7 +191,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         }
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), N_STREAMS); 
+        sc = new Scheduler(propagator_analyzer->get_computation_propagator_codes(), n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         double q_unity[M];
@@ -210,16 +212,9 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_propagator_device[gpu][1], sizeof(double)*M));  // next
         }
 
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
             gpu_error_check(cudaMalloc((void**)&d_q_half_step[i], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_junction[i],  sizeof(double)*M));
         }
@@ -228,16 +223,9 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M));
 
         // Allocate memory for stress calculation: compute_stress()
-        for(int i=0; i<N_STREAMS; i++)
+        for(int i=0; i<n_streams; i++)
         {
-            if (N_GPUS == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-            }
-            else
-            {
-                gpu_error_check(cudaSetDevice(i));
-            }
+            gpu_error_check(cudaSetDevice(i % N_GPUS));
             gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0],     sizeof(double)*2*M)); // prev
             gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1],     sizeof(double)*2*M)); // next
         }
@@ -278,7 +266,7 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
         delete[] item.second;
     #endif
 
-    for(int i=0; i<N_STREAMS; i++)
+    for(int i=0; i<n_streams; i++)
     {
         cudaFree(d_q_half_step[i]);
         cudaFree(d_q_junction[i]);
@@ -299,14 +287,14 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
     }
 
     // For stress calculation: compute_stress()
-    for(int i=0; i<N_STREAMS; i++)
+    for(int i=0; i<n_streams; i++)
     {
         cudaFree(d_q_pair[i][0]);
         cudaFree(d_q_pair[i][1]);
     }
 
     // Destroy streams
-    for(int i=0; i<N_STREAMS; i++)
+    for(int i=0; i<n_streams; i++)
     {
         cudaStreamDestroy(streams[i][0]);
         cudaStreamDestroy(streams[i][1]);
@@ -377,19 +365,11 @@ void CudaComputationDiscrete::compute_statistics(
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // For each propagator
-            #pragma omp parallel for num_threads(N_STREAMS) 
+            #pragma omp parallel for num_threads(n_streams)
             for(size_t job=0; job<parallel_job->size(); job++)
             {
-                int gpu;
                 const int STREAM = omp_get_thread_num();
-                if (N_GPUS == 1)
-                {
-                    gpu = 0;
-                }
-                else
-                {
-                    gpu = omp_get_thread_num();
-                }
+                int gpu = omp_get_thread_num() % N_GPUS;
                 gpu_error_check(cudaSetDevice(gpu));
 
                 auto& key = std::get<0>((*parallel_job)[job]);
@@ -455,7 +435,6 @@ void CudaComputationDiscrete::compute_statistics(
                                 _d_propagator[0], 1.0, _d_propagator[0],
                                 sub_n_repeated, d_propagator[sub_dep][sub_n_segment-1], M);
                         }
-
                         // STREAM 0
                         propagator_solver->advance_propagator_discrete(
                             gpu, STREAM,
@@ -639,16 +618,16 @@ void CudaComputationDiscrete::compute_statistics(
         // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
         {
-            int p                    = std::get<0>(segment_info);
-            double *d_propagator_v   = std::get<1>(segment_info);
-            double *d_propagator_u   = std::get<2>(segment_info);
-            std::string monomer_type = std::get<3>(segment_info).substr(0, 1);
-            int n_aggregated         = std::get<4>(segment_info);
+            int p                      = std::get<0>(segment_info);
+            double *d_propagator_left  = std::get<1>(segment_info);
+            double *d_propagator_right = std::get<2>(segment_info);
+            std::string monomer_type   = std::get<3>(segment_info).substr(0, 1);
+            int n_aggregated           = std::get<4>(segment_info);
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
             single_polymer_partitions[p] = cb->inner_product_inverse_weight_device(
-                d_propagator_v,  // q
-                d_propagator_u,  // q^dagger
+                d_propagator_left,   // q
+                d_propagator_right,  // q^dagger
                 _d_exp_dw)/n_aggregated/cb->get_volume();
         }
 
@@ -656,32 +635,32 @@ void CudaComputationDiscrete::compute_statistics(
         for(const auto& block: d_phi_block)
         {
             const auto& key = block.first;
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string key_left  = std::get<1>(key);
+            std::string key_right = std::get<2>(key);
 
-            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+            int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type.substr(0,1);
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
             // Check keys
             #ifndef NDEBUG
-            if (d_propagator.find(dep_v) == d_propagator.end())
-                throw_with_line_number("Could not find dep_v key'" + dep_v + "'. ");
-            if (d_propagator.find(dep_u) == d_propagator.end())
-                throw_with_line_number("Could not find dep_u key'" + dep_u + "'. ");
+            if (d_propagator.find(key_left) == d_propagator.end())
+                throw_with_line_number("Could not find key_left key'" + key_left + "'. ");
+            if (d_propagator.find(key_right) == d_propagator.end())
+                throw_with_line_number("Could not find key_right key'" + key_right + "'. ");
             #endif
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
                 block.second,              // phi
-                d_propagator[dep_v],       // dependency v
-                d_propagator[dep_u],       // dependency u
+                d_propagator[key_left],    // dependency v
+                d_propagator[key_right],   // dependency u
                 _d_exp_dw,                 // exp_dw
-                n_segment_compute,
-                n_segment_offset);
+                n_segment_right,
+                n_segment_left);
             
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
@@ -708,7 +687,7 @@ void CudaComputationDiscrete::compute_statistics(
     }
 }
 void CudaComputationDiscrete::calculate_phi_one_block(
-    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N, const int N_OFFSET)
+    double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N_RIGHT, const int N_LEFT)
 {
     try
     {
@@ -719,10 +698,10 @@ void CudaComputationDiscrete::calculate_phi_one_block(
 
         const int M = cb->get_n_grid();
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_OFFSET-1], d_q_2[0], 1.0, M);
-        for(int n=1; n<N; n++)
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_LEFT-1], d_q_2[0], 1.0, M);
+        for(int n=1; n<N_RIGHT; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_OFFSET-n-1], d_q_2[n], 1.0, M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_LEFT-n-1], d_q_2[n], 1.0, M);
         }
         divide_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
     }
@@ -759,9 +738,9 @@ void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, 
         for(const auto& d_block: d_phi_block)
         {
             const auto& key = d_block.first;
-            std::string dep_v = std::get<1>(key);
-            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            if (PropagatorCode::get_monomer_type_from_key(dep_v).substr(0,1) == monomer_type && n_segment_compute != 0)
+            std::string key_left = std::get<1>(key);
+            int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+            if (PropagatorCode::get_monomer_type_from_key(key_left).substr(0,1) == monomer_type && n_segment_right != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
 
@@ -801,9 +780,9 @@ void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer
         {
             const auto& key = d_block.first;
             int polymer_idx = std::get<0>(key);
-            std::string dep_v = std::get<1>(key);
-            int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(dep_v).substr(0,1) == monomer_type && n_segment_compute != 0)
+            std::string key_left = std::get<1>(key);
+            int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left).substr(0,1) == monomer_type && n_segment_right != 0)
                 lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -839,12 +818,12 @@ void CudaComputationDiscrete::get_block_concentration(int p, double *phi)
 
         for(size_t b=0; b<blocks.size(); b++)
         {
-            std::string dep_v = pc.get_propagator_key(blocks[b].v, blocks[b].u);
-            std::string dep_u = pc.get_propagator_key(blocks[b].u, blocks[b].v);
-            if (dep_v < dep_u)
-                dep_v.swap(dep_u);
+            std::string key_left  = pc.get_propagator_key(blocks[b].v, blocks[b].u);
+            std::string key_right = pc.get_propagator_key(blocks[b].u, blocks[b].v);
+            if (key_left < key_right)
+                key_left.swap(key_right);
 
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, dep_v, dep_u)], M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, key_left, key_right)], M);
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -901,62 +880,54 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
         const int M   = cb->get_n_grid();
 
         std::vector<double> stress(DIM);
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[N_STREAMS];
+        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[n_streams];
 
         // Reset stress map
         for(const auto& item: d_phi_block)
         {
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
                 for(int d=0; d<3; d++)
                     block_dq_dl[i][item.first][d] = 0.0;
         }
 
         // Compute stress for each block
-        #pragma omp parallel for num_threads(N_STREAMS) 
+        #pragma omp parallel for num_threads(n_streams)
         for(size_t b=0; b<d_phi_block.size();b++)
         {
-            int gpu;
             const int STREAM = omp_get_thread_num();
-            if (N_GPUS == 1)
-            {
-                gpu = 0;
-            }
-            else
-            {
-                gpu = omp_get_thread_num();
-            }
+            int gpu = omp_get_thread_num() % N_GPUS;
             gpu_error_check(cudaSetDevice(gpu));
 
             auto block = d_phi_block.begin();
             advance(block, b);
             const auto& key   = block->first;
 
-            int p                = std::get<0>(key);
-            std::string dep_v    = std::get<1>(key);
-            std::string dep_u    = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string key_left  = std::get<1>(key);
+            std::string key_right = std::get<2>(key);
 
-            const int N        = propagator_analyzer->get_computation_block(key).n_segment_compute;
-            const int N_OFFSET = propagator_analyzer->get_computation_block(key).n_segment_offset;
+            const int N_RIGHT = propagator_analyzer->get_computation_block(key).n_segment_right;
+            const int N_LEFT  = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type.substr(0,1);
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
 
-            double **d_q_1 = d_propagator[dep_v];     // Propagator q
-            double **d_q_2 = d_propagator[dep_u];     // Propagator q^dagger
+            double **d_q_1 = d_propagator[key_left];      // Propagator q
+            double **d_q_2 = d_propagator[key_right];     // Propagator q^dagger
 
             std::array<double,3> _block_dq_dl = {0.0, 0.0, 0.0};
 
             // Check block_stress_computation_plan
             const auto& _block_stress_compuation_key = block_stress_computation_plan[key];
-            if(_block_stress_compuation_key.size() != (unsigned int) (N+1))
+            if(_block_stress_compuation_key.size() != (unsigned int) (N_RIGHT+1))
             {
                 throw_with_line_number("Mismatch of block_stress_computation_plan("
-                    + std::to_string(p) + "," + dep_v + "," + dep_u + ") "
-                    + std::to_string(_block_stress_compuation_key.size()) + ".size() with N+1 (" + std::to_string(N+1) + ")");
+                    + std::to_string(p) + "," + key_left + "," + key_right + ") "
+                    + std::to_string(_block_stress_compuation_key.size()) + ".size() with N+1 (" + std::to_string(N_RIGHT+1) + ")");
             }
 
             // Variables for block_stress_computation_plan
-            double *d_propagator_v;
-            double *d_propagator_u;
+            double *d_propagator_left;
+            double *d_propagator_right;
 
             double *d_segment_stress;
             double segment_stress[DIM];
@@ -973,37 +944,37 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
             gpu_error_check(cudaEventCreate(&memcpy_done));
 
             // Copy memory from device to device
-            d_propagator_v = std::get<0>(_block_stress_compuation_key[0]);
-            d_propagator_u = std::get<1>(_block_stress_compuation_key[0]);
+            d_propagator_left  = std::get<0>(_block_stress_compuation_key[0]);
+            d_propagator_right = std::get<1>(_block_stress_compuation_key[0]);
 
-            if (d_propagator_v != nullptr)
+            if (d_propagator_left != nullptr)
             {
-                gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], d_propagator_v, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
-                gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][M], d_propagator_u, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], d_propagator_left,  sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][M], d_propagator_right, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
                 gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
             }
             gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
-            for(int n=0; n<=N; n++)
+            for(int n=0; n<=N_RIGHT; n++)
             {
                 // STREAM 1: copy memory from device to device
-                if (n+1 <= N)
+                if (n+1 <= N_RIGHT)
                 {
-                    d_propagator_v = std::get<0>(_block_stress_compuation_key[n+1]);
-                    d_propagator_u = std::get<1>(_block_stress_compuation_key[n+1]);
+                    d_propagator_left  = std::get<0>(_block_stress_compuation_key[n+1]);
+                    d_propagator_right = std::get<1>(_block_stress_compuation_key[n+1]);
 
-                    if (d_propagator_v != nullptr)
+                    if (d_propagator_left != nullptr)
                     {
-                        gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], d_propagator_v, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
-                        gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][M], d_propagator_u, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                        gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], d_propagator_left,  sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
+                        gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][M], d_propagator_right, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
                         gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                     }
                 }
 
                 // STREAM 0: Compute stress
-                d_propagator_v = std::get<0>(_block_stress_compuation_key[n]);
+                d_propagator_left = std::get<0>(_block_stress_compuation_key[n]);
                 bool is_half_bond_length = std::get<2>(_block_stress_compuation_key[n]);
-                if (d_propagator_v != nullptr)
+                if (d_propagator_left != nullptr)
                 {
                     propagator_solver->compute_single_segment_stress_discrete(
                         gpu, STREAM, d_q_pair[STREAM][prev], d_segment_stress, monomer_type, is_half_bond_length);
@@ -1014,7 +985,7 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
-                if (d_propagator_v != nullptr)
+                if (d_propagator_left != nullptr)
                 {
                     gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(double)*DIM, cudaMemcpyDeviceToHost));
                     for(int d=0; d<DIM; d++)
@@ -1047,12 +1018,12 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
         for(const auto& block: d_phi_block)
         {
             const auto& key = block.first;
-            int p             = std::get<0>(key);
-            std::string dep_v = std::get<1>(key);
-            std::string dep_u = std::get<2>(key);
+            int p                 = std::get<0>(key);
+            std::string key_left  = std::get<1>(key);
+            std::string key_right = std::get<2>(key);
             Polymer& pc  = molecules->get_polymer(p);
 
-            for(int i=0; i<N_STREAMS; i++)
+            for(int i=0; i<n_streams; i++)
                 for(int d=0; d<DIM; d++)
                     stress[d] += block_dq_dl[i][key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
         }
@@ -1081,9 +1052,9 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
         if (propagator_analyzer->get_computation_propagator_codes().find(dep) == propagator_analyzer->get_computation_propagator_codes().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_analyzer.");
 
-        const int N = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
-        if (n < 1 || n > N)
-            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N) + "]");
+        const int N_RIGHT = propagator_analyzer->get_computation_propagator_codes()[dep].max_n_segment;
+        if (n < 1 || n > N_RIGHT)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 
         gpu_error_check(cudaMemcpy(q_out, d_propagator[dep][n-1], sizeof(double)*M,cudaMemcpyDeviceToHost));
     }
@@ -1107,30 +1078,34 @@ bool CudaComputationDiscrete::check_total_partition()
     for(const auto& block: d_phi_block)
     {
         const auto& key = block.first;
-        int p                = std::get<0>(key);
-        std::string dep_v    = std::get<1>(key);
-        std::string dep_u    = std::get<2>(key);
+        int p                 = std::get<0>(key);
+        std::string key_left  = std::get<1>(key);
+        std::string key_right = std::get<2>(key);
 
-        int n_segment_compute = propagator_analyzer->get_computation_block(key).n_segment_compute;
-        int n_segment_offset  = propagator_analyzer->get_computation_block(key).n_segment_offset;
-        int n_repeated        = propagator_analyzer->get_computation_block(key).n_repeated;
-        int n_propagators     = propagator_analyzer->get_computation_block(key).v_u.size();
+        int n_segment_right = propagator_analyzer->get_computation_block(key).n_segment_right;
+        int n_segment_left  = propagator_analyzer->get_computation_block(key).n_segment_left;
+        int n_repeated      = propagator_analyzer->get_computation_block(key).n_repeated;
+        int n_propagators   = propagator_analyzer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type.substr(0,1);
         double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-        // std::cout<< p << ", " << dep_v << ", " << dep_u << ": " << n_segment_offset << ", " << n_segment_compute << ", " << n_aggregated << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #ifndef NDEBUG
+        std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
+        #endif
 
-        for(int n=0;n<n_segment_compute;n++)
+        for(int n=0;n<n_segment_right;n++)
         {
             double total_partition = cb->inner_product_inverse_weight_device(
-                d_propagator[dep_v][(n_segment_offset-n-1)],
-                d_propagator[dep_u][n], _d_exp_dw)*n_repeated/cb->get_volume();
+                d_propagator[key_left][(n_segment_left-n-1)],
+                d_propagator[key_right][n], _d_exp_dw)*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;
-
-            // std::cout<< p << ", " << n << ": " << total_partition << std::endl;
             total_partitions[p].push_back(total_partition);
+
+            #ifndef NDEBUG
+            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+            #endif
         }
     }
 

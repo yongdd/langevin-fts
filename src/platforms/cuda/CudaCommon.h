@@ -9,8 +9,11 @@
 
 typedef cufftDoubleComplex ftsComplex;
 
-// the maximum of GPUs
+// The maximum of GPUs
 #define MAX_GPUS 2
+
+// The maximum of computation streams
+#define MAX_STREAMS 4
 
 // Design Pattern : Singleton (Scott Meyer)
 

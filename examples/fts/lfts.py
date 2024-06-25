@@ -283,7 +283,7 @@ class LFTS:
         print("Real Fields: ",      self.exchange_fields_real_idx)
         print("Imaginary Fields: ", self.exchange_fields_imag_idx)
         
-        print("In Hamiltonian per chain:")
+        print("In Hamiltonian:")
         print("\treference energy: ", self.h_const)
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)

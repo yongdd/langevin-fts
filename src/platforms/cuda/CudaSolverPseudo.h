@@ -24,23 +24,24 @@ private:
 
     std::string chain_model;
 
-    static const int N_STREAMS = 2;
+    // The number of parallel streams for propagator computation
+    int n_streams;
 
     // Two streams for each gpu
-    cudaStream_t streams[N_STREAMS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // For pseudo-spectral: advance_propagator()
     double *d_q_unity; // All elements are 1 for initializing propagators
-    cufftHandle plan_for_one[N_STREAMS], plan_bak_one[N_STREAMS];
-    cufftHandle plan_for_two[N_STREAMS], plan_bak_two[N_STREAMS];
+    cufftHandle plan_for_one[MAX_STREAMS], plan_bak_one[MAX_STREAMS];
+    cufftHandle plan_for_two[MAX_STREAMS], plan_bak_two[MAX_STREAMS];
 
-    double *d_q_step_1_one[N_STREAMS], *d_q_step_2_one[N_STREAMS];
-    double *d_q_step_1_two[N_STREAMS], *d_q_step_2_two[N_STREAMS];
+    double *d_q_step_1_one[MAX_STREAMS], *d_q_step_2_one[MAX_STREAMS];
+    double *d_q_step_1_two[MAX_STREAMS], *d_q_step_2_two[MAX_STREAMS];
 
-    ftsComplex *d_qk_in_1_one[N_STREAMS];
-    ftsComplex *d_qk_in_2_one[N_STREAMS];
-    ftsComplex *d_qk_in_1_two[N_STREAMS];
-    ftsComplex *d_qk_in_2_two[N_STREAMS];
+    ftsComplex *d_qk_in_1_one[MAX_STREAMS];
+    ftsComplex *d_qk_in_2_one[MAX_STREAMS];
+    ftsComplex *d_qk_in_1_two[MAX_STREAMS];
+    ftsComplex *d_qk_in_2_two[MAX_STREAMS];
 
     // For stress calculation: compute_stress()
     double *d_fourier_basis_x[MAX_GPUS];
@@ -48,18 +49,18 @@ private:
     double *d_fourier_basis_z[MAX_GPUS];
 
     // Variables for cub reduction sum
-    size_t temp_storage_bytes[N_STREAMS];
-    double *d_temp_storage[N_STREAMS];
-    double *d_stress_sum[N_STREAMS];
-    double *d_stress_sum_out[N_STREAMS];
-    double *d_q_multi[N_STREAMS];
+    size_t temp_storage_bytes[MAX_STREAMS];
+    double *d_temp_storage[MAX_STREAMS];
+    double *d_stress_sum[MAX_STREAMS];
+    double *d_stress_sum_out[MAX_STREAMS];
+    double *d_q_multi[MAX_STREAMS];
 
 public:
     // GPU arrays for pseudo-spectral
     std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // Boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // Boltzmann factor for the half bond
 
-    CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, cudaStream_t streams[N_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverPseudo(ComputationBox *cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverPseudo();
 
     void update_laplacian_operator() override;
