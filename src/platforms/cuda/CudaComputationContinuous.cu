@@ -288,7 +288,7 @@ void CudaComputationContinuous::compute_statistics(
                 // Check key
                 #ifndef NDEBUG
                 if (d_propagator.find(key) == d_propagator.end())
-                    throw_with_line_number("Could not find key '" + key + "'. ");
+                    std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
                 double **_d_propagator = d_propagator[key];
@@ -301,7 +301,7 @@ void CudaComputationContinuous::compute_statistics(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            throw_with_line_number("Could not find q_init[\"" + g + "\"].");
+                            std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
                         gpu_error_check(cudaMemcpyAsync(_d_propagator[0], q_init[g],
                             sizeof(double)*M, cudaMemcpyInputToDevice, streams[STREAM][0]));
                     }
@@ -334,9 +334,9 @@ void CudaComputationContinuous::compute_statistics(
                             // Check sub key
                             #ifndef NDEBUG
                             if (d_propagator.find(sub_dep) == d_propagator.end())
-                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                                std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
-                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
                             lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -363,9 +363,9 @@ void CudaComputationContinuous::compute_statistics(
                             // Check sub key
                             #ifndef NDEBUG
                             if (d_propagator.find(sub_dep) == d_propagator.end())
-                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                                std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
-                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
                             multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -389,7 +389,7 @@ void CudaComputationContinuous::compute_statistics(
                     {
                         #ifndef NDEBUG
                         if (!propagator_finished[key][n-1])
-                            throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                         #endif
 
                         // STREAM 0
@@ -433,7 +433,7 @@ void CudaComputationContinuous::compute_statistics(
                     {
                         #ifndef NDEBUG
                         if (!propagator_finished[key][n-1])
-                            throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                         #endif
 
                         // DEVICE 1, STREAM 0: calculate propagators
