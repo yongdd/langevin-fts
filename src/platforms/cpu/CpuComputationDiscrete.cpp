@@ -29,7 +29,7 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string key = item.first;
-            int max_n_segment = item.second.max_n_segment;
+            int max_n_segment = item.second.max_n_segment+1;
 
             propagator_size[key] = max_n_segment;
             propagator[key] = new double*[max_n_segment];

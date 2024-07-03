@@ -304,7 +304,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 // Check key
                 #ifndef NDEBUG
                 if (propagator.find(key) == propagator.end())
-                    throw_with_line_number("Could not find key '" + key + "'. ");
+                    std::cout<< "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
                 double **_propagator = propagator[key];
@@ -317,7 +317,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            throw_with_line_number( "Could not find q_init[\"" + g + "\"].");
+                            std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
                         gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice));
                     }
                     else
@@ -357,9 +357,9 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                             // Check sub key
                             #ifndef NDEBUG
                             if (propagator.find(sub_dep) == propagator.end())
-                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                                std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
-                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                                std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
                             // STREAM 1: copy memory from host to device
@@ -408,9 +408,9 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                             // Check sub key
                             #ifndef NDEBUG
                             if (propagator.find(sub_dep) == propagator.end())
-                                throw_with_line_number("Could not find sub key '" + sub_dep + "'. ");
+                                std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
-                                throw_with_line_number("Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared.");
+                                std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
                             // STREAM 1: copy memory from host to device
@@ -468,7 +468,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 {
                     #ifndef NDEBUG
                     if (!propagator_finished[key][n-1])
-                        throw_with_line_number("unfinished, key: " + key + ", " + std::to_string(n-1));
+                        std::cout<< "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
                     #endif
 
                     // STREAM 0: calculate propagators
