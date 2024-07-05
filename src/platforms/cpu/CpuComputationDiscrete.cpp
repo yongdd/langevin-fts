@@ -28,20 +28,6 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             throw_with_line_number("There is no propagator code. Add polymers first.");
         for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
-            std::string key = item.first;
-            int max_n_segment = item.second.max_n_segment+1;
-
-            propagator_size[key] = max_n_segment;
-            propagator[key] = new double*[max_n_segment];
-            for(int i=0; i<propagator_size[key]; i++)
-                propagator[key][i] = new double[M];
-
-            #ifndef NDEBUG
-            propagator_finished[key] = new bool[max_n_segment];
-            for(int i=0; i<max_n_segment;i++)
-                propagator_finished[key][i] = false;
-            #endif
-
              // There are N segments
              // Example (N==5)
              // O--O--O--O--O
@@ -50,12 +36,32 @@ CpuComputationDiscrete::CpuComputationDiscrete(
              // Legend)
              // -- : full bond
              // O  : full segment
-        }
 
-        // Allocate memory for propagator_junction, which contain partition function at junction of discrete chain
-        for(const auto& item: propagator_analyzer->get_computation_propagators())
-        {
-            propagator_junction[item.first] = new double[M];
+            std::string key = item.first;
+            int max_n_segment = item.second.max_n_segment; 
+            propagator_size[key] = max_n_segment;
+            propagator[key] = new double*[max_n_segment];
+
+            // Allocate memory for q(r,1/2)
+            if (item.second.deps.size() > 0)
+                propagator_junction_start[key] = new double[M];
+
+            // Allocate memory for q(r,s+1/2)
+            for (int n: item.second.junction_ends)
+                propagator_half_steps[key][n-1] = new double[M];
+
+            // Allocate memory for q(r,s)
+            for(int i=0; i<propagator_size[key]; i++)
+                propagator[key][i] = new double[M];
+
+            #ifndef NDEBUG
+            propagator_finished[key] = new bool[max_n_segment];
+            for(int i=0; i<max_n_segment;i++)
+                propagator_finished[key][i] = false;
+            for (int n: item.second.junction_ends)
+                propagator_half_steps_finished[key][n-1] = false;
+            #endif
+
         }
 
         // Allocate memory for concentrations
@@ -130,8 +136,13 @@ CpuComputationDiscrete::~CpuComputationDiscrete()
     }
     for(const auto& item: phi_block)
         delete[] item.second;
-    for(const auto& item: propagator_junction)
+    for(const auto& item: propagator_junction_start)
         delete[] item.second;
+    for(const auto& item: propagator_half_steps)
+    {
+        for (const auto& index: item.second)
+            delete[] index.second;
+    }
     for(const auto& item: phi_solvent)
         delete[] item; 
 
@@ -184,6 +195,7 @@ void CpuComputationDiscrete::compute_statistics(
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
                 auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
                 auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
+                auto junction_ends = propagator_analyzer->get_computation_propagator(key).junction_ends;
 
                 // Check key
                 #ifndef NDEBUG
@@ -269,38 +281,28 @@ void CpuComputationDiscrete::compute_statistics(
                         // A, B, C : other full segments
 
                         // Combine branches
-                        double q_junction[M];
+                        double *_q_junction_start = propagator_junction_start[key];
                         for(int i=0; i<M; i++)
-                            q_junction[i] = 1.0;
+                            _q_junction_start[i] = 1.0;
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
-                            double q_half_step[M];
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (propagator.find(sub_dep) == propagator.end())
-                                std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!propagator_finished[sub_dep][sub_n_segment-1])
-                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                            if (!propagator_half_steps_finished[sub_dep][sub_n_segment-1])
+                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "+1/2' is not prepared." << std::endl;
                             #endif
 
-                            propagator_solver->advance_propagator_discrete_half_bond_step(
-                                propagator[sub_dep][sub_n_segment-1],
-                                q_half_step, 
-                                propagator_analyzer->get_computation_propagator(sub_dep).monomer_type);
-
+                            double *_propagator_half_step = propagator_half_steps[sub_dep][sub_n_segment-1];
                             for(int i=0; i<M; i++)
-                                q_junction[i] *= q_half_step[i];
+                                _q_junction_start[i] *= _propagator_half_step[i];
                         }
-                        double *_q_junction_cache = propagator_junction[key];
-                        for(int i=0; i<M; i++)
-                            _q_junction_cache[i] = q_junction[i];
 
                         // Add half bond
                         propagator_solver->advance_propagator_discrete_half_bond_step(
-                            q_junction, _propagator[0], monomer_type);
+                            _q_junction_start, _propagator[0], monomer_type);
 
                         // Add full segment
                         for(int i=0; i<M; i++)
@@ -311,17 +313,34 @@ void CpuComputationDiscrete::compute_statistics(
                         #endif
                     }
                 }
+
+                if (n_segment_from == 1)
+                {
+                    // Multiply mask
+                    if (q_mask != nullptr)
+                    {
+                        for(int i=0; i<M; i++)
+                            _propagator[0][i] *= q_mask[i];
+                    }
+
+                    // q(r, 1+1/2)
+                    if (propagator_half_steps[key].find(0) != propagator_half_steps[key].end())
+                    {
+                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                            _propagator[0],
+                            propagator_half_steps[key][0],
+                            monomer_type);
+
+                        #ifndef NDEBUG
+                        propagator_half_steps_finished[key][0] = true;
+                        #endif
+                    }
+                }
                 else
                 {
                     n_segment_from--;
                 }
 
-                // Multiply mask
-                if (n_segment_from == 1 && q_mask != nullptr)
-                {
-                    for(int i=0; i<M; i++)
-                        _propagator[0][i] *= q_mask[i];
-                }
 
                 // Advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
@@ -331,6 +350,7 @@ void CpuComputationDiscrete::compute_statistics(
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n);
                     #endif
 
+                    // q(r, n)
                     propagator_solver->advance_propagator_discrete(
                         _propagator[n-1], _propagator[n],
                         monomer_type, q_mask);
@@ -338,6 +358,19 @@ void CpuComputationDiscrete::compute_statistics(
                     #ifndef NDEBUG
                     propagator_finished[key][n] = true;
                     #endif
+
+                    // q(r, n+1/2)
+                    if (propagator_half_steps[key].find(n) != propagator_half_steps[key].end())
+                    {
+                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                            _propagator[n],
+                            propagator_half_steps[key][n],
+                            monomer_type);
+
+                        #ifndef NDEBUG
+                        propagator_half_steps_finished[key][n] = true;
+                        #endif
+                    }
 
                     // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
                 }
@@ -640,20 +673,20 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
                 // At v
                 if (n == N_LEFT)
                 {
-                    // std::cout << "case 1: " << propagator_junction[key_left][0] << ", " << q_2[(N-1)*M] << std::endl;
+                    // std::cout << "case 1: " << propagator_junction_start[key_left][0] << ", " << q_2[(N-1)*M] << std::endl;
                     if (propagator_analyzer->get_computation_propagator(key_left).deps.size() == 0) // if v is leaf node, skip
                         continue;
-                    q_segment_1 = propagator_junction[key_left];
+                    q_segment_1 = propagator_junction_start[key_left];
                     q_segment_2 = q_2[N_RIGHT-1];
                     is_half_bond_length = true;
                 }
                 // At u
                 else if (n == 0 && key_right.find('[') == std::string::npos){
-                    // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction[key_right][0] << std::endl;
+                    // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction_start[key_right][0] << std::endl;
                     if (propagator_analyzer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                         continue;
                     q_segment_1 = q_1[N_LEFT-1];
-                    q_segment_2 = propagator_junction[key_right];
+                    q_segment_2 = propagator_junction_start[key_right];
                     is_half_bond_length = true;
                 }
                 // At aggregation junction

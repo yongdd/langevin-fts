@@ -1,5 +1,4 @@
 #include <complex>
-#include <thrust/reduce.h>
 #include <omp.h>
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
@@ -444,7 +443,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 if (n_segment_from == 1 && d_q_mask[gpu] != nullptr)
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], d_q_mask[gpu], 1.0, M);
 
-                // Copy data from device to host
+                // Copy data between device and host
                 if (n_segment_from == 1)
                 {
                     gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[STREAM][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
@@ -479,7 +478,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                         monomer_type, d_q_mask[gpu]);
                     gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
 
-                    // STREAM 1: copy memory from device 1 to device 0
+                    // STREAM 1: copy memory from device to host
                     if (n > n_segment_from)
                     {
                         gpu_error_check(cudaMemcpyAsync(

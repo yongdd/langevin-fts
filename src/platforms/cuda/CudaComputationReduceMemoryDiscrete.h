@@ -49,18 +49,19 @@ private:
     // Scheduler for propagator computation 
     Scheduler *sc;
 
-    // Temporary arrays for compute segment at junction
-    double *d_q_half_step[MAX_STREAMS], *d_q_junction[MAX_STREAMS];
-
-    // key: (dep), value: array pointer
-    std::map<std::string, double*> propagator_junction;
-    // Host pinned memory space to store propagator, key: (dep) + monomer_type, value: propagator
+    // Map for propagator q(r,s; code)
     std::map<std::string, double **> propagator;
-    // Map for deallocation of d_propagator
+    // Map for q(r,1/2; code)
+    std::map<std::string, double *> propagator_junction_start;
+    // Map for q(r,s+1/2; code)
+    std::map<std::string, std::map<int, double *>> propagator_half_steps;
+    // Map for deallocation of propagator
     std::map<std::string, int> propagator_size;
+
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
+    std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
     #endif
 
     // Total partition functions for each polymer

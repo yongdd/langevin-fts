@@ -1,5 +1,4 @@
 #include <complex>
-#include <thrust/reduce.h>
 #include <omp.h>
 #include "CudaComputationContinuous.h"
 #include "CudaComputationBox.h"
