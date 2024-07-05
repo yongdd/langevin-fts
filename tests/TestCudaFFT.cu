@@ -67,7 +67,9 @@ int main()
         cufftDestroy(plan_for);
 
         cudaFree(d_data_k);
-        cudaFree(d_data_init);
+        cudaFree(d_data_init[0]);
+        cudaFree(d_data_init[1]);
+        delete[] d_data_init;
 
         return 0;
     }

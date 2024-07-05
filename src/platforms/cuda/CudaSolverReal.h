@@ -74,6 +74,9 @@ private:
     ComputationBox *cb;
     Molecules *molecules;
 
+    // for memory free
+    int dim;
+
     std::string chain_model;
     bool reduce_gpu_memory_usage;
 

@@ -181,24 +181,29 @@ int main()
         propagator_analyzer->display_propagators();
 
         std::vector<PropagatorComputation*> solver_list;
+        std::vector<ComputationBox*> cb_list;
         std::vector<std::string> solver_name_list;
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl");
-        solver_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
+        cb_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationDiscrete(cb_list.end()[-1], molecules, propagator_analyzer));
         #endif
         
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda");
         solver_name_list.push_back("cuda_reduce_memory_usage");
-        solver_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer));
+        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CudaComputationDiscrete(cb_list.end()[-2], molecules, propagator_analyzer));
+        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_list.end()[-1], molecules, propagator_analyzer));
         #endif
 
         // For each platform
         for(size_t n=0; n<solver_list.size(); n++)
         {
             PropagatorComputation* solver = solver_list[n];
+            ComputationBox* cb = cb_list[n];
 
             for(int i=0; i<M; i++)
             {
@@ -276,7 +281,8 @@ int main()
             std::cout<< "Stress[2] error: "<< error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
-                
+            
+            delete cb;
             delete solver;
         }
         return 0;

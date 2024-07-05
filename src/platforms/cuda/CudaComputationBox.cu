@@ -17,7 +17,7 @@ CudaComputationBox::CudaComputationBox(
 void CudaComputationBox::initialize()
 {
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*n_grid));
-    gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid,cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
     gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*n_grid));
