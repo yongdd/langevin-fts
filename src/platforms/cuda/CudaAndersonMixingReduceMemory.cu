@@ -69,6 +69,8 @@ CudaAndersonMixingReduceMemory::~CudaAndersonMixingReduceMemory()
     cudaFree(d_w_deriv);
     cudaFree(d_w_new);
     cudaFree(d_sum);
+    cudaFree(d_sum_out);
+    cudaFree(d_temp_storage);
 
     cudaFree(d_w_hist1);
     cudaFree(d_w_hist2);

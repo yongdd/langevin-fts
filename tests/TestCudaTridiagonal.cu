@@ -93,6 +93,18 @@ int main()
         if (!std::isfinite(error) || error > 1e-7)
             return -1;
 
+        cudaFree(d_a);
+        cudaFree(d_b);
+        cudaFree(d_c);
+        cudaFree(d_y);
+        cudaFree(d_x);
+
+        cudaFree(d_offset);
+        cudaFree(d_q_sparse);
+        cudaFree(d_temp);
+        cudaFree(d_x_answer);
+        cudaFree(d_x_periodic_answer);
+
         return 0;
     }
     catch(std::exception& exc)

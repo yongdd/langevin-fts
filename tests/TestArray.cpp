@@ -213,6 +213,8 @@ int main()
                 }
                 std::cout << "Test passed, zero_mean(Array& g)." << std::endl;
 
+                delete cb;
+
                 delete array_1;
                 delete array_2;
                 delete array_3;

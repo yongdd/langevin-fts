@@ -206,7 +206,6 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMalloc((void**)&d_q_mask[gpu], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_unity[gpu], sizeof(double)*M));
             gpu_error_check(cudaMemcpy(d_q_unity[gpu], q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
         }
@@ -216,6 +215,19 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             gpu_error_check(cudaSetDevice(gpu));
             gpu_error_check(cudaMalloc((void**)&d_propagator_device[gpu][0], sizeof(double)*M));  // prev
             gpu_error_check(cudaMalloc((void**)&d_propagator_device[gpu][1], sizeof(double)*M));  // next
+        }
+
+        // Copy mask to d_q_mask
+        for(int gpu=0; gpu<N_GPUS; gpu++)
+        {
+            gpu_error_check(cudaSetDevice(gpu));
+            if (cb->get_mask() != nullptr)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_q_mask [gpu], sizeof(double)*M));
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
+            }
+            else
+                d_q_mask[gpu] = nullptr;
         }
 
         gpu_error_check(cudaSetDevice(0));
@@ -275,10 +287,11 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
     // For pseudo-spectral: advance_propagator()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
-        cudaFree(d_q_mask[gpu]);
+        if (d_q_mask[gpu] != nullptr)
+            cudaFree(d_q_mask[gpu]);
         cudaFree(d_q_unity[gpu]);
     }
-    
+
     for(int gpu=1; gpu<N_GPUS; gpu++)
     {
         cudaFree(d_propagator_device[gpu][0]);
@@ -339,20 +352,6 @@ void CudaComputationDiscrete::compute_statistics(
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
-        }
-
-        // Copy mask to d_q_mask
-        for(int gpu=0; gpu<N_GPUS; gpu++)
-        {
-            gpu_error_check(cudaSetDevice(gpu));
-            if (cb->get_mask() != nullptr)
-            {
-                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyInputToDevice));
-            }
-            else
-            {
-                d_q_mask[gpu] = nullptr;
-            }
         }
 
         // Update dw or d_exp_dw

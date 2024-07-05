@@ -22,6 +22,7 @@ CudaSolverReal::CudaSolverReal(
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         const int DIM = cb->get_dim();
+        this->dim = DIM;
         std::vector<int> nx(DIM);
         if (DIM == 3)
             nx = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
@@ -177,7 +178,7 @@ CudaSolverReal::CudaSolverReal(
 CudaSolverReal::~CudaSolverReal()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-    const int DIM = cb->get_dim();
+    const int DIM = this->dim;
 
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {

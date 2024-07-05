@@ -201,7 +201,6 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMalloc((void**)&d_q_mask[gpu], sizeof(double)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_unity[gpu], sizeof(double)*M));
             gpu_error_check(cudaMemcpy(d_q_unity[gpu], q_unity, sizeof(double)*M, cudaMemcpyHostToDevice));
         }
@@ -238,12 +237,11 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
             gpu_error_check(cudaSetDevice(gpu));
             if (cb->get_mask() != nullptr)
             {
+                gpu_error_check(cudaMalloc((void**)&d_q_mask [gpu], sizeof(double)*M));
                 gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
             }
             else
-            {
                 d_q_mask[gpu] = nullptr;
-            }
         }
 
         propagator_solver->update_laplacian_operator();
@@ -313,7 +311,8 @@ CudaComputationReduceMemoryDiscrete::~CudaComputationReduceMemoryDiscrete()
     // For pseudo-spectral: advance_propagator()
     for(int gpu=0; gpu<N_GPUS; gpu++)
     {
-        cudaFree(d_q_mask[gpu]);
+        if (d_q_mask[gpu] != nullptr)
+            cudaFree(d_q_mask[gpu]);
         cudaFree(d_q_unity[gpu]);
     }
     
@@ -636,7 +635,7 @@ void CudaComputationReduceMemoryDiscrete::compute_statistics(
                             sizeof(double)*M, cudaMemcpyDeviceToHost));
 
                         #ifndef NDEBUG
-                        propagator_half_steps_finished[key][n] = true;
+                        propagator_half_steps_finished[key][n-1] = true;
                         #endif
                     }
                 }
