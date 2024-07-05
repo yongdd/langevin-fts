@@ -153,8 +153,8 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             // std::cout << "computation_blocks[key].n_repeated: " << key_v << ", " << key_u  << ", " << computation_blocks[key].n_repeated << std::endl;
 
             // Update propagators
-            update_computation_propagator_map(computation_propagators, key_v, n_segment_left,  is_junction_left,  is_junction_right);
-            update_computation_propagator_map(computation_propagators, key_u, n_segment_right, is_junction_right, is_junction_left);
+            update_computation_propagator_map(computation_propagators, key_v, n_segment_left,  is_junction_right);
+            update_computation_propagator_map(computation_propagators, key_u, n_segment_right, is_junction_left);
         }
     }
 }
@@ -394,7 +394,7 @@ void PropagatorAnalyzer::substitute_right_keys(
 
 void PropagatorAnalyzer::update_computation_propagator_map(
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
-    std::string new_key, int new_n_segment, bool is_junction_start, bool is_junction_end)
+    std::string new_key, int new_n_segment, bool is_junction_end)
 {
     if (computation_propagators.find(new_key) == computation_propagators.end())
     {
@@ -402,15 +402,16 @@ void PropagatorAnalyzer::update_computation_propagator_map(
         computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
         computation_propagators[new_key].max_n_segment = new_n_segment;
         computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
-
-        computation_propagators[new_key].is_junction_start = is_junction_start;
-        computation_propagators[new_key].is_junction_end = is_junction_end;
     }
     else
     {
         if (computation_propagators[new_key].max_n_segment < new_n_segment)
             computation_propagators[new_key].max_n_segment = new_n_segment;
     }
+
+
+    if (is_junction_end)
+        computation_propagators[new_key].junction_ends.insert(new_n_segment);
 }
 
 bool PropagatorAnalyzer::is_junction(Polymer& pc, int node)
@@ -523,7 +524,7 @@ void PropagatorAnalyzer::display_propagators() const
     int reduced_mde_steps = 0;
 
     std::cout << "--------- Propagators ---------" << std::endl;
-    std::cout << "Key:\n\taggregated, (start, end) is_junction, max_n_segment, height" << std::endl;
+    std::cout << "Key:\n\theight, aggregated, max_n_segment, # dependencies, junction_ends" << std::endl;
 
     for(const auto& item : total_segment_numbers)
     {
@@ -542,24 +543,27 @@ void PropagatorAnalyzer::display_propagators() const
             std::cout << item.first.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted> " ;
 
         std::cout << ":\n\t ";
+        std::cout << item.second.height << ", ";
         if (item.first.find('[') == std::string::npos)
             std::cout << "X, ";
         else
             std::cout << "O, ";
 
-        // Print is_free_end (left, right)
-        std::cout << "(";
-        if (item.second.is_junction_start)
-            std::cout << "O, ";
-        else
-            std::cout << "X, ";
+        // Print max_n_segment
+        std::cout << item.second.max_n_segment << ", ";
 
-        if (item.second.is_junction_end)
-            std::cout << "O), ";
-        else
-            std::cout << "X), ";
+        // Print number of dependency
+        std::cout << item.second.deps.size() << ", ";
 
-        std::cout << item.second.max_n_segment << ", " << item.second.height << std::endl;
+        // Print indices for junction_ends
+        std::cout << "{";
+        for (auto it = item.second.junction_ends.begin(); it != item.second.junction_ends.end(); ++it) {
+            std::cout << *it;
+            if (std::next(it) != item.second.junction_ends.end()) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "}, "<< std::endl;
     }
 
     std::cout << "Total number of modified diffusion equation (or integral equation for discrete chain model) steps to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
