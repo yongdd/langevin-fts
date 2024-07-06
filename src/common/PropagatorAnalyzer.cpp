@@ -71,9 +71,21 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
 
     // Total segment number
     int total_segment_number = 0;
-    for(size_t b=0; b<blocks.size(); b++)
+    if (this->model_name == "continuous")
     {
-        total_segment_number += blocks[b].n_segment;
+        for(size_t b=0; b<blocks.size(); b++)
+            total_segment_number += blocks[b].n_segment;
+    }
+    else if (this->model_name == "discrete")
+    {
+        for(size_t b=0; b<blocks.size(); b++)
+        {
+            total_segment_number += blocks[b].n_segment-1;
+            if(is_junction(pc, blocks[b].v))
+                total_segment_number ++;
+            if(is_junction(pc, blocks[b].u))
+                total_segment_number ++;
+        }
     }
     this->total_segment_numbers.push_back(total_segment_number);
 
@@ -533,8 +545,15 @@ void PropagatorAnalyzer::display_propagators() const
 
     for(const auto& item : computation_propagators)
     {
-        reduced_mde_steps += item.second.max_n_segment;
-
+        if (this->model_name == "continuous")
+            reduced_mde_steps += item.second.max_n_segment;
+        else if (this->model_name == "discrete")
+        {
+            reduced_mde_steps += item.second.max_n_segment-1;
+            reduced_mde_steps += item.second.junction_ends.size();
+            if (item.second.deps.size() > 0)
+                reduced_mde_steps++;
+        }
         const int MAX_PRINT_LENGTH = 500;
 
         if (item.first.size() <= MAX_PRINT_LENGTH)
@@ -566,8 +585,10 @@ void PropagatorAnalyzer::display_propagators() const
         }
         std::cout << "}, "<< std::endl;
     }
-
-    std::cout << "Total number of modified diffusion equation (or integral equation for discrete chain model) steps to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+    if (this->model_name == "continuous")
+        std::cout << "Time complexity (total number of modified diffusion equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+    else if (this->model_name == "discrete")
+        std::cout << "Time complexity (total number of integral equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
     std::cout << "Total number of steps after optimizing computation : " << reduced_mde_steps << std::endl;
 
     double percent = 100*(1.0 - ((double ) reduced_mde_steps)/((double) total_mde_steps_without_reduction));

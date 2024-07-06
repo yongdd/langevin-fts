@@ -38,6 +38,7 @@ private:
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
+    int time_complexity;
     #endif
 
     // Total partition functions for each polymer
