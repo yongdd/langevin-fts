@@ -557,7 +557,8 @@ void PropagatorAnalyzer::display_propagators() const
 
         // Print indices for junction_ends
         std::cout << "{";
-        for (auto it = item.second.junction_ends.begin(); it != item.second.junction_ends.end(); ++it) {
+        for (auto it = item.second.junction_ends.begin(); it != item.second.junction_ends.end(); ++it)
+        {
             std::cout << *it;
             if (std::next(it) != item.second.junction_ends.end()) {
                 std::cout << ", ";

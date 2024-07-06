@@ -25,7 +25,7 @@ CpuComputationContinuous::CpuComputationContinuous(
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
         if (env_omp_num_threads.empty())
-            n_streams = 1;
+            n_streams = 4;
         else
             n_streams = std::stoi(env_omp_num_threads);
         std::cout << "n_streams: " << n_streams << std::endl;
@@ -163,23 +163,22 @@ void CpuComputationContinuous::compute_statistics(
         // Assign a pointer for mask
         const double *q_mask = cb->get_mask();
 
-        auto& branch_schedule = sc->get_schedule();
-        // // display all jobs
-        // For (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
-        // {
-        //     std::cout << "jobs:" << std::endl;
-        //     for(int job=0; job<parallel_job->size(); job++)
-        //     {
-        //         auto& key = std::get<0>((*parallel_job)[job]);
-        //         int n_segment_from = std::get<1>((*parallel_job)[job]);
-        //         int n_segment_to = std::get<2>((*parallel_job)[job]);
-        //         std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
-        //     }
-        // }
-
         // For each time span
+        auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
+            // display all jobs
+            #ifndef NDEBUG
+            std::cout << "jobs:" << std::endl;
+            for(size_t job=0; job<parallel_job->size(); job++)
+            {
+                auto& key = std::get<0>((*parallel_job)[job]);
+                int n_segment_from = std::get<1>((*parallel_job)[job]);
+                int n_segment_to = std::get<2>((*parallel_job)[job]);
+                std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
+            }
+            #endif
+
             // For each propagator
             #pragma omp parallel for num_threads(n_streams)
             for(size_t job=0; job<parallel_job->size(); job++)
@@ -190,6 +189,11 @@ void CpuComputationContinuous::compute_statistics(
                 auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
                 auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
 
+                // // Display job info
+                // #ifndef NDEBUG
+                // std::cout << job << " started" << std::endl;
+                // #endif
+
                 // Check key
                 #ifndef NDEBUG
                 if (propagator.find(key) == propagator.end())
@@ -199,7 +203,7 @@ void CpuComputationContinuous::compute_statistics(
                 double **_propagator = propagator[key];
 
                 // If it is leaf node
-                if(n_segment_from == 1 && deps.size() == 0) 
+                if(n_segment_from == 0 && deps.size() == 0) 
                 {
                      // q_init
                     if (key[0] == '{')
@@ -221,7 +225,7 @@ void CpuComputationContinuous::compute_statistics(
                     #endif
                 }
                 // If it is not leaf node
-                else if (n_segment_from == 1 && deps.size() > 0) 
+                else if (n_segment_from == 0 && deps.size() > 0) 
                 {
                     // If it is aggregated
                     if (key[0] == '[')
@@ -285,30 +289,35 @@ void CpuComputationContinuous::compute_statistics(
                 }
         
                 // Multiply mask
-                if (n_segment_from == 1 && q_mask != nullptr)
+                if (n_segment_from == 0 && q_mask != nullptr)
                 {
                     for(int i=0; i<M; i++)
                         _propagator[0][i] *= q_mask[i];
                 }
 
                 // Advance propagator successively
-                for(int n=n_segment_from; n<=n_segment_to; n++)
+                for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!propagator_finished[key][n-1])
-                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                    if (!propagator_finished[key][n])
+                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                    if (propagator_finished[key][n+1])
+                        std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
                     #endif
-                    
+
                     propagator_solver->advance_propagator_continuous(
-                            _propagator[n-1],
                             _propagator[n],
+                            _propagator[n+1],
                             monomer_type, q_mask);
 
                     #ifndef NDEBUG
-                    propagator_finished[key][n] = true;
+                    propagator_finished[key][n+1] = true;
                     #endif
-                    // std::cout << "finished, key, n: " + key + ", " << std::to_string(n) << std::endl;
                 }
+                // // Display job info
+                // #ifndef NDEBUG
+                // std::cout << job << " finished" << std::endl;
+                // #endif
             }
         }
 

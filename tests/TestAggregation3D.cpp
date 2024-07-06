@@ -188,8 +188,11 @@ int main()
                         for(int iter=0; iter<max_scft_iter; iter++)
                         {
                             // For the given fields find the polymer statistics
+                            std::cout << "Computing statistics..." << std::endl;
                             solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                            std::cout << "Getting total concentration A..." << std::endl;
                             solver->get_total_concentration("A", phi_a);
+                            std::cout << "Getting total concentration B..." << std::endl;
                             solver->get_total_concentration("B", phi_b);
 
                             // Check the total partition function
@@ -199,9 +202,11 @@ int main()
                             #endif
 
                             // Compute stress
+                            std::cout << "Computing stress..." << std::endl;
                             std::vector<double> stress = solver->compute_stress();
 
                             // Calculate the total energy
+                            std::cout << "Computing total energy..." << std::endl;
                             for(int i=0; i<M; i++)
                             {
                                 w_minus[i] = (w[i]-w[i+M])/2;
@@ -257,6 +262,7 @@ int main()
                             if(error_level < tolerance) break;
 
                             // Calculate new fields using simple and Anderson mixing  //w_new, w_current, w_diff
+                            std::cout << "Calculating new fields..." << std::endl;
                             for(int d=0; d<cb->get_dim(); d++)
                             {
                                 w[2*M+d] = cb->get_lx(d);
@@ -265,6 +271,7 @@ int main()
                             am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
 
                             // Update lx
+                            std::cout << "Updating lx..." << std::endl;
                             for(int d=0; d<cb->get_dim(); d++)
                                 lx[d] = w[2*M+d];
                             

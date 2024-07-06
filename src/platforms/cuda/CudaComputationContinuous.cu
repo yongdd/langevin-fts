@@ -262,9 +262,8 @@ void CudaComputationContinuous::compute_statistics(
         // Update dw or d_exp_dw
         propagator_solver->update_dw(device, w_input);
        
-        auto& branch_schedule = sc->get_schedule();
-
         // For each time span
+        auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // For each propagator
@@ -283,6 +282,11 @@ void CudaComputationContinuous::compute_statistics(
                 auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
                 auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
 
+                // // Display job info
+                // #ifndef NDEBUG
+                // std::cout << job << " started" << std::endl;
+                // #endif
+
                 // Check key
                 #ifndef NDEBUG
                 if (d_propagator.find(key) == d_propagator.end())
@@ -292,7 +296,7 @@ void CudaComputationContinuous::compute_statistics(
                 double **_d_propagator = d_propagator[key];
 
                 // If it is leaf node
-                if(n_segment_from == 1 && deps.size() == 0)
+                if(n_segment_from == 0 && deps.size() == 0)
                 {
                      // q_init
                     if (key[0] == '{')
@@ -314,7 +318,7 @@ void CudaComputationContinuous::compute_statistics(
                     #endif
                 }
                 // If it is not leaf node
-                else if (n_segment_from == 1 && deps.size() > 0)
+                else if (n_segment_from == 0 && deps.size() > 0)
                 {
                     // If it is aggregated
                     if (key[0] == '[')
@@ -378,27 +382,29 @@ void CudaComputationContinuous::compute_statistics(
                 }
 
                 // Multiply mask
-                if (n_segment_from == 1 && d_q_mask[0] != nullptr)
+                if (n_segment_from == 0 && d_q_mask[0] != nullptr)
                     multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
 
                 if (gpu == 0)
                 {
-                    for(int n=n_segment_from; n<=n_segment_to; n++)
+                    for(int n=n_segment_from; n<n_segment_to; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[key][n-1])
-                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                        if (!propagator_finished[key][n])
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (propagator_finished[key][n+1])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
                         // STREAM 0
                         propagator_solver->advance_propagator_continuous(
                             gpu, STREAM, 
-                            _d_propagator[n-1],
                             _d_propagator[n],
+                            _d_propagator[n+1],
                             monomer_type, d_q_mask[gpu]);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][n] = true;
+                        propagator_finished[key][n+1] = true;
                         #endif
                     }
                 }
@@ -421,17 +427,19 @@ void CudaComputationContinuous::compute_statistics(
                     // Copy propagator copy memory from device 1 to device
                     gpu_error_check(cudaMemcpyAsync(
                         d_propagator_device[gpu][prev],
-                        _d_propagator[n_segment_from-1],
+                        _d_propagator[n_segment_from],
                         sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
 
                     gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                     gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
-                    for(int n=n_segment_from; n<=n_segment_to; n++)
+                    for(int n=n_segment_from; n<n_segment_to; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[key][n-1])
-                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                        if (!propagator_finished[key][n])
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (propagator_finished[key][n+1])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
                         // DEVICE 1, STREAM 0: calculate propagators
@@ -446,7 +454,7 @@ void CudaComputationContinuous::compute_statistics(
                         if (n > n_segment_from)
                         {
                             gpu_error_check(cudaMemcpyAsync(
-                                _d_propagator[n-1],
+                                _d_propagator[n],
                                 d_propagator_device[gpu][prev],
                                 sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
                             gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
@@ -459,7 +467,7 @@ void CudaComputationContinuous::compute_statistics(
                         std::swap(prev, next);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][n] = true;
+                        propagator_finished[key][n+1] = true;
                         #endif
                     }
 
@@ -477,6 +485,11 @@ void CudaComputationContinuous::compute_statistics(
                 }
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
+
+                // // Display job info
+                // #ifndef NDEBUG
+                // std::cout << job << " finished" << std::endl;
+                // #endif
             }
             // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)

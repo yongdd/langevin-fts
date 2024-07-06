@@ -276,8 +276,8 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
         // Update dw or d_exp_dw
         propagator_solver->update_dw(device, w_input);
 
-        auto& branch_schedule = sc->get_schedule();
         // For each time span
+        auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // For each propagator
@@ -308,7 +308,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 double **_propagator = propagator[key];
 
                 // If it is leaf node
-                if(n_segment_from == 1 && deps.size() == 0)
+                if(n_segment_from == 0 && deps.size() == 0)
                 {
                     // q_init
                     if (key[0] == '{')
@@ -328,7 +328,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                     #endif
                 }
                 // If it is not leaf node
-                else if (n_segment_from == 1 && deps.size() > 0)
+                else if (n_segment_from == 0 && deps.size() > 0)
                 {
                     // If it is aggregated
                     if (key[0] == '[')
@@ -439,17 +439,17 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 }
 
                 // Multiply mask
-                if (n_segment_from == 1 && d_q_mask[gpu] != nullptr)
+                if (n_segment_from == 0 && d_q_mask[gpu] != nullptr)
                     multi_real<<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], d_q_mask[gpu], 1.0, M);
 
                 // Copy data between device and host
-                if (n_segment_from == 1)
+                if (n_segment_from == 0)
                 {
                     gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[STREAM][0], sizeof(double)*M, cudaMemcpyDeviceToHost));
                 }
                 else
                 {
-                    gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], _propagator[n_segment_from-1], sizeof(double)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], _propagator[n_segment_from], sizeof(double)*M, cudaMemcpyHostToDevice));
                 }
 
                 int prev, next;
@@ -462,11 +462,13 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                 gpu_error_check(cudaEventCreate(&kernel_done));
                 gpu_error_check(cudaEventCreate(&memcpy_done));
 
-                for(int n=n_segment_from; n<=n_segment_to; n++)
+                for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!propagator_finished[key][n-1])
-                        std::cout<< "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                    if (!propagator_finished[key][n])
+                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                    if (propagator_finished[key][n+1])
+                        std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
                     // STREAM 0: calculate propagators
@@ -481,7 +483,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                     if (n > n_segment_from)
                     {
                         gpu_error_check(cudaMemcpyAsync(
-                            _propagator[n-1],
+                            _propagator[n],
                             d_q_one[STREAM][prev],
                             sizeof(double)*M, cudaMemcpyDeviceToHost, streams[STREAM][1]));
                         gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
@@ -494,7 +496,7 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
                     std::swap(prev, next);
 
                     #ifndef NDEBUG
-                    propagator_finished[key][n] = true;
+                    propagator_finished[key][n+1] = true;
                     #endif
                 }
 
