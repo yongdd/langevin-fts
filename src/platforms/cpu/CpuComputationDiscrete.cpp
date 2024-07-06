@@ -188,6 +188,10 @@ void CpuComputationDiscrete::compute_statistics(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
+        #ifndef NDEBUG
+        this->time_complexity = 0;
+        #endif
+
         // Update dw or exp_dw
         propagator_solver->update_dw(w_input);
 
@@ -313,6 +317,11 @@ void CpuComputationDiscrete::compute_statistics(
                                 _propagator[0][i] += _propagator_sub_dep[sub_n_segment-1][i]*sub_n_repeated;
                         }
 
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        this->time_complexity++;
+                        #endif
+
                         propagator_solver->advance_propagator_discrete(
                             _propagator[0],
                             _propagator[0],
@@ -366,6 +375,11 @@ void CpuComputationDiscrete::compute_statistics(
                                 _q_junction_start[i] *= _propagator_half_step[i];
                         }
 
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        this->time_complexity++;
+                        #endif
+
                         // Add half bond
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             _q_junction_start, _propagator[0], monomer_type);
@@ -395,6 +409,11 @@ void CpuComputationDiscrete::compute_statistics(
                         #ifndef NDEBUG
                         if (propagator_finished[key][0])
                             std::cout << "already finished: " + key + ", " + std::to_string(1) << std::endl;
+                        #endif
+
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        this->time_complexity++;
                         #endif
 
                         propagator_solver->advance_propagator_discrete_half_bond_step(
@@ -427,6 +446,11 @@ void CpuComputationDiscrete::compute_statistics(
                     //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
                     // #endif
 
+                    #ifndef NDEBUG
+                    #pragma omp critical
+                    this->time_complexity++;
+                    #endif
+
                     propagator_solver->advance_propagator_discrete(
                         _propagator[n-1], _propagator[n],
                         monomer_type, q_mask);
@@ -453,6 +477,11 @@ void CpuComputationDiscrete::compute_statistics(
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        this->time_complexity++;
+                        #endif
+
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             _propagator[n],
                             propagator_half_steps[key][n],
@@ -472,6 +501,10 @@ void CpuComputationDiscrete::compute_statistics(
                 // #endif
             }
         }
+
+        #ifndef NDEBUG
+        std::cout << "time_complexity: " << this->time_complexity << std::endl;
+        #endif
 
         // Compute total partition function of each distinct polymers
         for(const auto& segment_info: single_partition_segment)
