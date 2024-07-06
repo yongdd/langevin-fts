@@ -1,6 +1,8 @@
 #include <complex>
-#include <omp.h>
 #include <iostream>
+#include <chrono>
+#include <omp.h>
+
 #include "CudaComputationDiscrete.h"
 #include "CudaComputationBox.h"
 
@@ -53,21 +55,25 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment;
             propagator_size[key] = max_n_segment;
-            d_propagator[key] = new double*[max_n_segment];
-
+            
             // Allocate memory for q(r,1/2)
             if (item.second.deps.size() > 0)
             {
                 d_propagator_junction_start[key] = nullptr;
                 gpu_error_check(cudaMalloc((void**)&d_propagator_junction_start[key], sizeof(double)*M));
             }
+
             // Allocate memory for q(r,s+1/2)
-            for (int n: item.second.junction_ends)
+            d_propagator_half_steps[key] = new double*[max_n_segment];
+            for(int i=0; i<propagator_size[key]; i++)
             {
-                d_propagator_half_steps[key][n-1] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][n-1], sizeof(double)*M));
+                d_propagator_half_steps[key][i] = nullptr;
+                if (item.second.junction_ends.find(i+1) != item.second.junction_ends.end())
+                    gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][i], sizeof(double)*M));
             }
+
             // Allocate memory for q(r,s)
+            d_propagator[key] = new double*[max_n_segment];
             for(int i=0; i<propagator_size[key]; i++)
                 gpu_error_check(cudaMalloc((void**)&d_propagator[key][i], sizeof(double)*M));
 
@@ -259,8 +265,6 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
     delete[] single_polymer_partitions;
     delete[] single_solvent_partitions;
 
-    for(const auto& item: d_phi_block)
-        cudaFree(item.second);
     for(const auto& item: d_propagator)
     {
         for(int i=0; i<propagator_size[item.first]; i++)
@@ -271,9 +275,16 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
         cudaFree(item.second);
     for(const auto& item: d_propagator_half_steps)
     {
-        for (const auto& index: item.second)
-            cudaFree(index.second);
+        for(int i=0; i<propagator_size[item.first]; i++)
+        {
+            if(item.second[i] != nullptr)
+                cudaFree(item.second[i]);
+        }
+        delete[] item.second;
     }
+    
+    for(const auto& item: d_phi_block)
+        cudaFree(item.second);
     for(const auto& item: d_phi_solvent)
         cudaFree(item);
 
@@ -361,6 +372,30 @@ void CudaComputationDiscrete::compute_statistics(
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
+            // // display all jobs
+            // #ifndef NDEBUG
+            // std::cout << "jobs:" << std::endl;
+            // for(size_t job=0; job<parallel_job->size(); job++)
+            // {
+            //     auto& key = std::get<0>((*parallel_job)[job]);
+            //     int n_segment_from = std::get<1>((*parallel_job)[job]);
+            //     int n_segment_to = std::get<2>((*parallel_job)[job]);
+            //     std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
+            //     std::cout << "half_steps: ";
+            //     std::cout << "{";
+            //     for (auto it = d_propagator_half_steps[key].begin(); it != d_propagator_half_steps[key].end(); ++it)
+            //     {
+            //         std::cout << it->first+1;
+            //         if (std::next(it) != d_propagator_half_steps[key].end()) {
+            //             std::cout << ", ";
+            //         }
+            //     }
+            //     std::cout << "}, "<< std::endl;
+            // }
+            // auto start_time = std::chrono::duration_cast<std::chrono::microseconds>
+            //     (std::chrono::system_clock::now().time_since_epoch()).count();
+            // #endif
+
             // For each propagator
             #pragma omp parallel for num_threads(n_streams)
             for(size_t job=0; job<parallel_job->size(); job++)
@@ -375,17 +410,32 @@ void CudaComputationDiscrete::compute_statistics(
                 auto& deps = propagator_analyzer->get_computation_propagator(key).deps;
                 auto monomer_type = propagator_analyzer->get_computation_propagator(key).monomer_type;
 
+                // #ifndef NDEBUG
+                // #pragma omp critical
+                // std::cout << job << " started, stream: " << STREAM << ", " <<
+                //     std::chrono::duration_cast<std::chrono::microseconds>
+                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                // #endif
+
                 // Check key
                 #ifndef NDEBUG
                 if (d_propagator.find(key) == d_propagator.end())
                     std::cout<< "Could not find key '" + key + "'. " << std::endl;
                 #endif
+                
                 double **_d_propagator = d_propagator[key];
                 double *_d_exp_dw = propagator_solver->d_exp_dw[gpu][monomer_type];
 
                 // Calculate one block end
-                if(n_segment_from == 1 && deps.size() == 0) // if it is leaf node
+                if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
                 {
+                    // #ifndef NDEBUG
+                    // #pragma omp critical
+                    // std::cout << job << " init 1, " << 
+                    //     std::chrono::duration_cast<std::chrono::microseconds>
+                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                    // #endif
+
                      // q_init
                     if (key[0] == '{')
                     {
@@ -405,11 +455,18 @@ void CudaComputationDiscrete::compute_statistics(
                     #endif
                 }
                 // If it is not leaf node
-                else if (n_segment_from == 1 && deps.size() > 0)
+                else if (n_segment_from == 0 && deps.size() > 0)
                 {
                     // If it is aggregated
                     if (key[0] == '[')
                     {
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " init 2, " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
+
                         // Initialize to zero
                         gpu_error_check(cudaMemsetAsync(_d_propagator[0], 0, sizeof(double)*M, streams[STREAM][0]));
 
@@ -457,7 +514,15 @@ void CudaComputationDiscrete::compute_statistics(
                         // -, |    : half bonds
                         // A, B, C : other full segments
 
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " init 3, " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
+
                         // Combine branches
+                        // Initialize to one
                         gpu_error_check(cudaMemcpyAsync(d_propagator_junction_start[key], d_q_unity[0], sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
                         for(size_t d=0; d<deps.size(); d++)
@@ -490,26 +555,51 @@ void CudaComputationDiscrete::compute_statistics(
                     }
                 }
 
-                if(n_segment_from ==1)
+                if(n_segment_from == 0)
                 {
                     // Multiply mask
-                    if (d_q_mask[0] != nullptr)
+                    if (d_q_mask[gpu] != nullptr)
                         multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
-                }
-                else
-                {
-                    n_segment_from--;
+
+                    // q(r, 1+1/2)
+                    if (d_propagator_half_steps[key][0] != nullptr)
+                    {
+                        #ifndef NDEBUG
+                        if (propagator_half_steps_finished[key][0])
+                            std::cout << "already half_step finished: " + key + ", " + std::to_string(1) << std::endl;
+                        #endif
+
+                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                            gpu, STREAM, 
+                            _d_propagator[0],
+                            d_propagator_half_steps[key][0],
+                            monomer_type);
+
+                        #ifndef NDEBUG
+                        propagator_half_steps_finished[key][0] = true;
+                        #endif
+                    }
+                    n_segment_from++;
                 }
 
-                // q(r, n)
+                // q(r, s)
                 if (gpu == 0)
                 {
                     for(int n=n_segment_from; n<n_segment_to; n++)
                     {
                         #ifndef NDEBUG
                         if (!propagator_finished[key][n-1])
-                            std::cout<< "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (propagator_finished[key][n])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
+
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " q_s, " << n << ", " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
 
                         propagator_solver->advance_propagator_discrete(
                             gpu, STREAM, 
@@ -551,8 +641,17 @@ void CudaComputationDiscrete::compute_statistics(
                     {
                         #ifndef NDEBUG
                         if (!propagator_finished[key][n-1])
-                            std::cout<< "unfinished, key: " + key + ", " + std::to_string(n-1) << std::endl;
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (propagator_finished[key][n])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
+
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " q_s, " << n << ", " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
 
                         // DEVICE 1, STREAM 0: calculate propagators
                         propagator_solver->advance_propagator_discrete(
@@ -597,23 +696,42 @@ void CudaComputationDiscrete::compute_statistics(
                 }
 
                 // q(r, n+1/2)
-                for(int n=n_segment_from; n<=n_segment_to; n++)
+                for(int n=n_segment_from; n<n_segment_to; n++)
                 {
-                    if (d_propagator_half_steps[key].find(n-1) != d_propagator_half_steps[key].end())
+                    if (d_propagator_half_steps[key][n] != nullptr)
                     {
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " q_s+1/2, " << n << ", " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
+
+                        #ifndef NDEBUG
+                        if (propagator_half_steps_finished[key][n])
+                            std::cout << "already half_step finished: " + key + ", " + std::to_string(n+1) << std::endl;
+                        #endif
+
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             gpu, STREAM,
-                            _d_propagator[n-1],
-                            d_propagator_half_steps[key][n-1],
+                            _d_propagator[n],
+                            d_propagator_half_steps[key][n],
                             monomer_type);
 
                         #ifndef NDEBUG
-                        propagator_half_steps_finished[key][n-1] = true;
+                        propagator_half_steps_finished[key][n] = true;
                         #endif
                     }
                 }
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
+                
+                // #ifndef NDEBUG
+                // #pragma omp critical
+                // std::cout << job << " finished, " << 
+                //     std::chrono::duration_cast<std::chrono::microseconds>
+                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                // #endif
             }
             // Synchronize all GPUs
             for(int gpu=0; gpu<N_GPUS; gpu++)

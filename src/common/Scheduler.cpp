@@ -165,13 +165,13 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
                         // If max_n_segment is 0, skip propagator iterations 
                         if(computation_propagators[*iters[s]].max_n_segment == 0)
                         {
-                            n_segment_from = 1;
+                            n_segment_from = 0;
                             n_segment_to = 0;
                         }
                         // Set range of n_segment to be computed
                         else
                         {
-                            n_segment_from = 1+time_stamp[i]-std::get<1>(stream_start_finish[*iters[s]]);
+                            n_segment_from = time_stamp[i]-std::get<1>(stream_start_finish[*iters[s]]);
                             n_segment_to = time_stamp[i+1]-std::get<1>(stream_start_finish[*iters[s]]);
                         }
 

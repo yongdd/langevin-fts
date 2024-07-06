@@ -79,8 +79,6 @@ int main()
                     std::cout << "Platform: " << platform << std::endl;
                     std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
-
-
                     for(int i=0; i<M; i++)
                     {
                         w[i] = 0.0;

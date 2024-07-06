@@ -18,3 +18,5 @@
 47. Add tests for example files
 48. Check if CUDA can be installed using Conda
 50. Check if cuFFT callback function is applicable
+51. Figure out why 'std::map<std::string, std::map<int, double *>>' causes errors in 'omp parallel for'
+52. Figure out why 'propagator_half_steps[key].find(0) == propagator_half_steps[key].end()' fixes above problem

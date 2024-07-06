@@ -33,7 +33,7 @@ MklFFT3D::MklFFT3D(std::array<int,3> nx)
         status = DftiCommitDescriptor(hand_backward);
 
         if (status !=0)
-            std::cout << "MKL status: " << status << std::endl;
+            std::cout << "MKL constructor, status: " << status << std::endl;
 
         // Compute a normalization factor
         this->fft_normal_factor = nx[0]*nx[1]*nx[2];
@@ -50,7 +50,7 @@ MklFFT3D::~MklFFT3D()
     status = DftiFreeDescriptor(&hand_backward);
 
     if (status !=0)
-        std::cout << "MKL status: " << status << std::endl;
+        std::cout << "MKL destructor, status: " << status << std::endl;
 }
 void MklFFT3D::forward(double *rdata, std::complex<double> *cdata)
 {
@@ -58,7 +58,10 @@ void MklFFT3D::forward(double *rdata, std::complex<double> *cdata)
     status = DftiComputeForward(hand_forward, rdata, cdata);
 
     if (status !=0)
-        std::cout << "MKL status: " << status << std::endl;
+    {
+        // std::cout << "MKL forward, status: " << status << std::endl;
+        throw_with_line_number("MKL backward, status: " + std::to_string(status));
+    }
 }
 void MklFFT3D::backward(std::complex<double> *cdata, double *rdata)
 {
@@ -66,7 +69,10 @@ void MklFFT3D::backward(std::complex<double> *cdata, double *rdata)
     status = DftiComputeBackward(hand_backward, cdata, rdata);
     
     if (status !=0)
-        std::cout << "MKL status: " << status << std::endl;
+    {
+        // std::cout << "MKL backward, status: " << status << std::endl;
+        throw_with_line_number("MKL backward, status: " + std::to_string(status));
+    }
 
     for(int i=0; i<n_grid; i++)
         rdata[i] /= fft_normal_factor;

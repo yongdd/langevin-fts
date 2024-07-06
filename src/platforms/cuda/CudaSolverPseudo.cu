@@ -105,8 +105,6 @@ CudaSolverPseudo::CudaSolverPseudo(
             for(int i=0; i<n_streams; i++)
             {  
                 gpu_error_check(cudaSetDevice(i % N_GPUS));
-
-                gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(double)*2*M));
                 gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(ftsComplex)*M_COMPLEX));
                 gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(ftsComplex)*2*M_COMPLEX));
             }
@@ -190,7 +188,6 @@ CudaSolverPseudo::~CudaSolverPseudo()
     {
         for(int i=0; i<n_streams; i++)
         {
-            cudaFree(d_q_step_1_two[i]);
             cudaFree(d_qk_in_1_one[i]);
             cudaFree(d_qk_in_1_two[i]);
         }
