@@ -46,6 +46,8 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             // Allocate memory for q(r,1/2)
             if (item.second.deps.size() > 0)
                 propagator_junction_start[key] = new double[M];
+            else
+                propagator_junction_start[key] = nullptr;
 
             // Allocate memory for q(r,s+1/2)
             propagator_half_steps[key] = new double*[max_n_segment];

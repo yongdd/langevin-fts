@@ -57,11 +57,9 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             propagator_size[key] = max_n_segment;
             
             // Allocate memory for q(r,1/2)
+            d_propagator_junction_start[key] = nullptr;
             if (item.second.deps.size() > 0)
-            {
-                d_propagator_junction_start[key] = nullptr;
                 gpu_error_check(cudaMalloc((void**)&d_propagator_junction_start[key], sizeof(double)*M));
-            }
 
             // Allocate memory for q(r,s+1/2)
             d_propagator_half_steps[key] = new double*[max_n_segment];

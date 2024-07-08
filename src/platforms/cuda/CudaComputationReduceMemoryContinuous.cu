@@ -549,7 +549,8 @@ void CudaComputationReduceMemoryContinuous::compute_statistics(
             // If there is no segment
             if(n_segment_right == 0)
             {
-                gpu_error_check(cudaMemset(block.second, 0, sizeof(double)*M));
+                for(int i=0; i<M;i++)
+                    block.second[i] = 0.0;
                 continue;
             }
 
