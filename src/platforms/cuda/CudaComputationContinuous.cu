@@ -47,16 +47,16 @@ CudaComputationContinuous::CudaComputationContinuous(
         for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
             std::string key = item.first;
-            int max_n_segment = item.second.max_n_segment;
+            int max_n_segment = item.second.max_n_segment+1;
             
-            propagator_size[key] = max_n_segment+1;
-            d_propagator[key] = new double*[max_n_segment+1];
+            propagator_size[key] = max_n_segment;
+            d_propagator[key] = new double*[max_n_segment];
             for(int i=0; i<propagator_size[key]; i++)
                 gpu_error_check(cudaMalloc((void**)&d_propagator[key][i], sizeof(double)*M));
 
             #ifndef NDEBUG
-            propagator_finished[key] = new bool[max_n_segment+1];
-            for(int i=0; i<=max_n_segment;i++)
+            propagator_finished[key] = new bool[max_n_segment];
+            for(int i=0; i<max_n_segment;i++)
                 propagator_finished[key][i] = false;
             #endif
         }

@@ -42,8 +42,6 @@ private:
 
     // Map for propagator q(r,s)
     std::map<std::string, double **> d_propagator;
-    // Map for q(r,1/2; code)
-    std::map<std::string, double *> d_propagator_junction_start;
     // Map for q(r,s+1/2, ; code)
     std::map<std::string, double **> d_propagator_half_steps;
     // Map for deallocation of propagator
