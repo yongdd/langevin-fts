@@ -43,36 +43,37 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         for(const auto& item: propagator_analyzer->get_computation_propagators())
         {
              // There are N segments
-
              // Example (N==5)
              // O--O--O--O--O
-             // 0  1  2  3  4
+             // 1  2  3  4  5
 
              // Legend)
              // -- : full bond
              // O  : full segment
 
             std::string key = item.first;
-            int max_n_segment = item.second.max_n_segment;
+            int max_n_segment = item.second.max_n_segment+1; 
             propagator_size[key] = max_n_segment;
             
             // Allocate memory for q(r,1/2)
-            d_propagator_junction_start[key] = nullptr;
+            d_propagator_half_steps[key] = new double*[max_n_segment];
+            d_propagator_half_steps[key][0] = nullptr;
             if (item.second.deps.size() > 0)
-                gpu_error_check(cudaMalloc((void**)&d_propagator_junction_start[key], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][0], sizeof(double)*M));
 
             // Allocate memory for q(r,s+1/2)
-            d_propagator_half_steps[key] = new double*[max_n_segment];
-            for(int i=0; i<propagator_size[key]; i++)
+            for(int i=1; i<propagator_size[key]; i++)
             {
                 d_propagator_half_steps[key][i] = nullptr;
-                if (item.second.junction_ends.find(i+1) != item.second.junction_ends.end())
+                if (item.second.junction_ends.find(i) != item.second.junction_ends.end())
                     gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][i], sizeof(double)*M));
             }
 
             // Allocate memory for q(r,s)
+            // Index 0 will be not used
             d_propagator[key] = new double*[max_n_segment];
-            for(int i=0; i<propagator_size[key]; i++)
+            d_propagator[key][0] = nullptr;
+            for(int i=1; i<propagator_size[key]; i++)
                 gpu_error_check(cudaMalloc((void**)&d_propagator[key][i], sizeof(double)*M));
 
             #ifndef NDEBUG
@@ -80,7 +81,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             for(int i=0; i<max_n_segment;i++)
                 propagator_finished[key][i] = false;
             for (int n: item.second.junction_ends)
-                propagator_half_steps_finished[key][n-1] = false;
+                propagator_half_steps_finished[key][n] = false;
             #endif
         }
 
@@ -116,8 +117,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                d_propagator[key_left][n_segment_left-1],    // q
-                d_propagator[key_right][0],                  // q_dagger
+                d_propagator[key_left][n_segment_left],    // q
+                d_propagator[key_right][1],                  // q_dagger
                 monomer_type,       
                 n_aggregated                                 // how many propagators are aggregated
                 ));
@@ -156,8 +157,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                         continue;
                     }
                     
-                    d_propagator_left  = d_propagator_junction_start[key_left];
-                    d_propagator_right = d_q_2[N_RIGHT-1];
+                    d_propagator_left  = d_propagator_half_steps[key_left][0];
+                    d_propagator_right = d_q_2[N_RIGHT];
                     is_half_bond_length = true;
                 }
                 // At u
@@ -168,8 +169,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                         continue;
                     }
 
-                    d_propagator_left  = d_q_1[N_LEFT-1];
-                    d_propagator_right = d_propagator_junction_start[key_right];
+                    d_propagator_left  = d_q_1[N_LEFT];
+                    d_propagator_right = d_propagator_half_steps[key_right][0];
                     is_half_bond_length = true;
                 }
                 // At aggregation junction
@@ -181,8 +182,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
                 // Within the blocks
                 else
                 {
-                    d_propagator_left  = d_q_1[N_LEFT-n-1];
-                    d_propagator_right = d_q_2[n-1];
+                    d_propagator_left  = d_q_1[N_LEFT-n];
+                    d_propagator_right = d_q_2[n];
                     is_half_bond_length = false;
                 }
                 _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
@@ -266,11 +267,12 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
     for(const auto& item: d_propagator)
     {
         for(int i=0; i<propagator_size[item.first]; i++)
-            cudaFree(item.second[i]);
+        {
+            if(item.second[i] != nullptr)
+                cudaFree(item.second[i]);
+        }
         delete[] item.second;
     }
-    for(const auto& item: d_propagator_junction_start)
-        cudaFree(item.second);
     for(const auto& item: d_propagator_half_steps)
     {
         for(int i=0; i<propagator_size[item.first]; i++)
@@ -440,16 +442,16 @@ void CudaComputationDiscrete::compute_statistics(
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
-                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice, streams[STREAM][0]));
-                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], _d_exp_dw, 1.0, M);
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[1], q_init[g], sizeof(double)*M, cudaMemcpyInputToDevice, streams[STREAM][0]));
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], _d_exp_dw, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[1], _d_exp_dw, sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
                     }
                     
                     #ifndef NDEBUG
-                    propagator_finished[key][0] = true;
+                    propagator_finished[key][1] = true;
                     #endif
                 }
                 // If it is not leaf node
@@ -466,7 +468,7 @@ void CudaComputationDiscrete::compute_statistics(
                         // #endif
 
                         // Initialize to zero
-                        gpu_error_check(cudaMemsetAsync(_d_propagator[0], 0, sizeof(double)*M, streams[STREAM][0]));
+                        gpu_error_check(cudaMemsetAsync(_d_propagator[1], 0, sizeof(double)*M, streams[STREAM][0]));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -478,23 +480,23 @@ void CudaComputationDiscrete::compute_statistics(
                             #ifndef NDEBUG
                             if (d_propagator.find(sub_dep) == d_propagator.end())
                                 std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!propagator_finished[sub_dep][sub_n_segment-1])
+                            if (!propagator_finished[sub_dep][sub_n_segment])
                                 std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
                             lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                                _d_propagator[0], 1.0, _d_propagator[0],
-                                sub_n_repeated, d_propagator[sub_dep][sub_n_segment-1], M);
+                                _d_propagator[1], 1.0, _d_propagator[1],
+                                sub_n_repeated, d_propagator[sub_dep][sub_n_segment], M);
                         }
                         // STREAM 0
                         propagator_solver->advance_propagator_discrete(
                             gpu, STREAM,
-                            _d_propagator[0],
-                            _d_propagator[0],
+                            _d_propagator[1],
+                            _d_propagator[1],
                             monomer_type, d_q_mask[gpu]);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][0] = true;
+                        propagator_finished[key][1] = true;
                         #endif
                     }
                     else
@@ -521,7 +523,7 @@ void CudaComputationDiscrete::compute_statistics(
 
                         // Combine branches
                         // Initialize to one
-                        gpu_error_check(cudaMemcpyAsync(d_propagator_junction_start[key], d_q_unity[0], sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+                        gpu_error_check(cudaMemcpyAsync(d_propagator_half_steps[key][0], d_q_unity[0], sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -530,25 +532,25 @@ void CudaComputationDiscrete::compute_statistics(
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (!propagator_half_steps_finished[sub_dep][sub_n_segment-1])
+                            if (!propagator_half_steps_finished[sub_dep][sub_n_segment])
                                 std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "+1/2' is not prepared." << std::endl;
                             #endif
 
                             multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                                d_propagator_junction_start[key], d_propagator_junction_start[key],
-                                d_propagator_half_steps[sub_dep][sub_n_segment-1], 1.0, M);
+                                d_propagator_half_steps[key][0], d_propagator_half_steps[key][0],
+                                d_propagator_half_steps[sub_dep][sub_n_segment], 1.0, M);
                         }
 
                         // Add half bond, STREAM 0
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             gpu, STREAM,
-                            d_propagator_junction_start[key], _d_propagator[0], monomer_type);
+                            d_propagator_half_steps[key][0], _d_propagator[1], monomer_type);
 
                         // Add full segment
-                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], _d_exp_dw, 1.0, M);
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][0] = true;
+                        propagator_finished[key][1] = true;
                         #endif
                     }
                 }
@@ -557,24 +559,24 @@ void CudaComputationDiscrete::compute_statistics(
                 {
                     // Multiply mask
                     if (d_q_mask[gpu] != nullptr)
-                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], d_q_mask[0], 1.0, M);
+                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], d_q_mask[0], 1.0, M);
 
                     // q(r, 1+1/2)
-                    if (d_propagator_half_steps[key][0] != nullptr)
+                    if (d_propagator_half_steps[key][1] != nullptr)
                     {
                         #ifndef NDEBUG
-                        if (propagator_half_steps_finished[key][0])
+                        if (propagator_half_steps_finished[key][1])
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(1) << std::endl;
                         #endif
 
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             gpu, STREAM, 
-                            _d_propagator[0],
-                            d_propagator_half_steps[key][0],
+                            _d_propagator[1],
+                            d_propagator_half_steps[key][1],
                             monomer_type);
 
                         #ifndef NDEBUG
-                        propagator_half_steps_finished[key][0] = true;
+                        propagator_half_steps_finished[key][1] = true;
                         #endif
                     }
                     n_segment_from++;
@@ -586,9 +588,9 @@ void CudaComputationDiscrete::compute_statistics(
                     for(int n=n_segment_from; n<n_segment_to; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[key][n-1])
+                        if (!propagator_finished[key][n])
                             std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                        if (propagator_finished[key][n])
+                        if (propagator_finished[key][n+1])
                             std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
@@ -601,12 +603,12 @@ void CudaComputationDiscrete::compute_statistics(
 
                         propagator_solver->advance_propagator_discrete(
                             gpu, STREAM, 
-                            _d_propagator[n-1],
                             _d_propagator[n],
+                            _d_propagator[n+1],
                             monomer_type, d_q_mask[gpu]);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][n] = true;
+                        propagator_finished[key][n+1] = true;
                         #endif
                     }
                 }
@@ -638,9 +640,9 @@ void CudaComputationDiscrete::compute_statistics(
                     for(int n=n_segment_from; n<n_segment_to; n++)
                     {
                         #ifndef NDEBUG
-                        if (!propagator_finished[key][n-1])
+                        if (!propagator_finished[key][n])
                             std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                        if (propagator_finished[key][n])
+                        if (propagator_finished[key][n+1])
                             std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
@@ -663,7 +665,7 @@ void CudaComputationDiscrete::compute_statistics(
                         if (n > n_segment_from)
                         {
                             gpu_error_check(cudaMemcpyAsync(
-                                _d_propagator[n-1],
+                                _d_propagator[n],
                                 d_propagator_device[gpu][prev],
                                 sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
                             gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
@@ -676,13 +678,13 @@ void CudaComputationDiscrete::compute_statistics(
                         std::swap(prev, next);
 
                         #ifndef NDEBUG
-                        propagator_finished[key][n] = true;
+                        propagator_finished[key][n+1] = true;
                         #endif
                     }
 
                     // Copy memory from device 1 to device 0
                     gpu_error_check(cudaMemcpyAsync(
-                        _d_propagator[n_segment_to-1],
+                        _d_propagator[n_segment_to],
                         d_propagator_device[gpu][prev],
                         sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][1]));
 
@@ -696,7 +698,7 @@ void CudaComputationDiscrete::compute_statistics(
                 // q(r, n+1/2)
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
-                    if (d_propagator_half_steps[key][n] != nullptr)
+                    if (d_propagator_half_steps[key][n+1] != nullptr)
                     {
                         // #ifndef NDEBUG
                         // #pragma omp critical
@@ -706,18 +708,18 @@ void CudaComputationDiscrete::compute_statistics(
                         // #endif
 
                         #ifndef NDEBUG
-                        if (propagator_half_steps_finished[key][n])
+                        if (propagator_half_steps_finished[key][n+1])
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
                         propagator_solver->advance_propagator_discrete_half_bond_step(
                             gpu, STREAM,
-                            _d_propagator[n],
-                            d_propagator_half_steps[key][n],
+                            _d_propagator[n+1],
+                            d_propagator_half_steps[key][n+1],
                             monomer_type);
 
                         #ifndef NDEBUG
-                        propagator_half_steps_finished[key][n] = true;
+                        propagator_half_steps_finished[key][n+1] = true;
                         #endif
                     }
                 }
@@ -823,10 +825,10 @@ void CudaComputationDiscrete::calculate_phi_one_block(
 
         const int M = cb->get_n_grid();
         // Compute segment concentration
-        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_LEFT-1], d_q_2[0], 1.0, M);
-        for(int n=1; n<N_RIGHT; n++)
+        multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_LEFT], d_q_2[1], 1.0, M);
+        for(int n=2; n<=N_RIGHT; n++)
         {
-            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_LEFT-n-1], d_q_2[n], 1.0, M);
+            add_multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_LEFT-n+1], d_q_2[n], 1.0, M);
         }
         divide_real<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
     }
@@ -1181,7 +1183,7 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
         if (n < 1 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 
-        gpu_error_check(cudaMemcpy(q_out, d_propagator[dep][n-1], sizeof(double)*M,cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(q_out, d_propagator[dep][n], sizeof(double)*M,cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -1219,10 +1221,10 @@ bool CudaComputationDiscrete::check_total_partition()
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_analyzer->get_computation_block(key).n_repeated << std::endl;
         #endif
 
-        for(int n=0;n<n_segment_right;n++)
+        for(int n=1;n<=n_segment_right;n++)
         {
             double total_partition = cb->inner_product_inverse_weight_device(
-                d_propagator[key_left][(n_segment_left-n-1)],
+                d_propagator[key_left][(n_segment_left-n+1)],
                 d_propagator[key_right][n], _d_exp_dw)*n_repeated/cb->get_volume();
             
             total_partition /= n_propagators;

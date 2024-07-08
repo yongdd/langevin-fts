@@ -249,6 +249,17 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
                 set_S[item.first] = item.second;
         }
 
+        // If all monomer types are same, set minimum_n_segment = 0
+        bool is_same_monomer_type = true;
+        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
+        // for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        // {
+        //     if (it->second.monomer_type != monomer_type)
+        //         is_same_monomer_type = false;
+        // }
+        // if (is_same_monomer_type)
+        //     minimum_n_segment = 0;
+
         // Skip if nothing to aggregate
         if (set_S.size() == 1 || n_segment_current < 2*minimum_n_segment)
             continue;
@@ -285,7 +296,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
             std::vector<std::tuple<int ,int>> dep_v_u = set_I[dep_key].v_u;
             v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
         }
-        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
         propagator_code += "]" + monomer_type;
 
         // Add new aggregated key to set_I
