@@ -104,6 +104,10 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             int n_segment_left = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
+            // Skip if n_segment_left is 0
+            if (n_segment_left == 0)
+                continue;
+
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 propagator[key_left][n_segment_left],    // q
@@ -303,16 +307,32 @@ void CpuComputationDiscrete::compute_statistics(
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
+                            double **_propagator_sub_dep;
 
-                            // Check sub key
-                            #ifndef NDEBUG
-                            if (propagator.find(sub_dep) == propagator.end())
-                                std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!propagator_finished[sub_dep][sub_n_segment])
-                                std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
-                            #endif
+                            if (sub_n_segment == 0)
+                            {
+                                // Check sub key
+                                #ifndef NDEBUG
+                                if (propagator_half_steps.find(sub_dep) == propagator_half_steps.end())
+                                    std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
+                                if (!propagator_half_steps_finished[sub_dep][0])
+                                    std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(0) + "' is not prepared." << std::endl;
+                                #endif
 
-                            double **_propagator_sub_dep = propagator[sub_dep];
+                                _propagator_sub_dep = propagator_half_steps[sub_dep];
+                            }
+                            else
+                            {
+                                // Check sub key
+                                #ifndef NDEBUG
+                                if (propagator.find(sub_dep) == propagator.end())
+                                    std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
+                                if (!propagator_finished[sub_dep][sub_n_segment])
+                                    std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                                #endif
+
+                                _propagator_sub_dep = propagator[sub_dep];
+                            }
                             for(int i=0; i<M; i++)
                                 _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i]*sub_n_repeated;
                         }
@@ -322,11 +342,25 @@ void CpuComputationDiscrete::compute_statistics(
                         this->time_complexity++;
                         #endif
 
-                        propagator_solver->advance_propagator_discrete(
-                            _propagator[1],
-                            _propagator[1],
-                            monomer_type,
-                            q_mask);
+                        // if sub_n_segment == 0
+                        if (std::get<1>(deps[0]) == 0)
+                        {
+                            // Add half bond
+                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                                _propagator[1], _propagator[1], monomer_type);
+
+                            // Add full segment
+                            for(int i=0; i<M; i++)
+                                _propagator[1][i] *= _exp_dw[i];
+                        }
+                        else
+                        {
+                            propagator_solver->advance_propagator_discrete(
+                                _propagator[1],
+                                _propagator[1],
+                                monomer_type,
+                                q_mask);
+                        }
 
                         #ifndef NDEBUG
                         propagator_finished[key][1] = true;
@@ -376,23 +410,33 @@ void CpuComputationDiscrete::compute_statistics(
                         }
 
                         #ifndef NDEBUG
+                        propagator_half_steps_finished[key][0] = true;
+                        #endif
+
+                        #ifndef NDEBUG
                         #pragma omp critical
                         this->time_complexity++;
                         #endif
 
-                        // Add half bond
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
-                            _q_junction_start, _propagator[1], monomer_type);
+                        if (n_segment_to > 0)
+                        {
+                            // Add half bond
+                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                                _q_junction_start, _propagator[1], monomer_type);
 
-                        // Add full segment
-                        for(int i=0; i<M; i++)
-                            _propagator[1][i] *= _exp_dw[i];
-                        
-                        #ifndef NDEBUG
-                        propagator_finished[key][1] = true;
-                        #endif
+                            // Add full segment
+                            for(int i=0; i<M; i++)
+                                _propagator[1][i] *= _exp_dw[i];
+                            
+                            #ifndef NDEBUG
+                            propagator_finished[key][1] = true;
+                            #endif
+                        }
                     }
                 }
+
+                if (n_segment_to == 0)
+                    continue;
 
                 if (n_segment_from == 0)
                 {
@@ -537,6 +581,14 @@ void CpuComputationDiscrete::compute_statistics(
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
             const double *_exp_dw = propagator_solver->exp_dw[monomer_type];
+
+            // If there is no segment
+            if(n_segment_right == 0)
+            {
+                for(int i=0; i<M;i++)
+                    block->second[i] = 0.0;
+                continue;
+            }
 
             // Check keys
             #ifndef NDEBUG
@@ -782,6 +834,10 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
             const int N_LEFT  = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
+
+            // If there is no segment
+            if(N_RIGHT == 0)
+                continue;
 
             double **q_1 = propagator[key_left];     // dependency v
             double **q_2 = propagator[key_right];    // dependency u

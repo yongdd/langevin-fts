@@ -115,6 +115,10 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             int n_segment_left = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
 
+            // Skip if n_segment_left is 0
+            if (n_segment_left == 0)
+                continue;
+
             single_partition_segment.push_back(std::make_tuple(
                 p,
                 d_propagator[key_left][n_segment_left],    // q
@@ -135,6 +139,10 @@ CudaComputationDiscrete::CudaComputationDiscrete(
 
             const int N_RIGHT = propagator_analyzer->get_computation_block(key).n_segment_right;
             const int N_LEFT  = propagator_analyzer->get_computation_block(key).n_segment_left;
+
+            // If there is no segment
+            if(N_RIGHT == 0)
+                continue;
 
             double **d_q_1 = d_propagator[key_left];     // dependency v
             double **d_q_2 = d_propagator[key_right];    // dependency u
@@ -475,25 +483,58 @@ void CudaComputationDiscrete::compute_statistics(
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
+                            double **_propagator_sub_dep;
 
-                            // Check sub key
-                            #ifndef NDEBUG
-                            if (d_propagator.find(sub_dep) == d_propagator.end())
-                                std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                            if (!propagator_finished[sub_dep][sub_n_segment])
-                                std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
-                            #endif
+                            if (sub_n_segment == 0)
+                            {
+                                // Check sub key
+                                #ifndef NDEBUG
+                                if (d_propagator_half_steps.find(sub_dep) == d_propagator_half_steps.end())
+                                    std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
+                                if (!propagator_half_steps_finished[sub_dep][0])
+                                    std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(0) + "' is not prepared." << std::endl;
+                                #endif
+
+                                _propagator_sub_dep = d_propagator_half_steps[sub_dep];
+                            }
+                            else
+                            {
+                                // Check sub key
+                                #ifndef NDEBUG
+                                if (d_propagator.find(sub_dep) == d_propagator.end())
+                                    std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
+                                if (!propagator_finished[sub_dep][sub_n_segment])
+                                    std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                                #endif
+
+                                _propagator_sub_dep = d_propagator[sub_dep];
+                            }
 
                             lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 _d_propagator[1], 1.0, _d_propagator[1],
-                                sub_n_repeated, d_propagator[sub_dep][sub_n_segment], M);
+                                sub_n_repeated, _propagator_sub_dep[sub_n_segment], M);
                         }
-                        // STREAM 0
-                        propagator_solver->advance_propagator_discrete(
-                            gpu, STREAM,
-                            _d_propagator[1],
-                            _d_propagator[1],
-                            monomer_type, d_q_mask[gpu]);
+
+                        // if sub_n_segment == 0
+                        if (std::get<1>(deps[0]) == 0)
+                        {
+                            // Add half bond, STREAM 0
+                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                                gpu, STREAM,
+                                _d_propagator[1], _d_propagator[1], monomer_type);
+
+                            // Add full segment
+                            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
+
+                        }
+                        else
+                        {
+                            propagator_solver->advance_propagator_discrete(
+                                gpu, STREAM,
+                                _d_propagator[1],
+                                _d_propagator[1],
+                                monomer_type, d_q_mask[gpu]);
+                        }
 
                         #ifndef NDEBUG
                         propagator_finished[key][1] = true;
@@ -541,21 +582,35 @@ void CudaComputationDiscrete::compute_statistics(
                                 d_propagator_half_steps[sub_dep][sub_n_segment], 1.0, M);
                         }
 
-                        // Add half bond, STREAM 0
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
-                            gpu, STREAM,
-                            d_propagator_half_steps[key][0], _d_propagator[1], monomer_type);
-
-                        // Add full segment
-                        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
-
                         #ifndef NDEBUG
-                        propagator_finished[key][1] = true;
+                        propagator_half_steps_finished[key][0] = true;
                         #endif
+
+                        if (n_segment_to > 0)
+                        {
+                            // Add half bond, STREAM 0
+                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                                gpu, STREAM,
+                                d_propagator_half_steps[key][0], _d_propagator[1], monomer_type);
+
+                            // Add full segment
+                            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
+
+                            #ifndef NDEBUG
+                            propagator_finished[key][1] = true;
+                            #endif
+                        }
                     }
                 }
 
-                if(n_segment_from == 0)
+                if (n_segment_to == 0)
+                {
+                    gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
+                    gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
+                    continue;
+                }
+
+                if (n_segment_from == 0)
                 {
                     // Multiply mask
                     if (d_q_mask[gpu] != nullptr)
@@ -759,9 +814,9 @@ void CudaComputationDiscrete::compute_statistics(
         }
 
         // Calculate segment concentrations
-        for(const auto& block: d_phi_block)
+        for(const auto& d_block: d_phi_block)
         {
-            const auto& key = block.first;
+            const auto& key = d_block.first;
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
@@ -771,6 +826,13 @@ void CudaComputationDiscrete::compute_statistics(
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
+
+            // If there is no segment
+            if(n_segment_right == 0)
+            {
+                gpu_error_check(cudaMemset(d_block.second, 0, sizeof(double)*M));
+                continue;
+            }
 
             // Check keys
             #ifndef NDEBUG
@@ -782,7 +844,7 @@ void CudaComputationDiscrete::compute_statistics(
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
-                block.second,              // phi
+                d_block.second,              // phi
                 d_propagator[key_left],    // dependency v
                 d_propagator[key_right],   // dependency u
                 _d_exp_dw,                 // exp_dw
@@ -792,7 +854,7 @@ void CudaComputationDiscrete::compute_statistics(
             // Normalize concentration
             Polymer& pc = molecules->get_polymer(p);
             double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p]*n_repeated;
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(block.second, norm, block.second, 0.0, block.second, M);
+            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
         }
 
         // Calculate partition functions and concentrations of solvents
@@ -1037,6 +1099,10 @@ std::vector<double> CudaComputationDiscrete::compute_stress()
             const int N_LEFT  = propagator_analyzer->get_computation_block(key).n_segment_left;
             std::string monomer_type = propagator_analyzer->get_computation_block(key).monomer_type;
             int n_repeated = propagator_analyzer->get_computation_block(key).n_repeated;
+
+            // If there is no segment
+            if(N_RIGHT == 0)
+                continue;
 
             double **d_q_1 = d_propagator[key_left];      // Propagator q
             double **d_q_2 = d_propagator[key_right];     // Propagator q^dagger
