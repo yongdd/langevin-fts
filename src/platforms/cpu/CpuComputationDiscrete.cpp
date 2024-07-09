@@ -413,13 +413,13 @@ void CpuComputationDiscrete::compute_statistics(
                         propagator_half_steps_finished[key][0] = true;
                         #endif
 
-                        #ifndef NDEBUG
-                        #pragma omp critical
-                        this->time_complexity++;
-                        #endif
-
                         if (n_segment_to > 0)
                         {
+                            #ifndef NDEBUG
+                            #pragma omp critical
+                            this->time_complexity++;
+                            #endif
+
                             // Add half bond
                             propagator_solver->advance_propagator_discrete_half_bond_step(
                                 _q_junction_start, _propagator[1], monomer_type);
