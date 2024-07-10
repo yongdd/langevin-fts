@@ -345,6 +345,10 @@ void CpuComputationDiscrete::compute_statistics(
                         // if sub_n_segment == 0
                         if (std::get<1>(deps[0]) == 0)
                         {
+                            double *_propagator_half_step = propagator_half_steps[key][0];
+                            for(int i=0; i<M; i++)
+                                _propagator_half_step[i] = _propagator[1][i];
+
                             // Add half bond
                             propagator_solver->advance_propagator_discrete_half_bond_step(
                                 _propagator[1], _propagator[1], monomer_type);
@@ -866,7 +870,8 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && key_right.find('[') == std::string::npos){
+                else if (n == 0 && N_LEFT == N_RIGHT)
+                {
                     // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction_start[key_right][0] << std::endl;
                     if (propagator_analyzer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                         continue;

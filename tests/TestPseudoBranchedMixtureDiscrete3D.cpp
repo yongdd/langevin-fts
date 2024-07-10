@@ -349,7 +349,7 @@ int main()
         solver_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_list.end()[-1], molecules, propagator_analyzer_2));
         #endif
 
-        std::vector<std::vector<int>> stress_list {{},{},{}};
+        std::vector<std::vector<double>> stress_list {{},{},{}};
 
         // For each platform    
         for(size_t n=0; n<solver_list.size(); n++)
