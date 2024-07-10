@@ -169,7 +169,7 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && key_right.find('[') == std::string::npos){
+                else if (n == 0 && N_LEFT == N_RIGHT){
                     if (propagator_analyzer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_compuation_key.push_back(std::make_tuple(propagator_left, propagator_right, is_half_bond_length));
@@ -567,6 +567,8 @@ void CudaComputationReduceMemoryDiscrete::compute_statistics(
                         // if sub_n_segment == 0
                         if (std::get<1>(deps[0]) == 0)
                         {
+                            gpu_error_check(cudaMemcpyAsync(propagator_half_steps[key][0], d_q_one[STREAM][0], sizeof(double)*M, cudaMemcpyDeviceToHost, streams[STREAM][0]));
+
                             // Add half bond, STREAM 0
                             propagator_solver->advance_propagator_discrete_half_bond_step(
                                 gpu, STREAM,
