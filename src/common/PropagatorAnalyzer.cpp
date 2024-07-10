@@ -63,8 +63,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
         computation_blocks_new_polymer[key_left][key_right].n_segment_left = blocks[b].n_segment;
         computation_blocks_new_polymer[key_left][key_right].v_u.push_back(std::make_tuple(v,u));
         computation_blocks_new_polymer[key_left][key_right].n_repeated = computation_blocks_new_polymer[key_left][key_right].v_u.size();
-        computation_blocks_new_polymer[key_left][key_right].is_junction_left  = is_junction(pc, v);
-        computation_blocks_new_polymer[key_left][key_right].is_junction_right = is_junction(pc, u);
 
         v_u_to_right_key[std::make_tuple(v,u)] = key_right;
     }
@@ -92,7 +90,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
     // Aggregation
     if (this->aggregate_propagator_computation)
     {
-
         // Aggregated keys
         std::map<std::string, std::vector<std::string>> aggregated_blocks;
 
@@ -147,9 +144,6 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             int n_segment_left = u_item.second.n_segment_left;
             int n_repeated = u_item.second.n_repeated;
 
-            bool is_junction_left  = u_item.second.is_junction_left;
-            bool is_junction_right = u_item.second.is_junction_right;
-
             // Add blocks
             auto key = std::make_tuple(polymer_id, key_v, key_u);
 
@@ -158,11 +152,13 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             computation_blocks[key].n_segment_left = n_segment_left;
             computation_blocks[key].v_u = u_item.second.v_u;
             computation_blocks[key].n_repeated = n_repeated;
-
-            computation_blocks[key].is_junction_left  = is_junction_left;
-            computation_blocks[key].is_junction_right = is_junction_right;
-
             // std::cout << "computation_blocks[key].n_repeated: " << key_v << ", " << key_u  << ", " << computation_blocks[key].n_repeated << std::endl;
+            bool is_junction_left = false;
+            bool is_junction_right = false;
+            if (PropagatorCode::get_height_from_key(key_v) > 0)
+                is_junction_left = true;
+            if (PropagatorCode::get_height_from_key(key_u) > 0)
+                is_junction_right = true;
 
             // Update propagators
             update_computation_propagator_map(computation_propagators, key_v, n_segment_left,  is_junction_right);
@@ -302,8 +298,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         set_I[propagator_code].monomer_type = monomer_type;
         set_I[propagator_code].n_segment_right = n_segment_right;
         set_I[propagator_code].n_segment_left = n_segment_left;
-        set_I[propagator_code].is_junction_left  = set_I[set_S.begin()->first].is_junction_left;
-        set_I[propagator_code].is_junction_right = set_I[set_S.begin()->first].is_junction_right;
         set_I[propagator_code].v_u = v_u;
         set_I[propagator_code].n_repeated = 1;
 
@@ -354,7 +348,7 @@ void PropagatorAnalyzer::substitute_right_keys(
             int v = std::get<0>(v_u);
             int u = std::get<1>(v_u);
 
-            auto& neighbor_nodes_v = pc.get_adjacent_nodes()[v];
+            auto neighbor_nodes_v = pc.get_adjacent_nodes()[v];
             // Remove 'u' from 'neighbor_nodes_v'
             neighbor_nodes_v.erase(std::remove(neighbor_nodes_v.begin(), neighbor_nodes_v.end(), u), neighbor_nodes_v.end());
             // std::cout << "(v_u): " << v <<  ", " << v << std::endl;
@@ -391,8 +385,6 @@ void PropagatorAnalyzer::substitute_right_keys(
                     computation_blocks_new_polymer[dep_j][new_u_key].n_segment_right = pc.get_block(j,v).n_segment;
                     computation_blocks_new_polymer[dep_j][new_u_key].n_segment_left = pc.get_block(j,v).n_segment;
                     computation_blocks_new_polymer[dep_j][new_u_key].v_u.push_back(std::make_tuple(j,v));
-                    computation_blocks_new_polymer[dep_j][new_u_key].is_junction_left  = is_junction(pc, j);
-                    computation_blocks_new_polymer[dep_j][new_u_key].is_junction_right = is_junction(pc, v);
 
                     if (aggregated_key[0] == '[')
                         computation_blocks_new_polymer[dep_j][new_u_key].n_repeated = 1;
@@ -505,12 +497,12 @@ void PropagatorAnalyzer::display_blocks() const
 
         // Print is_free_end (left, right)
         std::cout << "(";
-        if (item.second.is_junction_left)
+        if (PropagatorCode::get_height_from_key(v_string) > 0)
             std::cout << "O, ";
         else
             std::cout << "X, ";
 
-        if (item.second.is_junction_right)
+        if (PropagatorCode::get_height_from_key(u_string) > 0)
             std::cout << "O), ";
         else
             std::cout << "X), ";

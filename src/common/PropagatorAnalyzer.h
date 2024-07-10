@@ -32,8 +32,6 @@ struct ComputationBlock{
     // In this case, n_segment_right, and n_segment_left are 5, and 5, respectively.
     int n_segment_left;
     int n_segment_right;
-    bool is_junction_left;
-    bool is_junction_right;
     int n_repeated;
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
 };
