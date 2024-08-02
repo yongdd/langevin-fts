@@ -1,5 +1,5 @@
 # Langevin FTS
-Langevin Field-Theoretic Simulation (L-FTS) for Python
+Langevin Field-Theoretic Simulation (L-FTS) with Python
 
 # Features
 This repository contains a library for polymer field theory simulations as well as its applications such as SCFT and L-FTS. The most time-consuming and common routines in polymer field theory simulations are the computation of stresses, partition functions and concentrations of polymers in external fields. These routines are written in C++/CUDA and provided as python classes in this library. These classes allow you to write your own programs using python language, and your applications can be easily customized and extended by adopting numerous useful python libraries. This library automatically optimize the computation of chain propagators for a mixture of arbitrary acyclic branched polymers. You no longer need to change your codes depending on the polymer architecture to optimize propagator calculations for branched polymers. This library supports following features:
