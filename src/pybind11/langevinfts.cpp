@@ -264,6 +264,20 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
+        .def("get_total_concentration_gce", [](PropagatorComputation& obj, double fugacity, int polymer, std::string monomer_type)
+        {
+            try{
+                const int M = obj.get_n_grid();
+                py::array_t<double> phi = py::array_t<double>(M);
+                py::buffer_info buf_phi = phi.request();
+                obj.get_total_concentration_gce(fugacity, polymer, monomer_type, (double*) buf_phi.ptr);
+                return phi;
+            }
+            catch(std::exception& exc)
+            {
+                throw_with_line_number(exc.what());
+            }
+        })
         .def("get_block_concentration", [](PropagatorComputation& obj, int polymer)
         {
             try{
@@ -312,6 +326,8 @@ PYBIND11_MODULE(langevinfts, m)
             }
         })
         .def("compute_stress", &PropagatorComputation::compute_stress)
+        .def("get_stress", &PropagatorComputation::get_stress)
+        .def("get_stress_gce", &PropagatorComputation::get_stress_gce)
         .def("check_total_partition", &PropagatorComputation::check_total_partition);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")

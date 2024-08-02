@@ -170,10 +170,12 @@ int main()
             if (!std::isfinite(error) || error > 1e-4)
                 return -1;
 
-            std::vector<double> stress_1 = solver_1_list[n]->compute_stress();
+            solver_1_list[n]->compute_stress();
+            std::vector<double> stress_1 = solver_1_list[n]->get_stress();
             std::cout<< "Stress_1: " << stress_1[0] << ", " << stress_1[1] << ", " << stress_1[2] << std::endl;
 
-            std::vector<double> stress_2 = solver_2_list[n]->compute_stress();
+            solver_2_list[n]->compute_stress();
+            std::vector<double> stress_2 = solver_2_list[n]->get_stress();
             std::cout<< "Stress_2: " << stress_2[0] << ", " << stress_2[1] << ", " << stress_2[2] << std::endl;
 
             for(int i=0; i<3; i++)

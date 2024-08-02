@@ -83,9 +83,6 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             phi_block[item.first] = new double[M];
         }
 
-        // Total partition functions for each polymer
-        single_polymer_partitions = new double[molecules->get_n_polymer_types()];
-
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
         for(const auto& block: phi_block)
@@ -118,9 +115,6 @@ CpuComputationDiscrete::CpuComputationDiscrete(
             current_p++;
         }
 
-        // Total partition functions for each solvent
-        single_solvent_partitions = new double[molecules->get_n_solvent_types()];
-        
         // Concentrations for each solvent
         for(int s=0;s<molecules->get_n_solvent_types();s++)
             phi_solvent.push_back(new double[M]);
@@ -139,9 +133,6 @@ CpuComputationDiscrete::~CpuComputationDiscrete()
 {
     delete propagator_solver;
     delete sc;
-        
-    delete[] single_polymer_partitions;
-    delete[] single_solvent_partitions;
 
     for(const auto& item: propagator)
     {
@@ -738,6 +729,40 @@ void CpuComputationDiscrete::get_total_concentration(int p, std::string monomer_
         throw_without_line_number(exc.what());
     }
 }
+void CpuComputationDiscrete::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
+{
+    try
+    {
+        const int M = cb->get_n_grid();
+        const int P = molecules->get_n_polymer_types();
+
+        if (p < 0 || p > P-1)
+            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
+
+        // Initialize array
+        for(int i=0; i<M; i++)
+            phi[i] = 0.0;
+
+        // For each block
+        for(const auto& block: phi_block)
+        {
+            int polymer_idx = std::get<0>(block.first);
+            std::string key_left = std::get<1>(block.first);
+            int n_segment_right = propagator_analyzer->get_computation_block(block.first).n_segment_right;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
+            {
+                Polymer& pc = molecules->get_polymer(p);
+                double norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*single_polymer_partitions[p];
+                for(int i=0; i<M; i++)
+                    phi[i] += block.second[i]*norm; 
+            }
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
 void CpuComputationDiscrete::get_block_concentration(int p, double *phi)
 {
     try
@@ -801,7 +826,7 @@ void CpuComputationDiscrete::get_solvent_concentration(int s, double *phi_out)
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuComputationDiscrete::compute_stress()
+void CpuComputationDiscrete::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -813,7 +838,6 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
         const int DIM  = cb->get_dim();
         const int M    = cb->get_n_grid();
 
-        std::vector<double> stress(DIM);
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
         // Reset stress map
@@ -917,8 +941,10 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
         }
 
         // Compute total stress
-        for(int d=0; d<DIM; d++)
-            stress[d] = 0.0;
+        int n_polymer_types = molecules->get_n_polymer_types();
+        for(int p=0; p<n_polymer_types; p++)
+            for(int d=0; d<DIM; d++)
+                dq_dl[p][d] = 0.0;
         for(const auto& block: phi_block)
         {
             const auto& key       = block.first;
@@ -928,12 +954,12 @@ std::vector<double> CpuComputationDiscrete::compute_stress()
             Polymer& pc = molecules->get_polymer(p);
 
             for(int d=0; d<DIM; d++)
-                stress[d] += block_dq_dl[key][d]*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p];
+                dq_dl[p][d] += block_dq_dl[key][d];
         }
-        for(int d=0; d<DIM; d++)
-            stress[d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
-
-        return stress;
+        for(int p=0; p<n_polymer_types; p++){
+            for(int d=0; d<DIM; d++)
+                dq_dl[p][d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
+        }
     }
     catch(std::exception& exc)
     {

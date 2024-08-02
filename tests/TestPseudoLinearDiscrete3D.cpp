@@ -264,7 +264,8 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
             
-            std::vector<double> stress = solver->compute_stress();
+            solver->compute_stress();
+            std::vector<double> stress = solver->get_stress();
             std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
             error = std::abs(stress[0] + 0.000473764);
