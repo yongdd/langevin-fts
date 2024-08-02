@@ -620,7 +620,8 @@ class SCFT:
             
             if (self.box_is_altering):
                 # Calculate stress
-                stress_array = np.array(self.solver.compute_stress())
+                self.solver.compute_stress()
+                stress_array = np.array(self.solver.get_stress())
                 error_level += np.sqrt(np.sum(stress_array**2))
 
                 print("%8d %12.3E " %

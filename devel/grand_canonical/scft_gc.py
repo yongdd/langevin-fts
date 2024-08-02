@@ -486,26 +486,7 @@ class SCFT:
         time_phi_start = time.time()
         if self.params["ensemble"] == "ce":
             
-            # # phi A, B, ...,
-            # for monomer_type in self.monomer_types:
-            #     phi[monomer_type] = np.zeros_like(w[0])
-
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     for monomer_type in self.monomer_types:
-            #         phi[monomer_type] += self.solver.get_total_concentration(p, monomer_type)
-
-            # # phi random
-            # for random_polymer_name, random_fraction in self.random_fraction.items():
-            #     phi[random_polymer_name] = np.zeros_like(w[0])
-
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     for random_polymer_name, random_fraction in self.random_fraction.items():
-            #         phi[random_polymer_name] += self.solver.get_total_concentration(p, random_polymer_name)
-                    
-            # for random_polymer_name, random_fraction in self.random_fraction.items():
-            #     for monomer_type, fraction in random_fraction.items():
-            #         phi[monomer_type] += phi[random_polymer_name]*fraction
-            
+            # phi A, B, ...,
             for monomer_type in self.monomer_types:
                     phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
 
@@ -517,40 +498,40 @@ class SCFT:
 
         elif self.params["ensemble"] == "gce":
             
-            # print(w_input)
-            
+            # Initialize
             total_phi = []
             for p in range(self.molecules.get_n_polymer_types()):
                 total_phi.append(np.zeros_like(w[0]))
             
-            # phi A, B, ...,
             for monomer_type in self.monomer_types:
                 phi[monomer_type] = np.zeros_like(w[0])
 
-            for p in range(self.molecules.get_n_polymer_types()):
-                for monomer_type in self.monomer_types:
-                    phi[monomer_type] += self.fugacity[p]*self.solver.get_total_concentration(p, monomer_type)*self.solver.get_total_partition(p)*self.molecules.get_polymer(p).get_alpha()
-                    total_phi[p]      += self.fugacity[p]*self.solver.get_total_concentration(p, monomer_type)*self.solver.get_total_partition(p)*self.molecules.get_polymer(p).get_alpha()
-
-            # phi random
             for random_polymer_name, random_fraction in self.random_fraction.items():
                 phi[random_polymer_name] = np.zeros_like(w[0])
 
             for p in range(self.molecules.get_n_polymer_types()):
+                # phi A, B, ...,
+                for monomer_type in self.monomer_types:
+                    phi[monomer_type] += self.solver.get_total_concentration_gce(self.fugacity[p], p, monomer_type)
+                    total_phi[p]      += self.solver.get_total_concentration_gce(self.fugacity[p], p, monomer_type)
+
+                # phi random
                 for random_polymer_name, random_fraction in self.random_fraction.items():
-                    phi[random_polymer_name] += self.fugacity[p]*self.solver.get_total_concentration(p, random_polymer_name)*self.solver.get_total_partition(p)*self.molecules.get_polymer(p).get_alpha()
-                    total_phi[p]             += self.fugacity[p]*self.solver.get_total_concentration(p, random_polymer_name)*self.solver.get_total_partition(p)*self.molecules.get_polymer(p).get_alpha()
+                    phi[random_polymer_name] += self.solver.get_total_concentration_gce(self.fugacity[p], p, random_polymer_name)
+                    total_phi[p]             += self.solver.get_total_concentration_gce(self.fugacity[p], p, random_polymer_name)
                     
             for random_polymer_name, random_fraction in self.random_fraction.items():
                 for monomer_type, fraction in random_fraction.items():
                     phi[monomer_type] += phi[random_polymer_name]*fraction
             
-            for p in range(self.molecules.get_n_polymer_types()):
-                print(f"volume_fraction[{p}]: ", np.mean(total_phi[p]))
-            
+            volume_fractions = np.mean(total_phi, axis=1)
+
         elapsed_time["phi"] = time.time() - time_phi_start
         
-        return phi, elapsed_time
+        if self.params["ensemble"] == "ce":
+            return phi, elapsed_time
+        elif self.params["ensemble"] == "gce":
+            return phi, volume_fractions, elapsed_time
 
     # Compute total Hamiltonian
     def compute_hamiltonian(self, phi, w, total_partitions):
@@ -661,8 +642,11 @@ class SCFT:
         for scft_iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
-            phi, _ = self.compute_concentrations(w)
-
+            if self.params["ensemble"] == "ce":
+                phi, _ = self.compute_concentrations(w)
+            elif self.params["ensemble"] == "gce":
+                phi, volume_fractions, _ = self.compute_concentrations(w)
+            
             # # Scaling phi
             # for monomer_type in self.monomer_types:
             #     phi[monomer_type] *= self.phi_rescaling
@@ -714,7 +698,11 @@ class SCFT:
             
             if (self.box_is_altering):
                 # Calculate stress
-                stress_array = np.array(self.solver.compute_stress())
+                self.solver.compute_stress()
+                if self.params["ensemble"] == "ce":
+                    stress_array = np.array(self.solver.get_stress())
+                elif self.params["ensemble"] == "gce":
+                    stress_array = np.array(self.solver.get_stress_gce(self.fugacity))
                 error_level += np.sqrt(np.sum(stress_array**2))
 
                 print("%8d %12.3E " %
@@ -728,6 +716,9 @@ class SCFT:
                 for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
+
+            if self.params["ensemble"] == "gce":
+                print("\t\tVolume fractions: ", volume_fractions)
 
             # Conditions to end the iteration
             if error_level < self.tolerance:
@@ -768,8 +759,12 @@ class SCFT:
         # Print free energy as per chain expression
         print("Free energy per chain (for each chain type):")
         for p in range(self.molecules.get_n_polymer_types()):
-            energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
-                                                  self.molecules.get_polymer(p).get_volume_fraction()
+            if self.params["ensemble"] == "ce":
+                energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
+                                                    self.molecules.get_polymer(p).get_volume_fraction()
+            elif self.params["ensemble"] == "gce":
+                energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
+                                                      volume_fractions[p]
             print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
 
         # Store phi and w

@@ -62,8 +62,6 @@ private:
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
     #endif
 
-    // Total partition functions for each polymer
-    double* single_polymer_partitions;
     // Remember one segment for each polymer chain to compute total partition function
     // (polymer id, propagator forward, propagator backward, monomer_type, n_repeated)
     std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
@@ -74,9 +72,6 @@ private:
     // Remember propagators and bond length for each segment to prepare stress computation
     // key: (polymer id, key_left, key_right), value (propagator forward, propagator backward, is_half_bond_length)
     std::map<std::tuple<int, std::string, std::string>, std::vector<std::tuple<double *, double *, bool>>> block_stress_computation_plan;
-
-    // Total partition functions for each solvent
-    double* single_solvent_partitions;
 
     // Solvent concentrations
     std::vector<double *> phi_solvent;
@@ -105,15 +100,20 @@ public:
     {
         compute_statistics("gpu", d_w_block, d_q_init);
     };
+    void compute_stress() override;
     double get_total_partition(int polymer) override;
+    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
+
+    // Canonical ensemble
     void get_total_concentration(std::string monomer_type, double *phi) override;
     void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
     void get_block_concentration(int polymer, double *phi) override;
-    std::vector<double> compute_stress() override;
-    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 
     double get_solvent_partition(int s) override;
     void get_solvent_concentration(int s, double *phi) override;
+
+    // Grand canonical ensemble
+    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, double *phi) override;
 
     // For tests
     bool check_total_partition() override;

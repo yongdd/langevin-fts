@@ -10,9 +10,8 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
 f = 0.5             # A-fraction of major BCP chain, f
-RCP_A_frac =  0.877203698840894    # fraction of A monomer in random copolymer
 alpha = 0.2
-mu = 1.0
+mu_rcp = 1.0
 
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
@@ -35,14 +34,12 @@ params = {
     "ensemble": "gce",      # "ce": canonical ensemble or "gce": grand canonical ensemble
 
     "distinct_polymers":[{      # Distinct Polymers
-        # "volume_fraction":RCP_A_frac,  # volume fraction of polymer chain
-        "chemical_potential": 1.0,
+        "chemical_potential": mu_rcp,
         "blocks":[              # AB Diblock
             {"type":"A", "length":f, },     # A-block
             {"type":"B", "length":1.0-f, }, # B-block
         ],},
         {
-        # "volume_fraction":1-RCP_A_frac,  
         "chemical_potential": 0.0,
         "blocks":[              # Random Copolymer. Only single block random copolymer is supported.
             {"type":"R", "length":alpha, "fraction":{"A":0.5, "B":0.5},},

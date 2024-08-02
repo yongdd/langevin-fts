@@ -203,7 +203,8 @@ int main()
 
                             // Compute stress
                             std::cout << "Computing stress..." << std::endl;
-                            std::vector<double> stress = solver->compute_stress();
+                            solver->compute_stress();
+                            std::vector<double> stress = solver->get_stress();
 
                             // Calculate the total energy
                             std::cout << "Computing total energy..." << std::endl;

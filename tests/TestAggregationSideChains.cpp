@@ -258,7 +258,8 @@ int main()
                             #endif
 
                             // Compute stress
-                            std::vector<double> stress = solver->compute_stress();
+                            solver->compute_stress();
+                            std::vector<double> stress = solver->get_stress();
 
                             // Calculate the total energy
                             for(int i=0; i<M; i++)

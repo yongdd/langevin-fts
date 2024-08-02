@@ -294,7 +294,9 @@ int main()
 
                     // Compute stress
                     double dh_dl = (energy_total_1-energy_total_2)/dL;
-                    auto stress = solver->compute_stress();
+                    solver->compute_stress();
+                    auto stress = solver->get_stress();
+
                     std:: cout << "dH/dL : " << dh_dl << std::endl;
                     std:: cout << "Stress : " << stress[0] << std::endl;
                     double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
