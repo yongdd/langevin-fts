@@ -544,7 +544,7 @@ class SCFT:
         #     for j in range(S-1):
         #         hamiltonian_fields += self.h_coef_mu1[i,j]*np.mean(w_exchange[i])
         
-        # Compute Hamiltonian part that total partition functions
+        # # Compute Hamiltonian part that total partition functions
         # hamiltonian_partition = 0.0
         # for p in range(self.molecules.get_n_polymer_types()):
         #     hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
@@ -757,15 +757,15 @@ class SCFT:
                     w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
         
         # Print free energy as per chain expression
-        print("Free energy per chain (for each chain type):")
-        for p in range(self.molecules.get_n_polymer_types()):
-            if self.params["ensemble"] == "ce":
+        if self.params["ensemble"] == "ce":
+            print("Free energy per chain (for each chain type):")
+            for p in range(self.molecules.get_n_polymer_types()):
                 energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
-                                                    self.molecules.get_polymer(p).get_volume_fraction()
-            elif self.params["ensemble"] == "gce":
-                energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
-                                                      volume_fractions[p]
-            print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
+                                                self.molecules.get_polymer(p).get_volume_fraction()
+                # elif self.params["ensemble"] == "gce":
+                #     energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
+                                                        # volume_fractions[p]
+                print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
 
         # Store phi and w
         self.phi = phi
