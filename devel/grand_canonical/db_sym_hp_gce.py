@@ -9,9 +9,9 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.5                   # A-fraction of major BCP chain, f
-volume_frac_bcp =  0.87626886    # Volume fraction of BCP
+f = 0.5             # A-fraction of major BCP chain, f
 alpha = 0.2
+mu_bcp = -2.0
 
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
@@ -21,7 +21,9 @@ params = {
                               # where "a_Ref" is reference statistical segment length
                               # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
-    "box_is_altering":False,      # Find box size that minimizes the free energy during saddle point iteration.
+    "box_is_altering":False,       # Find box size that minimizes the free energy during saddle point iteration.
+    "scale_stress" : 0.1,         # Scaling factor for stress, w_diff[M:] = scale_stress*dlx
+    
     "chain_model":"continuous",  # "discrete" or "continuous" chain model
     "ds":1/500,                  # Contour step interval, which is equal to 1/N_Ref.
 
@@ -30,20 +32,25 @@ params = {
         "B":1.0, },
 
     "chi_n": {"A,B": 15.0},       # Interaction parameter, Flory-Huggins params * N_Ref
-
-    "ensemble": "ce",      # "ce": canonical ensemble or "gce": grand canonical ensemble
+    "ensemble": "gce",              # "ce": canonical ensemble or "gce": grand canonical ensemble
 
     "distinct_polymers":[{      # Distinct Polymers
-        "volume_fraction":volume_frac_bcp,  # Volume fraction of polymer chain
+        "chemical_potential": mu_bcp,
         "blocks":[              # AB Diblock
             {"type":"A", "length":f, },     # A-block
             {"type":"B", "length":1.0-f, }, # B-block
         ],},
         {
-        "volume_fraction":1-volume_frac_bcp,  
-        "blocks":[              # Random Copolymer. Only single block random copolymer is supported.
-            {"type":"R", "length":alpha, "fraction":{"A":0.5, "B":0.5},},
-        ],}],
+        "chemical_potential": 0.0,
+        "blocks":[              # A homopolymer
+            {"type":"A", "length":alpha,},
+        ],},
+        {
+        "chemical_potential": 0.0,
+        "blocks":[              # B homopolymer
+            {"type":"B", "length":alpha,},
+        ],},
+        ],
 
     "optimizer":{
         "name":"am",            # Anderson Mixing

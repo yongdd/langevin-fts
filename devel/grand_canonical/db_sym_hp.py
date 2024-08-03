@@ -10,9 +10,8 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
 f = 0.5             # A-fraction of major BCP chain, f
-RCP_A_frac =  0.495794446476493   # fraction of A monomer in random copolymer
+volume_frac_bcp =  0.495794446476493   # Volume fraction of BCP
 alpha = 0.2
-mu = 1.0
 
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
@@ -22,9 +21,9 @@ params = {
                               # where "a_Ref" is reference statistical segment length
                               # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
-    "box_is_altering":False,      # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",  # "discrete" or "continuous" chain model
-    "ds":1/500,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":False,       # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",   # "discrete" or "continuous" chain model
+    "ds":1/500,                   # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
@@ -35,18 +34,18 @@ params = {
     "ensemble": "ce",      # "ce": canonical ensemble or "gce": grand canonical ensemble
 
     "distinct_polymers":[{      # Distinct Polymers
-        "volume_fraction":RCP_A_frac,  # volume fraction of polymer chain
+        "volume_fraction":volume_frac_bcp,  # Volume fraction of polymer chain
         "blocks":[              # AB Diblock
             {"type":"A", "length":f, },     # A-block
             {"type":"B", "length":1.0-f, }, # B-block
         ],},
         {
-        "volume_fraction":(1-RCP_A_frac)/2,  
+        "volume_fraction":(1-volume_frac_bcp)/2,  
         "blocks":[              # A homopolymer
             {"type":"A", "length":alpha,},
         ],},
         {
-        "volume_fraction":(1-RCP_A_frac)/2,  
+        "volume_fraction":(1-volume_frac_bcp)/2,  
         "blocks":[              # B homopolymer
             {"type":"B", "length":alpha,},
         ],},
