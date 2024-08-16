@@ -447,7 +447,8 @@ class LFTS:
 
         # For the given fields, compute the polymer statistics
         time_p_start = time.time()
-        self.solver.compute_statistics(w_input)
+        self.solver.compute_propagators(w_input)
+        self.solver.compute_concentrations()
         elapsed_time["pseudo"] = time.time() - time_p_start
 
         # Compute total concentration for each monomer type

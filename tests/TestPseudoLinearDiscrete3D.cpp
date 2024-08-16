@@ -215,7 +215,8 @@ int main()
 
             //---------------- run --------------------
             std::cout<< std::endl << "Running Pseudo: " << solver_name_list[n] << std::endl;
-            solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver->compute_concentrations();
             solver->get_total_concentration("A", phi_a);
             solver->get_total_concentration("B", phi_b);
 

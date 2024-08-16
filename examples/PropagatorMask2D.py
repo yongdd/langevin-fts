@@ -70,7 +70,8 @@ q_init = {"G":np.zeros(nx)}
 q_init["G"][30,:] = 1.0/(lx[0]/nx[0])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+solver.compute_propagators({"A":w["A"]}, q_init=q_init)
+solver.compute_concentrations()
 
 phi = np.reshape(solver.get_total_concentration("A"), nx)
 file_name = "phi"

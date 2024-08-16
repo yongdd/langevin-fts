@@ -345,13 +345,20 @@ void CudaComputationReduceMemoryDiscrete::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
+
 void CudaComputationReduceMemoryDiscrete::compute_statistics(
-    std::string device,
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
-    try
-    {
+    this->compute_propagators(w_input, q_init);
+    this->compute_concentrations();
+}
+
+void CudaComputationReduceMemoryDiscrete::compute_propagators(
+    std::map<std::string, const double*> w_input,
+    std::map<std::string, const double*> q_init)
+{
+    try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
@@ -359,6 +366,7 @@ void CudaComputationReduceMemoryDiscrete::compute_statistics(
         const int M = cb->get_n_grid();
         const double ds = molecules->get_ds();
 
+        std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
             cudaMemcpyInputToDevice = cudaMemcpyDeviceToDevice;
@@ -837,6 +845,22 @@ void CudaComputationReduceMemoryDiscrete::compute_statistics(
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)/n_aggregated/cb->get_volume();
         }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CudaComputationReduceMemoryDiscrete::compute_concentrations()
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+
+        const int M = cb->get_n_grid();
 
         // Calculate segment concentrations
         for(const auto& block: phi_block)

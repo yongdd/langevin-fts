@@ -76,7 +76,8 @@ q_init["G"][:-30,30] = 1.0/(lx[1]/nx[1])
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
 time_start = time.time()
-solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+solver.compute_propagators({"A":w["A"]}, q_init=q_init)
+solver.compute_concentrations()
 elapsed_time = time.time() - time_start
 print("Elapsed time: ", elapsed_time)
 

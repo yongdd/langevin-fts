@@ -56,15 +56,17 @@ public:
     ~CpuComputationDiscrete();
     
     void update_laplacian_operator() override;
+
+    void compute_propagators(
+        std::map<std::string, const double*> w_block,
+        std::map<std::string, const double*> q_init = {}) override;
+
+    void compute_concentrations() override;
+
     void compute_statistics(
         std::map<std::string, const double*> w_block,
         std::map<std::string, const double*> q_init = {}) override;
-    void compute_statistics_device(
-        std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override
-    {
-        compute_statistics(w_block, q_init);
-    };
+
     void compute_stress() override;
     double get_total_partition(int polymer) override;
     void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
