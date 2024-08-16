@@ -166,6 +166,51 @@ PYBIND11_MODULE(langevinfts, m)
 
     py::class_<PropagatorComputation>(m, "PropagatorComputation")
         .def("update_laplacian_operator", &PropagatorComputation::update_laplacian_operator)
+        .def("compute_propagators", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
+        {
+            try{
+                const int M = obj.get_n_grid();
+                std::map<std::string, const double*> map_buf_w_input;
+                std::map<std::string, const double*> map_buf_q_init;
+
+                //buf_w_input
+                for (auto it = w_input.begin(); it != w_input.end(); ++it)
+                {
+                    py::buffer_info buf_w_input = it->second.request();
+                    if (buf_w_input.size != M) {
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                    }
+                    else
+                    {
+                        map_buf_w_input.insert(std::pair<std::string, const double*>(it->first, (const double*)buf_w_input.ptr));
+                    }
+                }
+
+                //buf_q_init
+                if (!q_init.is_none()) {
+                    std::map<std::string, py::array_t<const double>> q_init_map = q_init.cast<std::map<std::string, py::array_t<const double>>>();
+
+                    for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
+                    {
+                        py::buffer_info buf_q_init = it->second.request();
+                        if (buf_q_init.size != M) {
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                        }
+                        else
+                        {
+                            map_buf_q_init.insert(std::pair<std::string, const double*>(it->first, (const double*)buf_q_init.ptr));
+                        }
+                    }
+                }
+
+                obj.compute_propagators(map_buf_w_input, map_buf_q_init);
+            }
+            catch(std::exception& exc)
+            {
+                throw_without_line_number(exc.what());
+            }
+        }, py::arg("w_input"), py::arg("q_init") = py::none())
+        .def("compute_concentrations", &PropagatorComputation::compute_concentrations)
         .def("compute_statistics", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
@@ -264,6 +309,20 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
+        .def("get_total_concentration_gce", [](PropagatorComputation& obj, double fugacity, int polymer, std::string monomer_type)
+        {
+            try{
+                const int M = obj.get_n_grid();
+                py::array_t<double> phi = py::array_t<double>(M);
+                py::buffer_info buf_phi = phi.request();
+                obj.get_total_concentration_gce(fugacity, polymer, monomer_type, (double*) buf_phi.ptr);
+                return phi;
+            }
+            catch(std::exception& exc)
+            {
+                throw_with_line_number(exc.what());
+            }
+        })
         .def("get_block_concentration", [](PropagatorComputation& obj, int polymer)
         {
             try{
@@ -312,6 +371,8 @@ PYBIND11_MODULE(langevinfts, m)
             }
         })
         .def("compute_stress", &PropagatorComputation::compute_stress)
+        .def("get_stress", &PropagatorComputation::get_stress)
+        .def("get_stress_gce", &PropagatorComputation::get_stress_gce)
         .def("check_total_partition", &PropagatorComputation::check_total_partition);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")

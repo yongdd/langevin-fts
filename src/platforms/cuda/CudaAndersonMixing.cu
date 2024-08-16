@@ -100,6 +100,8 @@ CudaAndersonMixing::~CudaAndersonMixing()
         cudaFree(d_w_deriv[gpu]);
         cudaFree(d_w_new[gpu]);
         cudaFree(d_sum[gpu]);
+        cudaFree(d_sum_out[gpu]);
+        cudaFree(d_temp_storage[gpu]);
     }
 
     if (N_GPUS > 1)

@@ -58,7 +58,8 @@ q_init = {"G":np.zeros(np.prod(nx))}
 q_init["G"][0] = 1.0/cb.get_dv(0)
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-solver.compute_statistics({"A":w["A"]}, q_init=q_init)
+solver.compute_propagators({"A":w["A"]}, q_init=q_init)
+solver.compute_concentrations()
 
 # Distance array
 dx = np.array(lx)/np.array(nx)

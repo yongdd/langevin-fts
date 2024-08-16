@@ -79,8 +79,6 @@ int main()
                     std::cout << "Platform: " << platform << std::endl;
                     std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
-
-
                     for(int i=0; i<M; i++)
                     {
                         w[i] = 0.0;
@@ -92,7 +90,8 @@ int main()
                     cb->zero_mean(w);
 
                     // For the given fields find the polymer statistics
-                    solver->compute_statistics({{"A",w}},{{"G", q_init}});
+                    solver->compute_propagators({{"A",w}},{{"G", q_init}});
+                    solver->compute_concentrations();
 
                     for(int n=20; n<=N; n+=20)
                     {   

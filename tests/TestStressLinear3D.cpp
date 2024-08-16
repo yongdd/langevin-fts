@@ -185,7 +185,8 @@ int main()
                     for(int iter=0; iter<max_scft_iter; iter++)
                     {
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_concentrations();
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -274,7 +275,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -298,7 +299,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -318,7 +319,8 @@ int main()
 
                         // Compute stress
                         double dh_dl = (energy_total_1-energy_total_2)/dL;
-                        auto stress = solver->compute_stress();
+                        solver->compute_stress();
+                    auto stress = solver->get_stress();
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
                         std:: cout << "Stress : " << stress[0] << std::endl;
                         double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
@@ -333,7 +335,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -357,7 +359,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -377,7 +379,8 @@ int main()
 
                         // Compute stress
                         double dh_dl = (energy_total_1-energy_total_2)/dL;
-                        auto stress = solver->compute_stress();
+                        solver->compute_stress();
+                    auto stress = solver->get_stress();
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
                         std:: cout << "Stress : " << stress[1] << std::endl;
                         double relative_stress_error = std::abs(dh_dl-stress[1])/std::abs(stress[1]);
@@ -393,7 +396,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -417,7 +420,7 @@ int main()
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 
@@ -437,7 +440,8 @@ int main()
 
                         // Compute stress
                         double dh_dl = (energy_total_1-energy_total_2)/dL;
-                        auto stress = solver->compute_stress();
+                        solver->compute_stress();
+                    auto stress = solver->get_stress();
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
                         std:: cout << "Stress : " << stress[2] << std::endl;
                         double relative_stress_error = std::abs(dh_dl-stress[2])/std::abs(stress[2]);

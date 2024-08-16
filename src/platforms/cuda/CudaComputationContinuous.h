@@ -51,8 +51,6 @@ private:
     std::map<std::string, bool *> propagator_finished;
     #endif
 
-    // Total partition functions
-    double *single_polymer_partitions; 
     // Remember one segment for each polymer chain to compute total partition function
     // (polymer id, propagator forward, propagator backward, n_repeated)
     std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
@@ -62,46 +60,44 @@ private:
     // Temp array for concentration computation
     double *d_phi;
 
-    // Total partition functions for each solvent
-    double* single_solvent_partitions;
-
     // Solvent concentrations
     std::vector<double *> d_phi_solvent;
 
     // Calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, const int N_RIGHT, const int N_LEFT);
-
-    // Compute statistics with inputs from selected device arrays
-    void compute_statistics(std::string device,
-        std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init = {});
+    
 public:
 
     CudaComputationContinuous(ComputationBox *cb, Molecules *pc, PropagatorAnalyzer *propagator_analyzer, std::string method);
     ~CudaComputationContinuous();
 
     void update_laplacian_operator() override;
-    void compute_statistics(
+
+    void compute_propagators(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override
-    {
-        compute_statistics("cpu", w_block, q_init);
-    };
-    void compute_statistics_device(
-        std::map<std::string, const double*> d_w_block,
-        std::map<std::string, const double*> d_q_init = {}) override
-    {
-        compute_statistics("gpu", d_w_block, d_q_init);
-    };
+        std::map<std::string, const double*> q_init = {}) override;
+
+    void compute_concentrations() override;
+
+    // Compute statistics with inputs from selected device arrays
+    void compute_statistics(
+        std::map<std::string, const double*> w_input,
+        std::map<std::string, const double*> q_init = {}) override;
+
+    void compute_stress() override;
     double get_total_partition(int polymer) override;
+    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
+
+    // Canonical ensemble
     void get_total_concentration(std::string monomer_type, double *phi) override;
     void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
     void get_block_concentration(int polymer, double *phi) override;
-    std::vector<double> compute_stress() override;
-    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
 
     double get_solvent_partition(int s) override;
     void get_solvent_concentration(int s, double *phi) override;
+
+    // Grand canonical ensemble
+    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, double *phi) override;
 
     // For tests
     bool check_total_partition() override;

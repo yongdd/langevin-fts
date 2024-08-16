@@ -8,15 +8,17 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 
 #include "Molecules.h"
 #include "Polymer.h"
 
 struct ComputationEdge{
-    int max_n_segment;                                    // the maximum segment number
-    std::string monomer_type;                             // monomer_type
-    std::vector<std::tuple<std::string, int, int>> deps;  // tuple <key, n_segment, n_repeated>
-    int height;                                           // height of propagator (height of tree data Structure)
+    int max_n_segment;                                    // The maximum segment number
+    std::string monomer_type;                             // Monomer_type
+    std::vector<std::tuple<std::string, int, int>> deps;  // Tuple <key, n_segment, n_repeated>
+    int height;                                           // Height of propagator (height of tree data Structure)
+    std::set<int> junction_ends;                          // Indices where additional half bond step computation is required.
 };
 struct ComputationBlock{
     std::string monomer_type;  // monomer_type
@@ -65,7 +67,11 @@ private:
         std::string left_key);
 
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
-    void update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators, std::string new_key, int new_n_segment);
+    void update_computation_propagator_map(
+        std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
+        std::string new_key, int new_n_segment, bool is_junction_end);
+
+    bool is_junction(Polymer& pc, int node);
 
 public:
     PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);

@@ -38,9 +38,9 @@ public:
     const std::map<std::string, double>& get_bond_lengths() const;
 
     // Add new polymer
-    // Mark some chain ends to set initial conditions of propagators when solver.compute_statistics() is invoked.
+    // Mark some chain ends to set initial conditions of propagators when solver.compute_propagators() is invoked.
     // For instance, if chain_end_to_q_init[a] is set to b, 
-    // q_init[b] will be used as an initial condition of chain end 'a' in solver.compute_statistics().
+    // q_init[b] will be used as an initial condition of chain end 'a' in solver.compute_propagators().
     void add_polymer(
         double volume_fraction,
         std::vector<BlockInput> block_inputs,

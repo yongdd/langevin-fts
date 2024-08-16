@@ -69,16 +69,27 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
 
     // Total segment number
     int total_segment_number = 0;
-    for(size_t b=0; b<blocks.size(); b++)
+    if (this->model_name == "continuous")
     {
-        total_segment_number += blocks[b].n_segment;
+        for(size_t b=0; b<blocks.size(); b++)
+            total_segment_number += blocks[b].n_segment;
+    }
+    else if (this->model_name == "discrete")
+    {
+        for(size_t b=0; b<blocks.size(); b++)
+        {
+            total_segment_number += blocks[b].n_segment-1;
+            if(is_junction(pc, blocks[b].v))
+                total_segment_number ++;
+            if(is_junction(pc, blocks[b].u))
+                total_segment_number ++;
+        }
     }
     this->total_segment_numbers.push_back(total_segment_number);
 
     // Aggregation
     if (this->aggregate_propagator_computation)
     {
-
         // Aggregated keys
         std::map<std::string, std::vector<std::string>> aggregated_blocks;
 
@@ -141,12 +152,17 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             computation_blocks[key].n_segment_left = n_segment_left;
             computation_blocks[key].v_u = u_item.second.v_u;
             computation_blocks[key].n_repeated = n_repeated;
-
             // std::cout << "computation_blocks[key].n_repeated: " << key_v << ", " << key_u  << ", " << computation_blocks[key].n_repeated << std::endl;
+            bool is_junction_left = false;
+            bool is_junction_right = false;
+            if (PropagatorCode::get_height_from_key(key_v) > 0)
+                is_junction_left = true;
+            if (PropagatorCode::get_height_from_key(key_u) > 0)
+                is_junction_right = true;
 
             // Update propagators
-            update_computation_propagator_map(computation_propagators, key_v, n_segment_left);
-            update_computation_propagator_map(computation_propagators, key_u, n_segment_right);
+            update_computation_propagator_map(computation_propagators, key_v, n_segment_left,  is_junction_right);
+            update_computation_propagator_map(computation_propagators, key_u, n_segment_right, is_junction_left);
         }
     }
 }
@@ -233,6 +249,17 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         if (set_S.size() == 1 || n_segment_current < 2*minimum_n_segment)
             continue;
 
+        // If all monomer types are same, set minimum_n_segment = 0
+        bool is_same_monomer_type = true;
+        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
+        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        {
+            if (it->second.monomer_type != monomer_type)
+                is_same_monomer_type = false;
+        }
+        if (is_same_monomer_type)
+            minimum_n_segment = 0;
+
         // Update 'n_segment_right'
         for(const auto& item: set_S)
             set_I[item.first].n_segment_right = minimum_n_segment;
@@ -265,7 +292,6 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
             std::vector<std::tuple<int ,int>> dep_v_u = set_I[dep_key].v_u;
             v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
         }
-        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
         propagator_code += "]" + monomer_type;
 
         // Add new aggregated key to set_I
@@ -321,7 +347,7 @@ void PropagatorAnalyzer::substitute_right_keys(
             int v = std::get<0>(v_u);
             int u = std::get<1>(v_u);
 
-            auto& neighbor_nodes_v = pc.get_adjacent_nodes()[v];
+            auto neighbor_nodes_v = pc.get_adjacent_nodes()[v];
             // Remove 'u' from 'neighbor_nodes_v'
             neighbor_nodes_v.erase(std::remove(neighbor_nodes_v.begin(), neighbor_nodes_v.end(), u), neighbor_nodes_v.end());
             // std::cout << "(v_u): " << v <<  ", " << v << std::endl;
@@ -379,7 +405,9 @@ void PropagatorAnalyzer::substitute_right_keys(
     }
 }
 
-void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators, std::string new_key, int new_n_segment)
+void PropagatorAnalyzer::update_computation_propagator_map(
+    std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
+    std::string new_key, int new_n_segment, bool is_junction_end)
 {
     if (computation_propagators.find(new_key) == computation_propagators.end())
     {
@@ -390,13 +418,23 @@ void PropagatorAnalyzer::update_computation_propagator_map(std::map<std::string,
     }
     else
     {
-        new_key += "Z";
-        computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
-        computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
-        computation_propagators[new_key].max_n_segment = new_n_segment;
-        computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
+        if (computation_propagators[new_key].max_n_segment < new_n_segment)
+            computation_propagators[new_key].max_n_segment = new_n_segment;
     }
+
+
+    if (is_junction_end)
+        computation_propagators[new_key].junction_ends.insert(new_n_segment);
 }
+
+bool PropagatorAnalyzer::is_junction(Polymer& pc, int node)
+{
+    if (pc.get_adjacent_nodes()[node].size() == 1)
+        return false;
+    else
+        return true;
+}
+
 int PropagatorAnalyzer::get_n_computation_propagator_codes() const
 {
     return computation_propagators.size();
@@ -428,14 +466,14 @@ void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------- Blocks ---------" << std::endl;
-    std::cout << "Polymer id, left key:\n\taggregated, n_segment (offset, compute), right key, n_repeat, {v, u} list" << std::endl;
+    std::cout << "Polymer id, left key:\n\taggregated, (left, right) is_junction, (left, right) n_segment, right key, n_repeat, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
     std::tuple<int, std::string> v_tuple = std::make_tuple(-1, "");
 
     for(const auto& item : computation_blocks)
     {
-        // Print polymer id, key1
+        // Print polymer id, left key
         const std::string v_string = std::get<1>(item.first);
         if (v_tuple != std::make_tuple(std::get<0>(item.first), v_string))
         {
@@ -455,10 +493,23 @@ void PropagatorAnalyzer::display_blocks() const
             std::cout << "X, ";
         else
             std::cout << "O, ";
-        // Print n_segment (offset, compute)
+
+        // Print is_free_end (left, right)
+        std::cout << "(";
+        if (PropagatorCode::get_height_from_key(v_string) > 0)
+            std::cout << "O, ";
+        else
+            std::cout << "X, ";
+
+        if (PropagatorCode::get_height_from_key(u_string) > 0)
+            std::cout << "O), ";
+        else
+            std::cout << "X), ";
+
+        // Print n_segment (left, right)
         std::cout << "(" + std::to_string(item.second.n_segment_left) + ", " + std::to_string(item.second.n_segment_right) + "), ";
 
-        // Print key2
+        // Print right key
         if (u_string.size() <= MAX_PRINT_LENGTH)
             std::cout << u_string;
         else
@@ -486,7 +537,7 @@ void PropagatorAnalyzer::display_propagators() const
     int reduced_mde_steps = 0;
 
     std::cout << "--------- Propagators ---------" << std::endl;
-    std::cout << "Key:\n\taggregated, max_n_segment, height" << std::endl;
+    std::cout << "Key:\n\theight, aggregated, max_n_segment, # dependencies, junction_ends" << std::endl;
 
     for(const auto& item : total_segment_numbers)
     {
@@ -495,8 +546,15 @@ void PropagatorAnalyzer::display_propagators() const
 
     for(const auto& item : computation_propagators)
     {
-        reduced_mde_steps += item.second.max_n_segment;
-
+        if (this->model_name == "continuous")
+            reduced_mde_steps += item.second.max_n_segment;
+        else if (this->model_name == "discrete")
+        {
+            reduced_mde_steps += item.second.max_n_segment-1;
+            reduced_mde_steps += item.second.junction_ends.size();
+            if (item.second.deps.size() > 0)
+                reduced_mde_steps++;
+        }
         const int MAX_PRINT_LENGTH = 500;
 
         if (item.first.size() <= MAX_PRINT_LENGTH)
@@ -505,14 +563,33 @@ void PropagatorAnalyzer::display_propagators() const
             std::cout << item.first.substr(0,MAX_PRINT_LENGTH-5) + " ... <omitted> " ;
 
         std::cout << ":\n\t ";
+        std::cout << item.second.height << ", ";
         if (item.first.find('[') == std::string::npos)
             std::cout << "X, ";
         else
             std::cout << "O, ";
-        std::cout << item.second.max_n_segment << ", " << item.second.height << std::endl;
-    }
 
-    std::cout << "Total number of modified diffusion equation (or integral equation for discrete chain model) steps to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+        // Print max_n_segment
+        std::cout << item.second.max_n_segment << ", ";
+
+        // Print number of dependency
+        std::cout << item.second.deps.size() << ", ";
+
+        // Print indices for junction_ends
+        std::cout << "{";
+        for (auto it = item.second.junction_ends.begin(); it != item.second.junction_ends.end(); ++it)
+        {
+            std::cout << *it;
+            if (std::next(it) != item.second.junction_ends.end()) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "}, "<< std::endl;
+    }
+    if (this->model_name == "continuous")
+        std::cout << "Time complexity (total number of modified diffusion equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+    else if (this->model_name == "discrete")
+        std::cout << "Time complexity (total number of integral equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
     std::cout << "Total number of steps after optimizing computation : " << reduced_mde_steps << std::endl;
 
     double percent = 100*(1.0 - ((double ) reduced_mde_steps)/((double) total_mde_steps_without_reduction));

@@ -98,21 +98,38 @@ int main()
 
         std::vector<PropagatorComputation*> solver_1_list;
         std::vector<PropagatorComputation*> solver_2_list;
+        std::vector<ComputationBox*> cb_1_list;
+        std::vector<ComputationBox*> cb_2_list;
+        std::vector<std::string> solver_name;
 
         #ifdef USE_CPU_MKL
-        solver_1_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_1, propagator_analyzer_1));
+        solver_name.push_back("CpuComputationDiscrete, Aggregation=false");
         #endif
         #ifdef USE_CUDA
-        solver_1_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_1, propagator_analyzer_1));
-        solver_1_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_1, propagator_analyzer_1));
+        solver_name.push_back("CudaComputationDiscrete, Aggregation=false");
+        solver_name.push_back("CudaComputationReduceMemoryDiscrete, Aggregation=false");
         #endif
 
         #ifdef USE_CPU_MKL
-        solver_2_list.push_back(new CpuComputationDiscrete(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_2, propagator_analyzer_2));
+        cb_1_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_1_list.push_back(new CpuComputationDiscrete(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1));
         #endif
         #ifdef USE_CUDA
-        solver_2_list.push_back(new CudaComputationDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_2, propagator_analyzer_2));
-        solver_2_list.push_back(new CudaComputationReduceMemoryDiscrete(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules_2, propagator_analyzer_2));
+        cb_1_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_1_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_1_list.push_back(new CudaComputationDiscrete(cb_1_list.end()[-2], molecules_1, propagator_analyzer_1));
+        solver_1_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1));
+        #endif
+
+        #ifdef USE_CPU_MKL
+        cb_2_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_2_list.push_back(new CpuComputationDiscrete(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2));
+        #endif
+        #ifdef USE_CUDA
+        cb_2_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_2_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_2_list.push_back(new CudaComputationDiscrete(cb_2_list.end()[-2], molecules_2, propagator_analyzer_2));
+        solver_2_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2));
         #endif
 
         // For each platform    
@@ -128,11 +145,14 @@ int main()
             const int s = 0;
 
             //---------------- run --------------------
-            std::cout<< "Running Pseudo " << std::endl;
-            solver_1_list[n]->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            std::cout<< "Running Pseudo 1: " << solver_name[n] << std::endl;
+            solver_1_list[n]->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver_1_list[n]->compute_concentrations();
             solver_1_list[n]->get_total_concentration(p, "A", phi_a);
 
-            solver_2_list[n]->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            std::cout<< "Running Pseudo 2: " << solver_name[n] << std::endl;
+            solver_2_list[n]->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver_2_list[n]->compute_concentrations();
             solver_2_list[n]->get_solvent_concentration(s, phi_solvent);
 
             //--------------- check --------------------
@@ -153,10 +173,12 @@ int main()
             if (!std::isfinite(error) || error > 1e-4)
                 return -1;
 
-            std::vector<double> stress_1 = solver_1_list[n]->compute_stress();
+            solver_1_list[n]->compute_stress();
+            std::vector<double> stress_1 = solver_1_list[n]->get_stress();
             std::cout<< "Stress_1: " << stress_1[0] << ", " << stress_1[1] << ", " << stress_1[2] << std::endl;
 
-            std::vector<double> stress_2 = solver_2_list[n]->compute_stress();
+            solver_2_list[n]->compute_stress();
+            std::vector<double> stress_2 = solver_2_list[n]->get_stress();
             std::cout<< "Stress_2: " << stress_2[0] << ", " << stress_2[1] << ", " << stress_2[2] << std::endl;
 
             for(int i=0; i<3; i++)
@@ -167,8 +189,11 @@ int main()
                     return -1;
             }
 
+            delete cb_1_list[n];
+            delete cb_2_list[n];
             delete solver_1_list[n];
             delete solver_2_list[n];
+        
         }
         return 0;
     }

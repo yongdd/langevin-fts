@@ -181,25 +181,30 @@ int main()
         propagator_analyzer->display_propagators();
 
         std::vector<PropagatorComputation*> solver_list;
+        std::vector<ComputationBox*> cb_list;
         std::vector<std::string> solver_name_list;
 
         // Real space method
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("real space, cpu-mkl");
-        solver_list.push_back(new CpuComputationContinuous(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "realspace"));
+        cb_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationContinuous(cb_list.end()[-1], molecules, propagator_analyzer, "realspace"));
         #endif
 
         #ifdef USE_CUDA
         solver_name_list.push_back("real space, cuda");
         solver_name_list.push_back("real space, cuda_reduce_memory_usage");
-        solver_list.push_back(new CudaComputationContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}), molecules, propagator_analyzer, "realspace"));
+        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-2], molecules, propagator_analyzer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-1], molecules, propagator_analyzer, "realspace"));
         #endif
 
         // For each platform
         for(size_t n=0; n<solver_list.size(); n++)
         {
             PropagatorComputation* solver = solver_list[n];
+            ComputationBox* cb = cb_list[n];
 
             for(int i=0; i<M; i++)
             {
@@ -211,7 +216,8 @@ int main()
 
             //---------------- run --------------------
             std::cout<< std::endl << "Running: " << solver_name_list[n] << std::endl;
-            solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver->compute_concentrations();
             solver->get_total_concentration("A", phi_a);
             solver->get_total_concentration("B", phi_b);
 
@@ -262,6 +268,7 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 
+            delete cb;
             delete solver;
         }
         return 0;

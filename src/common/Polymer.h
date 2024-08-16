@@ -41,7 +41,7 @@ private:
 
     // Grafting point.
     // For instance, 'chain_end_to_q_init[a] = b' means that
-    // The initial condition of chain end vertex 'a' will be given as 'initial[b]' in solver.compute_statistics()
+    // The initial condition of chain end vertex 'a' will be given as 'initial[b]' in solver.compute_propagators()
     std::map<int, std::string> chain_end_to_q_init;
 
     // Convert a number to a string of alphabets
