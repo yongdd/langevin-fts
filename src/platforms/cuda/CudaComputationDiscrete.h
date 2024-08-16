@@ -74,27 +74,23 @@ private:
     // Calculate concentration of one block
     void calculate_phi_one_block(double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N_RIGHT, const int N_LEFT);
 
-    // Compute statistics with inputs from selected device arrays
-    void compute_statistics(std::string device,
-        std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init = {});
 public:
     CudaComputationDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer *propagator_analyzer);
     ~CudaComputationDiscrete();
 
     void update_laplacian_operator() override;
-    void compute_statistics(
+
+    void compute_propagators(
         std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override
-    {
-        compute_statistics("cpu", w_block, q_init);
-    };
-    void compute_statistics_device(
-        std::map<std::string, const double*> d_w_block,
-        std::map<std::string, const double*> d_q_init = {}) override
-    {
-        compute_statistics("gpu", d_w_block, d_q_init);
-    };
+        std::map<std::string, const double*> q_init = {}) override;
+
+    void compute_concentrations() override;
+
+    // Compute statistics with inputs from selected device arrays
+    void compute_statistics(
+        std::map<std::string, const double*> w_input,
+        std::map<std::string, const double*> q_init = {}) override;
+    
     void compute_stress() override;
     double get_total_partition(int polymer) override;
     void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;

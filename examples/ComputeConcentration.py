@@ -76,7 +76,8 @@ w = {"A": np.random.normal(0.0, 1.0, np.prod(nx)),
      "C": np.random.normal(0.0, 1.0, np.prod(nx))}
 
 # Compute ensemble average concentration (phi) and total partition function (Q)
-solver.compute_statistics({"A":w["A"],"B":w["B"],"C":w["C"]})
+solver.compute_propagators({"A":w["A"],"B":w["B"],"C":w["C"]})
+solver.compute_concentrations()
 
 # Compute total concentration for each monomer type
 phi_a = solver.get_total_concentration("A")

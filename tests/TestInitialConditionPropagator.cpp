@@ -90,7 +90,8 @@ int main()
                     cb->zero_mean(w);
 
                     // For the given fields find the polymer statistics
-                    solver->compute_statistics({{"A",w}},{{"G", q_init}});
+                    solver->compute_propagators({{"A",w}},{{"G", q_init}});
+                    solver->compute_concentrations();
 
                     for(int n=20; n<=N; n+=20)
                     {   

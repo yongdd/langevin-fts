@@ -130,7 +130,16 @@ void CpuComputationContinuous::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
+
 void CpuComputationContinuous::compute_statistics(
+    std::map<std::string, const double*> w_input,
+    std::map<std::string, const double*> q_init)
+{
+    this->compute_propagators(w_input, q_init);
+    this->compute_concentrations();
+}
+
+void CpuComputationContinuous::compute_propagators(
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
@@ -143,9 +152,6 @@ void CpuComputationContinuous::compute_statistics(
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
-
-        // If( q_init.size() > 0)
-        //     throw_with_line_number("Currently, \'q_init\' is not supported.");
 
         // Update dw or exp_dw
         propagator_solver->update_dw(w_input);
@@ -348,6 +354,19 @@ void CpuComputationContinuous::compute_statistics(
             single_polymer_partitions[p]= cb->inner_product(
                 propagator_left, propagator_right)/n_aggregated/cb->get_volume();
         }
+
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuComputationContinuous::compute_concentrations()
+{
+    try
+    {
+        const int M = cb->get_n_grid();
 
         // Calculate segment concentrations
         #pragma omp parallel for num_threads(n_streams)

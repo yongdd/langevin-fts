@@ -168,7 +168,8 @@ int main()
                         cb->zero_mean(&w[M]);
 
                         // For the given fields find the polymer statistics
-                        solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}}, {});
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}}, {});
+                        solver->compute_concentrations();
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
 

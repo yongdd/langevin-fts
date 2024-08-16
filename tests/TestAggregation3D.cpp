@@ -189,7 +189,8 @@ int main()
                         {
                             // For the given fields find the polymer statistics
                             std::cout << "Computing statistics..." << std::endl;
-                            solver->compute_statistics({{"A",&w[0]},{"B",&w[M]}},{});
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+                            solver->compute_concentrations();
                             std::cout << "Getting total concentration A..." << std::endl;
                             solver->get_total_concentration("A", phi_a);
                             std::cout << "Getting total concentration B..." << std::endl;

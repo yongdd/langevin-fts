@@ -137,7 +137,8 @@ int main()
 
             //---------------- run --------------------
             std::cout<< std::endl << "Running Pseudo: " << n << ", " << solver_name_list[n] << std::endl;
-            solver->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver->compute_concentrations();
 
             solver->get_chain_propagator(q_next, 0, 1, 2, 1);
             if (n % repeat != 0)

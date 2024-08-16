@@ -146,10 +146,12 @@ int main()
 
             //---------------- run --------------------
             std::cout<< "Running Pseudo " << std::endl;
-            solver_1_list[n]->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver_1_list[n]->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver_1_list[n]->compute_concentrations();
             solver_1_list[n]->get_total_concentration(p, "A", phi_a);
 
-            solver_2_list[n]->compute_statistics({{"A",w_a},{"B",w_b}},{});
+            solver_2_list[n]->compute_propagators({{"A",w_a},{"B",w_b}},{});
+            solver_2_list[n]->compute_concentrations();
             solver_2_list[n]->get_solvent_concentration(s, phi_solvent);
 
             //--------------- check --------------------
