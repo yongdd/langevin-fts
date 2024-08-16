@@ -418,11 +418,15 @@ void PropagatorAnalyzer::update_computation_propagator_map(
     }
     else
     {
-        if (computation_propagators[new_key].max_n_segment < new_n_segment)
-            computation_propagators[new_key].max_n_segment = new_n_segment;
+        new_key += "Z";
+        computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
+        computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
+        computation_propagators[new_key].max_n_segment = new_n_segment;
+        computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
+
+        // if (computation_propagators[new_key].max_n_segment < new_n_segment)
+        //    computation_propagators[new_key].max_n_segment = new_n_segment;
     }
-
-
     if (is_junction_end)
         computation_propagators[new_key].junction_ends.insert(new_n_segment);
 }
