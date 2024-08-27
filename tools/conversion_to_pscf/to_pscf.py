@@ -1,12 +1,14 @@
 import sys
 import ast
 import numpy as np
+import argparse
+
+parser = argparse.ArgumentParser(description='')
+parser.add_argument('--file_name', type=str, required=True, help='file name')
+args, unknown = parser.parse_known_args()
 
 # Read the parameter file
-if len(sys.argv) != 2:
-    print("Usage: python to_pscft.py [file_name]")
-    exit(1)
-file_name = sys.argv[1] 
+file_name = args.file_name 
 #file_name = "Star9ArmsGyroid.py"
 print("file_name: ", file_name)
 fp = open(file_name, 'r')
