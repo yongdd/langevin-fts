@@ -30,7 +30,7 @@ params = {
         "C":1.0},
 
     "chi_n": {"A,B": chin,      # Interaction parameter, Flory-Huggins params * N_Ref
-              "A,C": 1.0*chin*1.75,
+              "A,C": chin*1.75,
               "B,C": chin,
              },
 
