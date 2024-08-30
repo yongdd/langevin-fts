@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-class MPT_Traditional:
+class MPT_Orthonormal:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -34,7 +34,9 @@ class MPT_Traditional:
         for i in range(S-1):
             # assert(not np.isclose(eigenvalues[i], 0.0)), \
             #     "One of eigenvalues is zero for given chiN values."
-            if eigenvalues[i] > 0:
+            if np.isclose(eigenvalues[i], 0.0):
+                print("One of eigenvalues is zero for given chiN values.")
+            elif eigenvalues[i] > 0:
                 self.eigen_fields_imag_idx.append(i)
             else:
                 self.eigen_fields_real_idx.append(i)
@@ -52,14 +54,16 @@ class MPT_Traditional:
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
 
         # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
-        matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o).copy()/S
-        # matrix_a = np.zeros((S,S))
-        # matrix_a[:,0:S-1] = matrix_o[:,0:S-1]
-        # matrix_a[:,S-1] = 1.0
+        matrix_a = np.zeros((S,S))
+        matrix_a[:,0:S-1] = matrix_o[:,0:S-1]
+        matrix_a[:,S-1] = 1.0
+        matrix_a_inv = np.transpose(matrix_a.copy())
+        matrix_a_inv[S-1,:] = 1.0/S
 
-        # matrix_a_inv = np.transpose(matrix_a.copy())
-        # matrix_a_inv[S-1,:] = 1.0/S
+        # Check the inverse matrix
+        error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
+        assert(np.isclose(error, 0.0)), \
+            "Invalid inverse of matrix A. Perhaps matrix O is not orthogonal."
 
         # Compute derivatives of Hamiltonian coefficients w.r.t. χN
         epsilon = 1e-5
@@ -75,8 +79,8 @@ class MPT_Traditional:
             chi_n_n[key] -= epsilon
 
             # Compute eigenvalues and orthogonal matrix
-            eigenvalues_p, matrix_o_p = self.compute_eigen_system(chi_n_p, self.matrix_p)
-            eigenvalues_n, matrix_o_n = self.compute_eigen_system(chi_n_n, self.matrix_p)
+            eigenvalues_p, _ = self.compute_eigen_system(chi_n_p, self.matrix_p)
+            eigenvalues_n, _ = self.compute_eigen_system(chi_n_n, self.matrix_p)
             
             # Compute coefficients for Hamiltonian computation
             h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(chi_n_p, eigenvalues_p)
@@ -96,13 +100,13 @@ class MPT_Traditional:
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
 
-        print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-        print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
+        # print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+        # print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
         print("Eigenvalues:\n\t", self.eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
+        print("Eigenvectors [v1, v2, ...] :\n\t", str(self.matrix_o).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
+        # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
         print("Real Fields: ",      self.eigen_fields_real_idx)
         print("Imaginary Fields: ", self.eigen_fields_imag_idx)
@@ -133,9 +137,10 @@ class MPT_Traditional:
                 if key in chi_n:
                     matrix_chi[i,j] = chi_n[key]
                     matrix_chi[j,i] = chi_n[key]
+                    
         projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
 
-        eigenvalues, eigenvectors = np.linalg.eig(projected_chin)
+        eigenvalues, eigenvectors = np.linalg.eigh(projected_chin)
         sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
         eigenvalues = eigenvalues[sorted_indexes]
         eigenvectors = eigenvectors[:,sorted_indexes]
@@ -159,8 +164,8 @@ class MPT_Traditional:
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
 
-        # Multiply np.sqrt(S) to eigenvectors
-        eigenvectors *= np.sqrt(S)
+        # # Multiply np.sqrt(S) to eigenvectors
+        # eigenvectors *= np.sqrt(S)
 
         return eigenvalues, eigenvectors
 
@@ -179,7 +184,7 @@ class MPT_Traditional:
         h_const = 0.5*np.sum(self.vector_s)/S
         for i in range(S-1):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
+                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]#/S
 
         # Compute coefficients of integral of μ(r)/V
         h_coef_mu1 = np.zeros(S-1)
@@ -191,7 +196,7 @@ class MPT_Traditional:
         h_coef_mu2 = np.zeros(S-1)
         for i in range(S-1):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]*S
+                h_coef_mu2[i] = -0.5/eigenvalues[i]#*S
 
         return h_const, h_coef_mu1, h_coef_mu2
 
