@@ -503,7 +503,7 @@ class SCFT:
                             self.molecules.get_polymer(p).get_alpha() * \
                             np.log(total_partitions[p])
 
-        return hamiltonian_partition + hamiltonian_fields # + self.h_const
+        return hamiltonian_partition + hamiltonian_fields + self.h_const
 
     def save_results(self, path):
         # Make a dictionary for chi_n

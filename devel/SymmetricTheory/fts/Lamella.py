@@ -37,7 +37,7 @@ params = {
         ],},],
         
     "langevin":{                # Langevin Dynamics
-        "max_step":50000,       # Langevin steps for simulation
+        "max_step":10000,       # Langevin steps for simulation
         "dt":8.0,               # Langevin step interval, delta tau*N_Ref
         "nbar":1024,            # Invariant polymerization index, nbar of N_Ref
     },
@@ -46,7 +46,7 @@ params = {
         "dir":"data_simulation",        # Directory name
         "recording_period":1000,        # Period for recording concentrations and fields
         "sf_computing_period":10,       # Period for computing structure function
-        "sf_recording_period":1000,    # Period for recording structure function
+        "sf_recording_period":1000,     # Period for recording structure function
     },
 
     "saddle":{                # Iteration for the pressure field 
@@ -93,16 +93,16 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       20    1.571E-16  [ 1.0217261E+00  ]     5.004521219   8.9464276E-05 
-# iteration, mass error, total partitions, total energy, incompressibility error
+#       20    3.454E-16  [ 1.0217261E+00  ]     5.004521219   [8.9464276E-05 ]
+# iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
 # ---------- Run  ----------
 # Langevin step:  1
-#       22    2.280E-16  [ 1.1036824E+00  ]     5.021894299   [9.5673754E-05 ]
+#       20    3.989E-16  [ 1.3949290E+00  ]     5.085582540   [7.8608843E-05 ]
 # Langevin step:  2
-#       24    5.243E-17  [ 1.4700034E+00  ]     5.099646978   [8.0163485E-05 ]
+#       23   -1.941E-16  [ 3.7840596E+00  ]     5.388305193   [8.9966385E-05 ]
 # Langevin step:  3
-#       24    1.736E-16  [ 1.8943395E+00  ]     5.170455712   [9.4283904E-05 ]
+#       24    1.846E-16  [ 6.6717461E+00  ]     5.473753680   [8.5637020E-05 ]
 # Langevin step:  4
-#       26   -1.560E-16  [ 2.3857432E+00  ]     5.234860548   [7.0143591E-05 ]
+#       24   -6.355E-16  [ 9.3541720E+00  ]     5.476192337   [9.9330327E-05 ]
 # Langevin step:  5
-#       25   -4.339E-16  [ 2.9502444E+00  ]     5.290531514   [7.3829234E-05 ]
+#       25   -3.883E-16  [ 1.1703783E+01  ]     5.457033828   [7.3703233E-05 ]

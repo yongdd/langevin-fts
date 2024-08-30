@@ -9,6 +9,12 @@ import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
 from langevinfts import *
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mpt_mse import *
+from mpt_original import *
+from mpt_traditional import *
+from mpt_orthonormal import *
+
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
@@ -52,579 +58,6 @@ class Adam:
         self.count += 1
         return w_new
     
-class SymmetricMPT:
-    def __init__(self, monomer_types, chi_n):
-        self.monomer_types = monomer_types
-        S = len(self.monomer_types)
-
-        self.matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    self.matrix_chi[i,j] = chi_n[key]
-                    self.matrix_chi[j,i] = chi_n[key]
-        
-        self.matrix_q = np.ones((S,S))/S
-        self.matrix_p = np.identity(S) - self.matrix_q
-        
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o = self.compute_eigen_system(self.matrix_chi, self.matrix_p)
-
-        self.vector_s = np.matmul(self.matrix_chi, np.ones(S))/S
-        self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
-        
-        vector_large_s_prime = self.vector_large_s.copy()
-        vector_large_s_prime[S-1] = 0.0
-        self.ois = np.reshape(np.matmul(matrix_o, vector_large_s_prime), (S, 1))/S
-
-        # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
-
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o.copy())/S
-
-        self.h_const = h_const
-        self.h_coef_mu1 = h_coef_mu1
-        self.h_coef_mu2 = h_coef_mu2
-
-        self.exchange_eigenvalues = eigenvalues
-        self.matrix_o = matrix_o
-        self.matrix_a = matrix_a
-        self.matrix_a_inv = matrix_a_inv
-
-        print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-        print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("In Hamiltonian:")
-        print("\treference energy: ", self.h_const)
-        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
-        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-
-    def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w - self.ois)
-
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen) + self.ois
-
-    def compute_eigen_system(self, matrix_chi, matrix_p):
-        projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
-
-        eigenvalues, eigenvectors = np.linalg.eig(projected_chin)
-        sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
-        eigenvalues = eigenvalues[sorted_indexes]
-        eigenvectors = eigenvectors[:,sorted_indexes]
-
-        # Set the last eigenvector to np.ones(S)/np.sqrt(S)
-        S = matrix_chi.shape[0]
-        eigenvectors[:,-1] = np.ones(S)/np.sqrt(S)
-        
-        # Make a orthogonal matrix using Gram-Schmidt
-        eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
-        eigenvalues[eigen_val_0] = 0.0
-        eigen_vec_0 = eigenvectors[:,eigen_val_0]
-        for i in range(eigen_vec_0.shape[1]-2,-1,-1):
-            vec_0 = eigen_vec_0[:,i].copy()
-            for j in range(i+1, eigen_vec_0.shape[1]):
-                eigen_vec_0[:,i] -= eigen_vec_0[:,j]*np.dot(vec_0,eigen_vec_0[:,j])
-            eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
-        eigenvectors[:,eigen_val_0] = eigen_vec_0
-
-        # Multiply np.sqrt(S) to eigenvectors
-        eigenvectors *= np.sqrt(S)
-
-        return eigenvalues, eigenvectors
-
-    def compute_h_coef(self, chi_n, eigenvalues):
-        S = len(self.monomer_types)
-
-        # Compute vector X_iS
-        vector_s = np.zeros(S-1)
-        for i in range(S-1):
-            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
-            monomer_pair.sort()
-            key = monomer_pair[0] + "," + monomer_pair[1]            
-            vector_s[i] = chi_n[key]
-
-        # Compute reference part of Hamiltonian
-        h_const = 0.5*np.sum(self.vector_s)/S
-
-        # Compute coefficients of integral of μ(r)/V
-        h_coef_mu1 = np.zeros(S-1)
-
-        # Compute coefficients of integral of μ(r)^2/V
-        h_coef_mu2 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5*S/eigenvalues[i]
-
-        return h_const, h_coef_mu1, h_coef_mu2
-
-    # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
-        S = len(self.monomer_types)
-
-        # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
-        for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
-        
-        # Compute Hamiltonian part that total partition functions
-        hamiltonian_partition = 0.0
-        for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
-
-        return hamiltonian_partition + hamiltonian_fields + self.h_const
-
-class SymmetricMPTConstH:
-    def __init__(self, monomer_types, chi_n):
-        self.monomer_types = monomer_types
-        S = len(self.monomer_types)
-
-        self.matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    self.matrix_chi[i,j] = chi_n[key]
-                    self.matrix_chi[j,i] = chi_n[key]
-        
-        self.matrix_q = np.ones((S,S))/S
-        self.matrix_p = np.identity(S) - self.matrix_q
-        
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o = self.compute_eigen_system(self.matrix_chi, self.matrix_p)
-
-        self.vector_s = np.matmul(self.matrix_chi, np.ones(S))/S
-        self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
-
-        # print(self.vector_s)
-        # print(self.vector_large_s)
-
-        # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
-
-        # projected_chin = np.matmul(self.matrix_p, np.matmul(self.matrix_chi, self.matrix_p))
-        # print("projected_chin:", projected_chin)
-        # print(np.matmul(projected_chin, -matrix_o[:,0]))
-        # print(np.matmul(projected_chin, -matrix_o[:,1]))
-        # print(np.matmul(projected_chin, -matrix_o[:,2]))
-        # print("Orthogonality: \n", np.matmul(np.transpose(matrix_o), matrix_o))
-
-        # self.vector_large_s_minus = np.zeros(S) 
-        # self.vector_large_s_minus[np.isclose(eigenvalues, 0.0)] = self.vector_large_s[np.isclose(eigenvalues, 0.0)]
-        # self.vector_large_s_minus[S-1] = 0.0
-        # print("S:\n", self.vector_large_s)
-        # print("I_S:\n", self.vector_large_s_minus)
-        # print("OI_S:\n", np.matmul(matrix_o, self.vector_large_s_minus))
-
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o.copy())/S
-
-        self.h_const = h_const
-        self.h_coef_mu1 = h_coef_mu1
-        self.h_coef_mu2 = h_coef_mu2
-
-        self.exchange_eigenvalues = eigenvalues
-        self.matrix_o = matrix_o
-        self.matrix_a = matrix_a
-        self.matrix_a_inv = matrix_a_inv
-
-        print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-        print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("In Hamiltonian:")
-        print("\treference energy: ", self.h_const)
-        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
-        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-
-    def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
-
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
-
-    def compute_eigen_system(self, matrix_chi, matrix_p):
-        projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
-
-        eigenvalues, eigenvectors = np.linalg.eig(projected_chin)
-        sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
-        eigenvalues = eigenvalues[sorted_indexes]
-        eigenvectors = eigenvectors[:,sorted_indexes]
-
-        # print("eigenvectors:\n", eigenvectors)
-
-        # Set the last eigenvector to np.ones(S)/np.sqrt(S)
-        S = matrix_chi.shape[0]
-        eigenvectors[:,-1] = np.ones(S)/np.sqrt(S)
-
-        # If eigen_vec_0.shape[1] == 4
-        # (2, -1, -1)
-        # 2: [3]
-        # 1: [2, 3]
-        # 0: [1, 2, 3]
-        
-        # Make a orthogonal matrix using Gram-Schmidt
-        eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
-        eigenvalues[eigen_val_0] = 0.0
-        eigen_vec_0 = eigenvectors[:,eigen_val_0]
-        for i in range(eigen_vec_0.shape[1]-2,-1,-1):
-            vec_0 = eigen_vec_0[:,i].copy()
-            for j in range(i+1, eigen_vec_0.shape[1]):
-                eigen_vec_0[:,i] -= eigen_vec_0[:,j]*np.dot(vec_0,eigen_vec_0[:,j])
-            eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
-        eigenvectors[:,eigen_val_0] = eigen_vec_0
-
-        # Multiply np.sqrt(S) to eigenvectors
-        eigenvectors *= np.sqrt(S)
-
-        return eigenvalues, eigenvectors
-
-    def compute_h_coef(self, chi_n, eigenvalues):
-        S = len(self.monomer_types)
-
-        # Compute vector X_iS
-        vector_s = np.zeros(S-1)
-        for i in range(S-1):
-            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
-            monomer_pair.sort()
-            key = monomer_pair[0] + "," + monomer_pair[1]            
-            vector_s[i] = chi_n[key]
-
-        # Compute reference part of Hamiltonian
-        h_const = 0.5*np.sum(self.vector_s)/S
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
-
-        # Compute coefficients of integral of μ(r)/V
-        h_coef_mu1 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)^2/V
-        h_coef_mu2 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5*S/eigenvalues[i]
-
-        return h_const, h_coef_mu1, h_coef_mu2
-
-    # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
-        S = len(self.monomer_types)
-
-        # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
-        for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
-        
-        # Compute Hamiltonian part that total partition functions
-        hamiltonian_partition = 0.0
-        for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
-
-        return hamiltonian_partition + hamiltonian_fields + self.h_const
-
-class SymmetricMPTOrthogonal:
-    def __init__(self, monomer_types, chi_n):
-        self.monomer_types = monomer_types
-        S = len(self.monomer_types)
-
-        self.matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    self.matrix_chi[i,j] = chi_n[key]
-                    self.matrix_chi[j,i] = chi_n[key]
-        
-        self.matrix_q = np.ones((S,S))/S
-        self.matrix_p = np.identity(S) - self.matrix_q
-        
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o = self.compute_eigen_system(self.matrix_chi, self.matrix_p)
-
-        self.vector_s = np.matmul(self.matrix_chi, np.ones(S))/S
-        self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
-
-        # print(self.vector_s)
-        # print(self.vector_large_s)
-
-        # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
-
-        # projected_chin = np.matmul(self.matrix_p, np.matmul(self.matrix_chi, self.matrix_p))
-        # print("projected_chin:", projected_chin)
-        # print(np.matmul(projected_chin, -matrix_o[:,0]))
-        # print(np.matmul(projected_chin, -matrix_o[:,1]))
-        # print(np.matmul(projected_chin, -matrix_o[:,2]))
-        # print("Orthogonality: \n", np.matmul(np.transpose(matrix_o), matrix_o))
-
-        # self.vector_large_s_minus = np.zeros(S) 
-        # self.vector_large_s_minus[np.isclose(eigenvalues, 0.0)] = self.vector_large_s[np.isclose(eigenvalues, 0.0)]
-        # self.vector_large_s_minus[S-1] = 0.0
-        # print("S:\n", self.vector_large_s)
-        # print("I_S:\n", self.vector_large_s_minus)
-        # print("OI_S:\n", np.matmul(matrix_o, self.vector_large_s_minus))
-
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        matrix_a = np.zeros((S,S))
-        matrix_a[:,0:S-1] = matrix_o[:,0:S-1]
-        matrix_a[:,S-1] = 1.0
-
-        matrix_a_inv = np.transpose(matrix_a.copy())
-        matrix_a_inv[S-1,:] = 1.0/S
-
-        self.h_const = h_const
-        self.h_coef_mu1 = h_coef_mu1
-        self.h_coef_mu2 = h_coef_mu2
-
-        self.exchange_eigenvalues = eigenvalues
-        self.matrix_o = matrix_o
-        self.matrix_a = matrix_a
-        self.matrix_a_inv = matrix_a_inv
-
-        print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-        print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("In Hamiltonian:")
-        print("\treference energy: ", self.h_const)
-        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
-        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-
-    def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
-
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
-
-    def compute_eigen_system(self, matrix_chi, matrix_p):
-        projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
-
-        eigenvalues, eigenvectors = np.linalg.eig(projected_chin)
-        sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
-        eigenvalues = eigenvalues[sorted_indexes]
-        eigenvectors = eigenvectors[:,sorted_indexes]
-
-        # print("eigenvectors:\n", eigenvectors)
-
-        # Set the last eigenvector to np.ones(S)/np.sqrt(S)
-        S = matrix_chi.shape[0]
-        eigenvectors[:,-1] = np.ones(S)/np.sqrt(S)
-
-        # If eigen_vec_0.shape[1] == 4
-        # (2, -1, -1)
-        # 2: [3]
-        # 1: [2, 3]
-        # 0: [1, 2, 3]
-        
-        # Make a orthogonal matrix using Gram-Schmidt
-        eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
-        eigenvalues[eigen_val_0] = 0.0
-        eigen_vec_0 = eigenvectors[:,eigen_val_0]
-        for i in range(eigen_vec_0.shape[1]-2,-1,-1):
-            vec_0 = eigen_vec_0[:,i].copy()
-            for j in range(i+1, eigen_vec_0.shape[1]):
-                eigen_vec_0[:,i] -= eigen_vec_0[:,j]*np.dot(vec_0,eigen_vec_0[:,j])
-            eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
-        eigenvectors[:,eigen_val_0] = eigen_vec_0
-
-        return eigenvalues, eigenvectors
-
-    def compute_h_coef(self, chi_n, eigenvalues):
-        S = len(self.monomer_types)
-
-        # Compute vector X_iS
-        vector_s = np.zeros(S-1)
-        for i in range(S-1):
-            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
-            monomer_pair.sort()
-            key = monomer_pair[0] + "," + monomer_pair[1]            
-            vector_s[i] = chi_n[key]
-
-        # Compute reference part of Hamiltonian
-        h_const = 0.5*np.sum(self.vector_s)/S
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)/V
-        h_coef_mu1 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)^2/V
-        h_coef_mu2 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]
-
-        return h_const, h_coef_mu1, h_coef_mu2
-
-    # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
-        S = len(self.monomer_types)
-
-        # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
-        for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
-        
-        # Compute Hamiltonian part that total partition functions
-        hamiltonian_partition = 0.0
-        for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
-
-        return hamiltonian_partition + hamiltonian_fields + self.h_const
-
-# Exchange mapping matrix.
-# See paper *J. Chem. Phys.* **2014**, 141, 174103
-class MSE:
-    def __init__(self, monomer_types, chi_n):
-        self.monomer_types = monomer_types
-        S = len(self.monomer_types)
-
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o = self.compute_eigen_system(chi_n)
-
-        # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, matrix_o)
-
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
-        matrix_a = np.zeros((S,S))
-        matrix_a_inv = np.zeros((S,S))
-        matrix_a[0:S-1,0:S-1] = matrix_o[0:S-1,0:S-1]
-        matrix_a[:,S-1] = 1
-        matrix_a_inv[0:S-1,0:S-1] = np.transpose(matrix_o[0:S-1,0:S-1])
-        for i in range(S-1):
-            matrix_a_inv[i,S-1] =  -np.sum(matrix_o[:,i])
-            matrix_a_inv[S-1,S-1] = 1
-
-        self.h_const = h_const
-        self.h_coef_mu1 = h_coef_mu1
-        self.h_coef_mu2 = h_coef_mu2
-
-        self.exchange_eigenvalues = eigenvalues
-        self.matrix_o = matrix_o
-        self.matrix_a = matrix_a
-        self.matrix_a_inv = matrix_a_inv
-
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
-        print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
-        print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        print("In Hamiltonian:")
-        print("\treference energy: ", self.h_const)
-        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
-        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-
-    def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
-
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
-
-    def compute_eigen_system(self, chi_n):
-        S = len(self.monomer_types)
-        matrix_chi = np.zeros((S,S))
-        matrix_chin = np.zeros((S-1,S-1))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    matrix_chi[i,j] = chi_n[key]
-                    matrix_chi[j,i] = chi_n[key]
-        
-        for i in range(S-1):
-            for j in range(S-1):
-                matrix_chin[i,j] = matrix_chi[i,j] - matrix_chi[i,S-1] - matrix_chi[j,S-1] # fix a typo in the paper
-        
-        return np.linalg.eig(matrix_chin)
-
-    def compute_h_coef(self, chi_n, eigenvalues, matrix_o):
-        S = len(self.monomer_types)
-
-        # Compute vector X_iS
-        vector_s = np.zeros(S-1)
-        for i in range(S-1):
-            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
-            monomer_pair.sort()
-            key = monomer_pair[0] + "," + monomer_pair[1]            
-            vector_s[i] = chi_n[key]
-
-        # Compute reference part of Hamiltonian
-        h_const = 0.0
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*(np.sum(matrix_o[:,i]*vector_s[:]))**2/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)/V
-        h_coef_mu1 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                for j in range(S-1):
-                    h_coef_mu1[i] = matrix_o[j,i]*vector_s[j]/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)^2/V
-        h_coef_mu2 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]
-
-        return h_const, h_coef_mu1, h_coef_mu2
-
-    # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
-        S = len(self.monomer_types)
-
-        # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
-        for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
-        
-        # Compute Hamiltonian part that total partition functions
-        hamiltonian_partition = 0.0
-        for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
-
-        return hamiltonian_partition + hamiltonian_fields + self.h_const
-
 class SCFT:
     def __init__(self, params): #, phi_target=None, mask=None):
 
@@ -677,12 +110,16 @@ class SCFT:
             sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
-
+        
         # Multi-monomer polymer field theory
-        self.mpt1 = MSE(self.monomer_types, self.chi_n)
-        self.mpt2 = SymmetricMPT(self.monomer_types, self.chi_n)
-        self.mpt3 = SymmetricMPTConstH(self.monomer_types, self.chi_n)
-        self.mpt4 = SymmetricMPTOrthogonal(self.monomer_types, self.chi_n)
+        print("---------------------------- MPT_MSE ----------------------------")
+        self.mpt1 = MPT_MSE(self.monomer_types, self.chi_n)
+        print("---------------------------- MPT_Original ----------------------------")
+        self.mpt2 = MPT_Original(self.monomer_types, self.chi_n)
+        print("---------------------------- MPT_Traditional ----------------------------")
+        self.mpt3 = MPT_Traditional(self.monomer_types, self.chi_n)
+        print("---------------------------- MPT_Orthonormal ----------------------------")
+        self.mpt4 = MPT_Orthonormal(self.monomer_types, self.chi_n)
         
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902
@@ -696,8 +133,10 @@ class SCFT:
                     matrix_chi[j,i] = self.chi_n[key]
         
         self.matrix_chi = matrix_chi
-        matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        matrix_chi_pinv = np.linalg.pinv(matrix_chi)
+        matrix_pchip = np.matmul(np.matmul(matrix_chi_pinv, matrix_chi), matrix_chi_pinv)
+        
+        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_pchip)/np.sum(matrix_chi_pinv)
         # print(matrix_chi)
         # print(matrix_chin)
 
@@ -969,7 +408,7 @@ class SCFT:
         # Make a dictionary for data
         mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds, "initial_params": self.params,
-            "eigenvalues": self.mpt1.exchange_eigenvalues, "matrix_a": self.mpt1.matrix_a, "matrix_a_inverse": self.mpt1.matrix_a_inv,
+            "eigenvalues": self.mpt1.eigenvalues, "matrix_a": self.mpt1.matrix_a, "matrix_a_inverse": self.mpt1.matrix_a_inv,
             "monomer_types":self.monomer_types}
 
         # Add w fields to the dictionary
@@ -1040,6 +479,16 @@ class SCFT:
             w_eigen_2 = self.mpt2.to_eigen_fields(w)
             w_eigen_3 = self.mpt3.to_eigen_fields(w)
             w_eigen_4 = self.mpt4.to_eigen_fields(w)
+
+            # print("w_eigen_1:\n", np.mean(w_eigen_1[0]))
+            # print("w_eigen_2:\n", np.mean(w_eigen_2[0]))
+            # print("w_eigen_3:\n", np.mean(w_eigen_3[0]))
+            # print("w_eigen_4:\n", np.mean(w_eigen_4[0]))
+
+            # print("w_eigen_1**2:\n", np.mean(w_eigen_1[0]**2)*self.mpt1.h_coef_mu2[0])
+            # print("w_eigen_2**2:\n", np.mean(w_eigen_2[0]**2)*self.mpt2.h_coef_mu2[0])
+            # print("w_eigen_3**2:\n", np.mean(w_eigen_3[0]**2)*self.mpt3.h_coef_mu2[0])
+            # print("w_eigen_4**2:\n", np.mean(w_eigen_4[0]**2)*self.mpt4.h_coef_mu2[0])
 
             # Calculate the total energy
             # energy_total = - self.cb.integral(self.phi_target*w_eigen[S-1])/self.cb.get_volume()
