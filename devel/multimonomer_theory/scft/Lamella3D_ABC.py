@@ -12,7 +12,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 f = 0.5         # A-fraction of major BCP chain, f
 
 chi_n = 13.27
-a_ratio = 0.25
+a_ratio = 0.125
 b_ratio = (1-np.sqrt(a_ratio))**2
 
 params = {

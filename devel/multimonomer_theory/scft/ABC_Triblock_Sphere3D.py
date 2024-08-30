@@ -30,8 +30,8 @@ params = {
         "C":1.0},
 
     "chi_n": {"A,B": chin,      # Interaction parameter, Flory-Huggins params * N_Ref
-              "A,C": chin*1.75,
-              "B,C": chin,
+              "A,C": chin*0.8,
+              "B,C": chin*0.6,
              },
 
     "distinct_polymers":[{      # Distinct Polymers
@@ -57,26 +57,26 @@ params = {
 # Initialize calculation
 calculation = scft.SCFT(params=params)
 
-# Set initial fields
-w_A = np.zeros(list(params["nx"]), dtype=np.float64)
-w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-w_C = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to spherical phase.")
-n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
-sphere_positions = []
-for i in range(0,n_unitcell):
-    for j in range(0,n_unitcell):
-        for k in range(0,n_unitcell):
-            sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
-            sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
-for x,y,z in sphere_positions:
-    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
-    w_A[molecules,my,mz] = -50/(np.prod(params["lx"])/np.prod(params["nx"]))
-w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
+# # Set initial fields
+# w_A = np.zeros(list(params["nx"]), dtype=np.float64)
+# w_B = np.zeros(list(params["nx"]), dtype=np.float64)
+# w_C = np.zeros(list(params["nx"]), dtype=np.float64)
+# print("w_A and w_B are initialized to spherical phase.")
+# n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
+# sphere_positions = []
+# for i in range(0,n_unitcell):
+#     for j in range(0,n_unitcell):
+#         for k in range(0,n_unitcell):
+#             sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
+#             sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
+# for x,y,z in sphere_positions:
+#     molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+#     w_A[molecules,my,mz] = -50/(np.prod(params["lx"])/np.prod(params["nx"]))
+# w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
 
-# w_A -= np.mean(w_A)
-# w_B -= np.mean(w_B)
-# w_C -= np.mean(w_C)
+w_A = np.random.normal(0.0, 5.0, params["nx"])
+w_B = np.random.normal(0.0, 5.0, params["nx"])
+w_C = np.random.normal(0.0, 5.0, params["nx"])
 
 # Set a timer
 time_start = time.time()
