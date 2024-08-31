@@ -10,7 +10,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-chin = 9.5        # Interaction parameter, Flory-Huggins params * N_Ref
+chin = 12.5        # Interaction parameter, Flory-Huggins params * N_Ref
 
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
@@ -74,9 +74,12 @@ calculation = scft.SCFT(params=params)
 #     w_A[molecules,my,mz] = -50/(np.prod(params["lx"])/np.prod(params["nx"]))
 # w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
 
-w_A = np.random.normal(0.0, 5.0, params["nx"])
-w_B = np.random.normal(0.0, 5.0, params["nx"])
-w_C = np.random.normal(0.0, 5.0, params["nx"])
+# random_seed = 12345
+# np.random.seed(random_seed)
+
+w_A = np.random.normal(0.0, 5.0, params["nx"]) + 0.5
+w_B = np.random.normal(0.0, 5.0, params["nx"]) + 1.0
+w_C = np.random.normal(0.0, 5.0, params["nx"]) + 1.5
 
 # Set a timer
 time_start = time.time()
@@ -90,10 +93,3 @@ print("total time: %f " % time_duration)
 
 # Save final results
 calculation.save_results("fields.mat")
-
-# Recording first a few iteration results for debugging and refactoring
-    #    1    0.000E+00  [ 3.6079092E+00  ]    -0.318161996   4.4693432E+00  [  2.9000000, 2.9000000, 2.9000000 ]
-    #    2    1.665E-15  [ 3.0252432E+00  ]    -0.249220685   3.8560277E+00  [  2.9006622, 2.9006622, 2.9006622 ]
-    #    3    1.998E-15  [ 2.6847016E+00  ]    -0.201835726   3.3958896E+00  [  2.9011100, 2.9011100, 2.9011100 ]
-    #    4   -1.971E-15  [ 2.4628496E+00  ]    -0.166892626   3.0245843E+00  [  2.9014276, 2.9014276, 2.9014276 ]
-    #    5    4.441E-16  [ 2.3083187E+00  ]    -0.139935578   2.7121688E+00  [  2.9016589, 2.9016589, 2.9016589 ]
