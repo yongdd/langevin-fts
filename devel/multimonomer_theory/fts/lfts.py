@@ -11,10 +11,11 @@ from scipy.io import savemat, loadmat
 from langevinfts import *
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mpt_mse import *
-from mpt_original import *
-from mpt_traditional import *
-from mpt_orthonormal import *
+from models.mpt_mse import *
+from models.mpt_mse_no_const_term import *
+from models.mpt_original import *
+from models.mpt_traditional import *
+from models.mpt_orthonormal import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -79,8 +80,8 @@ class LFTS:
         # Multi-monomer polymer field theory
         # self.mpt = MPT_MSE(self.monomer_types, self.chi_n)
         # self.mpt = MPT_Original(self.monomer_types, self.chi_n)
-        # self.mpt = MPT_Traditional(self.monomer_types, self.chi_n)
-        self.mpt = MPT_Orthonormal(self.monomer_types, self.chi_n)
+        self.mpt = MPT_Traditional(self.monomer_types, self.chi_n)
+        # self.mpt = MPT_Orthonormal(self.monomer_types, self.chi_n)
         
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
@@ -618,7 +619,7 @@ class LFTS:
                 h_deriv[count] *= self.dt_scaling[i]
 
             # Calculate new fields using simple and Anderson mixing
-            w_eigen[self.mpt.eigen_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_eigen[self.mpt.eigen_fields_imag_idx], h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
+            w_eigen[self.mpt.eigen_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_eigen[self.mpt.eigen_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
         
         # Set mean of pressure field to zero
         w_eigen[S-1] -= np.mean(w_eigen[S-1])

@@ -20,18 +20,6 @@ class MPT_MSE:
             vector_s[i] = chi_n[key]
         self.vector_large_s = np.matmul(np.transpose(matrix_o), vector_s)
 
-        # self.matrix_chi = matrix_chi
-        # self.vector_s = np.matmul(matrix_chi, np.ones(S))/S
-        # self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
-
-        vector_large_s_prime = self.vector_large_s.copy()
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                vector_large_s_prime[i] = 0.0
-        o_large_s = np.zeros(S)
-        o_large_s[0:S-1] = np.matmul(matrix_o, vector_large_s_prime)
-        self.o_large_s = np.reshape(o_large_s, (S, 1))
-
         # Indices whose eigen fields are real
         self.eigen_fields_real_idx = []
         # Indices whose eigen fields are imaginary including the pressure field
@@ -122,8 +110,8 @@ class MPT_MSE:
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
         print("\tdH_ref/dχN: ", self.h_const_deriv_chin)
-        print("\td(coef of mu1)/dχN: ", self.h_coef_mu1_deriv_chin)
-        print("\td(coef of mu2)/dχN: ", self.h_coef_mu2_deriv_chin)
+        print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
+        print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
     def to_eigen_fields(self, w):
         return np.matmul(self.matrix_a_inv, w)
@@ -212,12 +200,11 @@ class MPT_MSE:
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
-                
-            # Pressure fields
+            # Pressure field
             else:
                 for j in range(S):
-                    h_deriv[count] += phi[self.monomer_types[j]]
-                h_deriv[count] -= 1.0
+                    h_deriv[count] -= phi[self.monomer_types[j]]
+                h_deriv[count] += 1.0
         elapsed_time["h_deriv"] = time.time() - time_e_start
         
         return  h_deriv, elapsed_time

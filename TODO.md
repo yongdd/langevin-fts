@@ -5,7 +5,6 @@
 10. Validation Check for Pseudo Parameters
 16. Process Bar
 20. Graphic User Interface
-24. Draw network graph image for given polymer architecture
 27. Syntax check of Keys in Molecules 
 31. Throws Exception in openMP block
 35. Write UnitTest: TestComparePropagatorKey
@@ -20,3 +19,4 @@
 50. Check if cuFFT callback function is applicable
 51. Figure out why 'std::map<std::string, std::map<int, double *>>' causes errors in 'omp parallel for'
 52. Figure out why 'propagator_half_steps[key].find(0) == propagator_half_steps[key].end()' fixes above problem
+53. And a option to print a data file in a human-readable text.

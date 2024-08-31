@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-class MPT_Traditional:
+class MPT_Original:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -26,6 +26,10 @@ class MPT_Traditional:
         self.matrix_chi = matrix_chi
         self.vector_s = np.matmul(matrix_chi, np.ones(S))/S
         self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
+
+        vector_large_s_prime = self.vector_large_s.copy()
+        vector_large_s_prime[S-1] = 0.0
+        self.o_large_s = np.reshape(np.matmul(matrix_o, vector_large_s_prime), (S, 1))/S
 
         # Indices whose eigen fields are real
         self.eigen_fields_real_idx = []
@@ -56,7 +60,7 @@ class MPT_Traditional:
         # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
         matrix_a = matrix_o.copy()
         matrix_a_inv = np.transpose(matrix_o).copy()/S
-
+        
         # Check the inverse matrix
         error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
         assert(np.isclose(error, 0.0)), \
@@ -113,18 +117,19 @@ class MPT_Traditional:
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
         print("\tdH_ref/dχN: ", self.h_const_deriv_chin)
-        print("\td(coef of mu1)/dχN: ", self.h_coef_mu1_deriv_chin)
-        print("\td(coef of mu2)/dχN: ", self.h_coef_mu2_deriv_chin)
+        print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
+        print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
     def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
+        return np.matmul(self.matrix_a_inv, w-self.o_large_s)
 
     def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
+        return np.matmul(self.matrix_a, w_eigen) + self.o_large_s
 
     def compute_eigen_system(self, chi_n, matrix_p):
         S = matrix_p.shape[0]
 
+        # Compute eigenvalues and eigenvectors
         matrix_chi = np.zeros((S,S))
         for i in range(S):
             for j in range(i+1,S):
@@ -135,13 +140,14 @@ class MPT_Traditional:
                     matrix_chi[i,j] = chi_n[key]
                     matrix_chi[j,i] = chi_n[key]
         projected_chin = np.matmul(matrix_p, np.matmul(matrix_chi, matrix_p))
-
         eigenvalues, eigenvectors = np.linalg.eigh(projected_chin)
+
+        # Reordering eigenvalues and eigenvectors
         sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
         eigenvalues = eigenvalues[sorted_indexes]
         eigenvectors = eigenvectors[:,sorted_indexes]
 
-        # Set the last eigenvector to np.ones(S)/np.sqrt(S)
+        # Set the last eigenvector to [1, 1, ..., 1]/√S
         eigenvectors[:,-1] = np.ones(S)/np.sqrt(S)
         
         # Make a orthogonal matrix using Gram-Schmidt
@@ -160,7 +166,7 @@ class MPT_Traditional:
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
 
-        # Multiply np.sqrt(S) to eigenvectors
+        # Multiply √S to eigenvectors
         eigenvectors *= np.sqrt(S)
 
         return eigenvalues, eigenvectors
@@ -168,25 +174,11 @@ class MPT_Traditional:
     def compute_h_coef(self, chi_n, eigenvalues):
         S = len(self.monomer_types)
 
-        # Compute vector X_iS
-        vector_s = np.zeros(S-1)
-        for i in range(S-1):
-            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
-            monomer_pair.sort()
-            key = monomer_pair[0] + "," + monomer_pair[1]            
-            vector_s[i] = chi_n[key]
-
         # Compute reference part of Hamiltonian
         h_const = 0.5*np.sum(self.vector_s)/S
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
 
         # Compute coefficients of integral of μ(r)/V
         h_coef_mu1 = np.zeros(S-1)
-        for i in range(S-1):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
 
         # Compute coefficients of integral of μ(r)^2/V
         h_coef_mu2 = np.zeros(S-1)
@@ -229,12 +221,11 @@ class MPT_Traditional:
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
-                
-            # Pressure fields
+            # Pressure field
             else:
                 for j in range(S):
-                    h_deriv[count] += phi[self.monomer_types[j]]
-                h_deriv[count] -= 1.0
+                    h_deriv[count] -= phi[self.monomer_types[j]]
+                h_deriv[count] += 1.0
         elapsed_time["h_deriv"] = time.time() - time_e_start
         
         return  h_deriv, elapsed_time
