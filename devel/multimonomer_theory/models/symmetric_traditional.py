@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-class MPT_Orthonormal:
+class Symmetric_Traditional:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -55,7 +55,7 @@ class MPT_Orthonormal:
 
         # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
         matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o).copy()
+        matrix_a_inv = np.transpose(matrix_o).copy()/S
 
         # Check the inverse matrix
         error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
@@ -162,8 +162,8 @@ class MPT_Orthonormal:
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
 
-        # # Multiply √S to eigenvectors
-        # eigenvectors *= np.sqrt(S)
+        # Multiply √S to eigenvectors
+        eigenvectors *= np.sqrt(S)
 
         return eigenvalues, eigenvectors
 
@@ -182,7 +182,7 @@ class MPT_Orthonormal:
         h_const = 0.5*np.sum(self.vector_s)/S
         for i in range(S-1):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]
+                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
 
         # Compute coefficients of integral of μ(r)/V
         h_coef_mu1 = np.zeros(S-1)
@@ -194,7 +194,7 @@ class MPT_Orthonormal:
         h_coef_mu2 = np.zeros(S-1)
         for i in range(S-1):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]
+                h_coef_mu2[i] = -0.5/eigenvalues[i]*S
 
         return h_const, h_coef_mu1, h_coef_mu2
 
@@ -203,7 +203,7 @@ class MPT_Orthonormal:
         S = len(self.monomer_types)
 
         # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])/np.sqrt(S)
+        hamiltonian_fields = -np.mean(w_eigen[S-1])
         for i in range(S-1):
             hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
             hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])

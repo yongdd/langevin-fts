@@ -20,3 +20,4 @@
 51. Figure out why 'std::map<std::string, std::map<int, double *>>' causes errors in 'omp parallel for'
 52. Figure out why 'propagator_half_steps[key].find(0) == propagator_half_steps[key].end()' fixes above problem
 53. And a option to print a data file in a human-readable text.
+54. Extend scft.py to cover singular chi matrix

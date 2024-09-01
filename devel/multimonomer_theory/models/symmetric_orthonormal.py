@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-class MPT_Original:
+class Symmetric_Orthonormal:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -26,10 +26,6 @@ class MPT_Original:
         self.matrix_chi = matrix_chi
         self.vector_s = np.matmul(matrix_chi, np.ones(S))/S
         self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
-
-        vector_large_s_prime = self.vector_large_s.copy()
-        vector_large_s_prime[S-1] = 0.0
-        self.o_large_s = np.reshape(np.matmul(matrix_o, vector_large_s_prime), (S, 1))/S
 
         # Indices whose eigen fields are real
         self.eigen_fields_real_idx = []
@@ -59,8 +55,8 @@ class MPT_Original:
 
         # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
         matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o).copy()/S
-        
+        matrix_a_inv = np.transpose(matrix_o).copy()
+
         # Check the inverse matrix
         error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
         assert(np.isclose(error, 0.0)), \
@@ -121,10 +117,10 @@ class MPT_Original:
         print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
     def to_eigen_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w-self.o_large_s)
+        return np.matmul(self.matrix_a_inv, w)
 
     def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen) + self.o_large_s
+        return np.matmul(self.matrix_a, w_eigen)
 
     def compute_eigen_system(self, chi_n, matrix_p):
         S = matrix_p.shape[0]
@@ -166,25 +162,39 @@ class MPT_Original:
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
 
-        # Multiply √S to eigenvectors
-        eigenvectors *= np.sqrt(S)
+        # # Multiply √S to eigenvectors
+        # eigenvectors *= np.sqrt(S)
 
         return eigenvalues, eigenvectors
 
     def compute_h_coef(self, chi_n, eigenvalues):
         S = len(self.monomer_types)
 
+        # Compute vector X_iS
+        vector_s = np.zeros(S-1)
+        for i in range(S-1):
+            monomer_pair = [self.monomer_types[i], self.monomer_types[S-1]]
+            monomer_pair.sort()
+            key = monomer_pair[0] + "," + monomer_pair[1]            
+            vector_s[i] = chi_n[key]
+
         # Compute reference part of Hamiltonian
         h_const = 0.5*np.sum(self.vector_s)/S
+        for i in range(S-1):
+            if not np.isclose(eigenvalues[i], 0.0):
+                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]
 
         # Compute coefficients of integral of μ(r)/V
         h_coef_mu1 = np.zeros(S-1)
+        for i in range(S-1):
+            if not np.isclose(eigenvalues[i], 0.0):
+                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
 
         # Compute coefficients of integral of μ(r)^2/V
         h_coef_mu2 = np.zeros(S-1)
         for i in range(S-1):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]*S
+                h_coef_mu2[i] = -0.5/eigenvalues[i]
 
         return h_const, h_coef_mu1, h_coef_mu2
 
@@ -193,7 +203,7 @@ class MPT_Original:
         S = len(self.monomer_types)
 
         # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
+        hamiltonian_fields = -np.mean(w_eigen[S-1])/np.sqrt(S)
         for i in range(S-1):
             hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
             hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])

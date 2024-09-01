@@ -11,11 +11,11 @@ from scipy.io import savemat, loadmat
 from langevinfts import *
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.mpt_mse import *
-from models.mpt_mse_no_const_term import *
-from models.mpt_original import *
-from models.mpt_traditional import *
-from models.mpt_orthonormal import *
+from models.mse import *
+from models.mse_no_const_term import *
+from models.symmetric_original import *
+from models.symmetric_traditional import *
+from models.symmetric_orthonormal import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -78,10 +78,10 @@ class LFTS:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
         # Multi-monomer polymer field theory
-        # self.mpt = MPT_MSE(self.monomer_types, self.chi_n)
-        # self.mpt = MPT_Original(self.monomer_types, self.chi_n)
-        self.mpt = MPT_Traditional(self.monomer_types, self.chi_n)
-        # self.mpt = MPT_Orthonormal(self.monomer_types, self.chi_n)
+        # self.mpt = MSE(self.monomer_types, self.chi_n)
+        # self.mpt = Symmetric_Original(self.monomer_types, self.chi_n)
+        self.mpt = Symmetric_Traditional(self.monomer_types, self.chi_n)
+        # self.mpt = Symmetric_Orthonormal(self.monomer_types, self.chi_n)
         
         # Total volume fraction
         assert(len(params["distinct_polymers"]) >= 1), \
