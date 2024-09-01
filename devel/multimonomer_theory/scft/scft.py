@@ -10,11 +10,11 @@ from scipy.io import savemat, loadmat
 from langevinfts import *
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.mpt_mse import *
-from models.mpt_mse_no_const_term import *
-from models.mpt_original import *
-from models.mpt_traditional import *
-from models.mpt_orthonormal import *
+from models.mse import *
+from models.mse_no_const_term import *
+from models.symmetric_original import *
+from models.symmetric_traditional import *
+from models.symmetric_orthonormal import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -113,16 +113,16 @@ class SCFT:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
         # Multi-monomer polymer field theory
-        print("---------------------------- MPT_MSE ----------------------------")
-        self.mpt1 = MPT_MSE(self.monomer_types, self.chi_n)
+        print("---------------------------- MSE ----------------------------")
+        self.mpt1 = MSE(self.monomer_types, self.chi_n)
         print("---------------------------- MPT_MSE_No_Const ----------------------------")
         self.mpt2 = MPT_MSE_No_Const(self.monomer_types, self.chi_n)
-        print("---------------------------- MPT_Original ----------------------------")
-        self.mpt3 = MPT_Original(self.monomer_types, self.chi_n)
-        print("---------------------------- MPT_Traditional ----------------------------")
-        self.mpt4 = MPT_Traditional(self.monomer_types, self.chi_n)
-        print("---------------------------- MPT_Orthonormal ----------------------------")
-        self.mpt5 = MPT_Orthonormal(self.monomer_types, self.chi_n)
+        print("---------------------------- Symmetric_Original ----------------------------")
+        self.mpt3 = Symmetric_Original(self.monomer_types, self.chi_n)
+        print("---------------------------- Symmetric_Traditional ----------------------------")
+        self.mpt4 = Symmetric_Traditional(self.monomer_types, self.chi_n)
+        print("---------------------------- Symmetric_Orthonormal ----------------------------")
+        self.mpt5 = Symmetric_Orthonormal(self.monomer_types, self.chi_n)
         
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902

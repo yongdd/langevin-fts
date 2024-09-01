@@ -102,16 +102,16 @@ print("total time: %f, time per step: %f" %
 
 # Recording first a few iteration results for debugging and refactoring
 
-#       53   -1.599E-15  [ 1.1878907E+01  ]     5.662175232   9.4787433E-05 
-# iteration, mass error, total partitions, total energy, incompressibility error
+#       53   -1.643E-16  [ 1.1878907E+01  ]     5.662175232   [9.4787668E-05 ]
+# iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
 # ---------- Run  ----------
 # Langevin step:  1
-#       47   -2.249E-15  [ 4.9487578E+01  ]     4.788964055   [9.7535703E-05 ]
+#       47   -1.789E-15  [ 1.5278634E+03  ]     4.185883622   [9.5230592E-05 ]
 # Langevin step:  2
-#       52   -2.557E-15  [ 1.6939952E+02  ]     4.512100450   [9.8681906E-05 ]
+#       48    9.779E-16  [ 4.9855374E+01  ]     4.051992910   [9.0729112E-05 ]
 # Langevin step:  3
-#       52   -1.446E-15  [ 4.5383235E+02  ]     4.344580196   [9.3440109E-05 ]
+#       50   -1.905E-15  [ 2.3041191E+02  ]     4.013633667   [9.1691101E-05 ]
 # Langevin step:  4
-#       51    1.546E-15  [ 9.9284083E+02  ]     4.232714750   [9.6428622E-05 ]
+#       51    4.538E-16  [ 1.2099087E+02  ]     4.007848973   [9.6501273E-05 ]
 # Langevin step:  5
-#       50    1.958E-15  [ 1.9243007E+03  ]     4.149071041   [9.8916066E-05 ]
+#       51   -1.995E-15  [ 1.6642863E+02  ]     4.000168691   [9.1616075E-05 ]
