@@ -129,10 +129,10 @@ void CpuAndersonMixing::calculate_new_fields(
                 for(int j=0; j<n_anderson; j++)
                 {
                     u_nm[i][j] = cb_w_deriv_dots->get(0, 0)
-                                - cb_w_deriv_dots->get(0, i+1)
-                                - cb_w_deriv_dots->get(0, j+1)
-                                + cb_w_deriv_dots->get(std::min(i+1, j+1),
-                                                    std::abs(i-j));
+                               - cb_w_deriv_dots->get(0, i+1)
+                               - cb_w_deriv_dots->get(0, j+1)
+                               + cb_w_deriv_dots->get(std::min(i+1, j+1),
+                                                      std::abs(i-j));
                 }
             }
             find_an(u_nm, v_n, a_n, n_anderson);
