@@ -217,7 +217,7 @@ class Symmetric_Orthonormal:
 
         return hamiltonian_partition + hamiltonian_fields + self.h_const
 
-    # Compute functional derivatives of Hamiltonian w.r.t. exchange and pressure fields of selected indices
+    # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
     def compute_func_deriv(self, w_eigen, phi, indices):
         S = len(self.monomer_types)
                 
@@ -225,13 +225,13 @@ class Symmetric_Orthonormal:
         time_e_start = time.time()
         h_deriv = np.zeros([len(indices), w_eigen.shape[1]], dtype=np.float64)
         for count, i in enumerate(indices):
-            # Exchange fields
+            # Return dH/dw
             if i != S-1:
                 h_deriv[count] += 2*self.h_coef_mu2[i]*w_eigen[i]
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
-            # Pressure field
+            # Return -dH/dw for the pressure field
             else:
                 for j in range(S):
                     h_deriv[count] -= phi[self.monomer_types[j]]
