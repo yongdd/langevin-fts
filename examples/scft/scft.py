@@ -99,6 +99,7 @@ class Symmetric_Polymer_Theory:
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
 
+        print("------------ Polymer Field Theory for Multimonomer ------------")
         # print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
         # print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
         print("Eigenvalues:\n\t", self.eigenvalues)
@@ -269,7 +270,7 @@ class SCFT:
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
-        # Multi-monomer polymer field theory
+        # Multimonomer polymer field theory
         self.mpt = Symmetric_Polymer_Theory(self.monomer_types, self.chi_n)
         
         # Matrix for field residuals.
@@ -469,7 +470,6 @@ class SCFT:
         else :
             tolerance = 1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 
-        # -------------- Print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
         print("Box Dimension: %d" % (cb.get_dim()))
@@ -594,10 +594,7 @@ class SCFT:
         # Reset Optimizer
         self.field_optimizer.reset_count()
         
-        #------------------ run ----------------------
         print("---------- Run ----------")
-
-        # Iteration begins here
         print("iteration, mass error, total_partitions, energy_total, error_level", end="")
         if (self.box_is_altering):
             print(", box size")
@@ -614,6 +611,7 @@ class SCFT:
         for i in range(S):
             w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
+        # Iteration begins here
         for scft_iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type

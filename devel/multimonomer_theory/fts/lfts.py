@@ -77,7 +77,7 @@ class LFTS:
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
-        # Multi-monomer polymer field theory
+        # Multimonomer polymer field theory
         # self.mpt = MSE(self.monomer_types, self.chi_n)
         # self.mpt = Symmetric_Original(self.monomer_types, self.chi_n)
         self.mpt = Symmetric_Traditional(self.monomer_types, self.chi_n)

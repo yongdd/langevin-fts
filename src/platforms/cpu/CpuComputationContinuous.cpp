@@ -15,6 +15,8 @@ CpuComputationContinuous::CpuComputationContinuous(
 {
     try
     {
+        std::cout << "--------- Continuous Chain Solver, CPU Version ---------" << std::endl;
+
         const int M = cb->get_n_grid();
         if(method == "pseudospectral")
             this->propagator_solver = new CpuSolverPseudo(cb, molecules);
@@ -28,7 +30,7 @@ CpuComputationContinuous::CpuComputationContinuous(
             n_streams = 4;
         else
             n_streams = std::stoi(env_omp_num_threads);
-        std::cout << "n_streams: " << n_streams << std::endl;
+        std::cout << "The number of CPU threads: " << n_streams << std::endl;
 
         // Allocate memory for propagators
         if( propagator_analyzer->get_computation_propagators().size() == 0)

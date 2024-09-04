@@ -112,6 +112,7 @@ class Symmetric_Polymer_Theory:
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
 
+        print("------------ Polymer Field Theory for Multimonomer ------------")
         # print("Projection matrix P:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
         # print("Projection matrix Q:\n\t", str(self.matrix_q).replace("\n", "\n\t"))
         print("Eigenvalues:\n\t", self.eigenvalues)
@@ -320,7 +321,7 @@ class LFTS:
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
-        # Multi-monomer polymer field theory
+        # Multimonomer polymer field theory
         self.mpt = Symmetric_Polymer_Theory(self.monomer_types, self.chi_n)
         
         # Total volume fraction
@@ -471,7 +472,6 @@ class LFTS:
             self.random_bg = np.random.PCG64(random_seed)
         self.random = np.random.Generator(self.random_bg)
         
-        # -------------- Print simulation parameters ------------
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
         print("Box Dimension: %d" % (cb.get_dim()))
@@ -526,7 +526,7 @@ class LFTS:
         S = len(self.monomer_types)
         elapsed_time = {}
 
-        # Convert monomer fields to eigenvector-based fields
+        # Convert eigenvector-based fields to monomer fields
         w = self.mpt.to_monomer_fields(w_eigen)
 
         # Make a dictionary for input fields 
@@ -538,26 +538,24 @@ class LFTS:
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
-        # For the given fields, compute the polymer statistics
-        time_p_start = time.time()
+        # For the given fields, compute propagators
+        time_solver_start = time.time()
         self.solver.compute_propagators(w_input)
-        self.solver.compute_concentrations()
-        elapsed_time["pseudo"] = time.time() - time_p_start
+        elapsed_time["solver"] = time.time() - time_solver_start
 
-        # Compute total concentration for each monomer type
-        phi = {}
+        # Compute concentrations for each monomer type
         time_phi_start = time.time()
+        phi = {}
+        self.solver.compute_concentrations()
         for monomer_type in self.monomer_types:
             phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
-        elapsed_time["phi"] = time.time() - time_phi_start
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
             phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
-        
-        return phi, elapsed_time
+        elapsed_time["phi"] = time.time() - time_phi_start
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
 
@@ -621,6 +619,8 @@ class LFTS:
 
     def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
 
+        print("---------- Run  ----------")
+
         # The number of components
         S = len(self.monomer_types)
 
@@ -636,10 +636,11 @@ class LFTS:
         for i in range(S):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
             
-        # Convert fields in eigenvector bases
+        # Express fields using eigenvectors
         w_eigen = self.mpt.to_eigen_fields(w)
 
-        # Find saddle point 
+        # Find saddle point
+        print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
         phi, _, _, _, = self.find_saddle_point(w_eigen=w_eigen)
 
         # Dictionary to record history of H and dH/dχN
@@ -673,9 +674,7 @@ class LFTS:
         total_error_level = 0
         time_start = time.time()
 
-        #------------------ run ----------------------
-        print("iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
-        print("---------- Run  ----------")
+        # Langevin iteration begins here
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
 
@@ -683,7 +682,7 @@ class LFTS:
             w_eigen_copy = w_eigen.copy()
             phi_copy = phi.copy()
 
-            # Compute functional derivatives of Hamiltonian w.r.t. real eigen fields 
+            # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields 
             w_lambda, _ = self.mpt.compute_func_deriv(w_eigen, phi, self.mpt.eigen_fields_real_idx)
 
             # Update w_eigen using Leimkuhler-Matthews method
@@ -778,7 +777,7 @@ class LFTS:
                     sf_average[key][:,:,:] = 0.0
 
             # Save simulation data
-            if (langevin_step) % self.recording["recording_period"] == 0:
+            if langevin_step % self.recording["recording_period"] == 0:
                 w = self.mpt.to_monomer_fields(w_eigen)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
@@ -815,7 +814,7 @@ class LFTS:
             # Compute total concentrations with noised w_eigen
             phi, _ = self.compute_concentrations(w_eigen)
 
-            # Compute functional derivatives of Hamiltonian w.r.t. imaginary eigen fields 
+            # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
             h_deriv, _ = self.mpt.compute_func_deriv(w_eigen, phi, self.mpt.eigen_fields_imag_idx)
 
             # Compute total error

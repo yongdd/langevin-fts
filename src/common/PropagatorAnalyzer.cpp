@@ -466,7 +466,7 @@ ComputationBlock& PropagatorAnalyzer::get_computation_block(std::tuple<int, std:
 void PropagatorAnalyzer::display_blocks() const
 {
     // Print blocks
-    std::cout << "--------- Blocks ---------" << std::endl;
+    std::cout << "--------------- Blocks ---------------" << std::endl;
     std::cout << "Polymer id, left key:\n\taggregated, (left, right) is_junction, (left, right) n_segment, right key, n_repeat, {v, u} list" << std::endl;
 
     const int MAX_PRINT_LENGTH = 500;
@@ -528,7 +528,7 @@ void PropagatorAnalyzer::display_blocks() const
         }
         std::cout << std::endl;
     }
-    std::cout << "------------------------------------" << std::endl;
+    //std::cout << "------------------------------------" << std::endl;
 }
 void PropagatorAnalyzer::display_propagators() const
 {
@@ -537,7 +537,7 @@ void PropagatorAnalyzer::display_propagators() const
     int total_mde_steps_without_reduction = 0;
     int reduced_mde_steps = 0;
 
-    std::cout << "--------- Propagators ---------" << std::endl;
+    std::cout << "--------------- Propagators ---------------" << std::endl;
     std::cout << "Key:\n\theight, aggregated, max_n_segment, # dependencies, junction_ends" << std::endl;
 
     for(const auto& item : total_segment_numbers)
@@ -596,7 +596,7 @@ void PropagatorAnalyzer::display_propagators() const
     double percent = 100*(1.0 - ((double ) reduced_mde_steps)/((double) total_mde_steps_without_reduction));
     percent = std::round(percent*100)/100; //rounding
     std::cout << "Computational cost reduction (higher is better) : " << percent << " %" << std::endl;
-    std::cout << "------------------------------------" << std::endl;
+    //std::cout << "------------------------------------" << std::endl;
 }
 
 void PropagatorAnalyzer::display_sub_propagators() const
