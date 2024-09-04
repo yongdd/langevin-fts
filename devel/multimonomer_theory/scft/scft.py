@@ -112,7 +112,7 @@ class SCFT:
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
-        # Multi-monomer polymer field theory
+        # Multimonomer polymer field theory
         print("---------------------------- MSE ----------------------------")
         self.mpt1 = MSE(self.monomer_types, self.chi_n)
         print("---------------------------- MPT_MSE_No_Const ----------------------------")

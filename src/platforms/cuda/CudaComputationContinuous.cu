@@ -14,6 +14,8 @@ CudaComputationContinuous::CudaComputationContinuous(
     : PropagatorComputation(cb, molecules, propagator_analyzer)
 {
     try{
+        std::cout << "--------- Continuous Chain Solver, GPU Version ---------" << std::endl;
+    
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
@@ -24,7 +26,7 @@ CudaComputationContinuous::CudaComputationContinuous(
             n_streams = MAX_STREAMS;
         else
             n_streams =  std::min(std::stoi(env_omp_num_threads), MAX_STREAMS);
-        std::cout << "n_streams: " << n_streams << std::endl;
+        std::cout << "The number of CPU threads: " << n_streams << std::endl;
 
         // Copy streams
         for(int i=0; i<n_streams; i++)
