@@ -557,6 +557,8 @@ class LFTS:
                 phi[monomer_type] += phi[random_polymer_name]*fraction
         elapsed_time["phi"] = time.time() - time_phi_start
 
+        return phi, elapsed_time
+
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
 
         # Make a dictionary for chi_n
