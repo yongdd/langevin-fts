@@ -143,7 +143,7 @@ class SCFT:
         # print(matrix_chi)
         # print(matrix_chin)
 
-        self.non_zero_eigenvalues = self.mpt1.eigen_fields_real_idx + self.mpt1.eigen_fields_imag_idx
+        self.non_zero_eigenvalues = self.mpt1.aux_fields_real_idx + self.mpt1.aux_fields_imag_idx
 
         # if phi_target is None:
         #     phi_target = np.ones(params["nx"])
@@ -325,7 +325,7 @@ class SCFT:
         else :
             tolerance = 1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 
-        # dH/dw_eigen[i] is scaled by dt_scaling[i]
+        # dH/dw_aux[i] is scaled by dt_scaling[i]
         S = len(self.monomer_types)
         self.dt_scaling = np.ones(S)
         for i in range(S-1):
@@ -476,74 +476,74 @@ class SCFT:
         # for i in range(S):
         #     w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
 
-        # w_eigen_1 = self.mpt1.to_eigen_fields(w)
+        # w_aux_1 = self.mpt1.to_aux_fields(w)
         # for i in range(S-1):
         #     if np.isclose(self.mpt1.eigenvalues[i], 0.0):
-        #         w_eigen_1[i,:] = 0.0
+        #         w_aux_1[i,:] = 0.0
 
-        # w_mpt2 = self.mpt2.to_monomer_fields(w_eigen_1)
-        # w_mpt3 = self.mpt3.to_monomer_fields(w_eigen_1)
-        # w_mpt4 = self.mpt4.to_monomer_fields(w_eigen_1)
-        # w_mpt5 = self.mpt5.to_monomer_fields(w_eigen_1)
+        # w_mpt2 = self.mpt2.to_monomer_fields(w_aux_1)
+        # w_mpt3 = self.mpt3.to_monomer_fields(w_aux_1)
+        # w_mpt4 = self.mpt4.to_monomer_fields(w_aux_1)
+        # w_mpt5 = self.mpt5.to_monomer_fields(w_aux_1)
 
         # print("w_mpt2", np.mean(w_mpt2-w, axis=1), np.std(w_mpt2-w, axis=1))
         # print("w_mpt3", np.mean(w_mpt3-w, axis=1), np.std(w_mpt3-w, axis=1))
         # print("w_mpt4", np.mean(w_mpt4-w, axis=1), np.std(w_mpt4-w, axis=1))
         # print("w_mpt5", np.mean(w_mpt5-w, axis=1), np.std(w_mpt5-w, axis=1))
 
-        # w_eigen_1 = self.mpt1.to_eigen_fields(w)
-        # w_eigen_1[1,:] = 0.0
-        # w = self.mpt1.to_monomer_fields(w_eigen_1)
+        # w_aux_1 = self.mpt1.to_aux_fields(w)
+        # w_aux_1[1,:] = 0.0
+        # w = self.mpt1.to_monomer_fields(w_aux_1)
 
-        # w_eigen_2 = self.mpt2.to_eigen_fields(w)
+        # w_aux_2 = self.mpt2.to_aux_fields(w)
         # for i in range(S-1):
         #     if np.isclose(self.mpt2.eigenvalues[i], 0.0):
-        #         w_eigen_2[i,:] = -np.dot(self.mpt2.matrix_a_inv[i], self.mpt2.o_large_s)
-        # w = self.mpt2.to_monomer_fields(w_eigen_2)
+        #         w_aux_2[i,:] = -np.dot(self.mpt2.matrix_a_inv[i], self.mpt2.o_large_s)
+        # w = self.mpt2.to_monomer_fields(w_aux_2)
 
-        # w_eigen_3 = self.mpt3.to_eigen_fields(w)
+        # w_aux_3 = self.mpt3.to_aux_fields(w)
         # for i in range(S-1):
         #     if np.isclose(self.mpt3.eigenvalues[i], 0.0):
-        #         w_eigen_3[i,:] = -np.dot(self.mpt3.matrix_a_inv[i], self.mpt3.o_large_s)
-        # w = self.mpt3.to_monomer_fields(w_eigen_3)
+        #         w_aux_3[i,:] = -np.dot(self.mpt3.matrix_a_inv[i], self.mpt3.o_large_s)
+        # w = self.mpt3.to_monomer_fields(w_aux_3)
 
-        # w_eigen_4 = self.mpt4.to_eigen_fields(w)
+        # w_aux_4 = self.mpt4.to_aux_fields(w)
         # for i in range(S-1):
         #     if np.isclose(self.mpt4.eigenvalues[i], 0.0):
-        #         w_eigen_4[i,:] = 0.0
-        # w = self.mpt4.to_monomer_fields(w_eigen_4)
+        #         w_aux_4[i,:] = 0.0
+        # w = self.mpt4.to_monomer_fields(w_aux_4)
 
-        # w_eigen_5 = self.mpt5.to_eigen_fields(w)
+        # w_aux_5 = self.mpt5.to_aux_fields(w)
         # for i in range(S-1):
         #     if np.isclose(self.mpt5.eigenvalues[i], 0.0):
-        #         w_eigen_5[i,:] = 0.0
-        # w = self.mpt5.to_monomer_fields(w_eigen_5)
+        #         w_aux_5[i,:] = 0.0
+        # w = self.mpt5.to_monomer_fields(w_aux_5)
 
-        # w_eigen_1 = self.mpt1.to_eigen_fields(w)
-        # w_eigen_4 = self.mpt4.to_eigen_fields(w)
-        # w_eigen_5 = self.mpt5.to_eigen_fields(w)
+        # w_aux_1 = self.mpt1.to_aux_fields(w)
+        # w_aux_4 = self.mpt4.to_aux_fields(w)
+        # w_aux_5 = self.mpt5.to_aux_fields(w)
 
-        # print("w_eigen_1:\n", np.mean(w_eigen_1[1]), np.std(w_eigen_1[1]))
-        # print("w_eigen_4:\n", np.mean(w_eigen_4[1]), np.std(w_eigen_4[1]))
-        # print("w_eigen_5:\n", np.mean(w_eigen_5[1]), np.std(w_eigen_5[1]))
+        # print("w_aux_1:\n", np.mean(w_aux_1[1]), np.std(w_aux_1[1]))
+        # print("w_aux_4:\n", np.mean(w_aux_4[1]), np.std(w_aux_4[1]))
+        # print("w_aux_5:\n", np.mean(w_aux_5[1]), np.std(w_aux_5[1]))
 
         # for i in range(S-1):
         #     if np.isclose(self.mpt1.eigenvalues[i], 0.0):
-        #         w_eigen_1[i,:] = 0.0
+        #         w_aux_1[i,:] = 0.0
         #     if np.isclose(self.mpt2.eigenvalues[i], 0.0):
-        #         w_eigen_2[i,:] = -np.dot(self.mpt2.matrix_a_inv[i], self.mpt2.o_large_s)
+        #         w_aux_2[i,:] = -np.dot(self.mpt2.matrix_a_inv[i], self.mpt2.o_large_s)
         #     if np.isclose(self.mpt3.eigenvalues[i], 0.0):
-        #         w_eigen_3[i,:] = -np.dot(self.mpt3.matrix_a_inv[i], self.mpt3.o_large_s)
+        #         w_aux_3[i,:] = -np.dot(self.mpt3.matrix_a_inv[i], self.mpt3.o_large_s)
         #     if np.isclose(self.mpt4.eigenvalues[i], 0.0):
-        #         w_eigen_4[i,:] = 0.0
+        #         w_aux_4[i,:] = 0.0
         #     if np.isclose(self.mpt5.eigenvalues[i], 0.0):
-        #         w_eigen_5[i,:] = 0.0
+        #         w_aux_5[i,:] = 0.0
         
-        # w_mpt1 = self.mpt1.to_monomer_fields(w_eigen_1)
-        # w_mpt2 = self.mpt2.to_monomer_fields(w_eigen_2)
-        # w_mpt3 = self.mpt3.to_monomer_fields(w_eigen_3)
-        # w_mpt4 = self.mpt4.to_monomer_fields(w_eigen_4)
-        # w_mpt5 = self.mpt5.to_monomer_fields(w_eigen_5)
+        # w_mpt1 = self.mpt1.to_monomer_fields(w_aux_1)
+        # w_mpt2 = self.mpt2.to_monomer_fields(w_aux_2)
+        # w_mpt3 = self.mpt3.to_monomer_fields(w_aux_3)
+        # w_mpt4 = self.mpt4.to_monomer_fields(w_aux_4)
+        # w_mpt5 = self.mpt5.to_monomer_fields(w_aux_5)
 
         # print("w_mpt1", np.mean(w_mpt1-w, axis=1), np.std(w_mpt1-w, axis=1))
         # print("w_mpt2", np.mean(w_mpt2-w, axis=1), np.std(w_mpt2-w, axis=1))
@@ -560,15 +560,15 @@ class SCFT:
             # for monomer_type in self.monomer_types:
             #     phi[monomer_type] *= self.phi_rescaling
 
-            # Convert monomer fields to eigenvector-based fields
-            w_eigen_1 = self.mpt1.to_eigen_fields(w)
-            w_eigen_2 = self.mpt2.to_eigen_fields(w)
-            w_eigen_3 = self.mpt3.to_eigen_fields(w)
-            w_eigen_4 = self.mpt4.to_eigen_fields(w)
-            w_eigen_5 = self.mpt5.to_eigen_fields(w)
+            # Convert monomer fields to auxiliary fields
+            w_aux_1 = self.mpt1.to_aux_fields(w)
+            w_aux_2 = self.mpt2.to_aux_fields(w)
+            w_aux_3 = self.mpt3.to_aux_fields(w)
+            w_aux_4 = self.mpt4.to_aux_fields(w)
+            w_aux_5 = self.mpt5.to_aux_fields(w)
 
             # Calculate the total energy
-            # energy_total = - self.cb.integral(self.phi_target*w_eigen[S-1])/self.cb.get_volume()
+            # energy_total = - self.cb.integral(self.phi_target*w_aux[S-1])/self.cb.get_volume()
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
             
             # Compute Hamiltonian part that total partition functions
@@ -583,14 +583,14 @@ class SCFT:
             for count, type in enumerate(self.monomer_types):
                 energy_total_0 -= np.mean(w[count]*phi[type])
 
-            energy_total_1 = self.mpt1.compute_hamiltonian(self.molecules, w_eigen_1, total_partitions)
-            energy_total_2 = self.mpt2.compute_hamiltonian(self.molecules, w_eigen_2, total_partitions)
-            energy_total_3 = self.mpt3.compute_hamiltonian(self.molecules, w_eigen_3, total_partitions)
-            energy_total_4 = self.mpt4.compute_hamiltonian(self.molecules, w_eigen_4, total_partitions)
-            energy_total_5 = self.mpt5.compute_hamiltonian(self.molecules, w_eigen_5, total_partitions)
+            energy_total_1 = self.mpt1.compute_hamiltonian(self.molecules, w_aux_1, total_partitions)
+            energy_total_2 = self.mpt2.compute_hamiltonian(self.molecules, w_aux_2, total_partitions)
+            energy_total_3 = self.mpt3.compute_hamiltonian(self.molecules, w_aux_3, total_partitions)
+            energy_total_4 = self.mpt4.compute_hamiltonian(self.molecules, w_aux_4, total_partitions)
+            energy_total_5 = self.mpt5.compute_hamiltonian(self.molecules, w_aux_5, total_partitions)
 
-            # # Compute functional derivatives of Hamiltonian w.r.t. imaginary eigen fields 
-            # h_deriv, _ = self.mpt1.compute_func_deriv(w_eigen_1, phi, self.non_zero_eigenvalues)
+            # # Compute functional derivatives of Hamiltonian w.r.t. imaginary auxiliary fields 
+            # h_deriv, _ = self.mpt1.compute_func_deriv(w_aux_1, phi, self.non_zero_eigenvalues)
 
             # # Compute total error
             # old_error_level = error_level
@@ -615,10 +615,10 @@ class SCFT:
             #     h_deriv[count] *= self.dt_scaling[i]
 
             # # Calculate new fields using simple and Anderson mixing
-            # w_eigen_1[self.non_zero_eigenvalues] = np.reshape(self.field_optimizer.calculate_new_fields(w_eigen_1[self.non_zero_eigenvalues], -h_deriv, old_error_level, error_level), [len(self.non_zero_eigenvalues), self.cb.get_n_grid()])
+            # w_aux_1[self.non_zero_eigenvalues] = np.reshape(self.field_optimizer.calculate_new_fields(w_aux_1[self.non_zero_eigenvalues], -h_deriv, old_error_level, error_level), [len(self.non_zero_eigenvalues), self.cb.get_n_grid()])
 
-            # # Convert eigen fields to monomer fields
-            # w = self.mpt1.to_monomer_fields(w_eigen_1)
+            # # Convert auxiliary fields to monomer fields
+            # w = self.mpt1.to_monomer_fields(w_aux_1)
 
             # Calculate difference between current total density and target density
             phi_total = np.zeros(self.cb.get_n_grid())
@@ -627,8 +627,8 @@ class SCFT:
             # phi_diff = phi_total-self.phi_target
             phi_diff = phi_total-1.0
 
-            # Compute functional derivatives of Hamiltonian w.r.t. imaginary eigen fields 
-            w_diff, _ = self.mpt1.compute_func_deriv(w_eigen_1, phi, self.non_zero_eigenvalues)
+            # Compute functional derivatives of Hamiltonian w.r.t. imaginary auxiliary fields 
+            w_diff, _ = self.mpt1.compute_func_deriv(w_aux_1, phi, self.non_zero_eigenvalues)
 
             # Calculate self-consistency error
             w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
@@ -648,7 +648,7 @@ class SCFT:
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
                 error_level += self.cb.inner_product(w_diff[i],w_diff[i])
-                error_normal += self.cb.inner_product(w_eigen_1[i],w_eigen_1[i])
+                error_normal += self.cb.inner_product(w_aux_1[i],w_aux_1[i])
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
@@ -720,13 +720,13 @@ class SCFT:
         self.phi = phi
         self.w = w
 
-        # w_eigen_1 = self.mpt1.to_eigen_fields(w)
-        # w_eigen_4 = self.mpt4.to_eigen_fields(w)
-        # w_eigen_5 = self.mpt5.to_eigen_fields(w)
+        # w_aux_1 = self.mpt1.to_aux_fields(w)
+        # w_aux_4 = self.mpt4.to_aux_fields(w)
+        # w_aux_5 = self.mpt5.to_aux_fields(w)
 
-        # print("w_eigen_1:\n", np.mean(w_eigen_1[1]), np.std(w_eigen_1[1]))
-        # print("w_eigen_4:\n", np.mean(w_eigen_4[1]), np.std(w_eigen_4[1]))
-        # print("w_eigen_5:\n", np.mean(w_eigen_5[1]), np.std(w_eigen_5[1]))
+        # print("w_aux_1:\n", np.mean(w_aux_1[1]), np.std(w_aux_1[1]))
+        # print("w_aux_4:\n", np.mean(w_aux_4[1]), np.std(w_aux_4[1]))
+        # print("w_aux_5:\n", np.mean(w_aux_5[1]), np.std(w_aux_5[1]))
 
         # print("phi['A'][0:32]:", phi["A"][0:32])
 

@@ -444,7 +444,7 @@ class SCFT:
         # Compute coefficients for Hamiltonian computation
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, matrix_o)
 
-        # Matrix A and Inverse for converting between exchange fields and species chemical potential fields
+        # Matrix A and Inverse for converting between exchange fields and monomer chemical potential fields
         matrix_a = np.zeros((S,S))
         matrix_a_inv = np.zeros((S,S))
         matrix_a[0:S-1,0:S-1] = matrix_o[0:S-1,0:S-1]

@@ -42,33 +42,33 @@ class Symmetric_Polymer_Theory:
         self.vector_s = np.matmul(matrix_chi, np.ones(S))/S
         self.vector_large_s = np.matmul(np.transpose(matrix_o), self.vector_s)
 
-        # Indices whose eigen fields are real
-        self.eigen_fields_real_idx = []
-        # Indices whose eigen fields are imaginary including the pressure field
-        self.eigen_fields_imag_idx = []
+        # Indices whose auxiliary fields are real
+        self.aux_fields_real_idx = []
+        # Indices whose auxiliary fields are imaginary including the pressure field
+        self.aux_fields_imag_idx = []
         for i in range(S-1):
             # assert(not np.isclose(eigenvalues[i], 0.0)), \
             #     "One of eigenvalues is zero for given chiN values."
             if np.isclose(eigenvalues[i], 0.0):
                 print("One of eigenvalues is zero for given chiN values.")
             elif eigenvalues[i] > 0:
-                self.eigen_fields_imag_idx.append(i)
+                self.aux_fields_imag_idx.append(i)
             else:
-                self.eigen_fields_real_idx.append(i)
-        self.eigen_fields_imag_idx.append(S-1) # add pressure field
+                self.aux_fields_real_idx.append(i)
+        self.aux_fields_imag_idx.append(S-1) # add pressure field
 
         # The numbers of real and imaginary fields, respectively
-        self.R = len(self.eigen_fields_real_idx)
-        self.I = len(self.eigen_fields_imag_idx)
+        self.R = len(self.aux_fields_real_idx)
+        self.I = len(self.aux_fields_imag_idx)
 
         if self.I > 1:
-            print("(Warning!) For a given χN interaction parameter set, at least one of the eigen fields is an imaginary field. ", end="")
+            print("(Warning!) For a given χN interaction parameter set, at least one of the auxiliary fields is an imaginary field. ", end="")
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
 
         # Compute coefficients for Hamiltonian computation
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
 
-        # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
+        # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
         matrix_a = matrix_o.copy()
         matrix_a_inv = np.transpose(matrix_o).copy()/S
 
@@ -121,8 +121,8 @@ class Symmetric_Polymer_Theory:
         # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        print("Real Fields: ",      self.eigen_fields_real_idx)
-        print("Imaginary Fields: ", self.eigen_fields_imag_idx)
+        print("Real Fields: ",      self.aux_fields_real_idx)
+        print("Imaginary Fields: ", self.aux_fields_imag_idx)
         
         print("In Hamiltonian:")
         print("\treference energy: ", self.h_const)
@@ -132,11 +132,11 @@ class Symmetric_Polymer_Theory:
         print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
         print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
-    def to_eigen_fields(self, w):
+    def to_aux_fields(self, w):
         return np.matmul(self.matrix_a_inv, w)
 
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
+    def to_monomer_fields(self, w_aux):
+        return np.matmul(self.matrix_a, w_aux)
 
     def compute_eigen_system(self, chi_n, matrix_p):
         S = matrix_p.shape[0]
@@ -173,7 +173,7 @@ class Symmetric_Polymer_Theory:
             eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
         eigenvectors[:,eigen_val_0] = eigen_vec_0
 
-        # Make the first element of each vector positive to recover the conventional AB polymer field theory
+        # Make the first element of each vector positive to restore the conventional AB polymer field theory
         for i in range(S):
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
@@ -215,14 +215,14 @@ class Symmetric_Polymer_Theory:
         return h_const, h_coef_mu1, h_coef_mu2
 
     # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
+    def compute_hamiltonian(self, molecules, w_aux, total_partitions):
         S = len(self.monomer_types)
 
         # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
+        hamiltonian_fields = -np.mean(w_aux[S-1])
         for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
+            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
+            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
@@ -234,16 +234,16 @@ class Symmetric_Polymer_Theory:
         return hamiltonian_partition + hamiltonian_fields + self.h_const
 
     # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
-    def compute_func_deriv(self, w_eigen, phi, indices):
+    def compute_func_deriv(self, w_aux, phi, indices):
         S = len(self.monomer_types)
                 
         elapsed_time = {}
         time_e_start = time.time()
-        h_deriv = np.zeros([len(indices), w_eigen.shape[1]], dtype=np.float64)
+        h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=np.float64)
         for count, i in enumerate(indices):
             # Return dH/dw
             if i != S-1:
-                h_deriv[count] += 2*self.h_coef_mu2[i]*w_eigen[i]
+                h_deriv[count] += 2*self.h_coef_mu2[i]*w_aux[i]
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
@@ -257,15 +257,15 @@ class Symmetric_Polymer_Theory:
         return  h_deriv, elapsed_time
 
     # Compute dH/dχN
-    def compute_h_deriv_chin(self, chi_n, w_eigen):
+    def compute_h_deriv_chin(self, chi_n, w_aux):
         S = len(self.monomer_types)
 
         dH = {}
         for key in chi_n:
             dH[key] = self.h_const_deriv_chin[key]
             for i in range(S-1):
-                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_eigen[i]**2)
-                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_eigen[i])                            
+                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_aux[i]**2)
+                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_aux[i])                            
         return dH
 
 class LFTS:
@@ -450,7 +450,7 @@ class LFTS:
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(
-            len(self.mpt.eigen_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
+            len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
             params["am"]["max_hist"],                                   # maximum number of history
             params["am"]["start_error"],                                # when switch to AM from simple mixing
             params["am"]["mix_min"],                                    # minimum mixing rate of simple mixing
@@ -459,7 +459,7 @@ class LFTS:
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
-        # dH/dw_eigen[i] is scaled by dt_scaling[i]
+        # dH/dw_aux[i] is scaled by dt_scaling[i]
         S = len(self.monomer_types)
         self.dt_scaling = np.ones(S)
         for i in range(S-1):
@@ -522,12 +522,12 @@ class LFTS:
         self.solver = solver 
         self.am = am
 
-    def compute_concentrations(self, w_eigen):
+    def compute_concentrations(self, w_aux):
         S = len(self.monomer_types)
         elapsed_time = {}
 
-        # Convert eigenvector-based fields to monomer fields
-        w = self.mpt.to_monomer_fields(w_eigen)
+        # Convert auxiliary fields to monomer fields
+        w = self.mpt.to_monomer_fields(w_aux)
 
         # Make a dictionary for input fields 
         w_input = {}
@@ -571,8 +571,8 @@ class LFTS:
             "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params": self.params,
             "eigenvalues": self.mpt.eigenvalues,
-            "eigen_fields_real": self.mpt.eigen_fields_real_idx,
-            "eigen_fields_imag": self.mpt.eigen_fields_imag_idx,
+            "aux_fields_real": self.mpt.aux_fields_real_idx,
+            "aux_fields_imag": self.mpt.aux_fields_imag_idx,
             "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv, 
             "langevin_step":langevin_step,
             "random_generator":self.random_bg.state["bit_generator"],
@@ -627,8 +627,8 @@ class LFTS:
         S = len(self.monomer_types)
 
         # The numbers of real and imaginary fields, respectively
-        R = len(self.mpt.eigen_fields_real_idx)
-        I = len(self.mpt.eigen_fields_imag_idx)
+        R = len(self.mpt.aux_fields_real_idx)
+        I = len(self.mpt.aux_fields_imag_idx)
 
         # Simulation data directory
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
@@ -638,12 +638,12 @@ class LFTS:
         for i in range(S):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
             
-        # Express fields using eigenvectors
-        w_eigen = self.mpt.to_eigen_fields(w)
+        # Convert monomer chemical potential fields into auxiliary fields
+        w_aux = self.mpt.to_aux_fields(w)
 
         # Find saddle point
         print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
-        phi, _, _, _, = self.find_saddle_point(w_eigen=w_eigen)
+        phi, _, _, _, = self.find_saddle_point(w_aux=w_aux)
 
         # Dictionary to record history of H and dH/dχN
         H_history = []
@@ -681,23 +681,23 @@ class LFTS:
             print("Langevin step: ", langevin_step)
 
             # Copy data for restoring
-            w_eigen_copy = w_eigen.copy()
+            w_aux_copy = w_aux.copy()
             phi_copy = phi.copy()
 
             # Compute functional derivatives of Hamiltonian w.r.t. real-valued fields 
-            w_lambda, _ = self.mpt.compute_func_deriv(w_eigen, phi, self.mpt.eigen_fields_real_idx)
+            w_lambda, _ = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
 
-            # Update w_eigen using Leimkuhler-Matthews method
+            # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
-            for count, i in enumerate(self.mpt.eigen_fields_real_idx):
+            for count, i in enumerate(self.mpt.aux_fields_real_idx):
                 scaling = self.dt_scaling[i]
-                w_eigen[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+                w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
             # Find saddle point of the pressure field
-            phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_eigen=w_eigen)
+            phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
 
@@ -706,8 +706,8 @@ class LFTS:
                 if successive_fail_count < 5:                
                     print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
 
-                    # Restore w_eigen and phi
-                    w_eigen = w_eigen_copy
+                    # Restore w_aux and phi
+                    w_aux = w_aux_copy
                     phi = phi_copy
                     
                     # Increment counts and continue
@@ -723,7 +723,7 @@ class LFTS:
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:
                 H_history.append(hamiltonian)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_eigen)
+                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
                 for key in self.chi_n:
                     dH_history[key].append(dH[key])
 
@@ -751,7 +751,7 @@ class LFTS:
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_n_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(S-1) :
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_eigen[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_n_grid()
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_n_grid()
                 # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -780,7 +780,7 @@ class LFTS:
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
-                w = self.mpt.to_monomer_fields(w_eigen)
+                w = self.mpt.to_monomer_fields(w_aux)
                 self.save_simulation_data(
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
                     w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
@@ -795,14 +795,14 @@ class LFTS:
                 time_duration/(self.langevin["max_step"]+1-start_langevin_step), \
                 total_error_level/(self.langevin["max_step"]+1-start_langevin_step)
 
-    def find_saddle_point(self, w_eigen):
+    def find_saddle_point(self, w_aux):
 
         # The number of components
         S = len(self.monomer_types)
 
         # The numbers of real and imaginary fields, respectively
-        R = len(self.mpt.eigen_fields_real_idx)
-        I = len(self.mpt.eigen_fields_imag_idx)
+        R = len(self.mpt.aux_fields_real_idx)
+        I = len(self.mpt.aux_fields_imag_idx)
 
         # Assign large initial value for error
         error_level = 1e20
@@ -813,11 +813,11 @@ class LFTS:
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             
-            # Compute total concentrations with noised w_eigen
-            phi, _ = self.compute_concentrations(w_eigen)
+            # Compute total concentrations with noised w_aux
+            phi, _ = self.compute_concentrations(w_aux)
 
             # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
-            h_deriv, _ = self.mpt.compute_func_deriv(w_eigen, phi, self.mpt.eigen_fields_imag_idx)
+            h_deriv, _ = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_imag_idx)
 
             # Compute total error
             old_error_level = error_level
@@ -830,7 +830,7 @@ class LFTS:
             
                 # Calculate Hamiltonian
                 total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-                hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_eigen, total_partitions)
+                hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
 
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])
@@ -847,13 +847,13 @@ class LFTS:
                 break
 
             # Scaling h_deriv
-            for count, i in enumerate(self.mpt.eigen_fields_imag_idx):
+            for count, i in enumerate(self.mpt.aux_fields_imag_idx):
                 h_deriv[count] *= self.dt_scaling[i]
 
             # Calculate new fields using simple and Anderson mixing
-            w_eigen[self.mpt.eigen_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_eigen[self.mpt.eigen_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
+            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
         
         # Set mean of pressure field to zero
-        w_eigen[S-1] -= np.mean(w_eigen[S-1])
+        w_aux[S-1] -= np.mean(w_aux[S-1])
         
         return phi, hamiltonian, saddle_iter, error_level

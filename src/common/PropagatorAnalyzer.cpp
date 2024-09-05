@@ -588,9 +588,9 @@ void PropagatorAnalyzer::display_propagators() const
         std::cout << "}, "<< std::endl;
     }
     if (this->model_name == "continuous")
-        std::cout << "Time complexity (total number of modified diffusion equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+        std::cout << "Total number of modified diffusion equation steps (time complexity) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
     else if (this->model_name == "discrete")
-        std::cout << "Time complexity (total number of integral equation steps) to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
+        std::cout << "(Total number of integral equation steps (time complexity to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
     std::cout << "Total number of steps after optimizing computation : " << reduced_mde_steps << std::endl;
 
     double percent = 100*(1.0 - ((double ) reduced_mde_steps)/((double) total_mde_steps_without_reduction));
