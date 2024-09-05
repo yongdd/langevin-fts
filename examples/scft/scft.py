@@ -81,7 +81,7 @@ class Symmetric_Polymer_Theory:
         # Compute coefficients for Hamiltonian computation
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
 
-        # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
+        # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
         matrix_a = matrix_o.copy()
         matrix_a_inv = np.transpose(matrix_o).copy()/S
 
@@ -108,19 +108,19 @@ class Symmetric_Polymer_Theory:
         # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        # print("Real Fields: ",      self.eigen_fields_real_idx)
-        # print("Imaginary Fields: ", self.eigen_fields_imag_idx)
+        # print("Real Fields: ",      self.aux_fields_real_idx)
+        # print("Imaginary Fields: ", self.aux_fields_imag_idx)
         
         print("In Hamiltonian:")
         print("\treference energy: ", self.h_const)
         print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
         print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
 
-    def to_eigen_fields(self, w):
+    def to_aux_fields(self, w):
         return np.matmul(self.matrix_a_inv, w)
 
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen)
+    def to_monomer_fields(self, w_aux):
+        return np.matmul(self.matrix_a, w_aux)
 
     def compute_eigen_system(self, chi_n, matrix_p):
         S = matrix_p.shape[0]
@@ -157,7 +157,7 @@ class Symmetric_Polymer_Theory:
             eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
         eigenvectors[:,eigen_val_0] = eigen_vec_0
 
-        # Make the first element of each vector positive to recover the conventional AB polymer field theory
+        # Make the first element of each vector positive to restore the conventional AB polymer field theory
         for i in range(S):
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
@@ -199,14 +199,14 @@ class Symmetric_Polymer_Theory:
         return h_const, h_coef_mu1, h_coef_mu2
 
     # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
+    def compute_hamiltonian(self, molecules, w_aux, total_partitions):
         S = len(self.monomer_types)
 
         # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
+        hamiltonian_fields = -np.mean(w_aux[S-1])
         for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
+            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
+            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
@@ -450,6 +450,7 @@ class SCFT:
                 params["optimizer"]["start_error"],  # when switch to AM from simple mixing
                 params["optimizer"]["mix_min"],      # minimum mixing rate of simple mixing
                 params["optimizer"]["mix_init"])     # initial mixing rate of simple mixing
+
         # (Python class) ADAM optimizer for finding saddle point
         elif params["optimizer"]["name"] == "adam":
             self.field_optimizer = Adam(M = n_var,
@@ -621,13 +622,13 @@ class SCFT:
             # for monomer_type in self.monomer_types:
             #     phi[monomer_type] *= self.phi_rescaling
 
-            # Convert monomer fields to eigenvector-based fields
-            w_eigen = self.mpt.to_eigen_fields(w)
+            # Convert monomer fields to auxiliary fields
+            w_aux = self.mpt.to_aux_fields(w)
 
             # Calculate the total energy
             # energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            energy_total = self.mpt.compute_hamiltonian(self.molecules, w_eigen, total_partitions)
+            energy_total = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
 
             # Calculate difference between current total density and target density
             phi_total = np.zeros(self.cb.get_n_grid())

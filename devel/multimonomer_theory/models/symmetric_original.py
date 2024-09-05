@@ -31,33 +31,33 @@ class Symmetric_Original:
         vector_large_s_prime[S-1] = 0.0
         self.o_large_s = np.reshape(np.matmul(matrix_o, vector_large_s_prime), (S, 1))/S
 
-        # Indices whose eigen fields are real
-        self.eigen_fields_real_idx = []
-        # Indices whose eigen fields are imaginary including the pressure field
-        self.eigen_fields_imag_idx = []
+        # Indices whose auxiliary fields are real
+        self.aux_fields_real_idx = []
+        # Indices whose auxiliary fields are imaginary including the pressure field
+        self.aux_fields_imag_idx = []
         for i in range(S-1):
             # assert(not np.isclose(eigenvalues[i], 0.0)), \
             #     "One of eigenvalues is zero for given chiN values."
             if np.isclose(eigenvalues[i], 0.0):
                 print("One of eigenvalues is zero for given chiN values.")
             elif eigenvalues[i] > 0:
-                self.eigen_fields_imag_idx.append(i)
+                self.aux_fields_imag_idx.append(i)
             else:
-                self.eigen_fields_real_idx.append(i)
-        self.eigen_fields_imag_idx.append(S-1) # add pressure field
+                self.aux_fields_real_idx.append(i)
+        self.aux_fields_imag_idx.append(S-1) # add pressure field
 
         # The numbers of real and imaginary fields, respectively
-        self.R = len(self.eigen_fields_real_idx)
-        self.I = len(self.eigen_fields_imag_idx)
+        self.R = len(self.aux_fields_real_idx)
+        self.I = len(self.aux_fields_imag_idx)
 
         if self.I > 1:
-            print("(Warning!) For a given χN interaction parameter set, at least one of the eigen fields is an imaginary field. ", end="")
+            print("(Warning!) For a given χN interaction parameter set, at least one of the auxiliary fields is an imaginary field. ", end="")
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
 
         # Compute coefficients for Hamiltonian computation
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues)
 
-        # Matrix A and Inverse for converting between eigen fields and species chemical potential fields
+        # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
         matrix_a = matrix_o.copy()
         matrix_a_inv = np.transpose(matrix_o).copy()/S
         
@@ -109,8 +109,8 @@ class Symmetric_Original:
         # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
         # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        print("Real Fields: ",      self.eigen_fields_real_idx)
-        print("Imaginary Fields: ", self.eigen_fields_imag_idx)
+        print("Real Fields: ",      self.aux_fields_real_idx)
+        print("Imaginary Fields: ", self.aux_fields_imag_idx)
         
         print("In Hamiltonian:")
         print("\treference energy: ", self.h_const)
@@ -120,11 +120,11 @@ class Symmetric_Original:
         print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
         print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
-    def to_eigen_fields(self, w):
+    def to_aux_fields(self, w):
         return np.matmul(self.matrix_a_inv, w-self.o_large_s)
 
-    def to_monomer_fields(self, w_eigen):
-        return np.matmul(self.matrix_a, w_eigen) + self.o_large_s
+    def to_monomer_fields(self, w_aux):
+        return np.matmul(self.matrix_a, w_aux) + self.o_large_s
 
     def compute_eigen_system(self, chi_n, matrix_p):
         S = matrix_p.shape[0]
@@ -161,7 +161,7 @@ class Symmetric_Original:
             eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
         eigenvectors[:,eigen_val_0] = eigen_vec_0
 
-        # Make the first element of each vector positive to recover the conventional AB polymer field theory
+        # Make the first element of each vector positive to restore the conventional AB polymer field theory
         for i in range(S):
             if eigenvectors[0,i] < 0.0:
                 eigenvectors[:,i] *= -1.0
@@ -189,14 +189,14 @@ class Symmetric_Original:
         return h_const, h_coef_mu1, h_coef_mu2
 
     # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_eigen, total_partitions):
+    def compute_hamiltonian(self, molecules, w_aux, total_partitions):
         S = len(self.monomer_types)
 
         # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = -np.mean(w_eigen[S-1])
+        hamiltonian_fields = -np.mean(w_aux[S-1])
         for i in range(S-1):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_eigen[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_eigen[i])
+            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
+            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
@@ -208,16 +208,16 @@ class Symmetric_Original:
         return hamiltonian_partition + hamiltonian_fields + self.h_const
 
     # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
-    def compute_func_deriv(self, w_eigen, phi, indices):
+    def compute_func_deriv(self, w_aux, phi, indices):
         S = len(self.monomer_types)
                 
         elapsed_time = {}
         time_e_start = time.time()
-        h_deriv = np.zeros([len(indices), w_eigen.shape[1]], dtype=np.float64)
+        h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=np.float64)
         for count, i in enumerate(indices):
             # Return dH/dw
             if i != S-1:
-                h_deriv[count] += 2*self.h_coef_mu2[i]*w_eigen[i]
+                h_deriv[count] += 2*self.h_coef_mu2[i]*w_aux[i]
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
@@ -231,13 +231,13 @@ class Symmetric_Original:
         return  h_deriv, elapsed_time
 
     # Compute dH/dχN
-    def compute_h_deriv_chin(self, chi_n, w_eigen):
+    def compute_h_deriv_chin(self, chi_n, w_aux):
         S = len(self.monomer_types)
 
         dH = {}
         for key in chi_n:
             dH[key] = self.h_const_deriv_chin[key]
             for i in range(S-1):
-                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_eigen[i]**2)
-                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_eigen[i])                            
+                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_aux[i]**2)
+                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_aux[i])                            
         return dH

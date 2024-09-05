@@ -85,7 +85,7 @@ conda env remove -n lfts
 ```
 # User Guide
 + To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
-+ Even CUDA version use multiple CPUs. Each of them is responsible for each computation CUDA stream. Allocate 4 CPUs when submitting a job.
++ Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate 4 CPUs when submitting a job.
 + The SCFT and L-FTS are implemented on the python shared library in `examples/scft` and `examples/fts`, respectively.
   + Set 'reduce_gpu_memory_usage=True' (default: False) if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size. As an example, please see 'examples/scft/BottleBrushLamella3D.py'.
   + To use two GPUs, set `os.environ["LFTS_NUM_GPUS"]="2"`. This is useful if your GPUs do not support high performance in double precision, but only reduces simulation time by 5-40%. Simulation time may increase depending on the number of grids, number of segments, and GPU environment. Check the performance first. As an example, see 'examples/scft/A15.py'.
@@ -170,7 +170,6 @@ conda env remove -n lfts
 + B. Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of field-theoretic simulations, *J. Chem. Phys.* **2023**, 158, 114117
 #### Field Update Algorithm for SCFT 
 + A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
-+ K. D. Dorfman and Z.-G. Wang, Liquid-Like States in Micelle-Forming Diblock Copolymer Melts. *ACS Macro Lett.* **2023**, 12, 980 (stress scale)
 
 # Citation
 Daeseong Yong, and Jaeup U. Kim, Accelerating Langevin Field-theoretic Simulation of Polymers with Deep Learning, *Macromolecules* **2022**, 55, 6505  
