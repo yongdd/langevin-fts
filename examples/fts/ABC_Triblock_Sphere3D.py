@@ -41,7 +41,7 @@ params = {
         ],},],
 
     "langevin":{             # Langevin Dynamics
-        "max_step":100,      # Langevin steps for simulation
+        "max_step":200000,    # Langevin steps for simulation
         "dt":8.0,            # Langevin step interval, delta tau*N_Ref
         "nbar":1.0e6,        # Invariant polymerization index, nbar of N_Ref
     },
@@ -54,7 +54,7 @@ params = {
     },
 
     "saddle":{                # Iteration for the pressure field 
-        "max_iter" :100,      # Maximum number of iterations
+        "max_iter" :400,      # Maximum number of iterations
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 

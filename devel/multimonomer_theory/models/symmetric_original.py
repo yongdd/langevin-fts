@@ -221,11 +221,15 @@ class Symmetric_Original:
                 h_deriv[count] +=   self.h_coef_mu1[i]
                 for j in range(S):
                     h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
-            # Return -dH/dw for the pressure field
             else:
                 for j in range(S):
-                    h_deriv[count] -= phi[self.monomer_types[j]]
-                h_deriv[count] += 1.0
+                    h_deriv[count] += phi[self.monomer_types[j]]
+                h_deriv[count] -= 1.0
+
+            # Change the sign for the imaginary fields
+            if i in self.aux_fields_imag_idx:
+                h_deriv[count] = -h_deriv[count]
+                
         elapsed_time["h_deriv"] = time.time() - time_e_start
         
         return  h_deriv, elapsed_time
