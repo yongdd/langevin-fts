@@ -19,6 +19,7 @@ params = {
                         # where "a_Ref" is reference statistical segment length
                         # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
+    "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
     "ds":1/200,                   # Contour step interval, which is equal to 1/N_Ref.
