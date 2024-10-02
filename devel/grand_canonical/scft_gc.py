@@ -3,6 +3,9 @@ import time
 import re
 import numpy as np
 import sys
+import math
+import yaml
+import copy
 import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -57,6 +60,8 @@ class SCFT:
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
+        self.segment_lengths = copy.deepcopy(params["segment_lengths"])
+        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
         
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
@@ -86,9 +91,9 @@ class SCFT:
         self.chi_n = {}
         for monomer_pair_str, chin_value in params["chi_n"].items():
             monomer_pair = re.split(',| |_|/', monomer_pair_str)
-            assert(monomer_pair[0] in params["segment_lengths"]), \
+            assert(monomer_pair[0] in self.segment_lengths), \
                 f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'."
-            assert(monomer_pair[1] in params["segment_lengths"]), \
+            assert(monomer_pair[1] in self.segment_lengths), \
                 f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'."
             assert(monomer_pair[0] != monomer_pair[1]), \
                 "Do not add self interaction parameter, " + monomer_pair_str + "."
@@ -139,7 +144,7 @@ class SCFT:
         # See paper *J. Chem. Phys.* **2014**, 141, 174103
         # Compute exchange mapping for given chiN set
         # Initialize following variables:
-        #     self.exchange_eigenvalues,
+        #     self.eigenvalues,
         #     self.matrix_o,
         #     self.matrix_a,
         #     self.matrix_a_inv,
@@ -154,21 +159,21 @@ class SCFT:
         self.initialize_exchange_mapping(self.chi_n)
 
         # Total volume fraction
-        assert(len(params["distinct_polymers"]) >= 1), \
+        assert(len(self.distinct_polymers) >= 1), \
             "There is no polymer chain."
 
         if params["ensemble"] == "ce":
             total_volume_fraction = 0.0
-            for polymer in params["distinct_polymers"]:
+            for polymer in self.distinct_polymers:
                 total_volume_fraction += polymer["volume_fraction"]
             assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
         elif params["ensemble"] == "gce":
             self.fugacity = []
-            for polymer in params["distinct_polymers"]:
+            for polymer in self.distinct_polymers:
                 self.fugacity.append(np.exp(polymer["chemical_potential"]))
 
         # Polymer Chains
-        for polymer_counter, polymer in enumerate(params["distinct_polymers"]):
+        for polymer_counter, polymer in enumerate(self.distinct_polymers):
             blocks_input = []
             alpha = 0.0             # total_relative_contour_length
             has_node_number = not "v" in polymer["blocks"][0]
@@ -190,7 +195,7 @@ class SCFT:
 
         # Random Copolymer Chains
         self.random_fraction = {}
-        for polymer in params["distinct_polymers"]:
+        for polymer in self.distinct_polymers:
 
             is_random = False
             for block in polymer["blocks"]:
@@ -205,7 +210,7 @@ class SCFT:
             statistical_segment_length = 0
             total_random_fraction = 0
             for monomer_type in polymer["blocks"][0]["fraction"]:
-                statistical_segment_length += params["segment_lengths"][monomer_type]**2 * polymer["blocks"][0]["fraction"][monomer_type]
+                statistical_segment_length += self.segment_lengths[monomer_type]**2 * polymer["blocks"][0]["fraction"][monomer_type]
                 total_random_fraction += polymer["blocks"][0]["fraction"][monomer_type]
             statistical_segment_length = np.sqrt(statistical_segment_length)
 
@@ -213,18 +218,18 @@ class SCFT:
                 "The sum of volume fractions of random copolymer must be equal to 1."
 
             random_type_string = polymer["blocks"][0]["type"]
-            assert(not random_type_string in params["segment_lengths"]), \
+            assert(not random_type_string in self.segment_lengths), \
                 f"The name of random copolymer '{random_type_string}' is already used as a type in 'segment_lengths' or other random copolymer"
 
             # Add random copolymers
             polymer["block_monomer_types"] = [random_type_string]
-            params["segment_lengths"].update({random_type_string:statistical_segment_length})
+            self.segment_lengths.update({random_type_string:statistical_segment_length})
             self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
 
         # Make a monomer color dictionary
         dict_color= {}
         colors = ["red", "blue", "green", "cyan", "magenta", "yellow"]
-        for count, type in enumerate(params["segment_lengths"].keys()):
+        for count, type in enumerate(self.segment_lengths.keys()):
             if count < len(colors):
                 dict_color[type] = colors[count]
             else:
@@ -232,7 +237,7 @@ class SCFT:
         print("Monomer color: ", dict_color)
             
         # Draw polymer chain architectures
-        for idx, polymer in enumerate(params["distinct_polymers"]):
+        for idx, polymer in enumerate(self.distinct_polymers):
         
             # Make a graph
             G = nx.Graph()
@@ -267,17 +272,17 @@ class SCFT:
             plt.savefig("polymer_%01d.png" % (idx))
 
         # (C++ class) Molecules list
-        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], params["segment_lengths"])
+        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], self.segment_lengths)
 
         # Add polymer chains
         if params["ensemble"] == "ce":
-            for polymer in params["distinct_polymers"]:
+            for polymer in self.distinct_polymers:
                 if "initial_conditions" in polymer:
                     molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"], polymer["initial_conditions"])
                 else:
                     molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
         elif params["ensemble"] == "gce":
-            for polymer in params["distinct_polymers"]:
+            for polymer in self.distinct_polymers:
                 if "initial_conditions" in polymer:
                     molecules.add_polymer(1.0, polymer["blocks_input"], polymer["initial_conditions"])
                 else:
@@ -342,16 +347,16 @@ class SCFT:
         print("Volume: %f" % (cb.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
-        print("Segment lengths:\n\t", list(params["segment_lengths"].items()))
+        print("Segment lengths:\n\t", list(self.segment_lengths.items()))
         print("Conformational asymmetry (epsilon): ")
         for monomer_pair in itertools.combinations(self.monomer_types,2):
-            print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], params["segment_lengths"][monomer_pair[0]]/params["segment_lengths"][monomer_pair[1]]))
+            print("\t%s/%s: %f" % (monomer_pair[0], monomer_pair[1], self.segment_lengths[monomer_pair[0]]/self.segment_lengths[monomer_pair[1]]))
 
         print("χN: ")
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
-        print("Eigenvalues:\n\t", self.exchange_eigenvalues)
+        print("Eigenvalues:\n\t", self.eigenvalues)
         print("Column eigenvectors:\n\t", str(self.matrix_o).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
         print("Inverse of A:\n\t", str(self.matrix_a_inv).replace("\n", "\n\t"))
@@ -458,7 +463,7 @@ class SCFT:
         self.h_coef_mu1 = h_coef_mu1
         self.h_coef_mu2 = h_coef_mu2
 
-        self.exchange_eigenvalues = eigenvalues
+        self.eigenvalues = eigenvalues
         self.matrix_o = matrix_o
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
@@ -579,32 +584,62 @@ class SCFT:
             chi_n_mat[key] = self.chi_n[key]
             
         # Make a dictionary for data
-        mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-            "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds, "initial_params": self.params,
-            "eigenvalues": self.exchange_eigenvalues, "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv,
-            "monomer_types":self.monomer_types}
-
-        # Add w fields to the dictionary
-        for i, name in enumerate(self.monomer_types):
-            mdic["w_" + name] = self.w[i]
-        
-        # Add concentrations to the dictionary
-        for name in self.monomer_types:
-            mdic["phi_" + name] = self.phi[name]
+        m_dic = {"initial_params": self.params,
+            "dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+            "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+            "eigenvalues": self.eigenvalues, "matrix_a": self.matrix_a, "matrix_a_inverse": self.matrix_a_inv}
 
         # if self.mask is not None:
-        #     mdic["mask"] = self.mask
+        #     m_dic["mask"] = self.mask
             
         # if self.phi_target is not None:
-        #     mdic["phi_target"] = self.phi_target
+        #     m_dic["phi_target"] = self.phi_target
 
         # phi_total = np.zeros(self.cb.get_n_grid())
         # for name in self.monomer_types:
         #     phi_total += self.phi[name]
         # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
 
+        # Get input file extension
+        _, file_extension = os.path.splitext(path)
+
         # Save data with matlab format
-        savemat(path, mdic, long_field_names=True, do_compression=True)
+        if file_extension == ".mat":
+            # Add w fields to the dictionary
+            for i, name in enumerate(self.monomer_types):
+                m_dic["w_" + name] = self.w[i]
+            
+            # Add concentrations to the dictionary
+            for name in self.monomer_types:
+                m_dic["phi_" + name] = self.phi[name]
+            
+            savemat(path, m_dic, long_field_names=True, do_compression=True)
+
+        # Save data with yaml format
+        elif file_extension == ".yaml":
+
+            # Make 2d arrays combining phi and fields
+            field_names = []
+            field_data = []
+            for name in self.monomer_types:
+                field_names.append("phi_" + name)
+            for name in self.monomer_types:
+                field_names.append("w_" + name)
+            for name in self.monomer_types:
+                field_data.append(self.phi[name])
+
+            field_data = np.transpose(np.vstack((field_data, self.w)))
+            m_dic["field_names"] = field_names
+            m_dic["field_data"] = field_data
+            
+            # Convert numpy arrays to lists
+            for data in m_dic:
+                if type(m_dic[data]).__module__ == np.__name__  :
+                    m_dic[data] = m_dic[data].tolist()
+
+            # Write data into file
+            with open(path, "w") as f:
+                f.write(yaml.dump(m_dic, default_flow_style=None, width=math.inf, sort_keys=False))
 
     def run(self, initial_fields, q_init=None):
 
