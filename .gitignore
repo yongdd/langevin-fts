@@ -12,6 +12,7 @@ temp*
 *.sqlite
 data_simulation*
 fields*.mat
+fields*.yaml
 structure_function*.mat
 examples/*.m
 examples/scft*/*.m
