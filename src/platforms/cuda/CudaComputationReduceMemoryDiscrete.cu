@@ -14,7 +14,9 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
 {
     try
     {
+        #ifndef NDEBUG
         std::cout << "--------- Discrete Chain Solver, GPU Memoery Saving Version ---------" << std::endl;
+        #endif
 
         const int M = cb->get_n_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
@@ -26,7 +28,9 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
             n_streams = MAX_STREAMS;
         else
             n_streams =  std::min(std::stoi(env_omp_num_threads), MAX_STREAMS);
+        #ifndef NDEBUG
         std::cout << "The number of CPU threads: " << n_streams << std::endl;
+        #endif
 
         // Copy streams
         for(int i=0; i<n_streams; i++)
