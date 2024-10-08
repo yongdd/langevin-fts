@@ -17,7 +17,7 @@ disp(min(min(min(data))))
 
 phi_a_2d = reshape(data,[nx(2), nx(1)]);
 image(phi_a_2d(:,:),'CDataMapping','scaled');
-set(gca,'DataAspectRatio',[1 1 1]); % need to be changed...
+set(gca,'DataAspectRatio',[lx(2) lx(1) 1]);
 axis off;
 c = jet(1024);
 colormap(c)

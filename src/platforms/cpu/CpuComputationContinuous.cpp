@@ -15,7 +15,9 @@ CpuComputationContinuous::CpuComputationContinuous(
 {
     try
     {
+        #ifndef NDEBUG
         std::cout << "--------- Continuous Chain Solver, CPU Version ---------" << std::endl;
+        #endif
 
         const int M = cb->get_n_grid();
         if(method == "pseudospectral")
@@ -30,7 +32,9 @@ CpuComputationContinuous::CpuComputationContinuous(
             n_streams = 4;
         else
             n_streams = std::stoi(env_omp_num_threads);
+        #ifndef NDEBUG
         std::cout << "The number of CPU threads: " << n_streams << std::endl;
+        #endif
 
         // Allocate memory for propagators
         if( propagator_analyzer->get_computation_propagators().size() == 0)
