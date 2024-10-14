@@ -4,12 +4,13 @@ import re
 import numpy as np
 import sys
 import math
+import json
 import yaml
 import copy
 import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
-from scipy.io import savemat, loadmat
+import scipy.io
 from langevinfts import *
 
 # OpenMP environment variables
@@ -566,6 +567,14 @@ class SCFT:
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
+        # Add w fields to the dictionary
+        for i, name in enumerate(self.monomer_types):
+            m_dic["w_" + name] = self.w[i]
+        
+        # Add concentrations to the dictionary
+        for name in self.monomer_types:
+            m_dic["phi_" + name] = self.phi[name]
+
         # if self.mask is not None:
         #     m_dic["mask"] = self.mask
             
@@ -577,46 +586,29 @@ class SCFT:
         #     phi_total += self.phi[name]
         # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
 
+        # Convert numpy arrays to lists
+        for data in m_dic:
+            if type(m_dic[data]).__module__ == np.__name__  :
+                m_dic[data] = m_dic[data].tolist()
+
         # Get input file extension
         _, file_extension = os.path.splitext(path)
 
-        # Save data with matlab format
+        # Save data in matlab format
         if file_extension == ".mat":
-            # Add w fields to the dictionary
-            for i, name in enumerate(self.monomer_types):
-                m_dic["w_" + name] = self.w[i]
-            
-            # Add concentrations to the dictionary
-            for name in self.monomer_types:
-                m_dic["phi_" + name] = self.phi[name]
-            
-            savemat(path, m_dic, long_field_names=True, do_compression=True)
+            scipy.io.savemat(path, m_dic, long_field_names=True, do_compression=True)
 
-        # Save data with yaml format
-        elif file_extension == ".yaml":
-
-            # Make 2d arrays combining phi and fields
-            field_names = []
-            field_data = []
-            for name in self.monomer_types:
-                field_names.append("phi_" + name)
-            for name in self.monomer_types:
-                field_names.append("w_" + name)
-            for name in self.monomer_types:
-                field_data.append(self.phi[name])
-
-            field_data = np.transpose(np.vstack((field_data, self.w)))
-            m_dic["field_names"] = field_names
-            m_dic["field_data"] = field_data
-            
-            # Convert numpy arrays to lists
-            for data in m_dic:
-                if type(m_dic[data]).__module__ == np.__name__  :
-                    m_dic[data] = m_dic[data].tolist()
-
-            # Write data into file
+        # Save data in json format
+        elif file_extension == ".json":
             with open(path, "w") as f:
-                f.write(yaml.dump(m_dic, default_flow_style=None, width=math.inf, sort_keys=False))
+                json.dump(m_dic, f, indent=2)
+
+        # Save data in yaml format
+        elif file_extension == ".yaml":
+            with open(path, "w") as f:
+                f.write(yaml.dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
+        else:
+            raise("Invalid output file extension.")
 
     def run(self, initial_fields, q_init=None):
 
