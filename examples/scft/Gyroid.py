@@ -85,7 +85,7 @@ calculation.run(initial_fields={"A": w_A, "B": w_B})
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
-# Save final results (.mat or .yaml format)
+# Save final results (.mat, .json or .yaml format)
 calculation.save_results("fields.mat")
 
 # Recording first a few iteration results for debugging and refactoring
@@ -94,4 +94,3 @@ calculation.save_results("fields.mat")
     #    3   -1.554E-15  [ 1.0136595E+00  ]    -0.005598893   8.8631268E-01  [  3.3000287, 3.3000287, 3.3000287 ]
     #    4   -8.660E-15  [ 1.0156725E+00  ]    -0.006242039   7.8452381E-01  [  3.3000282, 3.3000282, 3.3000282 ]
     #    5   -2.331E-15  [ 1.0180636E+00  ]    -0.007097169   7.3177360E-01  [  3.3000234, 3.3000234, 3.3000234 ]
-    
