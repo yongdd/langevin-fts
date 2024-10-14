@@ -15,7 +15,7 @@ f = 0.43        # A-fraction of major BCP chain, f
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[16,32,56],            # Simulation grid numbers
+    "nx":[24,48,84],            # Simulation grid numbers
     "lx":[1.59,3.17,5.58],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
@@ -56,16 +56,21 @@ params = {
 
 # Set initial fields
 print("w_A and w_B are initialized to Fddd phase.")
-w_A_k = np.zeros_like(np.fft.rfftn(np.zeros(list(params["nx"]), dtype=np.float64)))
-w_A_k[ 0, 0,4] =  0.02+0.39j
-w_A_k[ 0, 2,2] =  0.22+0.36j
-w_A_k[ 0,30,2] =  0.37+0.20j
-w_A_k[ 1, 1,1] = -0.81-0.32j
-w_A_k[ 1,31,1] = -0.09+0.86j
-w_A_k[15, 1,1] =  0.69+0.52j
-w_A_k[15,31,1] = -0.37+0.80j
+x = np.arange(params["nx"][0])*2*np.pi/params["nx"][0]
+y = np.arange(params["nx"][1])*2*np.pi/params["nx"][1]
+z = np.arange(params["nx"][2])*2*np.pi/params["nx"][2]
+xx, yy, zz = np.meshgrid(x, y, z, indexing='ij')
 
-w_A = np.fft.irfftn(w_A_k, params["nx"])*np.prod(params["nx"])
+w_A = np.zeros(params["nx"], dtype=np.complex64)
+w_A += ( 0.02+0.39j)*np.exp(             4j*zz)
+w_A += ( 0.22+0.36j)*np.exp(       2j*yy+2j*zz)
+w_A += ( 0.37+0.20j)*np.exp(      -2j*yy+2j*zz)
+w_A += (-0.81-0.32j)*np.exp( 1j*xx+1j*yy+1j*zz)
+w_A += (-0.09+0.86j)*np.exp( 1j*xx-1j*yy+1j*zz)
+w_A += ( 0.69+0.52j)*np.exp(-1j*xx+1j*yy+1j*zz)
+w_A += (-0.37+0.80j)*np.exp(-1j*xx-1j*yy+1j*zz)
+w_A = (w_A + np.conjugate(w_A)).real
+
 w_B = -w_A
 
 # Initialize calculation
@@ -83,4 +88,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("fields.mat")
-    
+
+# Recording first a few iteration results for debugging and refactoring
+#     1   -1.310E-15  [ 1.9020053E+00  ]    -0.053408744   3.0154096E-01  [  1.5900000, 3.1700000, 5.5800000 ]
+#     2   -4.743E-13  [ 1.8986511E+00  ]    -0.045996110   2.5355729E-01  [  1.5886964, 3.1698418, 5.5799942 ]
+#     3    4.679E-13  [ 1.8971220E+00  ]    -0.040438763   2.1459982E-01  [  1.5873977, 3.1696502, 5.5799545 ]
+#     4    4.350E-13  [ 1.8964810E+00  ]    -0.036232923   1.8280298E-01  [  1.5861457, 3.1694431, 5.5798945 ]
+#     5    6.299E-13  [ 1.8961600E+00  ]    -0.033036051   1.5680863E-01  [  1.5849674, 3.1692325, 5.5798231 ]
