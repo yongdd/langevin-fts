@@ -591,6 +591,10 @@ class SCFT:
             if type(m_dic[data]).__module__ == np.__name__  :
                 m_dic[data] = m_dic[data].tolist()
 
+        for data in m_dic["initial_params"]:
+            if type(m_dic["initial_params"][data]).__module__ == np.__name__  :
+                m_dic["initial_params"][data] = m_dic["initial_params"][data].tolist()
+
         # Get input file extension
         _, file_extension = os.path.splitext(path)
 

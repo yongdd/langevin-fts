@@ -2,6 +2,13 @@ clear all;
 
 % Load Data
 load("fields_002000.mat");
+
+% % Uncomment to read a json file
+% json_str = fileread('fields.json');
+% data = jsondecode(json_str);
+% save('temp.mat','-struct','data')
+% load("temp.mat");
+
 if exist('phi_A','var')
     phi_a = phi_A;
 elseif exist('phi','var')
