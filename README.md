@@ -113,7 +113,7 @@ conda env remove -n lfts
 
 # Developer Guide
 
-#### Dynamic programming for Chain Propagator Computations
+#### Dynamic programming for Chain Propagator Computation
   In preparation for publication.
 
 #### Reducing GPU Memory Usage

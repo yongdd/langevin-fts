@@ -17,7 +17,7 @@ os.environ["OMP_STACKSIZE"] = "1G"
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
         return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
 
-class Symmetric_Polymer_Theory:
+class SymmetricPolymerTheory:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -329,7 +329,7 @@ class LFTS:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
         # Multimonomer polymer field theory
-        self.mpt = Symmetric_Polymer_Theory(self.monomer_types, self.chi_n)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n)
         
         # Total volume fraction
         assert(len(self.distinct_polymers) >= 1), \
