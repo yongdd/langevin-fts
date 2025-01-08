@@ -56,7 +56,7 @@ class Adam:
         self.count += 1
         return w_new
 
-class Symmetric_Polymer_Theory:
+class SymmetricPolymerTheory:
     def __init__(self, monomer_types, chi_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
@@ -277,7 +277,7 @@ class SCFT:
                 self.chi_n[sorted_monomer_pair] = 0.0
         
         # Multimonomer polymer field theory
-        self.mpt = Symmetric_Polymer_Theory(self.monomer_types, self.chi_n)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n)
         
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902
