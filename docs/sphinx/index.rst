@@ -20,6 +20,10 @@ Polymer Field Theory Simulations with Python
 
 .. toctree::
    :maxdepth: 2
+   :caption: Applications:
+
+.. toctree::
+   :maxdepth: 2
    :caption: Polymer Field Theory:
 
    theory
