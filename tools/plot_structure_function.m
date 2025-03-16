@@ -2,7 +2,7 @@ clear all;
 
 file_path = 'data_simulation/structure_function';
 type_pair = "A_A"; % "A_A", "A_B", "B_B" 
-load(strcat(file_path,'_002000.mat'));
+load(strcat(file_path,'_100000.mat'));
 
 % Calculate k (Fourier mode) sqaure 
 k2         = zeros(nx(1),nx(2),floor(double(nx(3))/2)+1);
@@ -35,7 +35,7 @@ end
 % Read data and caculate averages
 sf_mag   = zeros(size(k2_unique));
 sf_count = zeros(size(k2_unique));
-for langevin_iter = 1000:1000:2000
+for langevin_iter = 100000:100000:500000
     file_name = strcat(file_path,sprintf('_%06d.mat', langevin_iter));
     fprintf('%s\n', file_name);
     load(file_name);
