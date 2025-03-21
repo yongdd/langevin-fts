@@ -140,4 +140,4 @@ conda env remove -n lfts
 + A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
 
 # Citation
-Daeseong Yong, and Jaeup U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2023**, XX, XXXX  
+Daeseong Yong, and Jaeup U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2025**, XX, XXXX  
