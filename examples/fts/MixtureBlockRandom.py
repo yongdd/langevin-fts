@@ -55,11 +55,14 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "am":{
+    "optimizer":{
+        # "name":"am",                # Anderson Mixing
+        # "name":"lr",                # Linear Response
+        "name":"lram",              # Linear Response + Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":5e-1,         # When switch to AM from simple mixing
-        "mix_min":0.01,              # Minimum mixing rate of simple mixing
-        "mix_init":0.01,             # Initial mixing rate of simple mixing
+        "mix_min":0.01,             # Minimum mixing rate of simple mixing
+        "mix_init":0.01,            # Initial mixing rate of simple mixing
     },
 
     "verbose_level":1,      # 1 : Print at each Langevin step.
@@ -90,10 +93,10 @@ print("total time: %f, time per step: %f" %
     (time_duration, time_duration/params["langevin"]["max_step"]) )
 
 # Recording first a few iteration results for debugging and refactoring
-
-#       20    6.114E-16  [ 1.0217332E+00  1.0004506E+00  ]     6.255662440   [6.8265095E-05 ]
-# iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
+# (Anderson Mixing)
 # ---------- Run  ----------
+# iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
+#       20    6.114E-16  [ 1.0217332E+00  1.0004506E+00  ]     6.255662440   [6.8265095E-05 ]
 # Langevin step:  1
 #       16   -2.727E-17  [ 1.1291066E+00  1.0007375E+00  ]     6.280765080   [7.4798426E-05 ]
 # Langevin step:  2

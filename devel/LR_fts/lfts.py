@@ -19,11 +19,9 @@ def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
 
 # LR compressor
 class LR:
-    def __init__(self, chain_model, ds, nx, lx):
+    def __init__(self, nx, lx):
         self.nx = nx
         self.lx = lx
-        self.chain_model = chain_model
-        self.ds = ds
 
         # arrays for exponential time differencing
         space_kx, space_ky, space_kz = np.meshgrid(
@@ -32,21 +30,6 @@ class LR:
             2*np.pi/lx[2]*np.arange(nx[2]//2+1), indexing='ij')
         mag_k2 = (space_kx**2 + space_ky**2 + space_kz**2)/6
         mag_k2[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
-        
-        # if chain_model == "continuous":        
-        #     self.g_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
-        #     self.g_k[0,0,0] = 1.0
-        # elif chain_model == "discrete":
-            
-        #     n = 1.0/ds
-        #     expx = np.exp(-mag_k2)
-        #     expnx = np.exp(-n*mag_k2)
-            
-        #     self.g_k = (n + 2*expx*( n*(1-expx)-1+expnx )/(1-expx)**2 )/n
-            
-        #     # self.g_k = 1 + 2*expx*( 1-expx-1/n+expnx/n ) / (1-expx)**2
-                        
-        #     self.g_k[0,0,0] = 1.0
 
         self.g_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
         self.g_k[0,0,0] = 1.0
@@ -326,7 +309,8 @@ class LFTS:
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-        
+        S = len(self.monomer_types)
+
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
@@ -349,7 +333,7 @@ class LFTS:
         factory.display_info()
 
         # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"])
+        self.cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
@@ -499,21 +483,41 @@ class LFTS:
             propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
+        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_analyzer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
-        am = factory.create_anderson_mixing(
-            len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
-            params["am"]["max_hist"],                                   # maximum number of history
-            params["am"]["start_error"],                                # when switch to AM from simple mixing
-            params["am"]["mix_min"],                                    # minimum mixing rate of simple mixing
-            params["am"]["mix_init"])                                   # initial mixing rate of simple mixing
+        self.field_optimizer_name = params["optimizer"]["name"]
+        if params["optimizer"]["name"] == "am" or params["optimizer"]["name"] == "lram":
+            self.am = factory.create_anderson_mixing(
+                len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
+                params["optimizer"]["max_hist"],                           # maximum number of history
+                params["optimizer"]["start_error"],                        # when switch to AM from simple mixing
+                params["optimizer"]["mix_min"],                            # minimum mixing rate of simple mixing
+                params["optimizer"]["mix_init"])                           # initial mixing rate of simple mixing
+
+        # Fields Relaxation using Linear Reponse Method
+        if params["optimizer"]["name"] == "lr" or params["optimizer"]["name"] == "lram": 
+            # Create LR compressor
+            self.lr = LR(self.cb.get_nx(), self.cb.get_lx())
+
+            # Modify g_k function in LR
+            w_aux_perturbed = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+            w_aux_perturbed[S-1,0] = 0.01 # a small perturbation
+
+            phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
+            h_deriv_perturbed, _ = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
+            
+            w_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1,:], self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            g_k_numeric = np.real(h_deriv_perturbed_k/w_perturbed_k)
+            # print(np.mean(g_k_numeric), np.std(g_k_numeric))
+            # print(np.mean(self.lr.g_k), np.std(self.lr.g_k))
+            self.lr.g_k = g_k_numeric.copy()
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
-        S = len(self.monomer_types)
         self.dt_scaling = np.ones(S)
         for i in range(S-1):
             self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues))
@@ -527,11 +531,11 @@ class LFTS:
         
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Box Dimension: %d" % (cb.get_dim()))
-        print("Nx:", cb.get_nx())
-        print("Lx:", cb.get_lx())
-        print("dx:", cb.get_dx())
-        print("Volume: %f" % (cb.get_volume()))
+        print("Box Dimension: %d" % (self.cb.get_dim()))
+        print("Nx:", self.cb.get_nx())
+        print("Lx:", self.cb.get_lx())
+        print("dx:", self.cb.get_dx())
+        print("Volume: %f" % (self.cb.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
         print("Segment lengths:\n\t", list(self.segment_lengths.items()))
@@ -569,11 +573,8 @@ class LFTS:
         self.saddle = params["saddle"].copy()
         self.recording = params["recording"].copy()
 
-        self.cb = cb
         self.molecules = molecules
         self.propagator_analyzer = propagator_analyzer
-        self.solver = solver 
-        self.am = am
 
     def compute_concentrations(self, w_aux):
         S = len(self.monomer_types)
@@ -751,64 +752,10 @@ class LFTS:
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # # ###############################
-            # w_aux_before = w_aux.copy()
-            # phi, _ = self.compute_concentrations(w_aux)
-            # w_lambda_before, _ = self.mpt.compute_func_deriv(w_aux, phi, [0, 1])
-
             # Find saddle point of the pressure field
             phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
             total_saddle_iter += saddle_iter
             total_error_level += error_level
-
-            # ######################################################
-            # w_aux_diff = w_aux-w_aux_before
-
-            # nx = self.cb.get_nx()
-            # lx = self.cb.get_lx()
-
-            # # for n in range(6,9):
-
-            # # arrays for exponential time differencing
-            # space_kx, space_ky, space_kz = np.meshgrid(
-            #     2*np.pi/lx[0]*np.concatenate([np.arange((nx[0]+1)//2), nx[0]//2-np.arange(nx[0]//2)]),
-            #     2*np.pi/lx[1]*np.concatenate([np.arange((nx[1]+1)//2), nx[1]//2-np.arange(nx[1]//2)]),
-            #     2*np.pi/lx[2]*np.arange(nx[2]//2+1), indexing='ij')
-            # mag_k2 = (space_kx**2 + space_ky**2 + space_kz**2)/6.0
-            # mag_k2[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
-            
-            # g_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
-            # g_k[0,0,0] = 1.0
-
-            # negative_h_deriv = -w_lambda_before[1,:]
-            # negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
-
-            # multi_k = negative_h_deriv_k/g_k
-            # multi = np.reshape(np.fft.irfftn(multi_k, nx), np.prod(nx))*np.prod(nx)
-
-            # std_data_1 = np.std(w_aux_diff[1,:])
-            # std_data_2 = np.std(multi[:])
-
-            # std_ratio = std_data_1/std_data_2
-
-            # data_1 = (w_aux_diff[1,:]-np.mean(w_aux_diff[1,:]))/std_data_1
-            # data_2 = (multi[:]-np.mean(multi[:]))/std_data_2
-
-            # print(np.std(data_1-data_2), std_ratio)
-
-            # file_name = "w_aux_diff_%03d.png" % (langevin_step)
-            # plt.figure()
-            # f, axarr = plt.subplots(1,2)
-            # im = axarr[0].imshow(np.reshape(data_1, nx)[:,:,5], vmin=-4, vmax=4, extent=[0, lx[0], 0, lx[1]], aspect=1, interpolation='nearest')
-            # # plt.colorbar(im)
-            # im = axarr[1].imshow(np.reshape(data_2, nx)[:,:,5], vmin=-4, vmax=4, extent=[0, lx[0], 0, lx[1]], aspect=1, interpolation='nearest')
-            # # plt.colorbar(im)
-
-            # plt.savefig(file_name)
-            # plt.close()
-            # plt.close()
-
-            # # ###########################################################################
 
             # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
             if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:
@@ -901,10 +848,11 @@ class LFTS:
         time_duration = time.time() - time_start
 
         print("total time: %f, time per step: %f" %
-            (time_duration, time_duration/(self.langevin["max_step"]+1-start_langevin_step)) )
+            (time_duration, time_duration/(langevin_step+1-start_langevin_step)) )
         
         print("Total iterations for saddle points: %d, Iterations per Langevin step: %f" %
-            (total_saddle_iter, total_saddle_iter/(self.langevin["max_step"]+1-start_langevin_step)))
+            (total_saddle_iter, total_saddle_iter/(langevin_step+1-start_langevin_step)))
+
 
     def find_saddle_point(self, w_aux):
 
@@ -919,10 +867,8 @@ class LFTS:
         error_level = 1e20
 
         # Reset Anderson mixing module
-        self.am.reset_count()
-
-        # Create LR compressor
-        lr = LR(self.chain_model, self.ds, self.cb.get_nx(), self.cb.get_lx())
+        if self.field_optimizer_name == "am" or self.field_optimizer_name == "lram":
+            self.am.reset_count()
 
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
@@ -960,22 +906,24 @@ class LFTS:
             if error_level < self.saddle["tolerance"]:
                 break
 
-            # # Scaling h_deriv
-            # for count, i in enumerate(self.mpt.aux_fields_imag_idx):
-            #     h_deriv[count] *= self.dt_scaling[i]
+            # Scaling h_deriv
+            for count, i in enumerate(self.mpt.aux_fields_imag_idx):
+                h_deriv[count] *= self.dt_scaling[i]
 
-            # # Calculate new fields using LR
-            # w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
+            # Calculate new fields using simple and Anderson mixing
+            if self.field_optimizer_name == "am":
+                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
+
+            # Calculate new fields using LR
+            elif self.field_optimizer_name == "lr":
+                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
 
             # Calculate new fields using LRAM
-            w_aux_old = w_aux[self.mpt.aux_fields_imag_idx]
-            w_aux_new = np.reshape(lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
-            w_diff = w_aux_new - w_aux_old
-            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux_new, w_diff, old_error_level, error_level), [I, self.cb.get_n_grid()])
-
-            # # Calculate new fields using simple and Anderson mixing
-            # w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
-
+            elif self.field_optimizer_name == "lram":
+                w_aux_old = w_aux[self.mpt.aux_fields_imag_idx]
+                w_aux_new = np.reshape(self.lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
+                w_diff = w_aux_new - w_aux_old
+                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux_new, w_diff, old_error_level, error_level), [I, self.cb.get_n_grid()])
 
         # Set mean of pressure field to zero
         w_aux[S-1] -= np.mean(w_aux[S-1])
