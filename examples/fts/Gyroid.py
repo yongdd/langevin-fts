@@ -54,7 +54,10 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "am":{
+    "optimizer":{
+        # "name":"am",                # Anderson Mixing
+        # "name":"lr",                # Linear Response
+        "name":"lram",              # Linear Response + Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
@@ -86,16 +89,11 @@ time_start = time.time()
 # Run
 simulation.run(initial_fields={"A": w_A, "B": w_B})
 
-# Estimate execution time
-time_duration = time.time() - time_start
-print("total time: %f, time per step: %f" %
-    (time_duration, time_duration/params["langevin"]["max_step"]) )
-
 # Recording first a few iteration results for debugging and refactoring
-
-#        1    2.295E-18  [ 1.6835907E+01  ]     7.272741449   [9.3906464E-05 ]
-# iteration, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
+# (Anderson Mixing)
 # ---------- Run  ----------
+# iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
+#        1    2.295E-18  [ 1.6835907E+01  ]     7.272741449   [9.3906464E-05 ]
 # Langevin step:  1
 #       38    5.704E-16  [ 1.3958888E+01  ]     5.401031083   [8.9368844E-05 ]
 # Langevin step:  2
@@ -106,3 +104,18 @@ print("total time: %f, time per step: %f" %
 #       38   -8.821E-16  [ 2.1590641E+01  ]     7.240011784   [8.6466100E-05 ]
 # Langevin step:  5
 #       38    7.677E-18  [ 2.1011830E+01  ]     7.239727806   [8.7919974E-05 ]
+
+# (LRAM)
+# ---------- Run  ----------
+# iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)
+#        1    2.295E-18  [ 1.6835907E+01  ]     7.272741449   [9.3906464E-05 ]
+# Langevin step:  1
+#        9   -1.613E-17  [ 1.3958879E+01  ]     5.401031270   [4.0786240E-05 ]
+# Langevin step:  2
+#        9    6.963E-16  [ 2.2166390E+01  ]     7.118768389   [5.1305878E-05 ]
+# Langevin step:  3
+#        9   -3.622E-16  [ 2.2178084E+01  ]     7.217319886   [4.6183956E-05 ]
+# Langevin step:  4
+#        9   -4.441E-16  [ 2.1590972E+01  ]     7.239990296   [6.3314222E-05 ]
+# Langevin step:  5
+#        9   -4.787E-16  [ 2.1012985E+01  ]     7.239751839   [4.0090717E-05 ]

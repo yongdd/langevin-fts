@@ -54,7 +54,10 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "am":{
+    "optimizer":{
+        # "name":"am",                # Anderson Mixing
+        # "name":"lr",                # Linear Response
+        "name":"lram",              # Linear Response + Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
