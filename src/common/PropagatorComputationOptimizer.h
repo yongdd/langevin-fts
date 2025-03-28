@@ -1,9 +1,9 @@
 /*----------------------------------------------------------
-* This class defines analyzer of propagator to optimize the propagator computation
+* This class defines optimizer to avoid redundent computation of chain propagators
 *-----------------------------------------------------------*/
 
-#ifndef PROPAGATOR_ANALYZER_H_
-#define PROPAGATOR_ANALYZER_H_
+#ifndef PROPAGATOR_COMPUTATION_OPTIMIZER_H_
+#define PROPAGATOR_COMPUTATION_OPTIMIZER_H_
 
 #include <string>
 #include <vector>
@@ -42,7 +42,7 @@ struct ComparePropagatorKey
     bool operator()(const std::string& str1, const std::string& str2);
 };
 
-class PropagatorAnalyzer
+class PropagatorComputationOptimizer
 {
 private:
     std::string model_name; // "continuous": continuous standard Gaussian model
@@ -74,8 +74,8 @@ private:
     bool is_junction(Polymer& pc, int node);
 
 public:
-    PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation);
-    // ~PropagatorAnalyzer() {};
+    PropagatorComputationOptimizer(Molecules* molecules, bool aggregate_propagator_computation);
+    // ~PropagatorComputationOptimizer() {};
 
     // Add new polymers
     void add_polymer(Polymer& pc, int polymer_count);

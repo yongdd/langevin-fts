@@ -15,7 +15,7 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "PropagatorCode.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "Exception.h"
 
 class PropagatorComputation
@@ -23,7 +23,7 @@ class PropagatorComputation
 protected:
     ComputationBox *cb;
     Molecules *molecules;
-    PropagatorAnalyzer *propagator_analyzer;
+    PropagatorComputationOptimizer *propagator_computation_optimizer;
 
     // Total partition functions for each polymer
     double* single_polymer_partitions;
@@ -34,7 +34,7 @@ protected:
     // Stress of each polymer
     std::vector<std::array<double,3>> dq_dl;
 public:
-    PropagatorComputation(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer);
+    PropagatorComputation(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
     virtual ~PropagatorComputation();
 
     int get_n_grid() {return cb->get_n_grid();};

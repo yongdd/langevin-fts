@@ -11,7 +11,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -216,8 +216,8 @@ int main()
                         molecules->add_polymer(0.5, blocks_1, {});
                         molecules->add_polymer(0.3, blocks_2, {});
                         molecules->add_polymer(0.2, blocks_3, {});
-                        PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, aggregate_propagator_computation);
-                        PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
+                        PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
+                        PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
                         AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -231,8 +231,8 @@ int main()
 
                         // display branches
                         #ifndef NDEBUG
-                        propagator_analyzer->display_blocks();
-                        propagator_analyzer->display_propagators();
+                        propagator_computation_optimizer->display_blocks();
+                        propagator_computation_optimizer->display_propagators();
                         #endif
 
                         // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
@@ -360,7 +360,7 @@ int main()
                         delete factory;
                         delete cb;
                         delete molecules;
-                        delete propagator_analyzer;
+                        delete propagator_computation_optimizer;
                         delete solver;
                         delete am;
                     }

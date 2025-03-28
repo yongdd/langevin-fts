@@ -2,7 +2,7 @@
 #include <cmath>
 
 #include "Molecules.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "Polymer.h"
 
 int main()
@@ -32,11 +32,11 @@ int main()
 
         Molecules molecules("Continuous", 0.1, {{"A",1.0}, {"B",2.0}});
         molecules.add_polymer(1.0, blocks, {});
-        PropagatorAnalyzer propagator_analyzer(&molecules, false);
+        PropagatorComputationOptimizer propagator_computation_optimizer(&molecules, false);
 
         // Display all blocks and branches
-        propagator_analyzer.display_blocks();
-        propagator_analyzer.display_propagators();
+        propagator_computation_optimizer.display_blocks();
+        propagator_computation_optimizer.display_propagators();
 
         // Test get_deps_from_key
         std::string key;
@@ -84,7 +84,7 @@ int main()
             return -1;
 
         // Print sub propagator_codes
-        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators = propagator_analyzer.get_computation_propagators();
+        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators = propagator_computation_optimizer.get_computation_propagators();
         for(const auto& item : computation_propagators)
         {
             std::cout << item.first << ":\n\t";
@@ -96,67 +96,67 @@ int main()
         }
 
         // Check size of sub_deps dictionary
-        if(propagator_analyzer.get_n_computation_propagator_codes() != 29)
+        if(propagator_computation_optimizer.get_n_computation_propagator_codes() != 29)
             return -1;
 
         // Check max_n_segment
-        if(propagator_analyzer.get_computation_propagator("B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(B12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(B12)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("(B12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(A12B12)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(A12B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(A12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(A12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((A12B12)A9)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("((A12B12)A9)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((A12)B12(B12)A9(B12)B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("(((A12B12)A9)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
+        if(propagator_computation_optimizer.get_computation_propagator("(((A12)B12(B12)A9(B12)B12)A12B12B9)A").max_n_segment != 4)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
+        if(propagator_computation_optimizer.get_computation_propagator("((((A12B12)A9)A9(A12B12)A12)A9A12)A").max_n_segment != 4)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((((A12)B12(B12)A9(B12)B12)A12B12B9)A4(((A12B12)A9)A9(A12B12)A12)A9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((A12B12)A9)A9(A12B12)A12)A9A12)A4((A12)B12(B12)A9(B12)B12)A12B12)B").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A").max_n_segment != 9)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9((A12B12)A9)A9)A12A12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(B12)A9(B12)B12)B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)B12)A9)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((((A12B12)A9)A9(A12B12)A12)A9A12)A4B12B9)A12(A12)B12(B12)A9)B12)B").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9B12)A").max_n_segment != 12)
             return -1;
-        if(propagator_analyzer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
+        if(propagator_computation_optimizer.get_computation_propagator("(((((((A12)B12(B12)A9(B12)B12)A12B12B9)A4A12)A9(A12B12)A12)A9)A9A12)B").max_n_segment != 12)
             return -1;
         return 0;
     }

@@ -46,27 +46,27 @@ Molecules* MklFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+PropagatorComputation* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
     {
-        return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
+        return new CpuComputationContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
     }
     else if ( chain_model == "discrete" )
     {
-        return new CpuComputationDiscrete(cb, molecules, propagator_analyzer);
+        return new CpuComputationDiscrete(cb, molecules, propagator_computation_optimizer);
     }
     return NULL;
 }
-PropagatorComputation* MklFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+PropagatorComputation* MklFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {
         std::string chain_model = molecules->get_model_name();
         if ( chain_model == "continuous" )
         {
-            return new CpuComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+            return new CpuComputationContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
         }
         else if ( chain_model == "discrete" )
         {

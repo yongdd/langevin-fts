@@ -288,14 +288,14 @@ class SCFT:
                 else:
                     molecules.add_polymer(1.0, polymer["blocks_input"])
 
-        # (C++ class) Propagator Analyzer
+        # (C++ class) Propagator Computation Optimizer
         if "aggregate_propagator_computation" in params:
-            propagator_analyzer = factory.create_propagator_analyzer(molecules, params["aggregate_propagator_computation"])
+            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, params["aggregate_propagator_computation"])
         else:
-            propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
+            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_analyzer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer)
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
@@ -375,8 +375,8 @@ class SCFT:
                  molecules.get_polymer(p).get_alpha(),
                  molecules.get_polymer(p).get_n_segment_total()))
 
-        propagator_analyzer.display_blocks()
-        propagator_analyzer.display_propagators()
+        propagator_computation_optimizer.display_blocks()
+        propagator_computation_optimizer.display_propagators()
 
         #  Save Internal Variables
         self.params = params
@@ -389,7 +389,7 @@ class SCFT:
 
         self.cb = cb
         self.molecules = molecules
-        self.propagator_analyzer = propagator_analyzer
+        self.propagator_computation_optimizer = propagator_computation_optimizer
         self.solver = solver
 
     def compute_eigen_system(self, chi_n):
