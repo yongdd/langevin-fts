@@ -385,7 +385,7 @@ class SCFT:
         for i in range(S):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
@@ -436,7 +436,7 @@ class SCFT:
         # if self.phi_target is not None:
         #     mdic["phi_target"] = self.phi_target
 
-        # phi_total = np.zeros(self.cb.get_n_grid())
+        # phi_total = np.zeros(self.cb.get_total_grid())
         # for name in self.monomer_types:
         #     phi_total += self.phi[name]
         # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
@@ -467,10 +467,10 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
         
         for i in range(S):
-            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
+            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
 
         # # Keep the level of field value
         # for i in range(S):
@@ -615,13 +615,13 @@ class SCFT:
             #     h_deriv[count] *= self.dt_scaling[i]
 
             # # Calculate new fields using simple and Anderson mixing
-            # w_aux_1[self.non_zero_eigenvalues] = np.reshape(self.field_optimizer.calculate_new_fields(w_aux_1[self.non_zero_eigenvalues], -h_deriv, old_error_level, error_level), [len(self.non_zero_eigenvalues), self.cb.get_n_grid()])
+            # w_aux_1[self.non_zero_eigenvalues] = np.reshape(self.field_optimizer.calculate_new_fields(w_aux_1[self.non_zero_eigenvalues], -h_deriv, old_error_level, error_level), [len(self.non_zero_eigenvalues), self.cb.get_total_grid()])
 
             # # Convert auxiliary fields to monomer fields
             # w = self.mpt1.to_monomer_fields(w_aux_1)
 
             # Calculate difference between current total density and target density
-            phi_total = np.zeros(self.cb.get_n_grid())
+            phi_total = np.zeros(self.cb.get_total_grid())
             for i in range(S):
                 phi_total += phi[self.monomer_types[i]]
             # phi_diff = phi_total-self.phi_target
@@ -631,7 +631,7 @@ class SCFT:
             w_diff, _ = self.mpt1.compute_func_deriv(w_aux_1, phi, self.non_zero_eigenvalues)
 
             # Calculate self-consistency error
-            w_diff = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64) # array for output fields
+            w_diff = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64) # array for output fields
             for i in range(S):
                 for j in range(S):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
@@ -681,12 +681,12 @@ class SCFT:
             # Calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_n_grid()), self.cb.get_lx()))
-                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_n_grid()), self.scale_stress*dlx))
+                am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_total_grid()), self.cb.get_lx()))
+                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_total_grid()), self.scale_stress*dlx))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
-                w = np.reshape(am_new[0:S*self.cb.get_n_grid()], (S, self.cb.get_n_grid()))
+                w = np.reshape(am_new[0:S*self.cb.get_total_grid()], (S, self.cb.get_total_grid()))
 
                 # Set box size
                 # Restricting |dLx| to be less than 10 % of Lx
@@ -700,9 +700,9 @@ class SCFT:
                 self.solver.update_laplacian_operator()
             else:
                 w = self.field_optimizer.calculate_new_fields(
-                np.reshape(w,      S*self.cb.get_n_grid()),
-                np.reshape(w_diff, S*self.cb.get_n_grid()), old_error_level, error_level)
-                w = np.reshape(w, (S, self.cb.get_n_grid()))
+                np.reshape(w,      S*self.cb.get_total_grid()),
+                np.reshape(w_diff, S*self.cb.get_total_grid()), old_error_level, error_level)
+                w = np.reshape(w, (S, self.cb.get_total_grid()))
                         
             # Keep the level of field value
             for i in range(S):

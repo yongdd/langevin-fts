@@ -231,8 +231,8 @@ class LFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # flattening arrays
-        w_plus  = np.reshape(w_plus,  self.cb.get_n_grid())
-        w_minus = np.reshape(w_minus, self.cb.get_n_grid())
+        w_plus  = np.reshape(w_plus,  self.cb.get_total_grid())
+        w_minus = np.reshape(w_minus, self.cb.get_total_grid())
 
         # find saddle point 
         phi, _, _, = self.find_saddle_point(w_plus=w_plus, w_minus=w_minus)
@@ -241,7 +241,7 @@ class LFTS:
         sf_average = np.zeros_like(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx())),np.float64)
 
         # create an empty array for field update algorithm
-        normal_noise_prev = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+        normal_noise_prev = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
 
         # init timers
         total_saddle_iter = 0
@@ -255,7 +255,7 @@ class LFTS:
             print("Langevin step: ", langevin_step)
             
             # Update w_exchange using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], self.cb.get_n_grid())
+            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], self.cb.get_total_grid())
             lambda_minus = phi["A"]-phi["B"] + 2*w_minus/self.chi_n["A,B"]
 
             # print("w_minus:\n", w_minus)
@@ -276,7 +276,7 @@ class LFTS:
 
             # calculate structure function
             if langevin_step % self.recording["sf_computing_period"] == 0:
-                sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx()))/self.cb.get_n_grid())**2
+                sf_average += np.absolute(np.fft.rfftn(np.reshape(w_minus, self.cb.get_nx()))/self.cb.get_total_grid())**2
 
             # save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -312,7 +312,7 @@ class LFTS:
         phi = {}
 
         # compute hamiltonian part that is independent of w_plus
-        energy_total_minus = np.dot(w_minus,w_minus)/self.chi_n["A,B"]/self.cb.get_n_grid()
+        energy_total_minus = np.dot(w_minus,w_minus)/self.chi_n["A,B"]/self.cb.get_total_grid()
         energy_total_minus += self.chi_n["A,B"]/4
 
         # saddle point iteration begins here
@@ -336,7 +336,7 @@ class LFTS:
             # calculate incompressibility error
             old_error_level = error_level
             g_plus = phi["A"] + phi["B"] - 1.0
-            error_level = np.sqrt(np.dot(g_plus, g_plus)/self.cb.get_n_grid())
+            error_level = np.sqrt(np.dot(g_plus, g_plus)/self.cb.get_total_grid())
 
             # print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and

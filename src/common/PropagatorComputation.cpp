@@ -36,7 +36,7 @@ std::vector<double> PropagatorComputation::get_stress()
 { 
     const int DIM  = cb->get_dim();
     std::vector<double> stress(DIM);
-    const int M    = cb->get_n_grid();
+    const int M    = cb->get_total_grid();
 
     int n_polymer_types = molecules->get_n_polymer_types();
     for(int d=0; d<DIM; d++)
@@ -54,7 +54,7 @@ std::vector<double> PropagatorComputation::get_stress_gce(std::vector<double> fu
 { 
     const int DIM  = cb->get_dim();
     std::vector<double> stress(DIM);
-    const int M    = cb->get_n_grid();
+    const int M    = cb->get_total_grid();
 
     int n_polymer_types = molecules->get_n_polymer_types();
     for(int d=0; d<DIM; d++)

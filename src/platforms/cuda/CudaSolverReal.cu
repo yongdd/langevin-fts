@@ -19,7 +19,7 @@ CudaSolverReal::CudaSolverReal(
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");     
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         const int DIM = cb->get_dim();
         this->dim = DIM;
@@ -250,7 +250,7 @@ void CudaSolverReal::update_laplacian_operator()
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         const int DIM = cb->get_dim();
         std::vector<int> nx(DIM);
@@ -307,7 +307,7 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const double ds = molecules->get_ds();
 
         for(const auto& item: w_input)
@@ -378,7 +378,7 @@ void CudaSolverReal::advance_propagator_continuous(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int DIM = cb->get_dim();
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
@@ -414,7 +414,7 @@ void CudaSolverReal::advance_propagator_3d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const std::vector<int> nx = cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];
@@ -508,7 +508,7 @@ void CudaSolverReal::advance_propagator_2d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const std::vector<int> nx = cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];
@@ -578,7 +578,7 @@ void CudaSolverReal::advance_propagator_1d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const std::vector<int> nx = cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];

@@ -24,6 +24,6 @@ public:
         std::vector<BoundaryCondition> bc,
         double *fourier_basis_x, double *fourier_basis_y, double *fourier_basis_z,
         std::vector<int> nx, std::vector<double> dx);
-    static int get_n_complex_grid(std::vector<int> dx);
+    static int get_total_complex_grid(std::vector<int> dx);
 };
 #endif

@@ -9,7 +9,7 @@ MklFFT1D::MklFFT1D(int nx)
     try
     {
         MKL_LONG NX = nx;
-        this->n_grid = nx;
+        this->total_grid = nx;
         
         // Execution status
         MKL_LONG status{0};
@@ -60,6 +60,6 @@ void MklFFT1D::backward(std::complex<double> *cdata, double *rdata)
     if (status !=0)
         std::cout << "MKL status: " << status << std::endl;
         
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         rdata[i] /= fft_normal_factor;
 }

@@ -2,16 +2,16 @@
 #include <cmath>
 #include "Pseudo.h"
 
-int Pseudo::get_n_complex_grid(std::vector<int> nx)
+int Pseudo::get_total_complex_grid(std::vector<int> nx)
 {
-    int n_complex_grid;
+    int total_complex_grid;
     if (nx.size() == 3)
-        n_complex_grid = nx[0]*nx[1]*(nx[2]/2+1);
+        total_complex_grid = nx[0]*nx[1]*(nx[2]/2+1);
     else if (nx.size() == 2)
-        n_complex_grid = nx[0]*(nx[1]/2+1);
+        total_complex_grid = nx[0]*(nx[1]/2+1);
     else if (nx.size() == 1)
-        n_complex_grid = nx[0]/2+1;
-    return n_complex_grid;
+        total_complex_grid = nx[0]/2+1;
+    return total_complex_grid;
 }
 //----------------- get_boltz_bond -------------------
 void Pseudo::get_boltz_bond(

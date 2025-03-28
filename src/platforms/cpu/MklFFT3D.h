@@ -14,7 +14,7 @@ class MklFFT3D : public FFT
 {
 private:
     double fft_normal_factor; //normalization factor FFT
-    int n_grid; // the number of grids
+    int total_grid; // the number of grids
     // Pointers for forward and backward transform
     DFTI_DESCRIPTOR_HANDLE hand_forward = NULL;
     DFTI_DESCRIPTOR_HANDLE hand_backward = NULL;

@@ -9,7 +9,7 @@ MklFFT3D::MklFFT3D(std::array<int,3> nx)
     try
     {
         MKL_LONG NX[3] = {nx[0],nx[1],nx[2]};
-        this->n_grid = nx[0]*nx[1]*nx[2];
+        this->total_grid = nx[0]*nx[1]*nx[2];
         
         // Execution status
         MKL_LONG status{0};
@@ -74,6 +74,6 @@ void MklFFT3D::backward(std::complex<double> *cdata, double *rdata)
         throw_with_line_number("MKL backward, status: " + std::to_string(status));
     }
 
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         rdata[i] /= fft_normal_factor;
 }

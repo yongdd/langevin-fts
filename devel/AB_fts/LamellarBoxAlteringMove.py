@@ -33,7 +33,7 @@ def find_saddle_point(cb, molecules, pseudo, am, chi_n,
         # calculate incompressibility error
         old_error_level = error_level
         g_plus = phi_a + phi_b - 1.0
-        error_level = np.sqrt(np.dot(g_plus, g_plus)/cb.get_n_grid())
+        error_level = np.sqrt(np.dot(g_plus, g_plus)/cb.get_total_grid())
 
         # print iteration # and error levels
         if(verbose_level == 2 or
@@ -41,7 +41,7 @@ def find_saddle_point(cb, molecules, pseudo, am, chi_n,
          (error_level < saddle_tolerance or saddle_iter == saddle_max_iter)):
              
             # calculate the total energy
-            energy_total = np.dot(w_minus,w_minus)/chi_n/cb.get_n_grid()
+            energy_total = np.dot(w_minus,w_minus)/chi_n/cb.get_total_grid()
             energy_total += chi_n/4
             energy_total -= np.mean(w_plus)
             for p in range(molecules.get_n_polymer_types()):
@@ -171,7 +171,7 @@ if( np.abs(epsilon - 1.0) > 1e-7):
     raise Exception("Currently, only conformationally symmetric chains (epsilon==1) are supported.") 
 
 # standard deviation of normal noise
-langevin_sigma = np.sqrt(2*langevin_dt*cb.get_n_grid()/
+langevin_sigma = np.sqrt(2*langevin_dt*cb.get_total_grid()/
     (cb.get_volume()*np.sqrt(langevin_nbar)))
 
 ## random seed for MT19937
@@ -216,7 +216,7 @@ for langevin_step in range(1, langevin_max_step+1):
 
     print("langevin step: ", langevin_step)
     w_minus_copy = w_minus.copy()
-    normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_n_grid())
+    normal_noise = np.random.normal(0.0, langevin_sigma, cb.get_total_grid())
     lambda1 = phi_a-phi_b + 2*w_minus/chi_n
     w_minus += -lambda1*langevin_dt + normal_noise
     phi_a, phi_b, _, _ = find_saddle_point(cb, molecules, pseudo, am, chi_n,
@@ -240,7 +240,7 @@ for langevin_step in range(1, langevin_max_step+1):
         
     # caculate stress
     dlogQ_dl = -np.array(solver.compute_stress())
-    dfield_dchin = 1/4 - np.dot(w_minus,w_minus)/chi_n**2/cb.get_n_grid()
+    dfield_dchin = 1/4 - np.dot(w_minus,w_minus)/chi_n**2/cb.get_total_grid()
     dfield_dl = -dfield_dchin*chi_n/z_inf*dz_inf_dl
     dH_dl = -dlogQ_dl + dfield_dl
     #print(-dlogQ_dl, dfield_dl)

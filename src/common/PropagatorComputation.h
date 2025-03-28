@@ -37,7 +37,7 @@ public:
     PropagatorComputation(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
     virtual ~PropagatorComputation();
 
-    int get_n_grid() {return cb->get_n_grid();};
+    int get_total_grid() {return cb->get_total_grid();};
     int get_n_blocks(int polymer) { Polymer& pc = molecules->get_polymer(polymer); return pc.get_n_blocks();};
     virtual void update_laplacian_operator() = 0;
 

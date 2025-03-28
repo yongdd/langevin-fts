@@ -26,7 +26,7 @@ protected:
     std::vector<int> nx;  // the number of grid in each direction
     std::vector<double> lx;  // length of the block copolymer in each direction (in units of aN^1/2)
     std::vector<double> dx;  // grid interval in each direction
-    int n_grid;  // the number of grid
+    int total_grid;  // the number of grid
     double *mask; // mask, impenetrable region
     double *dv; // dV, simple integral weight,
     double volume; // volume of the system.
@@ -53,7 +53,7 @@ public:
     std::vector<double> get_dx();
     double get_dx(int i);
     double get_dv(int i);
-    int get_n_grid();
+    int get_total_grid();
     double get_volume();
     double get_accessible_volume();
     const double* get_mask() ;

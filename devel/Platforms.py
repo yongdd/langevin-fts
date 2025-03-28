@@ -82,10 +82,10 @@ for dim in [1,2,3]:
             #-------------- allocate array ------------
             # free end initial condition. q1 is q and q2 is qdagger.
             # q1 starts from A end and q2 starts from B end.
-            w       = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
-            w_out   = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
-            q1_init = np.ones (    cb.get_n_grid(),  dtype=np.float64)
-            q2_init = np.ones (    cb.get_n_grid(),  dtype=np.float64)
+            w       = np.zeros([2, cb.get_total_grid()], dtype=np.float64)
+            w_out   = np.zeros([2, cb.get_total_grid()], dtype=np.float64)
+            q1_init = np.ones (    cb.get_total_grid(),  dtype=np.float64)
+            q2_init = np.ones (    cb.get_total_grid(),  dtype=np.float64)
 
             #print("w_minus and w_plus are initialized to a given test fields.")
             for i in range(0,cb.get_nx(0)):
@@ -140,9 +140,9 @@ for dim in [1,2,3]:
                     break
                 # calculte new fields using simple and Anderson mixing
                 am.calculate_new_fields(
-                    np.reshape(w,      2*cb.get_n_grid()),
-                    np.reshape(w_out,  2*cb.get_n_grid()),
-                    np.reshape(w_diff, 2*cb.get_n_grid()),
+                    np.reshape(w,      2*cb.get_total_grid()),
+                    np.reshape(w_out,  2*cb.get_total_grid()),
+                    np.reshape(w_diff, 2*cb.get_total_grid()),
                     old_error_level, error_level)
             
             dqdl = np.linalg.norm(np.array(solver.compute_stress()[-cb.get_dim():]))/Q

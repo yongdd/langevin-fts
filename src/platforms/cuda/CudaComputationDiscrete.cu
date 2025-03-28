@@ -18,7 +18,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         std::cout << "--------- Discrete Chain Solver, GPU Version ---------" << std::endl;
         #endif
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // The number of parallel streams for propagator computation
@@ -359,7 +359,7 @@ void CudaComputationDiscrete::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const double ds = molecules->get_ds();
 
         std::string device = "cpu";
@@ -836,7 +836,7 @@ void CudaComputationDiscrete::compute_concentrations()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         // Calculate segment concentrations
         for(const auto& d_block: d_phi_block)
@@ -910,7 +910,7 @@ void CudaComputationDiscrete::calculate_phi_one_block(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         // Compute segment concentration
         multi_real<<<N_BLOCKS, N_THREADS>>>(d_phi,d_q_1[N_LEFT], d_q_2[1], 1.0, M);
         for(int n=2; n<=N_RIGHT; n++)
@@ -943,7 +943,7 @@ void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, 
 
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(double)*M));
@@ -980,7 +980,7 @@ void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1015,7 +1015,7 @@ void CudaComputationDiscrete::get_total_concentration_gce(double fugacity, int p
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1054,7 +1054,7 @@ void CudaComputationDiscrete::get_block_concentration(int p, double *phi)
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1104,7 +1104,7 @@ void CudaComputationDiscrete::get_solvent_concentration(int s, double *phi)
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int S = molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
@@ -1130,7 +1130,7 @@ void CudaComputationDiscrete::compute_stress()
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         const int DIM = cb->get_dim();
-        const int M   = cb->get_n_grid();
+        const int M   = cb->get_total_grid();
 
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[n_streams];
 
@@ -1303,7 +1303,7 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
     // This is made for debugging and testing.
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
@@ -1323,7 +1323,7 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
 }
 bool CudaComputationDiscrete::check_total_partition()
 {
-    const int M = cb->get_n_grid();
+    const int M = cb->get_total_grid();
     int n_polymer_types = molecules->get_n_polymer_types();
     std::vector<std::vector<double>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
