@@ -35,8 +35,8 @@ int main()
         };
 
         //-------------- initialize ------------
-        int n_grid[1] = {II};
-        cufftPlanMany(&plan_for, 1, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, 1);
+        int total_grid[1] = {II};
+        cufftPlanMany(&plan_for, 1, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z, 1);
 
         d_data_init = new double*[2];
         gpu_error_check(cudaMalloc((void**)&d_data_init[0], sizeof(double)*M));

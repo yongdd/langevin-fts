@@ -21,7 +21,7 @@ CpuSolverReal::CpuSolverReal(ComputationBox *cb, Molecules *molecules)
         //         throw_with_line_number("Currently, we do not support periodic boundary conditions in real-space method");
         // }
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
         for(const auto& item: molecules->get_bond_lengths())
@@ -111,7 +111,7 @@ void CpuSolverReal::update_laplacian_operator()
 }
 void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
 {
-    const int M = cb->get_n_grid();
+    const int M = cb->get_total_grid();
     const double ds = molecules->get_ds();
 
     for(const auto& item: w_input)
@@ -137,7 +137,7 @@ void CpuSolverReal::advance_propagator_continuous(
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int DIM = cb->get_dim();
 
         double *_exp_dw = exp_dw[monomer_type];
@@ -177,7 +177,7 @@ void CpuSolverReal::advance_propagator_3d(
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const std::vector<int> nx = cb->get_nx();
         double q_star[M];
         double q_dstar[M];
@@ -327,7 +327,7 @@ void CpuSolverReal::advance_propagator_2d(
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const std::vector<int> nx = cb->get_nx();
         double q_star[M];
         double temp1[nx[0]];

@@ -19,7 +19,7 @@ CpuComputationContinuous::CpuComputationContinuous(
         std::cout << "--------- Continuous Chain Solver, CPU Version ---------" << std::endl;
         #endif
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         if(method == "pseudospectral")
             this->propagator_solver = new CpuSolverPseudo(cb, molecules);
         else if(method == "realspace")
@@ -151,7 +151,7 @@ void CpuComputationContinuous::compute_propagators(
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         for(const auto& item: propagator_computation_optimizer->get_computation_propagators())
         {
@@ -372,7 +372,7 @@ void CpuComputationContinuous::compute_concentrations()
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         // Calculate segment concentrations
         #pragma omp parallel for num_threads(n_streams)
@@ -446,7 +446,7 @@ void CpuComputationContinuous::calculate_phi_one_block(
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
         // Compute segment concentration
@@ -478,7 +478,7 @@ void CpuComputationContinuous::get_total_concentration(std::string monomer_type,
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         // Initialize array
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
@@ -515,7 +515,7 @@ void CpuComputationContinuous::get_total_concentration(int p, std::string monome
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -547,7 +547,7 @@ void CpuComputationContinuous::get_total_concentration_gce(double fugacity, int 
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -581,7 +581,7 @@ void CpuComputationContinuous::get_block_concentration(int p, double *phi)
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -625,7 +625,7 @@ void CpuComputationContinuous::get_solvent_concentration(int s, double *phi)
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int S = molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
@@ -650,7 +650,7 @@ void CpuComputationContinuous::compute_stress()
     try
     {
         const int DIM  = cb->get_dim();
-        const int M    = cb->get_n_grid();
+        const int M    = cb->get_total_grid();
 
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
 
@@ -732,7 +732,7 @@ void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, 
     // This is made for debugging and testing.
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
@@ -754,7 +754,7 @@ void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, 
 }
 bool CpuComputationContinuous::check_total_partition()
 {
-    // const int M = cb->get_n_grid();
+    // const int M = cb->get_total_grid();
     int n_polymer_types = molecules->get_n_polymer_types();
     std::vector<std::vector<double>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)

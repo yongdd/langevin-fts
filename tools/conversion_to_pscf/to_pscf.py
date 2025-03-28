@@ -140,11 +140,11 @@ mesh
     "   ".join(map(str, nx)),
     )
 S = len(params["segment_lengths"])
-n_grid = np.prod(nx)
-w = np.zeros([S, n_grid], dtype=np.float64)
+total_grid = np.prod(nx)
+w = np.zeros([S, total_grid], dtype=np.float64)
 
 for count, monomer_type in enumerate(params["segment_lengths"]):
-    w[count,:] = np.reshape(np.reshape(eval(f"w_{monomer_type}"), nx).transpose(2,1,0), n_grid)
+    w[count,:] = np.reshape(np.reshape(eval(f"w_{monomer_type}"), nx).transpose(2,1,0), total_grid)
 
 for i in range(w.shape[1]):
     for n in monomer_to_idx.values():

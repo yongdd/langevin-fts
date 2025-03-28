@@ -16,20 +16,20 @@ CudaComputationBox::CudaComputationBox(
 }
 void CudaComputationBox::initialize()
 {
-    gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*n_grid));
-    gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*n_grid, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*total_grid));
+    gpu_error_check(cudaMemcpy(d_dv, dv,      sizeof(double)*total_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
-    gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*n_grid));
+    gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*total_grid));
 
-    gpu_error_check(cudaMalloc((void**)&d_g, sizeof(double)*n_grid));
-    gpu_error_check(cudaMalloc((void**)&d_h, sizeof(double)*n_grid));
-    gpu_error_check(cudaMalloc((void**)&d_w, sizeof(double)*n_grid));
+    gpu_error_check(cudaMalloc((void**)&d_g, sizeof(double)*total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_h, sizeof(double)*total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_w, sizeof(double)*total_grid));
 
     // Allocate memory for cub reduction sum
-    gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*n_grid));
+    gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*total_grid));
     gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 }
 //----------------- Destructor -----------------------------
@@ -50,7 +50,7 @@ CudaComputationBox::~CudaComputationBox()
 void CudaComputationBox::set_lx(std::vector<double> new_lx)
 {
     ComputationBox::set_lx(new_lx);
-    gpu_error_check(cudaMemcpy(d_dv, dv,  sizeof(double)*n_grid,cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, dv,  sizeof(double)*total_grid,cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------
 double CudaComputationBox::integral_device(const double *d_g)
@@ -59,8 +59,8 @@ double CudaComputationBox::integral_device(const double *d_g)
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, n_grid);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, total_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -71,9 +71,9 @@ double CudaComputationBox::inner_product_device(const double* d_g, const double*
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, n_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, n_grid);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -84,10 +84,10 @@ double CudaComputationBox::inner_product_inverse_weight_device(const double* d_g
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, n_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, n_grid);
-    divide_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, n_grid);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    divide_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, total_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -98,9 +98,9 @@ double CudaComputationBox::multi_inner_product_device(int n_comp, const double* 
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    mutiple_multi_real<<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, n_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, n_grid);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    mutiple_multi_real<<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, total_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -111,8 +111,8 @@ void CudaComputationBox::zero_mean_device(double* d_g)
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_g, 1.0, n_grid);
-    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_grid);
+    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_g, 1.0, total_grid);
+    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
-    linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, -sum/volume, n_grid);
+    linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, -sum/volume, total_grid);
 }

@@ -18,7 +18,7 @@ CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
         std::cout << "--------- Discrete Chain Solver, GPU Memoery Saving Version ---------" << std::endl;
         #endif
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // The number of parallel streams for propagator computation
@@ -369,7 +369,7 @@ void CudaComputationReduceMemoryDiscrete::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const double ds = molecules->get_ds();
 
         std::string device = "cpu";
@@ -866,7 +866,7 @@ void CudaComputationReduceMemoryDiscrete::compute_concentrations()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         // Calculate segment concentrations
         for(const auto& block: phi_block)
@@ -938,7 +938,7 @@ void CudaComputationReduceMemoryDiscrete::calculate_phi_one_block(
         gpu_error_check(cudaSetDevice(0));
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
 
         int prev, next;
         prev = 0;
@@ -993,7 +993,7 @@ void CudaComputationReduceMemoryDiscrete::get_total_concentration(std::string mo
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         // Initialize array
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
@@ -1029,7 +1029,7 @@ void CudaComputationReduceMemoryDiscrete::get_total_concentration(int p, std::st
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1061,7 +1061,7 @@ void CudaComputationReduceMemoryDiscrete::get_total_concentration_gce(double fug
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1095,7 +1095,7 @@ void CudaComputationReduceMemoryDiscrete::get_block_concentration(int p, double 
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int P = molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
@@ -1139,7 +1139,7 @@ void CudaComputationReduceMemoryDiscrete::get_solvent_concentration(int s, doubl
 {
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const int S = molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
@@ -1167,7 +1167,7 @@ void CudaComputationReduceMemoryDiscrete::compute_stress()
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         const int DIM = cb->get_dim();
-        const int M   = cb->get_n_grid();
+        const int M   = cb->get_total_grid();
 
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[n_streams];
 
@@ -1340,7 +1340,7 @@ void CudaComputationReduceMemoryDiscrete::get_chain_propagator(double *q_out, in
     // This is made for debugging and testing.
     try
     {
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         Polymer& pc = molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
@@ -1362,7 +1362,7 @@ void CudaComputationReduceMemoryDiscrete::get_chain_propagator(double *q_out, in
 }
 bool CudaComputationReduceMemoryDiscrete::check_total_partition()
 {
-    const int M = cb->get_n_grid();
+    const int M = cb->get_total_grid();
     int n_polymer_types = molecules->get_n_polymer_types();
     std::vector<std::vector<double>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)

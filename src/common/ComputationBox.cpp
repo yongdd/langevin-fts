@@ -42,17 +42,17 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             dx.push_back(lx[d]/nx[d]);
 
         // The number of grids
-        n_grid = 1;
+        total_grid = 1;
         for(int d=0; d<DIM; d++)
-            n_grid *= nx[d];
+            total_grid *= nx[d];
 
         // Mask
         // Penetrable region == 1.0 
         // Impenetrable region == 0.0
         if (mask != nullptr)
         {
-            this->mask = new double[n_grid];
-            for(int i=0; i<n_grid; i++)
+            this->mask = new double[total_grid];
+            for(int i=0; i<total_grid; i++)
             {
                 if(std::abs(mask[i]) < 1e-7)
                     this->mask[i] = 0.0;
@@ -66,15 +66,15 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
             this->mask = nullptr;
 
         // Weight factor for integral
-        dv = new double[n_grid];
-        for(int i=0; i<n_grid; i++)
+        dv = new double[total_grid];
+        for(int i=0; i<total_grid; i++)
         {
             dv[i] = 1.0;
             for(int d=0; d<DIM; d++)
                 dv[i] *= dx[d];
         }
         if (this->mask != nullptr)
-            for(int i=0; i<n_grid; i++)
+            for(int i=0; i<total_grid; i++)
                 dv[i] *= this->mask[i];
 
         // Volume of simulation box
@@ -84,7 +84,7 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
 
         // Accessible volume
         accessible_volume = 0.0;
-        for(int i=0; i<n_grid; i++)
+        for(int i=0; i<total_grid; i++)
             accessible_volume += dv[i];
 
         // Set boundary conditions
@@ -201,9 +201,9 @@ double ComputationBox::get_dv(int i)
 {
     return dv[i];
 }
-int ComputationBox::get_n_grid()
+int ComputationBox::get_total_grid()
 {
-    return n_grid;
+    return total_grid;
 }
 double ComputationBox::get_volume()
 {
@@ -245,19 +245,19 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
         dx[d] = lx[d]/nx[d];
 
     // Weight factor for integral
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
     {
         dv[i] = 1.0;
         for(int d=0; d<dim; d++)
             dv[i] *= dx[d];
     }
     if (this->mask != nullptr)
-        for(int i=0; i<n_grid; i++)
+        for(int i=0; i<total_grid; i++)
             dv[i] *= this->mask[i]; 
 
     // Volume of simulation box
     volume = 0.0;
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         volume += dv[i];
 }
 //-----------------------------------------------------------
@@ -265,7 +265,7 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
 double ComputationBox::integral(const double *g)
 {
     double sum{0.0};
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i];
     return sum;
 }
@@ -273,7 +273,7 @@ double ComputationBox::integral(const double *g)
 double ComputationBox::inner_product(const double *g, const double *h)
 {
     double sum{0.0};
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i]*h[i];
     return sum;
 }
@@ -281,7 +281,7 @@ double ComputationBox::inner_product(const double *g, const double *h)
 double ComputationBox::inner_product_inverse_weight(const double *g, const double *h, const double *w)
 {
     double sum{0.0};
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i]*h[i]/w[i];
     return sum;
 }
@@ -291,8 +291,8 @@ double ComputationBox::multi_inner_product(int n_comp, const double *g, const do
     double sum{0.0};
     for(int n=0; n < n_comp; n++)
     {
-        for(int i=0; i<n_grid; i++)
-            sum += dv[i]*g[i+n*n_grid]*h[i+n*n_grid];
+        for(int i=0; i<total_grid; i++)
+            sum += dv[i]*g[i+n*total_grid]*h[i+n*total_grid];
     }
     return sum;
 }
@@ -301,8 +301,8 @@ double ComputationBox::multi_inner_product(int n_comp, const double *g, const do
 void ComputationBox::zero_mean(double *g)
 {
     double sum{0.0};
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i];
-    for(int i=0; i<n_grid; i++)
+    for(int i=0; i<total_grid; i++)
         g[i] -= sum/volume;
 }

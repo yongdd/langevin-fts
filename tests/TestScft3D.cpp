@@ -87,7 +87,7 @@ int main()
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
-            const int M = cb->get_n_grid();
+            const int M = cb->get_total_grid();
 
             // -------------- Print simulation parameters ------------
             std::cout << std::setprecision(default_precision);

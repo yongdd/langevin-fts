@@ -16,8 +16,8 @@ CudaSolverPseudo::CudaSolverPseudo(
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         
-        const int M = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // Copy streams
@@ -52,32 +52,32 @@ CudaSolverPseudo::CudaSolverPseudo(
 
         // Create FFT plan
         const int NRANK{cb->get_dim()};
-        int n_grid[NRANK];
+        int total_grid[NRANK];
 
         if(cb->get_dim() == 3)
         {
-            n_grid[0] = cb->get_nx(0);
-            n_grid[1] = cb->get_nx(1);
-            n_grid[2] = cb->get_nx(2);
+            total_grid[0] = cb->get_nx(0);
+            total_grid[1] = cb->get_nx(1);
+            total_grid[2] = cb->get_nx(2);
         }
         else if(cb->get_dim() == 2)
         {
-            n_grid[0] = cb->get_nx(0);
-            n_grid[1] = cb->get_nx(1);
+            total_grid[0] = cb->get_nx(0);
+            total_grid[1] = cb->get_nx(1);
         }
         else if(cb->get_dim() == 1)
         {
-            n_grid[0] = cb->get_nx(0);
+            total_grid[0] = cb->get_nx(0);
         }
 
         for(int i=0; i<n_streams; i++)
         {  
             gpu_error_check(cudaSetDevice(i % N_GPUS));
                 
-            cufftPlanMany(&plan_for_one[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
-            cufftPlanMany(&plan_for_two[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
-            cufftPlanMany(&plan_bak_one[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
-            cufftPlanMany(&plan_bak_two[i], NRANK, n_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,2);
+            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
+            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
+            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
+            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,2);
             cufftSetStream(plan_for_one[i], streams[i][0]);
             cufftSetStream(plan_for_two[i], streams[i][0]);
             cufftSetStream(plan_bak_one[i], streams[i][0]);
@@ -212,7 +212,7 @@ void CudaSolverPseudo::update_laplacian_operator()
 {
     try{
         // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
@@ -258,7 +258,7 @@ void CudaSolverPseudo::update_dw(std::string device, std::map<std::string, const
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_n_grid();
+        const int M = cb->get_total_grid();
         const double ds = molecules->get_ds();
 
         for(const auto& item: w_input)
@@ -352,8 +352,8 @@ void CudaSolverPseudo::advance_propagator_continuous(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
         double *_d_exp_dw_half = d_exp_dw_half[GPU][monomer_type];
@@ -421,8 +421,8 @@ void CudaSolverPseudo::advance_propagator_discrete(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
         double *_d_boltz_bond = d_boltz_bond[GPU][monomer_type];
@@ -457,8 +457,8 @@ void CudaSolverPseudo::advance_propagator_discrete_half_bond_step(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
 
         double *_d_boltz_bond_half = d_boltz_bond_half[GPU][monomer_type];
 
@@ -484,8 +484,8 @@ void CudaSolverPseudo::compute_single_segment_stress_continuous(
         const int N_GPUS    = CudaCommon::get_instance().get_n_gpus();
 
         const int DIM = cb->get_dim();
-        const int M   = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M   = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
 
         auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
@@ -544,8 +544,8 @@ void CudaSolverPseudo::compute_single_segment_stress_discrete(
         const int N_GPUS    = CudaCommon::get_instance().get_n_gpus();
 
         const int DIM = cb->get_dim();
-        const int M   = cb->get_n_grid();
-        const int M_COMPLEX = Pseudo::get_n_complex_grid(cb->get_nx());
+        const int M   = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
 
         auto bond_lengths = molecules->get_bond_lengths();
         std::vector<double> stress(DIM);

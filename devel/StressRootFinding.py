@@ -60,9 +60,9 @@ def find_saddle_point(lx):
             break
         # calculte new fields using simple and Anderson mixing
         am.calculate_new_fields(
-            np.reshape(w,      2*cb.get_n_grid()),
-            np.reshape(w_out,  2*cb.get_n_grid()),
-            np.reshape(w_diff, 2*cb.get_n_grid()),
+            np.reshape(w,      2*cb.get_total_grid()),
+            np.reshape(w_out,  2*cb.get_total_grid()),
+            np.reshape(w_diff, 2*cb.get_total_grid()),
             old_error_level, error_level)
     
     if use_stress:
@@ -134,9 +134,9 @@ print("Volume: %f" % (cb.get_volume()) )
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
 w       = np.zeros([2]+list(cb.get_nx()), dtype=np.float64)
-w_out   = np.zeros([2, cb.get_n_grid()],  dtype=np.float64)
-q1_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
-q2_init = np.ones (    cb.get_n_grid(),   dtype=np.float64)
+w_out   = np.zeros([2, cb.get_total_grid()],  dtype=np.float64)
+q1_init = np.ones (    cb.get_total_grid(),   dtype=np.float64)
+q2_init = np.ones (    cb.get_total_grid(),   dtype=np.float64)
 
 print("w_A and w_B are initialized to gyroid phase.")
 for i in range(0,cb.get_nx(0)):
@@ -152,7 +152,7 @@ for i in range(0,cb.get_nx(0)):
             idx = i*cb.get_nx(1)*cb.get_nx(2) + j*cb.get_nx(2) + k
             w[0,i,j,k] = -0.364*c1+0.133*c2
             w[1,i,j,k] = 0.302*c1-0.106*c2
-w = np.reshape(w, [2, cb.get_n_grid()])
+w = np.reshape(w, [2, cb.get_total_grid()])
 
 # keep the level of field value
 cb.zero_mean(w[0])

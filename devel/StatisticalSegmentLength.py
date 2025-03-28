@@ -51,9 +51,9 @@ print("Volume: %f" % (cb.get_volume()) )
 #-------------- allocate array ------------
 # free end initial condition. q1 is q and q2 is qdagger.
 # q1 starts from A end and q2 starts from B end.
-w       = np.zeros([2, cb.get_n_grid()], dtype=np.float64)
-q1_init = np.zeros (   cb.get_n_grid(),  dtype=np.float64)
-q2_init = np.zeros (   cb.get_n_grid(),  dtype=np.float64)
+w       = np.zeros([2, cb.get_total_grid()], dtype=np.float64)
+q1_init = np.zeros (   cb.get_total_grid(),  dtype=np.float64)
+q2_init = np.zeros (   cb.get_total_grid(),  dtype=np.float64)
 q1_init[0] = np.prod(cb.get_nx())/np.prod(cb.get_lx())
 
 space_y, space_x, space_z = np.meshgrid(

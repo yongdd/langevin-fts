@@ -516,7 +516,7 @@ class LFTS:
                 f"Currently, LR methods are not working for imaginary-valued auxiliary fields."
 
             lr = LR(self.cb.get_nx(), self.cb.get_lx())
-            w_aux_perturbed = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+            w_aux_perturbed = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
             w_aux_perturbed[S-1,0] = 1e-3 # add a small perturbation at the pressure field
             w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1], self.cb.get_nx()))/np.prod(self.cb.get_nx())
 
@@ -609,7 +609,7 @@ class LFTS:
         for i in range(S):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_n_grid(), dtype=np.float64)
+            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
@@ -711,9 +711,9 @@ class LFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
         for i in range(S):
-            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_n_grid())
+            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
             
         # Convert monomer chemical potential fields into auxiliary fields
         w_aux = self.mpt.to_aux_fields(w)
@@ -737,7 +737,7 @@ class LFTS:
 
         # Create an empty array for field update algorithm
         if normal_noise_prev is None :
-            normal_noise_prev = np.zeros([R, self.cb.get_n_grid()], dtype=np.float64)
+            normal_noise_prev = np.zeros([R, self.cb.get_total_grid()], dtype=np.float64)
         else:
             normal_noise_prev = normal_noise_prev
 
@@ -765,7 +765,7 @@ class LFTS:
             w_lambda, _ = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
 
             # Update w_aux using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_n_grid()])
+            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_total_grid()])
             for count, i in enumerate(self.mpt.aux_fields_real_idx):
                 scaling = self.dt_scaling[i]
                 w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
@@ -825,10 +825,10 @@ class LFTS:
                 phi_fourier = {}
                 for i in range(S):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_n_grid()
+                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(S-1) :
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_n_grid()
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
                 # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -930,7 +930,7 @@ class LFTS:
                 h_deriv[count] *= self.dt_scaling[i]
 
             # Calculate new fields using compressor (AM, LR, LRAM)
-            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
+            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_total_grid()])
 
         # Set mean of pressure field to zero
         w_aux[S-1] -= np.mean(w_aux[S-1])

@@ -31,7 +31,7 @@ PYBIND11_MODULE(langevinfts, m)
                 int size = obj.get_size();
                 py::buffer_info buf = data.request();
                 if (buf.size != size) {
-                    throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(size) + ") must match");
+                    throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(size) + ") must match");
                 }
                 obj.set_data((double*) buf.ptr, size);
             }
@@ -56,28 +56,28 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_dx", overload_cast_<>()(&ComputationBox::get_dx))
         .def("get_dx", overload_cast_<int>()(&ComputationBox::get_dx))
         .def("get_dv", &ComputationBox::get_dv)
-        .def("get_n_grid", &ComputationBox::get_n_grid)
+        .def("get_total_grid", &ComputationBox::get_total_grid)
         .def("get_volume", &ComputationBox::get_volume)
         .def("set_lx", &ComputationBox::set_lx)
         .def("integral", [](ComputationBox& obj, py::array_t<double> g)
         {
-            const int M = obj.get_n_grid();
+            const int M = obj.get_total_grid();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
             }
             return obj.integral((double*) buf_g.ptr);
         })
         .def("inner_product", [](ComputationBox& obj, py::array_t<double> g, py::array_t<double> h)
         {
-            const int M = obj.get_n_grid();
+            const int M = obj.get_total_grid();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
             if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
             }
             if (buf_h.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
             }
             return obj.inner_product((double*) buf_g.ptr, (double*) buf_h.ptr);
         });
@@ -86,16 +86,16 @@ PYBIND11_MODULE(langevinfts, m)
         // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
         //     py::buffer_info buf1 = g.request();
         //     py::buffer_info buf2 = h.request();
-        //     if (buf1.size != n_comp*n_grid) 
-        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x n_grid' (" + std::to_string(n_comp*n_grid) + ") must match");
-        //     if (buf2.size != n_comp*n_grid)
-        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x n_grid' (" + std::to_string(n_comp*n_grid) + ") must match");
+        //     if (buf1.size != n_comp*total_grid) 
+        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
+        //     if (buf2.size != n_comp*total_grid)
+        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
         //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
         // };
         // Void zero_mean(py::array_t<double> g) {
         //     py::buffer_info buf = g.request();
-        //     if (buf.size != n_grid) {
-        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'n_grid' (" + std::to_string(n_grid) + ") must match");
+        //     if (buf.size != total_grid) {
+        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match");
         //     }
         //     zero_mean((double*) buf.ptr);
         // };
@@ -169,7 +169,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("compute_propagators", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 std::map<std::string, const double*> map_buf_w_input;
                 std::map<std::string, const double*> map_buf_q_init;
 
@@ -178,7 +178,7 @@ PYBIND11_MODULE(langevinfts, m)
                 {
                     py::buffer_info buf_w_input = it->second.request();
                     if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
                     {
@@ -194,7 +194,7 @@ PYBIND11_MODULE(langevinfts, m)
                     {
                         py::buffer_info buf_q_init = it->second.request();
                         if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                         }
                         else
                         {
@@ -214,7 +214,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("compute_statistics", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 std::map<std::string, const double*> map_buf_w_input;
                 std::map<std::string, const double*> map_buf_q_init;
 
@@ -223,7 +223,7 @@ PYBIND11_MODULE(langevinfts, m)
                 {
                     py::buffer_info buf_w_input = it->second.request();
                     if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                     }
                     else
                     {
@@ -239,7 +239,7 @@ PYBIND11_MODULE(langevinfts, m)
                     {
                         py::buffer_info buf_q_init = it->second.request();
                         if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                         }
                         else
                         {
@@ -284,7 +284,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_total_concentration", [](PropagatorComputation& obj, std::string monomer_type)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 py::array_t<double> phi = py::array_t<double>(M);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(monomer_type, (double*) buf_phi.ptr);
@@ -298,7 +298,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_total_concentration", [](PropagatorComputation& obj, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 py::array_t<double> phi = py::array_t<double>(M);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(polymer, monomer_type, (double*) buf_phi.ptr);
@@ -312,7 +312,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_total_concentration_gce", [](PropagatorComputation& obj, double fugacity, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 py::array_t<double> phi = py::array_t<double>(M);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration_gce(fugacity, polymer, monomer_type, (double*) buf_phi.ptr);
@@ -326,7 +326,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_block_concentration", [](PropagatorComputation& obj, int polymer)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 const int N_B = obj.get_n_blocks(polymer);
 
                 py::array_t<double> phi = py::array_t<double>({N_B,M});
@@ -344,7 +344,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_solvent_concentration", [](PropagatorComputation& obj, int s)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
 
                 py::array_t<double> phi = py::array_t<double>({M});
                 py::buffer_info buf_phi = phi.request();
@@ -359,7 +359,7 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_chain_propagator", [](PropagatorComputation& obj, int polymer, int v, int u, int n)
         {
             try{
-                const int M = obj.get_n_grid();
+                const int M = obj.get_total_grid();
                 py::array_t<double> q1 = py::array_t<double>(M);
                 py::buffer_info buf_q1 = q1.request();
                 obj.get_chain_propagator((double*) buf_q1.ptr, polymer, v, u, n);
@@ -437,7 +437,7 @@ PYBIND11_MODULE(langevinfts, m)
                     py::array_t<const double> mask_cast = mask.cast<py::array_t<const double>>();
                     buf_mask = mask_cast.request();
                     if (buf_mask.size != M) {
-                        throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'n_grid' (" + std::to_string(M) + ") must match");
+                        throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                     }
                 }
                 return obj.create_computation_box(nx, lx, bc_vec, (const double *) buf_mask.ptr);
