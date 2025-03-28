@@ -1,12 +1,13 @@
 import os
-import sys
 import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-import scipy.ndimage
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-import deep_langevin_fts
+import lfts
+
+# OpenMP environment variables
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
+os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 f = 0.4        # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
