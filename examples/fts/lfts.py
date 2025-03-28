@@ -23,22 +23,6 @@ class LR:
         self.nx = nx
         self.lx = lx
 
-        # # arrays for exponential time differencing
-        # space_kx, space_ky, space_kz = np.meshgrid(
-        #     2*np.pi/lx[0]*np.concatenate([np.arange((nx[0]+1)//2), nx[0]//2-np.arange(nx[0]//2)]),
-        #     2*np.pi/lx[1]*np.concatenate([np.arange((nx[1]+1)//2), nx[1]//2-np.arange(nx[1]//2)]),
-        #     2*np.pi/lx[2]*np.arange(nx[2]//2+1), indexing='ij')
-        # mag_k2 = (space_kx**2 + space_ky**2 + space_kz**2)/6
-        # mag_k2[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
-
-        # self.j_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
-        # self.j_k[0,0,0] = 1.0
-        
-        # self.j_k_array_shape = [I,I] + self.nx
-        # self.j_k_array_shape[-1] = self.j_k_array_shape[-1]//2 + 1
-        
-        # self.j_k = np.zeros(self.j_k_array_shape)
-
         self.j_k_array_shape = nx.copy()
         self.j_k_array_shape[-1] = self.j_k_array_shape[-1]//2 + 1
         self.j_k = np.zeros(self.j_k_array_shape)
@@ -52,20 +36,6 @@ class LR:
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
         w_diff_k = negative_h_deriv_k/self.j_k
         w_diff[0] = np.reshape(np.fft.irfftn(w_diff_k, nx), np.prod(nx))*np.prod(nx)
-
-        # w_diff_k = np.zeros(self.j_k_array_shape[1:], dtype=np.complex128)
-        # negative_h_deriv_k = np.zeros(self.j_k_array_shape[1:], dtype=np.complex128)
-        # for i in range(self.I):
-        #     negative_h_deriv_k[i] = np.fft.rfftn(np.reshape(negative_h_deriv[i], nx))/np.prod(nx)
-        # if self.I == 1:
-        #     w_diff_k[0] = negative_h_deriv_k[0]/self.j_k[0,0]
-        # if self.I == 2:
-        #     det = self.j_k[0,0]*self.j_k[1,1] - self.j_k[0,1]*self.j_k[1,0]
-        #     w_diff_k[0] =  self.j_k[1,1]*negative_h_deriv_k[0] - self.j_k[0,1]*negative_h_deriv_k[1]
-        #     w_diff_k[1] = -self.j_k[1,0]*negative_h_deriv_k[0] + self.j_k[0,0]*negative_h_deriv_k[1]
-        #     w_diff_k /= det
-        # for i in range(self.I):     
-        #     w_diff[i] = np.reshape(np.fft.irfftn(w_diff_k[i], nx), np.prod(nx))*np.prod(nx)
 
         return w_current + w_diff
 
@@ -535,10 +505,10 @@ class LFTS:
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
             am = factory.create_anderson_mixing(
                 len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
-                params["compressor"]["max_hist"],                           # maximum number of history
-                params["compressor"]["start_error"],                        # when switch to AM from simple mixing
-                params["compressor"]["mix_min"],                            # minimum mixing rate of simple mixing
-                params["compressor"]["mix_init"])                           # initial mixing rate of simple mixing
+                params["compressor"]["max_hist"],                          # maximum number of history
+                params["compressor"]["start_error"],                       # when switch to AM from simple mixing
+                params["compressor"]["mix_min"],                           # minimum mixing rate of simple mixing
+                params["compressor"]["mix_init"])                          # initial mixing rate of simple mixing
 
         # Fields Relaxation using Linear Reponse Method
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
@@ -554,40 +524,10 @@ class LFTS:
             h_deriv_perturbed, _ = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
             h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.cb.get_nx()))/np.prod(self.cb.get_nx())
             j_k_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
-            lr.j_k = j_k_numeric.copy()
             # print(np.mean(j_k_numeric), np.std(j_k_numeric))
             # print(np.mean(self.lr.j_k), np.std(self.lr.j_k))
+            lr.j_k = j_k_numeric.copy()
 
-            # # Get homogeneous solution
-            # w_aux_homo = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
-            # phi_zero, _ = self.compute_concentrations(w_aux_homo)
-            # phi_sum = np.zeros((S-1))
-            # for i in range(S-1):
-            #     for j in range(S):
-            #         phi_sum[i] += self.mpt.matrix_a[j,i]*np.mean(phi_zero[self.monomer_types[j]])
-            #     w_aux_homo[i,:] -= phi_sum[i] + self.mpt.h_coef_mu1[i]
-            #     w_aux_homo[i,:] /= 2*self.mpt.h_coef_mu2[i]
-            # print(w_aux_homo[:,0])
-
-            # # Find j_k function in LR
-            # for count_j, j in enumerate(self.mpt.aux_fields_imag_idx):
-            #     w_aux_perturbed = w_aux_homo.copy()
-            #     w_aux_perturbed[j,0] = 1e-3 # a small perturbation
-            #     w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[j], self.cb.get_nx()))/np.prod(self.cb.get_nx())
-
-            #     phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
-            #     h_deriv_perturbed, _ = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
-                
-            #     for count_i, i in enumerate(self.mpt.aux_fields_imag_idx):
-            #         h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed[count_i], self.cb.get_nx()))/np.prod(self.cb.get_nx())
-            #         j_k_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
-            #         print("i,j:", i,j)
-            #         # print(np.mean(h_deriv_perturbed_k), np.std(h_deriv_perturbed_k))
-            #         # print(np.mean(w_aux_perturbed_k), np.std(w_aux_perturbed_k))
-            #         print(np.mean(j_k_numeric), np.std(j_k_numeric))
-            #         # print(np.mean(self.lr.j_k), np.std(self.lr.j_k))
-            #         lr.j_k[count_i, count_j] = j_k_numeric.copy()
-        
         if params["compressor"]["name"] == "am":
             self.compressor = am
         elif params["compressor"]["name"] == "lr":
