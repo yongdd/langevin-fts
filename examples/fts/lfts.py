@@ -23,26 +23,68 @@ class LR:
         self.nx = nx
         self.lx = lx
 
-        # arrays for exponential time differencing
-        space_kx, space_ky, space_kz = np.meshgrid(
-            2*np.pi/lx[0]*np.concatenate([np.arange((nx[0]+1)//2), nx[0]//2-np.arange(nx[0]//2)]),
-            2*np.pi/lx[1]*np.concatenate([np.arange((nx[1]+1)//2), nx[1]//2-np.arange(nx[1]//2)]),
-            2*np.pi/lx[2]*np.arange(nx[2]//2+1), indexing='ij')
-        mag_k2 = (space_kx**2 + space_ky**2 + space_kz**2)/6
-        mag_k2[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
+        # # arrays for exponential time differencing
+        # space_kx, space_ky, space_kz = np.meshgrid(
+        #     2*np.pi/lx[0]*np.concatenate([np.arange((nx[0]+1)//2), nx[0]//2-np.arange(nx[0]//2)]),
+        #     2*np.pi/lx[1]*np.concatenate([np.arange((nx[1]+1)//2), nx[1]//2-np.arange(nx[1]//2)]),
+        #     2*np.pi/lx[2]*np.arange(nx[2]//2+1), indexing='ij')
+        # mag_k2 = (space_kx**2 + space_ky**2 + space_kz**2)/6
+        # mag_k2[0,0,0] = 1.0e-5 # to prevent 'division by zero' error
 
-        self.g_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
-        self.g_k[0,0,0] = 1.0
+        # self.j_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
+        # self.j_k[0,0,0] = 1.0
+        
+        # self.j_k_array_shape = [I,I] + self.nx
+        # self.j_k_array_shape[-1] = self.j_k_array_shape[-1]//2 + 1
+        
+        # self.j_k = np.zeros(self.j_k_array_shape)
+
+        self.j_k_array_shape = nx.copy()
+        self.j_k_array_shape[-1] = self.j_k_array_shape[-1]//2 + 1
+        self.j_k = np.zeros(self.j_k_array_shape)
 
     def reset_count(self,):
-        self.count = 1
+        pass
         
-    def calculate_new_fields(self, w_current, negative_h_deriv):
+    def calculate_new_fields(self, w_current, negative_h_deriv, old_error_level, error_level):
         nx = self.nx
+        w_diff = np.zeros_like(w_current)
         negative_h_deriv_k = np.fft.rfftn(np.reshape(negative_h_deriv, nx))/np.prod(nx)
-        w_diff_k = negative_h_deriv_k/self.g_k
-        w_diff = np.reshape(np.fft.irfftn(w_diff_k, nx), np.prod(nx))*np.prod(nx)
-        w_new = w_current + w_diff
+        w_diff_k = negative_h_deriv_k/self.j_k
+        w_diff[0] = np.reshape(np.fft.irfftn(w_diff_k, nx), np.prod(nx))*np.prod(nx)
+
+        # w_diff_k = np.zeros(self.j_k_array_shape[1:], dtype=np.complex128)
+        # negative_h_deriv_k = np.zeros(self.j_k_array_shape[1:], dtype=np.complex128)
+        # for i in range(self.I):
+        #     negative_h_deriv_k[i] = np.fft.rfftn(np.reshape(negative_h_deriv[i], nx))/np.prod(nx)
+        # if self.I == 1:
+        #     w_diff_k[0] = negative_h_deriv_k[0]/self.j_k[0,0]
+        # if self.I == 2:
+        #     det = self.j_k[0,0]*self.j_k[1,1] - self.j_k[0,1]*self.j_k[1,0]
+        #     w_diff_k[0] =  self.j_k[1,1]*negative_h_deriv_k[0] - self.j_k[0,1]*negative_h_deriv_k[1]
+        #     w_diff_k[1] = -self.j_k[1,0]*negative_h_deriv_k[0] + self.j_k[0,0]*negative_h_deriv_k[1]
+        #     w_diff_k /= det
+        # for i in range(self.I):     
+        #     w_diff[i] = np.reshape(np.fft.irfftn(w_diff_k[i], nx), np.prod(nx))*np.prod(nx)
+
+        return w_current + w_diff
+
+# LRAM compressor
+class LRAM:
+    def __init__(self, lr, am):
+        self.lr = lr
+        self.am = am
+
+    def reset_count(self,):
+        self.am.reset_count()
+        
+    def calculate_new_fields(self, w_current, negative_h_deriv, old_error_level, error_level):
+        nx = self.lr.nx
+        
+        w_lr_old = w_current.copy()
+        w_lr_new = np.reshape(self.lr.calculate_new_fields(w_lr_old, negative_h_deriv, old_error_level, error_level), [1, np.prod(nx)])
+        w_diff = w_lr_new - w_lr_old
+        w_new = np.reshape(self.am.calculate_new_fields(w_lr_new, w_diff, old_error_level, error_level), [1, np.prod(nx)])
 
         return w_new
 
@@ -309,7 +351,6 @@ class LFTS:
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-        S = len(self.monomer_types)
 
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
@@ -360,7 +401,12 @@ class LFTS:
 
         # Multimonomer polymer field theory
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n)
-        
+
+        # The numbers of real and imaginary fields, respectively
+        S = len(self.monomer_types)
+        R = len(self.mpt.aux_fields_real_idx)
+        I = len(self.mpt.aux_fields_imag_idx)
+
         # Total volume fraction
         assert(len(self.distinct_polymers) >= 1), \
             "There is no polymer chain."
@@ -486,33 +532,68 @@ class LFTS:
         self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_analyzer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
-        self.field_optimizer_name = params["optimizer"]["name"]
-        if params["optimizer"]["name"] == "am" or params["optimizer"]["name"] == "lram":
-            self.am = factory.create_anderson_mixing(
+        if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
+            am = factory.create_anderson_mixing(
                 len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
-                params["optimizer"]["max_hist"],                           # maximum number of history
-                params["optimizer"]["start_error"],                        # when switch to AM from simple mixing
-                params["optimizer"]["mix_min"],                            # minimum mixing rate of simple mixing
-                params["optimizer"]["mix_init"])                           # initial mixing rate of simple mixing
+                params["compressor"]["max_hist"],                           # maximum number of history
+                params["compressor"]["start_error"],                        # when switch to AM from simple mixing
+                params["compressor"]["mix_min"],                            # minimum mixing rate of simple mixing
+                params["compressor"]["mix_init"])                           # initial mixing rate of simple mixing
 
         # Fields Relaxation using Linear Reponse Method
-        if params["optimizer"]["name"] == "lr" or params["optimizer"]["name"] == "lram": 
-            # Create LR compressor
-            self.lr = LR(self.cb.get_nx(), self.cb.get_lx())
+        if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
+            assert(I == 1), \
+                f"Currently, LR methods are not working for imaginary-valued auxiliary fields."
 
-            # Modify g_k function in LR
+            lr = LR(self.cb.get_nx(), self.cb.get_lx())
             w_aux_perturbed = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
-            w_aux_perturbed[S-1,0] = 0.01 # a small perturbation
+            w_aux_perturbed[S-1,0] = 1e-3 # add a small perturbation at the pressure field
+            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1], self.cb.get_nx()))/np.prod(self.cb.get_nx())
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed, _ = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
-            
-            w_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1,:], self.cb.get_nx()))/np.prod(self.cb.get_nx())
             h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.cb.get_nx()))/np.prod(self.cb.get_nx())
-            g_k_numeric = np.real(h_deriv_perturbed_k/w_perturbed_k)
-            # print(np.mean(g_k_numeric), np.std(g_k_numeric))
-            # print(np.mean(self.lr.g_k), np.std(self.lr.g_k))
-            self.lr.g_k = g_k_numeric.copy()
+            j_k_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
+            lr.j_k = j_k_numeric.copy()
+            # print(np.mean(j_k_numeric), np.std(j_k_numeric))
+            # print(np.mean(self.lr.j_k), np.std(self.lr.j_k))
+
+            # # Get homogeneous solution
+            # w_aux_homo = np.zeros([S, self.cb.get_n_grid()], dtype=np.float64)
+            # phi_zero, _ = self.compute_concentrations(w_aux_homo)
+            # phi_sum = np.zeros((S-1))
+            # for i in range(S-1):
+            #     for j in range(S):
+            #         phi_sum[i] += self.mpt.matrix_a[j,i]*np.mean(phi_zero[self.monomer_types[j]])
+            #     w_aux_homo[i,:] -= phi_sum[i] + self.mpt.h_coef_mu1[i]
+            #     w_aux_homo[i,:] /= 2*self.mpt.h_coef_mu2[i]
+            # print(w_aux_homo[:,0])
+
+            # # Find j_k function in LR
+            # for count_j, j in enumerate(self.mpt.aux_fields_imag_idx):
+            #     w_aux_perturbed = w_aux_homo.copy()
+            #     w_aux_perturbed[j,0] = 1e-3 # a small perturbation
+            #     w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[j], self.cb.get_nx()))/np.prod(self.cb.get_nx())
+
+            #     phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
+            #     h_deriv_perturbed, _ = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
+                
+            #     for count_i, i in enumerate(self.mpt.aux_fields_imag_idx):
+            #         h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed[count_i], self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            #         j_k_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
+            #         print("i,j:", i,j)
+            #         # print(np.mean(h_deriv_perturbed_k), np.std(h_deriv_perturbed_k))
+            #         # print(np.mean(w_aux_perturbed_k), np.std(w_aux_perturbed_k))
+            #         print(np.mean(j_k_numeric), np.std(j_k_numeric))
+            #         # print(np.mean(self.lr.j_k), np.std(self.lr.j_k))
+            #         lr.j_k[count_i, count_j] = j_k_numeric.copy()
+        
+        if params["compressor"]["name"] == "am":
+            self.compressor = am
+        elif params["compressor"]["name"] == "lr":
+            self.compressor = lr
+        elif params["compressor"]["name"] == "lram":
+            self.compressor = LRAM(lr, am)            
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
@@ -853,7 +934,6 @@ class LFTS:
         print("Total iterations for saddle points: %d, Iterations per Langevin step: %f" %
             (total_saddle_iter, total_saddle_iter/(langevin_step+1-start_langevin_step)))
 
-
     def find_saddle_point(self, w_aux):
 
         # The number of components
@@ -866,9 +946,8 @@ class LFTS:
         # Assign large initial value for error
         error_level = 1e20
 
-        # Reset Anderson mixing module
-        if self.field_optimizer_name == "am" or self.field_optimizer_name == "lram":
-            self.am.reset_count()
+        # Reset compressor
+        self.compressor.reset_count()
 
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
@@ -910,20 +989,8 @@ class LFTS:
             for count, i in enumerate(self.mpt.aux_fields_imag_idx):
                 h_deriv[count] *= self.dt_scaling[i]
 
-            # Calculate new fields using simple and Anderson mixing
-            if self.field_optimizer_name == "am":
-                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
-
-            # Calculate new fields using LR
-            elif self.field_optimizer_name == "lr":
-                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
-
-            # Calculate new fields using LRAM
-            elif self.field_optimizer_name == "lram":
-                w_aux_old = w_aux[self.mpt.aux_fields_imag_idx]
-                w_aux_new = np.reshape(self.lr.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv), [I, self.cb.get_n_grid()])
-                w_diff = w_aux_new - w_aux_old
-                w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.am.calculate_new_fields(w_aux_new, w_diff, old_error_level, error_level), [I, self.cb.get_n_grid()])
+            # Calculate new fields using compressor (AM, LR, LRAM)
+            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_n_grid()])
 
         # Set mean of pressure field to zero
         w_aux[S-1] -= np.mean(w_aux[S-1])

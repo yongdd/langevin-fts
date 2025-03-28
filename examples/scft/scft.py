@@ -623,7 +623,7 @@ class SCFT:
         energy_total = 1.0e20
         error_level = 1.0e20
 
-        # Reset Optimizer
+        # Reset optimizer
         self.field_optimizer.reset_count()
         
         print("---------- Run ----------")

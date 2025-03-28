@@ -34,6 +34,15 @@ class LR:
         self.g_k = 2*(mag_k2+np.exp(-mag_k2)-1.0)/mag_k2**2
         self.g_k[0,0,0] = 1.0
 
+        # # Discrete chain
+        # ds = 0.01
+        # n = 1.0/ds
+        # expx = np.exp(-mag_k2/n)
+        # expnx = np.exp(-mag_k2)
+        
+        # self.g_k = (n + 2*expx*( n*(1-expx)-1+expnx )/(1-expx)**2 )/n**2
+        # self.g_k[0,0,0] = 1.0
+
     def reset_count(self,):
         self.count = 1
         
@@ -510,8 +519,8 @@ class LFTS:
             w_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1,:], self.cb.get_nx()))/np.prod(self.cb.get_nx())
             h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.cb.get_nx()))/np.prod(self.cb.get_nx())
             g_k_numeric = np.real(h_deriv_perturbed_k/w_perturbed_k)
-            # print(np.mean(g_k_numeric), np.std(g_k_numeric))
-            # print(np.mean(self.lr.g_k), np.std(self.lr.g_k))
+            print(np.mean(self.lr.g_k), np.std(self.lr.g_k))
+            print(np.mean(g_k_numeric), np.std(g_k_numeric))
             self.lr.g_k = g_k_numeric.copy()
 
         # Standard deviation of normal noise of Langevin dynamics

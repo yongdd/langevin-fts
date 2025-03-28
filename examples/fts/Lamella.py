@@ -53,7 +53,7 @@ params = {
         "tolerance":1e-4,     # Tolerance of incompressibility 
     },
 
-    "optimizer":{
+    "compressor":{
         # "name":"am",                # Anderson Mixing
         # "name":"lr",                # Linear Response
         "name":"lram",              # Linear Response + Anderson Mixing
