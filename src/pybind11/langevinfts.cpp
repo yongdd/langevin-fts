@@ -8,7 +8,7 @@
 
 #include "Array.h"
 #include "Polymer.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "ComputationBox.h"
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
@@ -154,13 +154,13 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_n_solvent_types", &Molecules::get_n_solvent_types)
         .def("add_solvent", &Molecules::add_solvent);
         
-    py::class_<PropagatorAnalyzer>(m, "PropagatorAnalyzer")
-        .def("get_computation_propagators()", &PropagatorAnalyzer::get_computation_propagators)
-        .def("get_computation_propagator", &PropagatorAnalyzer::get_computation_propagator)
-        .def("get_computation_blocks", &PropagatorAnalyzer::get_computation_blocks)
-        .def("get_computation_block", &PropagatorAnalyzer::get_computation_block)
-        .def("display_propagators", &PropagatorAnalyzer::display_propagators)
-        .def("display_blocks", &PropagatorAnalyzer::display_blocks)
+    py::class_<PropagatorComputationOptimizer>(m, "PropagatorComputationOptimizer")
+        .def("get_computation_propagators()", &PropagatorComputationOptimizer::get_computation_propagators)
+        .def("get_computation_propagator", &PropagatorComputationOptimizer::get_computation_propagator)
+        .def("get_computation_blocks", &PropagatorComputationOptimizer::get_computation_blocks)
+        .def("get_computation_block", &PropagatorComputationOptimizer::get_computation_block)
+        .def("display_propagators", &PropagatorComputationOptimizer::display_propagators)
+        .def("display_blocks", &PropagatorComputationOptimizer::display_blocks)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
@@ -448,7 +448,7 @@ PYBIND11_MODULE(langevinfts, m)
             }
         }, py::arg("nx"), py::arg("lx"), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory::create_molecules_information)
-        .def("create_propagator_analyzer", &AbstractFactory::create_propagator_analyzer)
+        .def("create_propagator_computation_optimizer", &AbstractFactory::create_propagator_computation_optimizer)
         .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
         .def("create_realspace_solver", &AbstractFactory::create_realspace_solver)
         .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)

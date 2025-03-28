@@ -8,7 +8,7 @@
 
 #include "Exception.h"
 #include "Polymer.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
@@ -314,11 +314,11 @@ int main()
             std::cout << "block size: " << block_inputs[p].size() << std::endl;
         }
 
-        PropagatorAnalyzer* propagator_analyzer_1 = new PropagatorAnalyzer(molecules, false);
+        PropagatorComputationOptimizer* propagator_analyzer_1 = new PropagatorComputationOptimizer(molecules, false);
         propagator_analyzer_1->display_blocks();
         propagator_analyzer_1->display_propagators();
 
-        PropagatorAnalyzer* propagator_analyzer_2 = new PropagatorAnalyzer(molecules, true);
+        PropagatorComputationOptimizer* propagator_analyzer_2 = new PropagatorComputationOptimizer(molecules, true);
         propagator_analyzer_2->display_blocks();
         propagator_analyzer_2->display_propagators();
 

@@ -6,7 +6,7 @@
 #include <map>
 
 #include "Exception.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
@@ -175,10 +175,10 @@ int main()
 
         Molecules* molecules = new Molecules("Continuous", 1.0/NN, bond_lengths);
         molecules->add_polymer(1.0, blocks, {});
-        PropagatorAnalyzer* propagator_analyzer= new PropagatorAnalyzer(molecules, false);
+        PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, false);
 
-        propagator_analyzer->display_blocks();
-        propagator_analyzer->display_propagators();
+        propagator_computation_optimizer->display_blocks();
+        propagator_computation_optimizer->display_propagators();
 
         std::vector<PropagatorComputation*> solver_list;
         std::vector<ComputationBox*> cb_list;
@@ -188,7 +188,7 @@ int main()
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("pseudo, cpu-mkl");
         cb_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationContinuous(cb_list.end()[-1], molecules, propagator_analyzer, "pseudospectral"));
+        solver_list.push_back(new CpuComputationContinuous(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
         #endif
 
         #ifdef USE_CUDA
@@ -196,8 +196,8 @@ int main()
         solver_name_list.push_back("pseudo, cuda_reduce_memory_usage");
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-2], molecules, propagator_analyzer, "pseudospectral"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-1], molecules, propagator_analyzer, "pseudospectral"));
+        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
         #endif
 
         // For each platform

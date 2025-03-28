@@ -5,7 +5,7 @@
 PropagatorComputation::PropagatorComputation(
     ComputationBox *cb,
     Molecules *molecules,
-    PropagatorAnalyzer *propagator_analyzer)
+    PropagatorComputationOptimizer *propagator_computation_optimizer)
 {
     if (cb == nullptr)
         throw_with_line_number("ComputationBox *cb is a null pointer");
@@ -14,7 +14,7 @@ PropagatorComputation::PropagatorComputation(
 
     this->cb = cb;
     this->molecules = molecules;
-    this->propagator_analyzer = propagator_analyzer;
+    this->propagator_computation_optimizer = propagator_computation_optimizer;
 
     // Total partition functions for each polymer
     single_polymer_partitions = new double[molecules->get_n_polymer_types()];

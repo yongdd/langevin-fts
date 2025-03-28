@@ -43,29 +43,29 @@ Molecules* CudaFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string model_name = molecules->get_model_name();
 
     if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
+        return new CudaComputationContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
     else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "pseudospectral");
+        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
     else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaComputationDiscrete(cb, molecules, propagator_analyzer);
+        return new CudaComputationDiscrete(cb, molecules, propagator_computation_optimizer);
     else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_analyzer);
+        return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
-PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer)
+PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {
         std::string model_name = molecules->get_model_name();
         if( model_name == "continuous" && reduce_memory_usage == false)
-            return new CudaComputationContinuous(cb, molecules, propagator_analyzer, "realspace");
+            return new CudaComputationContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
         else if( model_name == "continuous" && reduce_memory_usage == true)
-            return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_analyzer, "realspace");
+            return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
         else if ( model_name == "discrete" )
         {
             throw_with_line_number("The real-space solver does not support discrete chain model.");

@@ -10,7 +10,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
@@ -64,13 +64,13 @@ int main()
                     ComputationBox *cb = factory->create_computation_box(nx, lx, {});
                     Molecules *molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
                     molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
-                    PropagatorAnalyzer* propagator_analyzer= factory->create_propagator_analyzer(molecules, aggregate_propagator_computation);
+                    PropagatorComputationOptimizer* propagator_computation_optimizer= factory->create_propagator_computation_optimizer(molecules, aggregate_propagator_computation);
 
                     // Display branches
-                    propagator_analyzer->display_blocks();
-                    propagator_analyzer->display_sub_propagators();
+                    propagator_computation_optimizer->display_blocks();
+                    propagator_computation_optimizer->display_sub_propagators();
 
-                    PropagatorComputation *solver = factory->create_pseudospectral_solver(cb, molecules, propagator_analyzer);
+                    PropagatorComputation *solver = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
 
                     // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);
@@ -137,7 +137,7 @@ int main()
                     delete factory;
                     delete cb;
                     delete molecules;
-                    delete propagator_analyzer;
+                    delete propagator_computation_optimizer;
                     delete solver;
                 }
             }

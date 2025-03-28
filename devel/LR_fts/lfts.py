@@ -531,14 +531,14 @@ class LFTS:
         for polymer in self.distinct_polymers:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
-        # (C++ class) Propagator Analyzer
+        # (C++ class) Propagator Computation Optimizer
         if "aggregate_propagator_computation" in params:
-            propagator_analyzer = factory.create_propagator_analyzer(molecules, params["aggregate_propagator_computation"])
+            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, params["aggregate_propagator_computation"])
         else:
-            propagator_analyzer = factory.create_propagator_analyzer(molecules, True)
+            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_analyzer)
+        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_computation_optimizer)
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
@@ -649,8 +649,8 @@ class LFTS:
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        propagator_analyzer.display_blocks()
-        propagator_analyzer.display_propagators()
+        propagator_computation_optimizer.display_blocks()
+        propagator_computation_optimizer.display_propagators()
 
         #  Save internal variables
         self.params = params
@@ -664,7 +664,7 @@ class LFTS:
         self.recording = params["recording"].copy()
 
         self.molecules = molecules
-        self.propagator_analyzer = propagator_analyzer
+        self.propagator_computation_optimizer = propagator_computation_optimizer
 
     def compute_concentrations(self, w_aux):
         S = len(self.monomer_types)

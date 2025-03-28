@@ -6,7 +6,7 @@
 #include <stack>
 #include <set>
 
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #include "Exception.h"
@@ -26,7 +26,7 @@ bool ComparePropagatorKey::operator()(const std::string& str1, const std::string
     return str1 > str2;
 }
 
-PropagatorAnalyzer::PropagatorAnalyzer(Molecules* molecules, bool aggregate_propagator_computation)
+PropagatorComputationOptimizer::PropagatorComputationOptimizer(Molecules* molecules, bool aggregate_propagator_computation)
 {
     if(molecules->get_n_polymer_types() == 0)
         throw_with_line_number("There is no chain. Add polymers first.");
@@ -38,7 +38,7 @@ PropagatorAnalyzer::PropagatorAnalyzer(Molecules* molecules, bool aggregate_prop
         add_polymer(molecules->get_polymer(p), p);
     }
 }
-void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
+void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
 {
     // Temporary map for the new polymer
     std::map<std::string, std::map<std::string, ComputationBlock>> computation_blocks_new_polymer;
@@ -105,9 +105,9 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
             // Aggregate propagators for given left key
             std::map<std::string, ComputationBlock> set_I;
             if (model_name == "continuous")
-                set_I = PropagatorAnalyzer::aggregate_propagator_continuous_chain(right_keys);
+                set_I = PropagatorComputationOptimizer::aggregate_propagator_continuous_chain(right_keys);
             else if (model_name == "discrete")
-                set_I = PropagatorAnalyzer::aggregate_propagator_discrete_chain(right_keys);
+                set_I = PropagatorComputationOptimizer::aggregate_propagator_discrete_chain(right_keys);
             else if (model_name == "")
                 std::cout << "Chain model name is not set!" << std::endl;
             else
@@ -166,7 +166,7 @@ void PropagatorAnalyzer::add_polymer(Polymer& pc, int polymer_id)
         }
     }
 }
-std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
+std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
 {
     // Example)
     // 0, B:
@@ -187,7 +187,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     return aggregate_propagator_common(not_aggregated_right_keys, 0);
 
 }
-std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
+std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
 {
     // Example)
     // 0, B:
@@ -208,10 +208,10 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     return aggregate_propagator_common(not_aggregated_right_keys, 1);
 }
 
-std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator_common(std::map<std::string, ComputationBlock> set_I, int minimum_n_segment)
+std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_common(std::map<std::string, ComputationBlock> set_I, int minimum_n_segment)
 {
     #ifndef NDEBUG
-    std::cout << "--------- PropagatorAnalyzer::aggregate_propagator (before) -----------" << std::endl;
+    std::cout << "--------- PropagatorComputationOptimizer::aggregate_propagator (before) -----------" << std::endl;
     std::cout << "--------- map ------------" << std::endl;
     for(const auto& item : set_I)
     {
@@ -302,7 +302,7 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
         set_I[propagator_code].n_repeated = 1;
 
         #ifndef NDEBUG
-        std::cout << "---------- PropagatorAnalyzer::aggregate_propagator (in progress) -----------" << std::endl;
+        std::cout << "---------- PropagatorComputationOptimizer::aggregate_propagator (in progress) -----------" << std::endl;
         std::cout << "--------- map (" + std::to_string(set_I.size()) + ") -----------" << std::endl;
         for(const auto& item : set_I)
         {
@@ -322,12 +322,12 @@ std::map<std::string, ComputationBlock> PropagatorAnalyzer::aggregate_propagator
     }
     return set_I;
 }
-bool PropagatorAnalyzer::is_aggregated() const
+bool PropagatorComputationOptimizer::is_aggregated() const
 {
     return aggregate_propagator_computation;
 }
 
-void PropagatorAnalyzer::substitute_right_keys(
+void PropagatorComputationOptimizer::substitute_right_keys(
     Polymer& pc, 
     std::map<std::tuple<int, int>, std::string>& v_u_to_right_key,
     std::map<std::string, std::map<std::string, ComputationBlock>> & computation_blocks_new_polymer,
@@ -406,7 +406,7 @@ void PropagatorAnalyzer::substitute_right_keys(
     }
 }
 
-void PropagatorAnalyzer::update_computation_propagator_map(
+void PropagatorComputationOptimizer::update_computation_propagator_map(
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
     std::string new_key, int new_n_segment, bool is_junction_end)
 {
@@ -428,7 +428,7 @@ void PropagatorAnalyzer::update_computation_propagator_map(
         computation_propagators[new_key].junction_ends.insert(new_n_segment);
 }
 
-bool PropagatorAnalyzer::is_junction(Polymer& pc, int node)
+bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
 {
     if (pc.get_adjacent_nodes()[node].size() == 1)
         return false;
@@ -436,26 +436,26 @@ bool PropagatorAnalyzer::is_junction(Polymer& pc, int node)
         return true;
 }
 
-int PropagatorAnalyzer::get_n_computation_propagator_codes() const
+int PropagatorComputationOptimizer::get_n_computation_propagator_codes() const
 {
     return computation_propagators.size();
 }
-std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorAnalyzer::get_computation_propagators()
+std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorComputationOptimizer::get_computation_propagators()
 {
     return computation_propagators;
 }
-ComputationEdge& PropagatorAnalyzer::get_computation_propagator(std::string key)
+ComputationEdge& PropagatorComputationOptimizer::get_computation_propagator(std::string key)
 {
     if (computation_propagators.find(key) == computation_propagators.end())
         throw_with_line_number("There is no such key (" + key + ").");
 
     return computation_propagators[key];
 }
-std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorAnalyzer::get_computation_blocks()
+std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorComputationOptimizer::get_computation_blocks()
 {
     return computation_blocks;
 }
-ComputationBlock& PropagatorAnalyzer::get_computation_block(std::tuple<int, std::string, std::string> key)
+ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tuple<int, std::string, std::string> key)
 {
     if (computation_blocks.find(key) == computation_blocks.end())
         throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
@@ -463,7 +463,7 @@ ComputationBlock& PropagatorAnalyzer::get_computation_block(std::tuple<int, std:
 
     return computation_blocks[key];
 }
-void PropagatorAnalyzer::display_blocks() const
+void PropagatorComputationOptimizer::display_blocks() const
 {
     // Print blocks
     std::cout << "--------------- Blocks ---------------" << std::endl;
@@ -530,7 +530,7 @@ void PropagatorAnalyzer::display_blocks() const
     }
     //std::cout << "------------------------------------" << std::endl;
 }
-void PropagatorAnalyzer::display_propagators() const
+void PropagatorComputationOptimizer::display_propagators() const
 {
     // Print propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;
@@ -599,7 +599,7 @@ void PropagatorAnalyzer::display_propagators() const
     //std::cout << "------------------------------------" << std::endl;
 }
 
-void PropagatorAnalyzer::display_sub_propagators() const
+void PropagatorComputationOptimizer::display_sub_propagators() const
 {
     // Print sub propagators
     std::vector<std::tuple<std::string, int, int>> sub_deps;

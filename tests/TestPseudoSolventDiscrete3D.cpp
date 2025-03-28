@@ -6,7 +6,7 @@
 #include <map>
 
 #include "Exception.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
@@ -88,11 +88,11 @@ int main()
         molecules_2->add_polymer(0.6, blocks_1, {});
         molecules_2->add_solvent(0.4, "A");
 
-        PropagatorAnalyzer* propagator_analyzer_1 = new PropagatorAnalyzer(molecules_1, false);
+        PropagatorComputationOptimizer* propagator_analyzer_1 = new PropagatorComputationOptimizer(molecules_1, false);
         propagator_analyzer_1->display_blocks();
         propagator_analyzer_1->display_propagators();
 
-        PropagatorAnalyzer* propagator_analyzer_2 = new PropagatorAnalyzer(molecules_2, false);
+        PropagatorComputationOptimizer* propagator_analyzer_2 = new PropagatorComputationOptimizer(molecules_2, false);
         propagator_analyzer_2->display_blocks();
         propagator_analyzer_2->display_propagators();
 

@@ -12,7 +12,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorAnalyzer.h"
+#include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
 #include "CpuSolverPseudo.h"
 #include "Scheduler.h"
@@ -48,7 +48,7 @@ private:
     // Calculate concentration of one block
     void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N_RIGHT, const int N_LEFT);
 public:
-    CpuComputationContinuous(ComputationBox *cb, Molecules *molecules, PropagatorAnalyzer* propagator_analyzer, std::string method);
+    CpuComputationContinuous(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationContinuous();
     
     void update_laplacian_operator() override;
