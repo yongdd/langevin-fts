@@ -1,12 +1,12 @@
 #include <iostream>
 #include <cmath>
-#include "CpuSolverPseudo.h"
+#include "CpuSolverPseudoDiscrete.h"
 
 #include "MklFFT3D.h"
 #include "MklFFT2D.h"
 #include "MklFFT1D.h"
 
-CpuSolverPseudo::CpuSolverPseudo(ComputationBox *cb, Molecules *molecules)
+CpuSolverPseudoDiscrete::CpuSolverPseudoDiscrete(ComputationBox *cb, Molecules *molecules)
 {
     try{
         if (cb->get_dim() == 3)
@@ -30,8 +30,6 @@ CpuSolverPseudo::CpuSolverPseudo(ComputationBox *cb, Molecules *molecules)
             boltz_bond     [monomer_type] = new double[M_COMPLEX];
             boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
             exp_dw         [monomer_type] = new double[M];
-            if(chain_model == "continuous")
-                exp_dw_half    [monomer_type] = new double[M]; 
         }
 
         // Allocate memory for stress calculation: compute_stress()
@@ -46,7 +44,7 @@ CpuSolverPseudo::CpuSolverPseudo(ComputationBox *cb, Molecules *molecules)
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverPseudo::~CpuSolverPseudo()
+CpuSolverPseudoDiscrete::~CpuSolverPseudoDiscrete()
 {
     delete fft;
 
@@ -60,13 +58,8 @@ CpuSolverPseudo::~CpuSolverPseudo()
         delete[] item.second;
     for(const auto& item: exp_dw)
         delete[] item.second;
-    if(chain_model == "continuous")
-    {
-        for(const auto& item: exp_dw_half)
-            delete[] item.second;
-    }
 }
-void CpuSolverPseudo::update_laplacian_operator()
+void CpuSolverPseudoDiscrete::update_laplacian_operator()
 {
     try
     {
@@ -86,7 +79,7 @@ void CpuSolverPseudo::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverPseudo::update_dw(std::map<std::string, const double*> w_input)
+void CpuSolverPseudoDiscrete::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = cb->get_total_grid();
     const double ds = molecules->get_ds();
@@ -102,91 +95,11 @@ void CpuSolverPseudo::update_dw(std::map<std::string, const double*> w_input)
         std::string monomer_type = item.first;
         const double *w = item.second;
 
-        if(chain_model == "continuous")
-        {
-            for(int i=0; i<M; i++)
-            { 
-                exp_dw     [monomer_type][i] = exp(-w[i]*ds*0.5);
-                exp_dw_half[monomer_type][i] = exp(-w[i]*ds*0.25);
-            }
-        }
-        else if(chain_model == "discrete")
-        {
-            for(int i=0; i<M; i++)
-                exp_dw[monomer_type][i] = exp(-w[i]*ds);
-        }
+        for(int i=0; i<M; i++)
+            exp_dw[monomer_type][i] = exp(-w[i]*ds);
     }
 }
-void CpuSolverPseudo::advance_propagator_continuous(
-    double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
-{
-    try
-    {
-        const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
-        double q_out1[M], q_out2[M];
-        std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
-
-        double *_exp_dw = exp_dw[monomer_type];
-        double *_exp_dw_half = exp_dw_half[monomer_type];
-        double *_boltz_bond = boltz_bond[monomer_type];
-        double *_boltz_bond_half = boltz_bond_half[monomer_type];
-
-        // step 1
-        for(int i=0; i<M; i++)
-            q_out1[i] = _exp_dw[i]*q_in[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out1,k_q_in1);
-        // Multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in1[i] *= _boltz_bond[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in1,q_out1);
-        // Evaluate exp(-w*ds/2) in real space
-        for(int i=0; i<M; i++)
-            q_out1[i] *= _exp_dw[i];
-
-        // step 2
-        // Evaluate exp(-w*ds/4) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] = _exp_dw_half[i]*q_in[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out2,k_q_in2);
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in2[i] *= _boltz_bond_half[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in2,q_out2);
-        // Normalization calculation and evaluate exp(-w*ds/2) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] *= _exp_dw[i];
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_out2,k_q_in2);
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in2[i] *= _boltz_bond_half[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in2,q_out2);
-        // Evaluate exp(-w*ds/4) in real space
-        for(int i=0; i<M; i++)
-            q_out2[i] *= _exp_dw_half[i];
-
-        for(int i=0; i<M; i++)
-            q_out[i] = (4.0*q_out2[i] - q_out1[i])/3.0;
-
-        // Multiply mask
-        if (q_mask != nullptr)
-        {
-            for(int i=0; i<M; i++)
-                q_out[i] *= q_mask[i];
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-void CpuSolverPseudo::advance_propagator_discrete(
+void CpuSolverPseudoDiscrete::advance_propagator(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
@@ -222,7 +135,7 @@ void CpuSolverPseudo::advance_propagator_discrete(
     }
 }
 
-void CpuSolverPseudo::advance_propagator_discrete_half_bond_step(
+void CpuSolverPseudoDiscrete::advance_propagator_half_bond_step(
     double *q_in, double *q_out, std::string monomer_type)
 {
     try
@@ -246,56 +159,7 @@ void CpuSolverPseudo::advance_propagator_discrete_half_bond_step(
         throw_without_line_number(exc.what());
     }
 }
-
-std::vector<double> CpuSolverPseudo::compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, std::string monomer_type)
-{
-    const int DIM  = cb->get_dim();
-    // const int M    = cb->get_total_grid();
-    const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
-    auto bond_lengths = molecules->get_bond_lengths();
-    double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-    double coeff;
-    
-    std::vector<double> stress(DIM);
-    std::complex<double> qk_1[M_COMPLEX];
-    std::complex<double> qk_2[M_COMPLEX];
-
-    fft->forward(q_1, qk_1);
-    fft->forward(q_2, qk_2);
-
-    for(int d=0; d<DIM; d++)
-        stress[d] = 0.0;
-
-    if ( DIM == 3 )
-    {
-        for(int i=0; i<M_COMPLEX; i++){
-            coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-            stress[0] += coeff*fourier_basis_x[i];
-            stress[1] += coeff*fourier_basis_y[i];
-            stress[2] += coeff*fourier_basis_z[i];
-        }
-    }
-    if ( DIM == 2 )
-    {
-        for(int i=0; i<M_COMPLEX; i++){
-            coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-            stress[0] += coeff*fourier_basis_y[i];
-            stress[1] += coeff*fourier_basis_z[i];
-        }
-    }
-    if ( DIM == 1 )
-    {
-        for(int i=0; i<M_COMPLEX; i++){
-            coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
-            stress[0] += coeff*fourier_basis_z[i];
-        }
-    }
-
-    return stress;
-}
-
-std::vector<double> CpuSolverPseudo::compute_single_segment_stress_discrete(
+std::vector<double> CpuSolverPseudoDiscrete::compute_single_segment_stress(
                 double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     const int DIM  = cb->get_dim();

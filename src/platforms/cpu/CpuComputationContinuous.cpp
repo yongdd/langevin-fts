@@ -2,7 +2,7 @@
 #include <omp.h>
 
 #include "CpuComputationContinuous.h"
-#include "CpuSolverPseudo.h"
+#include "CpuSolverPseudoContinuous.h"
 #include "CpuSolverReal.h"
 #include "SimpsonRule.h"
 
@@ -21,7 +21,7 @@ CpuComputationContinuous::CpuComputationContinuous(
 
         const int M = cb->get_total_grid();
         if(method == "pseudospectral")
-            this->propagator_solver = new CpuSolverPseudo(cb, molecules);
+            this->propagator_solver = new CpuSolverPseudoContinuous(cb, molecules);
         else if(method == "realspace")
             this->propagator_solver = new CpuSolverReal(cb, molecules);
 
@@ -307,7 +307,7 @@ void CpuComputationContinuous::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
                     #endif
 
-                    propagator_solver->advance_propagator_continuous(
+                    propagator_solver->advance_propagator(
                             _propagator[n],
                             _propagator[n+1],
                             monomer_type, q_mask);
@@ -690,8 +690,8 @@ void CpuComputationContinuous::compute_stress()
             // Compute
             for(int n=0; n<=N_RIGHT; n++)
             {
-                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_continuous(
-                    q_1[N_LEFT-n], q_2[n], monomer_type);
+                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress(
+                    q_1[N_LEFT-n], q_2[n], monomer_type, false);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
             }
