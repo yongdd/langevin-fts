@@ -2,7 +2,7 @@
 #include <chrono>
 
 #include "CpuComputationDiscrete.h"
-#include "CpuSolverPseudo.h"
+#include "CpuSolverPseudoDiscrete.h"
 #include "SimpsonRule.h"
 
 CpuComputationDiscrete::CpuComputationDiscrete(
@@ -18,7 +18,7 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         #endif
 
         const int M = cb->get_total_grid();
-        this->propagator_solver = new CpuSolverPseudo(cb, molecules);
+        this->propagator_solver = new CpuSolverPseudoDiscrete(cb, molecules);
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
@@ -356,7 +356,7 @@ void CpuComputationDiscrete::compute_propagators(
                                 _propagator_half_step[i] = _propagator[1][i];
 
                             // Add half bond
-                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                            propagator_solver->advance_propagator_half_bond_step(
                                 _propagator[1], _propagator[1], monomer_type);
 
                             // Add full segment
@@ -365,7 +365,7 @@ void CpuComputationDiscrete::compute_propagators(
                         }
                         else
                         {
-                            propagator_solver->advance_propagator_discrete(
+                            propagator_solver->advance_propagator(
                                 _propagator[1],
                                 _propagator[1],
                                 monomer_type,
@@ -431,7 +431,7 @@ void CpuComputationDiscrete::compute_propagators(
                             #endif
 
                             // Add half bond
-                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                            propagator_solver->advance_propagator_half_bond_step(
                                 _q_junction_start, _propagator[1], monomer_type);
 
                             // Add full segment
@@ -470,7 +470,7 @@ void CpuComputationDiscrete::compute_propagators(
                         this->time_complexity++;
                         #endif
 
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                        propagator_solver->advance_propagator_half_bond_step(
                             _propagator[1],
                             propagator_half_steps[key][1],
                             monomer_type);
@@ -505,7 +505,7 @@ void CpuComputationDiscrete::compute_propagators(
                     this->time_complexity++;
                     #endif
 
-                    propagator_solver->advance_propagator_discrete(
+                    propagator_solver->advance_propagator(
                         _propagator[n], _propagator[n+1],
                         monomer_type, q_mask);
 
@@ -536,7 +536,7 @@ void CpuComputationDiscrete::compute_propagators(
                         this->time_complexity++;
                         #endif
 
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                        propagator_solver->advance_propagator_half_bond_step(
                             _propagator[n+1],
                             propagator_half_steps[key][n+1],
                             monomer_type);
@@ -957,7 +957,7 @@ void CpuComputationDiscrete::compute_stress()
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
                 // Compute 
-                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress_discrete(
+                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*n_repeated;

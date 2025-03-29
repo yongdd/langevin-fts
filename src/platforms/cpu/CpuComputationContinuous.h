@@ -14,7 +14,7 @@
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
-#include "CpuSolverPseudo.h"
+#include "CpuSolver.h"
 #include "Scheduler.h"
 
 class CpuComputationContinuous : public PropagatorComputation

@@ -14,14 +14,14 @@
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
-#include "CpuSolverPseudo.h"
+#include "CpuSolverPseudoDiscrete.h"
 #include "Scheduler.h"
 
 class CpuComputationDiscrete : public PropagatorComputation
 {
 private:
     // Pseudo-spectral integral solver
-    CpuSolverPseudo *propagator_solver;
+    CpuSolver *propagator_solver;
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation

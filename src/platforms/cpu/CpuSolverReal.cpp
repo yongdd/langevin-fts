@@ -132,7 +132,7 @@ void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
         }
     }
 }
-void CpuSolverReal::advance_propagator_continuous(
+void CpuSolverReal::advance_propagator(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
@@ -458,8 +458,8 @@ void CpuSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuSolverReal::compute_single_segment_stress_continuous(
-    double *q_1, double *q_2, std::string monomer_type)
+std::vector<double> CpuSolverReal::compute_single_segment_stress(
+    double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     try
     {

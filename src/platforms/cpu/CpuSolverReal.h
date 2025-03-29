@@ -65,11 +65,14 @@ public:
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
-    void advance_propagator_continuous(
+    void advance_propagator(
                 double *q_in, double *q_out, std::string monomer_type, const double *q_mask) override;
-    
+
+    // Advance propagator by half bond step
+    void advance_propagator_half_bond_step(double *q_in, double *q_out, std::string monomer_type) override {};
+
     // Compute stress of single segment
-    std::vector<double> compute_single_segment_stress_continuous(
-                double *q_1, double *q_2, std::string monomer_type) override;
+    std::vector<double> compute_single_segment_stress(
+                double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif
