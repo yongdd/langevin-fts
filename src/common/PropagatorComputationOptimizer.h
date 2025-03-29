@@ -39,7 +39,7 @@ struct ComputationBlock{
 /* This stucture defines comparison function for branched key */
 struct ComparePropagatorKey
 {
-    bool operator()(const std::string& str1, const std::string& str2);
+    bool operator()(const std::string& str1, const std::string& str2) const;
 };
 
 class PropagatorComputationOptimizer

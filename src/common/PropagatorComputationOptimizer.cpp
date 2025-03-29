@@ -11,7 +11,7 @@
 #include "Polymer.h"
 #include "Exception.h"
 
-bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2)
+bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2) const
 {
     // First compare heights
     int height_str1 = PropagatorCode::get_height_from_key(str1);
