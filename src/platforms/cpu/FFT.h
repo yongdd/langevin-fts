@@ -14,8 +14,8 @@ class FFT
 {
 public:
     virtual ~FFT() {};
-    virtual void forward (T *rdata, std::complex<T> *cdata) = 0;
-    virtual void backward(std::complex<T> *cdata, T *rdata) = 0;
+    virtual void forward (T *rdata, std::complex<double> *cdata) = 0;
+    virtual void backward(std::complex<double> *cdata, T *rdata) = 0;
 };
 
 #endif

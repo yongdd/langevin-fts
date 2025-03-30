@@ -6,15 +6,14 @@
 template <typename T, int DIM>
 MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx)
 {
-    try
-    {
+    try {
         MKL_LONG NX[DIM];
         for (int i = 0; i < DIM; i++)
             NX[i] = nx[i];
 
-        this->total_grid = 1;
+        int total_grid = 1;
         for (int i = 0; i < DIM; i++)
-            this->total_grid *= nx[i];
+            total_grid *= nx[i];
 
         // Execution status
         MKL_LONG status{0};
@@ -25,49 +24,57 @@ MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx)
         rs[DIM] = 1;
         cs[DIM] = 1;
 
+        // Determine if we're using real or complex data type
+        constexpr bool is_real = std::is_same<T, double>::value;
+        constexpr DFTI_CONFIG_VALUE dtype = is_real ? DFTI_REAL : DFTI_COMPLEX;
+
+        // Calculate strides for real domain
         for (int i = DIM - 1; i > 0; i--)
-        {
             rs[i] = rs[i + 1] * nx[i];
-            cs[i] = cs[i + 1] * (i == DIM - 1 ? nx[i] / 2 + 1 : nx[i]);
-        }
 
-        // Set precision based on the template type
-        constexpr DFTI_CONFIG_VALUE precision = std::is_same<T, double>::value ? DFTI_DOUBLE : DFTI_SINGLE;
-
-        if (DIM == 1)
+        // Calculate strides for complex domain
+        if (std::is_same<T, double>::value)
         {
-            status = DftiCreateDescriptor(&hand_forward, precision, DFTI_REAL, 1, NX[0]);
-            status = DftiSetValue(hand_forward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(hand_forward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiCommitDescriptor(hand_forward);
-    
-            status = DftiCreateDescriptor(&hand_backward, precision, DFTI_REAL, 1, NX[0]);
-            status = DftiSetValue(hand_backward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(hand_backward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiCommitDescriptor(hand_backward);
+            for (int i = DIM - 1; i > 0; i--)
+                cs[i] = cs[i + 1] * (i == DIM - 1 ? nx[i] / 2 + 1 : nx[i]);
         }
         else
         {
-            status = DftiCreateDescriptor(&hand_forward, precision, DFTI_REAL, DIM, NX);
-            status = DftiSetValue(hand_forward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(hand_forward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiSetValue(hand_forward, DFTI_INPUT_STRIDES, rs);
-            status = DftiSetValue(hand_forward, DFTI_OUTPUT_STRIDES, cs);
-            status = DftiCommitDescriptor(hand_forward);
-
-            status = DftiCreateDescriptor(&hand_backward, precision, DFTI_REAL, DIM, NX);
-            status = DftiSetValue(hand_backward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
-            status = DftiSetValue(hand_backward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            status = DftiSetValue(hand_backward, DFTI_INPUT_STRIDES, cs);
-            status = DftiSetValue(hand_backward, DFTI_OUTPUT_STRIDES, rs);
-            status = DftiCommitDescriptor(hand_backward);
+            for (int i = DIM - 1; i > 0; i--)
+                cs[i] = cs[i + 1] * nx[i];
         }
 
-        if (status != 0)
-            std::cout << "MKL constructor, status: " << status << std::endl;
+        if (DIM == 1)
+        {
+            // 1D FFT
+            status = DftiCreateDescriptor(&hand_forward, DFTI_DOUBLE, dtype, 1, NX[0]);
+            status = DftiCreateDescriptor(&hand_backward, DFTI_DOUBLE, dtype, 1, NX[0]);
+        }
+        else
+        {
+            // Multi-dimensional FFT
+            status = DftiCreateDescriptor(&hand_forward, DFTI_DOUBLE, dtype, DIM, NX);
+            status = DftiSetValue(hand_forward, DFTI_INPUT_STRIDES, rs);
+            status = DftiSetValue(hand_forward, DFTI_OUTPUT_STRIDES, cs);
 
-        // Compute a normalization factor
-        this->fft_normal_factor = static_cast<T>(this->total_grid);
+            status = DftiCreateDescriptor(&hand_backward, DFTI_DOUBLE, dtype, DIM, NX);
+            status = DftiSetValue(hand_backward, DFTI_INPUT_STRIDES, cs);
+            status = DftiSetValue(hand_backward, DFTI_OUTPUT_STRIDES, rs);
+        }
+        status = DftiSetValue(hand_forward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+        status = DftiSetValue(hand_backward, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+        if (is_real)
+        {
+            status = DftiSetValue(hand_forward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
+            status = DftiSetValue(hand_backward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
+        }
+        status = DftiCommitDescriptor(hand_forward);
+        status = DftiSetValue(hand_backward, DFTI_BACKWARD_SCALE, 1.0/((double)total_grid));
+        status = DftiCommitDescriptor(hand_backward);
+
+        if (status != 0)
+            std::cerr << "MKL constructor, status: " << status << std::endl;
+
     }
     catch (std::exception &exc)
     {
@@ -83,14 +90,14 @@ MklFFT<T, DIM>::~MklFFT()
     status = DftiFreeDescriptor(&hand_backward);
 
     if (status != 0)
-        std::cout << "MKL destructor, status: " << status << std::endl;
+        std::cerr << "MKL destructor, status: " << status << std::endl;
 }
 
 template <typename T, int DIM>
-void MklFFT<T, DIM>::forward(T *rdata, std::complex<T> *cdata)
+void MklFFT<T, DIM>::forward(T *rdata, std::complex<double> *cdata)
 {
-    int status;
-    status = DftiComputeForward(hand_forward, rdata, cdata);
+    // Real-to-complex transform
+    int status = DftiComputeForward(hand_forward, rdata, cdata);
 
     if (status != 0)
     {
@@ -99,21 +106,21 @@ void MklFFT<T, DIM>::forward(T *rdata, std::complex<T> *cdata)
 }
 
 template <typename T, int DIM>
-void MklFFT<T, DIM>::backward(std::complex<T> *cdata, T *rdata)
+void MklFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
 {
-    int status;
-    status = DftiComputeBackward(hand_backward, cdata, rdata);
+    // Complex-to-real transform
+    int status = DftiComputeBackward(hand_backward, cdata, rdata);
 
     if (status != 0)
     {
         throw_with_line_number("MKL backward, status: " + std::to_string(status));
     }
-
-    for (int i = 0; i < total_grid; i++)
-        rdata[i] /= fft_normal_factor;
 }
 
 // Explicit template instantiations for 1D, 2D, and 3D FFTs
 template class MklFFT<double, 1>;
 template class MklFFT<double, 2>;
 template class MklFFT<double, 3>;
+template class MklFFT<std::complex<double>, 1>;
+template class MklFFT<std::complex<double>, 2>;
+template class MklFFT<std::complex<double>, 3>;
