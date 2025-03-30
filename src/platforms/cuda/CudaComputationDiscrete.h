@@ -13,14 +13,14 @@
 #include "Molecules.h"
 #include "PropagatorComputation.h"
 #include "CudaCommon.h"
-#include "CudaSolverPseudo.h"
+#include "CudaSolver.h"
 #include "Scheduler.h"
 
 class CudaComputationDiscrete : public PropagatorComputation
 {
 private:
     // Pseudo-spectral PDE solver
-    CudaSolverPseudo *propagator_solver;
+    CudaSolver<double> *propagator_solver;
 
     // The number of parallel streams for propagator computation
     int n_streams;

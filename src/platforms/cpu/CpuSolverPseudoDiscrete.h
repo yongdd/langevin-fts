@@ -16,13 +16,14 @@
 #include "Pseudo.h"
 #include "FFT.h"
 
-class CpuSolverPseudoDiscrete : public CpuSolver
+template <typename T>
+class CpuSolverPseudoDiscrete : public CpuSolver<T>
 {
 private:
     ComputationBox *cb;
     Molecules *molecules;
     
-    FFT<double> *fft;
+    FFT<T> *fft;
     std::string chain_model;
 
     // For stress calculation: compute_stress()
@@ -38,16 +39,16 @@ public:
     CpuSolverPseudoDiscrete(ComputationBox *cb, Molecules *molecules);
     ~CpuSolverPseudoDiscrete();
     void update_laplacian_operator() override;
-    void update_dw(std::map<std::string, const double*> w_input) override;
+    void update_dw(std::map<std::string, const T*> w_input) override;
 
     // Advance propagator by one segment step
-    void advance_propagator(double *q_in, double *q_out, std::string monomer_type, const double* q_mask) override;
+    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask) override;
 
     // Advance propagator by half bond step
-    void advance_propagator_half_bond_step(double *q_in, double *q_out, std::string monomer_type) override;
+    void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) override;
 
     // Compute stress of single segment
-    std::vector<double> compute_single_segment_stress(
-                double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length) override;
+    std::vector<T> compute_single_segment_stress(
+                T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif

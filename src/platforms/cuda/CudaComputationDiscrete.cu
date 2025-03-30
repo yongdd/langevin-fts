@@ -5,6 +5,7 @@
 
 #include "CudaComputationDiscrete.h"
 #include "CudaComputationBox.h"
+#include "CudaSolverPseudoDiscrete.h"
 
 CudaComputationDiscrete::CudaComputationDiscrete(
     ComputationBox *cb,
@@ -40,7 +41,7 @@ CudaComputationDiscrete::CudaComputationDiscrete(
             gpu_error_check(cudaStreamCreate(&streams[i][1])); // for memcpy
         }
 
-        this->propagator_solver = new CudaSolverPseudo(cb, molecules, n_streams, streams, false);
+        this->propagator_solver = new CudaSolverPseudoDiscrete(cb, molecules, n_streams, streams, false);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
@@ -527,7 +528,7 @@ void CudaComputationDiscrete::compute_propagators(
                             gpu_error_check(cudaMemcpyAsync(d_propagator_half_steps[key][0], _d_propagator[1], sizeof(double)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
                             // Add half bond, STREAM 0
-                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                            propagator_solver->advance_propagator_half_bond_step(
                                 gpu, STREAM,
                                 _d_propagator[1], _d_propagator[1], monomer_type);
 
@@ -537,7 +538,7 @@ void CudaComputationDiscrete::compute_propagators(
                         }
                         else
                         {
-                            propagator_solver->advance_propagator_discrete(
+                            propagator_solver->advance_propagator(
                                 gpu, STREAM,
                                 _d_propagator[1],
                                 _d_propagator[1],
@@ -597,7 +598,7 @@ void CudaComputationDiscrete::compute_propagators(
                         if (n_segment_to > 0)
                         {
                             // Add half bond, STREAM 0
-                            propagator_solver->advance_propagator_discrete_half_bond_step(
+                            propagator_solver->advance_propagator_half_bond_step(
                                 gpu, STREAM,
                                 d_propagator_half_steps[key][0], _d_propagator[1], monomer_type);
 
@@ -632,7 +633,7 @@ void CudaComputationDiscrete::compute_propagators(
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(1) << std::endl;
                         #endif
 
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                        propagator_solver->advance_propagator_half_bond_step(
                             gpu, STREAM, 
                             _d_propagator[1],
                             d_propagator_half_steps[key][1],
@@ -664,7 +665,7 @@ void CudaComputationDiscrete::compute_propagators(
                         //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
                         // #endif
 
-                        propagator_solver->advance_propagator_discrete(
+                        propagator_solver->advance_propagator(
                             gpu, STREAM, 
                             _d_propagator[n],
                             _d_propagator[n+1],
@@ -717,7 +718,7 @@ void CudaComputationDiscrete::compute_propagators(
                         // #endif
 
                         // DEVICE 1, STREAM 0: calculate propagators
-                        propagator_solver->advance_propagator_discrete(
+                        propagator_solver->advance_propagator(
                             gpu, STREAM, 
                             d_propagator_device[gpu][prev],
                             d_propagator_device[gpu][next],
@@ -775,7 +776,7 @@ void CudaComputationDiscrete::compute_propagators(
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(n+1) << std::endl;
                         #endif
 
-                        propagator_solver->advance_propagator_discrete_half_bond_step(
+                        propagator_solver->advance_propagator_half_bond_step(
                             gpu, STREAM,
                             _d_propagator[n+1],
                             d_propagator_half_steps[key][n+1],
@@ -1232,7 +1233,7 @@ void CudaComputationDiscrete::compute_stress()
                 bool is_half_bond_length = std::get<2>(_block_stress_compuation_key[n]);
                 if (d_propagator_left != nullptr)
                 {
-                    propagator_solver->compute_single_segment_stress_discrete(
+                    propagator_solver->compute_single_segment_stress(
                         gpu, STREAM, d_q_pair[STREAM][prev], d_segment_stress, monomer_type, is_half_bond_length);
                     gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
                 }

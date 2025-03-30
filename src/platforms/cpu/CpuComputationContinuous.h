@@ -21,7 +21,7 @@ class CpuComputationContinuous : public PropagatorComputation
 {
 private:
     // Pseudo-spectral PDE solver
-    CpuSolver *propagator_solver;
+    CpuSolver<double> *propagator_solver;
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
