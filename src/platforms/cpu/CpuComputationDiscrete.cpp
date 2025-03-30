@@ -18,7 +18,7 @@ CpuComputationDiscrete::CpuComputationDiscrete(
         #endif
 
         const int M = cb->get_total_grid();
-        this->propagator_solver = new CpuSolverPseudoDiscrete(cb, molecules);
+        this->propagator_solver = new CpuSolverPseudoDiscrete<double>(cb, molecules);
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");

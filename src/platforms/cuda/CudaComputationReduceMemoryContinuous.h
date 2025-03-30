@@ -27,7 +27,7 @@ class CudaComputationReduceMemoryContinuous : public PropagatorComputation
 {
 private:
     // Pseudo-spectral PDE solver
-    CudaSolver *propagator_solver;
+    CudaSolver<double> *propagator_solver;
     std::string method;
 
     // The number of parallel streams for propagator computation

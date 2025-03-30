@@ -65,6 +65,11 @@ __global__ void exp_real(double* dst,
                         double  a, double exp_b,
                         const int M);
 
+__global__ void exp_complex(ftsComplex* dst,
+                        const ftsComplex* src,
+                        double  a, double exp_b,
+                        const int M);
+
 __global__ void multi_real(double* dst,
                         const double* src1,
                         const double* src2,

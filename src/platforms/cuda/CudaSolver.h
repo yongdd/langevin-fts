@@ -14,28 +14,35 @@
 #include "ComputationBox.h"
 #include "CudaCommon.h"
 
+template <typename T>
 class CudaSolver
 {
 public:
     // Arrays for real-space method with operator spliting
-    std::map<std::string, double*> d_exp_dw[MAX_GPUS];       // Boltzmann factor for the single segment
-    std::map<std::string, double*> d_exp_dw_half[MAX_GPUS];  // Boltzmann factor for the half segment
+    std::map<std::string, T*> d_exp_dw[MAX_GPUS];       // Boltzmann factor for the single segment
+    std::map<std::string, T*> d_exp_dw_half[MAX_GPUS];  // Boltzmann factor for the half segment
 
     // CudaSolver(ComputationBox *cb, Molecules *molecules);
     virtual ~CudaSolver() {};
     virtual void update_laplacian_operator() = 0;
-    virtual void update_dw(std::string device, std::map<std::string, const double*> d_w_input) = 0;
+    virtual void update_dw(std::string device, std::map<std::string, const T*> d_w_input) = 0;
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
-    virtual void advance_propagator_continuous(
+    virtual void advance_propagator(
         const int GPU, const int STREAM,
-        double *d_q_in, double *d_q_out,
+        T *d_q_in, T *d_q_out,
         std::string monomer_type, double *d_q_mask) = 0;
 
-    virtual void compute_single_segment_stress_continuous(
+    // Advance propagator by half bond step
+    virtual void advance_propagator_half_bond_step(
         const int GPU, const int STREAM,
-        double *d_q_pair, double *d_segment_stress, std::string monomer_type) = 0;
+        T *q_in, T *q_out, std::string monomer_type) = 0;
+
+    // Compute stress of single segment
+    virtual void compute_single_segment_stress(
+        const int GPU, const int STREAM,
+        T *d_q_pair, T *d_segment_stress, std::string monomer_type, bool is_half_bond_length) = 0;
 
 //     virtual void compute_single_segment_stress_fourier(const int GPU, double *d_q) = 0;
 //     virtual std::vector<double> compute_single_segment_stress_continuous(const int GPU, std::string monomer_type) = 0;

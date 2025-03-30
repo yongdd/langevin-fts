@@ -68,7 +68,7 @@ __global__  void tridiagonal_periodic(
     const int *d_offset, const int REPEAT,
     const int INTERVAL, const int M);
 
-class CudaSolverReal : public CudaSolver
+class CudaSolverReal : public CudaSolver<double>
 {
 private:
     ComputationBox *cb;
@@ -141,14 +141,22 @@ public:
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
-    void advance_propagator_continuous(
-            const int GPU, const int STREAM,
-            double *d_q_in, double *d_q_out,
-            std::string monomer_type, double *d_q_mask) override;
-
-    // void compute_single_segment_stress_fourier(const int GPU, double *d_q) override;
-    void compute_single_segment_stress_continuous(
+    void advance_propagator(
         const int GPU, const int STREAM,
-        double *d_q_pair, double *d_segment_stress, std::string monomer_type) override;
+        double *d_q_in, double *d_q_out,
+        std::string monomer_type, double *d_q_mask) override;
+
+    // Advance propagator by half bond step
+    void advance_propagator_half_bond_step(
+        const int GPU, const int STREAM,
+        double *d_q_in, double *d_q_out,
+        std::string monomer_type) override {};
+
+    // Compute stress of single segment
+    void compute_single_segment_stress(
+        const int GPU, const int STREAM,
+        double *d_q_pair, double *d_segment_stress,
+        std::string monomer_type, bool is_half_bond_length) override;
+
 };
 #endif

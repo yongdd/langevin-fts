@@ -15,7 +15,7 @@
 #include "CpuSolver.h"
 #include "FiniteDifference.h"
 
-class CpuSolverReal : public CpuSolver
+class CpuSolverReal : public CpuSolver<double>
 {
 private:
     ComputationBox *cb;

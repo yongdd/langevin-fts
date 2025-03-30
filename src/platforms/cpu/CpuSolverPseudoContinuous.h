@@ -17,7 +17,7 @@
 #include "FFT.h"
 
 template <typename T>
-class CpuSolverPseudoContinuous : public CpuSolver
+class CpuSolverPseudoContinuous : public CpuSolver<T>
 {
 private:
     ComputationBox *cb;
@@ -27,14 +27,14 @@ private:
     std::string chain_model;
 
     // For stress calculation: compute_stress()
-    T *fourier_basis_x;
-    T *fourier_basis_y;
-    T *fourier_basis_z;
+    double *fourier_basis_x;
+    double *fourier_basis_y;
+    double *fourier_basis_z;
 
 public:
     // Arrays for pseudo-spectral
-    std::map<std::string, T*> boltz_bond;        // Boltzmann factor for the single bond
-    std::map<std::string, T*> boltz_bond_half;   // Boltzmann factor for the half bond
+    std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
+    std::map<std::string, double*> boltz_bond_half;   // Boltzmann factor for the half bond
 
     CpuSolverPseudoContinuous(ComputationBox *cb, Molecules *molecules);
     ~CpuSolverPseudoContinuous();

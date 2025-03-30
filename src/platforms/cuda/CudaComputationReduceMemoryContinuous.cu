@@ -2,7 +2,7 @@
 #include <omp.h>
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
-#include "CudaSolverPseudo.h"
+#include "CudaSolverPseudoContinuous.h"
 #include "CudaSolverReal.h"
 #include "SimpsonRule.h"
 
@@ -43,7 +43,7 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
 
         this->method = method;
         if(method == "pseudospectral")
-            this->propagator_solver = new CudaSolverPseudo(cb, molecules, n_streams, streams, true);
+            this->propagator_solver = new CudaSolverPseudoContinuous(cb, molecules, n_streams, streams, true);
         else if(method == "realspace")
             this->propagator_solver = new CudaSolverReal(cb, molecules, n_streams, streams, true);
 
@@ -478,7 +478,7 @@ void CudaComputationReduceMemoryContinuous::compute_propagators(
                     #endif
 
                     // STREAM 0: calculate propagators
-                    propagator_solver->advance_propagator_continuous(
+                    propagator_solver->advance_propagator(
                         gpu, STREAM, 
                         d_q_one[STREAM][prev],
                         d_q_one[STREAM][next],
@@ -933,8 +933,9 @@ void CudaComputationReduceMemoryContinuous::compute_stress()
                 }
 
                 // STREAM 0: Compute stress
-                propagator_solver->compute_single_segment_stress_continuous(
-                    gpu, STREAM, d_q_pair[STREAM][prev], d_segment_stress, monomer_type);   
+                propagator_solver->compute_single_segment_stress(
+                    gpu, STREAM, d_q_pair[STREAM][prev], d_segment_stress,
+                    monomer_type, false);   
                 gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
 
                 // Wait until computation and memory copy are done

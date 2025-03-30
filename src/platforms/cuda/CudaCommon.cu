@@ -125,8 +125,8 @@ __global__ void linear_scaling_real(
 
 __global__ void exp_real(double* dst,
                         const double* src,
-                        double  a, 
-                        double  exp_b, const int M)
+                        double a, 
+                        double exp_b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -136,6 +136,19 @@ __global__ void exp_real(double* dst,
     }
 }
 
+__global__ void exp_complex(ftsComplex* dst,
+                            const ftsComplex* src,
+                            double a, 
+                            double exp_b, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a * exp(exp_b * src[i].x) * cos(exp_b * src[i].y);
+        dst[i].y = a * exp(exp_b * src[i].x) * sin(exp_b * src[i].y);
+        i += blockDim.x * gridDim.x;
+    }
+}
 __global__ void multi_real(double* dst,
                           const double* src1,
                           const double* src2,

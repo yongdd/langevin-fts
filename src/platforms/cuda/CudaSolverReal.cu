@@ -368,7 +368,7 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_propagator_continuous(
+void CudaSolverReal::advance_propagator(
     const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out,
     std::string monomer_type, double *d_q_mask) 
@@ -605,9 +605,10 @@ void CudaSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::compute_single_segment_stress_continuous(
+void CudaSolverReal::compute_single_segment_stress(
         const int GPU, const int STREAM,
-        double *d_q_pair, double *d_segment_stress, std::string monomer_type)
+        double *d_q_pair, double *d_segment_stress,
+        std::string monomer_type, bool is_half_bond_length)
 {
     try
     {
