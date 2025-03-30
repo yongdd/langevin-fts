@@ -7,7 +7,7 @@
 #include "Exception.h"
 #include "FFT.h"
 #ifdef USE_CPU_MKL
-#include "MklFFT1D.h"
+#include "MklFFT.h"
 #endif
 
 int main()
@@ -35,20 +35,19 @@ int main()
 
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
-        std::vector<FFT*> fft_list;
-        #ifdef USE_CPU_MKL
-        fft_list.push_back(new MklFFT1D({II}));
-        #endif
-
+        std::vector<FFT<double> *> fft_list;
+#ifdef USE_CPU_MKL
+        fft_list.push_back(new MklFFT<double, 1>({II}));
+#endif
         // For each platform    
-        for(FFT* fft : fft_list){
+        for(FFT<double>* fft : fft_list){
             for(int i=0; i<M; i++)
                 data_r[i] = 0.0;
             for(int i=0; i<M_COMPLEX; i++)
                 data_k[i] = 0.0;
 
             //---------------- Forward --------------------
-            std::cout<< "Running FFT 1D" << std::endl;
+            std::cout<< "Running FFT<double> 1D" << std::endl;
             fft->forward(data_init,data_k);
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
             for(int i=0; i<M_COMPLEX; i++){
@@ -56,7 +55,7 @@ int main()
                 diff_sq_cplx[i] += pow(std::abs(data_k[i].imag() - data_k_answer[i].imag()),2);
             }
             error = sqrt(*std::max_element(diff_sq_cplx.begin(),diff_sq_cplx.end()));
-            std::cout<< "FFT Forward Error: " << error << std::endl;
+            std::cout<< "FFT<double> Forward Error: " << error << std::endl;
             if(!std::isfinite(error) || error > 1e-7)
                 return -1;
 
@@ -65,7 +64,7 @@ int main()
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(std::abs(data_r[i] - data_init[i]),2);
             error = sqrt(*std::max_element(diff_sq.begin(),diff_sq.end()));
-            std::cout<< "FFT Backward Error: " << error << std::endl;
+            std::cout<< "FFT<double> Backward Error: " << error << std::endl;
             if(!std::isfinite(error) || error > 1e-7)
                 return -1;
             

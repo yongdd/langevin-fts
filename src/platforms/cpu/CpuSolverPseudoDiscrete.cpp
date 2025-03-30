@@ -1,20 +1,18 @@
 #include <iostream>
 #include <cmath>
-#include "CpuSolverPseudoDiscrete.h"
 
-#include "MklFFT3D.h"
-#include "MklFFT2D.h"
-#include "MklFFT1D.h"
+#include "CpuSolverPseudoDiscrete.h"
+#include "MklFFT.h"
 
 CpuSolverPseudoDiscrete::CpuSolverPseudoDiscrete(ComputationBox *cb, Molecules *molecules)
 {
     try{
         if (cb->get_dim() == 3)
-            this->fft = new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
+            this->fft = new MklFFT<double, 3>({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
         else if (cb->get_dim() == 2)
-            this->fft = new MklFFT2D({cb->get_nx(0),cb->get_nx(1)});
+            this->fft = new MklFFT<double, 2>({cb->get_nx(0),cb->get_nx(1)});
         else if (cb->get_dim() == 1)
-            this->fft = new MklFFT1D(cb->get_nx(0));
+            this->fft = new MklFFT<double, 1>({cb->get_nx(0)});
 
         this->cb = cb;
         this->molecules = molecules;

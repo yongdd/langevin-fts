@@ -22,7 +22,7 @@ private:
     ComputationBox *cb;
     Molecules *molecules;
     
-    FFT *fft;
+    FFT<double> *fft;
     std::string chain_model;
 
     // For stress calculation: compute_stress()

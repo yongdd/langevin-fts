@@ -1,20 +1,19 @@
 #include <iostream>
 #include <cmath>
+
 #include "CpuSolverPseudoContinuous.h"
+#include "MklFFT.h"
 
-#include "MklFFT3D.h"
-#include "MklFFT2D.h"
-#include "MklFFT1D.h"
-
-CpuSolverPseudoContinuous::CpuSolverPseudoContinuous(ComputationBox *cb, Molecules *molecules)
+template <typename T>
+CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox *cb, Molecules *molecules)
 {
     try{
         if (cb->get_dim() == 3)
-            this->fft = new MklFFT3D({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
+            this->fft = new MklFFT<T, 3>({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
         else if (cb->get_dim() == 2)
-            this->fft = new MklFFT2D({cb->get_nx(0),cb->get_nx(1)});
+            this->fft = new MklFFT<T, 2>({cb->get_nx(0),cb->get_nx(1)});
         else if (cb->get_dim() == 1)
-            this->fft = new MklFFT1D(cb->get_nx(0));
+            this->fft = new MklFFT<T, 1>({cb->get_nx(0)});
 
         this->cb = cb;
         this->molecules = molecules;
@@ -27,16 +26,16 @@ CpuSolverPseudoContinuous::CpuSolverPseudoContinuous(ComputationBox *cb, Molecul
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            boltz_bond     [monomer_type] = new double[M_COMPLEX];
-            boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
-            exp_dw         [monomer_type] = new double[M];
-            exp_dw_half    [monomer_type] = new double[M]; 
+            boltz_bond     [monomer_type] = new T[M_COMPLEX];
+            boltz_bond_half[monomer_type] = new T[M_COMPLEX]; 
+            exp_dw         [monomer_type] = new T[M];
+            exp_dw_half    [monomer_type] = new T[M]; 
         }
 
         // Allocate memory for stress calculation: compute_stress()
-        fourier_basis_x = new double[M_COMPLEX];
-        fourier_basis_y = new double[M_COMPLEX];
-        fourier_basis_z = new double[M_COMPLEX];
+        fourier_basis_x = new T[M_COMPLEX];
+        fourier_basis_y = new T[M_COMPLEX];
+        fourier_basis_z = new T[M_COMPLEX];
 
         update_laplacian_operator();
     }
@@ -45,7 +44,8 @@ CpuSolverPseudoContinuous::CpuSolverPseudoContinuous(ComputationBox *cb, Molecul
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverPseudoContinuous::~CpuSolverPseudoContinuous()
+template <typename T>
+CpuSolverPseudoContinuous<T>::~CpuSolverPseudoContinuous()
 {
     delete fft;
 
@@ -62,7 +62,8 @@ CpuSolverPseudoContinuous::~CpuSolverPseudoContinuous()
     for(const auto& item: exp_dw_half)
         delete[] item.second;
 }
-void CpuSolverPseudoContinuous::update_laplacian_operator()
+template <typename T>
+void CpuSolverPseudoContinuous<T>::update_laplacian_operator()
 {
     try
     {
@@ -82,7 +83,8 @@ void CpuSolverPseudoContinuous::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverPseudoContinuous::update_dw(std::map<std::string, const double*> w_input)
+template <typename T>
+void CpuSolverPseudoContinuous<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = cb->get_total_grid();
     const double ds = molecules->get_ds();
@@ -96,7 +98,7 @@ void CpuSolverPseudoContinuous::update_dw(std::map<std::string, const double*> w
     for(const auto& item: w_input)
     {
         std::string monomer_type = item.first;
-        const double *w = item.second;
+        const T *w = item.second;
 
         for(int i=0; i<M; i++)
         { 
@@ -105,20 +107,21 @@ void CpuSolverPseudoContinuous::update_dw(std::map<std::string, const double*> w
         }
     }
 }
-void CpuSolverPseudoContinuous::advance_propagator(
-    double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
+template <typename T>
+void CpuSolverPseudoContinuous<T>::advance_propagator(
+    T *q_in, T *q_out, std::string monomer_type, const double *q_mask)
 {
     try
     {
         const int M = cb->get_total_grid();
         const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
-        double q_out1[M], q_out2[M];
+        T q_out1[M], q_out2[M];
         std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
 
-        double *_exp_dw = exp_dw[monomer_type];
-        double *_exp_dw_half = exp_dw_half[monomer_type];
-        double *_boltz_bond = boltz_bond[monomer_type];
-        double *_boltz_bond_half = boltz_bond_half[monomer_type];
+        T *_exp_dw = exp_dw[monomer_type];
+        T *_exp_dw_half = exp_dw_half[monomer_type];
+        T *_boltz_bond = boltz_bond[monomer_type];
+        T *_boltz_bond_half = boltz_bond_half[monomer_type];
 
         // step 1
         for(int i=0; i<M; i++)
@@ -174,17 +177,18 @@ void CpuSolverPseudoContinuous::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuSolverPseudoContinuous::compute_single_segment_stress(
-                double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
+template <typename T>
+std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
+                T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     const int DIM  = cb->get_dim();
     // const int M    = cb->get_total_grid();
     const int M_COMPLEX = Pseudo::get_total_complex_grid(cb->get_nx());
     auto bond_lengths = molecules->get_bond_lengths();
     double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-    double coeff;
+    T coeff;
     
-    std::vector<double> stress(DIM);
+    std::vector<T> stress(DIM);
     std::complex<double> qk_1[M_COMPLEX];
     std::complex<double> qk_2[M_COMPLEX];
 
@@ -221,3 +225,7 @@ std::vector<double> CpuSolverPseudoContinuous::compute_single_segment_stress(
 
     return stress;
 }
+
+// Explicit template instantiation for double and std::complex<double>
+template class CpuSolverPseudoContinuous<double>;
+// template class CpuSolverPseudoContinuous<std::complex<double>>;

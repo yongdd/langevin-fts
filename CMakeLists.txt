@@ -59,9 +59,7 @@ IF(MKL_FOUND)
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
-        src/platforms/cpu/MklFFT1D.cpp
-        src/platforms/cpu/MklFFT2D.cpp
-        src/platforms/cpu/MklFFT3D.cpp
+        src/platforms/cpu/MklFFT.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoContinuous.cpp

@@ -21,7 +21,7 @@ CpuComputationContinuous::CpuComputationContinuous(
 
         const int M = cb->get_total_grid();
         if(method == "pseudospectral")
-            this->propagator_solver = new CpuSolverPseudoContinuous(cb, molecules);
+            this->propagator_solver = new CpuSolverPseudoContinuous<double>(cb, molecules);
         else if(method == "realspace")
             this->propagator_solver = new CpuSolverReal(cb, molecules);
 
