@@ -1,10 +1,7 @@
 #include <iostream>
 #include <cmath>
-#include "CpuSolverReal.h"
 
-#include "MklFFT3D.h"
-#include "MklFFT2D.h"
-#include "MklFFT1D.h"
+#include "CpuSolverReal.h"
 
 CpuSolverReal::CpuSolverReal(ComputationBox *cb, Molecules *molecules)
 {
