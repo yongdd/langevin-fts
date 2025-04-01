@@ -57,85 +57,59 @@ public:
 #define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
-__global__ void linear_scaling_real(
-            double* dst, const double* src, double a, double b, const int M);
+template <typename T>
+__global__ void ker_linear_scaling(T* dst, const T* src, double a, double b, const int M);
 
-__global__ void exp_real(double* dst,
-                        const double* src,
-                        double  a, double exp_b,
-                        const int M);
+template <typename T>
+__global__ void ker_exp(T* dst, const T* src, double a, double exp_b, const int M);
 
-__global__ void exp_complex(ftsComplex* dst,
-                        const ftsComplex* src,
-                        double  a, double exp_b,
-                        const int M);
+template <typename T>
+__global__ void ker_multi(T* dst, const T* src1, const T* src2, double a, const int M);
 
-__global__ void multi_real(double* dst,
-                        const double* src1,
-                        const double* src2,
-                        double  a, const int M);
-                          
-__global__ void mutiple_multi_real(int n_comp,
-                        double* dst,
-                        const double* src1,
-                        const double* src2,
-                        double  a, const int M);
-                                    
-__global__ void divide_real(double* dst,
-                        const double* src1,
-                        const double* src2,
-                        double  a, const int M);
-                          
-__global__ void add_multi_real(double* dst,
-                        const double* src1,
-                        const double* src2,
-                        double  a, const int M);
+template <typename T>
+__global__ void ker_mutiple_multi(int n_comp, T* dst, const T* src1, const T* src2, double  a, const int M);
 
-__global__ void lin_comb(double* dst,
-                        double a,
-                        const double* src1,
-                        double b,
-                        const double* src2,
-                        const int M);
+template <typename T>
+__global__ void ker_multi_complex_conjugate(T* dst, const ftsComplex* src1, const ftsComplex* src2, const int M);
 
-__global__ void add_lin_comb(double* dst,
-                        double a,
-                        const double* src1,
-                        double b,
-                        const double* src2,
-                        const int M);
+template <typename T>
+__global__ void ker_divide(T* dst, const T* src1, const T* src2, double a, const int M);
 
-__global__ void multi_complex_real(ftsComplex* dst,
-                                 const double* src, const int M);
+template <typename T>
+__global__ void ker_add_multi(T* dst, const T* src1, const T* src2, double a, const int M);
 
-__global__ void multi_complex_real(ftsComplex* dst,
-                                 const double* src, double a, const int M);
+template <typename T>
+__global__ void ker_lin_comb(T* dst, double a, const T* src1, double b, const T* src2, const int M);
 
-__global__ void multi_complex_conjugate(double* dst,
-                                const ftsComplex* src1,
-                                const ftsComplex* src2, const int M);
+template <typename T>
+__global__ void ker_add_lin_comb(T* dst, double a, const T* src1, double b, const T* src2, const int M);
 
-__global__ void real_multi_exp_dw_two(
-                        double* dst1, const double* src1, const double* exp_dw1,
-                        double* dst2, const double* src2, const double* exp_dw2,
-                        double  a, const int M);
+__global__ void ker_multi_complex_real(ftsComplex* dst, const double* src, double a, const int M);
 
-__global__ void real_multi_exp_dw_four(
-                        double* dst1, const double* src1, const double* exp_dw1,
-                        double* dst2, const double* src2, const double* exp_dw2,
-                        double* dst3, const double* src3, const double* exp_dw3,
-                        double* dst4, const double* src4, const double* exp_dw4,
-                        double  a, const int M);
+template <typename T>
+__global__ void ker_multi_exp_dw_two(
+    T* dst1, const T* src1, const T* exp_dw1,
+    T* dst2, const T* src2, const T* exp_dw2,
+    double a, const int M);
 
-__global__ void complex_real_multi_bond_two(
-                        ftsComplex* dst1, const double* boltz_bond1,
-                        ftsComplex* dst2, const double* boltz_bond2,
-                        const int M);
+template <typename T>
+__global__ void ker_multi_exp_dw_four(
+    T* dst1, const T* src1, const T* exp_dw1,
+    T* dst2, const T* src2, const T* exp_dw2,
+    T* dst3, const T* src3, const T* exp_dw3,
+    T* dst4, const T* src4, const T* exp_dw4,
+    double a, const int M);
 
-__global__ void complex_real_multi_bond_four(
-                        ftsComplex* dst1, const double* boltz_bond1,
-                        ftsComplex* dst2, const double* boltz_bond2,
-                        ftsComplex* dst3, const double* boltz_bond3,
-                        ftsComplex* dst4, const double* boltz_bond4,
-                        const int M);
+__global__ void ker_complex_real_multi_bond_two(
+    ftsComplex* dst1, const double* boltz_bond1,
+    ftsComplex* dst2, const double* boltz_bond2,
+    const int M);
+
+__global__ void ker_complex_real_multi_bond_four(
+    ftsComplex* dst1, const double* boltz_bond1,
+    ftsComplex* dst2, const double* boltz_bond2,
+    ftsComplex* dst3, const double* boltz_bond3,
+    ftsComplex* dst4, const double* boltz_bond4,
+    const int M);
+
 #endif

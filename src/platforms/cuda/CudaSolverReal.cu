@@ -348,9 +348,9 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
-                exp_real<<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
+                ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
                     (d_exp_dw[gpu][monomer_type],      d_exp_dw[gpu][monomer_type],      1.0, -0.50*ds, M);
-                exp_real<<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
+                ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
                     (d_exp_dw_half[gpu][monomer_type], d_exp_dw_half[gpu][monomer_type], 1.0, -0.25*ds, M);
             }
 
@@ -384,7 +384,7 @@ void CudaSolverReal::advance_propagator(
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
 
         // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
 
         if(DIM == 3)           // input, output
             advance_propagator_3d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
@@ -394,11 +394,11 @@ void CudaSolverReal::advance_propagator(
             advance_propagator_1d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
 
         // Multiply mask
         if (d_q_mask != nullptr)
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
