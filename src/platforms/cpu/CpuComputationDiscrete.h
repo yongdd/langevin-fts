@@ -17,19 +17,20 @@
 #include "CpuSolverPseudoDiscrete.h"
 #include "Scheduler.h"
 
-class CpuComputationDiscrete : public PropagatorComputation
+template <typename T>
+class CpuComputationDiscrete : public PropagatorComputation<T>
 {
 private:
     // Pseudo-spectral integral solver
-    CpuSolver<double> *propagator_solver;
+    CpuSolver<T> *propagator_solver;
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
     int n_streams;
     // Map for propagator q(r,s; code)
-    std::map<std::string, double **> propagator;
+    std::map<std::string, T **> propagator;
     // Map for q(r,1/2+s; code)
-    std::map<std::string, double **> propagator_half_steps;
+    std::map<std::string, T **> propagator_half_steps;
     // Map for deallocation of propagator
     std::map<std::string, int> propagator_size;
     // Check if computation of propagator is finished
@@ -41,16 +42,16 @@ private:
 
     // Remember one segment for each polymer chain to compute total partition function
     // (polymer id, propagator forward, propagator backward, monomer_type, n_repeated)
-    std::vector<std::tuple<int, double *, double *, std::string, int>> single_partition_segment;
+    std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
 
     // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
-    std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
+    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
 
     // Solvent concentrations
-    std::vector<double *> phi_solvent;
+    std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const double *exp_dw, const int N_RIGHT, const int N_LEFT);
+    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const T *exp_dw, const int N_RIGHT, const int N_LEFT);
 public:
     CpuComputationDiscrete(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
     ~CpuComputationDiscrete();
@@ -58,29 +59,29 @@ public:
     void update_laplacian_operator() override;
 
     void compute_propagators(
-        std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override;
+        std::map<std::string, const T*> w_block,
+        std::map<std::string, const T*> q_init = {}) override;
 
     void compute_concentrations() override;
 
     void compute_statistics(
-        std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override;
+        std::map<std::string, const T*> w_block,
+        std::map<std::string, const T*> q_init = {}) override;
 
     void compute_stress() override;
-    double get_total_partition(int polymer) override;
-    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
+    T get_total_partition(int polymer) override;
+    void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
     // Canonical ensemble
-    void get_total_concentration(std::string monomer_type, double *phi) override;
-    void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
-    void get_block_concentration(int polymer, double *phi) override;
+    void get_total_concentration(std::string monomer_type, T *phi) override;
+    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
+    void get_block_concentration(int polymer, T *phi) override;
 
-    double get_solvent_partition(int s) override;
-    void get_solvent_concentration(int s, double *phi) override;
+    T get_solvent_partition(int s) override;
+    void get_solvent_concentration(int s, T *phi) override;
 
     // Grand canonical ensemble
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, double *phi) override;
+    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
 
     // For tests
     bool check_total_partition() override;

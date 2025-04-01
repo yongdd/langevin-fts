@@ -322,7 +322,7 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     }
     return set_I;
 }
-bool PropagatorComputationOptimizer::is_aggregated() const
+bool PropagatorComputationOptimizer::use_aggregation() const
 {
     return aggregate_propagator_computation;
 }

@@ -87,18 +87,18 @@ void CpuSolverReal::update_laplacian_operator()
 {
     try
     {
-        for(const auto& item: molecules->get_bond_lengths())
+        for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
 
             FiniteDifference::get_laplacian_matrix(
-                cb->get_boundary_conditions(),
-                cb->get_nx(), cb->get_dx(),
+                this->cb->get_boundary_conditions(),
+                this->cb->get_nx(), this->cb->get_dx(),
                 xl[monomer_type], xd[monomer_type], xh[monomer_type],
                 yl[monomer_type], yd[monomer_type], yh[monomer_type],
                 zl[monomer_type], zd[monomer_type], zh[monomer_type],
-                bond_length_sq, molecules->get_ds());
+                bond_length_sq, this->molecules->get_ds());
         }
     }
     catch(std::exception& exc)
@@ -108,8 +108,8 @@ void CpuSolverReal::update_laplacian_operator()
 }
 void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
 {
-    const int M = cb->get_total_grid();
-    const double ds = molecules->get_ds();
+    const int M = this->cb->get_total_grid();
+    const double ds = this->molecules->get_ds();
 
     for(const auto& item: w_input)
     {
@@ -134,8 +134,8 @@ void CpuSolverReal::advance_propagator(
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int DIM = cb->get_dim();
+        const int M = this->cb->get_total_grid();
+        const int DIM = this->cb->get_dim();
 
         double *_exp_dw = exp_dw[monomer_type];
         double q_exp[M];
@@ -144,12 +144,12 @@ void CpuSolverReal::advance_propagator(
         for(int i=0; i<M; i++)
             q_exp[i] = _exp_dw[i]*q_in[i];
 
-        if(DIM == 3)                                          // input, output
-            advance_propagator_3d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
+        if(DIM == 3)                                                // input, output
+            advance_propagator_3d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
+            advance_propagator_2d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
         else if(DIM ==1 )
-            advance_propagator_1d(cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
+            advance_propagator_1d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
         for(int i=0; i<M; i++)
@@ -174,8 +174,8 @@ void CpuSolverReal::advance_propagator_3d(
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const std::vector<int> nx = cb->get_nx();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
         double q_star[M];
         double q_dstar[M];
         double temp1[nx[0]];
@@ -324,8 +324,8 @@ void CpuSolverReal::advance_propagator_2d(
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const std::vector<int> nx = cb->get_nx();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
         double q_star[M];
         double temp1[nx[0]];
         double temp2[nx[1]];
@@ -421,7 +421,7 @@ void CpuSolverReal::advance_propagator_1d(
 {
     try
     {
-        const std::vector<int> nx = cb->get_nx();
+        const std::vector<int> nx = this->cb->get_nx();
         double q_star[nx[0]];
 
         double *_xl = xl[monomer_type];
@@ -460,7 +460,7 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress(
 {
     try
     {
-        const int DIM  = cb->get_dim();
+        const int DIM  = this->cb->get_dim();
         std::vector<double> stress(DIM); 
 
         throw_with_line_number("Currently, the real-space method does not support stress computation.");   

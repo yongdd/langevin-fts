@@ -250,33 +250,33 @@ void CudaSolverReal::update_laplacian_operator()
 {
     try
     {
-        const int M = cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-        const int DIM = cb->get_dim();
+        const int DIM = this->cb->get_dim();
         std::vector<int> nx(DIM);
         if (DIM == 3)
-            nx = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
+            nx = {this->cb->get_nx(0), this->cb->get_nx(1), this->cb->get_nx(2)};
         else if (DIM == 2)
-            nx = {cb->get_nx(0), cb->get_nx(1), 1};
+            nx = {this->cb->get_nx(0), this->cb->get_nx(1), 1};
         else if (DIM == 1)
-            nx = {cb->get_nx(0), 1, 1};
+            nx = {this->cb->get_nx(0), 1, 1};
 
         double xl[nx[0]], xd[nx[0]], xh[nx[0]];
         double yl[nx[1]], yd[nx[1]], yh[nx[1]];
         double zl[nx[2]], zd[nx[2]], zh[nx[2]];
 
-        for(const auto& item: molecules->get_bond_lengths())
+        for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
 
             FiniteDifference::get_laplacian_matrix(
-                cb->get_boundary_conditions(),
-                cb->get_nx(), cb->get_dx(),
+                this->cb->get_boundary_conditions(),
+                this->cb->get_nx(), this->cb->get_dx(),
                 xl, xd, xh,
                 yl, yd, yh,
                 zl, zd, zh,
-                bond_length_sq, molecules->get_ds());
+                bond_length_sq, this->molecules->get_ds());
 
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
@@ -307,8 +307,8 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_total_grid();
-        const double ds = molecules->get_ds();
+        const int M = this->cb->get_total_grid();
+        const double ds = this->molecules->get_ds();
 
         for(const auto& item: w_input)
         {
@@ -378,8 +378,8 @@ void CudaSolverReal::advance_propagator(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_total_grid();
-        const int DIM = cb->get_dim();
+        const int M = this->cb->get_total_grid();
+        const int DIM = this->cb->get_dim();
 
         double *_d_exp_dw = d_exp_dw[GPU][monomer_type];
 
@@ -387,11 +387,11 @@ void CudaSolverReal::advance_propagator(
         ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
 
         if(DIM == 3)           // input, output
-            advance_propagator_3d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
+            advance_propagator_3d(this->cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
+            advance_propagator_2d(this->cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
         else if(DIM ==1 )
-            advance_propagator_1d(cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
+            advance_propagator_1d(this->cb->get_boundary_conditions(), GPU, STREAM, d_q_out, d_q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
         ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
@@ -414,8 +414,8 @@ void CudaSolverReal::advance_propagator_3d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_total_grid();
-        const std::vector<int> nx = cb->get_nx();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];
         double *_d_xd = d_xd[GPU][monomer_type];
@@ -508,8 +508,8 @@ void CudaSolverReal::advance_propagator_2d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_total_grid();
-        const std::vector<int> nx = cb->get_nx();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];
         double *_d_xd = d_xd[GPU][monomer_type];
@@ -578,8 +578,8 @@ void CudaSolverReal::advance_propagator_1d(
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_total_grid();
-        const std::vector<int> nx = cb->get_nx();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
 
         double *_d_xl = d_xl[GPU][monomer_type];
         double *_d_xd = d_xd[GPU][monomer_type];

@@ -180,7 +180,7 @@ int main()
         propagator_computation_optimizer->display_blocks();
         propagator_computation_optimizer->display_propagators();
 
-        std::vector<PropagatorComputation*> solver_list;
+        std::vector<PropagatorComputation<double>*> solver_list;
         std::vector<ComputationBox*> cb_list;
         std::vector<std::string> solver_name_list;
 
@@ -203,7 +203,7 @@ int main()
         // For each platform
         for(size_t n=0; n<solver_list.size(); n++)
         {
-            PropagatorComputation* solver = solver_list[n];
+            PropagatorComputation<double>* solver = solver_list[n];
             ComputationBox* cb = cb_list[n];
 
             for(int i=0; i<M; i++)

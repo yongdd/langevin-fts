@@ -96,8 +96,8 @@ int main()
         propagator_analyzer_2->display_blocks();
         propagator_analyzer_2->display_propagators();
 
-        std::vector<PropagatorComputation*> solver_1_list;
-        std::vector<PropagatorComputation*> solver_2_list;
+        std::vector<PropagatorComputation<double>*> solver_1_list;
+        std::vector<PropagatorComputation<double>*> solver_2_list;
         std::vector<ComputationBox*> cb_1_list;
         std::vector<ComputationBox*> cb_2_list;
         std::vector<std::string> solver_name;
@@ -112,7 +112,7 @@ int main()
 
         #ifdef USE_CPU_MKL
         cb_1_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_1_list.push_back(new CpuComputationDiscrete(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1));
+        solver_1_list.push_back(new CpuComputationDiscrete<double>(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1));
         #endif
         #ifdef USE_CUDA
         cb_1_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
@@ -123,7 +123,7 @@ int main()
 
         #ifdef USE_CPU_MKL
         cb_2_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_2_list.push_back(new CpuComputationDiscrete(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2));
+        solver_2_list.push_back(new CpuComputationDiscrete<double>(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2));
         #endif
         #ifdef USE_CUDA
         cb_2_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));

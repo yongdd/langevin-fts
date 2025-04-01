@@ -64,15 +64,15 @@ void CpuSolverPseudoDiscrete<T>::update_laplacian_operator()
 {
     try
     {
-        for(const auto& item: molecules->get_bond_lengths())
+        for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            Pseudo::get_boltz_bond<T>(cb->get_boundary_conditions(), boltz_bond     [monomer_type], bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds() );
-            Pseudo::get_boltz_bond<T>(cb->get_boundary_conditions(), boltz_bond_half[monomer_type], bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds() );
+            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond     [monomer_type], bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
+            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond_half[monomer_type], bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
 
             // For stress calculation: compute_stress()
-            Pseudo::get_weighted_fourier_basis<T>(cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+            Pseudo::get_weighted_fourier_basis<T>(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
         }
     }
     catch(std::exception& exc)
@@ -83,8 +83,8 @@ void CpuSolverPseudoDiscrete<T>::update_laplacian_operator()
 template <typename T>
 void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_input)
 {
-    const int M = cb->get_total_grid();
-    const double ds = molecules->get_ds();
+    const int M = this->cb->get_total_grid();
+    const double ds = this->molecules->get_ds();
 
     for(const auto& item: w_input)
     {
@@ -107,8 +107,8 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());
+        const int M = this->cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
         std::complex<double> k_q_in[M_COMPLEX];
 
         T *_exp_dw = this->exp_dw[monomer_type];
@@ -143,8 +143,8 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 {
     try
     {
-        // Const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());
+        // Const int M = this->cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
         std::complex<double> k_q_in[M_COMPLEX];
 
         double *_boltz_bond_half = boltz_bond_half[monomer_type];
@@ -166,16 +166,16 @@ template <typename T>
 std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
-    const int DIM  = cb->get_dim();
-    // const int M    = cb->get_total_grid();
-    const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());
+    const int DIM  = this->cb->get_dim();
+    // const int M    = this->cb->get_total_grid();
+    const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
     T coeff;
 
     std::vector<T> stress(DIM);
     std::complex<double> qk_1[M_COMPLEX];
     std::complex<double> qk_2[M_COMPLEX];
 
-    auto bond_lengths = molecules->get_bond_lengths();
+    auto bond_lengths = this->molecules->get_bond_lengths();
     double bond_length_sq;
     double *_boltz_bond;
 
