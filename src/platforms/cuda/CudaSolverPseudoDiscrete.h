@@ -19,7 +19,7 @@
 class CudaSolverPseudoDiscrete : public CudaSolver<double>
 {
 private:
-    ComputationBox *cb;
+    ComputationBox<double>* cb;
     Molecules *molecules;
 
     std::string chain_model;
@@ -60,7 +60,7 @@ public:
     std::map<std::string, double*> d_boltz_bond[MAX_GPUS];        // Boltzmann factor for the single bond
     std::map<std::string, double*> d_boltz_bond_half[MAX_GPUS];   // Boltzmann factor for the half bond
 
-    CudaSolverPseudoDiscrete(ComputationBox *cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverPseudoDiscrete(ComputationBox<double>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverPseudoDiscrete();
 
     void update_laplacian_operator() override;

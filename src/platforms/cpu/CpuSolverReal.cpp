@@ -3,7 +3,8 @@
 
 #include "CpuSolverReal.h"
 
-CpuSolverReal::CpuSolverReal(ComputationBox *cb, Molecules *molecules)
+template <typename T>
+CpuSolverReal<T>::CpuSolverReal(ComputationBox<double>* cb, Molecules *molecules)
 {
     try{
         this->cb = cb;
@@ -47,7 +48,8 @@ CpuSolverReal::CpuSolverReal(ComputationBox *cb, Molecules *molecules)
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverReal::~CpuSolverReal()
+template <typename T>
+CpuSolverReal<T>::~CpuSolverReal()
 {
     for(const auto& item: exp_dw)
         delete[] item.second;
@@ -75,15 +77,18 @@ CpuSolverReal::~CpuSolverReal()
     for(const auto& item: zh)
         delete[] item.second;
 }
-int CpuSolverReal::max_of_two(int x, int y)
+template <typename T>
+int CpuSolverReal<T>::max_of_two(int x, int y)
 {
    return (x > y) ? x : y;
 }
-int CpuSolverReal::min_of_two(int x, int y)
+template <typename T>
+int CpuSolverReal<T>::min_of_two(int x, int y)
 {
    return (x < y) ? x : y;
 }
-void CpuSolverReal::update_laplacian_operator()
+template <typename T>
+void CpuSolverReal<T>::update_laplacian_operator()
 {
     try
     {
@@ -106,7 +111,8 @@ void CpuSolverReal::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
+template <typename T>
+void CpuSolverReal<T>::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
@@ -129,7 +135,8 @@ void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
         }
     }
 }
-void CpuSolverReal::advance_propagator(
+template <typename T>
+void CpuSolverReal<T>::advance_propagator(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
@@ -167,8 +174,8 @@ void CpuSolverReal::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-
-void CpuSolverReal::advance_propagator_3d(
+template <typename T>
+void CpuSolverReal<T>::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -318,7 +325,8 @@ void CpuSolverReal::advance_propagator_3d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::advance_propagator_2d(
+template <typename T>
+void CpuSolverReal<T>::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -415,7 +423,8 @@ void CpuSolverReal::advance_propagator_2d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::advance_propagator_1d(
+template <typename T>
+void CpuSolverReal<T>::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -455,7 +464,8 @@ void CpuSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuSolverReal::compute_single_segment_stress(
+template <typename T>
+std::vector<double> CpuSolverReal<T>::compute_single_segment_stress(
     double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     try
@@ -473,8 +483,9 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress(
     }
 }
 
-// This method solves CX=Y, where C is a tridiagonal matrix 
-void CpuSolverReal::tridiagonal(
+// This method solves CX=Y, where C is a tridiagonal matrix
+template <typename T>
+void CpuSolverReal<T>::tridiagonal(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {
@@ -503,7 +514,8 @@ void CpuSolverReal::tridiagonal(
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
-void CpuSolverReal::tridiagonal_periodic(
+template <typename T>
+void CpuSolverReal<T>::tridiagonal_periodic(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {
@@ -545,3 +557,7 @@ void CpuSolverReal::tridiagonal_periodic(
     for(int i=0; i<M; i++)
         x[i*INTERVAL] = x[i*INTERVAL] - q[i]*value;
 }
+
+// Explicit template instantiation for double and std::complex<double>
+template class CpuSolverReal<double>;
+template class CpuSolverReal<std::complex<double>>;

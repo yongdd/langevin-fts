@@ -60,7 +60,7 @@ int main()
             factory->display_info();
 
             // Create instances and assign to the variables of base classes for the dynamic binding
-            ComputationBox *cb = factory->create_computation_box(nx, lx, {});
+            ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
             
             std::cout<< "---------- Run ----------" << std::endl;
             std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;

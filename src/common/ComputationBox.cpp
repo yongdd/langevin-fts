@@ -4,10 +4,13 @@
 #include <iterator>
 #include <algorithm>
 #include <map>
+#include <complex>
+
 #include "ComputationBox.h"
 
 //----------------- Constructor -----------------------------
-ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
+template <typename T>
+ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
     std::vector<std::string> bc, const double* mask)
 {
     if ( new_nx.size() != new_lx.size() )
@@ -156,77 +159,93 @@ ComputationBox::ComputationBox(std::vector<int> new_nx, std::vector<double> new_
     }
 }
 //----------------- Destructor -----------------------------
-ComputationBox::~ComputationBox()
+template <typename T>
+ComputationBox<T>::~ComputationBox()
 {
     delete[] dv;
     if (mask != nullptr)
         delete[] mask;
 }
 //----------------- get methods-------------------------------------
-int ComputationBox::get_dim()
+template <typename T>
+int ComputationBox<T>::get_dim()
 {
     return dim;
 }
-int ComputationBox::get_nx(int i)
+template <typename T>
+int ComputationBox<T>::get_nx(int i)
 {
     if (i < 0 or i >= dim)
         throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return nx[i];
 }
-double ComputationBox::get_lx(int i)
+template <typename T>
+double ComputationBox<T>::get_lx(int i)
 {
     if (i < 0 or i >= dim)
         throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return lx[i];
 }
-double ComputationBox::get_dx(int i)
+template <typename T>
+double ComputationBox<T>::get_dx(int i)
 {
     if (i < 0 or i >= dim)
         throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
     return dx[i];
 }
-std::vector<int> ComputationBox::get_nx()
+template <typename T>
+std::vector<int> ComputationBox<T>::get_nx()
 {
     return nx;
 }
-std::vector<double> ComputationBox::get_lx()
+template <typename T>
+std::vector<double> ComputationBox<T>::get_lx()
 {
     return lx;
 }
-std::vector<double> ComputationBox::get_dx()
+template <typename T>
+std::vector<double> ComputationBox<T>::get_dx()
 {
     return dx;
 }
-double ComputationBox::get_dv(int i)
+template <typename T>
+double ComputationBox<T>::get_dv(int i)
 {
     return dv[i];
 }
-int ComputationBox::get_total_grid()
+template <typename T>
+int ComputationBox<T>::get_total_grid()
 {
     return total_grid;
 }
-double ComputationBox::get_volume()
+template <typename T>
+double ComputationBox<T>::get_volume()
 {
     return volume;
 }
-double ComputationBox::get_accessible_volume()
+template <typename T>
+double ComputationBox<T>::get_accessible_volume()
 {
     return accessible_volume;
 }
-const double* ComputationBox::get_mask()
+template <typename T>
+const double* ComputationBox<T>::get_mask()
 {
     return mask;
 }
-const std::vector<BoundaryCondition> ComputationBox::get_boundary_conditions()
+template <typename T>
+const std::vector<BoundaryCondition> ComputationBox<T>::get_boundary_conditions()
 {
     return bc;
 }
-BoundaryCondition ComputationBox::get_boundary_condition(int i)
+template <typename T>
+BoundaryCondition ComputationBox<T>::get_boundary_condition(int i)
 {
     return bc[i];
 }
 //----------------- set methods-------------------------------------
-void ComputationBox::set_lx(std::vector<double> new_lx)
+template <typename T>
+void ComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
     if ( new_lx.size() != (unsigned int) dim )
         throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");
@@ -262,33 +281,37 @@ void ComputationBox::set_lx(std::vector<double> new_lx)
 }
 //-----------------------------------------------------------
 // This method calculates integral of g
-double ComputationBox::integral(const double *g)
+template <typename T>
+T ComputationBox<T>::integral(const T *g)
 {
-    double sum{0.0};
+    T sum{0.0};
     for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i];
     return sum;
 }
 // This method calculates inner product g and h
-double ComputationBox::inner_product(const double *g, const double *h)
+template <typename T>
+T ComputationBox<T>::inner_product(const T *g, const T *h)
 {
-    double sum{0.0};
+    T sum{0.0};
     for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i]*h[i];
     return sum;
 }
 // This method calculates inner product g and h with weight 1/w
-double ComputationBox::inner_product_inverse_weight(const double *g, const double *h, const double *w)
+template <typename T>
+T ComputationBox<T>::inner_product_inverse_weight(const T *g, const T *h, const T *w)
 {
-    double sum{0.0};
+    T sum{0.0};
     for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i]*h[i]/w[i];
     return sum;
 }
 //-----------------------------------------------------------
-double ComputationBox::multi_inner_product(int n_comp, const double *g, const double *h)
+template <typename T>
+T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
 {
-    double sum{0.0};
+    T sum{0.0};
     for(int n=0; n < n_comp; n++)
     {
         for(int i=0; i<total_grid; i++)
@@ -298,11 +321,16 @@ double ComputationBox::multi_inner_product(int n_comp, const double *g, const do
 }
 //-----------------------------------------------------------
 // This method makes the input a zero-meaned matrix
-void ComputationBox::zero_mean(double *g)
+template <typename T>
+void ComputationBox<T>::zero_mean(T *g)
 {
-    double sum{0.0};
+    T sum{0.0};
     for(int i=0; i<total_grid; i++)
         sum += dv[i]*g[i];
     for(int i=0; i<total_grid; i++)
         g[i] -= sum/volume;
 }
+
+// Explicit template instantiation for double and std::complex<double>
+template class ComputationBox<double>;
+template class ComputationBox<std::complex<double>>;

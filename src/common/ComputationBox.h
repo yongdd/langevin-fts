@@ -19,6 +19,7 @@ enum class BoundaryCondition
 	ABSORBING,
 };
 
+template <typename T>
 class ComputationBox
 {
 protected:
@@ -62,16 +63,16 @@ public:
 
     virtual void set_lx(std::vector<double> new_lx);
 
-    virtual double integral(const double *g);
-    virtual double inner_product(const double *g, const double *h);
-    virtual double inner_product_inverse_weight(const double *g, const double *h, const double *w);
-    virtual double multi_inner_product(int n_comp, const double *g, const double *h);
-    virtual void zero_mean(double *g);
+    virtual T integral(const T *g);
+    virtual T inner_product(const T *g, const T *h);
+    virtual T inner_product_inverse_weight(const T *g, const T *h, const T *w);
+    virtual T multi_inner_product(int n_comp, const T *g, const T *h);
+    virtual void zero_mean(T *g);
 
-    virtual double integral_device(const double *g)=0;
-    virtual double inner_product_device(const double *g, const double *h)=0;
-    virtual double inner_product_inverse_weight_device(const double *g, const double *h, const double *w)=0;
-    virtual double multi_inner_product_device(int n_comp, const double *g, const double *h)=0;
-    virtual void zero_mean_device(double *g)=0;
+    virtual T integral_device(const T *g)=0;
+    virtual T inner_product_device(const T *g, const T *h)=0;
+    virtual T inner_product_inverse_weight_device(const T *g, const T *h, const T *w)=0;
+    virtual T multi_inner_product_device(int n_comp, const T *g, const T *h)=0;
+    virtual void zero_mean_device(T *g)=0;
 };
 #endif

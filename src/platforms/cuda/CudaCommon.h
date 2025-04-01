@@ -58,7 +58,7 @@ public:
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
 template <typename T>
-__global__ void ker_linear_scaling(T* dst, const T* src, double a, double b, const int M);
+__global__ void ker_linear_scaling(T* dst, const T* src, double a, T b, const int M);
 
 template <typename T>
 __global__ void ker_exp(T* dst, const T* src, double a, double exp_b, const int M);

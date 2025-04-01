@@ -33,7 +33,7 @@ public :
         double *data,
         unsigned int size) = 0;
 
-    virtual ComputationBox* create_computation_box(
+    virtual ComputationBox<double>* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -48,10 +48,10 @@ public :
     };
 
     virtual PropagatorComputation<double>* create_pseudospectral_solver(
-        ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
+        ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual PropagatorComputation<double>* create_realspace_solver(
-        ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
+        ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

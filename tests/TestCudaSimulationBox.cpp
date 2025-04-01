@@ -6,7 +6,7 @@ int main()
 {
     try
     {
-        CudaComputationBox cb({1,2,2}, {4.5,3.5,2.5}, {});
+        CudaComputationBox<double> cb({1,2,2}, {4.5,3.5,2.5}, {});
         double sum_w, volume;
         double w[] {-0.81747, -2.02147, -3.52469, 1.43482};
         double g[] {2.82006, -0.944886, -1.37078, -2.47236};

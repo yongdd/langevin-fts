@@ -4,7 +4,7 @@
 #include "CudaSolverPseudoContinuous.h"
 
 CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
-    ComputationBox *cb,
+    ComputationBox<double>* cb,
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
