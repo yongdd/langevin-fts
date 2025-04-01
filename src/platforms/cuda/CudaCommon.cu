@@ -113,7 +113,7 @@ void CudaCommon::set_idx(int process_idx)
 }
 
 template <typename T>
-__global__ void ker_linear_scaling(T* dst, const T* src, double a, double b, const int M)
+__global__ void ker_linear_scaling(T* dst, const T* src, double a, T b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -124,13 +124,13 @@ __global__ void ker_linear_scaling(T* dst, const T* src, double a, double b, con
 }
 
 template <>
-__global__ void ker_linear_scaling<ftsComplex>(ftsComplex* dst, const ftsComplex* src, double a, double b, const int M)
+__global__ void ker_linear_scaling<ftsComplex>(ftsComplex* dst, const ftsComplex* src, double a, ftsComplex b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = a * src[i].x + b;
-        dst[i].y = a * src[i].y;
+        dst[i].x = a * src[i].x + b.x;
+        dst[i].y = a * src[i].y + b.y;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -461,7 +461,7 @@ __global__ void ker_complex_real_multi_bond_four(
 
 // Explicit template instantiations for double and std::complex<double>
 template __global__ void ker_linear_scaling<double>(double*, const double*, double, double, const int);
-template __global__ void ker_linear_scaling<ftsComplex>(ftsComplex*, const ftsComplex*, double, double, const int);
+template __global__ void ker_linear_scaling<ftsComplex>(ftsComplex*, const ftsComplex*, double, ftsComplex, const int);
 
 template __global__ void ker_exp<double>(double*, const double*, double, double, const int);
 template __global__ void ker_exp<ftsComplex>(ftsComplex*, const ftsComplex*, double, double, const int);

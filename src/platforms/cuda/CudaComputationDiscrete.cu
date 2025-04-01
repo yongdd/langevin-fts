@@ -8,7 +8,7 @@
 #include "CudaSolverPseudoDiscrete.h"
 
 CudaComputationDiscrete::CudaComputationDiscrete(
-    ComputationBox *cb,
+    ComputationBox<double>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation(cb, molecules, propagator_computation_optimizer)

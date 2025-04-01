@@ -8,7 +8,7 @@
 #include "SimpsonRule.h"
 
 CudaComputationContinuous::CudaComputationContinuous(
-    ComputationBox *cb,
+    ComputationBox<double>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)

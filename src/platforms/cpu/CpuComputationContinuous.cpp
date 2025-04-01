@@ -6,12 +6,13 @@
 #include "CpuSolverReal.h"
 #include "SimpsonRule.h"
 
-CpuComputationContinuous::CpuComputationContinuous(
-    ComputationBox *cb,
+template <typename T>
+CpuComputationContinuous<T>::CpuComputationContinuous(
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
-    : PropagatorComputation(cb, molecules, propagator_computation_optimizer)
+    : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
     {
@@ -21,10 +22,14 @@ CpuComputationContinuous::CpuComputationContinuous(
 
         const int M = this->cb->get_total_grid();
         if(method == "pseudospectral")
-            this->propagator_solver = new CpuSolverPseudoContinuous<double>(cb, molecules);
+            this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
         else if(method == "realspace")
-            this->propagator_solver = new CpuSolverReal(cb, molecules);
-
+        {
+            if constexpr (std::is_same<T, double>::value) 
+                this->propagator_solver = new CpuSolverReal<T>(cb, molecules);
+            else
+                throw_with_line_number("Currently, the realspace method is only available for double precision.");
+        }
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
@@ -45,9 +50,9 @@ CpuComputationContinuous::CpuComputationContinuous(
             int max_n_segment = item.second.max_n_segment+1;
 
             propagator_size[key] = max_n_segment;
-            propagator[key] = new double*[max_n_segment];
+            propagator[key] = new T*[max_n_segment];
             for(int i=0; i<propagator_size[key]; i++)
-                propagator[key][i] = new double[M];
+                propagator[key][i] = new T[M];
 
             #ifndef NDEBUG
             propagator_finished[key] = new bool[max_n_segment];
@@ -61,7 +66,7 @@ CpuComputationContinuous::CpuComputationContinuous(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            phi_block[item.first] = new double[M];
+            phi_block[item.first] = new T[M];
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -91,7 +96,7 @@ CpuComputationContinuous::CpuComputationContinuous(
         }
         // Concentrations for each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
-            phi_solvent.push_back(new double[M]);
+            phi_solvent.push_back(new T[M]);
 
         // Create scheduler for computation of propagator
         sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), n_streams); 
@@ -103,7 +108,8 @@ CpuComputationContinuous::CpuComputationContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CpuComputationContinuous::~CpuComputationContinuous()
+template <typename T>
+CpuComputationContinuous<T>::~CpuComputationContinuous()
 {
     delete propagator_solver;
     delete sc;
@@ -125,7 +131,8 @@ CpuComputationContinuous::~CpuComputationContinuous()
         delete[] item.second;
     #endif
 }
-void CpuComputationContinuous::update_laplacian_operator()
+template <typename T>
+void CpuComputationContinuous<T>::update_laplacian_operator()
 {
     try
     {
@@ -136,18 +143,18 @@ void CpuComputationContinuous::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-
-void CpuComputationContinuous::compute_statistics(
-    std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init)
+template <typename T>
+void CpuComputationContinuous<T>::compute_statistics(
+    std::map<std::string, const T*> w_input,
+    std::map<std::string, const T*> q_init)
 {
     this->compute_propagators(w_input, q_init);
     this->compute_concentrations();
 }
-
-void CpuComputationContinuous::compute_propagators(
-    std::map<std::string, const double*> w_input,
-    std::map<std::string, const double*> q_init)
+template <typename T>
+void CpuComputationContinuous<T>::compute_propagators(
+    std::map<std::string, const T*> w_input,
+    std::map<std::string, const T*> q_init)
 {
     try
     {
@@ -174,9 +181,9 @@ void CpuComputationContinuous::compute_propagators(
             std::cout << "jobs:" << std::endl;
             for(size_t job=0; job<parallel_job->size(); job++)
             {
-                auto& key = std::get<0>((*parallel_job)[job]);
+                auto& key          = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
-                int n_segment_to = std::get<2>((*parallel_job)[job]);
+                int n_segment_to   = std::get<2>((*parallel_job)[job]);
                 std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
             }
             #endif
@@ -202,7 +209,7 @@ void CpuComputationContinuous::compute_propagators(
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
-                double **_propagator = propagator[key];
+                T **_propagator = propagator[key];
 
                 // If it is leaf node
                 if(n_segment_from == 0 && deps.size() == 0) 
@@ -250,9 +257,9 @@ void CpuComputationContinuous::compute_propagators(
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double **_propagator_sub_dep = propagator[sub_dep];
+                            T **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*sub_n_repeated;
+                                _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*((double)sub_n_repeated);
                         }
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -278,7 +285,7 @@ void CpuComputationContinuous::compute_propagators(
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            double **_propagator_sub_dep = propagator[sub_dep];
+                            T **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
                                 _propagator[0][i] *= _propagator_sub_dep[sub_n_segment][i];
                         }
@@ -353,12 +360,12 @@ void CpuComputationContinuous::compute_propagators(
         for(const auto& segment_info: single_partition_segment)
         {
             int p                    = std::get<0>(segment_info);
-            double *propagator_left  = std::get<1>(segment_info);
-            double *propagator_right = std::get<2>(segment_info);
+            T *propagator_left  = std::get<1>(segment_info);
+            T *propagator_right = std::get<2>(segment_info);
             int n_aggregated         = std::get<3>(segment_info);
 
             this->single_polymer_partitions[p]= this->cb->inner_product(
-                propagator_left, propagator_right)/n_aggregated/this->cb->get_volume();
+                propagator_left, propagator_right)/((double)n_aggregated)/this->cb->get_volume();
         }
 
     }
@@ -367,8 +374,8 @@ void CpuComputationContinuous::compute_propagators(
         throw_without_line_number(exc.what());
     }
 }
-
-void CpuComputationContinuous::compute_concentrations()
+template <typename T>
+void CpuComputationContinuous<T>::compute_concentrations()
 {
     try
     {
@@ -416,7 +423,7 @@ void CpuComputationContinuous::compute_concentrations()
 
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-            double norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*n_repeated;
+            T norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*((double)n_repeated);
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }
@@ -427,8 +434,8 @@ void CpuComputationContinuous::compute_concentrations()
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             
-            double *_phi = phi_solvent[s];
-            double *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            T *_phi = phi_solvent[s];
+            T *_exp_dw = propagator_solver->exp_dw[monomer_type];
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -441,8 +448,9 @@ void CpuComputationContinuous::compute_concentrations()
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::calculate_phi_one_block(
-    double *phi, double **q_1, double **q_2, const int N_RIGHT, const int N_LEFT)
+template <typename T>
+void CpuComputationContinuous<T>::calculate_phi_one_block(
+    T *phi, T **q_1, T **q_2, const int N_RIGHT, const int N_LEFT)
 {
     try
     {
@@ -463,18 +471,20 @@ void CpuComputationContinuous::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CpuComputationContinuous::get_total_partition(int polymer)
+template <typename T>
+T CpuComputationContinuous<T>::get_total_partition(int polymer)
 {
     try
     {
-        return single_polymer_partitions[polymer];
+        return this->single_polymer_partitions[polymer];
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_total_concentration(std::string monomer_type, double *phi)
+template <typename T>
+void CpuComputationContinuous<T>::get_total_concentration(std::string monomer_type, T *phi)
 {
     try
     {
@@ -500,7 +510,7 @@ void CpuComputationContinuous::get_total_concentration(std::string monomer_type,
         {
             if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
             {
-                double *phi_solvent_ = phi_solvent[s];
+                T *phi_solvent_ = phi_solvent[s];
                 for(int i=0; i<M; i++)
                     phi[i] += phi_solvent_[i];
             }
@@ -511,7 +521,8 @@ void CpuComputationContinuous::get_total_concentration(std::string monomer_type,
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_total_concentration(int p, std::string monomer_type, double *phi)
+template <typename T>
+void CpuComputationContinuous<T>::get_total_concentration(int p, std::string monomer_type, T *phi)
 {
     try
     {
@@ -543,7 +554,8 @@ void CpuComputationContinuous::get_total_concentration(int p, std::string monome
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
+template <typename T>
+void CpuComputationContinuous<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, T *phi)
 {
     try
     {
@@ -566,7 +578,7 @@ void CpuComputationContinuous::get_total_concentration_gce(double fugacity, int 
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 Polymer& pc = this->molecules->get_polymer(p);
-                double norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
+                T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]*norm; 
             }
@@ -577,7 +589,8 @@ void CpuComputationContinuous::get_total_concentration_gce(double fugacity, int 
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_block_concentration(int p, double *phi)
+template <typename T>
+void CpuComputationContinuous<T>::get_block_concentration(int p, T *phi)
 {
     try
     {
@@ -600,7 +613,7 @@ void CpuComputationContinuous::get_block_concentration(int p, double *phi)
             if (key_left < key_right)
                 key_left.swap(key_right);
 
-            double* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
+            T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
             for(int i=0; i<M; i++)
                 phi[i+b*M] = _essential_phi_block[i]; 
         }
@@ -610,7 +623,8 @@ void CpuComputationContinuous::get_block_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-double CpuComputationContinuous::get_solvent_partition(int s)
+template <typename T>
+T CpuComputationContinuous<T>::get_solvent_partition(int s)
 {
     try
     {
@@ -621,7 +635,8 @@ double CpuComputationContinuous::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_solvent_concentration(int s, double *phi)
+template <typename T>
+void CpuComputationContinuous<T>::get_solvent_concentration(int s, T *phi)
 {
     try
     {
@@ -631,7 +646,7 @@ void CpuComputationContinuous::get_solvent_concentration(int s, double *phi)
         if (s < 0 || s > S-1)
             throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
 
-        double *phi_solvent_ = phi_solvent[s];
+        T *phi_solvent_ = phi_solvent[s];
         for(int i=0; i<M; i++)
             phi[i] = phi_solvent_[i];
     }
@@ -640,7 +655,8 @@ void CpuComputationContinuous::get_solvent_concentration(int s, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::compute_stress()
+template <typename T>
+void CpuComputationContinuous<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -681,8 +697,8 @@ void CpuComputationContinuous::compute_stress()
             if(N_RIGHT == 0)
                 continue;
 
-            double **q_1 = propagator[key_left];     // dependency v
-            double **q_2 = propagator[key_right];    // dependency u
+            T **q_1 = propagator[key_left];     // dependency v
+            T **q_2 = propagator[key_right];    // dependency u
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N_RIGHT);
             std::array<double,3> _block_dq_dl = block_dq_dl[key];
@@ -724,7 +740,8 @@ void CpuComputationContinuous::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+template <typename T>
+void CpuComputationContinuous<T>::get_chain_propagator(T *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 
@@ -743,7 +760,7 @@ void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, 
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
-        double **_partition = propagator[dep];
+        T **_partition = propagator[dep];
         for(int i=0; i<M; i++)
             q_out[i] = _partition[n][i];
     }
@@ -752,14 +769,15 @@ void CpuComputationContinuous::get_chain_propagator(double *q_out, int polymer, 
         throw_without_line_number(exc.what());
     }
 }
-bool CpuComputationContinuous::check_total_partition()
+template <typename T>
+bool CpuComputationContinuous<T>::check_total_partition()
 {
     // const int M = this->cb->get_total_grid();
     int n_polymer_types = this->molecules->get_n_polymer_types();
-    std::vector<std::vector<double>> total_partitions;
+    std::vector<std::vector<T>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
     {
-        std::vector<double> total_partitions_p;
+        std::vector<T> total_partitions_p;
         total_partitions.push_back(total_partitions_p);
     }
 
@@ -781,9 +799,9 @@ bool CpuComputationContinuous::check_total_partition()
 
         for(int n=0;n<=n_segment_right;n++)
         {
-            double total_partition = this->cb->inner_product(
+            T total_partition = this->cb->inner_product(
                 propagator[key_left][n_segment_left-n],
-                propagator[key_right][n])*n_repeated/this->cb->get_volume();
+                propagator[key_right][n])*((double)n_repeated)/this->cb->get_volume();
 
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);
@@ -802,10 +820,10 @@ bool CpuComputationContinuous::check_total_partition()
         double min_partition =  1e20;
         for(size_t n=0;n<total_partitions[p].size();n++)
         {
-            if (total_partitions[p][n] > max_partition)
-                max_partition = total_partitions[p][n];
-            if (total_partitions[p][n] < min_partition)
-                min_partition = total_partitions[p][n];
+            if (std::abs(total_partitions[p][n]) > max_partition)
+                max_partition = std::abs(total_partitions[p][n]);
+            if (std::abs(total_partitions[p][n]) < min_partition)
+                min_partition = std::abs(total_partitions[p][n]);
         }
         double diff_partition = std::abs(max_partition - min_partition);
 
@@ -815,3 +833,7 @@ bool CpuComputationContinuous::check_total_partition()
     }
     return true;
 }
+
+// Explicit template instantiation for double and std::complex<double>
+template class CpuComputationContinuous<double>;
+template class CpuComputationContinuous<std::complex<double>>;

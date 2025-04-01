@@ -68,7 +68,7 @@ private:
     
 public:
 
-    CudaComputationContinuous(ComputationBox *cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
+    CudaComputationContinuous(ComputationBox<double>* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
     ~CudaComputationContinuous();
 
     void update_laplacian_operator() override;

@@ -46,20 +46,20 @@ PYBIND11_MODULE(langevinfts, m)
         })
         .def("get_size", &Array::get_size);
 
-    py::class_<ComputationBox>(m, "ComputationBox")
+    py::class_<ComputationBox<double>>(m, "ComputationBox")
         // .def(py::init<std::vector<int>, std::vector<double>>())
-        .def("get_dim", &ComputationBox::get_dim)
-        .def("get_nx", overload_cast_<>()(&ComputationBox::get_nx))
-        .def("get_nx", overload_cast_<int>()(&ComputationBox::get_nx))
-        .def("get_lx", overload_cast_<>()(&ComputationBox::get_lx))
-        .def("get_lx", overload_cast_<int>()(&ComputationBox::get_lx))
-        .def("get_dx", overload_cast_<>()(&ComputationBox::get_dx))
-        .def("get_dx", overload_cast_<int>()(&ComputationBox::get_dx))
-        .def("get_dv", &ComputationBox::get_dv)
-        .def("get_total_grid", &ComputationBox::get_total_grid)
-        .def("get_volume", &ComputationBox::get_volume)
-        .def("set_lx", &ComputationBox::set_lx)
-        .def("integral", [](ComputationBox& obj, py::array_t<double> g)
+        .def("get_dim", &ComputationBox<double>::get_dim)
+        .def("get_nx", overload_cast_<>()(&ComputationBox<double>::get_nx))
+        .def("get_nx", overload_cast_<int>()(&ComputationBox<double>::get_nx))
+        .def("get_lx", overload_cast_<>()(&ComputationBox<double>::get_lx))
+        .def("get_lx", overload_cast_<int>()(&ComputationBox<double>::get_lx))
+        .def("get_dx", overload_cast_<>()(&ComputationBox<double>::get_dx))
+        .def("get_dx", overload_cast_<int>()(&ComputationBox<double>::get_dx))
+        .def("get_dv", &ComputationBox<double>::get_dv)
+        .def("get_total_grid", &ComputationBox<double>::get_total_grid)
+        .def("get_volume", &ComputationBox<double>::get_volume)
+        .def("set_lx", &ComputationBox<double>::set_lx)
+        .def("integral", [](ComputationBox<double>& obj, py::array_t<double> g)
         {
             const int M = obj.get_total_grid();
             py::buffer_info buf_g = g.request();
@@ -68,7 +68,7 @@ PYBIND11_MODULE(langevinfts, m)
             }
             return obj.integral((double*) buf_g.ptr);
         })
-        .def("inner_product", [](ComputationBox& obj, py::array_t<double> g, py::array_t<double> h)
+        .def("inner_product", [](ComputationBox<double>& obj, py::array_t<double> g, py::array_t<double> h)
         {
             const int M = obj.get_total_grid();
             py::buffer_info buf_g = g.request();
@@ -81,8 +81,8 @@ PYBIND11_MODULE(langevinfts, m)
             }
             return obj.inner_product((double*) buf_g.ptr, (double*) buf_h.ptr);
         });
-        // .def("multi_inner_product", &ComputationBox::multi_inner_product);
-        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
+        // .def("multi_inner_product", &ComputationBox<double>::multi_inner_product);
+        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox<double>::zero_mean));
         // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
         //     py::buffer_info buf1 = g.request();
         //     py::buffer_info buf2 = h.request();

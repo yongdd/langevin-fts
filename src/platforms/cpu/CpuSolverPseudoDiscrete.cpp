@@ -5,7 +5,7 @@
 #include "MklFFT.h"
 
 template <typename T>
-CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox *cb, Molecules *molecules)
+CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules)
 {
     try{
         if (cb->get_dim() == 3)
@@ -163,15 +163,15 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
     }
 }
 template <typename T>
-std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
+std::vector<double> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     const int DIM  = this->cb->get_dim();
     // const int M    = this->cb->get_total_grid();
     const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
-    T coeff;
+    double coeff;
 
-    std::vector<T> stress(DIM);
+    std::vector<double> stress(DIM);
     std::complex<double> qk_1[M_COMPLEX];
     std::complex<double> qk_2[M_COMPLEX];
 
@@ -199,10 +199,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
     if ( DIM == 3 )
     {
         for(int i=0; i<M_COMPLEX; i++){
-            if constexpr (std::is_same<T, double>::value)
-                coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-            else
-                coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*std::conj(qk_2[i]);
+            coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
             stress[0] += coeff*fourier_basis_x[i];
             stress[1] += coeff*fourier_basis_y[i];
             stress[2] += coeff*fourier_basis_z[i];
@@ -211,10 +208,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
     if ( DIM == 2 )
     {
         for(int i=0; i<M_COMPLEX; i++){
-            if constexpr (std::is_same<T, double>::value)
-                coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-            else
-                coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*std::conj(qk_2[i]);
+            coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
             stress[0] += coeff*fourier_basis_y[i];
             stress[1] += coeff*fourier_basis_z[i];
         }
@@ -222,10 +216,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
     if ( DIM == 1 )
     {
         for(int i=0; i<M_COMPLEX; i++){
-            if constexpr (std::is_same<T, double>::value)
-                coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-            else
-                coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*std::conj(qk_2[i]);
+            coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
             stress[0] += coeff*fourier_basis_z[i];
         }
     }

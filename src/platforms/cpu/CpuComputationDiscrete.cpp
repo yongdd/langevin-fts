@@ -7,7 +7,7 @@
 
 template <typename T>
 CpuComputationDiscrete<T>::CpuComputationDiscrete(
-    ComputationBox *cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)
@@ -343,7 +343,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 _propagator_sub_dep = propagator[sub_dep];
                             }
                             for(int i=0; i<M; i++)
-                                _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i]*sub_n_repeated;
+                                _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i] * ((double) sub_n_repeated);
                         }
 
                         #ifndef NDEBUG
@@ -354,7 +354,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         // if sub_n_segment == 0
                         if (std::get<1>(deps[0]) == 0)
                         {
-                            double *_propagator_half_step = propagator_half_steps[key][0];
+                            T *_propagator_half_step = propagator_half_steps[key][0];
                             for(int i=0; i<M; i++)
                                 _propagator_half_step[i] = _propagator[1][i];
 
@@ -567,14 +567,14 @@ void CpuComputationDiscrete<T>::compute_propagators(
         for(const auto& segment_info: single_partition_segment)
         {
             int p                    = std::get<0>(segment_info);
-            T *propagator_left  = std::get<1>(segment_info);
-            T *propagator_right = std::get<2>(segment_info);
+            T *propagator_left       = std::get<1>(segment_info);
+            T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
             const T *_exp_dw    = propagator_solver->exp_dw[monomer_type];
 
             this->single_polymer_partitions[p]= this->cb->inner_product_inverse_weight(
-                propagator_left, propagator_right, _exp_dw)/n_aggregated/this->cb->get_volume();
+                propagator_left, propagator_right, _exp_dw)/((double) n_aggregated)/this->cb->get_volume();
         }
 
     }
@@ -635,7 +635,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-            double norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*n_repeated;
+            T norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*((double) n_repeated);
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }
@@ -917,7 +917,7 @@ void CpuComputationDiscrete<T>::compute_stress()
             // std::cout << "key_left, key_right, N_LEFT, N: "
             //      << key_left << ", " << key_right << ", " << N_LEFT << ", " << N << std::endl;
 
-            std::array<T,3> _block_dq_dl = block_dq_dl[key];
+            std::array<double,3> _block_dq_dl = block_dq_dl[key];
 
             // Compute stress at each chain bond
             for(int n=0; n<=N_RIGHT; n++)
@@ -969,7 +969,7 @@ void CpuComputationDiscrete<T>::compute_stress()
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
                 // Compute 
-                std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
+                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*n_repeated;
@@ -1070,7 +1070,7 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         {
             T total_partition = this->cb->inner_product_inverse_weight(
                 propagator[key_left][n_segment_left-n+1],
-                propagator[key_right][n], _exp_dw)*n_repeated/this->cb->get_volume();
+                propagator[key_right][n], _exp_dw)*((double)n_repeated)/this->cb->get_volume();
             
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);
@@ -1105,4 +1105,4 @@ bool CpuComputationDiscrete<T>::check_total_partition()
 
 // Explicit template instantiation for double and std::complex<double>
 template class CpuComputationDiscrete<double>;
-// template class CpuComputationDiscrete<std::complex<double>>;/
+template class CpuComputationDiscrete<std::complex<double>>;

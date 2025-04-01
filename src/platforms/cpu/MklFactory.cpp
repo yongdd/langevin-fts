@@ -36,22 +36,22 @@ Array* MklFactory::create_array(
 {
     return new CpuArray(data, size);
 }
-ComputationBox* MklFactory::create_computation_box(
+ComputationBox<double>* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
-    return new CpuComputationBox(nx, lx, bc, mask);
+    return new CpuComputationBox<double>(nx, lx, bc, mask);
 }
 Molecules* MklFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
     {
-        return new CpuComputationContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+        return new CpuComputationContinuous<double>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
     }
     else if ( chain_model == "discrete" )
     {
@@ -59,14 +59,14 @@ PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(Computat
     }
     return NULL;
 }
-PropagatorComputation<double>* MklFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* MklFactory::create_realspace_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {
         std::string chain_model = molecules->get_model_name();
         if ( chain_model == "continuous" )
         {
-            return new CpuComputationContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
+            return new CpuComputationContinuous<double>(cb, molecules, propagator_computation_optimizer, "realspace");
         }
         else if ( chain_model == "discrete" )
         {

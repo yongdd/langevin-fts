@@ -6,12 +6,12 @@
 
 template <typename T>
 PropagatorComputation<T>::PropagatorComputation(
-    ComputationBox *cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
 {
     if (cb == nullptr)
-        throw_with_line_number("ComputationBox *cb is a null pointer");
+        throw_with_line_number("ComputationBox<double>* cb is a null pointer");
     if (molecules == nullptr)
         throw_with_line_number("Molecules *molecules is a null pointer");
 

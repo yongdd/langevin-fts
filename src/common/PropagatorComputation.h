@@ -22,7 +22,7 @@ template <typename T>
 class PropagatorComputation
 {
 protected:
-    ComputationBox *cb;
+    ComputationBox<T>* cb;
     Molecules *molecules;
     PropagatorComputationOptimizer *propagator_computation_optimizer;
 
@@ -33,9 +33,9 @@ protected:
     T* single_solvent_partitions;
 
     // Stress of each polymer
-    std::vector<std::array<T,3>> dq_dl;
+    std::vector<std::array<double,3>> dq_dl;
 public:
-    PropagatorComputation(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
+    PropagatorComputation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
     virtual ~PropagatorComputation();
 
     int get_total_grid() {return this->cb->get_total_grid();};

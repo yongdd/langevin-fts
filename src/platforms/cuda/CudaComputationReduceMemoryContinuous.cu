@@ -7,7 +7,7 @@
 #include "SimpsonRule.h"
 
 CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
-    ComputationBox *cb,
+    ComputationBox<double>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
