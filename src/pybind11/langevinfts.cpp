@@ -164,9 +164,9 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
 
-    py::class_<PropagatorComputation>(m, "PropagatorComputation")
-        .def("update_laplacian_operator", &PropagatorComputation::update_laplacian_operator)
-        .def("compute_propagators", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
+    py::class_<PropagatorComputation<double>>(m, "PropagatorComputation")
+        .def("update_laplacian_operator", &PropagatorComputation<double>::update_laplacian_operator)
+        .def("compute_propagators", [](PropagatorComputation<double>& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -210,8 +210,8 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
-        .def("compute_concentrations", &PropagatorComputation::compute_concentrations)
-        .def("compute_statistics", [](PropagatorComputation& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
+        .def("compute_concentrations", &PropagatorComputation<double>::compute_concentrations)
+        .def("compute_statistics", [](PropagatorComputation<double>& obj, std::map<std::string,py::array_t<const double>> w_input, py::object q_init)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -255,7 +255,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
-        // .def("compute_statistics_device", [](PropagatorComputation& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
+        // .def("compute_statistics_device", [](PropagatorComputation<double>& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
         // {
         //     try{
         //         std::map<std::string, const double*> map_buf_w_input;
@@ -281,7 +281,7 @@ PYBIND11_MODULE(langevinfts, m)
         //         throw_without_line_number(exc.what());
         //     }
         // })
-        .def("get_total_concentration", [](PropagatorComputation& obj, std::string monomer_type)
+        .def("get_total_concentration", [](PropagatorComputation<double>& obj, std::string monomer_type)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -295,7 +295,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_concentration", [](PropagatorComputation& obj, int polymer, std::string monomer_type)
+        .def("get_total_concentration", [](PropagatorComputation<double>& obj, int polymer, std::string monomer_type)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -309,7 +309,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_concentration_gce", [](PropagatorComputation& obj, double fugacity, int polymer, std::string monomer_type)
+        .def("get_total_concentration_gce", [](PropagatorComputation<double>& obj, double fugacity, int polymer, std::string monomer_type)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -323,7 +323,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_block_concentration", [](PropagatorComputation& obj, int polymer)
+        .def("get_block_concentration", [](PropagatorComputation<double>& obj, int polymer)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -339,9 +339,9 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_total_partition", &PropagatorComputation::get_total_partition)
-        .def("get_solvent_partition", &PropagatorComputation::get_solvent_partition)
-        .def("get_solvent_concentration", [](PropagatorComputation& obj, int s)
+        .def("get_total_partition", &PropagatorComputation<double>::get_total_partition)
+        .def("get_solvent_partition", &PropagatorComputation<double>::get_solvent_partition)
+        .def("get_solvent_concentration", [](PropagatorComputation<double>& obj, int s)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -356,7 +356,7 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("get_chain_propagator", [](PropagatorComputation& obj, int polymer, int v, int u, int n)
+        .def("get_chain_propagator", [](PropagatorComputation<double>& obj, int polymer, int v, int u, int n)
         {
             try{
                 const int M = obj.get_total_grid();
@@ -370,10 +370,10 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_with_line_number(exc.what());
             }
         })
-        .def("compute_stress", &PropagatorComputation::compute_stress)
-        .def("get_stress", &PropagatorComputation::get_stress)
-        .def("get_stress_gce", &PropagatorComputation::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation::check_total_partition);
+        .def("compute_stress", &PropagatorComputation<double>::compute_stress)
+        .def("get_stress", &PropagatorComputation<double>::get_stress)
+        .def("get_stress_gce", &PropagatorComputation<double>::get_stress_gce)
+        .def("check_total_partition", &PropagatorComputation<double>::check_total_partition);
 
     py::class_<AndersonMixing>(m, "AndersonMixing")
         .def("reset_count", &AndersonMixing::reset_count)

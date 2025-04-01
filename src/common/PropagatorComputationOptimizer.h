@@ -86,7 +86,7 @@ public:
     static std::map<std::string, ComputationBlock> aggregate_propagator_discrete_chain  (std::map<std::string, ComputationBlock> u_map);
 
     // Get information of computation propagators and blocks
-    bool is_aggregated() const;
+    bool use_aggregation() const;
     int get_n_computation_propagator_codes() const;
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& get_computation_propagators(); 
     ComputationEdge& get_computation_propagator(std::string key);

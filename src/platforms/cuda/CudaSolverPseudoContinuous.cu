@@ -182,17 +182,17 @@ void CudaSolverPseudoContinuous::update_laplacian_operator()
 {
     try{
         // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
-        for(const auto& item: molecules->get_bond_lengths())
+        for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
             
-            Pseudo::get_boltz_bond<double>(cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   cb->get_nx(), cb->get_dx(), molecules->get_ds());
-            Pseudo::get_boltz_bond<double>(cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            Pseudo::get_boltz_bond<double>(this->cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
+            Pseudo::get_boltz_bond<double>(this->cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
         
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
@@ -206,7 +206,7 @@ void CudaSolverPseudoContinuous::update_laplacian_operator()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
-        Pseudo::get_weighted_fourier_basis<double>(cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, cb->get_nx(), cb->get_dx());
+        Pseudo::get_weighted_fourier_basis<double>(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
@@ -228,8 +228,8 @@ void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::str
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_total_grid();
-        const double ds = molecules->get_ds();
+        const int M = this->cb->get_total_grid();
+        const double ds = this->molecules->get_ds();
 
         for(const auto& item: w_input)
         {
@@ -300,8 +300,8 @@ void CudaSolverPseudoContinuous::advance_propagator(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());
+        const int M = this->cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
 
         double *_d_exp_dw = this->d_exp_dw[GPU][monomer_type];
         double *_d_exp_dw_half = this->d_exp_dw_half[GPU][monomer_type];
@@ -368,11 +368,11 @@ void CudaSolverPseudoContinuous::compute_single_segment_stress(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS    = CudaCommon::get_instance().get_n_gpus();
 
-        const int DIM = cb->get_dim();
-        const int M   = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());
+        const int DIM = this->cb->get_dim();
+        const int M   = this->cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
 
-        auto bond_lengths = molecules->get_bond_lengths();
+        auto bond_lengths = this->molecules->get_bond_lengths();
         std::vector<double> stress(DIM);
         double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
 

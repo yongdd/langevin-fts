@@ -16,7 +16,7 @@
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
-class CudaComputationContinuous : public PropagatorComputation
+class CudaComputationContinuous : public PropagatorComputation<double>
 {
 private:
     // Pseudo-spectral PDE solver

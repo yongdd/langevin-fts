@@ -43,7 +43,7 @@ Molecules* CudaFactory::create_molecules_information(
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* CudaFactory::create_pseudospectral_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string model_name = molecules->get_model_name();
 
@@ -57,7 +57,7 @@ PropagatorComputation* CudaFactory::create_pseudospectral_solver(ComputationBox 
         return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
-PropagatorComputation* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* CudaFactory::create_realspace_solver(ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {

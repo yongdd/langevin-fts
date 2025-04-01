@@ -96,8 +96,8 @@ int main()
         propagator_analyzer_2->display_blocks();
         propagator_analyzer_2->display_propagators();
 
-        std::vector<PropagatorComputation*> solver_1_list;
-        std::vector<PropagatorComputation*> solver_2_list;
+        std::vector<PropagatorComputation<double>*> solver_1_list;
+        std::vector<PropagatorComputation<double>*> solver_2_list;
         std::vector<ComputationBox*> cb_1_list;
         std::vector<ComputationBox*> cb_2_list;
         std::vector<std::string> solver_name;

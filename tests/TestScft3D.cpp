@@ -83,7 +83,7 @@ int main()
             Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
             molecules->add_polymer(1.0, blocks, {});
             PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, false);
-            PropagatorComputation *solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
+            PropagatorComputation<double>* solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
             AndersonMixing *am = factory->create_anderson_mixing(am_n_var,
                                 am_max_hist, am_start_error, am_mix_min, am_mix_init);
 

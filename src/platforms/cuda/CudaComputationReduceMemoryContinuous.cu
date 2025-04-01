@@ -18,7 +18,7 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
         std::cout << "--------- Continuous Chain Solver, GPU Memoery Saving Version ---------" << std::endl;
         #endif
 
-        const int M = cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
         // The number of parallel streams for propagator computation
@@ -49,9 +49,9 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));
-        if( propagator_computation_optimizer->get_computation_propagators().size() == 0)
+        if( this->propagator_computation_optimizer->get_computation_propagators().size() == 0)
             throw_with_line_number("There is no propagator code. Add polymers first.");
-        for(const auto& item: propagator_computation_optimizer->get_computation_propagators())
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment+1;
@@ -70,9 +70,9 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
         }
 
         // Allocate memory for concentrations
-        if( propagator_computation_optimizer->get_computation_blocks().size() == 0)
+        if( this->propagator_computation_optimizer->get_computation_blocks().size() == 0)
             throw_with_line_number("There is no block. Add polymers first.");
-        for(const auto& item: propagator_computation_optimizer->get_computation_blocks())
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
             phi_block[item.first] = nullptr;
             // Allocate pinned memory
@@ -92,9 +92,9 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
             if (p != current_p)
                 continue;
 
-            int n_aggregated = propagator_computation_optimizer->get_computation_block(key).v_u.size()/
-                               propagator_computation_optimizer->get_computation_block(key).n_repeated;
-            int n_segment_left = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
+            int n_aggregated = this->propagator_computation_optimizer->get_computation_block(key).v_u.size()/
+                               this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
+            int n_segment_left = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
@@ -105,11 +105,11 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
             current_p++;
         }
         // Concentrations for each solvent
-        for(int s=0;s<molecules->get_n_solvent_types();s++)
+        for(int s=0;s<this->molecules->get_n_solvent_types();s++)
             phi_solvent.push_back(new double[M]);
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(propagator_computation_optimizer->get_computation_propagators(), n_streams); 
+        sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         double q_unity[M];
@@ -152,10 +152,10 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
         for(int gpu=0; gpu<N_GPUS; gpu++)
         {
             gpu_error_check(cudaSetDevice(gpu));
-            if (cb->get_mask() != nullptr)
+            if (this->cb->get_mask() != nullptr)
             {
                 gpu_error_check(cudaMalloc((void**)&d_q_mask [gpu], sizeof(double)*M));
-                gpu_error_check(cudaMemcpy(d_q_mask[gpu], cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_mask[gpu], this->cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
             }
             else
                 d_q_mask[gpu] = nullptr;
@@ -259,8 +259,8 @@ void CudaComputationReduceMemoryContinuous::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_total_grid();
-        const double ds = molecules->get_ds();
+        const int M = this->cb->get_total_grid();
+        const double ds = this->molecules->get_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -273,7 +273,7 @@ void CudaComputationReduceMemoryContinuous::compute_propagators(
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        for(const auto& item: propagator_computation_optimizer->get_computation_propagators())
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
             if( w_input.find(item.second.monomer_type) == w_input.end())
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
@@ -299,8 +299,8 @@ void CudaComputationReduceMemoryContinuous::compute_propagators(
                 auto& key = std::get<0>((*parallel_job)[job]);
                 int n_segment_from = std::get<1>((*parallel_job)[job]);
                 int n_segment_to = std::get<2>((*parallel_job)[job]);
-                auto& deps = propagator_computation_optimizer->get_computation_propagator(key).deps;
-                auto monomer_type = propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
+                auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
+                auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
                 // if (STREAM == 0)
                 //     std::cout << gpu << ", " << STREAM << ", " << n_segment_from << ", " << n_segment_to << ", " << monomer_type << ", " << key << ", "  << std::endl;    
@@ -536,8 +536,8 @@ void CudaComputationReduceMemoryContinuous::compute_propagators(
             double *propagator_right = std::get<2>(segment_info);
             int n_aggregated         = std::get<3>(segment_info);
 
-            single_polymer_partitions[p]= cb->inner_product(
-                propagator_left, propagator_right)/n_aggregated/cb->get_volume();
+            this->single_polymer_partitions[p]= this->cb->inner_product(
+                propagator_left, propagator_right)/n_aggregated/this->cb->get_volume();
         }
     }
     catch(std::exception& exc)
@@ -554,7 +554,7 @@ void CudaComputationReduceMemoryContinuous::compute_concentrations()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int M = cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
 
         // Calculate segment concentrations
         for(const auto& block: phi_block)
@@ -564,9 +564,9 @@ void CudaComputationReduceMemoryContinuous::compute_concentrations()
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
 
-            int n_segment_right = propagator_computation_optimizer->get_computation_block(key).n_segment_right;
-            int n_segment_left  = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
-            int n_repeated = propagator_computation_optimizer->get_computation_block(key).n_repeated;
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
+            int n_segment_left  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
+            int n_repeated      = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(n_segment_right == 0)
@@ -585,8 +585,8 @@ void CudaComputationReduceMemoryContinuous::compute_concentrations()
             #endif
 
             // Normalization constant
-            Polymer& pc = molecules->get_polymer(p);
-            double norm = molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/single_polymer_partitions[p]*n_repeated;
+            Polymer& pc = this->molecules->get_polymer(p);
+            double norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*n_repeated;
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
@@ -598,14 +598,14 @@ void CudaComputationReduceMemoryContinuous::compute_concentrations()
                 norm);
         }
         // Calculate partition functions and concentrations of solvents
-        for(int s=0; s<molecules->get_n_solvent_types(); s++)
+        for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
-            double volume_fraction = std::get<0>(molecules->get_solvent(s));
-            std::string monomer_type = std::get<1>(molecules->get_solvent(s));
+            double volume_fraction = std::get<0>(this->molecules->get_solvent(s));
+            std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-            single_solvent_partitions[s] = cb->inner_product_device(_d_exp_dw, _d_exp_dw)/cb->get_volume();
-            ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, _d_exp_dw, volume_fraction/single_solvent_partitions[s], M);
+            this->single_solvent_partitions[s] = this->cb->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
+            ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], M);
             gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
         gpu_error_check(cudaSetDevice(0));
@@ -624,7 +624,7 @@ void CudaComputationReduceMemoryContinuous::calculate_phi_one_block(
 
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
         int prev, next;
@@ -677,7 +677,7 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration(std::string 
 {
     try
     {
-        const int M = cb->get_total_grid();
+        const int M = this->cb->get_total_grid();
         // Initialize array
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
@@ -686,7 +686,7 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration(std::string 
         for(const auto& block: phi_block)
         {
             std::string key_left = std::get<1>(block.first);
-            int n_segment_right = propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
@@ -694,9 +694,9 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration(std::string 
             }
         }
         // For each solvent
-        for(int s=0;s<molecules->get_n_solvent_types();s++)
+        for(int s=0;s<this->molecules->get_n_solvent_types();s++)
         {
-            if (std::get<1>(molecules->get_solvent(s)) == monomer_type)
+            if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
             {
                 double *phi_solvent_ = phi_solvent[s];
                 for(int i=0; i<M; i++)
@@ -713,8 +713,8 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration(int p, std::
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int P = molecules->get_n_polymer_types();
+        const int M = this->cb->get_total_grid();
+        const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -728,7 +728,7 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration(int p, std::
         {
             int polymer_idx = std::get<0>(block.first);
             std::string key_left = std::get<1>(block.first);
-            int n_segment_right = propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
                 for(int i=0; i<M; i++)
@@ -745,8 +745,8 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration_gce(double f
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int P = molecules->get_n_polymer_types();
+        const int M = this->cb->get_total_grid();
+        const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
@@ -760,11 +760,11 @@ void CudaComputationReduceMemoryContinuous::get_total_concentration_gce(double f
         {
             int polymer_idx = std::get<0>(block.first);
             std::string key_left = std::get<1>(block.first);
-            int n_segment_right = propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                Polymer& pc = molecules->get_polymer(p);
-                double norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*single_polymer_partitions[p];
+                Polymer& pc = this->molecules->get_polymer(p);
+                double norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
                 for(int i=0; i<M; i++)
                     phi[i] += block.second[i]*norm; 
             }
@@ -779,16 +779,16 @@ void CudaComputationReduceMemoryContinuous::get_block_concentration(int p, doubl
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int P = molecules->get_n_polymer_types();
+        const int M = this->cb->get_total_grid();
+        const int P = this->molecules->get_n_polymer_types();
 
         if (p < 0 || p > P-1)
             throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
 
-        if (propagator_computation_optimizer->is_aggregated())
+        if (this->propagator_computation_optimizer->use_aggregation())
             throw_with_line_number("Disable 'aggregation' option to invoke 'get_block_concentration'.");
 
-        Polymer& pc = molecules->get_polymer(p);
+        Polymer& pc = this->molecules->get_polymer(p);
         std::vector<Block>& blocks = pc.get_blocks();
 
         for(size_t b=0; b<blocks.size(); b++)
@@ -812,7 +812,7 @@ double CudaComputationReduceMemoryContinuous::get_solvent_partition(int s)
 {
     try
     {
-        return single_solvent_partitions[s];
+        return this->single_solvent_partitions[s];
     }
     catch(std::exception& exc)
     {
@@ -823,8 +823,8 @@ void CudaComputationReduceMemoryContinuous::get_solvent_concentration(int s, dou
 {
     try
     {
-        const int M = cb->get_total_grid();
-        const int S = molecules->get_n_solvent_types();
+        const int M = this->cb->get_total_grid();
+        const int S = this->molecules->get_n_solvent_types();
 
         if (s < 0 || s > S-1)
             throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
@@ -854,8 +854,8 @@ void CudaComputationReduceMemoryContinuous::compute_stress()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
-        const int DIM = cb->get_dim();
-        const int M   = cb->get_total_grid();
+        const int DIM = this->cb->get_dim();
+        const int M   = this->cb->get_total_grid();
 
         std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[n_streams];
 
@@ -883,10 +883,10 @@ void CudaComputationReduceMemoryContinuous::compute_stress()
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
 
-            const int N_RIGHT = propagator_computation_optimizer->get_computation_block(key).n_segment_right;
-            const int N_LEFT  = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
-            std::string monomer_type = propagator_computation_optimizer->get_computation_block(key).monomer_type;
-            int n_repeated = propagator_computation_optimizer->get_computation_block(key).n_repeated;
+            const int N_RIGHT = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
+            const int N_LEFT  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
+            std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
+            int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
             // If there is no segment
             if(N_RIGHT == 0)
@@ -967,25 +967,25 @@ void CudaComputationReduceMemoryContinuous::compute_stress()
         gpu_error_check(cudaSetDevice(0));
 
         // Compute total stress
-        int n_polymer_types = molecules->get_n_polymer_types();
+        int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
             for(int d=0; d<DIM; d++)
-                dq_dl[p][d] = 0.0;
+                this->dq_dl[p][d] = 0.0;
         for(const auto& block: phi_block)
         {
             const auto& key       = block.first;
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
-            Polymer& pc = molecules->get_polymer(p);
+            Polymer& pc = this->molecules->get_polymer(p);
 
             for(int i=0; i<n_streams; i++)
                 for(int d=0; d<DIM; d++)
-                    dq_dl[p][d] += block_dq_dl[i][key][d];
+                    this->dq_dl[p][d] += block_dq_dl[i][key][d];
         }
         for(int p=0; p<n_polymer_types; p++){
             for(int d=0; d<DIM; d++)
-                dq_dl[p][d] /= -3.0*cb->get_lx(d)*M*M/molecules->get_ds();
+                this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_ds();
         }
     }
     catch(std::exception& exc)
@@ -1001,14 +1001,14 @@ void CudaComputationReduceMemoryContinuous::get_chain_propagator(double *q_out, 
     // This is made for debugging and testing.
     try
     {
-        const int M = cb->get_total_grid();
-        Polymer& pc = molecules->get_polymer(polymer);
+        const int M = this->cb->get_total_grid();
+        Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
-        if (propagator_computation_optimizer->get_computation_propagators().find(dep) == propagator_computation_optimizer->get_computation_propagators().end())
+        if (this->propagator_computation_optimizer->get_computation_propagators().find(dep) == this->propagator_computation_optimizer->get_computation_propagators().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_computation_optimizer.");
 
-        const int N_RIGHT = propagator_computation_optimizer->get_computation_propagator(dep).max_n_segment;
+        const int N_RIGHT = this->propagator_computation_optimizer->get_computation_propagator(dep).max_n_segment;
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
@@ -1023,8 +1023,8 @@ void CudaComputationReduceMemoryContinuous::get_chain_propagator(double *q_out, 
 }
 bool CudaComputationReduceMemoryContinuous::check_total_partition()
 {
-    const int M = cb->get_total_grid();
-    int n_polymer_types = molecules->get_n_polymer_types();
+    const int M = this->cb->get_total_grid();
+    int n_polymer_types = this->molecules->get_n_polymer_types();
     std::vector<std::vector<double>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
     {
@@ -1040,20 +1040,20 @@ bool CudaComputationReduceMemoryContinuous::check_total_partition()
         std::string key_left  = std::get<1>(key);
         std::string key_right = std::get<2>(key);
 
-        int n_segment_right = propagator_computation_optimizer->get_computation_block(key).n_segment_right;
-        int n_segment_left  = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
-        int n_repeated      = propagator_computation_optimizer->get_computation_block(key).n_repeated;
-        int n_propagators   = propagator_computation_optimizer->get_computation_block(key).v_u.size();
+        int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
+        int n_segment_left  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
+        int n_repeated      = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
+        int n_propagators   = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         #ifndef NDEBUG
-        std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << propagator_computation_optimizer->get_computation_block(key).n_repeated << std::endl;
+        std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << this->propagator_computation_optimizer->get_computation_block(key).n_repeated << std::endl;
         #endif
 
         for(int n=0;n<=n_segment_right;n++)
         {
-            double total_partition = cb->inner_product(
+            double total_partition = this->cb->inner_product(
                 propagator[key_left][n_segment_left-n],   // q
-                propagator[key_right][n])*n_repeated/cb->get_volume();
+                propagator[key_right][n])*n_repeated/this->cb->get_volume();
 
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);

@@ -47,10 +47,10 @@ public :
         return new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
     };
 
-    virtual PropagatorComputation* create_pseudospectral_solver(
+    virtual PropagatorComputation<double>* create_pseudospectral_solver(
         ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
-    virtual PropagatorComputation* create_realspace_solver(
+    virtual PropagatorComputation<double>* create_realspace_solver(
         ComputationBox *cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
