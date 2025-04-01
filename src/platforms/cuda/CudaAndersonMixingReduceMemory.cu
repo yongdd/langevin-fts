@@ -128,7 +128,7 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
             for(int i=0; i<= n_anderson; i++)
             {
                 gpu_error_check(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(double)*n_var, cudaMemcpyHostToDevice));
-                multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, n_var);
+                ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, n_var);
                 cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
                 gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
             }
@@ -175,13 +175,13 @@ void CudaAndersonMixingReduceMemory::calculate_new_fields(
             gpu_error_check(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(double)*n_var,cudaMemcpyHostToDevice));
 
             gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
-            lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
+            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
             for(int i=0; i<n_anderson; i++)
             {
                 gpu_error_check(cudaMemcpy(d_w_hist2,       pinned_cb_w_hist->get_array(i+1),       sizeof(double)*n_var,cudaMemcpyHostToDevice));
                 gpu_error_check(cudaMemcpy(d_w_deriv_hist2, pinned_cb_w_deriv_hist->get_array(i+1), sizeof(double)*n_var,cudaMemcpyHostToDevice));
-                add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
-                add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
+                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
+                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
             }
             gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var,cudaMemcpyDeviceToHost));
         }

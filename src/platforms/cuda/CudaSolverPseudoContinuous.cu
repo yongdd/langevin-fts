@@ -269,9 +269,9 @@ void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::str
             for(int gpu=0; gpu<N_GPUS; gpu++)
             {
                 gpu_error_check(cudaSetDevice(gpu));
-                exp_real<<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
+                ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
                     (this->d_exp_dw[gpu][monomer_type],      this->d_exp_dw[gpu][monomer_type],      1.0, -0.50*ds, M);
-                exp_real<<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
+                ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[gpu][1]>>>
                     (this->d_exp_dw_half[gpu][monomer_type], this->d_exp_dw_half[gpu][monomer_type], 1.0, -0.25*ds, M);
             }
 
@@ -310,7 +310,7 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/4) in real space
-        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        ker_multi_exp_dw_two<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
             &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
 
@@ -320,7 +320,7 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
-        complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        ker_complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             &d_qk_in_1_two[STREAM][0],         _d_boltz_bond,
             &d_qk_in_1_two[STREAM][M_COMPLEX], _d_boltz_bond_half, M_COMPLEX);
 
@@ -330,7 +330,7 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/2) in real space
-        real_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        ker_multi_exp_dw_two<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             d_q_step_1_one[STREAM], &d_q_step_1_two[STREAM][0], _d_exp_dw,
             d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/((double)M), M);
 
@@ -338,20 +338,20 @@ void CudaSolverPseudoContinuous::advance_propagator(
         cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
 
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
-        multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, M_COMPLEX);
+        ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
 
         // step 1/4: Execute a backward FFT
         cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
 
         // step 1/4: Evaluate exp(-w*ds/4) in real space.
-        multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/((double)M), M);
+        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/((double)M), M);
 
         // Compute linear combination with 4/3 and -1/3 ratio
-        lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
+        ker_lin_comb<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
 
         // Multiply mask
         if (d_q_mask != nullptr)
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
@@ -380,35 +380,35 @@ void CudaSolverPseudoContinuous::compute_single_segment_stress(
         cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
 
         // Multiply two propagators in the fourier spaces
-        multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
+        ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
         if ( DIM == 3 )
         {
             // x direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_x[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_x[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
 
             // y direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
 
             // z direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
         }
         if ( DIM == 2 )
         {
             // y direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
 
             // z direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
         }
         if ( DIM == 1 )
         {
             // z direction
-            multi_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
+            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z[GPU], bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
         }
     }

@@ -59,7 +59,7 @@ double CudaComputationBox::integral_device(const double *d_g)
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_dv, 1.0, total_grid);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
     return sum;
@@ -71,8 +71,8 @@ double CudaComputationBox::inner_product_device(const double* d_g, const double*
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
@@ -84,9 +84,9 @@ double CudaComputationBox::inner_product_inverse_weight_device(const double* d_g
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
-    divide_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    ker_divide<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, total_grid);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
@@ -98,8 +98,8 @@ double CudaComputationBox::multi_inner_product_device(int n_comp, const double* 
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    mutiple_multi_real<<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, total_grid);
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
+    ker_mutiple_multi<double><<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_sum, 1.0, total_grid);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
     return sum;
@@ -111,8 +111,8 @@ void CudaComputationBox::zero_mean_device(double* d_g)
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     double sum{0.0};
 
-    multi_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_g, 1.0, total_grid);
+    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_dv, d_g, 1.0, total_grid);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, total_grid);
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(double), cudaMemcpyDeviceToHost));
-    linear_scaling_real<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, -sum/volume, total_grid);
+    ker_linear_scaling<double><<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, -sum/volume, total_grid);
 }
