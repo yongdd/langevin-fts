@@ -20,7 +20,7 @@ template <typename T>
 class CpuSolverPseudoContinuous : public CpuSolver<T>
 {
 private:
-    ComputationBox<T>* cb;
+    ComputationBox* cb;
     Molecules *molecules;
     
     FFT<T> *fft;
@@ -36,7 +36,7 @@ public:
     std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
     std::map<std::string, double*> boltz_bond_half;   // Boltzmann factor for the half bond
 
-    CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules);
+    CpuSolverPseudoContinuous(ComputationBox* cb, Molecules *molecules);
     ~CpuSolverPseudoContinuous();
     void update_laplacian_operator() override;
     void update_dw(std::map<std::string, const T*> w_input) override;

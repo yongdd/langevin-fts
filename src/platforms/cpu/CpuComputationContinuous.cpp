@@ -8,7 +8,7 @@
 
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
-    ComputationBox<T>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
@@ -26,7 +26,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         else if(method == "realspace")
         {
             if constexpr (std::is_same<T, double>::value) 
-                this->propagator_solver = new CpuSolverReal<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverReal(cb, molecules);
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }

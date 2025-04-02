@@ -8,7 +8,7 @@
 #include "CudaSolverPseudoDiscrete.h"
 
 CudaComputationReduceMemoryDiscrete::CudaComputationReduceMemoryDiscrete(
-    ComputationBox<double>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation(cb, molecules, propagator_computation_optimizer)
@@ -847,7 +847,7 @@ void CudaComputationReduceMemoryDiscrete::compute_propagators(
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator_left,  sizeof(double)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_right, sizeof(double)*M, cudaMemcpyHostToDevice));
 
-            this->single_polymer_partitions[p] = this->cb->inner_product_inverse_weight_device(
+            this->single_polymer_partitions[p] = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)/n_aggregated/this->cb->get_volume();
@@ -920,7 +920,7 @@ void CudaComputationReduceMemoryDiscrete::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-            this->single_solvent_partitions[s] = this->cb->integral_device(_d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
             ker_linear_scaling<double><<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], 0.0, M);
             gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }
@@ -1399,7 +1399,7 @@ bool CudaComputationReduceMemoryDiscrete::check_total_partition()
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator[key_left][n_segment_left-n+1], sizeof(double)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator[key_right][n], sizeof(double)*M, cudaMemcpyHostToDevice));
 
-            double total_partition = this->cb->inner_product_inverse_weight_device(
+            double total_partition = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)*n_repeated/this->cb->get_volume();

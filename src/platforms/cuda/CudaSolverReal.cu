@@ -3,7 +3,7 @@
 #include "CudaSolverReal.h"
 
 CudaSolverReal::CudaSolverReal(
-    ComputationBox<double>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],

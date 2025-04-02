@@ -9,6 +9,7 @@
 #include <array>
 #include <vector>
 #include <cassert>
+#include <complex>
 
 #include "Exception.h"
 
@@ -19,7 +20,7 @@ enum class BoundaryCondition
 	ABSORBING,
 };
 
-template <typename T>
+
 class ComputationBox
 {
 protected:
@@ -61,18 +62,24 @@ public:
     const std::vector<BoundaryCondition> get_boundary_conditions();
     BoundaryCondition get_boundary_condition(int i);
 
+    double integral(const double *g);
+    double inner_product(const double *g, const double *h);
+    double inner_product_inverse_weight(const double *g, const double *h, const double *w);
+    double multi_inner_product(int n_comp, const double *g, const double *h);
+    void zero_mean(double *g);
+
+    std::complex<double> integral(const std::complex<double> *g);
+    std::complex<double> inner_product(const std::complex<double> *g, const std::complex<double> *h);
+    std::complex<double> inner_product_inverse_weight(const std::complex<double> *g, const std::complex<double> *h, const std::complex<double> *w);
+    std::complex<double> multi_inner_product(int n_comp, const std::complex<double> *g, const std::complex<double> *h);
+    void zero_mean(std::complex<double> *g);
+
     virtual void set_lx(std::vector<double> new_lx);
 
-    virtual T integral(const T *g);
-    virtual T inner_product(const T *g, const T *h);
-    virtual T inner_product_inverse_weight(const T *g, const T *h, const T *w);
-    virtual T multi_inner_product(int n_comp, const T *g, const T *h);
-    virtual void zero_mean(T *g);
-
-    virtual T integral_device(const T *g)=0;
-    virtual T inner_product_device(const T *g, const T *h)=0;
-    virtual T inner_product_inverse_weight_device(const T *g, const T *h, const T *w)=0;
-    virtual T multi_inner_product_device(int n_comp, const T *g, const T *h)=0;
-    virtual void zero_mean_device(T *g)=0;
+    // virtual double integral_device(const double *g)=0;
+    // virtual double inner_product_device(const double *g, const double *h)=0;
+    // virtual double inner_product_inverse_weight_device(const double *g, const double *h, const double *w)=0;
+    // virtual double multi_inner_product_device(int n_comp, const double *g, const double *h)=0;
+    // virtual void zero_mean_device(double *g)=0;
 };
 #endif

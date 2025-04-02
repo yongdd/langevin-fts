@@ -5,7 +5,7 @@
 #include "MklFFT.h"
 
 template <typename T>
-CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules)
+CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox* cb, Molecules *molecules)
 {
     try{
         if (cb->get_dim() == 3)

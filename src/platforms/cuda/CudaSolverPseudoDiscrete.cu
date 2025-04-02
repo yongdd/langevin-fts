@@ -4,7 +4,7 @@
 #include "CudaSolverPseudoDiscrete.h"
 
 CudaSolverPseudoDiscrete::CudaSolverPseudoDiscrete(
-    ComputationBox<double>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],

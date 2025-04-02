@@ -7,6 +7,7 @@
 
 #include <string>
 #include <array>
+#include <complex>
 
 #include "ComputationBox.h"
 #include "Polymer.h"
@@ -21,8 +22,9 @@
 class AbstractFactory
 {
 protected:
-    std::string chain_model;
+    std::string data_type;
     bool reduce_memory_usage;
+
 public :
     virtual ~AbstractFactory() {};
 
@@ -33,7 +35,7 @@ public :
         double *data,
         unsigned int size) = 0;
 
-    virtual ComputationBox<double>* create_computation_box(
+    virtual ComputationBox* create_computation_box(
         std::vector<int> nx,
         std::vector<double> lx,
         std::vector<std::string> bc,
@@ -48,16 +50,16 @@ public :
     };
 
     virtual PropagatorComputation<double>* create_pseudospectral_solver(
-        ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
+        ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual PropagatorComputation<double>* create_realspace_solver(
-        ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
+        ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) = 0;
 
-    std::string get_model_name() {return chain_model;};
+    // std::string get_model_name() {return chain_model;};
     virtual void display_info() = 0;
 };
 #endif

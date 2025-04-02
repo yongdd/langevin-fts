@@ -8,7 +8,7 @@
 #include "SimpsonRule.h"
 
 CudaComputationContinuous::CudaComputationContinuous(
-    ComputationBox<double>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
@@ -515,7 +515,7 @@ void CudaComputationContinuous::compute_propagators(
             double *d_propagator_right = std::get<2>(segment_info);
             int n_aggregated           = std::get<3>(segment_info);
 
-            this->single_polymer_partitions[p] = this->cb->inner_product_device(
+            this->single_polymer_partitions[p] = ((CudaComputationBox *) this->cb)->inner_product_device(
                 d_propagator_left, d_propagator_right)/n_aggregated/this->cb->get_volume();
         }
     }
@@ -584,7 +584,7 @@ void CudaComputationContinuous::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[0][monomer_type];
 
-            this->single_solvent_partitions[s] = this->cb->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
             ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_phi_,_d_exp_dw, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], M);
         }
         gpu_error_check(cudaSetDevice(0));
@@ -1031,7 +1031,7 @@ bool CudaComputationContinuous::check_total_partition()
 
         for(int n=0;n<=n_segment_right;n++)
         {
-            double total_partition = this->cb->inner_product_device(
+            double total_partition = ((CudaComputationBox *) this->cb)->inner_product_device(
                 d_propagator[key_left][n_segment_left-n],
                 d_propagator[key_right][n])*n_repeated/this->cb->get_volume();
             
