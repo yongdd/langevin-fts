@@ -7,7 +7,7 @@
 
 template <typename T>
 CpuComputationDiscrete<T>::CpuComputationDiscrete(
-    ComputationBox<T>* cb,
+    ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)

@@ -16,9 +16,14 @@
 #include "CudaFactory.h"
 #include "CudaArray.h"
 
-CudaFactory::CudaFactory(bool reduce_memory_usage)
+CudaFactory::CudaFactory(std::string data_type, bool reduce_memory_usage)
 {
+    this->data_type = data_type;
     this->reduce_memory_usage = reduce_memory_usage;
+
+    if (this->data_type != "double" && this->data_type != "complex")
+        throw_with_line_number("MklFactory only supports double and complex data types. Please check your input.");
+        
 }
 
 Array* CudaFactory::create_array(
@@ -33,17 +38,17 @@ Array* CudaFactory::create_array(
 {
     return new CudaArray(data, size);
 }
-ComputationBox<double>* CudaFactory::create_computation_box(
+ComputationBox* CudaFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
-    return new CudaComputationBox<double>(nx, lx, bc, mask);
+    return new CudaComputationBox(nx, lx, bc, mask);
 }
 Molecules* CudaFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation<double>* CudaFactory::create_pseudospectral_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* CudaFactory::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string model_name = molecules->get_model_name();
 
@@ -57,7 +62,7 @@ PropagatorComputation<double>* CudaFactory::create_pseudospectral_solver(Computa
         return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
-PropagatorComputation<double>* CudaFactory::create_realspace_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* CudaFactory::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {

@@ -15,11 +15,10 @@
 #include "CpuSolver.h"
 #include "FiniteDifference.h"
 
-template <typename T>
 class CpuSolverReal : public CpuSolver<double>
 {
 private:
-    ComputationBox<double>* cb;
+    ComputationBox* cb;
     Molecules *molecules;
     
     // Trigonal matrix for x direction
@@ -51,7 +50,7 @@ private:
         double *q_in, double *q_out, std::string monomer_type);
 public:
 
-    CpuSolverReal(ComputationBox<double>* cb, Molecules *molecules);
+    CpuSolverReal(ComputationBox* cb, Molecules *molecules);
     ~CpuSolverReal();
     void update_laplacian_operator() override;
     void update_dw(std::map<std::string, const double*> w_input) override;

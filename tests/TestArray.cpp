@@ -12,6 +12,7 @@ int main()
 {
     try
     {
+        /*
         const int N_REPEATS = 1;
 
         // Math constants
@@ -60,7 +61,7 @@ int main()
             factory->display_info();
 
             // Create instances and assign to the variables of base classes for the dynamic binding
-            ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
+            ComputationBox* cb = factory->create_computation_box(nx, lx, {});
             
             std::cout<< "---------- Run ----------" << std::endl;
             std::cout<< "iteration, mass error, total partitions, total energy, error level" << std::endl;
@@ -230,6 +231,7 @@ int main()
             std::cout<< time_duration.count() << std::endl;
         }
         return 0;
+        */
     }
     catch(std::exception& exc)
     {

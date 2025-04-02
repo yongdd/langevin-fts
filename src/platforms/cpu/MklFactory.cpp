@@ -16,10 +16,14 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
-MklFactory::MklFactory(bool reduce_memory_usage)
+MklFactory::MklFactory(std::string data_type, bool reduce_memory_usage)
 {
+    this->data_type = data_type;
     this->reduce_memory_usage = reduce_memory_usage;
 
+    if (this->data_type != "double" && this->data_type != "complex")
+        throw_with_line_number("MklFactory only supports double and complex data types. Please check your input.");
+        
     if (this->reduce_memory_usage)
         std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
 
@@ -36,17 +40,17 @@ Array* MklFactory::create_array(
 {
     return new CpuArray(data, size);
 }
-ComputationBox<double>* MklFactory::create_computation_box(
+ComputationBox* MklFactory::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
-    return new CpuComputationBox<double>(nx, lx, bc, mask);
+    return new CpuComputationBox(nx, lx, bc, mask);
 }
 Molecules* MklFactory::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
@@ -59,7 +63,7 @@ PropagatorComputation<double>* MklFactory::create_pseudospectral_solver(Computat
     }
     return NULL;
 }
-PropagatorComputation<double>* MklFactory::create_realspace_solver(ComputationBox<double>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<double>* MklFactory::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {

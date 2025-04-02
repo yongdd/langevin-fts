@@ -30,11 +30,11 @@ AbstractFactory *PlatformSelector::create_factory(std::string platform)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory(false);
+        return new MklFactory("double", false);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory(false);
+        return new CudaFactory("double", false);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return NULL;
@@ -43,11 +43,37 @@ AbstractFactory *PlatformSelector::create_factory(std::string platform, bool red
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory(reduce_memory_usage);
+        return new MklFactory("double", reduce_memory_usage);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory(reduce_memory_usage);
+        return new CudaFactory("double", reduce_memory_usage);
+#endif
+    throw_with_line_number("Could not find platform '" + platform + "'");
+    return NULL;
+}
+AbstractFactory *PlatformSelector::create_factory(std::string platform, std::string data_type)
+{
+#ifdef USE_CPU_MKL
+    if (platform == "cpu-mkl")
+        return new MklFactory(data_type, false);
+#endif
+#ifdef USE_CUDA
+    if (platform == "cuda")
+        return new CudaFactory(data_type, false);
+#endif
+    throw_with_line_number("Could not find platform '" + platform + "'");
+    return NULL;
+}
+AbstractFactory *PlatformSelector::create_factory(std::string platform, std::string data_type, bool reduce_memory_usage)
+{
+#ifdef USE_CPU_MKL
+    if (platform == "cpu-mkl")
+        return new MklFactory(data_type, reduce_memory_usage);
+#endif
+#ifdef USE_CUDA
+    if (platform == "cuda")
+        return new CudaFactory(data_type, reduce_memory_usage);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return NULL;
