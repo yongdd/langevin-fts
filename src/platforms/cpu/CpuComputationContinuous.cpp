@@ -3,7 +3,7 @@
 
 #include "CpuComputationContinuous.h"
 #include "CpuSolverPseudoContinuous.h"
-#include "CpuSolverReal.h"
+#include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
 
 template <typename T>
@@ -26,7 +26,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         else if(method == "realspace")
         {
             if constexpr (std::is_same<T, double>::value) 
-                this->propagator_solver = new CpuSolverReal(cb, molecules);
+                this->propagator_solver = new CpuSolverRealSpace(cb, molecules);
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }

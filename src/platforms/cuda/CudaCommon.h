@@ -9,8 +9,8 @@
 
 typedef cufftDoubleComplex ftsComplex;
 
-// The maximum of GPUs
-#define MAX_GPUS 2
+// // The maximum of GPUs
+// #define MAX_GPUS 2
 
 // The maximum of computation streams
 #define MAX_STREAMS 4
@@ -23,7 +23,7 @@ private:
     int n_blocks;
     int n_threads;
 
-    int n_gpus;
+    // int n_gpus;
 
     CudaCommon();
     ~CudaCommon();
@@ -47,7 +47,7 @@ public:
     
     int get_n_blocks();
     int get_n_threads();
-    int get_n_gpus();
+    // int get_n_gpus();
     
     void set_n_blocks(int n_blocks);
     void set_n_threads(int n_threads);
@@ -59,6 +59,9 @@ void throw_on_cuda_error(cudaError_t code, const char *file, int line, const cha
 
 template <typename T>
 __global__ void ker_linear_scaling(T* dst, const T* src, double a, T b, const int M);
+
+template <typename T>
+__global__ void ker_linear_scaling_complex(T* dst, const T* src, double a, T b, const int M);
 
 template <typename T>
 __global__ void ker_exp(T* dst, const T* src, double a, double exp_b, const int M);
@@ -85,6 +88,8 @@ template <typename T>
 __global__ void ker_add_lin_comb(T* dst, double a, const T* src1, double b, const T* src2, const int M);
 
 __global__ void ker_multi_complex_real(ftsComplex* dst, const double* src, double a, const int M);
+
+__global__ void ker_multi_complex_real(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M);
 
 template <typename T>
 __global__ void ker_multi_exp_dw_two(

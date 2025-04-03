@@ -42,10 +42,10 @@ private:
     double *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
 
     // All elements are 1 for initializing propagators
-    double *d_q_unity[MAX_GPUS];
+    double *d_q_unity;
 
     // q_mask to make impenetrable region for nano particles
-    double *d_q_mask[MAX_GPUS];
+    double *d_q_mask;
 
     // For concentration computation
     double *d_q_block_v[2];    // one for prev, the other for next

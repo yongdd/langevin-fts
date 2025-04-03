@@ -87,19 +87,19 @@ private:
     cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
     
     // Trigonal matrix for x direction
-    std::map<std::string, double*> d_xl[MAX_GPUS];
-    std::map<std::string, double*> d_xd[MAX_GPUS];
-    std::map<std::string, double*> d_xh[MAX_GPUS];
+    std::map<std::string, double*> d_xl;
+    std::map<std::string, double*> d_xd;
+    std::map<std::string, double*> d_xh;
 
     // Trigonal matrix for y direction
-    std::map<std::string, double*> d_yl[MAX_GPUS];
-    std::map<std::string, double*> d_yd[MAX_GPUS];
-    std::map<std::string, double*> d_yh[MAX_GPUS];
+    std::map<std::string, double*> d_yl;
+    std::map<std::string, double*> d_yd;
+    std::map<std::string, double*> d_yh;
 
     // Trigonal matrix for z direction
-    std::map<std::string, double*> d_zl[MAX_GPUS];
-    std::map<std::string, double*> d_zd[MAX_GPUS];
-    std::map<std::string, double*> d_zh[MAX_GPUS];
+    std::map<std::string, double*> d_zl;
+    std::map<std::string, double*> d_zd;
+    std::map<std::string, double*> d_zh;
 
     // Arrays for tridiagonal computation
     double *d_q_star  [MAX_STREAMS];
@@ -110,26 +110,26 @@ private:
 
     // Offset 
     // For 3D
-    int* d_offset_xy[MAX_GPUS];
-    int* d_offset_yz[MAX_GPUS];
-    int* d_offset_xz[MAX_GPUS];
+    int* d_offset_xy;
+    int* d_offset_yz;
+    int* d_offset_xz;
     // For 2D
-    int* d_offset_x[MAX_GPUS];
-    int* d_offset_y[MAX_GPUS];
+    int* d_offset_x;
+    int* d_offset_y;
     // For 1D
-    int* d_offset[MAX_GPUS];
+    int* d_offset;
 
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,      
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
@@ -142,19 +142,19 @@ public:
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step
     void advance_propagator(
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_in, double *d_q_out,
         std::string monomer_type, double *d_q_mask) override;
 
     // Advance propagator by half bond step
     void advance_propagator_half_bond_step(
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_in, double *d_q_out,
         std::string monomer_type) override {};
 
     // Compute stress of single segment
     void compute_single_segment_stress(
-        const int GPU, const int STREAM,
+        const int STREAM,
         double *d_q_pair, double *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) override;
 

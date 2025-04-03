@@ -2,8 +2,8 @@
 * This class defines a class for real-space method
 *-----------------------------------------------------------*/
 
-#ifndef CPU_SOLVER_REAL_H_
-#define CPU_SOLVER_REAL_H_
+#ifndef CPU_SOLVER_REAL_SPACE_H_
+#define CPU_SOLVER_REAL_SPACE_H_
 
 #include <string>
 #include <vector>
@@ -15,7 +15,7 @@
 #include "CpuSolver.h"
 #include "FiniteDifference.h"
 
-class CpuSolverReal : public CpuSolver<double>
+class CpuSolverRealSpace : public CpuSolver<double>
 {
 private:
     ComputationBox* cb;
@@ -50,8 +50,8 @@ private:
         double *q_in, double *q_out, std::string monomer_type);
 public:
 
-    CpuSolverReal(ComputationBox* cb, Molecules *molecules);
-    ~CpuSolverReal();
+    CpuSolverRealSpace(ComputationBox* cb, Molecules *molecules);
+    ~CpuSolverRealSpace();
     void update_laplacian_operator() override;
     void update_dw(std::map<std::string, const double*> w_input) override;
 

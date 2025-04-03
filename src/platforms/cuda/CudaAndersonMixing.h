@@ -14,7 +14,7 @@ class CudaAndersonMixing : public AndersonMixing
 {
 private:
     // Two streams for each gpu
-    cudaStream_t streams[MAX_GPUS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[2]; // one for kernel execution, the other for memcpy
 
     // A few previous field values are stored for anderson mixing in GPU
     CudaCircularBuffer *d_cb_w_hist, *d_cb_w_deriv_hist;
@@ -24,17 +24,14 @@ private:
     double **u_nm, *v_n, *a_n;
     // Temporary arrays
     double *d_w_current;
-    double *d_w_new[MAX_GPUS];
-    double *d_w_deriv[MAX_GPUS];
-    double *d_sum[MAX_GPUS];
+    double *d_w_new;
+    double *d_w_deriv;
+    double *d_sum;
 
-    // Temporary arrays for device_1
-    double *d_w_deriv_device_1[2]; // one for prev, the other for next
-    
     // Variables for cub reduction sum
-    size_t temp_storage_bytes[MAX_GPUS];
-    double *d_temp_storage[MAX_GPUS];
-    double *d_sum_out[MAX_GPUS];
+    size_t temp_storage_bytes;
+    double *d_temp_storage;
+    double *d_sum_out;
 
     void print_array(int n, double *a);
 public:

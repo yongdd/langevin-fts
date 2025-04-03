@@ -30,10 +30,10 @@ private:
     cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // All elements are 1 for initializing propagators
-    double *d_q_unity[MAX_GPUS]; 
+    double *d_q_unity; 
 
     // q_mask to make impenetrable region for nano particles
-    double *d_q_mask[MAX_GPUS];
+    double *d_q_mask;
 
     // One for prev, the other for next
     double *d_q_pair[MAX_STREAMS][2];
@@ -48,8 +48,6 @@ private:
     // Map for deallocation of propagator
     std::map<std::string, int> propagator_size;
 
-    // Temporary arrays for device_1, one for prev, the other for next
-    double *d_propagator_device[MAX_GPUS][2];
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;

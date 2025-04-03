@@ -227,6 +227,5 @@ std::vector<double> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
 
 // template class CpuSolverPseudoDiscrete<float>;
 // template class CpuSolverPseudoDiscrete<std::complex<float>>;
-
 template class CpuSolverPseudoDiscrete<double>;
 template class CpuSolverPseudoDiscrete<std::complex<double>>;

@@ -111,7 +111,7 @@ void CudaFactory<T>::display_info()
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+    // const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
 
     // Get GPU info
     gpu_error_check(cudaGetDeviceCount(&devices_count));
@@ -120,7 +120,7 @@ void CudaFactory<T>::display_info()
 
     std::cout<< "========== CUDA Setting and Device Information ==========" << std::endl;
     std::cout<< "N_BLOCKS, N_THREADS: " << N_BLOCKS << ", " << N_THREADS << std::endl;
-    std::cout<< "N_GPUS (# of using GPUs): " << N_GPUS << std::endl;
+    // std::cout<< "N_GPUS (# of using GPUs): " << N_GPUS << std::endl;
 
     std::cout<< "DeviceCount (# of available GPUs): " << devices_count << std::endl;
     std::cout<< "Device " << device << ": \t\t\t\t" << prop.name << std::endl;

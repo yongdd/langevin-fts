@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
-#include "CpuSolverReal.h"
+#include "CpuSolverRealSpace.h"
 
 int main()
 {
@@ -42,7 +42,7 @@ int main()
         double error;
 
         // Tridiagonal
-        CpuSolverReal::tridiagonal(a, b, c, x, 1, y, M);
+        CpuSolverRealSpace::tridiagonal(a, b, c, x, 1, y, M);
         std::cout << "Tridiagonal" << std::endl;
         std::cout << "i: x_answer[i], x[i]" << std::endl;
         for(int i=0; i<M; i++)
@@ -57,7 +57,7 @@ int main()
             return -1;
 
         // Tridiagonal with periodic boundary
-        CpuSolverReal::tridiagonal_periodic(a, b, c, x, 1, y, M);
+        CpuSolverRealSpace::tridiagonal_periodic(a, b, c, x, 1, y, M);
         std::cout << "Tridiagonal with periodic boundary" << std::endl;
         std::cout << "i: x_periodic_answer[i], x[i]" << std::endl;
         for(int i=0; i<M; i++)
