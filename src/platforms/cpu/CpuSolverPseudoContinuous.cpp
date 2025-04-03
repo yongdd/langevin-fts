@@ -226,6 +226,9 @@ std::vector<double> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
     return stress;
 }
 
-// Explicit template instantiation for double and std::complex<double>
+// Explicit template instantiation
+
+// template class CpuSolverPseudoContinuous<float>;
+// template class CpuSolverPseudoContinuous<std::complex<float>>;
 template class CpuSolverPseudoContinuous<double>;
 template class CpuSolverPseudoContinuous<std::complex<double>>;

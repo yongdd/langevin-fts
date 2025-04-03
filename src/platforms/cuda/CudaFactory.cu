@@ -16,61 +16,65 @@
 #include "CudaFactory.h"
 #include "CudaArray.h"
 
-CudaFactory::CudaFactory(std::string data_type, bool reduce_memory_usage)
+template <typename T>
+CudaFactory<T>::CudaFactory(bool reduce_memory_usage)
 {
-    this->data_type = data_type;
+    // this->data_type = data_type;
+    // if (this->data_type != "double" && this->data_type != "complex")
+    //     throw_with_line_number("CudaFactory only supports double and complex data types. Please check your input.");
+
     this->reduce_memory_usage = reduce_memory_usage;
-
-    if (this->data_type != "double" && this->data_type != "complex")
-        throw_with_line_number("MklFactory only supports double and complex data types. Please check your input.");
-        
 }
 
-Array* CudaFactory::create_array(
-    unsigned int size)
-{
-    return new CudaArray(size);
-}
+// Array* CudaFactory<T>::create_array(
+//     unsigned int size)
+// {
+//     return new CudaArray(size);
+// }
 
-Array* CudaFactory::create_array(
-    double *data,
-    unsigned int size)
-{
-    return new CudaArray(data, size);
-}
-ComputationBox* CudaFactory::create_computation_box(
+// Array* CudaFactory<T>::create_array(
+//     double *data,
+//     unsigned int size)
+// {
+//     return new CudaArray(data, size);
+// }
+template <typename T>
+ComputationBox* CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
     return new CudaComputationBox(nx, lx, bc, mask);
 }
-Molecules* CudaFactory::create_molecules_information(
+template <typename T>
+Molecules* CudaFactory<T>::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {
     return new Molecules(chain_model, ds, bond_lengths);
 }
-PropagatorComputation<double>* CudaFactory::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+template <typename T>
+PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string model_name = molecules->get_model_name();
 
-    if( model_name == "continuous" && reduce_memory_usage == false)
-        return new CudaComputationContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
-    else if( model_name == "continuous" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_computation_optimizer, "pseudospectral");
-    else if( model_name == "discrete" && reduce_memory_usage == false )
-        return new CudaComputationDiscrete(cb, molecules, propagator_computation_optimizer);
-    else if( model_name == "discrete" && reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryDiscrete(cb, molecules, propagator_computation_optimizer);
+    if( model_name == "continuous" && this->reduce_memory_usage == false)
+        return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+    else if( model_name == "continuous" && this->reduce_memory_usage == true)
+        return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+    else if( model_name == "discrete" && this->reduce_memory_usage == false )
+        return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+    else if( model_name == "discrete" && this->reduce_memory_usage == true)
+        return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
-PropagatorComputation<double>* CudaFactory::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+template <typename T>
+PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {
         std::string model_name = molecules->get_model_name();
-        if( model_name == "continuous" && reduce_memory_usage == false)
-            return new CudaComputationContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
-        else if( model_name == "continuous" && reduce_memory_usage == true)
-            return new CudaComputationReduceMemoryContinuous(cb, molecules, propagator_computation_optimizer, "realspace");
+        if( model_name == "continuous" && this->reduce_memory_usage == false)
+            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace");
+        else if( model_name == "continuous" && this->reduce_memory_usage == true)
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace");
         else if ( model_name == "discrete" )
         {
             throw_with_line_number("The real-space solver does not support discrete chain model.");
@@ -82,11 +86,11 @@ PropagatorComputation<double>* CudaFactory::create_realspace_solver(ComputationB
         throw_without_line_number(exc.what());
     }
 }
-AndersonMixing* CudaFactory::create_anderson_mixing(
+template <typename T>
+AndersonMixing* CudaFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-
     if(this->reduce_memory_usage)
     {
         return new CudaAndersonMixingReduceMemory(
@@ -98,7 +102,8 @@ AndersonMixing* CudaFactory::create_anderson_mixing(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
 }
-void CudaFactory::display_info()
+template <typename T>
+void CudaFactory<T>::display_info()
 {
     int device;
     int devices_count;
@@ -147,3 +152,11 @@ void CudaFactory::display_info()
 
     printf("================================================================\n");
 }
+
+// Explicit template instantiation for double and std::complex<double>
+
+// template class CudaFactory<float>;
+// template class CudaFactory<std::complex<float>>;
+
+template class CudaFactory<double>;
+// template class CudaFactory<std::complex<double>>;

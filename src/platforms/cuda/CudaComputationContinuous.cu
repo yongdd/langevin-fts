@@ -7,7 +7,8 @@
 #include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
 
-CudaComputationContinuous::CudaComputationContinuous(
+template <typename T>
+CudaComputationContinuous<T>::CudaComputationContinuous(
     ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
@@ -164,7 +165,8 @@ CudaComputationContinuous::CudaComputationContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CudaComputationContinuous::~CudaComputationContinuous()
+template <typename T>
+CudaComputationContinuous<T>::~CudaComputationContinuous()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
@@ -217,8 +219,8 @@ CudaComputationContinuous::~CudaComputationContinuous()
         cudaStreamDestroy(streams[i][1]);
     }
 }
-
-void CudaComputationContinuous::update_laplacian_operator()
+template <typename T>
+void CudaComputationContinuous<T>::update_laplacian_operator()
 {
     try{
         propagator_solver->update_laplacian_operator();
@@ -228,16 +230,16 @@ void CudaComputationContinuous::update_laplacian_operator()
         throw_with_line_number(exc.what());
     }
 }
-
-void CudaComputationContinuous::compute_statistics(
+template <typename T>
+void CudaComputationContinuous<T>::compute_statistics(
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
     this->compute_propagators(w_input, q_init);
     this->compute_concentrations();
 }
-
-void CudaComputationContinuous::compute_propagators(
+template <typename T>
+void CudaComputationContinuous<T>::compute_propagators(
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
@@ -524,8 +526,8 @@ void CudaComputationContinuous::compute_propagators(
         throw_without_line_number(exc.what());
     }
 }
-
-void CudaComputationContinuous::compute_concentrations()
+template <typename T>
+void CudaComputationContinuous<T>::compute_concentrations()
 {
     try
     {
@@ -594,7 +596,8 @@ void CudaComputationContinuous::compute_concentrations()
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::calculate_phi_one_block(
+template <typename T>
+void CudaComputationContinuous<T>::calculate_phi_one_block(
     double *d_phi, double **d_q_1, double **d_q_2, const int N_RIGHT, const int N_LEFT)
 {
     try
@@ -619,7 +622,8 @@ void CudaComputationContinuous::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CudaComputationContinuous::get_total_partition(int polymer)
+template <typename T>
+double CudaComputationContinuous<T>::get_total_partition(int polymer)
 {
     try
     {
@@ -630,7 +634,8 @@ double CudaComputationContinuous::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_total_concentration(std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationContinuous<T>::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -666,7 +671,8 @@ void CudaComputationContinuous::get_total_concentration(std::string monomer_type
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_total_concentration(int p, std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationContinuous<T>::get_total_concentration(int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -701,7 +707,8 @@ void CudaComputationContinuous::get_total_concentration(int p, std::string monom
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationContinuous<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -740,7 +747,8 @@ void CudaComputationContinuous::get_total_concentration_gce(double fugacity, int
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_block_concentration(int p, double *phi)
+template <typename T>
+void CudaComputationContinuous<T>::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -779,7 +787,8 @@ void CudaComputationContinuous::get_block_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-double CudaComputationContinuous::get_solvent_partition(int s)
+template <typename T>
+double CudaComputationContinuous<T>::get_solvent_partition(int s)
 {
     try
     {
@@ -790,7 +799,8 @@ double CudaComputationContinuous::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_solvent_concentration(int s, double *phi)
+template <typename T>
+void CudaComputationContinuous<T>::get_solvent_concentration(int s, double *phi)
 {
     try
     {
@@ -811,7 +821,8 @@ void CudaComputationContinuous::get_solvent_concentration(int s, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::compute_stress()
+template <typename T>
+void CudaComputationContinuous<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -975,7 +986,8 @@ void CudaComputationContinuous::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationContinuous::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+template <typename T>
+void CudaComputationContinuous<T>::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
 
@@ -1001,7 +1013,8 @@ void CudaComputationContinuous::get_chain_propagator(double *q_out, int polymer,
         throw_without_line_number(exc.what());
     }
 }
-bool CudaComputationContinuous::check_total_partition()
+template <typename T>
+bool CudaComputationContinuous<T>::check_total_partition()
 {
     const int M = this->cb->get_total_grid();
     int n_polymer_types = this->molecules->get_n_polymer_types();
@@ -1065,3 +1078,11 @@ bool CudaComputationContinuous::check_total_partition()
     }
     return true;
 }
+
+// Explicit template instantiation
+
+// template class CudaComputationContinuous<float>;
+// template class CudaComputationContinuous<std::complex<float>>;
+
+template class CudaComputationContinuous<double>;
+template class CudaComputationContinuous<std::complex<double>>;

@@ -834,6 +834,9 @@ bool CpuComputationContinuous<T>::check_total_partition()
     return true;
 }
 
-// Explicit template instantiation for double and std::complex<double>
+// Explicit template instantiation
+
+// template class CpuComputationContinuous<float>;
+// template class CpuComputationContinuous<std::complex<float>>;
 template class CpuComputationContinuous<double>;
 template class CpuComputationContinuous<std::complex<double>>;

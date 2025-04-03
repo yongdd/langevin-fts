@@ -343,10 +343,10 @@ int main()
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-4], molecules, propagator_analyzer_1, "pseudospectral"));
-        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-3], molecules, propagator_analyzer_2, "pseudospectral"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-2], molecules, propagator_analyzer_1, "pseudospectral"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-1], molecules, propagator_analyzer_2, "pseudospectral"));
+        solver_list.push_back(new CudaComputationContinuous<double>(cb_list.end()[-4], molecules, propagator_analyzer_1, "pseudospectral"));
+        solver_list.push_back(new CudaComputationContinuous<double>(cb_list.end()[-3], molecules, propagator_analyzer_2, "pseudospectral"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_list.end()[-2], molecules, propagator_analyzer_1, "pseudospectral"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_list.end()[-1], molecules, propagator_analyzer_2, "pseudospectral"));
         #endif
 
         std::vector<std::vector<double>> stress_list {{},{},{}};

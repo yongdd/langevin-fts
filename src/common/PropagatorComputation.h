@@ -33,7 +33,7 @@ protected:
     T* single_solvent_partitions;
 
     // Stress of each polymer
-    std::vector<std::array<double,3>> dq_dl;
+    std::vector<std::array<T,3>> dq_dl;
 public:
     PropagatorComputation(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
     virtual ~PropagatorComputation();

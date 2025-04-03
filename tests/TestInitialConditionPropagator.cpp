@@ -57,7 +57,7 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
+                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
                     // factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding

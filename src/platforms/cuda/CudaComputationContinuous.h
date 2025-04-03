@@ -16,6 +16,7 @@
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
+template <typename T>
 class CudaComputationContinuous : public PropagatorComputation<double>
 {
 private:

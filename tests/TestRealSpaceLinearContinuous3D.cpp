@@ -196,8 +196,8 @@ int main()
         solver_name_list.push_back("real space, cuda_reduce_memory_usage");
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationContinuous(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CudaComputationContinuous<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         // For each platform

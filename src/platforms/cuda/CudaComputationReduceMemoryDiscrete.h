@@ -16,6 +16,7 @@
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
+template <typename T>
 class CudaComputationReduceMemoryDiscrete : public PropagatorComputation<double>
 {
 private:
