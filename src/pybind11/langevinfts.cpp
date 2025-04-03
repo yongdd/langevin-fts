@@ -23,28 +23,28 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 
 PYBIND11_MODULE(langevinfts, m)
 {
-    py::class_<Array>(m, "Array")
-        .def("set_data", [](Array& obj, py::array_t<const double> data)
-        {
-            try
-            {
-                int size = obj.get_size();
-                py::buffer_info buf = data.request();
-                if (buf.size != size) {
-                    throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(size) + ") must match");
-                }
-                obj.set_data((double*) buf.ptr, size);
-            }
-            catch(std::exception& exc)
-            {
-                throw_without_line_number(exc.what());
-            }
-        })
-        .def("get_ptr", [](Array& obj)
-        {
-            return reinterpret_cast<std::uintptr_t>(obj.get_ptr());
-        })
-        .def("get_size", &Array::get_size);
+    // py::class_<Array>(m, "Array")
+    //     .def("set_data", [](Array& obj, py::array_t<const double> data)
+    //     {
+    //         try
+    //         {
+    //             int size = obj.get_size();
+    //             py::buffer_info buf = data.request();
+    //             if (buf.size != size) {
+    //                 throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(size) + ") must match");
+    //             }
+    //             obj.set_data((double*) buf.ptr, size);
+    //         }
+    //         catch(std::exception& exc)
+    //         {
+    //             throw_without_line_number(exc.what());
+    //         }
+    //     })
+    //     .def("get_ptr", [](Array& obj)
+    //     {
+    //         return reinterpret_cast<std::uintptr_t>(obj.get_ptr());
+    //     })
+    //     .def("get_size", &Array::get_size);
 
     py::class_<ComputationBox>(m, "ComputationBox")
         // .def(py::init<std::vector<int>, std::vector<double>>())
@@ -406,11 +406,11 @@ PYBIND11_MODULE(langevinfts, m)
             }
         });
 
-    py::class_<AbstractFactory>(m, "AbstractFactory")
-        .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory::create_array))
+    py::class_<AbstractFactory<double>>(m, "AbstractFactory")
+        // .def("create_array", overload_cast_<unsigned int>()(&AbstractFactory<double>::create_array))
         // .def("create_computation_box", &AbstractFactory::create_computation_box)
         .def("create_computation_box", [](
-            AbstractFactory& obj,
+            AbstractFactory<double>& obj,
             std::vector<int> nx, std::vector<double> lx,
             py::object bc,
             py::object mask)
@@ -447,17 +447,17 @@ PYBIND11_MODULE(langevinfts, m)
                 throw_without_line_number(exc.what());
             }
         }, py::arg("nx"), py::arg("lx"), py::arg("bc") = py::none(), py::arg("mask") = py::none())
-        .def("create_molecules_information", &AbstractFactory::create_molecules_information)
-        .def("create_propagator_computation_optimizer", &AbstractFactory::create_propagator_computation_optimizer)
-        .def("create_pseudospectral_solver", &AbstractFactory::create_pseudospectral_solver)
-        .def("create_realspace_solver", &AbstractFactory::create_realspace_solver)
-        .def("create_anderson_mixing", &AbstractFactory::create_anderson_mixing)
-        .def("display_info", &AbstractFactory::display_info);
+        .def("create_molecules_information", &AbstractFactory<double>::create_molecules_information)
+        .def("create_propagator_computation_optimizer", &AbstractFactory<double>::create_propagator_computation_optimizer)
+        .def("create_pseudospectral_solver", &AbstractFactory<double>::create_pseudospectral_solver)
+        .def("create_realspace_solver", &AbstractFactory<double>::create_realspace_solver)
+        .def("create_anderson_mixing", &AbstractFactory<double>::create_anderson_mixing)
+        .def("display_info", &AbstractFactory<double>::display_info);
         // .def("get_model_name", &AbstractFactory::get_model_name);
 
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def("create_factory", overload_cast_<std::string>()(&PlatformSelector::create_factory))
-        .def("create_factory", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory));
+        .def("create_factory_real", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_real))
+        .def("create_factory_complex", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_complex));
 }

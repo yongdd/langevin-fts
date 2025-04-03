@@ -19,21 +19,21 @@
 
 // Design Pattern : Abstract Factory
 
+template <typename T>
 class AbstractFactory
 {
 protected:
-    std::string data_type;
     bool reduce_memory_usage;
 
 public :
     virtual ~AbstractFactory() {};
 
-    virtual Array* create_array(
-        unsigned int size) = 0;
+    // virtual Array* create_array(
+    //     unsigned int size) = 0;
 
-    virtual Array* create_array(
-        double *data,
-        unsigned int size) = 0;
+    // virtual Array* create_array(
+    //     double *data,
+    //     unsigned int size) = 0;
 
     virtual ComputationBox* create_computation_box(
         std::vector<int> nx,
@@ -49,10 +49,10 @@ public :
         return new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
     };
 
-    virtual PropagatorComputation<double>* create_pseudospectral_solver(
+    virtual PropagatorComputation<T>* create_pseudospectral_solver(
         ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
-    virtual PropagatorComputation<double>* create_realspace_solver(
+    virtual PropagatorComputation<T>* create_realspace_solver(
         ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0; 
 
     virtual AndersonMixing* create_anderson_mixing(

@@ -7,7 +7,8 @@
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudoDiscrete.h"
 
-CudaComputationDiscrete::CudaComputationDiscrete(
+template <typename T>
+CudaComputationDiscrete<T>::CudaComputationDiscrete(
     ComputationBox* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
@@ -263,7 +264,8 @@ CudaComputationDiscrete::CudaComputationDiscrete(
         throw_without_line_number(exc.what());
     }
 }
-CudaComputationDiscrete::~CudaComputationDiscrete()
+template <typename T>
+CudaComputationDiscrete<T>::~CudaComputationDiscrete()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     
@@ -329,8 +331,8 @@ CudaComputationDiscrete::~CudaComputationDiscrete()
         cudaStreamDestroy(streams[i][1]);
     }
 }
-
-void CudaComputationDiscrete::update_laplacian_operator()
+template <typename T>
+void CudaComputationDiscrete<T>::update_laplacian_operator()
 {
     try
     {
@@ -341,16 +343,16 @@ void CudaComputationDiscrete::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-
-void CudaComputationDiscrete::compute_statistics(
+template <typename T>
+void CudaComputationDiscrete<T>::compute_statistics(
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
     this->compute_propagators(w_input, q_init);
     this->compute_concentrations();
 }
-
-void CudaComputationDiscrete::compute_propagators(
+template <typename T>
+void CudaComputationDiscrete<T>::compute_propagators(
     std::map<std::string, const double*> w_input,
     std::map<std::string, const double*> q_init)
 {
@@ -828,8 +830,8 @@ void CudaComputationDiscrete::compute_propagators(
         throw_without_line_number(exc.what());
     }
 }
-
-void CudaComputationDiscrete::compute_concentrations()
+template <typename T>
+void CudaComputationDiscrete<T>::compute_concentrations()
 {
     try
     {
@@ -901,7 +903,8 @@ void CudaComputationDiscrete::compute_concentrations()
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::calculate_phi_one_block(
+template <typename T>
+void CudaComputationDiscrete<T>::calculate_phi_one_block(
     double *d_phi, double **d_q_1, double **d_q_2, double *d_exp_dw, const int N_RIGHT, const int N_LEFT)
 {
     try
@@ -925,7 +928,8 @@ void CudaComputationDiscrete::calculate_phi_one_block(
         throw_without_line_number(exc.what());
     }
 }
-double CudaComputationDiscrete::get_total_partition(int polymer)
+template <typename T>
+double CudaComputationDiscrete<T>::get_total_partition(int polymer)
 {
     try
     {
@@ -936,7 +940,8 @@ double CudaComputationDiscrete::get_total_partition(int polymer)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationDiscrete<T>::get_total_concentration(std::string monomer_type, double *phi)
 {
     try
     {
@@ -972,7 +977,8 @@ void CudaComputationDiscrete::get_total_concentration(std::string monomer_type, 
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationDiscrete<T>::get_total_concentration(int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -1007,7 +1013,8 @@ void CudaComputationDiscrete::get_total_concentration(int p, std::string monomer
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
+template <typename T>
+void CudaComputationDiscrete<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, double *phi)
 {
     try
     {
@@ -1046,7 +1053,8 @@ void CudaComputationDiscrete::get_total_concentration_gce(double fugacity, int p
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_block_concentration(int p, double *phi)
+template <typename T>
+void CudaComputationDiscrete<T>::get_block_concentration(int p, double *phi)
 {
     try
     {
@@ -1086,7 +1094,8 @@ void CudaComputationDiscrete::get_block_concentration(int p, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-double CudaComputationDiscrete::get_solvent_partition(int s)
+template <typename T>
+double CudaComputationDiscrete<T>::get_solvent_partition(int s)
 {
     try
     {
@@ -1097,7 +1106,8 @@ double CudaComputationDiscrete::get_solvent_partition(int s)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_solvent_concentration(int s, double *phi)
+template <typename T>
+void CudaComputationDiscrete<T>::get_solvent_concentration(int s, double *phi)
 {
     try
     {
@@ -1118,7 +1128,8 @@ void CudaComputationDiscrete::get_solvent_concentration(int s, double *phi)
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::compute_stress()
+template <typename T>
+void CudaComputationDiscrete<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
 
@@ -1296,7 +1307,8 @@ void CudaComputationDiscrete::compute_stress()
         throw_without_line_number(exc.what());
     }
 }
-void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
+template <typename T>
+void CudaComputationDiscrete<T>::get_chain_propagator(double *q_out, int polymer, int v, int u, int n)
 { 
     // This method should be invoked after invoking compute_statistics()
 
@@ -1322,7 +1334,8 @@ void CudaComputationDiscrete::get_chain_propagator(double *q_out, int polymer, i
         throw_without_line_number(exc.what());
     }
 }
-bool CudaComputationDiscrete::check_total_partition()
+template <typename T>
+bool CudaComputationDiscrete<T>::check_total_partition()
 {
     const int M = this->cb->get_total_grid();
     int n_polymer_types = this->molecules->get_n_polymer_types();
@@ -1389,3 +1402,11 @@ bool CudaComputationDiscrete::check_total_partition()
     }
     return true;
 }
+
+// Explicit template instantiation
+
+// template class CudaComputationDiscrete<float>;
+// template class CudaComputationDiscrete<std::complex<float>>;
+
+template class CudaComputationDiscrete<double>;
+template class CudaComputationDiscrete<std::complex<double>>;

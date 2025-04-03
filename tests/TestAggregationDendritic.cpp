@@ -207,7 +207,7 @@ int main()
                         if(reduce_memory_usage == true && platform == "cpu-mkl")
                                 continue;
                         
-                        AbstractFactory *factory = PlatformSelector::create_factory(platform, reduce_memory_usage);
+                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
                         // factory->display_info();
 
                         // Create instances and assign to the variables of base classes for the dynamic binding

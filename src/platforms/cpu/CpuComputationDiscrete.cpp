@@ -1103,6 +1103,9 @@ bool CpuComputationDiscrete<T>::check_total_partition()
     return true;
 }
 
-// Explicit template instantiation for double and std::complex<double>
+// Explicit template instantiation
+
+// template class CpuComputationDiscrete<float>;
+// template class CpuComputationDiscrete<std::complex<float>>;
 template class CpuComputationDiscrete<double>;
 template class CpuComputationDiscrete<std::complex<double>>;

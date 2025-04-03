@@ -13,17 +13,18 @@
 #include "AbstractFactory.h"
 #include "Array.h"
 
-class MklFactory : public AbstractFactory
+template <typename T>
+class MklFactory : public AbstractFactory<T>
 {
 public :
-    MklFactory(std::string data_type, bool reduce_memory_usage);
+    MklFactory(bool reduce_memory_usage);
 
-    Array* create_array(
-        unsigned int size) override;
+    // Array* create_array(
+    //     unsigned int size) override;
 
-    Array* create_array(
-        double *data,
-        unsigned int size) override;
+    // Array* create_array(
+    //     double *data,
+    //     unsigned int size) override;
 
     ComputationBox* create_computation_box(
         std::vector<int> nx,
@@ -34,9 +35,9 @@ public :
     Molecules* create_molecules_information(
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;
 
-    PropagatorComputation<double>* create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
+    PropagatorComputation<T>* create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
 
-    PropagatorComputation<double>* create_realspace_solver     (ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
+    PropagatorComputation<T>* create_realspace_solver     (ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
 
     AndersonMixing* create_anderson_mixing(
         int n_var, int max_hist, double start_error,

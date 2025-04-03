@@ -23,6 +23,7 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
+template <typename T>
 class CudaComputationReduceMemoryContinuous : public PropagatorComputation<double>
 {
 private:

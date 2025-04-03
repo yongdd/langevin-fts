@@ -343,10 +343,10 @@ int main()
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationDiscrete(cb_list.end()[-4], molecules, propagator_analyzer_1));
-        solver_list.push_back(new CudaComputationDiscrete(cb_list.end()[-3], molecules, propagator_analyzer_2));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_list.end()[-2], molecules, propagator_analyzer_1));
-        solver_list.push_back(new CudaComputationReduceMemoryDiscrete(cb_list.end()[-1], molecules, propagator_analyzer_2));
+        solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_analyzer_1));
+        solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_analyzer_2));
+        solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_analyzer_1));
+        solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_analyzer_2));
         #endif
 
         std::vector<std::vector<double>> stress_list {{},{},{}};

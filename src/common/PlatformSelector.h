@@ -13,10 +13,9 @@ class PlatformSelector
 {
 public:
     static std::vector<std::string> avail_platforms();
-    static AbstractFactory* create_factory(std::string platform);
-    static AbstractFactory* create_factory(std::string platform, bool reduce_memory_usage);
-    static AbstractFactory* create_factory(std::string platform, std::string data_type);
-    static AbstractFactory* create_factory(std::string platform, std::string data_type, bool reduce_memory_usage);
+    static AbstractFactory<double>* create_factory_real(std::string platform, bool reduce_memory_usage);
+    static AbstractFactory<std::complex<double>>* create_factory_complex(std::string platform, bool reduce_memory_usage);
+
 };
 
 #endif
