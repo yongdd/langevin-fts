@@ -1,8 +1,8 @@
 #include <iostream>
 #include <cmath>
-#include "CudaSolverReal.h"
+#include "CudaSolverRealSpace.h"
 
-CudaSolverReal::CudaSolverReal(
+CudaSolverRealSpace::CudaSolverRealSpace(
     ComputationBox* cb,
     Molecules *molecules,
     int n_streams,
@@ -175,7 +175,7 @@ CudaSolverReal::CudaSolverReal(
         throw_without_line_number(exc.what());
     }
 }
-CudaSolverReal::~CudaSolverReal()
+CudaSolverRealSpace::~CudaSolverRealSpace()
 {
     const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
     const int DIM = this->dim;
@@ -246,7 +246,7 @@ CudaSolverReal::~CudaSolverReal()
         }
     }
 }
-void CudaSolverReal::update_laplacian_operator()
+void CudaSolverRealSpace::update_laplacian_operator()
 {
     try
     {
@@ -300,7 +300,7 @@ void CudaSolverReal::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::update_dw(std::string device, std::map<std::string, const double*> w_input)
+void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, const double*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -368,7 +368,7 @@ void CudaSolverReal::update_dw(std::string device, std::map<std::string, const d
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_propagator(
+void CudaSolverRealSpace::advance_propagator(
     const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out,
     std::string monomer_type, double *d_q_mask) 
@@ -405,7 +405,7 @@ void CudaSolverReal::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_propagator_3d(
+void CudaSolverRealSpace::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -499,7 +499,7 @@ void CudaSolverReal::advance_propagator_3d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_propagator_2d(
+void CudaSolverRealSpace::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -569,7 +569,7 @@ void CudaSolverReal::advance_propagator_2d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::advance_propagator_1d(
+void CudaSolverRealSpace::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     const int GPU, const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -605,7 +605,7 @@ void CudaSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverReal::compute_single_segment_stress(
+void CudaSolverRealSpace::compute_single_segment_stress(
         const int GPU, const int STREAM,
         double *d_q_pair, double *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length)

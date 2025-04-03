@@ -3,7 +3,7 @@
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudoContinuous.h"
-#include "CudaSolverReal.h"
+#include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
 
 CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
@@ -45,7 +45,7 @@ CudaComputationReduceMemoryContinuous::CudaComputationReduceMemoryContinuous(
         if(method == "pseudospectral")
             this->propagator_solver = new CudaSolverPseudoContinuous(cb, molecules, n_streams, streams, true);
         else if(method == "realspace")
-            this->propagator_solver = new CudaSolverReal(cb, molecules, n_streams, streams, true);
+            this->propagator_solver = new CudaSolverRealSpace(cb, molecules, n_streams, streams, true);
 
         // Allocate memory for propagators
         gpu_error_check(cudaSetDevice(0));

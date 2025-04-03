@@ -2,8 +2,8 @@
 * This class defines a class for real-space method
 *-----------------------------------------------------------*/
 
-#ifndef CUDA_SOLVER_REAL_H_
-#define CUDA_SOLVER_REAL_H_
+#ifndef CUDA_SOLVER_REAL_SPACE_H_
+#define CUDA_SOLVER_REAL_SPACE_H_
 
 #include <string>
 #include <vector>
@@ -68,7 +68,7 @@ __global__  void tridiagonal_periodic(
     const int *d_offset, const int REPEAT,
     const int INTERVAL, const int M);
 
-class CudaSolverReal : public CudaSolver<double>
+class CudaSolverRealSpace : public CudaSolver<double>
 {
 private:
     ComputationBox* cb;
@@ -133,8 +133,8 @@ private:
         double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
-    CudaSolverReal(ComputationBox* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
-    ~CudaSolverReal();
+    CudaSolverRealSpace(ComputationBox* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
+    ~CudaSolverRealSpace();
 
     void update_laplacian_operator() override;
     void update_dw(std::string device, std::map<std::string, const double*> d_w_input) override;
