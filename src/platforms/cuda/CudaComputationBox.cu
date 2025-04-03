@@ -11,17 +11,6 @@
 #include "CudaComputationBox.h"
 #include "CudaCommon.h"
 
-// Define custom binary operator for complex addition
-struct CufftComplexSum {
-    __device__ __forceinline__
-    cufftDoubleComplex operator()(const cufftDoubleComplex& a, const cufftDoubleComplex& b) const {
-        cufftDoubleComplex result;
-        result.x = a.x + b.x;
-        result.y = a.y + b.y;
-        return result;
-    }
-};
-
 //----------------- Constructor -----------------------------
 CudaComputationBox::CudaComputationBox(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
@@ -31,18 +20,14 @@ CudaComputationBox::CudaComputationBox(
 }
 void CudaComputationBox::initialize()
 {
-    gpu_error_check(cudaMalloc((void**)&d_dv,  sizeof(double)*this->total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*this->total_grid));
     gpu_error_check(cudaMemcpy(d_dv, dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
     gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(double)*this->total_grid));
 
-    gpu_error_check(cudaMalloc((void**)&d_g, sizeof(double)*this->total_grid));
-    gpu_error_check(cudaMalloc((void**)&d_h, sizeof(double)*this->total_grid));
-    gpu_error_check(cudaMalloc((void**)&d_w, sizeof(double)*this->total_grid));
-
     // Allocate memory for cub reduction sum
-    gpu_error_check(cudaMalloc((void**)&d_sum, sizeof(double)*this->total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(double)*this->total_grid));
     gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
 
     // Determine temporary storage size for cub reduction
@@ -53,12 +38,7 @@ void CudaComputationBox::initialize()
 CudaComputationBox::~CudaComputationBox()
 {
     cudaFree(d_dv);
-
     cudaFree(d_multiple);
-    cudaFree(d_g);
-    cudaFree(d_h);
-    cudaFree(d_w);
-
     cudaFree(d_sum);
     cudaFree(d_sum_out);
     cudaFree(d_temp_storage);

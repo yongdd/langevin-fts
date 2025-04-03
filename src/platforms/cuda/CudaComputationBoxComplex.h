@@ -19,10 +19,7 @@ private:
     // Temporal storage for mutiple_inner_product_gpu
     ftsComplex *d_multiple;
     // dV for GPU
-    ftsComplex *d_dv;
-
-    // Temporal arrays
-    ftsComplex *d_g, *d_h, *d_w; 
+    double *d_dv;
 
     // Variables for cub reduction sum
     size_t temp_storage_bytes = 0;

@@ -32,40 +32,40 @@ CudaCommon::CudaCommon()
         else
             this->n_threads = std::stoi(env_var_n_threads);
 
-        // The number of GPUs
-        int devices_count;
-        gpu_error_check(cudaGetDeviceCount(&devices_count));
-        const char *ENV_N_GPUS = getenv("LFTS_NUM_GPUS");
-        std::string env_var_n_gpus (ENV_N_GPUS  ? ENV_N_GPUS  : "");
+        // // The number of GPUs
+        // int devices_count;
+        // gpu_error_check(cudaGetDeviceCount(&devices_count));
+        // const char *ENV_N_GPUS = getenv("LFTS_NUM_GPUS");
+        // std::string env_var_n_gpus (ENV_N_GPUS  ? ENV_N_GPUS  : "");
 
-        if (env_var_n_gpus.empty())
-            n_gpus = 1;
-        else
-            n_gpus = std::min(std::min(std::stoi(env_var_n_gpus), devices_count), MAX_GPUS);
+        // if (env_var_n_gpus.empty())
+        //     n_gpus = 1;
+        // else
+        //     n_gpus = std::min(std::min(std::stoi(env_var_n_gpus), devices_count), MAX_GPUS);
 
-        // Check if can access peer GPUs
-        if (n_gpus > 1)
-        {
-            int can_access_from_0_to_1;
-            int can_access_from_1_to_0;
-            gpu_error_check(cudaDeviceCanAccessPeer(&can_access_from_0_to_1, 0, 1));
-            gpu_error_check(cudaDeviceCanAccessPeer(&can_access_from_1_to_0, 1, 0));
+        // // Check if can access peer GPUs
+        // if (n_gpus > 1)
+        // {
+        //     int can_access_from_0_to_1;
+        //     int can_access_from_1_to_0;
+        //     gpu_error_check(cudaDeviceCanAccessPeer(&can_access_from_0_to_1, 0, 1));
+        //     gpu_error_check(cudaDeviceCanAccessPeer(&can_access_from_1_to_0, 1, 0));
 
-            if (can_access_from_0_to_1 == 1 && can_access_from_1_to_0 == 1)
-            {
-                gpu_error_check(cudaSetDevice(0));
-                gpu_error_check(cudaDeviceEnablePeerAccess(1, 0));
-                gpu_error_check(cudaSetDevice(1));
-                gpu_error_check(cudaDeviceEnablePeerAccess(0, 0));
-            }
-            else
-            {
-                std::cout << "Could not establish peer access between GPUs." << std::endl;
-                std::cout << "Only one GPU will be used." << std::endl;
-                n_gpus = 1;
-            }
-        }
-        gpu_error_check(cudaSetDevice(0));
+        //     if (can_access_from_0_to_1 == 1 && can_access_from_1_to_0 == 1)
+        //     {
+        //         gpu_error_check(cudaSetDevice(0));
+        //         gpu_error_check(cudaDeviceEnablePeerAccess(1, 0));
+        //         gpu_error_check(cudaSetDevice(1));
+        //         gpu_error_check(cudaDeviceEnablePeerAccess(0, 0));
+        //     }
+        //     else
+        //     {
+        //         std::cout << "Could not establish peer access between GPUs." << std::endl;
+        //         std::cout << "Only one GPU will be used." << std::endl;
+        //         n_gpus = 1;
+        //     }
+        // }
+        // gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -91,10 +91,10 @@ int CudaCommon::get_n_threads()
 {
     return n_threads;
 }
-int CudaCommon::get_n_gpus()
-{
-    return n_gpus;
-}
+// int CudaCommon::get_n_gpus()
+// {
+//     return n_gpus;
+// }
 void CudaCommon::set_n_blocks(int n_blocks)
 {
     this->n_blocks = n_blocks;
@@ -313,6 +313,17 @@ __global__ void ker_multi_complex_real(ftsComplex* dst, const double* src, doubl
     {
         dst[i].x = a * dst[i].x * src[i];
         dst[i].y = a * dst[i].y * src[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi_complex_real(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a * src1[i].x * src2[i];
+        dst[i].y = a * src1[i].y * src2[i];
         i += blockDim.x * gridDim.x;
     }
 }

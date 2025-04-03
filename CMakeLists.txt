@@ -64,7 +64,7 @@ IF(MKL_FOUND)
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoContinuous.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
-        src/platforms/cpu/CpuSolverReal.cpp
+        src/platforms/cpu/CpuSolverRealSpace.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp

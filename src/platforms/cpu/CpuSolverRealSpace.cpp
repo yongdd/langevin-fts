@@ -1,8 +1,8 @@
 #include <iostream>
 #include <cmath>
 
-#include "CpuSolverReal.h"
-CpuSolverReal::CpuSolverReal(ComputationBox* cb, Molecules *molecules)
+#include "CpuSolverRealSpace.h"
+CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox* cb, Molecules *molecules)
 {
     try{
         this->cb = cb;
@@ -46,7 +46,7 @@ CpuSolverReal::CpuSolverReal(ComputationBox* cb, Molecules *molecules)
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverReal::~CpuSolverReal()
+CpuSolverRealSpace::~CpuSolverRealSpace()
 {
     for(const auto& item: exp_dw)
         delete[] item.second;
@@ -74,15 +74,15 @@ CpuSolverReal::~CpuSolverReal()
     for(const auto& item: zh)
         delete[] item.second;
 }
-int CpuSolverReal::max_of_two(int x, int y)
+int CpuSolverRealSpace::max_of_two(int x, int y)
 {
    return (x > y) ? x : y;
 }
-int CpuSolverReal::min_of_two(int x, int y)
+int CpuSolverRealSpace::min_of_two(int x, int y)
 {
    return (x < y) ? x : y;
 }
-void CpuSolverReal::update_laplacian_operator()
+void CpuSolverRealSpace::update_laplacian_operator()
 {
     try
     {
@@ -105,7 +105,7 @@ void CpuSolverReal::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
+void CpuSolverRealSpace::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
@@ -128,7 +128,7 @@ void CpuSolverReal::update_dw(std::map<std::string, const double*> w_input)
         }
     }
 }
-void CpuSolverReal::advance_propagator(
+void CpuSolverRealSpace::advance_propagator(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
@@ -166,7 +166,7 @@ void CpuSolverReal::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::advance_propagator_3d(
+void CpuSolverRealSpace::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -316,7 +316,7 @@ void CpuSolverReal::advance_propagator_3d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::advance_propagator_2d(
+void CpuSolverRealSpace::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -413,7 +413,7 @@ void CpuSolverReal::advance_propagator_2d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverReal::advance_propagator_1d(
+void CpuSolverRealSpace::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -453,7 +453,7 @@ void CpuSolverReal::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CpuSolverReal::compute_single_segment_stress(
+std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
     double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     try
@@ -472,7 +472,7 @@ std::vector<double> CpuSolverReal::compute_single_segment_stress(
 }
 
 // This method solves CX=Y, where C is a tridiagonal matrix
-void CpuSolverReal::tridiagonal(
+void CpuSolverRealSpace::tridiagonal(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {
@@ -501,7 +501,7 @@ void CpuSolverReal::tridiagonal(
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
-void CpuSolverReal::tridiagonal_periodic(
+void CpuSolverRealSpace::tridiagonal_periodic(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {

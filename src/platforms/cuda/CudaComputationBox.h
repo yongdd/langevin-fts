@@ -13,13 +13,11 @@ class CudaComputationBox : public ComputationBox
 private:
     // Temporal storage for reduction in integral_gpu
     double *sum, *d_sum; 
+    
     // Temporal storage for mutiple_inner_product_gpu
     double *d_multiple;
     // dV for GPU
     double *d_dv;
-
-    // Temporal arrays
-    double *d_g, *d_h, *d_w; 
 
     // Variables for cub reduction sum
     size_t temp_storage_bytes = 0;

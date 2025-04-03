@@ -13,9 +13,9 @@ CudaAndersonMixing::CudaAndersonMixing(
 {
     try
     {
-        const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+        // const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
+        // gpu_error_check(cudaSetDevice(0));
 
-        gpu_error_check(cudaSetDevice(0));
         // Number of anderson mixing steps, increases from 0 to max_hist
         n_anderson = -1;
         // Record history of w in GPU device memory
@@ -34,45 +34,24 @@ CudaAndersonMixing::CudaAndersonMixing(
         this->w_deriv_dots = new double[max_hist+1];
 
         // Create streams
-        for(int gpu=0; gpu<N_GPUS; gpu++)
-        {
-            gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaStreamCreate(&streams[gpu][0])); // for kernel execution
-            gpu_error_check(cudaStreamCreate(&streams[gpu][1])); // for memcpy
-        }
+        gpu_error_check(cudaStreamCreate(&streams[0])); // for kernel execution
+        gpu_error_check(cudaStreamCreate(&streams[1])); // for memcpy
 
         // Fields arrays
-        gpu_error_check(cudaSetDevice(0));
         gpu_error_check(cudaMalloc((void**)&d_w_current, sizeof(double)*n_var));
-        if (N_GPUS > 1)
-        {
-            gpu_error_check(cudaSetDevice(1));
-            gpu_error_check(cudaMalloc((void**)&d_w_deriv_device_1[0], sizeof(double)*n_var));  // prev
-            gpu_error_check(cudaMalloc((void**)&d_w_deriv_device_1[1], sizeof(double)*n_var));  // next
-        }
-
-        for(int gpu=0; gpu<N_GPUS; gpu++)
-        {
-            gpu_error_check(cudaSetDevice(gpu));
-            gpu_error_check(cudaMalloc((void**)&d_w_new[gpu],   sizeof(double)*n_var));
-            gpu_error_check(cudaMalloc((void**)&d_w_deriv[gpu], sizeof(double)*n_var));
-            gpu_error_check(cudaMalloc((void**)&d_sum[gpu],     sizeof(double)*n_var));
-            gpu_error_check(cudaMalloc((void**)&d_sum_out[gpu], sizeof(double)));
-        }
+        gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(double)*n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(double)*n_var));
+        gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(double)*n_var));
+        gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(double)));
 
         // Allocate memory for cub reduction sum
-        for(int gpu=0; gpu<N_GPUS; gpu++)
-        {
-            gpu_error_check(cudaSetDevice(gpu));
-            d_temp_storage[gpu] = nullptr; 
-            temp_storage_bytes[gpu] = 0;
-            cub::DeviceReduce::Sum(d_temp_storage[gpu], temp_storage_bytes[gpu], d_sum[gpu], d_sum_out[gpu], n_var, streams[gpu][0]);
-            gpu_error_check(cudaMalloc(&d_temp_storage[gpu], temp_storage_bytes[gpu]));
-        }        
+        d_temp_storage = nullptr; 
+        temp_storage_bytes = 0;
+        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var, streams[0]);
+        gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
+
         // Reset_count
         reset_count();
-        
-        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
@@ -81,8 +60,6 @@ CudaAndersonMixing::CudaAndersonMixing(
 }
 CudaAndersonMixing::~CudaAndersonMixing()
 {
-    const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
-
     delete d_cb_w_hist;
     delete d_cb_w_deriv_hist;
     delete cb_w_deriv_dots;
@@ -95,27 +72,15 @@ CudaAndersonMixing::~CudaAndersonMixing()
     delete[] w_deriv_dots;
 
     cudaFree(d_w_current);
-    for(int gpu=0; gpu<N_GPUS; gpu++)
-    {
-        cudaFree(d_w_deriv[gpu]);
-        cudaFree(d_w_new[gpu]);
-        cudaFree(d_sum[gpu]);
-        cudaFree(d_sum_out[gpu]);
-        cudaFree(d_temp_storage[gpu]);
-    }
-
-    if (N_GPUS > 1)
-    {
-        cudaFree(d_w_deriv_device_1[0]);
-        cudaFree(d_w_deriv_device_1[1]);
-    }
+    cudaFree(d_w_deriv);
+    cudaFree(d_w_new);
+    cudaFree(d_sum);
+    cudaFree(d_sum_out);
+    cudaFree(d_temp_storage);
 
     // Destroy streams
-    for(int gpu=0; gpu<N_GPUS; gpu++)
-    {
-        cudaStreamDestroy(streams[gpu][0]);
-        cudaStreamDestroy(streams[gpu][1]);
-    }
+    cudaStreamDestroy(streams[0]);
+    cudaStreamDestroy(streams[1]);
 }
 void CudaAndersonMixing::reset_count()
 {
@@ -147,15 +112,13 @@ void CudaAndersonMixing::calculate_new_fields(
     {
         const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int N_GPUS = CudaCommon::get_instance().get_n_gpus();
         
         double *d_w_hist1;
         double *d_w_hist2;
         double *d_w_deriv_hist1;
         double *d_w_deriv_hist2;
 
-        gpu_error_check(cudaSetDevice(0));
-        gpu_error_check(cudaMemcpy(d_w_deriv[0], w_deriv,  sizeof(double)*n_var, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv,  sizeof(double)*n_var, cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_w_current, w_current, sizeof(double)*n_var, cudaMemcpyHostToDevice));
         // If (N_GPUS > 1)
         //     gpu_error_check(cudaMemcpy(d_w_deriv[1], d_w_deriv[0], sizeof(double)*n_var, cudaMemcpyDeviceToDevice));
@@ -171,90 +134,20 @@ void CudaAndersonMixing::calculate_new_fields(
             
             // store the input and output field (the memory is used in a periodic way)
             d_cb_w_hist->insert(d_w_current);
-            d_cb_w_deriv_hist->insert(d_w_deriv[0]);
+            d_cb_w_deriv_hist->insert(d_w_deriv);
 
-            // If(N_GPUS > 1)
-            // {
-            //     int prev, next;
-            //     prev = 0;
-            //     next = 1;
-
-            //     // Copy memory from device 0 to device 1
-            //     const int idx_gpu_1 = 1;
-            //     if(idx_gpu_1 <= n_anderson)
-            //     {
-            //         gpu_error_check(cudaMemcpy(d_w_deriv_device_1[prev], d_cb_w_deriv_hist->get_array(idx_gpu_1),
-            //                 sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
-            //     }
-
-            //     // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
-            //     int n_anderson_odd = n_anderson;
-            //     if (n_anderson%2 == 0)
-            //         n_anderson_odd -= 1;
-
-            //     for(int i=0; i<= n_anderson_odd; i+=2)
-            //     {
-            //         const int idx_gpu_0 = i;
-            //         const int idx_gpu_1 = i+1;
-            //         const int idx_next_gpu_1 = i+3;
-
-            //         // Multiply
-            //         gpu_error_check(cudaSetDevice(0));
-            //         ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_sum[0], d_w_deriv[0], d_cb_w_deriv_hist->get_array(idx_gpu_0), 1.0, n_var);
-            //         gpu_error_check(cudaSetDevice(1));
-            //         ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[1][0]>>>(d_sum[1], d_w_deriv[1], d_w_deriv_device_1[prev], 1.0, n_var);
-
-            //         // DEVICE 1, STREAM 1: copy memory from device 0 to device 1
-            //         if(idx_next_gpu_1 <= n_anderson_odd)
-            //         {
-            //             gpu_error_check(cudaMemcpyAsync(d_w_deriv_device_1[next], d_cb_w_deriv_hist->get_array(idx_next_gpu_1),
-            //                     sizeof(double)*n_var,cudaMemcpyDeviceToDevice, streams[1][1]));
-            //         }
-
-            //         // Reduce sum
-            //         gpu_error_check(cudaSetDevice(0));
-            //         cub::DeviceReduce::Sum(d_temp_storage[0], temp_storage_bytes[0], d_sum[0], d_sum_out[0], n_var, streams[0][0]);
-            //         gpu_error_check(cudaSetDevice(1));
-            //         cub::DeviceReduce::Sum(d_temp_storage[1], temp_storage_bytes[1], d_sum[1], d_sum_out[1], n_var, streams[1][0]);
-
-            //         gpu_error_check(cudaSetDevice(0));
-            //         gpu_error_check(cudaMemcpyAsync(&w_deriv_dots[idx_gpu_0], d_sum_out[0], sizeof(double), cudaMemcpyDeviceToHost, streams[0][0]));
-            //         gpu_error_check(cudaSetDevice(1));
-            //         gpu_error_check(cudaMemcpyAsync(&w_deriv_dots[idx_gpu_1], d_sum_out[1], sizeof(double), cudaMemcpyDeviceToHost, streams[1][0]));
-
-            //         // Synchronize all GPUs
-            //         for(int gpu=0; gpu<N_GPUS; gpu++)
-            //         {
-            //             gpu_error_check(cudaSetDevice(gpu));
-            //             gpu_error_check(cudaDeviceSynchronize());
-            //         }
-            //         std::swap(prev, next);
-            //     }
-            //     gpu_error_check(cudaSetDevice(0));
-            //     if (n_anderson%2 == 0)
-            //     {
-            //         ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum[0], d_w_deriv[0], d_cb_w_deriv_hist->get_array(n_anderson), 1.0, n_var);
-            //         cub::DeviceReduce::Sum(d_temp_storage[0], temp_storage_bytes[0], d_sum[0], d_sum_out[0], n_var);
-            //         gpu_error_check(cudaMemcpy(&w_deriv_dots[n_anderson], d_sum_out[0], sizeof(double),cudaMemcpyDeviceToHost));
-            //     }
-            // }
-            // Else
+            // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
+            for(int i=0; i<=n_anderson; i++)
             {
-                gpu_error_check(cudaSetDevice(0));
-                // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
-                for(int i=0; i<=n_anderson; i++)
-                {
-                    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum[0], d_w_deriv[0], d_cb_w_deriv_hist->get_array(i), 1.0, n_var);
-                    cub::DeviceReduce::Sum(d_temp_storage[0], temp_storage_bytes[0], d_sum[0], d_sum_out[0], n_var);
-                    gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out[0], sizeof(double),cudaMemcpyDeviceToHost));
-                }
+                ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, n_var);
+                cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
+                gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
             }
 
             //print_array(max_hist+1, w_deriv_dots);
             cb_w_deriv_dots->insert(w_deriv_dots);
         }
 
-        gpu_error_check(cudaSetDevice(0));
         // Conditions to apply the simple mixing method
         if( n_anderson <= 0 )
         {
@@ -265,8 +158,8 @@ void CudaAndersonMixing::calculate_new_fields(
                 mix = mix*1.01;
 
             // Make a simple mixing of input and output fields for the next iteration
-            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new[0], 1.0, d_w_current, mix, d_w_deriv[0], n_var);
-            gpu_error_check(cudaMemcpy(w_new, d_w_new[0], sizeof(double)*n_var, cudaMemcpyDeviceToHost));
+            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_current, mix, d_w_deriv, n_var);
+            gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var, cudaMemcpyDeviceToHost));
         }
         else
         {
@@ -292,18 +185,17 @@ void CudaAndersonMixing::calculate_new_fields(
             // Calculate the new field
             d_w_hist1 = d_cb_w_hist->get_array(0);
             d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
-            gpu_error_check(cudaMemcpy(d_w_new[0], d_w_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
-            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new[0], 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
+            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
+            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
             for(int i=0; i<n_anderson; i++)
             {
                 d_w_hist2 = d_cb_w_hist->get_array(i+1);
                 d_w_deriv_hist2 = d_cb_w_deriv_hist->get_array(i+1);
-                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new[0], a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
-                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new[0], a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
+                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
+                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
             }
-            gpu_error_check(cudaMemcpy(w_new, d_w_new[0], sizeof(double)*n_var,cudaMemcpyDeviceToHost));
+            gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var,cudaMemcpyDeviceToHost));
         }
-        gpu_error_check(cudaSetDevice(0));
     }
     catch(std::exception& exc)
     {
