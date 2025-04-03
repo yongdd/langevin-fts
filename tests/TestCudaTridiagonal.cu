@@ -2,7 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <CudaCommon.h>
-#include "CudaSolverReal.h"
+#include "CudaSolverRealSpace.h"
 
 int main()
 {
