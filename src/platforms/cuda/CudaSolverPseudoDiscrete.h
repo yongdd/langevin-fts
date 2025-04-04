@@ -39,10 +39,10 @@ private:
     T *d_q_step_1_one[MAX_STREAMS], *d_q_step_2_one[MAX_STREAMS];
     T *d_q_step_1_two[MAX_STREAMS], *d_q_step_2_two[MAX_STREAMS];
 
-    ftsComplex *d_qk_in_1_one[MAX_STREAMS];
-    ftsComplex *d_qk_in_2_one[MAX_STREAMS];
-    ftsComplex *d_qk_in_1_two[MAX_STREAMS];
-    ftsComplex *d_qk_in_2_two[MAX_STREAMS];
+    cuDoubleComplex *d_qk_in_1_one[MAX_STREAMS];
+    cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
+    cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
+    cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
 
     // For stress calculation: compute_stress()
     double *d_fourier_basis_x;
@@ -71,19 +71,19 @@ public:
     // Advance propagator by one contour step
     void advance_propagator(
         const int STREAM,
-        T *d_q_in, T *d_q_out,
+        CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type, double *d_q_mask) override;
 
     // Advance propagator by half bond step
     void advance_propagator_half_bond_step(
         const int STREAM,
-        T *d_q_in, T *d_q_out,
+        CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type) override;
 
     // Compute stress of single segment
     void compute_single_segment_stress(
         const int STREAM,
-        T *d_q_pair, double *d_segment_stress,
+        CuDeviceData<T> *d_q_pair, double *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif

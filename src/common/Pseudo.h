@@ -15,7 +15,7 @@
 
 class Pseudo
 {
-private:
+public:
     // Real-to-complex transform
     static void get_boltz_bond_r2c(
         std::vector<BoundaryCondition> bc,
@@ -38,7 +38,6 @@ private:
         std::vector<int> nx, std::vector<double> dx);
     static int get_total_complex_grid_c2c(std::vector<int> dx);
 
-public:
     template <typename T>
     static void get_boltz_bond(
         std::vector<BoundaryCondition> bc,

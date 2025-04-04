@@ -137,7 +137,7 @@ public:
     ~CudaSolverRealSpace();
 
     void update_laplacian_operator() override;
-    void update_dw(std::string device, std::map<std::string, const double*> d_w_input) override;
+    void update_dw(std::string device, std::map<std::string, const double*> w_input) override;
 
     //---------- Continuous chain model -------------
     // Advance propagator by one contour step

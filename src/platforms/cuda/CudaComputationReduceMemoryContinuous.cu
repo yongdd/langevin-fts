@@ -42,7 +42,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
         this->method = method;
         if(method == "pseudospectral")
-            this->propagator_solver = new CudaSolverPseudoContinuous(cb, molecules, n_streams, streams, true);
+            this->propagator_solver = new CudaSolverPseudoContinuous<double>(cb, molecules, n_streams, streams, true);
         else if(method == "realspace")
             this->propagator_solver = new CudaSolverRealSpace(cb, molecules, n_streams, streams, true);
 

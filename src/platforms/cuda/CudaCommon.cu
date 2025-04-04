@@ -12,6 +12,23 @@ void throw_on_cuda_error(cudaError_t code, const char *file, int line, const cha
     }
 }
 
+std::complex<double> cuDoubleToStdComplex(cuDoubleComplex z) {
+    return std::complex<double>(z.x, z.y);
+}
+
+cuDoubleComplex stdToCuDoubleComplex(const std::complex<double>& z) {
+    return make_cuDoubleComplex(z.real(), z.imag());
+}
+
+template<typename From, typename To>
+std::map<std::string, const To*> reinterpret_map(const std::map<std::string, const From*>& input) {
+    std::map<std::string, const To*> output;
+    for (const auto& [key, ptr] : input) {
+        output[key] = reinterpret_cast<const To*>(ptr);
+    }
+    return output;
+}
+
 CudaCommon::CudaCommon()
 {
     try{
@@ -187,6 +204,24 @@ __global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComp
     }
 }
 
+__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, ftsComplex a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        // Multiply src1[i] and src2[i]
+        ftsComplex temp;
+        temp.x = src1[i].x * src2[i].x - src1[i].y * src2[i].y;
+        temp.y = src1[i].x * src2[i].y + src1[i].y * src2[i].x;
+
+        // Multiply the result by the complex number a
+        dst[i].x = a.x * temp.x - a.y * temp.y;
+        dst[i].y = a.x * temp.y + a.y * temp.x;
+
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_mutiple_multi(int n_comp, double* dst, const double* src1, const double* src2, double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -277,6 +312,17 @@ __global__ void ker_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, 
     {
         dst[i].x = a * src1[i].x + b * src2[i].x;
         dst[i].y = a * src1[i].y + b * src2[i].y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_lin_comb(ftsComplex* dst, ftsComplex a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a.x * src1[i].x - a.y * src1[i].y + b * src2[i].x;
+        dst[i].y = a.x * src1[i].y + a.y * src1[i].x + b * src2[i].y;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -459,3 +505,11 @@ __global__ void ker_complex_real_multi_bond_four(
         i += blockDim.x * gridDim.x;
     }
 }
+
+// Explicit template instantiation
+
+template std::map<std::string, const double*> 
+reinterpret_map<double, double>(const std::map<std::string, const double*>& input);
+
+template std::map<std::string, const cuDoubleComplex*> 
+reinterpret_map<std::complex<double>, cuDoubleComplex>(const std::map<std::string, const std::complex<double>*>& input);
