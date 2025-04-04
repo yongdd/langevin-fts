@@ -692,7 +692,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
             int n_aggregated           = std::get<4>(segment_info);
             double *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_polymer_partitions[p] = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
+            this->single_polymer_partitions[p] = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
                 d_propagator_left,   // q
                 d_propagator_right,  // q^dagger
                 _d_exp_dw)/n_aggregated/this->cb->get_volume();
@@ -765,7 +765,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = ((CudaComputationBox<T> *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
             ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_phi_, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], 0.0, M);
         }
     }
@@ -1217,7 +1217,7 @@ bool CudaComputationDiscrete<T>::check_total_partition()
 
         for(int n=1;n<=n_segment_right;n++)
         {
-            double total_partition = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
+            double total_partition = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
                 d_propagator[key_left][(n_segment_left-n+1)],
                 d_propagator[key_right][n], _d_exp_dw)*n_repeated/this->cb->get_volume();
             

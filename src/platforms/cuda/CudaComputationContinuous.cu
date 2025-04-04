@@ -5,7 +5,6 @@
 
 #include "CudaComputationContinuous.h"
 #include "CudaComputationBox.h"
-#include "CudaComputationBoxComplex.h"
 #include "CudaSolverPseudoContinuous.h"
 #include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
@@ -413,16 +412,8 @@ void CudaComputationContinuous<T>::compute_propagators(
             CuDeviceData<T> *d_propagator_right = std::get<2>(segment_info);
             int n_aggregated      = std::get<3>(segment_info);
 
-            if constexpr (std::is_same<T, double>::value) 
-            {
-                this->single_polymer_partitions[p] = ((CudaComputationBox *) this->cb)->inner_product_device(d_propagator_left, d_propagator_right)
-                    /(n_aggregated*this->cb->get_volume());
-            }
-            else
-            {
-                this->single_polymer_partitions[p] = ((CudaComputationBoxComplex *) this->cb)->inner_product_device(d_propagator_left, d_propagator_right)
-                /(n_aggregated*this->cb->get_volume(), 0.0);
-            }
+            this->single_polymer_partitions[p] = ((CudaComputationBox<T> *) this->cb)->inner_product_device(d_propagator_left, d_propagator_right)
+                /(n_aggregated*this->cb->get_volume());
         }
     }
     catch(std::exception& exc)
@@ -499,15 +490,15 @@ void CudaComputationContinuous<T>::compute_concentrations()
             CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
             CuDeviceData<T> norm;
+            this->single_solvent_partitions[s] = ((CudaComputationBox<T> *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
+
             if constexpr (std::is_same<T, double>::value)
             {
-                this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
                 norm = volume_fraction;
                 norm = norm/this->single_solvent_partitions[s];
             }
             else
             {
-                this->single_solvent_partitions[s] =((CudaComputationBoxComplex *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
                 norm = make_cuDoubleComplex(volume_fraction, 0.0);
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_solvent_partitions[s]));
             }
@@ -950,19 +941,9 @@ bool CudaComputationContinuous<T>::check_total_partition()
 
         for(int n=0;n<=n_segment_right;n++)
         {
-            T total_partition;
-            if constexpr (std::is_same<T, double>::value) 
-            {
-                total_partition = ((CudaComputationBox *) this->cb)->inner_product_device(
-                    d_propagator[key_left][n_segment_left-n],
-                    d_propagator[key_right][n]);
-            }
-            else
-            {
-                total_partition = ((CudaComputationBoxComplex *) this->cb)->inner_product_device(
-                    d_propagator[key_left][n_segment_left-n],
-                    d_propagator[key_right][n]);
-            }
+            T total_partition = ((CudaComputationBox<T> *) this->cb)->inner_product_device(
+                d_propagator[key_left][n_segment_left-n],
+                d_propagator[key_right][n]);
 
             total_partition *= n_repeated/this->cb->get_volume()/n_propagators;
             total_partitions[p].push_back(total_partition);

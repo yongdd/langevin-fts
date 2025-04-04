@@ -574,7 +574,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             double *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = ((CudaComputationBox<double> *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
             ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], M);
             gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(double)*M, cudaMemcpyDeviceToHost));
         }

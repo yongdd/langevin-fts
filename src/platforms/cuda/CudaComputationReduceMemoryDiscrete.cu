@@ -820,7 +820,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
 
-            this->single_polymer_partitions[p] = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
+            this->single_polymer_partitions[p] = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)/n_aggregated/this->cb->get_volume();
@@ -891,7 +891,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             T *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = ((CudaComputationBox<T> *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
             ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], 0.0, M);
             gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
@@ -1367,7 +1367,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator[key_left][n_segment_left-n+1], sizeof(T)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator[key_right][n], sizeof(T)*M, cudaMemcpyHostToDevice));
 
-            T total_partition = ((CudaComputationBox *) this->cb)->inner_product_inverse_weight_device(
+            T total_partition = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)*n_repeated/this->cb->get_volume();

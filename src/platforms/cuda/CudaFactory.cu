@@ -42,7 +42,7 @@ template <typename T>
 ComputationBox* CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
-    return new CudaComputationBox(nx, lx, bc, mask);
+    return new CudaComputationBox<T>(nx, lx, bc, mask);
 }
 template <typename T>
 Molecules* CudaFactory<T>::create_molecules_information(
