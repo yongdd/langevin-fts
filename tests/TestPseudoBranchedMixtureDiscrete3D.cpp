@@ -339,10 +339,10 @@ int main()
         solver_name_list.push_back("pseudo, cuda, aggregated");
         solver_name_list.push_back("pseudo, cuda_reduce_memory_usage");
         solver_name_list.push_back("pseudo, cuda_reduce_memory_usage, aggregated");
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_analyzer_1));
         solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_analyzer_2));
         solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_analyzer_1));

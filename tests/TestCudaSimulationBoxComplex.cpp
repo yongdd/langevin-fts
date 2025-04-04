@@ -2,13 +2,13 @@
 #include <cmath>
 #include <complex>
 
-#include "CudaComputationBoxComplex.h"
+#include "CudaComputationBox.h"
 
 int main()
 {
     try
     {
-        CudaComputationBoxComplex cb({1,2,2}, {4.5,3.5,2.5}, {});
+        CudaComputationBox<std::complex<double>>  cb({1,2,2}, {4.5,3.5,2.5}, {});
         double volume;
         std::complex<double> sum_w;
         std::complex<double> w[] 

@@ -193,8 +193,8 @@ int main()
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda");
         solver_name_list.push_back("cuda_reduce_memory_usage");
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer));
         solver_list.push_back(new CudaComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer));
         #endif
