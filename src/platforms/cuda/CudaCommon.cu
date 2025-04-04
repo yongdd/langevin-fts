@@ -112,8 +112,7 @@ void CudaCommon::set_idx(int process_idx)
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
 
-template <typename T>
-__global__ void ker_linear_scaling(T* dst, const T* src, double a, T b, const int M)
+__global__ void ker_linear_scaling(double* dst, const double* src, double a, double b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -123,8 +122,7 @@ __global__ void ker_linear_scaling(T* dst, const T* src, double a, T b, const in
     }
 }
 
-template <>
-__global__ void ker_linear_scaling<ftsComplex>(ftsComplex* dst, const ftsComplex* src, double a, ftsComplex b, const int M)
+__global__ void ker_linear_scaling(ftsComplex* dst, const ftsComplex* src, double a, ftsComplex b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -135,8 +133,7 @@ __global__ void ker_linear_scaling<ftsComplex>(ftsComplex* dst, const ftsComplex
     }
 }
 
-template <typename T>
-__global__ void ker_exp(T* dst, const T* src, double a, double exp_b, const int M)
+__global__ void ker_exp(double* dst, const double* src, double a, double exp_b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -146,8 +143,8 @@ __global__ void ker_exp(T* dst, const T* src, double a, double exp_b, const int 
     }
 }
 
-template <>
-__global__ void ker_exp<ftsComplex>(ftsComplex* dst, const ftsComplex* src, double a, double exp_b, const int M)
+
+__global__ void ker_exp(ftsComplex* dst, const ftsComplex* src, double a, double exp_b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -158,8 +155,7 @@ __global__ void ker_exp<ftsComplex>(ftsComplex* dst, const ftsComplex* src, doub
     }
 }
 
-template <typename T>
-__global__ void ker_multi(T* dst, const T* src1, const T* src2, double a, const int M)
+__global__ void ker_multi(double* dst, const double* src1, const double* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -169,8 +165,18 @@ __global__ void ker_multi(T* dst, const T* src1, const T* src2, double a, const 
     }
 }
 
-template <>
-__global__ void ker_multi<ftsComplex>(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a * src1[i].x * src2[i];
+        dst[i].y = a * src1[i].y * src2[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -181,8 +187,7 @@ __global__ void ker_multi<ftsComplex>(ftsComplex* dst, const ftsComplex* src1, c
     }
 }
 
-template <typename T>
-__global__ void ker_mutiple_multi(int n_comp, T* dst, const T* src1, const T* src2, double  a, const int M)
+__global__ void ker_mutiple_multi(int n_comp, double* dst, const double* src1, const double* src2, double  a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -194,8 +199,7 @@ __global__ void ker_mutiple_multi(int n_comp, T* dst, const T* src1, const T* sr
     }
 }
 
-template <>
-__global__ void ker_mutiple_multi<ftsComplex>(int n_comp, ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_mutiple_multi(int n_comp, ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -213,8 +217,7 @@ __global__ void ker_mutiple_multi<ftsComplex>(int n_comp, ftsComplex* dst, const
     }
 }
 
-template <typename T>
-__global__ void ker_divide(T* dst, const T* src1, const T* src2, double a, const int M)
+__global__ void ker_divide(double* dst, const double* src1, const double* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -224,8 +227,7 @@ __global__ void ker_divide(T* dst, const T* src1, const T* src2, double a, const
     }
 }
 
-template <>
-__global__ void ker_divide<ftsComplex>(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_divide(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -237,8 +239,7 @@ __global__ void ker_divide<ftsComplex>(ftsComplex* dst, const ftsComplex* src1, 
     }
 }
 
-template <typename T>
-__global__ void ker_add_multi(T* dst, const T* src1, const T* src2, double a, const int M)
+__global__ void ker_add_multi(double* dst, const double* src1, const double* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -248,8 +249,7 @@ __global__ void ker_add_multi(T* dst, const T* src1, const T* src2, double a, co
     }
 }
 
-template <>
-__global__ void ker_add_multi<ftsComplex>(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_add_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -260,8 +260,7 @@ __global__ void ker_add_multi<ftsComplex>(ftsComplex* dst, const ftsComplex* src
     }
 }
 
-template <typename T>
-__global__ void ker_lin_comb(T* dst, double a, const T* src1, double b, const T* src2, const int M)
+__global__ void ker_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -271,8 +270,7 @@ __global__ void ker_lin_comb(T* dst, double a, const T* src1, double b, const T*
     }
 }
 
-template <>
-__global__ void ker_lin_comb<ftsComplex>(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+__global__ void ker_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -283,8 +281,7 @@ __global__ void ker_lin_comb<ftsComplex>(ftsComplex* dst, double a, const ftsCom
     }
 }
 
-template <typename T>
-__global__ void ker_add_lin_comb(T* dst, double a, const T* src1, double b, const T* src2, const int M)
+__global__ void ker_add_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -294,8 +291,7 @@ __global__ void ker_add_lin_comb(T* dst, double a, const T* src1, double b, cons
     }
 }
 
-template <>
-__global__ void ker_add_lin_comb<ftsComplex>(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+__global__ void ker_add_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -328,8 +324,7 @@ __global__ void ker_multi_complex_real(ftsComplex* dst, const ftsComplex* src1, 
     }
 }
 
-template <typename T>
-__global__ void ker_multi_complex_conjugate(T* dst, const ftsComplex* src1, const ftsComplex* src2, const int M)
+__global__ void ker_multi_complex_conjugate(double* dst, const ftsComplex* src1, const ftsComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -339,8 +334,7 @@ __global__ void ker_multi_complex_conjugate(T* dst, const ftsComplex* src1, cons
     }
 }
 
-template <>
-__global__ void ker_multi_complex_conjugate<ftsComplex>(
+__global__ void ker_multi_complex_conjugate(
     ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -352,10 +346,9 @@ __global__ void ker_multi_complex_conjugate<ftsComplex>(
     }
 }
 
-template <typename T>
 __global__ void ker_multi_exp_dw_two(
-    T* dst1, const T* src1, const T* exp_dw1,
-    T* dst2, const T* src2, const T* exp_dw2,
+    double* dst1, const double* src1, const double* exp_dw1,
+    double* dst2, const double* src2, const double* exp_dw2,
     double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -367,8 +360,7 @@ __global__ void ker_multi_exp_dw_two(
     }
 }
 
-template <>
-__global__ void ker_multi_exp_dw_two<ftsComplex>(
+__global__ void ker_multi_exp_dw_two(
     ftsComplex* dst1, const ftsComplex* src1, const ftsComplex* exp_dw1,
     ftsComplex* dst2, const ftsComplex* src2, const ftsComplex* exp_dw2,
     double a, const int M)
@@ -386,12 +378,11 @@ __global__ void ker_multi_exp_dw_two<ftsComplex>(
     }
 }
 
-template <typename T>
 __global__ void ker_multi_exp_dw_four(
-    T* dst1, const T* src1, const T* exp_dw1,
-    T* dst2, const T* src2, const T* exp_dw2,
-    T* dst3, const T* src3, const T* exp_dw3,
-    T* dst4, const T* src4, const T* exp_dw4,
+    double* dst1, const double* src1, const double* exp_dw1,
+    double* dst2, const double* src2, const double* exp_dw2,
+    double* dst3, const double* src3, const double* exp_dw3,
+    double* dst4, const double* src4, const double* exp_dw4,
     double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -405,8 +396,7 @@ __global__ void ker_multi_exp_dw_four(
     }
 }
 
-template <>
-__global__ void ker_multi_exp_dw_four<ftsComplex>(
+__global__ void ker_multi_exp_dw_four(
     ftsComplex* dst1, const ftsComplex* src1, const ftsComplex* exp_dw1,
     ftsComplex* dst2, const ftsComplex* src2, const ftsComplex* exp_dw2,
     ftsComplex* dst3, const ftsComplex* src3, const ftsComplex* exp_dw3,
@@ -469,41 +459,3 @@ __global__ void ker_complex_real_multi_bond_four(
         i += blockDim.x * gridDim.x;
     }
 }
-
-// Explicit template instantiations for double and std::complex<double>
-template __global__ void ker_linear_scaling<double>(double*, const double*, double, double, const int);
-template __global__ void ker_linear_scaling<ftsComplex>(ftsComplex*, const ftsComplex*, double, ftsComplex, const int);
-
-template __global__ void ker_exp<double>(double*, const double*, double, double, const int);
-template __global__ void ker_exp<ftsComplex>(ftsComplex*, const ftsComplex*, double, double, const int);
-
-template __global__ void ker_multi<double>(double*, const double*, const double*, double, const int);
-template __global__ void ker_multi<ftsComplex>(ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);
-
-template __global__ void ker_mutiple_multi<double>(int, double*, const double*, const double*, double, const int);
-template __global__ void ker_mutiple_multi<ftsComplex>(int, ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);
-
-template __global__ void ker_multi_complex_conjugate<double>(double*, const ftsComplex*, const ftsComplex*, const int);
-template __global__ void ker_multi_complex_conjugate<ftsComplex>(ftsComplex*, const ftsComplex*, const ftsComplex*, const int);
-
-template __global__ void ker_divide<double>(double*, const double*, const double*, double, const int);
-template __global__ void ker_divide<ftsComplex>(ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);
-
-template __global__ void ker_add_multi<double>(double*, const double*, const double*, double, const int);
-template __global__ void ker_add_multi<ftsComplex>(ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);
-
-template __global__ void ker_lin_comb<double>(double*, double, const double*, double, const double*, const int);
-template __global__ void ker_lin_comb<ftsComplex>(ftsComplex*, double, const ftsComplex*, double, const ftsComplex*, const int);
-
-template __global__ void ker_add_lin_comb<double>(double*, double, const double*, double, const double*, const int);
-template __global__ void ker_add_lin_comb<ftsComplex>(ftsComplex*, double, const ftsComplex*, double, const ftsComplex*, const int);
-
-template __global__ void ker_multi_exp_dw_two<double>(
-    double*, const double*, const double*, double*, const double*, const double*, double, const int);
-template __global__ void ker_multi_exp_dw_two<ftsComplex>(
-    ftsComplex*, const ftsComplex*, const ftsComplex*, ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);
-
-template __global__ void ker_multi_exp_dw_four<double>(
-    double*, const double*, const double*, double*, const double*, const double*, double*, const double*, const double*, double*, const double*, const double*, double, const int);
-template __global__ void ker_multi_exp_dw_four<ftsComplex>(
-    ftsComplex*, const ftsComplex*, const ftsComplex*, ftsComplex*, const ftsComplex*, const ftsComplex*, ftsComplex*, const ftsComplex*, const ftsComplex*, ftsComplex*, const ftsComplex*, const ftsComplex*, double, const int);

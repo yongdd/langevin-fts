@@ -103,7 +103,7 @@ void CudaArray::add(const Array& src_1, const Array& src_2)
     if (this->device_id != device_id)
         throw_with_line_number("Device id does not match.");
 
-    ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(this->d_data, 1.0, d_src1_data, 1.0, d_src2_data, this->size);
+    ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(this->d_data, 1.0, d_src1_data, 1.0, d_src2_data, this->size);
 }
 void CudaArray::subtract(const Array& src_1, const Array& src_2)
 {
@@ -127,7 +127,7 @@ void CudaArray::subtract(const Array& src_1, const Array& src_2)
     if (this->device_id != device_id)
         throw_with_line_number("Device id does not match.");
 
-    ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(this->d_data, 1.0, d_src1_data, -1.0, d_src2_data, this->size);
+    ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(this->d_data, 1.0, d_src1_data, -1.0, d_src2_data, this->size);
 }
 void CudaArray::multiply(const Array& src_1, const Array& src_2)
 {
@@ -151,7 +151,7 @@ void CudaArray::multiply(const Array& src_1, const Array& src_2)
     if (this->device_id != device_id)
         throw_with_line_number("Device id does not match.");
 
-    ker_multi<double><<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src1_data, d_src2_data, 1.0, this->size);
+    ker_multi<<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src1_data, d_src2_data, 1.0, this->size);
 }
 void CudaArray::divide(const Array& src_1, const Array& src_2)
 {
@@ -175,7 +175,7 @@ void CudaArray::divide(const Array& src_1, const Array& src_2)
     if (this->device_id != device_id)
         throw_with_line_number("Device id does not match.");
 
-    ker_divide<double><<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src1_data, d_src2_data, 1.0, this->size);
+    ker_divide<<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src1_data, d_src2_data, 1.0, this->size);
 }
 // Arithmetic operations with an array and a float number
 void CudaArray::linear_scaling(const Array& src, const double a, const double b)
@@ -197,5 +197,5 @@ void CudaArray::linear_scaling(const Array& src, const double a, const double b)
     if (this->device_id != device_id)
         throw_with_line_number("Device id does not match.");
 
-    ker_linear_scaling<double><<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src_data, a, b, this->size);
+    ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(this->d_data, d_src_data, a, b, this->size);
 }

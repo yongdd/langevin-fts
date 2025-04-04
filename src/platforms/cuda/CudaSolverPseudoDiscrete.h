@@ -51,10 +51,10 @@ private:
 
     // Variables for cub reduction sum
     size_t temp_storage_bytes[MAX_STREAMS];
-    T *d_temp_storage[MAX_STREAMS];
-    T *d_stress_sum[MAX_STREAMS];
-    T *d_stress_sum_out[MAX_STREAMS];
-    T *d_q_multi[MAX_STREAMS];
+    double *d_temp_storage[MAX_STREAMS];
+    double *d_stress_sum[MAX_STREAMS];
+    double *d_stress_sum_out[MAX_STREAMS];
+    double *d_q_multi[MAX_STREAMS];
 
 public:
     // GPU arrays for pseudo-spectral
@@ -83,7 +83,7 @@ public:
     // Compute stress of single segment
     void compute_single_segment_stress(
         const int STREAM,
-        T *d_q_pair, T *d_segment_stress,
+        T *d_q_pair, double *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif

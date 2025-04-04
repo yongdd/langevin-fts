@@ -458,6 +458,6 @@ PYBIND11_MODULE(langevinfts, m)
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def("create_factory_real", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_real))
-        .def("create_factory_complex", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_complex));
+        .def("create_factory", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_real));
+        // .def("create_factory_complex", overload_cast_<std::string, bool>()(&PlatformSelector::create_factory_complex));
 }

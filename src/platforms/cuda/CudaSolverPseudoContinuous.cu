@@ -227,9 +227,9 @@ void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::str
                 sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
 
             // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
                 (this->d_exp_dw[monomer_type],      this->d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
                 (this->d_exp_dw_half[monomer_type], this->d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
 
             gpu_error_check(cudaDeviceSynchronize());
@@ -261,7 +261,7 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/4) in real space
-        ker_multi_exp_dw_two<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
             &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
 
@@ -281,7 +281,7 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/2) in real space
-        ker_multi_exp_dw_two<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             d_q_step_1_one[STREAM], &d_q_step_1_two[STREAM][0], _d_exp_dw,
             d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/((double)M), M);
 
@@ -295,14 +295,14 @@ void CudaSolverPseudoContinuous::advance_propagator(
         cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
 
         // step 1/4: Evaluate exp(-w*ds/4) in real space.
-        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/((double)M), M);
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/((double)M), M);
 
         // Compute linear combination with 4/3 and -1/3 ratio
-        ker_lin_comb<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
+        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
 
         // Multiply mask
         if (d_q_mask != nullptr)
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {
@@ -334,31 +334,31 @@ void CudaSolverPseudoContinuous::compute_single_segment_stress(
         if ( DIM == 3 )
         {
             // x direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_x, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
 
             // y direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
 
             // z direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
         }
         if ( DIM == 2 )
         {
             // y direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
 
             // z direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
         }
         if ( DIM == 1 )
         {
             // z direction
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, bond_length_sq, M_COMPLEX);
             cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
         }
     }
