@@ -2,18 +2,25 @@
 #define CUDA_COMMON_H_
 
 #include <complex>
+#include <map>
 #include <cufft.h>
+
 #include <thrust/system_error.h>
 #include <thrust/system/cuda/error.h>
 #include "Exception.h"
-
-typedef cufftDoubleComplex ftsComplex;
 
 // // The maximum of GPUs
 // #define MAX_GPUS 2
 
 // The maximum of computation streams
 #define MAX_STREAMS 4
+
+typedef cuDoubleComplex ftsComplex;
+
+template<typename T>
+using CuDeviceData = std::conditional_t<std::is_same_v<T, double>,               double,
+                     std::conditional_t<std::is_same_v<T, std::complex<double>>, cuDoubleComplex, void>
+>;
 
 // Define custom reduction operator for ftsComplex
 struct ComplexSumOp {
@@ -25,6 +32,11 @@ struct ComplexSumOp {
         return result;
     }
 };
+
+std::complex<double> cuDoubleToStdComplex(cuDoubleComplex z);
+cuDoubleComplex stdToCuDoubleComplex(const std::complex<double>& z);
+template<typename From, typename To>
+std::map<std::string, const To*> reinterpret_map(const std::map<std::string, const From*>& input);
 
 // Design Pattern : Singleton (Scott Meyer)
 class CudaCommon
@@ -74,8 +86,9 @@ __global__ void ker_exp(double* dst, const double* src, double a, double exp_b, 
 __global__ void ker_exp(ftsComplex* dst, const ftsComplex* src, double a, double exp_b, const int M);
 
 __global__ void ker_multi(double* dst, const double* src1, const double* src2, double a, const int M);
-__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M);
 __global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M);
+__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M);
+__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, ftsComplex a, const int M);
 
 __global__ void ker_mutiple_multi(int n_comp, double* dst, const double* src1, const double* src2, double  a, const int M);
 __global__ void ker_mutiple_multi(int n_comp, ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double  a, const int M);
@@ -91,6 +104,7 @@ __global__ void ker_add_multi(ftsComplex* dst, const ftsComplex* src1, const fts
 
 __global__ void ker_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M);
+__global__ void ker_lin_comb(ftsComplex* dst, ftsComplex a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M);
 
 __global__ void ker_add_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_add_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M);

@@ -3,7 +3,8 @@
 #include <thrust/reduce.h>
 #include "CudaSolverPseudoContinuous.h"
 
-CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
+template <typename T>
+CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
     ComputationBox* cb,
     Molecules *molecules,
     int n_streams,
@@ -16,8 +17,8 @@ CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         
-        const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());
+        const int M = cb->get_total_grid(); 
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
 
         // Copy streams
         for(int i=0; i<n_streams; i++)
@@ -37,8 +38,8 @@ CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
 
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond       [monomer_type], sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half  [monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(CuDeviceData<T>)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(CuDeviceData<T>)*M));
         }
 
         // Create FFT plan
@@ -61,12 +62,25 @@ CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
             total_grid[0] = cb->get_nx(0);
         }
 
+        cufftType cufft_forward;
+        cufftType cufft_backward;
+        if constexpr (std::is_same<T, double>::value)
+        {
+            cufft_forward = CUFFT_D2Z;
+            cufft_backward = CUFFT_Z2D;
+        }
+        else
+        {
+            cufft_forward = CUFFT_Z2Z;
+            cufft_backward = CUFFT_Z2Z;
+        }
+
         for(int i=0; i<n_streams; i++)
-        {  
-            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,1);
-            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_D2Z,2);
-            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,1);
-            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, CUFFT_Z2D,2);
+        {
+            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_forward, 1);
+            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_forward, 2);
+            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_backward, 1);
+            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_backward, 2);
             cufftSetStream(plan_for_one[i], streams[i][0]);
             cufftSetStream(plan_for_two[i], streams[i][0]);
             cufftSetStream(plan_bak_one[i], streams[i][0]);
@@ -76,9 +90,9 @@ CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
         {  
-            gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(double)*2*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(CuDeviceData<T>)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(CuDeviceData<T>)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(CuDeviceData<T>)*2*M));
             
             gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[i], sizeof(ftsComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(ftsComplex)*2*M_COMPLEX));
@@ -111,7 +125,8 @@ CudaSolverPseudoContinuous::CudaSolverPseudoContinuous(
         throw_without_line_number(exc.what());
     }
 }
-CudaSolverPseudoContinuous::~CudaSolverPseudoContinuous()
+template <typename T>
+CudaSolverPseudoContinuous<T>::~CudaSolverPseudoContinuous()
 {
     for(int i=0; i<n_streams; i++)
     {
@@ -153,11 +168,12 @@ CudaSolverPseudoContinuous::~CudaSolverPseudoContinuous()
         cudaFree(d_temp_storage[i]);
     }
 }
-void CudaSolverPseudoContinuous::update_laplacian_operator()
+template <typename T>
+void CudaSolverPseudoContinuous<T>::update_laplacian_operator()
 {
     try{
         // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
         for(const auto& item: this->molecules->get_bond_lengths())
@@ -165,9 +181,9 @@ void CudaSolverPseudoContinuous::update_laplacian_operator()
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
             
-            Pseudo::get_boltz_bond<double>(this->cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
-            Pseudo::get_boltz_bond<double>(this->cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
-        
+            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
+            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());    
+
             gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], boltz_bond,      sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], boltz_bond_half, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         }
@@ -176,7 +192,8 @@ void CudaSolverPseudoContinuous::update_laplacian_operator()
         double fourier_basis_x[M_COMPLEX];
         double fourier_basis_y[M_COMPLEX];
         double fourier_basis_z[M_COMPLEX];
-        Pseudo::get_weighted_fourier_basis<double>(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
+
+        Pseudo::get_weighted_fourier_basis<T>(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
 
         gpu_error_check(cudaMemcpy(d_fourier_basis_x, fourier_basis_x, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_fourier_basis_y, fourier_basis_y, sizeof(double)*M_COMPLEX,cudaMemcpyHostToDevice));
@@ -187,13 +204,14 @@ void CudaSolverPseudoContinuous::update_laplacian_operator()
         throw_with_line_number(exc.what());
     }
 }
-void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::string, const double*> w_input)
+template <typename T>
+void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::string, const T*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = this->cb->get_total_grid();
+        const int M = cb->get_total_grid();
         const double ds = this->molecules->get_ds();
 
         for(const auto& item: w_input)
@@ -216,15 +234,15 @@ void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::str
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
-            const double *w = item.second;
+            const T *w = item.second;
 
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpyAsync(
                 this->d_exp_dw     [monomer_type], w,      
-                sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(T)*M, cudaMemcpyInputToDevice, streams[0][1]));
             gpu_error_check(cudaMemcpyAsync(
                 this->d_exp_dw_half[monomer_type], w,
-                sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(T)*M, cudaMemcpyInputToDevice, streams[0][1]));
 
             // Compute d_exp_dw and d_exp_dw_half
             ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
@@ -241,9 +259,10 @@ void CudaSolverPseudoContinuous::update_dw(std::string device, std::map<std::str
     }
 }
 // Advance propagator using Richardson extrapolation
-void CudaSolverPseudoContinuous::advance_propagator(
+template <typename T>
+void CudaSolverPseudoContinuous<T>::advance_propagator(
         const int STREAM,
-        double *d_q_in, double *d_q_out,
+        CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type, double *d_q_mask)
 {
     try
@@ -251,11 +270,11 @@ void CudaSolverPseudoContinuous::advance_propagator(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
+        const int M = cb->get_total_grid();
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
 
-        double *_d_exp_dw = this->d_exp_dw[monomer_type];
-        double *_d_exp_dw_half = this->d_exp_dw_half[monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[monomer_type];
+        CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[monomer_type];
         double *_d_boltz_bond = d_boltz_bond[monomer_type];
         double *_d_boltz_bond_half = d_boltz_bond_half[monomer_type];
 
@@ -267,7 +286,10 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Execute a forward FFT
         // step 1/4: Execute a forward FFT
-        cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
+        if constexpr (std::is_same<T, double>::value)
+            cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
+        else
+            cufftExecZ2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM], CUFFT_FORWARD);
 
         // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
@@ -277,7 +299,10 @@ void CudaSolverPseudoContinuous::advance_propagator(
 
         // step 1/2: Execute a backward FFT
         // step 1/4: Execute a backward FFT
-        cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
+        if constexpr (std::is_same<T, double>::value)
+            cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
+        else
+            cufftExecZ2Z(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM], CUFFT_INVERSE);
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/2) in real space
@@ -286,13 +311,19 @@ void CudaSolverPseudoContinuous::advance_propagator(
             d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/((double)M), M);
 
         // step 1/4: Execute a forward FFT
-        cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
+        if constexpr (std::is_same<T, double>::value)
+            cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
+        else
+            cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM], CUFFT_FORWARD);
 
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
         ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
 
         // step 1/4: Execute a backward FFT
-        cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
+        if constexpr (std::is_same<T, double>::value)
+            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
+        else
+            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], CUFFT_INVERSE);
 
         // step 1/4: Evaluate exp(-w*ds/4) in real space.
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/((double)M), M);
@@ -309,9 +340,10 @@ void CudaSolverPseudoContinuous::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverPseudoContinuous::compute_single_segment_stress(
+template <typename T>
+void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
     const int STREAM,
-    double *d_q_pair, double *d_segment_stress,
+    CuDeviceData<T> *d_q_pair, double *d_segment_stress,
     std::string monomer_type, bool is_half_bond_length)
 {
     try{
@@ -319,15 +351,17 @@ void CudaSolverPseudoContinuous::compute_single_segment_stress(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int DIM = this->cb->get_dim();
-        const int M   = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(this->cb->get_nx());
+        // const int M   = total_grid;
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
 
         auto bond_lengths = this->molecules->get_bond_lengths();
-        std::vector<double> stress(DIM);
         double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
 
         // Execute a forward FFT
-        cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
+        if constexpr (std::is_same<T, double>::value)
+            cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
+        else
+            cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
 
         // Multiply two propagators in the fourier spaces
         ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
@@ -367,3 +401,8 @@ void CudaSolverPseudoContinuous::compute_single_segment_stress(
         throw_without_line_number(exc.what());
     }
 }
+
+// Explicit template instantiation
+
+template class CudaSolverPseudoContinuous<double>;
+template class CudaSolverPseudoContinuous<std::complex<double>>;
