@@ -12,17 +12,6 @@
 #include "CudaCommon.h"
 
 
-// Define custom reduction operator for ftsComplex
-struct ComplexSumOp {
-    __device__ __forceinline__
-    ftsComplex operator()(const ftsComplex& a, const ftsComplex& b) const {
-        ftsComplex result;
-        result.x = a.x + b.x;
-        result.y = a.y + b.y;
-        return result;
-    }
-};
-
 //----------------- Constructor -----------------------------
 CudaComputationBoxComplex::CudaComputationBoxComplex(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
@@ -83,7 +72,7 @@ std::complex<double> CudaComputationBoxComplex::inner_product_device(const ftsCo
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ftsComplex sum{0.0};
 
-    ker_multi<ftsComplex><<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
+    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
     ker_multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
     ftsComplex zero = {0.0, 0.0};
     cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
@@ -97,8 +86,8 @@ std::complex<double> CudaComputationBoxComplex::inner_product_inverse_weight_dev
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ftsComplex sum{0.0};
 
-    ker_multi<ftsComplex><<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
-    ker_divide<ftsComplex><<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, this->total_grid);
+    ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_g, d_h, 1.0, this->total_grid);
+    ker_divide<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_w, 1.0, this->total_grid);
     ker_multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
     ftsComplex zero = {0.0, 0.0};
     cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
@@ -112,7 +101,7 @@ std::complex<double> CudaComputationBoxComplex::multi_inner_product_device(int n
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
     ftsComplex sum{0.0};
 
-    ker_mutiple_multi<ftsComplex><<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, this->total_grid);
+    ker_mutiple_multi<<<N_BLOCKS, N_THREADS>>>(n_comp, d_sum, d_g, d_h, 1.0, this->total_grid);
     ker_multi_complex_real<<<N_BLOCKS, N_THREADS>>>(d_sum, d_sum, d_dv, 1.0, this->total_grid);
     ftsComplex zero = {0.0, 0.0};
     cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
@@ -132,5 +121,5 @@ void CudaComputationBoxComplex::zero_mean_device(ftsComplex* d_g)
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(ftsComplex), cudaMemcpyDeviceToHost));
     sum.x = -sum.x/this->volume;
     sum.y = -sum.y/this->volume;
-    ker_linear_scaling<ftsComplex><<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, sum, this->total_grid);
+    ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_g, d_g, 1.0, sum, this->total_grid);
 }

@@ -139,7 +139,7 @@ void CudaAndersonMixing::calculate_new_fields(
             // Evaluate w_deriv inner_product products for calculating Unm and Vn in Thompson's paper
             for(int i=0; i<=n_anderson; i++)
             {
-                ker_multi<double><<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, n_var);
+                ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, n_var);
                 cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, n_var);
                 gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(double),cudaMemcpyDeviceToHost));
             }
@@ -158,7 +158,7 @@ void CudaAndersonMixing::calculate_new_fields(
                 mix = mix*1.01;
 
             // Make a simple mixing of input and output fields for the next iteration
-            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_current, mix, d_w_deriv, n_var);
+            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_current, mix, d_w_deriv, n_var);
             gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var, cudaMemcpyDeviceToHost));
         }
         else
@@ -186,13 +186,13 @@ void CudaAndersonMixing::calculate_new_fields(
             d_w_hist1 = d_cb_w_hist->get_array(0);
             d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
             gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1, sizeof(double)*n_var,cudaMemcpyDeviceToDevice));
-            ker_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
+            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, n_var);
             for(int i=0; i<n_anderson; i++)
             {
                 d_w_hist2 = d_cb_w_hist->get_array(i+1);
                 d_w_deriv_hist2 = d_cb_w_deriv_hist->get_array(i+1);
-                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
-                ker_add_lin_comb<double><<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
+                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       n_var);
+                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, n_var);
             }
             gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(double)*n_var,cudaMemcpyDeviceToHost));
         }

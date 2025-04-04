@@ -309,9 +309,9 @@ void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, co
                 sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
 
             // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
                 (d_exp_dw[monomer_type],      d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<double><<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
                 (d_exp_dw_half[monomer_type], d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
 
             gpu_error_check(cudaDeviceSynchronize());
@@ -338,7 +338,7 @@ void CudaSolverRealSpace::advance_propagator(
         double *_d_exp_dw = d_exp_dw[monomer_type];
 
         // Evaluate exp(-w*ds/2) in real space
-        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
 
         if(DIM == 3)           // input, output
             advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
@@ -348,11 +348,11 @@ void CudaSolverRealSpace::advance_propagator(
             advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
 
         // Evaluate exp(-w*ds/2) in real space
-        ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
 
         // Multiply mask
         if (d_q_mask != nullptr)
-            ker_multi<double><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
     }
     catch(std::exception& exc)
     {

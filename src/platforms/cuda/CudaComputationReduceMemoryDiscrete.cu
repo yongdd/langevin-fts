@@ -453,7 +453,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         if (q_init.find(g) == q_init.end())
                             std::cout<<  "Could not find q_init[\"" + g + "\"]." << std::endl;
                         gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
-                        ker_multi<T><<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
+                        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
                     }
                     else
                     {
@@ -541,7 +541,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             }
 
                             // STREAM 0: compute linear combination
-                            ker_lin_comb<T><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                            ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                     d_q_one[STREAM][0], 1.0, d_q_one[STREAM][0],
                                     sub_n_repeated, d_propagator_sub_dep[STREAM][prev], M);
 
@@ -560,7 +560,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                 d_q_one[STREAM][0], d_q_one[STREAM][0], monomer_type);
 
                             // Add full segment
-                            ker_multi<T><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
+                            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
                         }
                         else
                         {
@@ -619,7 +619,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             }
 
                             // STREAM 0: multiply 
-                            ker_multi<T><<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 d_q_one[STREAM][0], d_q_one[STREAM][0], d_propagator_sub_dep[STREAM][prev], 1.0, M);
 
                             std::swap(prev, next);
@@ -639,7 +639,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                 d_q_one[STREAM][0], d_q_one[STREAM][0], monomer_type);
 
                             // Add full segment
-                            ker_multi<T><<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
+                            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], _d_exp_dw, 1.0, M);
 
                             #ifndef NDEBUG
                             propagator_finished[key][1] = true;
@@ -659,7 +659,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 {
                     // Multiply mask
                     if (d_q_mask != nullptr)
-                        ker_multi<T><<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], d_q_mask, 1.0, M);
+                        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_one[STREAM][0], d_q_one[STREAM][0], d_q_mask, 1.0, M);
 
                     // Copy data between device and host
                     gpu_error_check(cudaMemcpy(_propagator[1], d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
@@ -892,7 +892,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
             T *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
             this->single_solvent_partitions[s] = ((CudaComputationBox *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
-            ker_linear_scaling<T><<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], 0.0, M);
+            ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, volume_fraction/this->single_solvent_partitions[s], 0.0, M);
             gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -934,12 +934,12 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
             }
 
             // STREAM 0: multiply two propagators
-            ker_add_multi<T><<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_phi, d_q_block_v[prev], d_q_block_u[prev], NORM, M);
+            ker_add_multi<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_phi, d_q_block_v[prev], d_q_block_u[prev], NORM, M);
             std::swap(prev, next);
             cudaDeviceSynchronize();
         }
         // divide exp_dw
-        ker_divide<T><<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
+        ker_divide<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
 
         // Copy propagators from device to host
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
