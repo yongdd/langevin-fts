@@ -87,18 +87,18 @@ PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox
     }
 }
 template <typename T>
-AndersonMixing* CudaFactory<T>::create_anderson_mixing(
+AndersonMixing<T>* CudaFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
     if(this->reduce_memory_usage)
     {
-        return new CudaAndersonMixingReduceMemory(
+        return new CudaAndersonMixingReduceMemory<T>(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
     else
     {
-        return new CudaAndersonMixing(
+        return new CudaAndersonMixing<T>(
             n_var, max_hist, start_error, mix_min, mix_init);
     }
 }

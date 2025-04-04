@@ -90,11 +90,11 @@ PropagatorComputation<T>* MklFactory<T>::create_realspace_solver(ComputationBox*
     }
 }
 template <typename T>
-AndersonMixing* MklFactory<T>::create_anderson_mixing(
+AndersonMixing<T>* MklFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-    return new CpuAndersonMixing(
+    return new CpuAndersonMixing<T>(
         n_var, max_hist, start_error, mix_min, mix_init);
 }
 template <typename T>
@@ -115,9 +115,5 @@ void MklFactory<T>::display_info()
 }
 
 // Explicit template instantiation
-
-// template class MklFactory<float>;
-// template class MklFactory<std::complex<float>>;
-
 template class MklFactory<double>;
 template class MklFactory<std::complex<double>>;

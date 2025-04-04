@@ -9,18 +9,19 @@
 #include "CircularBuffer.h"
 #include "AndersonMixing.h"
 
-class CpuAndersonMixing : public AndersonMixing
+template <typename T>
+class CpuAndersonMixing : public AndersonMixing<T>
 {
 private:
     // A few previous field values are stored
-    CircularBuffer *cb_w_hist, *cb_w_deriv_hist;
-    CircularBuffer *cb_w_deriv_dots;
-    double *w_deriv_dots;
+    CircularBuffer<T> *cb_w_hist, *cb_w_deriv_hist;
+    CircularBuffer<T> *cb_w_deriv_dots;
+    T *w_deriv_dots;
     // A matrix and arrays for determining coefficients
-    double **u_nm, *v_n, *a_n;
+    T **u_nm, *v_n, *a_n;
     
-    double dot_product(double *a, double *b);
-    void print_array(int n, double *a);
+    T dot_product(T *a, T *b);
+    void print_array(int n, T *a);
 public:
 
     CpuAndersonMixing(int n_var, int max_hist,
@@ -29,7 +30,7 @@ public:
       
     void reset_count() override;
     void calculate_new_fields(
-        double *w_new, double *w_current, double *w_deriv,
+        T *w_new, T *w_current, T *w_deriv,
         double old_error_level, double error_level) override;
 };
 #endif

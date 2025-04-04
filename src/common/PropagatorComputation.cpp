@@ -40,7 +40,7 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 { 
     const int DIM  = this->cb->get_dim();
-    const int M    = this->cb->get_total_grid();
+    // const int M    = this->cb->get_total_grid();
     std::vector<T> stress(DIM);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
@@ -60,7 +60,7 @@ template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 { 
     const int DIM  = this->cb->get_dim();
-    const int M    = this->cb->get_total_grid();
+    // const int M    = this->cb->get_total_grid();
     std::vector<T> stress(DIM);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
@@ -68,7 +68,6 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
         stress[d] = 0.0;
     
     for(int p=0; p<n_polymer_types; p++){
-        Polymer& pc = this->molecules->get_polymer(p);
         for(int d=0; d<DIM; d++){
             stress[d] += static_cast<T>(fugacities[p]) * this->dq_dl[p][d];
         }
@@ -77,8 +76,5 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
 }
 
 // Explicit template instantiation
-
-// template class PropagatorComputation<float>;
-// template class PropagatorComputation<std::complex<float>>;
 template class PropagatorComputation<double>;
 template class PropagatorComputation<std::complex<double>>;

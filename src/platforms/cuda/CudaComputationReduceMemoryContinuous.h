@@ -24,11 +24,11 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 #include "Scheduler.h"
 
 template <typename T>
-class CudaComputationReduceMemoryContinuous : public PropagatorComputation<double>
+class CudaComputationReduceMemoryContinuous : public PropagatorComputation<T>
 {
 private:
     // Pseudo-spectral PDE solver
-    CudaSolver<double> *propagator_solver;
+    CudaSolver<T> *propagator_solver;
     std::string method;
 
     // The number of parallel streams for propagator computation
@@ -38,28 +38,28 @@ private:
     cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // For pseudo-spectral: advance_one propagator()
-    double *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
-    double *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
+    CuDeviceData<T> *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
+    CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
 
     // All elements are 1 for initializing propagators
-    double *d_q_unity;
+    CuDeviceData<T> *d_q_unity;
 
     // q_mask to make impenetrable region for nano particles
     double *d_q_mask;
 
     // For concentration computation
-    double *d_q_block_v[2];    // one for prev, the other for next
-    double *d_q_block_u[2];    // one for prev, the other for next
-    double *d_phi;
+    CuDeviceData<T> *d_q_block_v[2];    // one for prev, the other for next
+    CuDeviceData<T> *d_q_block_u[2];    // one for prev, the other for next
+    CuDeviceData<T> *d_phi;
 
     // For stress calculation: compute_stress()
-    double *d_q_pair[MAX_STREAMS][2];  // one for prev, the other for next
+    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  // one for prev, the other for next
 
     // Scheduler for propagator computation 
     Scheduler *sc;
 
     // Host pinned memory space to store propagator, key: (dep) + monomer_type, value: propagator
-    std::map<std::string, double **> propagator;
+    std::map<std::string, T **> propagator;
     // Map for deallocation of d_propagator
     std::map<std::string, int> propagator_size;
     // Check if computation of propagator is finished
@@ -69,16 +69,16 @@ private:
 
     // Remember one segment for each polymer chain to compute total partition function
     // (polymer id, propagator forward, propagator backward, n_repeated)
-    std::vector<std::tuple<int, double *, double *, int>> single_partition_segment;
+    std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
     // Host pinned space to store concentration, key: (polymer id, key_left, key_right) (assert(key_left <= key_right)), value: concentration
-    std::map<std::tuple<int, std::string, std::string>, double *> phi_block;
+    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
 
     // Solvent concentrations
-    std::vector<double *> phi_solvent;
+    std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(double *phi, double **q_1, double **q_2, const int N_RIGHT, const int N_LEFT, const double NORM);
+    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_RIGHT, const int N_LEFT, const T NORM);
 
 public:
 
@@ -88,30 +88,30 @@ public:
     void update_laplacian_operator() override;
 
     void compute_propagators(
-        std::map<std::string, const double*> w_block,
-        std::map<std::string, const double*> q_init = {}) override;
+        std::map<std::string, const T*> w_block,
+        std::map<std::string, const T*> q_init = {}) override;
 
     void compute_concentrations() override;
 
-    // Compute statistics with inputs from selected device arrays
+    // Compute statistics with inputs
     void compute_statistics(
-        std::map<std::string, const double*> w_input,
-        std::map<std::string, const double*> q_init = {}) override;
+        std::map<std::string, const T*> w_input,
+        std::map<std::string, const T*> q_init = {}) override;
 
     void compute_stress() override;
-    double get_total_partition(int polymer) override;
-    void get_chain_propagator(double *q_out, int polymer, int v, int u, int n) override;
+    T get_total_partition(int polymer) override;
+    void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
     // Canonical ensemble
-    void get_total_concentration(std::string monomer_type, double *phi) override;
-    void get_total_concentration(int polymer, std::string monomer_type, double *phi) override;
-    void get_block_concentration(int polymer, double *phi) override;
+    void get_total_concentration(std::string monomer_type, T *phi) override;
+    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
+    void get_block_concentration(int polymer, T *phi) override;
 
-    double get_solvent_partition(int s) override;
-    void get_solvent_concentration(int s, double *phi) override;
+    T get_solvent_partition(int s) override;
+    void get_solvent_concentration(int s, T *phi) override;
 
     // Grand canonical ensemble
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, double *phi) override;
+    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
 
     // For tests
     bool check_total_partition() override;

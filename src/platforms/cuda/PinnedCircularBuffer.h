@@ -4,6 +4,8 @@
 /*-----------------------------------------------------------------
 ! A circular buffer stores data in the pinned host memory.
 !-----------------------------------------------------------------*/
+
+template <typename T>
 class PinnedCircularBuffer
 {
 private:
@@ -11,14 +13,14 @@ private:
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double** elems;
+    T** elems;
 
 public:
     PinnedCircularBuffer(int length, int width);
     ~PinnedCircularBuffer();
     void reset();
-    void insert(double* new_arr);
-    double* get_array(int n);
+    void insert(T* new_arr);
+    T* get_array(int n);
 };
 
 #endif

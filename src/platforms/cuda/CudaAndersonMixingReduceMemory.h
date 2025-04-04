@@ -11,32 +11,33 @@
 #include "CudaCommon.h"
 #include "PinnedCircularBuffer.h"
 
-class CudaAndersonMixingReduceMemory : public AndersonMixing
+template <typename T>
+class CudaAndersonMixingReduceMemory : public AndersonMixing<T>
 {
 private:
     // A few previous field values are stored for anderson mixing in pinned host memory
-    PinnedCircularBuffer *pinned_cb_w_hist, *pinned_cb_w_deriv_hist;
+    PinnedCircularBuffer<T> *pinned_cb_w_hist, *pinned_cb_w_deriv_hist;
 
-    CircularBuffer *cb_w_deriv_dots;
-    double *w_deriv_dots;
+    CircularBuffer<T> *cb_w_deriv_dots;
+    T *w_deriv_dots;
     // A matrix and arrays for determining coefficients
-    double **u_nm, *v_n, *a_n;
+    T **u_nm, *v_n, *a_n;
     // Temporary arrays
-    double *d_w_new;
-    double *d_w_deriv;
-    double *d_sum;
+    CuDeviceData<T> *d_w_new;
+    CuDeviceData<T> *d_w_deriv;
+    CuDeviceData<T> *d_sum;
     
-    double *d_w_hist1;
-    double *d_w_hist2;
-    double *d_w_deriv_hist1;
-    double *d_w_deriv_hist2;
+    CuDeviceData<T> *d_w_hist1;
+    CuDeviceData<T> *d_w_hist2;
+    CuDeviceData<T> *d_w_deriv_hist1;
+    CuDeviceData<T> *d_w_deriv_hist2;
 
     // Variables for cub reduction sum
     size_t temp_storage_bytes = 0;
-    double *d_temp_storage = nullptr;
-    double *d_sum_out;
+    CuDeviceData<T> *d_temp_storage = nullptr;
+    CuDeviceData<T> *d_sum_out;
 
-    void print_array(int n, double *a);
+    void print_array(int n, T *a);
 public:
 
     CudaAndersonMixingReduceMemory(int n_var, int max_hist,
@@ -45,7 +46,7 @@ public:
 
     void reset_count() override;
     void calculate_new_fields(
-        double *w_new, double *w_current, double *w_deriv,
+        T *w_new, T *w_current, T *w_deriv,
         double old_error_level, double error_level) override;
 
 };
