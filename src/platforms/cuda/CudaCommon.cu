@@ -139,13 +139,24 @@ __global__ void ker_linear_scaling(double* dst, const double* src, double a, dou
     }
 }
 
-__global__ void ker_linear_scaling(ftsComplex* dst, const ftsComplex* src, double a, ftsComplex b, const int M)
+__global__ void ker_linear_scaling(cuDoubleComplex* dst, const cuDoubleComplex* src, double a, cuDoubleComplex b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
         dst[i].x = a * src[i].x + b.x;
         dst[i].y = a * src[i].y + b.y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_linear_scaling(cuDoubleComplex* dst, const cuDoubleComplex* src, cuDoubleComplex a, double b, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = a.x * src[i].x - a.y * src[i].y + b;
+        dst[i].y = a.x * src[i].y + a.y * src[i].x;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -161,7 +172,7 @@ __global__ void ker_exp(double* dst, const double* src, double a, double exp_b, 
 }
 
 
-__global__ void ker_exp(ftsComplex* dst, const ftsComplex* src, double a, double exp_b, const int M)
+__global__ void ker_exp(cuDoubleComplex* dst, const cuDoubleComplex* src, double a, double exp_b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -182,7 +193,7 @@ __global__ void ker_multi(double* dst, const double* src1, const double* src2, d
     }
 }
 
-__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M)
+__global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const double* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -193,7 +204,7 @@ __global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const double*
     }
 }
 
-__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -204,13 +215,13 @@ __global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComp
     }
 }
 
-__global__ void ker_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, ftsComplex a, const int M)
+__global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, cuDoubleComplex a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
         // Multiply src1[i] and src2[i]
-        ftsComplex temp;
+        cuDoubleComplex temp;
         temp.x = src1[i].x * src2[i].x - src1[i].y * src2[i].y;
         temp.y = src1[i].x * src2[i].y + src1[i].y * src2[i].x;
 
@@ -234,12 +245,12 @@ __global__ void ker_mutiple_multi(int n_comp, double* dst, const double* src1, c
     }
 }
 
-__global__ void ker_mutiple_multi(int n_comp, ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_mutiple_multi(int n_comp, cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        ftsComplex result = {a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y),
+        cuDoubleComplex result = {a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y),
                              a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x)};
         for (int n = 1; n < n_comp; n++)
         {
@@ -262,7 +273,7 @@ __global__ void ker_divide(double* dst, const double* src1, const double* src2, 
     }
 }
 
-__global__ void ker_divide(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_divide(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -284,13 +295,36 @@ __global__ void ker_add_multi(double* dst, const double* src1, const double* src
     }
 }
 
-__global__ void ker_add_multi(ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, double a, const int M)
+__global__ void ker_add_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
         dst[i].x += a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y);
         dst[i].y += a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void ker_add_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, cuDoubleComplex a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        // Perform complex multiplication of src1[i] and src2[i]
+        cuDoubleComplex temp;
+        temp.x = src1[i].x * src2[i].x - src1[i].y * src2[i].y;
+        temp.y = src1[i].x * src2[i].y + src1[i].y * src2[i].x;
+
+        // Multiply the result by the complex number a
+        cuDoubleComplex result;
+        result.x = a.x * temp.x - a.y * temp.y;
+        result.y = a.x * temp.y + a.y * temp.x;
+
+        // Add the result to dst[i]
+        dst[i].x += result.x;
+        dst[i].y += result.y;
+        
         i += blockDim.x * gridDim.x;
     }
 }
@@ -305,7 +339,7 @@ __global__ void ker_lin_comb(double* dst, double a, const double* src1, double b
     }
 }
 
-__global__ void ker_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+__global__ void ker_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -316,7 +350,7 @@ __global__ void ker_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, 
     }
 }
 
-__global__ void ker_lin_comb(ftsComplex* dst, ftsComplex a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+__global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -337,7 +371,7 @@ __global__ void ker_add_lin_comb(double* dst, double a, const double* src1, doub
     }
 }
 
-__global__ void ker_add_lin_comb(ftsComplex* dst, double a, const ftsComplex* src1, double b, const ftsComplex* src2, const int M)
+__global__ void ker_add_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -348,7 +382,7 @@ __global__ void ker_add_lin_comb(ftsComplex* dst, double a, const ftsComplex* sr
     }
 }
 
-__global__ void ker_multi_complex_real(ftsComplex* dst, const double* src, double a, const int M)
+__global__ void ker_multi_complex_real(cuDoubleComplex* dst, const double* src, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -359,7 +393,7 @@ __global__ void ker_multi_complex_real(ftsComplex* dst, const double* src, doubl
     }
 }
 
-__global__ void ker_multi_complex_real(ftsComplex* dst, const ftsComplex* src1, const double* src2, double a, const int M)
+__global__ void ker_multi_complex_real(cuDoubleComplex* dst, const cuDoubleComplex* src1, const double* src2, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -370,7 +404,7 @@ __global__ void ker_multi_complex_real(ftsComplex* dst, const ftsComplex* src1, 
     }
 }
 
-__global__ void ker_multi_complex_conjugate(double* dst, const ftsComplex* src1, const ftsComplex* src2, const int M)
+__global__ void ker_multi_complex_conjugate(double* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -381,7 +415,7 @@ __global__ void ker_multi_complex_conjugate(double* dst, const ftsComplex* src1,
 }
 
 __global__ void ker_multi_complex_conjugate(
-    ftsComplex* dst, const ftsComplex* src1, const ftsComplex* src2, const int M)
+    cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
@@ -407,8 +441,8 @@ __global__ void ker_multi_exp_dw_two(
 }
 
 __global__ void ker_multi_exp_dw_two(
-    ftsComplex* dst1, const ftsComplex* src1, const ftsComplex* exp_dw1,
-    ftsComplex* dst2, const ftsComplex* src2, const ftsComplex* exp_dw2,
+    cuDoubleComplex* dst1, const cuDoubleComplex* src1, const cuDoubleComplex* exp_dw1,
+    cuDoubleComplex* dst2, const cuDoubleComplex* src2, const cuDoubleComplex* exp_dw2,
     double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -443,10 +477,10 @@ __global__ void ker_multi_exp_dw_four(
 }
 
 __global__ void ker_multi_exp_dw_four(
-    ftsComplex* dst1, const ftsComplex* src1, const ftsComplex* exp_dw1,
-    ftsComplex* dst2, const ftsComplex* src2, const ftsComplex* exp_dw2,
-    ftsComplex* dst3, const ftsComplex* src3, const ftsComplex* exp_dw3,
-    ftsComplex* dst4, const ftsComplex* src4, const ftsComplex* exp_dw4,
+    cuDoubleComplex* dst1, const cuDoubleComplex* src1, const cuDoubleComplex* exp_dw1,
+    cuDoubleComplex* dst2, const cuDoubleComplex* src2, const cuDoubleComplex* exp_dw2,
+    cuDoubleComplex* dst3, const cuDoubleComplex* src3, const cuDoubleComplex* exp_dw3,
+    cuDoubleComplex* dst4, const cuDoubleComplex* src4, const cuDoubleComplex* exp_dw4,
     double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -469,8 +503,8 @@ __global__ void ker_multi_exp_dw_four(
 }
 
 __global__ void ker_complex_real_multi_bond_two(
-    ftsComplex* dst1, const double* boltz_bond1,
-    ftsComplex* dst2, const double* boltz_bond2,
+    cuDoubleComplex* dst1, const double* boltz_bond1,
+    cuDoubleComplex* dst2, const double* boltz_bond2,
     const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -485,10 +519,10 @@ __global__ void ker_complex_real_multi_bond_two(
 }
 
 __global__ void ker_complex_real_multi_bond_four(
-    ftsComplex* dst1, const double* boltz_bond1,
-    ftsComplex* dst2, const double* boltz_bond2,
-    ftsComplex* dst3, const double* boltz_bond3,
-    ftsComplex* dst4, const double* boltz_bond4,
+    cuDoubleComplex* dst1, const double* boltz_bond1,
+    cuDoubleComplex* dst2, const double* boltz_bond2,
+    cuDoubleComplex* dst3, const double* boltz_bond3,
+    cuDoubleComplex* dst4, const double* boltz_bond4,
     const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

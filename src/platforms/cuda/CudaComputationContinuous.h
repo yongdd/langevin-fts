@@ -78,7 +78,7 @@ public:
 
     void compute_concentrations() override;
 
-    // Compute statistics with inputs from selected device arrays
+    // Compute statistics with inputs
     void compute_statistics(
         std::map<std::string, const T*> w_input,
         std::map<std::string, const T*> q_init = {}) override;

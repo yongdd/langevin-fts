@@ -725,8 +725,6 @@ void CpuComputationContinuous<T>::compute_stress()
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
-            Polymer& pc = this->molecules->get_polymer(p);
-
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }

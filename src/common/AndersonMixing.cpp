@@ -1,6 +1,9 @@
+#include <complex>
+
 #include "AndersonMixing.h"
 
-AndersonMixing::AndersonMixing(int n_var, int max_hist,
+template <typename T>
+AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
 {
     // The number of variables to be determined
@@ -15,11 +18,11 @@ AndersonMixing::AndersonMixing(int n_var, int max_hist,
     this->mix = mix_init;
     this->mix_init = mix_init;
 }
-
-void AndersonMixing::find_an(double **u, double *v, double *a, int n)
+template <typename T>
+void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
 {
     int i,j,k;
-    double factor, temp_sum;
+    T factor, temp_sum;
     // Elimination process
     for(i=0; i<n; i++)
     {
@@ -45,3 +48,7 @@ void AndersonMixing::find_an(double **u, double *v, double *a, int n)
         a[i] = (v[i] - temp_sum)/u[i][i];
     }
 }
+
+// Explicit template instantiation
+template class AndersonMixing<double>;
+template class AndersonMixing<std::complex<double>>;

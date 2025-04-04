@@ -7,6 +7,7 @@
 #ifndef CIRCULAR_BUFFER_H_
 #define CIRCULAR_BUFFER_H_
 
+template <typename T>
 class CircularBuffer
 {
 private:
@@ -14,15 +15,15 @@ private:
     int width;  // size of each elements
     int start;  // index of oldest elements
     int n_items;   // index at which to write new element
-    double** elems;
+    T** elems;
 
 public:
     CircularBuffer(int length, int width);
     ~CircularBuffer();
     void reset();
-    void insert(double* new_arr);
-    double* get_array(int n);
-    double* operator[] (int n);
-    double get(int n, int m);
+    void insert(T* new_arr);
+    T* get_array(int n);
+    T* operator[] (int n);
+    T get(int n, int m);
 };
 #endif

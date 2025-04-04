@@ -38,7 +38,7 @@ public :
 
     PropagatorComputation<T>* create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
 
-    AndersonMixing* create_anderson_mixing(
+    AndersonMixing<T>* create_anderson_mixing(
         int n_var, int max_hist, double start_error,
         double mix_min, double mix_init) override;
 

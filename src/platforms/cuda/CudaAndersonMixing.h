@@ -10,30 +10,31 @@
 #include "CudaCommon.h"
 #include "CudaCircularBuffer.h"
 
-class CudaAndersonMixing : public AndersonMixing
+template <typename T>
+class CudaAndersonMixing : public AndersonMixing<T>
 {
 private:
     // Two streams for each gpu
     cudaStream_t streams[2]; // one for kernel execution, the other for memcpy
 
     // A few previous field values are stored for anderson mixing in GPU
-    CudaCircularBuffer *d_cb_w_hist, *d_cb_w_deriv_hist;
-    CircularBuffer *cb_w_deriv_dots;
-    double *w_deriv_dots;
+    CudaCircularBuffer<T> *d_cb_w_hist, *d_cb_w_deriv_hist;
+    CircularBuffer<T> *cb_w_deriv_dots;
+    T *w_deriv_dots;
     // A matrix and arrays for determining coefficients
-    double **u_nm, *v_n, *a_n;
+    T **u_nm, *v_n, *a_n;
     // Temporary arrays
-    double *d_w_current;
-    double *d_w_new;
-    double *d_w_deriv;
-    double *d_sum;
+    CuDeviceData<T> *d_w_current;
+    CuDeviceData<T> *d_w_new;
+    CuDeviceData<T> *d_w_deriv;
+    CuDeviceData<T> *d_sum;
 
     // Variables for cub reduction sum
     size_t temp_storage_bytes;
-    double *d_temp_storage;
-    double *d_sum_out;
+    CuDeviceData<T> *d_temp_storage;
+    CuDeviceData<T> *d_sum_out;
 
-    void print_array(int n, double *a);
+    void print_array(int n, T *a);
 public:
 
     CudaAndersonMixing(int n_var, int max_hist,
@@ -42,7 +43,7 @@ public:
 
     void reset_count() override;
     void calculate_new_fields(
-        double *w_new, double *w_current, double *w_deriv,
+        T *w_new, T *w_current, T *w_deriv,
         double old_error_level, double error_level) override;
 
 };

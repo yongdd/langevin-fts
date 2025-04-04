@@ -78,9 +78,7 @@ public:
 
     // Advance propagator by half bond step
     void advance_propagator_half_bond_step(
-        const int STREAM,
-        CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type) override {};
+        const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
     // Compute stress of single segment
     void compute_single_segment_stress(

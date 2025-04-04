@@ -403,6 +403,5 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
 }
 
 // Explicit template instantiation
-
 template class CudaSolverPseudoContinuous<double>;
 template class CudaSolverPseudoContinuous<std::complex<double>>;

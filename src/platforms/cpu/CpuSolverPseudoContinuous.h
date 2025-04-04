@@ -45,7 +45,7 @@ public:
     void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask) override;
     
     // Advance propagator by half bond step
-    void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) override {};
+    void advance_propagator_half_bond_step(T *, T *, std::string) override {};
                
     // Compute stress of single segment
     std::vector<double> compute_single_segment_stress(

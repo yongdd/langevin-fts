@@ -15,7 +15,7 @@ int main()
         std::vector<std::string> vec_string;
 
         // arrays to calculate anderson mixing
-        CircularBuffer cb(SIZE, M);
+        CircularBuffer<double> cb(SIZE, M);
         double * p_arr;
 
         p_arr = new double[M] {1,2,3,5,4};

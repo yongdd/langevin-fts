@@ -30,22 +30,22 @@ private:
     cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
 
     // All elements are 1 for initializing propagators
-    T *d_q_unity; 
+    CuDeviceData<T> *d_q_unity; 
 
     // q_mask to make impenetrable region for nano particles
     double *d_q_mask;
 
     // One for prev, the other for next
-    T *d_q_pair[MAX_STREAMS][2];
+    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];
 
     // For pseudo-spectral: advance_one propagator()
-    T *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
-    T *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
+    CuDeviceData<T> *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
+    CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
 
     // For concentration computation
-    T *d_q_block_v[2];    // one for prev, the other for next
-    T *d_q_block_u[2];    // one for prev, the other for next
-    T *d_phi;
+    CuDeviceData<T> *d_q_block_v[2];    // one for prev, the other for next
+    CuDeviceData<T> *d_q_block_u[2];    // one for prev, the other for next
+    CuDeviceData<T> *d_phi;
 
     // Scheduler for propagator computation 
     Scheduler *sc;
@@ -92,7 +92,7 @@ public:
 
     void compute_concentrations() override;
 
-    // Compute statistics with inputs from selected device arrays
+    // Compute statistics with inputs
     void compute_statistics(
         std::map<std::string, const T*> w_input,
         std::map<std::string, const T*> q_init = {}) override;
