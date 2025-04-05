@@ -36,10 +36,7 @@ void CudaComputationBox<T>::initialize()
     if constexpr (std::is_same<T, double>::value) 
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
     else
-    {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-    }
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
     gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 }
 //----------------- Destructor -----------------------------
@@ -72,10 +69,7 @@ T CudaComputationBox<T>::integral_device(const CuDeviceData<T> *d_g)
     if constexpr (std::is_same<T, double>::value)
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
     else
-    {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-    }
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -93,10 +87,8 @@ T CudaComputationBox<T>::inner_product_device(const CuDeviceData<T>* d_g, const 
     if constexpr (std::is_same<T, double>::value)
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
     else
-    {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-    }
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -114,10 +106,8 @@ T CudaComputationBox<T>::inner_product_inverse_weight_device(const CuDeviceData<
     if constexpr (std::is_same<T, double>::value)
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
     else
-    {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-    }
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
+
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -134,10 +124,7 @@ T CudaComputationBox<T>::multi_inner_product_device(int n_comp, const CuDeviceDa
     if constexpr (std::is_same<T, double>::value)
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid);
     else
-    {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-    }
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
     gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(T), cudaMemcpyDeviceToHost));
     return sum;
 }
@@ -158,8 +145,7 @@ void CudaComputationBox<T>::zero_mean_device(CuDeviceData<T>* d_g)
     }
     else
     {
-        CuDeviceData<T> zero = {0.0, 0.0};
-        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
         gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost));
         sum.x = -sum.x/this->volume;
         sum.y = -sum.y/this->volume;

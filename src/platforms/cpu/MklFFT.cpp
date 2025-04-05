@@ -69,7 +69,7 @@ MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx)
             status = DftiSetValue(hand_backward, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
         }
         status = DftiCommitDescriptor(hand_forward);
-        status = DftiSetValue(hand_backward, DFTI_BACKWARD_SCALE, 1.0/((double)total_grid));
+        status = DftiSetValue(hand_backward, DFTI_BACKWARD_SCALE, 1.0/static_cast<double>(total_grid));
         status = DftiCommitDescriptor(hand_backward);
 
         if (status != 0)

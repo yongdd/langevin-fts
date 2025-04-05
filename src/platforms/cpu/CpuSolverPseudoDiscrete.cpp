@@ -163,7 +163,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
     }
 }
 template <typename T>
-std::vector<double> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
+std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     if constexpr (std::is_same<T, std::complex<double>>::value)
@@ -174,7 +174,7 @@ std::vector<double> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
     const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
     double coeff;
 
-    std::vector<double> stress(DIM);
+    std::vector<T> stress(DIM);
     std::complex<double> qk_1[M_COMPLEX];
     std::complex<double> qk_2[M_COMPLEX];
 

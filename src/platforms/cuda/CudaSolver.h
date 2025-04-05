@@ -42,7 +42,7 @@ public:
     // Compute stress of single segment
     virtual void compute_single_segment_stress(
         const int STREAM,
-        CuDeviceData<T> *d_q_pair, double *d_segment_stress,
+        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) = 0;
 
 //     virtual void compute_single_segment_stress_fourier(const int GPU, double *d_q) = 0;

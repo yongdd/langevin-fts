@@ -593,7 +593,7 @@ void PropagatorComputationOptimizer::display_propagators() const
         std::cout << "(Total number of integral equation steps (time complexity to compute propagators: " << total_mde_steps_without_reduction << std::endl;    
     std::cout << "Total number of steps after optimizing computation : " << reduced_mde_steps << std::endl;
 
-    double percent = 100*(1.0 - ((double ) reduced_mde_steps)/((double) total_mde_steps_without_reduction));
+    double percent = 100*(1.0 - static_cast<double>(reduced_mde_steps)/static_cast<double>(total_mde_steps_without_reduction));
     percent = std::round(percent*100)/100; //rounding
     std::cout << "Computational cost reduction (higher is better) : " << percent << " %" << std::endl;
     //std::cout << "------------------------------------" << std::endl;

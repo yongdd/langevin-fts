@@ -36,7 +36,7 @@ public:
     virtual void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) = 0;
                 
     // Compute stress of single segment
-    virtual std::vector<double> compute_single_segment_stress(
+    virtual std::vector<T> compute_single_segment_stress(
         T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) = 0;
 };
 #endif
