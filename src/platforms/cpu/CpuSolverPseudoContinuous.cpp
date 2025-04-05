@@ -181,6 +181,9 @@ template <typename T>
 std::vector<double> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
+    if constexpr (std::is_same<T, std::complex<double>>::value)
+        throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+
     const int DIM  = this->cb->get_dim();
     // const int M    = this->cb->get_total_grid();
     const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());

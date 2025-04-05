@@ -288,24 +288,24 @@ int main()
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
             
-            solver->compute_stress();
-            std::vector<T> stress = solver->get_stress();
-            std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
+            // solver->compute_stress();
+            // std::vector<T> stress = solver->get_stress();
+            // std::cout<< "Stress: " << stress[0] << ", " << stress[1] << ", " << stress[2] << std::endl;
 
-            error = std::abs(stress[0] + 0.000473764);
-            std::cout<< "Stress[0] error: "<< error << std::endl;
-            if (!std::isfinite(error) || error > 1e-7)
-                return -1;
+            // error = std::abs(stress[0] + 0.000473764);
+            // std::cout<< "Stress[0] error: "<< error << std::endl;
+            // if (!std::isfinite(error) || error > 1e-7)
+            //     return -1;
 
-            error = std::abs(stress[1] + 0.0006085);
-            std::cout<< "Stress[1] error: "<< error << std::endl;
-            if (!std::isfinite(error) || error > 1e-7)
-                return -1;
+            // error = std::abs(stress[1] + 0.0006085);
+            // std::cout<< "Stress[1] error: "<< error << std::endl;
+            // if (!std::isfinite(error) || error > 1e-7)
+            //     return -1;
 
-            error = std::abs(stress[2] + 0.00148826);
-            std::cout<< "Stress[2] error: "<< error << std::endl;
-            if (!std::isfinite(error) || error > 1e-7)
-                return -1;
+            // error = std::abs(stress[2] + 0.00148826);
+            // std::cout<< "Stress[2] error: "<< error << std::endl;
+            // if (!std::isfinite(error) || error > 1e-7)
+            //     return -1;
             
             delete cb;
             delete solver;
