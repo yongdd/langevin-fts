@@ -50,8 +50,8 @@ std::vector<T> PropagatorComputation<T>::get_stress()
     for(int p=0; p<n_polymer_types; p++){
         Polymer& pc = this->molecules->get_polymer(p);
         for(int d=0; d<DIM; d++){
-            stress[d] += this->dq_dl[p][d] * static_cast<T>(pc.get_volume_fraction()) /
-                 static_cast<T>(pc.get_alpha()) / this->single_polymer_partitions[p];
+            stress[d] += (this->dq_dl[p][d] * pc.get_volume_fraction() /
+                 pc.get_alpha()) / this->single_polymer_partitions[p];
         }
     }
     return stress;

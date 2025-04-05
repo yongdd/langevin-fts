@@ -14,8 +14,8 @@ CudaCircularBuffer<T>::CudaCircularBuffer(int length, int width)
     d_elems = new CuDeviceData<T>*[length];
     for(int i=0; i<length; i++)
     {
-        gpu_error_check(cudaMalloc((void**)&d_elems[i], sizeof(CuDeviceData<T>)*width));
-        gpu_error_check(cudaMemset(d_elems[i], 0, sizeof(CuDeviceData<T>)*width));
+        gpu_error_check(cudaMalloc((void**)&d_elems[i], sizeof(T)*width));
+        gpu_error_check(cudaMemset(d_elems[i], 0,       sizeof(T)*width));
     }
 }
 template<typename T>
@@ -35,7 +35,7 @@ template<typename T>
 void CudaCircularBuffer<T>::insert(CuDeviceData<T>* d_new_arr)
 {
     int i = (start+n_items)%length;
-    gpu_error_check(cudaMemcpy(d_elems[i], d_new_arr, sizeof(CuDeviceData<T>)*width, cudaMemcpyDeviceToDevice));
+    gpu_error_check(cudaMemcpy(d_elems[i], d_new_arr, sizeof(T)*width, cudaMemcpyDeviceToDevice));
     if (n_items == length)
         start = (start+1)%length;
     n_items = min(n_items+1, length);

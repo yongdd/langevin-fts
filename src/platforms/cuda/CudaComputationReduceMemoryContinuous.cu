@@ -115,7 +115,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
-        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(CuDeviceData<T>)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_unity, sizeof(T)*M));
         for(int i=0; i<M; i++)
         {
             CuDeviceData<T> q_unity;
@@ -123,30 +123,30 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                 q_unity = 1.0;
             else
                 q_unity = make_cuDoubleComplex(1.0, 0.0);
-            gpu_error_check(cudaMemcpy(&d_q_unity[i], &q_unity, sizeof(CuDeviceData<T>), cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(&d_q_unity[i], &q_unity, sizeof(T), cudaMemcpyHostToDevice));
         }
 
         // Allocate memory for propagator computation
         for(int i=0; i<n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_q_one[i][0], sizeof(CuDeviceData<T>)*M)); // for prev
-            gpu_error_check(cudaMalloc((void**)&d_q_one[i][1], sizeof(CuDeviceData<T>)*M)); // for next
-            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][0], sizeof(CuDeviceData<T>)*M)); // for prev
-            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][1], sizeof(CuDeviceData<T>)*M)); // for next
+            gpu_error_check(cudaMalloc((void**)&d_q_one[i][0], sizeof(T)*M)); // for prev
+            gpu_error_check(cudaMalloc((void**)&d_q_one[i][1], sizeof(T)*M)); // for next
+            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][0], sizeof(T)*M)); // for prev
+            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][1], sizeof(T)*M)); // for next
         }
 
         // For concentration computation
-        gpu_error_check(cudaMalloc((void**)&d_q_block_v[0], sizeof(CuDeviceData<T>)*M)); // for prev
-        gpu_error_check(cudaMalloc((void**)&d_q_block_v[1], sizeof(CuDeviceData<T>)*M)); // for next
-        gpu_error_check(cudaMalloc((void**)&d_q_block_u[0], sizeof(CuDeviceData<T>)*M)); // for prev
-        gpu_error_check(cudaMalloc((void**)&d_q_block_u[1], sizeof(CuDeviceData<T>)*M)); // for next
-        gpu_error_check(cudaMalloc((void**)&d_phi,          sizeof(CuDeviceData<T>)*M));
+        gpu_error_check(cudaMalloc((void**)&d_q_block_v[0], sizeof(T)*M)); // for prev
+        gpu_error_check(cudaMalloc((void**)&d_q_block_v[1], sizeof(T)*M)); // for next
+        gpu_error_check(cudaMalloc((void**)&d_q_block_u[0], sizeof(T)*M)); // for prev
+        gpu_error_check(cudaMalloc((void**)&d_q_block_u[1], sizeof(T)*M)); // for next
+        gpu_error_check(cudaMalloc((void**)&d_phi,          sizeof(T)*M));
 
         // Allocate memory for stress calculation: compute_stress()
         for(int i=0; i<n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0], sizeof(CuDeviceData<T>)*2*M)); // prev
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1], sizeof(CuDeviceData<T>)*2*M)); // next
+            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0], sizeof(T)*2*M)); // prev
+            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1], sizeof(T)*2*M)); // next
         }
 
         // Copy mask to d_q_mask
@@ -311,11 +311,11 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
-                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], q_init[g], sizeof(CuDeviceData<T>)*M, cudaMemcpyInputToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice));
                     }
                     else
                     {
-                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_unity, sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_unity, sizeof(T)*M, cudaMemcpyDeviceToDevice));
                     }
 
                     #ifndef NDEBUG
@@ -329,7 +329,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                     if (key[0] == '[')
                     {
                         // Initialize to zero
-                        gpu_error_check(cudaMemset(d_q_one[STREAM][0], 0, sizeof(CuDeviceData<T>)*M));
+                        gpu_error_check(cudaMemset(d_q_one[STREAM][0], 0, sizeof(T)*M));
 
                         int prev, next;
                         prev = 0;
@@ -339,7 +339,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
                         int sub_n_repeated;
-                        gpu_error_check(cudaMemcpy(d_propagator_sub_dep[STREAM][prev], propagator[sub_dep][sub_n_segment], sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_propagator_sub_dep[STREAM][prev], propagator[sub_dep][sub_n_segment], sizeof(T)*M, cudaMemcpyHostToDevice));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -362,7 +362,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 int sub_n_segment_next   = std::get<1>(deps[d+1]);
 
                                 gpu_error_check(cudaMemcpyAsync(d_propagator_sub_dep[STREAM][next],
-                                                propagator[sub_dep_next][sub_n_segment_next], sizeof(CuDeviceData<T>)*M,
+                                                propagator[sub_dep_next][sub_n_segment_next], sizeof(T)*M,
                                                 cudaMemcpyHostToDevice, streams[STREAM][1]));
                             }
 
@@ -382,7 +382,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                     else
                     {
                         // Initialize to one
-                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_unity, sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToDevice));
+                        gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_unity, sizeof(T)*M, cudaMemcpyDeviceToDevice));
 
                         int prev, next;
                         prev = 0;
@@ -391,7 +391,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         // Copy memory from host to device
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
-                        gpu_error_check(cudaMemcpy(d_propagator_sub_dep[STREAM][prev], propagator[sub_dep][sub_n_segment], sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(d_propagator_sub_dep[STREAM][prev], propagator[sub_dep][sub_n_segment], sizeof(T)*M, cudaMemcpyHostToDevice));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -413,7 +413,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 int sub_n_segment_next   = std::get<1>(deps[d+1]);
 
                                 gpu_error_check(cudaMemcpyAsync(d_propagator_sub_dep[STREAM][next],
-                                                propagator[sub_dep_next][sub_n_segment_next], sizeof(CuDeviceData<T>)*M,
+                                                propagator[sub_dep_next][sub_n_segment_next], sizeof(T)*M,
                                                 cudaMemcpyHostToDevice, streams[STREAM][1]));
                             }
 
@@ -440,11 +440,11 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 // Copy data between device and host
                 if (n_segment_from == 0)
                 {
-                    gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[STREAM][0], sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(_propagator[0], d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 }
                 else
                 {
-                    gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], _propagator[n_segment_from], sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], _propagator[n_segment_from], sizeof(T)*M, cudaMemcpyHostToDevice));
                 }
 
                 int prev, next;
@@ -480,7 +480,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         gpu_error_check(cudaMemcpyAsync(
                             _propagator[n],
                             d_q_one[STREAM][prev],
-                            sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToHost, streams[STREAM][1]));
+                            sizeof(T)*M, cudaMemcpyDeviceToHost, streams[STREAM][1]));
                         gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                     }
 
@@ -499,7 +499,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 gpu_error_check(cudaMemcpyAsync(
                     _propagator[n_segment_to],
                     d_q_one[STREAM][prev],
-                    sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToHost, streams[STREAM][1]));
+                    sizeof(T)*M, cudaMemcpyDeviceToHost, streams[STREAM][1]));
 
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][0]));
                 gpu_error_check(cudaStreamSynchronize(streams[STREAM][1]));
@@ -599,7 +599,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
             }
 
             ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, _d_exp_dw, _d_exp_dw, norm, M);
-            gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToHost));
+            gpu_error_check(cudaMemcpy(phi_solvent[s], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }
     catch(std::exception& exc)
@@ -623,11 +623,11 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         next = 1;
 
         // Copy propagators from host to device
-        gpu_error_check(cudaMemcpy(d_q_block_v[prev], q_1[N_LEFT], sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_q_block_u[prev], q_2[0],      sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_q_block_v[prev], q_1[N_LEFT], sizeof(T)*M, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_q_block_u[prev], q_2[0],      sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Initialize to zero
-        gpu_error_check(cudaMemset(d_phi, 0, sizeof(CuDeviceData<T>)*M));
+        gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
  
         for(int n=0; n<=N_RIGHT; n++)
         {
@@ -635,9 +635,9 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             if (n+1 <= N_RIGHT)
             {
                 gpu_error_check(cudaMemcpyAsync(d_q_block_v[next], q_1[N_LEFT-(n+1)],
-                    sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice, streams[0][1]));
+                    sizeof(T)*M, cudaMemcpyHostToDevice, streams[0][1]));
                 gpu_error_check(cudaMemcpyAsync(d_q_block_u[next], q_2[n+1],
-                    sizeof(CuDeviceData<T>)*M, cudaMemcpyHostToDevice, streams[0][1]));
+                    sizeof(T)*M, cudaMemcpyHostToDevice, streams[0][1]));
             }
 
             CuDeviceData<T> norm;
@@ -652,7 +652,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             cudaDeviceSynchronize();
         }
         // Copy propagators from device to host
-        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(CuDeviceData<T>)*M, cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -913,9 +913,9 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             gpu_error_check(cudaEventCreate(&memcpy_done));
 
             gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][0], q_1[N_LEFT],
-                    sizeof(CuDeviceData<T>)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
+                    sizeof(T)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
             gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][prev][M], q_2[0],
-                    sizeof(CuDeviceData<T>)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
+                    sizeof(T)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
 
             gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
             gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
@@ -926,9 +926,9 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                 if (n+1 <= N_RIGHT)
                 {
                     gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][0], q_1[N_LEFT-n-1],
-                            sizeof(CuDeviceData<T>)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
+                            sizeof(T)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
                     gpu_error_check(cudaMemcpyAsync(&d_q_pair[STREAM][next][M], q_2[n+1],
-                            sizeof(CuDeviceData<T>)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
+                            sizeof(T)*M,cudaMemcpyHostToDevice, streams[STREAM][1]));
                     gpu_error_check(cudaEventRecord(memcpy_done, streams[STREAM][1]));
                 }
 

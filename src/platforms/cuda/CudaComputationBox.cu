@@ -26,11 +26,11 @@ void CudaComputationBox<T>::initialize()
     gpu_error_check(cudaMemcpy(d_dv, dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
-    gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(CuDeviceData<T>)*this->total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(T)*this->total_grid));
 
     // Allocate memory for cub reduction sum
-    gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(CuDeviceData<T>)*this->total_grid));
-    gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(CuDeviceData<T>)));
+    gpu_error_check(cudaMalloc((void**)&d_sum,      sizeof(T)*this->total_grid));
+    gpu_error_check(cudaMalloc((void**)&d_sum_out,  sizeof(T)));
 
     // Determine temporary storage size for cub reduction
     if constexpr (std::is_same<T, double>::value) 
@@ -160,7 +160,7 @@ void CudaComputationBox<T>::zero_mean_device(CuDeviceData<T>* d_g)
     {
         CuDeviceData<T> zero = {0.0, 0.0};
         cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->total_grid, ComplexSumOp(), zero);
-        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(ftsComplex), cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(&sum, d_sum_out, sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost));
         sum.x = -sum.x/this->volume;
         sum.y = -sum.y/this->volume;
     }

@@ -78,7 +78,7 @@ private:
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, T *d_exp_dw, const int N_RIGHT, const int N_LEFT, const T NORM);
+    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, CuDeviceData<T> *d_exp_dw, const int N_RIGHT, const int N_LEFT, const T NORM);
 
 public:
     CudaComputationReduceMemoryDiscrete(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer *propagator_computation_optimizer);

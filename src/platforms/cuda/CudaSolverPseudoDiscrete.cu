@@ -37,7 +37,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
 
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw   [monomer_type], sizeof(CuDeviceData<T>)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw   [monomer_type], sizeof(T)*M));
         }
 
         // Create FFT plan
@@ -88,8 +88,8 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
         {  
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(ftsComplex)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(ftsComplex)*2*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
         }
 
         // Allocate memory for stress calculation: compute_stress()
@@ -225,12 +225,12 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
             const T *w = item.second;
 
             // Copy field configurations from host to device
-            gpu_error_check(cudaMemcpyAsync(
+            gpu_error_check(cudaMemcpy(
                 this->d_exp_dw[monomer_type], w,      
-                sizeof(T)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(T)*M, cudaMemcpyInputToDevice));
 
             // Compute exp_dw and exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS>>>
                 (this->d_exp_dw[monomer_type],
                  this->d_exp_dw[monomer_type], 1.0, -1.0*ds, M);
 
