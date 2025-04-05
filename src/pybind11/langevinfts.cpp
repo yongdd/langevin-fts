@@ -375,9 +375,9 @@ PYBIND11_MODULE(langevinfts, m)
         .def("get_stress_gce", &PropagatorComputation<double>::get_stress_gce)
         .def("check_total_partition", &PropagatorComputation<double>::check_total_partition);
 
-    py::class_<AndersonMixing>(m, "AndersonMixing")
-        .def("reset_count", &AndersonMixing::reset_count)
-        .def("calculate_new_fields", [](AndersonMixing &obj,
+    py::class_<AndersonMixing<double>>(m, "AndersonMixing")
+        .def("reset_count", &AndersonMixing<double>::reset_count)
+        .def("calculate_new_fields", [](AndersonMixing<double> &obj,
                 py::array_t<double> w_current, py::array_t<double> w_deriv,
                 double old_error_level, double error_level)
         {

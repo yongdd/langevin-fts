@@ -303,16 +303,18 @@ void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, co
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpyAsync(
                 d_exp_dw     [monomer_type], w,      
-                sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(double)*M, cudaMemcpyInputToDevice));
             gpu_error_check(cudaMemcpyAsync(
                 d_exp_dw_half[monomer_type], w,
-                sizeof(double)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(double)*M, cudaMemcpyInputToDevice));
 
             // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
-                (d_exp_dw[monomer_type],      d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
-                (d_exp_dw_half[monomer_type], d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
+            ker_exp<<<N_BLOCKS, N_THREADS>>>
+                ((double*) d_exp_dw[monomer_type],
+                 (double*) d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
+            ker_exp<<<N_BLOCKS, N_THREADS>>>
+                ((double*) d_exp_dw_half[monomer_type],
+                 (double*) d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
 
             gpu_error_check(cudaDeviceSynchronize());
         }

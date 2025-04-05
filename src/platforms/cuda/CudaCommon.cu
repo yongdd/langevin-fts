@@ -155,8 +155,11 @@ __global__ void ker_linear_scaling(cuDoubleComplex* dst, const cuDoubleComplex* 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = a.x * src[i].x - a.y * src[i].y + b;
-        dst[i].y = a.x * src[i].y + a.y * src[i].x;
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a.x * src[i].x - a.y * src[i].y + b;
+        temp_dst.y = a.x * src[i].y + a.y * src[i].x;
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -171,14 +174,16 @@ __global__ void ker_exp(double* dst, const double* src, double a, double exp_b, 
     }
 }
 
-
 __global__ void ker_exp(cuDoubleComplex* dst, const cuDoubleComplex* src, double a, double exp_b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = a * exp(exp_b * src[i].x) * cos(exp_b * src[i].y);
-        dst[i].y = a * exp(exp_b * src[i].x) * sin(exp_b * src[i].y);
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a * exp(exp_b * src[i].x) * cos(exp_b * src[i].y);
+        temp_dst.y = a * exp(exp_b * src[i].x) * sin(exp_b * src[i].y);
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -209,8 +214,11 @@ __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, con
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y);
-        dst[i].y = a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x);
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y);
+        temp_dst.y = a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x);
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -278,9 +286,12 @@ __global__ void ker_divide(cuDoubleComplex* dst, const cuDoubleComplex* src1, co
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
         double denom = src2[i].x * src2[i].x + src2[i].y * src2[i].y;
-        dst[i].x = a * (src1[i].x * src2[i].x + src1[i].y * src2[i].y) / denom;
-        dst[i].y = a * (src1[i].y * src2[i].x - src1[i].x * src2[i].y) / denom;
+        temp_dst.x = a * (src1[i].x * src2[i].x + src1[i].y * src2[i].y) / denom;
+        temp_dst.y = a * (src1[i].y * src2[i].x - src1[i].x * src2[i].y) / denom;
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -300,8 +311,12 @@ __global__ void ker_add_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1,
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x += a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y);
-        dst[i].y += a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x);
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a * (src1[i].x * src2[i].x - src1[i].y * src2[i].y);
+        temp_dst.y = a * (src1[i].x * src2[i].y + src1[i].y * src2[i].x);
+        dst[i].x += temp_dst.x;
+        dst[i].y += temp_dst.y;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -355,8 +370,11 @@ __global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDo
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = a.x * src1[i].x - a.y * src1[i].y + b * src2[i].x;
-        dst[i].y = a.x * src1[i].y + a.y * src1[i].x + b * src2[i].y;
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a.x * src1[i].x - a.y * src1[i].y + b * src2[i].x;
+        temp_dst.y = a.x * src1[i].y + a.y * src1[i].x + b * src2[i].y;
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -420,8 +438,11 @@ __global__ void ker_multi_complex_conjugate(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst[i].x = src1[i].x * src2[i].x + src1[i].y * src2[i].y;
-        dst[i].y = src1[i].x * src2[i].y - src1[i].y * src2[i].x;
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = src1[i].x * src2[i].x + src1[i].y * src2[i].y;
+        temp_dst.y = src1[i].x * src2[i].y - src1[i].y * src2[i].x;
+        dst[i] = temp_dst;
         i += blockDim.x * gridDim.x;
     }
 }
@@ -448,11 +469,17 @@ __global__ void ker_multi_exp_dw_two(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst1[i].x = a * (src1[i].x * exp_dw1[i].x - src1[i].y * exp_dw1[i].y);
-        dst1[i].y = a * (src1[i].x * exp_dw1[i].y + src1[i].y * exp_dw1[i].x);
+        // Use temporary variables to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst1, temp_dst2;
 
-        dst2[i].x = a * (src2[i].x * exp_dw2[i].x - src2[i].y * exp_dw2[i].y);
-        dst2[i].y = a * (src2[i].x * exp_dw2[i].y + src2[i].y * exp_dw2[i].x);
+        temp_dst1.x = a * (src1[i].x * exp_dw1[i].x - src1[i].y * exp_dw1[i].y);
+        temp_dst1.y = a * (src1[i].x * exp_dw1[i].y + src1[i].y * exp_dw1[i].x);
+
+        temp_dst2.x = a * (src2[i].x * exp_dw2[i].x - src2[i].y * exp_dw2[i].y);
+        temp_dst2.y = a * (src2[i].x * exp_dw2[i].y + src2[i].y * exp_dw2[i].x);
+
+        dst1[i] = temp_dst1;
+        dst2[i] = temp_dst2;
 
         i += blockDim.x * gridDim.x;
     }
@@ -486,17 +513,25 @@ __global__ void ker_multi_exp_dw_four(
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)
     {
-        dst1[i].x = a * (src1[i].x * exp_dw1[i].x - src1[i].y * exp_dw1[i].y);
-        dst1[i].y = a * (src1[i].x * exp_dw1[i].y + src1[i].y * exp_dw1[i].x);
+        // Use temporary variables to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst1, temp_dst2, temp_dst3, temp_dst4;
 
-        dst2[i].x = a * (src2[i].x * exp_dw2[i].x - src2[i].y * exp_dw2[i].y);
-        dst2[i].y = a * (src2[i].x * exp_dw2[i].y + src2[i].y * exp_dw2[i].x);
+        temp_dst1.x = a * (src1[i].x * exp_dw1[i].x - src1[i].y * exp_dw1[i].y);
+        temp_dst1.y = a * (src1[i].x * exp_dw1[i].y + src1[i].y * exp_dw1[i].x);
 
-        dst3[i].x = a * (src3[i].x * exp_dw3[i].x - src3[i].y * exp_dw3[i].y);
-        dst3[i].y = a * (src3[i].x * exp_dw3[i].y + src3[i].y * exp_dw3[i].x);
+        temp_dst2.x = a * (src2[i].x * exp_dw2[i].x - src2[i].y * exp_dw2[i].y);
+        temp_dst2.y = a * (src2[i].x * exp_dw2[i].y + src2[i].y * exp_dw2[i].x);
 
-        dst4[i].x = a * (src4[i].x * exp_dw4[i].x - src4[i].y * exp_dw4[i].y);
-        dst4[i].y = a * (src4[i].x * exp_dw4[i].y + src4[i].y * exp_dw4[i].x);
+        temp_dst3.x = a * (src3[i].x * exp_dw3[i].x - src3[i].y * exp_dw3[i].y);
+        temp_dst3.y = a * (src3[i].x * exp_dw3[i].y + src3[i].y * exp_dw3[i].x);
+
+        temp_dst4.x = a * (src4[i].x * exp_dw4[i].x - src4[i].y * exp_dw4[i].y);
+        temp_dst4.y = a * (src4[i].x * exp_dw4[i].y + src4[i].y * exp_dw4[i].x);
+
+        dst1[i] = temp_dst1;
+        dst2[i] = temp_dst2;
+        dst3[i] = temp_dst3;
+        dst4[i] = temp_dst4;
 
         i += blockDim.x * gridDim.x;
     }

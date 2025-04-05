@@ -365,7 +365,7 @@ void CpuComputationContinuous<T>::compute_propagators(
             int n_aggregated         = std::get<3>(segment_info);
 
             this->single_polymer_partitions[p]= this->cb->inner_product(
-                propagator_left, propagator_right)/((double)n_aggregated)/this->cb->get_volume();
+                propagator_left, propagator_right)/(n_aggregated*this->cb->get_volume());
         }
 
     }
@@ -423,7 +423,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
 
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-            T norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()/this->single_polymer_partitions[p]*((double)n_repeated);
+            T norm = (this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }

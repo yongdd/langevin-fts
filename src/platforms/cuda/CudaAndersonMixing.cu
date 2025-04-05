@@ -39,11 +39,11 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
         gpu_error_check(cudaStreamCreate(&streams[1])); // for memcpy
 
         // Fields arrays
-        gpu_error_check(cudaMalloc((void**)&d_w_current, sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(CuDeviceData<T>)));
+        gpu_error_check(cudaMalloc((void**)&d_w_current, sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_new,     sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_deriv,   sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_sum,       sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_sum_out,   sizeof(T)));
 
         // Allocate memory for cub reduction sum
         d_temp_storage = nullptr; 
@@ -188,7 +188,7 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             // Calculate the new field
             d_w_hist1 = d_cb_w_hist->get_array(0);
             d_w_deriv_hist1 = d_cb_w_deriv_hist->get_array(0);
-            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1, sizeof(CuDeviceData<T>)*this->n_var,cudaMemcpyDeviceToDevice));
+            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1, sizeof(T)*this->n_var,cudaMemcpyDeviceToDevice));
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
             for(int i=0; i<this->n_anderson; i++)
             {

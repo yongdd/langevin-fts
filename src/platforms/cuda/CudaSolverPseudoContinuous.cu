@@ -18,7 +18,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
         this->n_streams = n_streams;
         
         const int M = cb->get_total_grid(); 
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());;
 
         // Copy streams
         for(int i=0; i<n_streams; i++)
@@ -38,8 +38,8 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
 
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond       [monomer_type], sizeof(double)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half  [monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(CuDeviceData<T>)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(CuDeviceData<T>)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(T)*M));
         }
 
         // Create FFT plan
@@ -90,12 +90,12 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
         {  
-            gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(CuDeviceData<T>)*M));
-            gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(CuDeviceData<T>)*M));
-            gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(CuDeviceData<T>)*2*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(T)*2*M));
             
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[i], sizeof(ftsComplex)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(ftsComplex)*2*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
         }
     
         // Allocate memory for stress calculation: compute_stress()
@@ -173,7 +173,7 @@ void CudaSolverPseudoContinuous<T>::update_laplacian_operator()
 {
     try{
         // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());;
         double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
 
         for(const auto& item: this->molecules->get_bond_lengths())
@@ -239,15 +239,15 @@ void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpyAsync(
                 this->d_exp_dw     [monomer_type], w,      
-                sizeof(T)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(T)*M, cudaMemcpyInputToDevice));
             gpu_error_check(cudaMemcpyAsync(
                 this->d_exp_dw_half[monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice, streams[0][1]));
+                sizeof(T)*M, cudaMemcpyInputToDevice));
 
             // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS>>>
                 (this->d_exp_dw[monomer_type],      this->d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][1]>>>
+            ker_exp<<<N_BLOCKS, N_THREADS>>>
                 (this->d_exp_dw_half[monomer_type], this->d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
 
             gpu_error_check(cudaDeviceSynchronize());
@@ -271,7 +271,7 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());;
 
         CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[monomer_type];
         CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[monomer_type];
@@ -352,7 +352,7 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
 
         const int DIM = this->cb->get_dim();
         // const int M   = total_grid;
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<double>(cb->get_nx());;
+        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());;
 
         auto bond_lengths = this->molecules->get_bond_lengths();
         double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];

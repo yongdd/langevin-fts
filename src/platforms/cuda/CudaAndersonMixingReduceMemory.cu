@@ -32,17 +32,17 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
         this->w_deriv_dots = new T[this->max_hist+1];
 
         // Temporary fields arrays
-        gpu_error_check(cudaMalloc((void**)&d_w_hist1,  sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_hist2,  sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_deriv_hist1,  sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_deriv_hist2,  sizeof(CuDeviceData<T>)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_hist1,  sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_hist2,  sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_deriv_hist1,  sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_deriv_hist2,  sizeof(T)*this->n_var));
 
-        gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(CuDeviceData<T>)*this->n_var));
-        gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(CuDeviceData<T>)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_new,   sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_w_deriv, sizeof(T)*this->n_var));
+        gpu_error_check(cudaMalloc((void**)&d_sum,     sizeof(T)*this->n_var));
 
         // Allocate memory for cub reduction sum
-        gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(CuDeviceData<T>)));
+        gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(T)));
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
         gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
@@ -177,7 +177,7 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             gpu_error_check(cudaMemcpy(d_w_hist1,       pinned_cb_w_hist->get_array(0),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_w_deriv_hist1, pinned_cb_w_deriv_hist->get_array(0), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
 
-            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(CuDeviceData<T>)*this->n_var, cudaMemcpyDeviceToDevice));
+            gpu_error_check(cudaMemcpy(d_w_new, d_w_hist1,  sizeof(T)*this->n_var, cudaMemcpyDeviceToDevice));
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, 1.0, d_w_hist1, 1.0, d_w_deriv_hist1, this->n_var);
             for(int i=0; i<this->n_anderson; i++)
             {
