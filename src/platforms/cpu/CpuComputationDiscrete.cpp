@@ -79,6 +79,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
                 propagator_finished[key][i] = false;
             for (int n: item.second.junction_ends)
                 propagator_half_steps_finished[key][n] = false;
+            propagator_half_steps_finished[key][0] = false;
             #endif
         }
 
@@ -325,7 +326,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 if (propagator_half_steps.find(sub_dep) == propagator_half_steps.end())
                                     std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                                 if (!propagator_half_steps_finished[sub_dep][0])
-                                    std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(0) + "' is not prepared." << std::endl;
+                                    std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(0) + "+1/2' is not prepared." << std::endl;
                                 #endif
 
                                 _propagator_sub_dep = propagator_half_steps[sub_dep];
@@ -464,8 +465,8 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     if (propagator_half_steps[key][1] != nullptr)
                     {
                         #ifndef NDEBUG
-                        if (propagator_finished[key][1])
-                            std::cout << "already finished: " + key + ", " + std::to_string(1) << std::endl;
+                        if (propagator_half_steps_finished[key][1])
+                            std::cout << "already half_step finished: " + key + ", " + std::to_string(1) << std::endl;
                         #endif
 
                         #ifndef NDEBUG
@@ -991,8 +992,6 @@ void CpuComputationDiscrete<T>::compute_stress()
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
-            Polymer& pc = this->molecules->get_polymer(p);
-
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }

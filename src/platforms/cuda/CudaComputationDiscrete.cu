@@ -87,6 +87,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
                 propagator_finished[key][i] = false;
             for (int n: item.second.junction_ends)
                 propagator_half_steps_finished[key][n] = false;
+            propagator_half_steps_finished[key][0] = false;
             #endif
         }
 
