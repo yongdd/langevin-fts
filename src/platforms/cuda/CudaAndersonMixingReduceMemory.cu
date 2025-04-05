@@ -43,7 +43,10 @@ CudaAndersonMixingReduceMemory<T>::CudaAndersonMixingReduceMemory(
 
         // Allocate memory for cub reduction sum
         gpu_error_check(cudaMalloc((void**)&d_sum_out, sizeof(T)));
+        if constexpr (std::is_same<T, double>::value)
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+            else
+        cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
         gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
         // Reset_count
@@ -132,7 +135,10 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             {
                 gpu_error_check(cudaMemcpy(d_w_hist1, pinned_cb_w_deriv_hist->get_array(i), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
                 ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_w_hist1, 1.0, this->n_var);
-                cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
                 gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
             //print_array(this->max_hist+1, w_deriv_dots);
@@ -183,8 +189,16 @@ void CudaAndersonMixingReduceMemory<T>::calculate_new_fields(
             {
                 gpu_error_check(cudaMemcpy(d_w_hist2,       pinned_cb_w_hist->get_array(i+1),       sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
                 gpu_error_check(cudaMemcpy(d_w_deriv_hist2, pinned_cb_w_deriv_hist->get_array(i+1), sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
-                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
-                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                if constexpr (std::is_same<T, double>::value)
+                {
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                }
+                else
+                {
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_hist2,       stdToCuDoubleComplex(-a_n[i]), d_w_hist1,       this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv_hist1, this->n_var);
+                }
             }
             gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(T)*this->n_var,cudaMemcpyDeviceToHost));
         }
@@ -206,4 +220,4 @@ void CudaAndersonMixingReduceMemory<T>::print_array(int n, T *a)
 
 // Explicit template instantiation
 template class CudaAndersonMixingReduceMemory<double>;
-// template class CudaAndersonMixingReduceMemory<std::complex<double>>;
+template class CudaAndersonMixingReduceMemory<std::complex<double>>;

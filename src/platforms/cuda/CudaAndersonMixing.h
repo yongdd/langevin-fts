@@ -30,8 +30,8 @@ private:
     CuDeviceData<T> *d_sum;
 
     // Variables for cub reduction sum
-    size_t temp_storage_bytes;
-    CuDeviceData<T> *d_temp_storage;
+    size_t temp_storage_bytes = 0;
+    CuDeviceData<T> *d_temp_storage = nullptr;
     CuDeviceData<T> *d_sum_out;
 
     void print_array(int n, T *a);

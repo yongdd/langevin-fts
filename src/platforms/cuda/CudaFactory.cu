@@ -153,10 +153,6 @@ void CudaFactory<T>::display_info()
     printf("================================================================\n");
 }
 
-// Explicit template instantiation for double and std::complex<double>
-
-// template class CudaFactory<float>;
-// template class CudaFactory<std::complex<float>>;
-
+// Explicit template instantiation
 template class CudaFactory<double>;
-// template class CudaFactory<std::complex<double>>;
+template class CudaFactory<std::complex<double>>;

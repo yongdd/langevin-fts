@@ -46,8 +46,8 @@ AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
         return new MklFactory<std::complex<double>>(reduce_memory_usage);
 #endif
 #ifdef USE_CUDA
-    // if (platform == "cuda")
-    //     return new CudaFactory<std::complex<double>>(reduce_memory_usage);
+    if (platform == "cuda")
+        return new CudaFactory<std::complex<double>>(reduce_memory_usage);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return NULL;
