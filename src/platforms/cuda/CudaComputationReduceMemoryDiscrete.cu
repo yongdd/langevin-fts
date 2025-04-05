@@ -824,7 +824,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
 
-            this->single_polymer_partitions[p] = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
+            this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -895,7 +895,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_solvent_partitions[s] = ((CudaComputationBox<T> *) this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
 
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
@@ -1204,7 +1204,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             T **q_1 = propagator[key_left];      // Propagator q
             T **q_2 = propagator[key_right];     // Propagator q^dagger
 
-            std::array<T,3> _block_dq_dl = {0.0, 0.0, 0.0};
+            std::array<T,3> _block_dq_dl;
+            for(int i=0; i<3; i++)
+                _block_dq_dl[i] = 0.0;
 
             // Check block_stress_computation_plan
             const auto& _block_stress_compuation_key = block_stress_computation_plan[key];
@@ -1219,9 +1221,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             T *propagator_left;
             T *propagator_right;
 
-            double *d_segment_stress;
-            double segment_stress[DIM];
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(double)*3));
+            CuDeviceData<T> *d_segment_stress;
+            T segment_stress[DIM];
+            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
 
             int prev, next;
             prev = 0;
@@ -1278,9 +1280,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
 
                 if (propagator_left != nullptr)
                 {
-                    gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(double)*DIM, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
                     for(int d=0; d<DIM; d++)
-                        _block_dq_dl[d] += segment_stress[d]*n_repeated;
+                        _block_dq_dl[d] += segment_stress[d]*static_cast<double>(n_repeated);
                 }
                 std::swap(prev, next);
             }
@@ -1390,7 +1392,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
             gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator[key_left][n_segment_left-n+1], sizeof(T)*M, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator[key_right][n], sizeof(T)*M, cudaMemcpyHostToDevice));
 
-            T total_partition = ((CudaComputationBox<T> *) this->cb)->inner_product_inverse_weight_device(
+            T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
                 _d_exp_dw)*(n_repeated*this->cb->get_volume());

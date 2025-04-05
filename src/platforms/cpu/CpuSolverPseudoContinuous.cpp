@@ -178,7 +178,7 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
     }
 }
 template <typename T>
-std::vector<double> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
+std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
 {
     if constexpr (std::is_same<T, std::complex<double>>::value)
@@ -191,7 +191,7 @@ std::vector<double> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
     double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
     double coeff;
     
-    std::vector<double> stress(DIM);
+    std::vector<T> stress(DIM);
     std::complex<double> qk_1[M_COMPLEX];
     std::complex<double> qk_2[M_COMPLEX];
 

@@ -410,7 +410,7 @@ void CudaComputationContinuous<T>::compute_propagators(
             CuDeviceData<T> *d_propagator_right = std::get<2>(segment_info);
             int n_aggregated      = std::get<3>(segment_info);
 
-            this->single_polymer_partitions[p] = ((CudaComputationBox<T> *) this->cb)->inner_product_device(d_propagator_left, d_propagator_right)
+            this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(d_propagator_left, d_propagator_right)
                 /(n_aggregated*this->cb->get_volume());
         }
     }
@@ -483,7 +483,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
-            this->single_solvent_partitions[s] = ((CudaComputationBox<T> *) this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
+            this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
 
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
@@ -743,7 +743,7 @@ void CudaComputationContinuous<T>::compute_stress()
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl[n_streams];
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl[n_streams];
 
         // Reset stress map
         for(const auto& item: d_phi_block)
@@ -784,11 +784,13 @@ void CudaComputationContinuous<T>::compute_stress()
             CuDeviceData<T>** d_q_1 = d_propagator[key_left];     // dependency v
             CuDeviceData<T>** d_q_2 = d_propagator[key_right];    // dependency u
 
-            std::array<double,3> _block_dq_dl = {0.0, 0.0, 0.0};
+            std::array<T,3> _block_dq_dl;
+            for(int i=0; i<3; i++)
+                _block_dq_dl[i] = 0.0;
             
-            double *d_segment_stress;
-            double segment_stress[DIM];
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(double)*3));
+            CuDeviceData<T> *d_segment_stress;
+            T segment_stress[DIM];
+            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
 
             int prev, next;
             prev = 0;
@@ -830,9 +832,9 @@ void CudaComputationContinuous<T>::compute_stress()
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
-                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(double)*DIM, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
                 for(int d=0; d<DIM; d++)
-                    _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
+                    _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
 
                 std::swap(prev, next);
             }
@@ -934,7 +936,7 @@ bool CudaComputationContinuous<T>::check_total_partition()
 
         for(int n=0;n<=n_segment_right;n++)
         {
-            T total_partition = ((CudaComputationBox<T> *) this->cb)->inner_product_device(
+            T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(
                 d_propagator[key_left][n_segment_left-n],
                 d_propagator[key_right][n]);
 

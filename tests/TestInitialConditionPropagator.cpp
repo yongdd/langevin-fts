@@ -119,12 +119,12 @@ int main()
                         }
                         if (chain_model == "Continuous")
                         {
-                            x_square *= ((double) N)/((double) n);
+                            x_square *= static_cast<double>(N)/static_cast<double>(n);
                             std::cout << "n, <x^2>N/n: " << n << ", " << x_square << std::endl;
                         }
                         else if (chain_model == "Discrete")
                         {
-                            x_square *= ((double) N)/((double) n-1);
+                            x_square *= static_cast<double>(N)/static_cast<double>(n-1);
                             std::cout << "n, <x^2>N/(n-1): " << n << ", " << x_square << std::endl;
                         }
                         if ( std::abs(x_square-1.0) > 1e-2)

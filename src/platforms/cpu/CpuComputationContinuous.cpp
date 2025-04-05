@@ -259,7 +259,7 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                             T **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*((double)sub_n_repeated);
+                                _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*static_cast<double>(sub_n_repeated);
                         }
                         #ifndef NDEBUG
                         propagator_finished[key][0] = true;
@@ -668,7 +668,7 @@ void CpuComputationContinuous<T>::compute_stress()
         const int DIM  = this->cb->get_dim();
         const int M    = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl;
 
         // Reset stress map
         for(const auto& item: phi_block)
@@ -701,15 +701,15 @@ void CpuComputationContinuous<T>::compute_stress()
             T **q_2 = propagator[key_right];    // dependency u
 
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N_RIGHT);
-            std::array<double,3> _block_dq_dl = block_dq_dl[key];
+            std::array<T,3> _block_dq_dl = block_dq_dl[key];
 
             // Compute
             for(int n=0; n<=N_RIGHT; n++)
             {
-                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress(
+                std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_1[N_LEFT-n], q_2[n], monomer_type, false);
                 for(int d=0; d<DIM; d++)
-                    _block_dq_dl[d] += segment_stress[d]*s_coeff[n]*n_repeated;
+                    _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
             }
             block_dq_dl[key] = _block_dq_dl;
         }
@@ -799,7 +799,7 @@ bool CpuComputationContinuous<T>::check_total_partition()
         {
             T total_partition = this->cb->inner_product(
                 propagator[key_left][n_segment_left-n],
-                propagator[key_right][n])*((double)n_repeated)/this->cb->get_volume();
+                propagator[key_right][n])*(n_repeated/this->cb->get_volume());
 
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);

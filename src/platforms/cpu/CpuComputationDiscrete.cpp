@@ -344,7 +344,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 _propagator_sub_dep = propagator[sub_dep];
                             }
                             for(int i=0; i<M; i++)
-                                _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i] * ((double) sub_n_repeated);
+                                _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i] * static_cast<double>(sub_n_repeated);
                         }
 
                         #ifndef NDEBUG
@@ -879,7 +879,7 @@ void CpuComputationDiscrete<T>::compute_stress()
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<double,3>> block_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl;
 
         // Reset stress map
         for(const auto& item: phi_block)
@@ -918,7 +918,7 @@ void CpuComputationDiscrete<T>::compute_stress()
             // std::cout << "key_left, key_right, N_LEFT, N: "
             //      << key_left << ", " << key_right << ", " << N_LEFT << ", " << N << std::endl;
 
-            std::array<double,3> _block_dq_dl = block_dq_dl[key];
+            std::array<T,3> _block_dq_dl = block_dq_dl[key];
 
             // Compute stress at each chain bond
             for(int n=0; n<=N_RIGHT; n++)
@@ -970,10 +970,10 @@ void CpuComputationDiscrete<T>::compute_stress()
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
                 // Compute 
-                std::vector<double> segment_stress = propagator_solver->compute_single_segment_stress(
+                std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
                 for(int d=0; d<DIM; d++)
-                    _block_dq_dl[d] += segment_stress[d]*n_repeated;
+                    _block_dq_dl[d] += segment_stress[d]*((T)n_repeated);
 
                 // std::cout << "n: " << n << ", " << is_half_bond_length << ", " << segment_stress[0] << std::endl;
                 // std::cout << "n: " << n << ", " << block_dq_dl[key][0] << std::endl;
@@ -1069,7 +1069,7 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         {
             T total_partition = this->cb->inner_product_inverse_weight(
                 propagator[key_left][n_segment_left-n+1],
-                propagator[key_right][n], _exp_dw)*((double)n_repeated)/this->cb->get_volume();
+                propagator[key_right][n], _exp_dw)*(n_repeated/this->cb->get_volume());
             
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);
