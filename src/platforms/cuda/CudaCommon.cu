@@ -400,6 +400,20 @@ __global__ void ker_add_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleC
     }
 }
 
+__global__ void ker_add_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDoubleComplex* src1, cuDoubleComplex b, const cuDoubleComplex* src2, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        // Use a temporary variable to avoid overwriting when dst and src share the same address
+        cuDoubleComplex temp_dst;
+        temp_dst.x = a.x * src1[i].x - a.y * src1[i].y + b.x * src2[i].x - b.y * src2[i].y;
+        temp_dst.y = a.x * src1[i].y + a.y * src1[i].x + b.x * src2[i].y + b.y * src2[i].x;
+        dst[i] = temp_dst;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_multi_complex_real(cuDoubleComplex* dst, const double* src, double a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

@@ -48,7 +48,10 @@ CudaAndersonMixing<T>::CudaAndersonMixing(
         // Allocate memory for cub reduction sum
         d_temp_storage = nullptr; 
         temp_storage_bytes = 0;
-        cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var, streams[0]);
+        if constexpr (std::is_same<T, double>::value)
+            cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+        else
+            cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
         gpu_error_check(cudaMalloc(&d_temp_storage, temp_storage_bytes));
 
         // Reset_count
@@ -143,7 +146,10 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             for(int i=0; i<=this->n_anderson; i++)
             {
                 ker_multi<<<N_BLOCKS, N_THREADS>>>(d_sum, d_w_deriv, d_cb_w_deriv_hist->get_array(i), 1.0, this->n_var);
-                cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_sum, d_sum_out, this->n_var, ComplexSumOp(), CuDeviceData<T>{0.0,0.0});
                 gpu_error_check(cudaMemcpy(&w_deriv_dots[i], d_sum_out, sizeof(T),cudaMemcpyDeviceToHost));
             }
 
@@ -194,8 +200,16 @@ void CudaAndersonMixing<T>::calculate_new_fields(
             {
                 d_w_hist2 = d_cb_w_hist->get_array(i+1);
                 d_w_deriv_hist2 = d_cb_w_deriv_hist->get_array(i+1);
-                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
-                ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                if constexpr (std::is_same<T, double>::value)
+                {
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_hist2,       -a_n[i], d_w_hist1,       this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, a_n[i], d_w_deriv_hist2, -a_n[i], d_w_deriv_hist1, this->n_var);
+                }
+                else
+                {
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_hist2,       stdToCuDoubleComplex(-a_n[i]), d_w_hist1,       this->n_var);
+                    ker_add_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_w_new, stdToCuDoubleComplex(a_n[i]), d_w_deriv_hist2, stdToCuDoubleComplex(-a_n[i]), d_w_deriv_hist1, this->n_var);
+                }
             }
             gpu_error_check(cudaMemcpy(w_new, d_w_new, sizeof(T)*this->n_var,cudaMemcpyDeviceToHost));
         }
@@ -217,4 +231,4 @@ void CudaAndersonMixing<T>::print_array(int n, T *a)
 
 // Explicit template instantiation
 template class CudaAndersonMixing<double>;
-// template class CudaCircularBuffer<std::complex<double>>;
+template class CudaAndersonMixing<std::complex<double>>;

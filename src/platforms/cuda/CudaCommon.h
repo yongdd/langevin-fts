@@ -110,6 +110,7 @@ __global__ void ker_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDo
 
 __global__ void ker_add_lin_comb(double* dst, double a, const double* src1, double b, const double* src2, const int M);
 __global__ void ker_add_lin_comb(cuDoubleComplex* dst, double a, const cuDoubleComplex* src1, double b, const cuDoubleComplex* src2, const int M);
+__global__ void ker_add_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const cuDoubleComplex* src1, cuDoubleComplex b, const cuDoubleComplex* src2, const int M);
 
 __global__ void ker_multi_complex_real(cuDoubleComplex* dst, const double* src, double a, const int M);
 __global__ void ker_multi_complex_real(cuDoubleComplex* dst, const cuDoubleComplex* src1, const double* src2, double a, const int M);
