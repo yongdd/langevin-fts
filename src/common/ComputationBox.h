@@ -20,7 +20,7 @@ enum class BoundaryCondition
 	ABSORBING,
 };
 
-
+template <typename T>
 class ComputationBox
 {
 protected:
@@ -62,17 +62,11 @@ public:
     const std::vector<BoundaryCondition> get_boundary_conditions();
     BoundaryCondition get_boundary_condition(int i);
 
-    double integral(const double *g);
-    double inner_product(const double *g, const double *h);
-    double inner_product_inverse_weight(const double *g, const double *h, const double *w);
-    double multi_inner_product(int n_comp, const double *g, const double *h);
-    void zero_mean(double *g);
-
-    std::complex<double> integral(const std::complex<double> *g);
-    std::complex<double> inner_product(const std::complex<double> *g, const std::complex<double> *h);
-    std::complex<double> inner_product_inverse_weight(const std::complex<double> *g, const std::complex<double> *h, const std::complex<double> *w);
-    std::complex<double> multi_inner_product(int n_comp, const std::complex<double> *g, const std::complex<double> *h);
-    void zero_mean(std::complex<double> *g);
+    T integral(const T *g);
+    T inner_product(const T *g, const T *h);
+    T inner_product_inverse_weight(const T *g, const T *h, const T *w);
+    T multi_inner_product(int n_comp, const T *g, const T *h);
+    void zero_mean(T *g);
 
     virtual void set_lx(std::vector<double> new_lx);
 

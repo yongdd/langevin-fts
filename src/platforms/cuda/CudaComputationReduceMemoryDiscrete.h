@@ -81,7 +81,7 @@ private:
     void calculate_phi_one_block(T *phi, T **q_1, T **q_2, CuDeviceData<T> *d_exp_dw, const int N_RIGHT, const int N_LEFT, const T NORM);
 
 public:
-    CudaComputationReduceMemoryDiscrete(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer *propagator_computation_optimizer);
+    CudaComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer *propagator_computation_optimizer);
     ~CudaComputationReduceMemoryDiscrete();
 
     void update_laplacian_operator() override;

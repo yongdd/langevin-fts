@@ -181,12 +181,12 @@ int main()
         propagator_computation_optimizer->display_propagators();
 
         std::vector<PropagatorComputation<double>*> solver_list;
-        std::vector<ComputationBox*> cb_list;
+        std::vector<ComputationBox<double>*> cb_list;
         std::vector<std::string> solver_name_list;
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl");
-        cb_list.push_back(new CpuComputationBox({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer));
         #endif
         
@@ -203,7 +203,7 @@ int main()
         for(size_t n=0; n<solver_list.size(); n++)
         {
             PropagatorComputation<double>* solver = solver_list[n];
-            ComputationBox* cb = cb_list[n];
+            ComputationBox<double>* cb = cb_list[n];
 
             for(int i=0; i<M; i++)
             {

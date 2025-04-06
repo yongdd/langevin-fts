@@ -71,7 +71,7 @@ __global__  void tridiagonal_periodic(
 class CudaSolverRealSpace : public CudaSolver<double>
 {
 private:
-    ComputationBox* cb;
+    ComputationBox<double>* cb;
     Molecules *molecules;
 
     // for memory free
@@ -133,7 +133,7 @@ private:
         double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
-    CudaSolverRealSpace(ComputationBox* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverRealSpace();
 
     void update_laplacian_operator() override;

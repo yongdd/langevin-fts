@@ -7,7 +7,7 @@
 
 template <typename T>
 CpuComputationDiscrete<T>::CpuComputationDiscrete(
-    ComputationBox* cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)
@@ -876,6 +876,9 @@ void CpuComputationDiscrete<T>::compute_stress()
 
     try
     {
+        // if constexpr (std::is_same<T, std::complex<double>>::value)
+        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
 

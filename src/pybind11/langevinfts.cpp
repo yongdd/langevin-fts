@@ -22,6 +22,66 @@ template <typename... Args>
 using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 
 
+// Define a template function to bind ComputationBox for any type T
+template<typename T>
+void bind_computation_box(py::module &m, const std::string &type_name) {
+    std::string class_name = "ComputationBox" + type_name;
+    
+    py::class_<ComputationBox<T>>(m, class_name.c_str())
+        // .def(py::init<std::vector<int>, std::vector<double>>())
+        .def("get_dim", &ComputationBox<T>::get_dim)
+        .def("get_nx", overload_cast_<>()(&ComputationBox<T>::get_nx))
+        .def("get_nx", overload_cast_<int>()(&ComputationBox<T>::get_nx))
+        .def("get_lx", overload_cast_<>()(&ComputationBox<T>::get_lx))
+        .def("get_lx", overload_cast_<int>()(&ComputationBox<T>::get_lx))
+        .def("get_dx", overload_cast_<>()(&ComputationBox<T>::get_dx))
+        .def("get_dx", overload_cast_<int>()(&ComputationBox<T>::get_dx))
+        .def("get_dv", &ComputationBox<T>::get_dv)
+        .def("get_total_grid", &ComputationBox<T>::get_total_grid)
+        .def("get_volume", &ComputationBox<T>::get_volume)
+        .def("set_lx", &ComputationBox<T>::set_lx)
+        .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
+        {
+            const int M = obj.get_total_grid();
+            py::buffer_info buf_g = g.request();
+            if (buf_g.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+            }
+            return obj.integral(static_cast<T*>(buf_g.ptr));
+        })
+        .def("inner_product", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h)
+        {
+            const int M = obj.get_total_grid();
+            py::buffer_info buf_g = g.request();
+            py::buffer_info buf_h = h.request();
+            if (buf_g.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+            }
+            if (buf_h.size != M) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+            }
+            return obj.inner_product(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
+        });
+        // .def("multi_inner_product", &ComputationBox<T>::multi_inner_product);
+        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox<T>::zero_mean));
+        // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
+        //     py::buffer_info buf1 = g.request();
+        //     py::buffer_info buf2 = h.request();
+        //     if (buf1.size != n_comp*total_grid) 
+        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
+        //     if (buf2.size != n_comp*total_grid)
+        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
+        //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
+        // };
+        // Void zero_mean(py::array_t<double> g) {
+        //     py::buffer_info buf = g.request();
+        //     if (buf.size != total_grid) {
+        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match");
+        //     }
+        //     zero_mean((double*) buf.ptr);
+        // };
+}
+
 // Define a template function to bind PropagatorComputation for any type T
 template<typename T>
 void bind_propagator_computation(py::module &m, const std::string &type_name) {
@@ -358,59 +418,6 @@ PYBIND11_MODULE(langevinfts, m)
     //     })
     //     .def("get_size", &Array::get_size);
 
-    py::class_<ComputationBox>(m, "ComputationBox")
-        // .def(py::init<std::vector<int>, std::vector<double>>())
-        .def("get_dim", &ComputationBox::get_dim)
-        .def("get_nx", overload_cast_<>()(&ComputationBox::get_nx))
-        .def("get_nx", overload_cast_<int>()(&ComputationBox::get_nx))
-        .def("get_lx", overload_cast_<>()(&ComputationBox::get_lx))
-        .def("get_lx", overload_cast_<int>()(&ComputationBox::get_lx))
-        .def("get_dx", overload_cast_<>()(&ComputationBox::get_dx))
-        .def("get_dx", overload_cast_<int>()(&ComputationBox::get_dx))
-        .def("get_dv", &ComputationBox::get_dv)
-        .def("get_total_grid", &ComputationBox::get_total_grid)
-        .def("get_volume", &ComputationBox::get_volume)
-        .def("set_lx", &ComputationBox::set_lx)
-        .def("integral", [](ComputationBox& obj, py::array_t<double> g)
-        {
-            const int M = obj.get_total_grid();
-            py::buffer_info buf_g = g.request();
-            if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
-            }
-            return obj.integral((double*) buf_g.ptr);
-        })
-        .def("inner_product", [](ComputationBox& obj, py::array_t<double> g, py::array_t<double> h)
-        {
-            const int M = obj.get_total_grid();
-            py::buffer_info buf_g = g.request();
-            py::buffer_info buf_h = h.request();
-            if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
-            }
-            if (buf_h.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
-            }
-            return obj.inner_product((double*) buf_g.ptr, (double*) buf_h.ptr);
-        });
-        // .def("multi_inner_product", &ComputationBox::multi_inner_product);
-        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox::zero_mean));
-        // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
-        //     py::buffer_info buf1 = g.request();
-        //     py::buffer_info buf2 = h.request();
-        //     if (buf1.size != n_comp*total_grid) 
-        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
-        //     if (buf2.size != n_comp*total_grid)
-        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
-        //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
-        // };
-        // Void zero_mean(py::array_t<double> g) {
-        //     py::buffer_info buf = g.request();
-        //     if (buf.size != total_grid) {
-        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match");
-        //     }
-        //     zero_mean((double*) buf.ptr);
-        // };
 
     py::class_<Polymer>(m, "Polymer")
         // .def(py::init<double, std::map<std::string, double>, double,
@@ -475,6 +482,10 @@ PYBIND11_MODULE(langevinfts, m)
         .def("display_blocks", &PropagatorComputationOptimizer::display_blocks)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
+
+    // Bind ComputationBox
+    bind_computation_box<double>(m, "Real");
+    bind_computation_box<std::complex<double>>(m, "Complex");
 
     // Bind PropagatorComputation
     bind_propagator_computation<double>(m, "Real");

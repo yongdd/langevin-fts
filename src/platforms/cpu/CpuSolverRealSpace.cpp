@@ -2,7 +2,7 @@
 #include <cmath>
 
 #include "CpuSolverRealSpace.h"
-CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox* cb, Molecules *molecules)
+CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules)
 {
     try{
         this->cb = cb;
@@ -461,7 +461,7 @@ std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
         const int DIM  = this->cb->get_dim();
         std::vector<double> stress(DIM); 
 
-        throw_with_line_number("Currently, the real-space method does not support stress computation.");   
+        throw_with_line_number("Currently, the real-space method does not support stress computation.");
         
         return stress;
     }

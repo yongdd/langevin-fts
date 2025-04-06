@@ -15,7 +15,7 @@
 template <typename T>
 CudaComputationBox<T>::CudaComputationBox(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
-    : ComputationBox(nx, lx, bc, mask)
+    : ComputationBox<T>(nx, lx, bc, mask)
 {
     initialize();
 }
@@ -23,7 +23,7 @@ template <typename T>
 void CudaComputationBox<T>::initialize()
 {
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*this->total_grid));
-    gpu_error_check(cudaMemcpy(d_dv, dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
     gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(T)*this->total_grid));
@@ -53,7 +53,7 @@ CudaComputationBox<T>::~CudaComputationBox()
 template <typename T>
 void CudaComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
-    ComputationBox::set_lx(new_lx);
+    ComputationBox<T>::set_lx(new_lx);
     gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------

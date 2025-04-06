@@ -5,7 +5,7 @@
 
 template <typename T>
 CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
-    ComputationBox* cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
@@ -330,9 +330,6 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
     std::string monomer_type, bool is_half_bond_length)
 {
     try{
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
-
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 

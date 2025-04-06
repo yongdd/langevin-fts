@@ -61,8 +61,8 @@ int main()
                     // factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
-                    ComputationBox* cb = factory->create_computation_box(nx, lx, {});
-                    Molecules *molecules        = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
+                    Molecules *molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
                     molecules->add_polymer(1.0, block_inputs, chain_end_to_q_init);
                     PropagatorComputationOptimizer* propagator_computation_optimizer= factory->create_propagator_computation_optimizer(molecules, aggregate_propagator_computation);
 

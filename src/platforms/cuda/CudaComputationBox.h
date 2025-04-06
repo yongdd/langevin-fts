@@ -11,7 +11,7 @@
 #include "ComputationBox.h"
 
 template <typename T>
-class CudaComputationBox : public ComputationBox
+class CudaComputationBox : public ComputationBox<T>
 {
 private:
     // Temporal storage for reduction in integral_gpu
