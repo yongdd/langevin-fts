@@ -8,7 +8,7 @@
 
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
-    ComputationBox* cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
@@ -21,6 +21,8 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         #endif
 
         const int M = this->cb->get_total_grid();
+        
+        this->method = method;
         if(method == "pseudospectral")
             this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
         else if(method == "realspace")
@@ -665,6 +667,12 @@ void CpuComputationContinuous<T>::compute_stress()
 
     try
     {
+        // if constexpr (std::is_same<T, std::complex<double>>::value)
+        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+
+        if (this->method == "realspace")
+            throw_with_line_number("Currently, the real-space method does not support stress computation.");
+
         const int DIM  = this->cb->get_dim();
         const int M    = this->cb->get_total_grid();
 

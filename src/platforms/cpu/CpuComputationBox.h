@@ -11,11 +11,12 @@
 #include "Exception.h"
 #include "ComputationBox.h"
 
-class CpuComputationBox : public ComputationBox
+template <typename T>
+class CpuComputationBox : public ComputationBox<T>
 {
 public:
     CpuComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr)
-        : ComputationBox(nx, lx, bc, mask) {};
+        : ComputationBox<T>(nx, lx, bc, mask) {};
     virtual ~CpuComputationBox() {};
 
     // // Methods with device array

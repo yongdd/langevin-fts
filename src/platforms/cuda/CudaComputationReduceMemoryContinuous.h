@@ -82,7 +82,7 @@ private:
 
 public:
 
-    CudaComputationReduceMemoryContinuous(ComputationBox* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
+    CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
     ~CudaComputationReduceMemoryContinuous();
 
     void update_laplacian_operator() override;

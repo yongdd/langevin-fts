@@ -23,6 +23,8 @@ class CpuComputationContinuous : public PropagatorComputation<T>
 private:
     // Pseudo-spectral PDE solver
     CpuSolver<T> *propagator_solver;
+    std::string method;
+    
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
@@ -49,7 +51,7 @@ private:
     // Calculate concentration of one block
     void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_RIGHT, const int N_LEFT);
 public:
-    CpuComputationContinuous(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
+    CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationContinuous();
     
     void update_laplacian_operator() override;

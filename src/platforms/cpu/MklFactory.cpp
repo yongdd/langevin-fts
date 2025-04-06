@@ -43,10 +43,10 @@ MklFactory<T>::MklFactory(bool reduce_memory_usage)
 // }
 
 template <typename T>
-ComputationBox* MklFactory<T>::create_computation_box(
+ComputationBox<T>* MklFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double *mask)
 {
-    return new CpuComputationBox(nx, lx, bc, mask);
+    return new CpuComputationBox<T>(nx, lx, bc, mask);
 }
 template <typename T>
 Molecules* MklFactory<T>::create_molecules_information(
@@ -55,7 +55,7 @@ Molecules* MklFactory<T>::create_molecules_information(
     return new Molecules(chain_model, ds, bond_lengths);
 }
 template <typename T>
-PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string chain_model = molecules->get_model_name();
     if ( chain_model == "continuous" )
@@ -69,7 +69,7 @@ PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(Computatio
     return NULL;
 }
 template <typename T>
-PropagatorComputation<T>* MklFactory<T>::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* MklFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {

@@ -18,7 +18,7 @@
 class CpuSolverRealSpace : public CpuSolver<double>
 {
 private:
-    ComputationBox* cb;
+    ComputationBox<double>* cb;
     Molecules *molecules;
     
     // Trigonal matrix for x direction
@@ -50,7 +50,7 @@ private:
         double *q_in, double *q_out, std::string monomer_type);
 public:
 
-    CpuSolverRealSpace(ComputationBox* cb, Molecules *molecules);
+    CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules);
     ~CpuSolverRealSpace();
     void update_laplacian_operator() override;
     void update_dw(std::map<std::string, const double*> w_input) override;

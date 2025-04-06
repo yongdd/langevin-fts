@@ -11,7 +11,7 @@
 
 template <typename T>
 CudaComputationContinuous<T>::CudaComputationContinuous(
-    ComputationBox* cb,
+    ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method)
@@ -734,6 +734,9 @@ void CudaComputationContinuous<T>::compute_stress()
 
     try
     {
+        // if constexpr (std::is_same<T, std::complex<double>>::value)
+        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 

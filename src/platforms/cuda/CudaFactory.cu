@@ -39,7 +39,7 @@ CudaFactory<T>::CudaFactory(bool reduce_memory_usage)
 //     return new CudaArray(data, size);
 // }
 template <typename T>
-ComputationBox* CudaFactory<T>::create_computation_box(
+ComputationBox<T>* CudaFactory<T>::create_computation_box(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)
 {
     return new CudaComputationBox<T>(nx, lx, bc, mask);
@@ -51,7 +51,7 @@ Molecules* CudaFactory<T>::create_molecules_information(
     return new Molecules(chain_model, ds, bond_lengths);
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string model_name = molecules->get_model_name();
 
@@ -66,7 +66,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(Computati
     return NULL;
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     try
     {
