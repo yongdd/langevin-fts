@@ -689,26 +689,39 @@ class SCFT:
                 error_normal += self.cb.inner_product(w[i],w[i])
             error_level = np.sqrt(np.abs(error_level/error_normal))
 
-            # Print iteration # and error levels and check the mass conservation
+            # Check the mass conservation
             mass_error = np.abs(self.cb.integral(phi_diff)/self.cb.get_volume())
             
+            # Calculate stress
             if (self.box_is_altering):
-                # Calculate stress
                 self.solver.compute_stress()
                 stress_array = np.array(self.solver.get_stress())
                 error_level += np.sqrt(np.sum(np.abs(stress_array)**2))
 
-                print("%8d %12.3E " %
-                (scft_iter, mass_error), end=" [ ")
-                for p in range(self.molecules.get_n_polymer_types()):
-                    print(self.solver.get_total_partition(p), end=" ")
-                print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
+            # Print iteration # and error levels and check the mass conservation
+            print("%8d %12.3E " %
+            (scft_iter, mass_error), end=" [ ")
+            for p in range(self.molecules.get_n_polymer_types()):
+                num = self.solver.get_total_partition(p)
+                if isinstance(num, complex):
+                    sign_real = " " if num.real >= 0 else ""
+                    sign_imag = "+" if num.imag >= 0 else ""
+                    print("%s%13.7E%s%13.7Ej" % (sign_real, num.real, sign_imag, num.imag), end=" ")
+                else:
+                    print("%13.7E " % (num), end=" ")
+            print("]", end=" ")
+
+            num = energy_total
+            if isinstance(num, complex):
+                sign_real = " " if num.real >= 0 else ""
+                sign_imag = "+" if num.imag >= 0 else ""
+                print("%s%13.7E%s%13.7Ej %15.7E " % (sign_real, num.real, sign_imag, num.imag, error_level), end=" ")
             else:
-                print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
-                for p in range(self.molecules.get_n_polymer_types()):
-                    print(self.solver.get_total_partition(p), end=" ")
-                print("] %15.9f %15.7E " % (energy_total, error_level))
+                print("%13.7E %15.7E " % (num, error_level), end=" ")
+
+            # Print box size
+            if (self.box_is_altering):
+                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
 
             # Conditions to end the iteration
             if error_level < self.tolerance:
@@ -735,12 +748,10 @@ class SCFT:
                 # Update bond parameters using new lx
                 self.solver.update_laplacian_operator()
             else:
-
                 w = self.field_optimizer.calculate_new_fields(
                 np.reshape(w,      S*self.cb.get_total_grid()),
                 np.reshape(w_diff, S*self.cb.get_total_grid()), old_error_level, error_level)
                 w = np.reshape(w, (S, self.cb.get_total_grid()))
-        
 
             # Keep the level of field value
             for i in range(S):
