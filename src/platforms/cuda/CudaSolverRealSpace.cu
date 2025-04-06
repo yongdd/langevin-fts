@@ -561,19 +561,14 @@ void CudaSolverRealSpace::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-std::vector<double> CudaSolverRealSpace::compute_single_segment_stress(
-        const int STREAM,
-        double *d_q_pair, std::string monomer_type, bool is_half_bond_length)
+void CudaSolverRealSpace::compute_single_segment_stress(
+    const int STREAM,
+    double *d_q_pair, double *d_segment_stress,
+    std::string monomer_type, bool is_half_bond_length)
 {
     try
     {
         throw_with_line_number("Currently, the real-space method does not support stress computation.");
-
-        const int DIM = this->cb->get_dim();
-        std::vector<double> segment_stress(DIM);
-        for(int i=0; i<DIM; i++)
-            segment_stress[i] = 0.0;
-        return segment_stress;
     }
     catch(std::exception& exc)
     {

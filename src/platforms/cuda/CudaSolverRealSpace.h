@@ -151,9 +151,10 @@ public:
         const int, double *, double *, std::string) override {};
 
     // Compute stress of single segment
-    std::vector<double> compute_single_segment_stress(
+    void compute_single_segment_stress(
         const int STREAM,
-        double *d_q_pair, std::string monomer_type, bool is_half_bond_length) override;
+        double *d_q_pair, double *d_segment_stress,
+        std::string monomer_type, bool is_half_bond_length) override;
 
 };
 #endif

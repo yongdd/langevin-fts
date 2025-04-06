@@ -84,8 +84,9 @@ public:
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
     // Compute stress of single segment
-    std::vector<T> compute_single_segment_stress(
+    void compute_single_segment_stress(
         const int STREAM,
-        CuDeviceData<T> *d_q_pair, std::string monomer_type, bool is_half_bond_length) override;
+        CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
+        std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif
