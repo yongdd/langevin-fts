@@ -31,6 +31,9 @@ ComputationBox<T>* cb;
     double *fourier_basis_y;
     double *fourier_basis_z;
 
+    // Mapping array for negative frequency
+    int *k_idx;
+
 public:
     // Arrays for pseudo-spectral
     std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond

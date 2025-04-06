@@ -722,6 +722,8 @@ class SCFT:
             # Print box size
             if (self.box_is_altering):
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
+            else:
+                print("")
 
             # Conditions to end the iteration
             if error_level < self.tolerance:

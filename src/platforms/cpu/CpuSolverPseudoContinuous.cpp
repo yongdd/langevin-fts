@@ -20,7 +20,7 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
         this->chain_model = molecules->get_model_name();
 
         const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(cb->get_nx());
+        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
 
         // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
         for(const auto& item: molecules->get_bond_lengths())
@@ -36,6 +36,11 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
         fourier_basis_x = new double[M_COMPLEX];
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+        {
+            k_idx = new int[M_COMPLEX];
+            Pseudo<T>::get_negative_frequency_mapping(cb->get_nx(), k_idx);
+        }
 
         update_laplacian_operator();
     }
@@ -52,6 +57,8 @@ CpuSolverPseudoContinuous<T>::~CpuSolverPseudoContinuous()
     delete[] fourier_basis_x;
     delete[] fourier_basis_y;
     delete[] fourier_basis_z;
+    if constexpr (std::is_same<T, std::complex<double>>::value)
+        delete[] k_idx;
 
     for(const auto& item: boltz_bond)
         delete[] item.second;
@@ -71,11 +78,11 @@ void CpuSolverPseudoContinuous<T>::update_laplacian_operator()
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond     [monomer_type], bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
-            Pseudo::get_boltz_bond<T>(this->cb->get_boundary_conditions(), boltz_bond_half[monomer_type], bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
+            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond     [monomer_type], bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
+            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond_half[monomer_type], bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
 
             // For stress calculation: compute_stress()
-            Pseudo::get_weighted_fourier_basis<T>(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
+            Pseudo<T>::get_weighted_fourier_basis(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
         }
     }
     catch(std::exception& exc)
@@ -114,7 +121,7 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
     try
     {
         const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
+        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(this->cb->get_nx());
         T q_out1[M], q_out2[M];
         std::complex<double> k_q_in1[M_COMPLEX], k_q_in2[M_COMPLEX];
 
@@ -185,10 +192,10 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
     {
         const int DIM  = this->cb->get_dim();
         // const int M    = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo::get_total_complex_grid<T>(this->cb->get_nx());
+        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(this->cb->get_nx());
         auto bond_lengths = this->molecules->get_bond_lengths();
         double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-        double coeff;
+        T coeff;
         
         std::vector<T> stress(DIM);
         std::complex<double> qk_1[M_COMPLEX];
@@ -203,7 +210,11 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
         if ( DIM == 3 )
         {
             for(int i=0; i<M_COMPLEX; i++){
-                coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                if constexpr (std::is_same<T, double>::value)
+                    coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                else
+                    coeff = bond_length_sq* qk_1[i]*qk_2[k_idx[i]];
+
                 stress[0] += coeff*fourier_basis_x[i];
                 stress[1] += coeff*fourier_basis_y[i];
                 stress[2] += coeff*fourier_basis_z[i];
@@ -212,7 +223,10 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
         if ( DIM == 2 )
         {
             for(int i=0; i<M_COMPLEX; i++){
-                coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                if constexpr (std::is_same<T, double>::value)
+                    coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                else
+                    coeff = bond_length_sq* qk_1[i]*qk_2[k_idx[i]];
                 stress[0] += coeff*fourier_basis_y[i];
                 stress[1] += coeff*fourier_basis_z[i];
             }
@@ -220,7 +234,10 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
         if ( DIM == 1 )
         {
             for(int i=0; i<M_COMPLEX; i++){
-                coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                if constexpr (std::is_same<T, double>::value)
+                    coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
+                else
+                    coeff = bond_length_sq* qk_1[i]*qk_2[k_idx[i]];
                 stress[0] += coeff*fourier_basis_z[i];
             }
         }

@@ -1029,8 +1029,8 @@ void CudaComputationDiscrete<T>::compute_stress()
     // We only need the real part of stress calculation.
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
