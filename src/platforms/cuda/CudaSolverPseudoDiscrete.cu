@@ -334,9 +334,10 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
     }
 }
 template <typename T>
-std::vector<T> CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
+void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
     const int STREAM,
-    CuDeviceData<T> *d_q_pair, std::string monomer_type, bool is_half_bond_length)
+    CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
+    std::string monomer_type, bool is_half_bond_length)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -367,9 +368,6 @@ std::vector<T> CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         else
             cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
 
-        std::vector<T> segment_stress(DIM);
-        CuDeviceData<T> *d_segment_stress;
-        gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
 
         // Multiply two propagators in the fourier spaces
         if constexpr (std::is_same<T, double>::value)
@@ -431,10 +429,7 @@ std::vector<T> CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
         }
-        gpu_error_check(cudaMemcpy(segment_stress.data(), d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
-        cudaFree(d_segment_stress);
 
-        return segment_stress;
     }
     catch(std::exception& exc)
     {
