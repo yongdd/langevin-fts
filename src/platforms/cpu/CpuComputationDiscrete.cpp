@@ -876,8 +876,8 @@ void CpuComputationDiscrete<T>::compute_stress()
 
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();

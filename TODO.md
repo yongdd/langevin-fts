@@ -22,4 +22,5 @@
 53. And a option to print a data file in a human-readable text.
 54. Extend scft.py to cover singular chi matrix
 55. Add tests for stress computation with complex type
-56. Add tests for Anderson mixing with complex type
+56. Check get_negative_frequency_mapping() and compute_single_segment_stress()
+57. Add tests for Anderson mixing with complex type

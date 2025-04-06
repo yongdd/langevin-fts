@@ -667,8 +667,8 @@ void CpuComputationContinuous<T>::compute_stress()
 
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+        if constexpr (std::is_same<T, std::complex<double>>::value)
+            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");

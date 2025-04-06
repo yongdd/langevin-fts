@@ -49,6 +49,9 @@ private:
     double *d_fourier_basis_y;
     double *d_fourier_basis_z;
 
+    // Mapping array for negative frequency
+    int *d_k_idx;
+
     // Variables for cub reduction sum
     size_t temp_storage_bytes[MAX_STREAMS];
     CuDeviceData<T> *d_temp_storage[MAX_STREAMS];

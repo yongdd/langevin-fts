@@ -2,7 +2,8 @@
 #include <cmath>
 #include "Pseudo.h"
 
-int Pseudo::get_total_complex_grid_r2c(std::vector<int> nx)
+template <typename T>
+int Pseudo<T>::get_total_complex_grid(std::vector<int> nx)
 {
     int total_complex_grid;
     if (nx.size() == 3)
@@ -13,7 +14,8 @@ int Pseudo::get_total_complex_grid_r2c(std::vector<int> nx)
         total_complex_grid = nx[0]/2+1;
     return total_complex_grid;
 }
-int Pseudo::get_total_complex_grid_c2c(std::vector<int> nx)
+template <>
+int Pseudo<std::complex<double>>::get_total_complex_grid(std::vector<int> nx)
 {
     int total_complex_grid;
     if (nx.size() == 3)
@@ -26,7 +28,8 @@ int Pseudo::get_total_complex_grid_c2c(std::vector<int> nx)
 }
 
 //----------------- get_boltz_bond -------------------
-void Pseudo::get_boltz_bond_r2c(
+template <typename T>
+void Pseudo<T>::get_boltz_bond(
     std::vector<BoundaryCondition> bc,
     double *boltz_bond, double bond_length_variance,
     std::vector<int> nx, std::vector<double> dx, double ds)
@@ -92,7 +95,8 @@ void Pseudo::get_boltz_bond_r2c(
         throw_without_line_number(exc.what());
     }
 }
-void Pseudo::get_boltz_bond_c2c(
+template <>
+void Pseudo<std::complex<double>>::get_boltz_bond(
     std::vector<BoundaryCondition> bc,
     double *boltz_bond, double bond_length_variance,
     std::vector<int> nx, std::vector<double> dx, double ds)
@@ -161,7 +165,8 @@ void Pseudo::get_boltz_bond_c2c(
         throw_without_line_number(exc.what());
     }
 }
-void Pseudo::get_weighted_fourier_basis_r2c(
+template <typename T>
+void Pseudo<T>::get_weighted_fourier_basis(
     std::vector<BoundaryCondition> bc,
     double *fourier_basis_x,
     double *fourier_basis_y,
@@ -231,7 +236,8 @@ void Pseudo::get_weighted_fourier_basis_r2c(
         }
     }
 }
-void Pseudo::get_weighted_fourier_basis_c2c(
+template <>
+void Pseudo<std::complex<double>>::get_weighted_fourier_basis(
     std::vector<BoundaryCondition> bc,
     double *fourier_basis_x,
     double *fourier_basis_y,
@@ -298,3 +304,78 @@ void Pseudo::get_weighted_fourier_basis_c2c(
         }
     }
 }
+
+template <typename T>
+void Pseudo<T>::get_negative_frequency_mapping(std::vector<int> nx, int *k_idx){}
+
+template <>
+void Pseudo<std::complex<double>>::get_negative_frequency_mapping(std::vector<int> nx, int *k_idx)
+{
+    const int DIM = nx.size();
+    int itemp, jtemp, ktemp, idx, idx_minus;
+    std::vector<int> tnx;
+
+    if (DIM == 3)
+    {
+        tnx = {nx[0], nx[1], nx[2]};
+    }
+    else if (DIM == 2)
+    {
+        tnx = {1,   nx[0], nx[1]};
+    }
+    else if (DIM == 1)
+    {
+        tnx = {1,   1,   nx[0]};
+    }
+
+    for(int i=0; i<tnx[0]; i++)
+    {
+        if(i == 0)
+            itemp = 0;
+        else
+            itemp = tnx[0]-i;
+        for(int j=0; j<tnx[1]; j++)
+        {
+            if(j == 0)
+                jtemp = 0;
+            else
+                jtemp = tnx[1]-j;
+            for(int k=0; k<tnx[2]; k++)
+            {
+                if(k == 0)
+                    ktemp = 0;
+                else
+                    ktemp = tnx[2]-k;
+
+                idx       = i    *tnx[1]*tnx[2] + j    *tnx[2] + k;
+                idx_minus = itemp*tnx[1]*tnx[2] + jtemp*tnx[2] + ktemp;
+
+                k_idx[idx] = idx_minus;
+
+            //     0   0   0
+            //     1   1   6
+            //     2   2   5
+            //     3   3   4
+            //    -3   4   3
+            //    -2   5   2
+            //    -1   6   1
+
+            //     0   0   0
+            //     1   1   7
+            //     2   2   6
+            //     3   3   5
+            //    -4   4   4
+            //    -3   5   3
+            //    -2   6   2
+            //    -1   7   1
+
+            }
+        }
+    }
+    // for(int i=0;i<nx[0]*nx[1]*nx[2];i++)
+    //     std::cout << i << ", " << k_idx[i] << ", " << std::endl;
+}
+
+// Explicit template instantiation
+template class Pseudo<double>;
+template class Pseudo<std::complex<double>>;

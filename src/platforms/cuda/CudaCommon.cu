@@ -129,6 +129,16 @@ void CudaCommon::set_idx(int process_idx)
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
 
+__global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, int* k_idx, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = src[k_idx[i]];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_linear_scaling(double* dst, const double* src, double a, double b, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
