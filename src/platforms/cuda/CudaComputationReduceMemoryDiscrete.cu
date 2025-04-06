@@ -1224,10 +1224,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             T *propagator_left;
             T *propagator_right;
 
-            CuDeviceData<T> *d_segment_stress;
-            T segment_stress[DIM];
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
-
             int prev, next;
             prev = 0;
             next = 1;
@@ -1269,11 +1265,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 // STREAM 0: Compute stress
                 propagator_left = std::get<0>(_block_stress_compuation_key[n]);
                 bool is_half_bond_length = std::get<2>(_block_stress_compuation_key[n]);
+                std::vector<T> segment_stress;
                 if (propagator_left != nullptr)
                 {
-                    propagator_solver->compute_single_segment_stress(
-                        STREAM, d_q_pair[STREAM][prev], d_segment_stress,
-                        monomer_type, is_half_bond_length);
+                    segment_stress = propagator_solver->compute_single_segment_stress(
+                        STREAM, d_q_pair[STREAM][prev], monomer_type, is_half_bond_length);
                     gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
                 }
 
@@ -1283,7 +1279,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
 
                 if (propagator_left != nullptr)
                 {
-                    gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
                     for(int d=0; d<DIM; d++)
                         _block_dq_dl[d] += segment_stress[d]*static_cast<double>(n_repeated);
                 }
@@ -1297,8 +1292,6 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             // Copy stress data
             for(int d=0; d<DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
-                
-            cudaFree(d_segment_stress);
         }
         gpu_error_check(cudaDeviceSynchronize());
 

@@ -207,21 +207,21 @@ int main()
             if (!std::isfinite(error) || error > 1e-4)
                 return -1;
 
-            // solver_1_list[n]->compute_stress();
-            // std::vector<T> stress_1 = solver_1_list[n]->get_stress();
-            // std::cout<< "Stress_1: " << stress_1[0] << ", " << stress_1[1] << ", " << stress_1[2] << std::endl;
+            solver_1_list[n]->compute_stress();
+            std::vector<T> stress_1 = solver_1_list[n]->get_stress();
+            std::cout<< "Stress_1: " << stress_1[0] << ", " << stress_1[1] << ", " << stress_1[2] << std::endl;
 
-            // solver_2_list[n]->compute_stress();
-            // std::vector<T> stress_2 = solver_2_list[n]->get_stress();
-            // std::cout<< "Stress_2: " << stress_2[0] << ", " << stress_2[1] << ", " << stress_2[2] << std::endl;
+            solver_2_list[n]->compute_stress();
+            std::vector<T> stress_2 = solver_2_list[n]->get_stress();
+            std::cout<< "Stress_2: " << stress_2[0] << ", " << stress_2[1] << ", " << stress_2[2] << std::endl;
 
-            // for(int i=0; i<3; i++)
-            // {
-            //     error = std::abs(stress_1[i] - stress_2[i]);
-            //     std::cout<< "Stress[" << std::to_string(i) << "] error: "<< error << std::endl;
-            //     if (!std::isfinite(error) || error > 1e-7)
-            //         return -1;
-            // }
+            for(int i=0; i<3; i++)
+            {
+                error = std::abs(stress_1[i] - stress_2[i]);
+                std::cout<< "Stress[" << std::to_string(i) << "] error: "<< error << std::endl;
+                if (!std::isfinite(error) || error > 1e-7)
+                    return -1;
+            }
 
             delete cb_1_list[n];
             delete cb_2_list[n];

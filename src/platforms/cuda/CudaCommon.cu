@@ -409,7 +409,8 @@ __global__ void ker_add_lin_comb(cuDoubleComplex* dst, cuDoubleComplex a, const 
         cuDoubleComplex temp_dst;
         temp_dst.x = a.x * src1[i].x - a.y * src1[i].y + b.x * src2[i].x - b.y * src2[i].y;
         temp_dst.y = a.x * src1[i].y + a.y * src1[i].x + b.x * src2[i].y + b.y * src2[i].x;
-        dst[i] = temp_dst;
+        dst[i].x += temp_dst.x;
+        dst[i].y += temp_dst.y;
         i += blockDim.x * gridDim.x;
     }
 }

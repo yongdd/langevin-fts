@@ -124,7 +124,7 @@ void CudaAndersonMixing<T>::calculate_new_fields(
         CuDeviceData<T> *d_w_deriv_hist1;
         CuDeviceData<T> *d_w_deriv_hist2;
 
-        gpu_error_check(cudaMemcpy(d_w_deriv, w_deriv,  sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_w_deriv,   w_deriv,   sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_w_current, w_current, sizeof(T)*this->n_var, cudaMemcpyHostToDevice));
         // If (N_GPUS > 1)
         //     gpu_error_check(cudaMemcpy(d_w_deriv[1], d_w_deriv[0], sizeof(double)*this->n_var, cudaMemcpyDeviceToDevice));

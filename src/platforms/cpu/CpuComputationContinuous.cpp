@@ -716,6 +716,9 @@ void CpuComputationContinuous<T>::compute_stress()
             {
                 std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_1[N_LEFT-n], q_2[n], monomer_type, false);
+                    
+                // std::cout << key_left << ", "  << key_right << ", " << n << ", " << segment_stress[0] << ", " << segment_stress[1] << ", " << segment_stress[2] << std::endl;
+
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
             }
