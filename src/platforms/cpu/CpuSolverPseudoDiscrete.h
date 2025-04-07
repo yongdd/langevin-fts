@@ -22,23 +22,12 @@ class CpuSolverPseudoDiscrete : public CpuSolver<T>
 private:
     ComputationBox<T>* cb;
     Molecules *molecules;
-    
-    FFT<T> *fft;
     std::string chain_model;
 
-    // For stress calculation: compute_stress()
-    double *fourier_basis_x;
-    double *fourier_basis_y;
-    double *fourier_basis_z;
-
-    // Mapping array for negative frequency
-    int *k_idx;
+    FFT<T> *fft;
+    Pseudo<T> *pseudo;
 
 public:
-    // Arrays for pseudo-spectral
-    std::map<std::string, double*> boltz_bond;        // Boltzmann factor for the single bond
-    std::map<std::string, double*> boltz_bond_half;   // Boltzmann factor for the half bond
-
     CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules);
     ~CpuSolverPseudoDiscrete();
     void update_laplacian_operator() override;
