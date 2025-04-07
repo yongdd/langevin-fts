@@ -1,6 +1,8 @@
 #include <iostream>
 #include <cmath>
 #include <thrust/reduce.h>
+
+#include "CudaPseudo.h"
 #include "CudaSolverPseudoDiscrete.h"
 
 template <typename T>
@@ -17,8 +19,13 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         
+        pseudo = new CudaPseudo<T>(
+            molecules->get_bond_lengths(),
+            cb->get_boundary_conditions(),
+            cb->get_nx(), cb->get_dx(), molecules->get_ds());
+
         const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
 
         // Copy streams
         for(int i=0; i<n_streams; i++)
@@ -27,17 +34,12 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // Create exp_dw
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            d_boltz_bond     [monomer_type] = nullptr;
-            d_boltz_bond_half[monomer_type] = nullptr;
             this->d_exp_dw   [monomer_type] = nullptr;
-
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw   [monomer_type], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw[monomer_type], sizeof(T)*M));
         }
 
         // Create FFT plan
@@ -92,19 +94,6 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
         }
 
-        // Allocate memory for stress calculation: compute_stress()
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
-        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));
-
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-        {
-            int k_idx[M_COMPLEX];
-            Pseudo<T>::get_negative_frequency_mapping(cb->get_nx(), k_idx);
-            gpu_error_check(cudaMalloc((void**)&d_k_idx, sizeof(int)*M_COMPLEX));
-            gpu_error_check(cudaMemcpy(d_k_idx, k_idx, sizeof(int)*M_COMPLEX,cudaMemcpyHostToDevice));
-        }
-
         for(int i=0; i<n_streams; i++)
         {  
             gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
@@ -133,6 +122,8 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
 template <typename T>
 CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
 {
+    delete pseudo;
+
     for(int i=0; i<n_streams; i++)
     {
         cufftDestroy(plan_for_one[i]);
@@ -141,10 +132,6 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
         cufftDestroy(plan_bak_two[i]);
     }
 
-    for(const auto& item: d_boltz_bond)
-        cudaFree(item.second);
-    for(const auto& item: d_boltz_bond_half)
-        cudaFree(item.second);
     for(const auto& item: this->d_exp_dw)
         cudaFree(item.second);
 
@@ -154,13 +141,6 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
         cudaFree(d_qk_in_1_one[i]);
         cudaFree(d_qk_in_1_two[i]);
     }
-
-    // For stress calculation: compute_stress()
-    cudaFree(d_fourier_basis_x);
-    cudaFree(d_fourier_basis_y);
-    cudaFree(d_fourier_basis_z);
-    if constexpr (std::is_same<T, std::complex<double>>::value)
-        cudaFree(d_k_idx);
 
     for(int i=0; i<n_streams; i++)
     {
@@ -174,32 +154,10 @@ template <typename T>
 void CudaSolverPseudoDiscrete<T>::update_laplacian_operator()
 {
     try{
-        // For pseudo-spectral: advance_propagator()
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
-        double boltz_bond[M_COMPLEX], boltz_bond_half[M_COMPLEX];
-
-        for(const auto& item: this->molecules->get_bond_lengths())
-        {
-            std::string monomer_type = item.first;
-            double bond_length_sq = item.second*item.second;
-            
-            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond     , bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
-            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond_half, bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
-
-            gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], boltz_bond,      sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], boltz_bond_half, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-        }
-
-        // For stress calculation: compute_stress()
-        double fourier_basis_x[M_COMPLEX];
-        double fourier_basis_y[M_COMPLEX];
-        double fourier_basis_z[M_COMPLEX];
-
-        Pseudo<T>::get_weighted_fourier_basis(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
-
-        gpu_error_check(cudaMemcpy(d_fourier_basis_x, fourier_basis_x, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_fourier_basis_y, fourier_basis_y, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_fourier_basis_z, fourier_basis_z, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+        pseudo->update(
+            this->cb->get_boundary_conditions(),
+            this->molecules->get_bond_lengths(),
+            this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
     }
     catch(std::exception& exc)
     {
@@ -268,10 +226,10 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();;
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
 
         CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[monomer_type];
-        double *_d_boltz_bond = d_boltz_bond[monomer_type];
+        const double* _d_boltz_bond = pseudo->get_boltz_bond(monomer_type);
 
         // Execute a forward FFT
         if constexpr (std::is_same<T, double>::value)
@@ -311,9 +269,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();;
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
-
-        double *_d_boltz_bond_half = d_boltz_bond_half[monomer_type];
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
+        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
 
         // 3D fourier discrete transform, forward and inplace
         if constexpr (std::is_same<T, double>::value)
@@ -345,21 +302,26 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
 
         const int DIM = this->cb->get_dim();
         // const int M   = total_grid;
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
 
         auto bond_lengths = this->molecules->get_bond_lengths();
         double bond_length_sq;
         double *_d_boltz_bond;
 
+        const double* _d_fourier_basis_x = pseudo->get_fourier_basis_x();
+        const double* _d_fourier_basis_y = pseudo->get_fourier_basis_y();
+        const double* _d_fourier_basis_z = pseudo->get_fourier_basis_z();
+        const int* _d_k_idx = pseudo->get_negative_frequency_mapping();
+
         if (is_half_bond_length)
         {
             bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = d_boltz_bond_half[monomer_type];
+            _d_boltz_bond = pseudo->get_boltz_bond_half(monomer_type);
         }
         else
         {
             bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = d_boltz_bond[monomer_type];
+            _d_boltz_bond = pseudo->get_boltz_bond(monomer_type);
         }
 
         // Execute a forward FFT
@@ -368,14 +330,13 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         else
             cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
 
-
         // Multiply two propagators in the fourier spaces
         if constexpr (std::is_same<T, double>::value)
             ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
         else
         {
             // TODO
-            // ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], d_k_idx, M_COMPLEX);
+            // ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_k_idx, M_COMPLEX);
             // ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_1_one[STREAM], 1.0, M_COMPLEX);
         }
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
@@ -383,21 +344,21 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         if ( DIM == 3 )
         {
             // x direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_x, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
 
             // y direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
 
             // z direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
             else
@@ -406,14 +367,14 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         if ( DIM == 2 )
         {
             // y direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_y, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
 
             // z direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
@@ -423,7 +384,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         if ( DIM == 1 )
         {
             // z direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], d_fourier_basis_z, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else

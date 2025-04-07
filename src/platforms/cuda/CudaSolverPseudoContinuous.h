@@ -22,11 +22,9 @@ class CudaSolverPseudoContinuous : public CudaSolver<T>
 private:
     ComputationBox<T>* cb;
     Molecules *molecules;
-
+    Pseudo<T> *pseudo;
     std::string chain_model;
-    int total_grid;
-    int total_complex_grid;
-    
+
     // The number of parallel streams for propagator computation
     int n_streams;
 
@@ -46,14 +44,6 @@ private:
     cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
 
-    // For stress calculation: compute_stress()
-    double *d_fourier_basis_x;
-    double *d_fourier_basis_y;
-    double *d_fourier_basis_z;
-    
-    // Mapping array for negative frequency
-    int *d_k_idx;
-
     // Variables for cub reduction sum
     size_t temp_storage_bytes[MAX_STREAMS];
     CuDeviceData<T> *d_temp_storage[MAX_STREAMS];
@@ -62,10 +52,6 @@ private:
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
 
 public:
-    // GPU arrays for pseudo-spectral
-    std::map<std::string, double*> d_boltz_bond;        // Boltzmann factor for the single bond
-    std::map<std::string, double*> d_boltz_bond_half;   // Boltzmann factor for the half bond
-
     CudaSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
     ~CudaSolverPseudoContinuous();
 

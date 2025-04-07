@@ -19,28 +19,18 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
 
-        const int M = cb->get_total_grid();
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(cb->get_nx());
+        pseudo = new Pseudo<T>(
+            molecules->get_bond_lengths(),
+            cb->get_boundary_conditions(),
+            cb->get_nx(), cb->get_dx(), molecules->get_ds());
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // Create exp_dw
+        const int M = cb->get_total_grid();
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            boltz_bond     [monomer_type] = new double[M_COMPLEX];
-            boltz_bond_half[monomer_type] = new double[M_COMPLEX]; 
             this->exp_dw   [monomer_type] = new T[M];
         }
-
-        // Allocate memory for stress calculation: compute_stress()
-        fourier_basis_x = new double[M_COMPLEX];
-        fourier_basis_y = new double[M_COMPLEX];
-        fourier_basis_z = new double[M_COMPLEX];
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-        {
-            k_idx = new int[M_COMPLEX];
-            Pseudo<T>::get_negative_frequency_mapping(cb->get_nx(), k_idx);
-        }
-
         update_laplacian_operator();
     }
     catch(std::exception& exc)
@@ -52,17 +42,8 @@ template <typename T>
 CpuSolverPseudoDiscrete<T>::~CpuSolverPseudoDiscrete()
 {
     delete fft;
+    delete pseudo;
 
-    delete[] fourier_basis_x;
-    delete[] fourier_basis_y;
-    delete[] fourier_basis_z;
-    if constexpr (std::is_same<T, std::complex<double>>::value)
-        delete[] k_idx;
-
-    for(const auto& item: boltz_bond)
-        delete[] item.second;
-    for(const auto& item: boltz_bond_half)
-        delete[] item.second;
     for(const auto& item: this->exp_dw)
         delete[] item.second;
 }
@@ -71,16 +52,10 @@ void CpuSolverPseudoDiscrete<T>::update_laplacian_operator()
 {
     try
     {
-        for(const auto& item: this->molecules->get_bond_lengths())
-        {
-            std::string monomer_type = item.first;
-            double bond_length_sq = item.second*item.second;
-            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond     [monomer_type], bond_length_sq,   this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
-            Pseudo<T>::get_boltz_bond(this->cb->get_boundary_conditions(), boltz_bond_half[monomer_type], bond_length_sq/2, this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds() );
-
-            // For stress calculation: compute_stress()
-            Pseudo<T>::get_weighted_fourier_basis(this->cb->get_boundary_conditions(), fourier_basis_x, fourier_basis_y, fourier_basis_z, this->cb->get_nx(), this->cb->get_dx());
-        }
+        pseudo->update(
+            this->cb->get_boundary_conditions(),
+            this->molecules->get_bond_lengths(),
+            this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
     }
     catch(std::exception& exc)
     {
@@ -115,11 +90,11 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
     try
     {
         const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(this->cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
         std::complex<double> k_q_in[M_COMPLEX];
 
         T *_exp_dw = this->exp_dw[monomer_type];
-        double *_boltz_bond = boltz_bond[monomer_type];
+        const double* _boltz_bond = pseudo->get_boltz_bond(monomer_type);
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in,k_q_in);
@@ -151,10 +126,10 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
     try
     {
         // Const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(this->cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
         std::complex<double> k_q_in[M_COMPLEX];
 
-        double *_boltz_bond_half = boltz_bond_half[monomer_type];
+        const double* _boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
 
         // 3D fourier discrete transform, forward and inplace
         fft->forward(q_in, k_q_in);
@@ -177,7 +152,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
     {
         const int DIM  = this->cb->get_dim();
         // const int M    = this->cb->get_total_grid();
-        const int M_COMPLEX = Pseudo<T>::get_total_complex_grid(this->cb->get_nx());
+        const int M_COMPLEX = pseudo->get_total_complex_grid();
         T coeff;
 
         std::vector<T> stress(DIM);
@@ -188,15 +163,20 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
         double bond_length_sq;
         double *_boltz_bond;
 
+        const double* _fourier_basis_x = pseudo->get_fourier_basis_x();
+        const double* _fourier_basis_y = pseudo->get_fourier_basis_y();
+        const double* _fourier_basis_z = pseudo->get_fourier_basis_z();
+        const int* _k_idx = pseudo->get_negative_frequency_mapping();
+
         if (is_half_bond_length)
         {
             bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _boltz_bond = boltz_bond_half[monomer_type];
+            _boltz_bond = pseudo->get_boltz_bond_half(monomer_type);
         }
         else
         {
             bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _boltz_bond = boltz_bond[monomer_type];
+            _boltz_bond = pseudo->get_boltz_bond(monomer_type);
         }
 
         fft->forward(q_1, qk_1);
@@ -211,10 +191,10 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[k_idx[i]];
-                stress[0] += coeff*fourier_basis_x[i];
-                stress[1] += coeff*fourier_basis_y[i];
-                stress[2] += coeff*fourier_basis_z[i];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                stress[0] += coeff*_fourier_basis_x[i];
+                stress[1] += coeff*_fourier_basis_y[i];
+                stress[2] += coeff*_fourier_basis_z[i];
             }
         }
         if ( DIM == 2 )
@@ -223,9 +203,9 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[k_idx[i]];
-                stress[0] += coeff*fourier_basis_y[i];
-                stress[1] += coeff*fourier_basis_z[i];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                stress[0] += coeff*_fourier_basis_y[i];
+                stress[1] += coeff*_fourier_basis_z[i];
             }
         }
         if ( DIM == 1 )
@@ -234,8 +214,8 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[k_idx[i]];
-                stress[0] += coeff*fourier_basis_z[i];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                stress[0] += coeff*_fourier_basis_z[i];
             }
         }
         return stress;
@@ -247,8 +227,5 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
 }
 
 // Explicit template instantiation
-
-// template class CpuSolverPseudoDiscrete<float>;
-// template class CpuSolverPseudoDiscrete<std::complex<float>>;
 template class CpuSolverPseudoDiscrete<double>;
 template class CpuSolverPseudoDiscrete<std::complex<double>>;
