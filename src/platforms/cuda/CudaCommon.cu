@@ -129,7 +129,7 @@ void CudaCommon::set_idx(int process_idx)
     gpu_error_check(cudaSetDevice(process_idx%devices_count));
 }
 
-__global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, int* k_idx, const int M)
+__global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* k_idx, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     while (i < M)

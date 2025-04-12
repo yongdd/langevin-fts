@@ -380,6 +380,19 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
         propagator_solver->update_dw(device, w_input);
 
         // For each time span
+        #ifndef NDEBUG
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
+        {
+            std::string key = item.first;
+            int max_n_segment = item.second.max_n_segment+1; 
+            for(int i=0; i<max_n_segment;i++)
+                propagator_finished[key][i] = false;
+            for (int n: item.second.junction_ends)
+                propagator_half_steps_finished[key][n] = false;
+            propagator_half_steps_finished[key][0] = false;
+        }
+        #endif
+
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
@@ -1164,8 +1177,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
     // We only need the real part of stress calculation.
     try
     {
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+        // if constexpr (std::is_same<T, std::complex<double>>::value)
+        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();

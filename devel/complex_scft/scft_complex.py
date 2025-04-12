@@ -680,13 +680,31 @@ class SCFT:
                 # w_diff[i] *= self.mask
                 w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
 
+            # xi = 0.5*(w[0]+w[1]-self.chi_n["A,B"])
+            # w_out_a = self.chi_n["A,B"] * phi["B"] + xi
+            # w_out_b = self.chi_n["A,B"] * phi["A"] + xi 
+
+            # w_out_a -= self.cb.integral(w_out_a)/self.cb.get_volume()
+            # w_out_b -= self.cb.integral(w_out_b)/self.cb.get_volume()
+
+            # w_diff[0] = w_out_a - w[0] 
+            # w_diff[1] = w_out_b - w[1] 
+
+            # print(phi["A"])
+            # print(phi["B"])
+            # print(xi)
+
+            # print(w_out_a)
+            # print(w_out_b)
+
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
-            error_normal = 1.0  # add 1.0 to prevent divergence
+            error_normal = 0.0  # add 1.0 to prevent divergence
             for i in range(S):
                 error_level += self.cb.inner_product(w_diff[i],w_diff[i])
                 error_normal += self.cb.inner_product(w[i],w[i])
+            # print(error_level, error_normal)
             error_level = np.sqrt(np.abs(error_level/error_normal))
 
             # Check the mass conservation

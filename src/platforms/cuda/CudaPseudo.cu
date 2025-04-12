@@ -36,7 +36,7 @@ CudaPseudo<T>::CudaPseudo(
         {
             const int* k_idx = Pseudo<T>::get_negative_frequency_mapping();
             gpu_error_check(cudaMalloc((void**)&d_k_idx, sizeof(int)*M_COMPLEX));
-            gpu_error_check(cudaMemcpy(d_k_idx, k_idx, sizeof(int)*M_COMPLEX,cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_k_idx, k_idx,   sizeof(int)*M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
     catch(std::exception& exc)
@@ -62,10 +62,11 @@ CudaPseudo<T>::~CudaPseudo()
 }
 template <typename T>
 void CudaPseudo<T>::update(
-    std::vector<BoundaryCondition> bc, std::map<std::string, double> bond_lengths,
-    std::vector<int> nx, std::vector<double> dx, double ds)
+    std::vector<BoundaryCondition> bc,
+    std::map<std::string, double> bond_lengths,
+    std::vector<double> dx, double ds)
 {
-    Pseudo<T>::update(bc, bond_lengths, nx, dx, ds);
+    Pseudo<T>::update(bc, bond_lengths, dx, ds);
 
     const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();;
     for(const auto& item: this->bond_lengths)

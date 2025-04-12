@@ -113,7 +113,7 @@ conda env remove -n lfts
 # Developer Guide
 
 #### Chain Propagator Computation
-  Read my paper "Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations".
+  Please refer to *J. Chem. Theory Comput.* **2025**, 21, 3676.
 
 #### Reducing GPU Memory Usage
   1. Propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. To enable this option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaComputationReduceMemoryDiscrete or CudaComputationReduceMemoryDiscrete.
@@ -140,4 +140,4 @@ conda env remove -n lfts
 + A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
 
 # Citation
-Daeseong Yong, and Jaeup U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2025**, XX, XXXX  
+Daeseong Yong, and Jaeup U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2025**, 21, 3676

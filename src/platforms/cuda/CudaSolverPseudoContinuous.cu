@@ -167,7 +167,7 @@ void CudaSolverPseudoContinuous<T>::update_laplacian_operator()
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
+            this->cb->get_dx(), this->molecules->get_ds());
     }
     catch(std::exception& exc)
     {
@@ -343,9 +343,8 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
             ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
         else
         {
-            // TODO
-            // ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_k_idx, M_COMPLEX);
-            // ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_2_one[STREAM], 1.0, M_COMPLEX);
+            ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_k_idx, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_2_one[STREAM], 1.0, M_COMPLEX);
         }
         if ( DIM == 3 )
         {

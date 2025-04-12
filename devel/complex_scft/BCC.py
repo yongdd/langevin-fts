@@ -10,26 +10,28 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 24/90       # A-fraction of major BCP chain, f
+f = 0.2       # A-fraction of major BCP chain, f
 
 params = {
     # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
 
-    "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[1.9,1.9,1.9],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    # 1.8613020, 1.8613020, 1.8613020
+
+    "nx":[64,64,64],            # Simulation grid numbers
+    "lx":[1.86,1.86,1.86],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":False,     # Find box size that minimizes the free energy during saddle point iteration.
+    "box_is_altering":False,    # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "ds":1/100,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": {"A,B": 18.1},     # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 25.0},     # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -41,9 +43,9 @@ params = {
     "optimizer":{
         "name":"am",            # Anderson Mixing
         "max_hist":20,          # Maximum number of history
-        "start_error":1e-2,     # When switch to AM from simple mixing
+        "start_error":5e-2,     # When switch to AM from simple mixing
         "mix_min":0.1,          # Minimum mixing rate of simple mixing
-        "mix_init":0.1,         # Initial mixing rate of simple mixing
+        "mix_init":0.2,         # Initial mixing rate of simple mixing
     },
     
     "max_iter":2000,     # The maximum relaxation iterations
@@ -54,18 +56,47 @@ params = {
 w_A = np.zeros(list(params["nx"]), dtype=np.complex64)
 w_B = np.zeros(list(params["nx"]), dtype=np.complex64)
 
-print("w_A and w_B are initialized to BCC phase.")
-n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
-sphere_positions = []
-for i in range(0,n_unitcell):
-    for j in range(0,n_unitcell):
-        for k in range(0,n_unitcell):
-            sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
-            sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
-for x,y,z in sphere_positions:
-    molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
-    w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
-w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
+# with open("fields.input", 'r',) as f:
+with open("fields.input2", 'r',) as f:
+    lines = f.readlines()
+
+data_lines = lines[5:]
+table = np.loadtxt(data_lines[:])
+print(table.shape)
+z       = table[:,0]
+wa_re   = table[:,1]
+wa_im   = table[:,2]
+phia_re = table[:,3]
+phia_im = table[:,4]
+wb_re   = table[:,5]
+wb_im   = table[:,6]
+phib_re = table[:,7]
+phib_im = table[:,8]
+
+print(np.mean(wa_re))
+print(np.mean(wa_im))
+print(np.mean(wb_re))
+print(np.mean(wb_im))
+
+w_A =  wa_re + 1j * wa_im
+w_B =  wb_re + 1j * wb_im
+
+# z, wa_re, wa_im, phia_re, phia_im, wb_re, wb_im, phib_re, phib_im
+
+# table = np.loadtxt(data_lines)
+
+# print("w_A and w_B are initialized to BCC phase.")
+# n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
+# sphere_positions = []
+# for i in range(0,n_unitcell):
+#     for j in range(0,n_unitcell):
+#         for k in range(0,n_unitcell):
+#             sphere_positions.append([i/n_unitcell,j/n_unitcell,k/n_unitcell])
+#             sphere_positions.append([(i+1/2)/n_unitcell,(j+1/2)/n_unitcell,(k+1/2)/n_unitcell])
+# for x,y,z in sphere_positions:
+#     molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)
+#     w_A[molecules,my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+# w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 # nx = np.array(params["nx"])
 # lx = np.array(params["lx"])
@@ -81,7 +112,7 @@ w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 # exp_k = np.exp(-(space_kx*bxstep[0] + space_ky*bxstep[1] + space_kz*bxstep[2]))
 
-# input_data = loadmat("fields_001.mat", squeeze_me=True)
+# input_data = loadmat("fields_000.mat", squeeze_me=True)
 # w_A = np.reshape(input_data["w_A"], params["nx"]) 
 # w_B = np.reshape(input_data["w_B"], params["nx"])
 
@@ -107,5 +138,5 @@ calculation.run(initial_fields={"A": w_A, "B": w_B})
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
-# Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields_000.mat")
+# # Save final results (.mat, .json or .yaml format)
+# calculation.save_results("fields_000.yaml")

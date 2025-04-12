@@ -76,22 +76,22 @@ double* Pseudo<T>::get_boltz_bond_half(std::string monomer_type)
     return boltz_bond_half[monomer_type];
 }
 template <typename T>
-double* Pseudo<T>::get_fourier_basis_x()
+const double* Pseudo<T>::get_fourier_basis_x()
 {
     return fourier_basis_x;
 }
 template <typename T>
-double* Pseudo<T>::get_fourier_basis_y()
+const double* Pseudo<T>::get_fourier_basis_y()
 {
     return fourier_basis_y;
 }
 template <typename T>
-double* Pseudo<T>::get_fourier_basis_z()
+const double* Pseudo<T>::get_fourier_basis_z()
 {
     return fourier_basis_z;
 }
 template <typename T>
-int* Pseudo<T>::get_negative_frequency_mapping()
+const int* Pseudo<T>::get_negative_frequency_mapping()
 {
     return k_idx;
 }
@@ -370,7 +370,8 @@ void Pseudo<std::complex<double>>::update_negative_frequency_mapping()
             }
         }
     }
-    // for(int i=0;i<nx[0]*nx[1]*nx[2];i++)
+    // const int M_COMPLEX = get_total_complex_grid();
+    // for(int i=0;i<M_COMPLEX;i++)
     //     std::cout << i << ", " << k_idx[i] << ", " << std::endl;
 }
 
