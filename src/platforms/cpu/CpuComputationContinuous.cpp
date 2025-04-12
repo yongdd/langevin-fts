@@ -36,7 +36,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
         if (env_omp_num_threads.empty())
-            n_streams = 4;
+            n_streams = 8;
         else
             n_streams = std::stoi(env_omp_num_threads);
         #ifndef NDEBUG
@@ -175,6 +175,16 @@ void CpuComputationContinuous<T>::compute_propagators(
         const double *q_mask = this->cb->get_mask();
 
         // For each time span
+        #ifndef NDEBUG
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
+        {
+            std::string key = item.first;
+            int max_n_segment = item.second.max_n_segment+1;
+            for(int i=0; i<max_n_segment;i++)
+                propagator_finished[key][i] = false;
+        }
+        #endif
+
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
@@ -667,8 +677,8 @@ void CpuComputationContinuous<T>::compute_stress()
 
     try
     {
-        if constexpr (std::is_same<T, std::complex<double>>::value)
-            throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
+        // if constexpr (std::is_same<T, std::complex<double>>::value)
+        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");

@@ -79,7 +79,7 @@ public:
 #define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
-__global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, int* k_idx, const int M);
+__global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* k_idx, const int M);
 
 __global__ void ker_linear_scaling(double* dst, const double* src, double a, double b, const int M);
 __global__ void ker_linear_scaling(cuDoubleComplex* dst, const cuDoubleComplex* src, double a, cuDoubleComplex b, const int M);

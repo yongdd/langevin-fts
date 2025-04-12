@@ -18,6 +18,8 @@
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
 
+typedef std::complex<double> T;
+
 int main()
 {
     try
@@ -27,14 +29,14 @@ int main()
         // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
 
-        double energy_total;
+        T energy_total;
         // error_level = variable to check convergence of the iteration
         double error_level, old_error_level;
         // Input and output fields, xi is temporary storage for pressures
-        double *w, *w_out, *w_diff;  // n_comp * M
-        double *xi, *w_plus, *w_minus; // M
+        T *w, *w_out, *w_diff;  // n_comp * M
+        T *xi, *w_plus, *w_minus; // M
         // Segment concentration
-        double *phi_a, *phi_b, *phi_tot;
+        T *phi_a, *phi_b, *phi_tot;
 
         // String to output file and print stream
         std::streamsize default_precision = std::cout.precision();
@@ -71,34 +73,15 @@ int main()
         };
 
         //-------------- Allocate array ------------
-        w       = new double[2*M];
-        w_out   = new double[2*M];
-        w_diff  = new double[2*M];
-        xi      = new double[M];
-        phi_a   = new double[M];
-        phi_b   = new double[M];
-        phi_tot = new double[M];
-        w_plus  = new double[M];
-        w_minus = new double[M];
-
-        // std::cout<< "w_a and w_b are initialized to a cylinder." << std::endl;
-        double xx, yy, c1, c2;
-        for(int i=0; i<nx[0]; i++)
-        {
-            xx = float(i+1)/float(nx[0]);
-            for(int j=0; j<nx[1]; j++)
-            {
-                yy = float(j+1)/float(nx[1]);
-                c1  = std::min(xx,1-xx)*std::min(xx,1-xx);
-                c1 += std::min(yy,1-yy)*std::min(yy,1-yy);
-
-                //std::cout << i << ", " << j << ", " << c1 << std::endl;
-                c2 = cos(2*PI*c1);
-                idx = i*nx[1] + j;
-                w[idx]  = -c2;
-                w[idx+M] = c2;
-            }
-        }
+        w       = new T[2*M];
+        w_out   = new T[2*M];
+        w_diff  = new T[2*M];
+        xi      = new T[M];
+        phi_a   = new T[M];
+        phi_b   = new T[M];
+        phi_tot = new T[M];
+        w_plus  = new T[M];
+        w_minus = new T[M];
 
         bool reduce_memory_usage=false;
 
@@ -112,16 +95,16 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, reduce_memory_usage);
                     factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
+                    ComputationBox<T>* cb = factory->create_computation_box(nx, lx, {});
                     Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
                     PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                    PropagatorComputation<double>* solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
-                    AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
+                    PropagatorComputation<T>* solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
+                    AndersonMixing<T> *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
                     // -------------- print simulation parameters ------------
@@ -144,20 +127,41 @@ int main()
                     // molecules->display_propagators();
                     // molecules->display_blocks();
 
+                    // // std::cout<< "w_a and w_b are initialized to a cylinder." << std::endl;
+                    // double xx, yy, c1, c2, c3;
+                    // for(int i=0; i<nx[0]; i++)
+                    // {
+                    //     xx = float(i+1)/float(nx[0]);
+                    //     for(int j=0; j<nx[1]; j++)
+                    //     {
+                    //         yy = float(j+1)/float(nx[1]);
+                    //         c1  = std::min(xx,1-xx)*std::min(xx,1-xx);
+                    //         c1 += std::min(yy,1-yy)*std::min(yy,1-yy);
+
+                    //         //std::cout << i << ", " << j << ", " << c1 << std::endl;
+                    //         c2 = cos(2*PI*c1);
+                    //         c3 = sin(2*PI*c1);
+                    //         idx = i*nx[1] + j;
+                    //         w[idx]  =  T(-c2,  c2);
+                    //         w[idx+M] = T( c2, -c3);
+                    //     }
+                    // }
+
                     std::string line;
                     std::ifstream input_field_file;
                     if(molecules->get_model_name() == "continuous")
-                        input_field_file.open("Stress2D_ContinuousInput.txt");
+                        input_field_file.open("Stress2D_ContinuousInputComplex.txt");
                     else if(molecules->get_model_name() == "discrete")
-                        input_field_file.open("Stress2D_DiscreteInput.txt");
+                        input_field_file.open("Stress2D_DiscreteInputComplex.txt");
 
                     if (input_field_file.is_open())
                     {
                         // std::cout << "input_field_file" << std::endl;
                         for(int i=0; i<2*M ; i++)
                         {
-                            std::getline(input_field_file, line);
-                            w[i] = std::stod(line);
+                            double real_part, imag_part;
+                            input_field_file >> real_part >> imag_part;
+                            w[i] = T(real_part, imag_part);
                             // std::cout << line << " " << w[i] << std::endl;
                         }
                         input_field_file.close();
@@ -191,8 +195,8 @@ int main()
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            w_minus[i] = (w[i]-w[i+M])/2.0;
+                            w_plus[i]  = (w[i]+w[i+M])/2.0;
                         }
 
                         energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
@@ -217,8 +221,9 @@ int main()
                         old_error_level = error_level;
                         for(int i=0; i<2*M; i++)
                             w_diff[i] = w_out[i]- w[i];
-                        error_level = sqrt(cb->multi_inner_product(2,w_diff,w_diff)/
-                                        (cb->multi_inner_product(2,w,w)+1.0));
+                        error_level = sqrt(std::abs(cb->multi_inner_product(2,w_diff,w_diff))/
+                                          (std::abs(cb->multi_inner_product(2,w,w)+1.0)));
+                        // std::cout << "error_level: " << error_level << std::endl;
 
                         // // print iteration # and error levels and check the mass conservation
                         // sum = (cb->integral(phi_a) + cb->integral(phi_b))/cb->get_volume() - 1.0;
@@ -241,22 +246,22 @@ int main()
 
                     // if(molecules->get_model_name() == "continuous")
                     // {
-                    //     std::ofstream output_field_file("Stress2D_ContinuousInput.txt");
+                    //     std::ofstream output_field_file("Stress2D_ContinuousInputComplex.txt");
                     //     if (output_field_file.is_open())
                     //     {
                     //         for(int i=0; i<2*M ; i++){
-                    //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                    //             output_field_file << std::setprecision(10) << w[i].real() << " " << w[i].imag() << std::endl;
                     //         }
                     //         output_field_file.close();
                     //     }
                     // }
                     // else if(molecules->get_model_name() == "discrete")
                     // {
-                    //     std::ofstream output_field_file("Stress2D_DiscreteInput.txt");
+                    //     std::ofstream output_field_file("Stress2D_DiscreteInputComplex.txt");
                     //     if (output_field_file.is_open())
                     //     {
                     //         for(int i=0; i<2*M ; i++){
-                    //             output_field_file << std::setprecision(10) << w[i] << std::endl;
+                    //             output_field_file << std::setprecision(10) << w[i].real() << " " << w[i].imag() << std::endl;
                     //         }
                     //         output_field_file.close();
                     //     }
@@ -279,11 +284,11 @@ int main()
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            w_minus[i] = (w[i]-w[i+M])/2.0;
+                            w_plus[i]  = (w[i]+w[i+M])/2.0;
                         }
 
-                        double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        T energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
                             Polymer& pc = molecules->get_polymer(p);
@@ -303,11 +308,11 @@ int main()
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            w_minus[i] = (w[i]-w[i+M])/2.0;
+                            w_plus[i]  = (w[i]+w[i+M])/2.0;
                         }
 
-                        double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        T energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
                             Polymer& pc = molecules->get_polymer(p);
@@ -315,7 +320,7 @@ int main()
                         }
 
                         // Compute stress
-                        double dh_dl = (energy_total_1-energy_total_2)/dL;
+                        T dh_dl = (energy_total_1-energy_total_2)/dL;
                         solver->compute_stress();
                         auto stress = solver->get_stress();
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
@@ -324,8 +329,6 @@ int main()
                         std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;
-
-                        
                     }
                     {
                         //----------- Compute derivate of H: ly + delta ----------------
@@ -341,11 +344,11 @@ int main()
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            w_minus[i] = (w[i]-w[i+M])/2.0;
+                            w_plus[i]  = (w[i]+w[i+M])/2.0;
                         }
 
-                        double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        T energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
                             Polymer& pc = molecules->get_polymer(p);
@@ -365,11 +368,11 @@ int main()
                         // Calculate the total energy
                         for(int i=0; i<M; i++)
                         {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
+                            w_minus[i] = (w[i]-w[i+M])/2.0;
+                            w_plus[i]  = (w[i]+w[i+M])/2.0;
                         }
 
-                        double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        T energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
                         energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
                         for(int p=0; p<molecules->get_n_polymer_types(); p++){
                             Polymer& pc = molecules->get_polymer(p);
@@ -377,9 +380,9 @@ int main()
                         }
 
                         // Compute stress
-                        double dh_dl = (energy_total_1-energy_total_2)/dL;
+                        T dh_dl = (energy_total_1-energy_total_2)/dL;
                         solver->compute_stress();
-                    auto stress = solver->get_stress();
+                        auto stress = solver->get_stress();
                         std:: cout << "dH/dL : " << dh_dl << std::endl;
                         std:: cout << "Stress : " << stress[1] << std::endl;
                         double relative_stress_error = std::abs(dh_dl-stress[1])/std::abs(stress[1]);

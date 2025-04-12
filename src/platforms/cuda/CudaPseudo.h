@@ -41,12 +41,15 @@ public:
     double* get_boltz_bond     (std::string monomer_type) override { return d_boltz_bond[monomer_type]; };
     double* get_boltz_bond_half(std::string monomer_type) override { return d_boltz_bond_half[monomer_type];};
     
-    double* get_fourier_basis_x() override { return d_fourier_basis_x;};
-    double* get_fourier_basis_y() override { return d_fourier_basis_y;};
-    double* get_fourier_basis_z() override { return d_fourier_basis_z;};
+    const double* get_fourier_basis_x() override { return d_fourier_basis_x;};
+    const double* get_fourier_basis_y() override { return d_fourier_basis_y;};
+    const double* get_fourier_basis_z() override { return d_fourier_basis_z;};
+
+    const int* get_negative_frequency_mapping() override { return d_k_idx;};
 
     void update(
-        std::vector<BoundaryCondition> bc, std::map<std::string, double> bond_lengths,
-        std::vector<int> nx, std::vector<double> dx, double ds) override;
+        std::vector<BoundaryCondition> bc,
+        std::map<std::string, double> bond_lengths,
+        std::vector<double> dx, double ds) override;
 };
 #endif

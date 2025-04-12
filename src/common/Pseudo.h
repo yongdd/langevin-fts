@@ -52,19 +52,19 @@ public:
     virtual double* get_boltz_bond(std::string monomer_type);
     virtual double* get_boltz_bond_half(std::string monomer_type);
 
-    virtual double* get_fourier_basis_x();
-    virtual double* get_fourier_basis_y();
-    virtual double* get_fourier_basis_z();
+    virtual const double* get_fourier_basis_x();
+    virtual const double* get_fourier_basis_y();
+    virtual const double* get_fourier_basis_z();
 
-    int* get_negative_frequency_mapping();
+    virtual const int* get_negative_frequency_mapping();
 
     virtual void update(
-        std::vector<BoundaryCondition> bc, std::map<std::string, double> bond_lengths,
-        std::vector<int> nx, std::vector<double> dx, double ds)
+        std::vector<BoundaryCondition> bc, 
+        std::map<std::string, double> bond_lengths,
+        std::vector<double> dx, double ds)
     {
         this->bond_lengths = bond_lengths;
         this->bc = bc;
-        this->nx = nx;
         this->dx = dx;
         this->ds = ds;
 

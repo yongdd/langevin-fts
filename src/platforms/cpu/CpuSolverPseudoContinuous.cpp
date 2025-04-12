@@ -58,7 +58,7 @@ void CpuSolverPseudoContinuous<T>::update_laplacian_operator()
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_nx(), this->cb->get_dx(), this->molecules->get_ds());
+            this->cb->get_dx(), this->molecules->get_ds());
     }
     catch(std::exception& exc)
     {
