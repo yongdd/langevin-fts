@@ -34,8 +34,8 @@ class Adam:
         self.gamma = gamma
         self.count = 1
         
-        self.m = np.zeros(M, dtype=np.complex64) # first moment
-        self.v = np.zeros(M, dtype=np.complex64) # second moment
+        self.m = np.zeros(M, dtype=np.complex128) # first moment
+        self.v = np.zeros(M, dtype=np.complex128) # second moment
         
     def reset_count(self,):
         self.count = 1
@@ -530,7 +530,7 @@ class SCFT:
         for i in range(S):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex64)
+            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
@@ -634,7 +634,7 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.complex64)
+        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.complex128)
         
         for i in range(S):
             w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
@@ -642,7 +642,7 @@ class SCFT:
         # Keep the level of field value
         for i in range(S):
             w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
-        
+
         # Iteration begins here
         for scft_iter in range(1, self.max_iter+1):
 
@@ -662,14 +662,14 @@ class SCFT:
             energy_total = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
 
             # Calculate difference between current total density and target density
-            phi_total = np.zeros(self.cb.get_total_grid(), dtype=np.complex64)
+            phi_total = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
             for i in range(S):
                 phi_total += phi[self.monomer_types[i]]
             # phi_diff = phi_total-self.phi_target
             phi_diff = phi_total-1.0
 
             # Calculate self-consistency error
-            w_diff = np.zeros([S, self.cb.get_total_grid()], dtype=np.complex64) # array for output fields
+            w_diff = np.zeros([S, self.cb.get_total_grid()], dtype=np.complex128) # array for output fields
             for i in range(S):
                 for j in range(S):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
@@ -700,7 +700,7 @@ class SCFT:
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
-            error_normal = 0.0  # add 1.0 to prevent divergence
+            error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(S):
                 error_level += self.cb.inner_product(w_diff[i],w_diff[i])
                 error_normal += self.cb.inner_product(w[i],w[i])

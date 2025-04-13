@@ -61,7 +61,7 @@ y = np.arange(params["nx"][1])*2*np.pi/params["nx"][1]
 z = np.arange(params["nx"][2])*2*np.pi/params["nx"][2]
 xx, yy, zz = np.meshgrid(x, y, z, indexing='ij')
 
-w_A = np.zeros(params["nx"], dtype=np.complex64)
+w_A = np.zeros(params["nx"], dtype=np.complex128)
 w_A += ( 0.02+0.39j)*np.exp(             4j*zz)
 w_A += ( 0.22+0.36j)*np.exp(       2j*yy+2j*zz)
 w_A += ( 0.37+0.20j)*np.exp(      -2j*yy+2j*zz)
