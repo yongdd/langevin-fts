@@ -53,11 +53,11 @@ params = {
 }
 
 # Set initial fields
-w_A = np.zeros(list(params["nx"]), dtype=np.complex64)
-w_B = np.zeros(list(params["nx"]), dtype=np.complex64)
+w_A = np.zeros(list(params["nx"]), dtype=np.complex128)
+w_B = np.zeros(list(params["nx"]), dtype=np.complex128)
 
-# with open("fields.input", 'r',) as f:
-with open("fields.input2", 'r',) as f:
+# with open("fields.real", 'r',) as f:
+with open("fields.complex", 'r',) as f:
     lines = f.readlines()
 
 data_lines = lines[5:]
@@ -73,17 +73,13 @@ wb_im   = table[:,6]
 phib_re = table[:,7]
 phib_im = table[:,8]
 
-print(np.mean(wa_re))
-print(np.mean(wa_im))
-print(np.mean(wb_re))
-print(np.mean(wb_im))
+# print(np.mean(wa_re))
+# print(np.mean(wa_im))
+# print(np.mean(wb_re))
+# print(np.mean(wb_im))
 
 w_A =  wa_re + 1j * wa_im
 w_B =  wb_re + 1j * wb_im
-
-# z, wa_re, wa_im, phia_re, phia_im, wb_re, wb_im, phib_re, phib_im
-
-# table = np.loadtxt(data_lines)
 
 # print("w_A and w_B are initialized to BCC phase.")
 # n_unitcell = 1 # number of unit cell for each direction. the number of total unit cells is n_unitcell^3
