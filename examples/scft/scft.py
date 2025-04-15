@@ -245,9 +245,9 @@ class SCFT:
 
         # (C++ class) Create a factory for given platform and chain_model
         if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"])
+            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"], "real")
         else:
-            factory = PlatformSelector.create_factory(platform, False)
+            factory = PlatformSelector.create_factory(platform, False, "real")
         factory.display_info()
 
         # (C++ class) Computation box
