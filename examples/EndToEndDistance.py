@@ -27,8 +27,8 @@ reduce_gpu_memory_usage = False
 # Grafting points
 grafting_point = {0:"G"}  # node 0 will be initialized with q_init["G"]
 
-# Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
+# Select platform ("cuda" or "cpu-mkl") for real-valued simulations
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage, "real")
 factory.display_info()
 
 # Create an instance for computation box

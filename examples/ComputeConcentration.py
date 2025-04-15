@@ -25,8 +25,8 @@ stat_seg_length = {"A":1.0, "B":2.0, "C":1.5}     # statistical segment lengths
 aggregate_propagator_computation = False
 reduce_gpu_memory_usage = False
 
-# Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
+# Select platform ("cuda" or "cpu-mkl") for real-valued simulations
+factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage, "real")
 factory.display_info()
 
 # Create an instance for computation box

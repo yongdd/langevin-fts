@@ -1,7 +1,7 @@
 # Polymer Field Theory Simulations with Python
 
 # Features
-This repository contains a library for polymer field theory simulations and its applications, such as SCFT and L-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
+This repository contains a library for polymer field theory simulations and its applications, such as SCFT, L-FTS and CL-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
   * Any number of monomer types
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers
@@ -127,8 +127,8 @@ conda env remove -n lfts
   https://pybind11.readthedocs.io/en/stable/index.html   
 
 # References
-#### Multi-Species Exchange Mapping
-+ D. Düchs, K. T. Delaney, and G. H. Fredrickson, A multi-species exchange model for fully fluctuating polymer field theory simulations. *J. Chem. Phys.* **2014**, 141, 174103
+#### Multi-Monomer Polymer Field Theory
+D. Morse, D. Yong, and K. Chen, Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems. *Macromolecules* **2025**, 58, 816
 #### CUDA Implementation
 + G. K. Cheong, A. Chawla, D. C. Morse, and K. D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 + D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces. *Macromolecules* **2021**, 54, 11304
@@ -140,4 +140,4 @@ conda env remove -n lfts
 + A. Arora, D. C. Morse, F. S. Bates, and K. D. Dorfman, Accelerating self-consistent field theory of block polymers in a variable unit cell. *J. Chem. Phys.* **2017**, 146, 244902
 
 # Citation
-Daeseong Yong, and Jaeup U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2025**, 21, 3676
+D. Yong, and J. U. Kim, Dynamic Programming for Chain Propagator Computation of Branched Block Copolymers in Polymer Field Theory Simulations. *J. Chem. Theory Comput.* **2025**, 21, 3676
