@@ -33,7 +33,7 @@ On the top the above library, SCFT and L-FTS are implemented. They support follo
   * Leimkuhler-Matthews method for updating exchange field (for L-FTS)
   * Random Number Generator: PCG64 (for L-FTS)
 
-This open-source code is distributed under the Apache license 2.0 instead of GPL. This license is one of the permissive software licenses and has minimal restrictions.
+This open-source code is distributed under the Apache license 2.0. This license is one of the permissive software licenses and has minimal restrictions.
 
 # Dependencies
 #### Linux System
@@ -128,7 +128,7 @@ conda env remove -n lfts
 
 # References
 #### Multi-Monomer Polymer Field Theory
-D. Morse, D. Yong, and K. Chen, Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems. *Macromolecules* **2025**, 58, 816
++ D. Morse, D. Yong, and K. Chen, Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems. *Macromolecules* **2025**, 58, 816
 #### CUDA Implementation
 + G. K. Cheong, A. Chawla, D. C. Morse, and K. D. Dorfman, Open-source code for self-consistent field theory calculations of block polymer phase behavior on graphics processing units. *Eur. Phys. J. E* **2020**, 43, 15
 + D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces. *Macromolecules* **2021**, 54, 11304
