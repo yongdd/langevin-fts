@@ -1,48 +1,68 @@
 import os
 import time
 import re
-import pathlib
-import copy
 import numpy as np
+import sys
+import math
+import json
+import yaml
+import copy
 import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
-from scipy.io import savemat, loadmat
+import scipy.io
 from langevinfts import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
-def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
-        return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
+# For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
+class Adam:
+    def __init__(self, M,
+                    lr = 1e-2,       # initial learning rate, γ
+                    b1 = 0.9,        # β1
+                    b2 = 0.999,      # β2
+                    eps = 1e-8,      # epsilon, small number to prevent dividing by zero
+                    gamma = 1.0,     # learning rate at Tth iteration is lr*γ^(T-1)
+                    ):
+        self.M = M
+        self.lr = lr
+        self.b1 = b1
+        self.b2 = b2
+        self.eps = eps
+        self.gamma = gamma
+        self.count = 1
+        
+        self.m = np.zeros(M, dtype=np.float64) # first moment
+        self.v = np.zeros(M, dtype=np.float64) # second moment
+        
+    def reset_count(self,):
+        self.count = 1
+        self.m[:] = 0.0
+        self.v[:] = 0.0        
+        
+    def calculate_new_fields(self, w_current, w_diff, old_error_level, error_level):
 
-class SymmetricPolymerTheoryCompressible:
+        lr = self.lr*self.gamma**(self.count-1)
+        
+        self.m = self.b1*self.m + (1.0-self.b1)*w_diff
+        self.v = self.b2*self.v + (1.0-self.b2)*w_diff**2
+        m_hat = self.m/(1.0-self.b1**self.count)
+        v_hat = self.v/(1.0-self.b2**self.count)
+                
+        w_new = w_current + lr*m_hat/(np.sqrt(v_hat) + self.eps)
+        
+        self.count += 1
+        return w_new
+
+class SymmetricPolymerTheory:
     def __init__(self, monomer_types, chi_n, zeta_n):
         self.monomer_types = monomer_types
         S = len(self.monomer_types)
         
-        # self.matrix_q = np.ones((S,S))/S
-        # self.matrix_p = np.identity(S) - self.matrix_q
-        
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o,  = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
-
-        # Construct chi_n matrix
-        matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    matrix_chi[i,j] = chi_n[key]
-                    matrix_chi[j,i] = chi_n[key]
-
-        matrix_chi = matrix_chi
-        self.vector_large_s = -zeta_n*np.matmul(np.transpose(matrix_o), np.ones(S))
-
-        print("vector_large_s", self.vector_large_s)
+        # Compute eigenvalues, orthogonal matrix, vector_s and vector_S
+        eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
 
         # Indices whose auxiliary fields are real
         self.aux_fields_real_idx = []
@@ -57,6 +77,9 @@ class SymmetricPolymerTheoryCompressible:
                 self.aux_fields_imag_idx.append(i)
             else:
                 self.aux_fields_real_idx.append(i)
+        
+        if zeta_n is None:
+            self.aux_fields_imag_idx.append(S-1) # add pressure field
 
         # The numbers of real and imaginary fields, respectively
         self.R = len(self.aux_fields_real_idx)
@@ -67,7 +90,7 @@ class SymmetricPolymerTheoryCompressible:
             print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
 
         # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, zeta_n)
+        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(eigenvalues, vector_s, vector_large_s, zeta_n)
 
         # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
         matrix_a = matrix_o.copy()
@@ -77,7 +100,7 @@ class SymmetricPolymerTheoryCompressible:
         error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
         assert(np.isclose(error, 0.0)), \
             "Invalid inverse of matrix A. Perhaps matrix O is not orthogonal."
-
+        
         # Compute derivatives of Hamiltonian coefficients w.r.t. χN
         epsilon = 1e-5
         self.h_const_deriv_chin = {}
@@ -92,17 +115,33 @@ class SymmetricPolymerTheoryCompressible:
             chi_n_n[key] -= epsilon
 
             # Compute eigenvalues and orthogonal matrix
-            eigenvalues_p, _ = self.compute_eigen_system(monomer_types, chi_n_p, zeta_n)
-            eigenvalues_n, _ = self.compute_eigen_system(monomer_types, chi_n_n, zeta_n)
+            eigenvalues_p, _, vector_s_p, vector_large_s_p = self.compute_eigen_system(monomer_types, chi_n_p, zeta_n)
+            eigenvalues_n, _, vector_s_n, vector_large_s_n = self.compute_eigen_system(monomer_types, chi_n_n, zeta_n)
             
             # Compute coefficients for Hamiltonian computation
-            h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(chi_n_p, eigenvalues_p, zeta_n)
-            h_const_n, h_coef_mu1_n, h_coef_mu2_n = self.compute_h_coef(chi_n_n, eigenvalues_n, zeta_n)
+            h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(eigenvalues_p, vector_s_p, vector_large_s_p, zeta_n)
+            h_const_n, h_coef_mu1_n, h_coef_mu2_n = self.compute_h_coef(eigenvalues_n, vector_s_n, vector_large_s_n, zeta_n)
             
             # Compute derivatives using finite difference
             self.h_const_deriv_chin[key] = (h_const_p - h_const_n)/(2*epsilon)
             self.h_coef_mu1_deriv_chin[key] = (h_coef_mu1_p - h_coef_mu1_n)/(2*epsilon)
             self.h_coef_mu2_deriv_chin[key] = (h_coef_mu2_p - h_coef_mu2_n)/(2*epsilon)
+
+        # # Matsen's Notation
+        # h_const = chi_n["A,B"]/4.0
+        # h_coef_mu1[0] = 0.0
+        # h_coef_mu2[0] = 1.0/(chi_n["A,B"])
+
+        # h_coef_mu1[1] = -1.0
+        # h_coef_mu2[1] = -1.0/(chi_n["A,B"] + 2*zeta_n)
+
+        # # Simple's Notation
+        # h_const = -zeta_n/2
+        # h_coef_mu1[0] = 0.0
+        # h_coef_mu2[0] = 1.0/(chi_n["A,B"])
+
+        # h_coef_mu1[1] = 0.0
+        # h_coef_mu2[1] = -1.0/(chi_n["A,B"] + 2*zeta_n)
 
         self.h_const = h_const
         self.h_coef_mu1 = h_coef_mu1
@@ -140,7 +179,7 @@ class SymmetricPolymerTheoryCompressible:
     def compute_eigen_system(self, monomer_types, chi_n, zeta_n):
         S = len(monomer_types)
 
-        # Compute eigenvalues and eigenvectors
+        # Construct chi_n matrix
         matrix_chin = np.zeros((S,S))
         for i in range(S):
             for j in range(i+1,S):
@@ -150,14 +189,42 @@ class SymmetricPolymerTheoryCompressible:
                 if key in chi_n:
                     matrix_chin[i,j] = chi_n[key]
                     matrix_chin[j,i] = chi_n[key]
-        u = zeta_n*np.ones((S,S)) + matrix_chin
-        
-        eigenvalues, eigenvectors = np.linalg.eigh(u)
 
-        # Reordering eigenvalues and eigenvectors
-        sorted_indexes = np.argsort(eigenvalues)[::]
-        eigenvalues = eigenvalues[sorted_indexes]
-        eigenvectors = eigenvectors[:,sorted_indexes]
+        # Incompressible model
+        if zeta_n is None:
+            matrix_q = np.ones((S,S))/S
+            matrix_p = np.identity(S) - matrix_q
+
+            # Compute eigenvalues and eigenvectors
+            projected_chin = np.matmul(matrix_p, np.matmul(matrix_chin, matrix_p))
+            eigenvalues, eigenvectors = np.linalg.eigh(projected_chin)
+
+            # Reordering eigenvalues and eigenvectors
+            sorted_indexes = np.argsort(np.abs(eigenvalues))[::-1]
+            eigenvalues = eigenvalues[sorted_indexes]
+            eigenvectors = eigenvectors[:,sorted_indexes]
+
+            # Set the last eigenvector to [1, 1, ..., 1]/√S
+            eigenvectors[:,-1] = np.ones(S)/np.sqrt(S)
+
+            # Construct vector_s and vector_S
+            vector_s = np.matmul(matrix_chin, np.ones(S))/S
+            vector_large_s = np.matmul(np.transpose(eigenvectors), vector_s)
+
+        # Compressible model
+        else:
+            # Compute eigenvalues and eigenvectors
+            u = zeta_n*np.ones((S,S)) + matrix_chin
+            eigenvalues, eigenvectors = np.linalg.eigh(u)
+
+            # Reordering eigenvalues and eigenvectors
+            sorted_indexes = np.argsort(eigenvalues)[::]
+            eigenvalues = eigenvalues[sorted_indexes]
+            eigenvectors = eigenvectors[:,sorted_indexes]     
+
+            # Construct vector_s and vector_S
+            vector_s = np.zeros(S)
+            vector_large_s = -zeta_n*np.matmul(np.transpose(eigenvectors), np.ones(S))*np.sqrt(S)
         
         # Make a orthogonal matrix using Gram-Schmidt
         eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
@@ -178,28 +245,35 @@ class SymmetricPolymerTheoryCompressible:
         # Multiply √S to eigenvectors
         eigenvectors *= np.sqrt(S)
 
-        return eigenvalues, eigenvectors
+        return eigenvalues, eigenvectors, vector_s, vector_large_s
 
-    def compute_h_coef(self, eigenvalues, zeta_n):
+    def compute_h_coef(self, eigenvalues, vector_s, vector_large_s, zeta_n):
         S = len(self.monomer_types)
-
+        
         # Compute reference part of Hamiltonian
-        h_const = 0.5*zeta_n
+        h_const = 0.0
         for i in range(S):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
+                h_const -= 0.5*vector_large_s[i]**2/eigenvalues[i]/S
 
         # Compute coefficients of integral of μ(r)/V
         h_coef_mu1 = np.zeros(S)
         for i in range(S):
             if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
+                h_coef_mu1[i] = vector_large_s[i]/eigenvalues[i]
 
         # Compute coefficients of integral of μ(r)^2/V
         h_coef_mu2 = np.zeros(S)
         for i in range(S):
             if not np.isclose(eigenvalues[i], 0.0):
                 h_coef_mu2[i] = -0.5/eigenvalues[i]*S
+
+        if zeta_n is None:
+            h_const += 0.5*np.sum(vector_s)/S
+            h_coef_mu1[S-1] = -1.0
+            h_coef_mu2[S-1] =  0.0
+        else:
+            h_const += 0.5*zeta_n
 
         return h_const, h_coef_mu1, h_coef_mu2
 
@@ -210,8 +284,10 @@ class SymmetricPolymerTheoryCompressible:
         # Compute Hamiltonian part that is related to fields
         hamiltonian_fields = 0.0
         for i in range(S):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
+            if not np.isclose(self.h_coef_mu2[i], 0.0): 
+                hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
+            if not np.isclose(self.h_coef_mu1[i], 0.0): 
+                hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
@@ -221,14 +297,15 @@ class SymmetricPolymerTheoryCompressible:
                             np.log(total_partitions[p])
 
         return hamiltonian_partition + hamiltonian_fields + self.h_const
-
+    
     # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
     def compute_func_deriv(self, w_aux, phi, indices):
         S = len(self.monomer_types)
                 
         elapsed_time = {}
         time_e_start = time.time()
-        h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=np.complex128)
+
+        h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=type(w_aux[0,0]))
         for count, i in enumerate(indices):
             # Return dH/dw
             h_deriv[count] += 2*self.h_coef_mu2[i]*w_aux[i]
@@ -256,14 +333,15 @@ class SymmetricPolymerTheoryCompressible:
                 dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_aux[i])                   
         return dH
 
-class CLFTS:
-    def __init__(self, params, random_seed=None):
+
+class SCFT:
+    def __init__(self, params): #, phi_target=None, mask=None):
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-
+        
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
@@ -280,13 +358,13 @@ class CLFTS:
 
         # (C++ class) Create a factory for given platform and chain_model
         if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"], "complex")
+            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"], "real")
         else:
-            factory = PlatformSelector.create_factory(platform, False, "complex")
+            factory = PlatformSelector.create_factory(platform, False, "real")
         factory.display_info()
 
         # (C++ class) Computation box
-        self.cb = factory.create_computation_box(params["nx"], params["lx"])
+        cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
@@ -310,15 +388,39 @@ class CLFTS:
             sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
             if not sorted_monomer_pair in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
-
+        
         # Multimonomer polymer field theory
-        self.zeta_n = 100
-        self.mpt = SymmetricPolymerTheoryCompressible(self.monomer_types, self.chi_n, self.zeta_n)
-
-        # The numbers of real and imaginary fields, respectively
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=100)
+        
+        # Matrix for field residuals.
+        # See *J. Chem. Phys.* **2017**, 146, 244902
         S = len(self.monomer_types)
-        R = len(self.mpt.aux_fields_real_idx)
-        I = len(self.mpt.aux_fields_imag_idx)
+        matrix_chi = np.zeros((S,S))
+        for i in range(S):
+            for j in range(i+1,S):
+                key = self.monomer_types[i] + "," + self.monomer_types[j]
+                if key in self.chi_n:
+                    matrix_chi[i,j] = self.chi_n[key]
+                    matrix_chi[j,i] = self.chi_n[key]
+        
+        self.matrix_chi = matrix_chi
+        matrix_chi_inv = np.linalg.inv(matrix_chi)
+        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        # print(matrix_chi)
+        # print(matrix_chin)
+
+        # if phi_target is None:
+        #     phi_target = np.ones(params["nx"])
+        # self.phi_target = np.reshape(phi_target, (-1))
+
+        # self.phi_target_pressure = self.phi_target/np.sum(matrix_chi_inv)
+        # print(self.matrix_p)
+
+        # # Scaling rate of total polymer concentration
+        # if mask is None:
+        #     mask = np.ones(params["nx"])
+        # self.mask = np.reshape(mask, (-1))
+        # self.phi_rescaling = np.mean((self.phi_target*self.mask)[np.isclose(self.mask, 1.0)])
 
         # Total volume fraction
         assert(len(self.distinct_polymers) >= 1), \
@@ -433,7 +535,10 @@ class CLFTS:
 
         # Add polymer chains
         for polymer in self.distinct_polymers:
-            molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
+            if "initial_conditions" in polymer:
+                molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"], polymer["initial_conditions"])
+            else:
+                molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
         # (C++ class) Propagator Computation Optimizer
         if "aggregate_propagator_computation" in params:
@@ -442,30 +547,56 @@ class CLFTS:
             propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_computation_optimizer)
+        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer)
 
-        # Standard deviation of normal noise of Langevin dynamics
-        langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
-
-        # dH/dw_aux[i] is scaled by dt_scaling[i]
-        self.dt_scaling = np.ones(S)
-        for i in range(S-1):
-            self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues))
-
-        # Set random generator
-        if random_seed is None:         
-            self.random_bg = np.random.PCG64()  # Set random bit generator
+        # Scaling factor for stress when the fields and box size are simultaneously computed
+        if "scale_stress" in params:
+            self.scale_stress = params["scale_stress"]
         else:
-            self.random_bg = np.random.PCG64(random_seed)
-        self.random = np.random.Generator(self.random_bg)
-        
+            self.scale_stress = 1
+
+        # Total number of variables to be adjusted to minimize the Hamiltonian
+        if params["box_is_altering"]:
+            n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
+        else :
+            n_var = len(self.monomer_types)*np.prod(params["nx"])
+            
+        # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point        
+        # (C++ class) Anderson Mixing method for finding saddle point
+        if params["optimizer"]["name"] == "am":
+            self.field_optimizer = factory.create_anderson_mixing(n_var,
+                params["optimizer"]["max_hist"],     # maximum number of history
+                params["optimizer"]["start_error"],  # when switch to AM from simple mixing
+                params["optimizer"]["mix_min"],      # minimum mixing rate of simple mixing
+                params["optimizer"]["mix_init"])     # initial mixing rate of simple mixing
+
+        # (Python class) ADAM optimizer for finding saddle point
+        elif params["optimizer"]["name"] == "adam":
+            self.field_optimizer = Adam(M = n_var,
+                lr = params["optimizer"]["lr"],
+                gamma = params["optimizer"]["gamma"])
+        else:
+            print("Invalid optimizer name: ", params["optimizer"], '. Choose among "am" and "adam".')
+
+       # The maximum iteration steps
+        if "max_iter" in params :
+            max_iter = params["max_iter"]
+        else :
+            max_iter = 2000      # the number of maximum iterations
+
+        # Tolerance
+        if "tolerance" in params :
+            tolerance = params["tolerance"]
+        else :
+            tolerance = 1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Box Dimension: %d" % (self.cb.get_dim()))
-        print("Nx:", self.cb.get_nx())
-        print("Lx:", self.cb.get_lx())
-        print("dx:", self.cb.get_dx())
-        print("Volume: %f" % (self.cb.get_volume()))
+        print("Box Dimension: %d" % (cb.get_dim()))
+        print("Nx:", cb.get_nx())
+        print("Lx:", cb.get_lx())
+        print("dx:", cb.get_dx())
+        print("Volume: %f" % (cb.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
         print("Segment lengths:\n\t", list(self.segment_lengths.items()))
@@ -477,17 +608,14 @@ class CLFTS:
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
+        print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
+
         for p in range(molecules.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
                 (molecules.get_polymer(p).get_volume_fraction(),
                  molecules.get_polymer(p).get_alpha(),
                  molecules.get_polymer(p).get_n_segment_total()))
-
-        print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
-        print("Langevin Sigma: %f" % (langevin_sigma))
-        print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
-        print("Random Number Generator: ", self.random_bg.state)
 
         propagator_computation_optimizer.display_blocks()
         propagator_computation_optimizer.display_propagators()
@@ -496,331 +624,253 @@ class CLFTS:
         self.params = params
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
-        self.langevin = params["langevin"].copy()
-        self.langevin.update({"sigma":langevin_sigma})
+        self.box_is_altering = params["box_is_altering"]
 
-        self.verbose_level = params["verbose_level"]
-        self.saddle = params["saddle"].copy()
-        self.recording = params["recording"].copy()
+        self.max_iter = max_iter
+        self.tolerance = tolerance
 
+        self.cb = cb
         self.molecules = molecules
         self.propagator_computation_optimizer = propagator_computation_optimizer
+        self.solver = solver
 
-    def compute_concentrations(self, w_aux):
+    def compute_concentrations(self, w):
         S = len(self.monomer_types)
         elapsed_time = {}
-
-        # Convert auxiliary fields to monomer fields
-        w = self.mpt.to_monomer_fields(w_aux)
 
         # Make a dictionary for input fields 
         w_input = {}
         for i in range(S):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
+            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
-        # For the given fields, compute propagators
-        time_solver_start = time.time()
+        # For the given fields, compute the polymer statistics
+        time_p_start = time.time()
         self.solver.compute_propagators(w_input)
-        elapsed_time["solver"] = time.time() - time_solver_start
-
-        # Compute concentrations for each monomer type
-        time_phi_start = time.time()
-        phi = {}
         self.solver.compute_concentrations()
+        elapsed_time["pseudo"] = time.time() - time_p_start
+
+        # Compute total concentration for each monomer type
+        phi = {}
+        time_phi_start = time.time()
         for monomer_type in self.monomer_types:
             phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
+        elapsed_time["phi"] = time.time() - time_phi_start
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
             phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
-        elapsed_time["phi"] = time.time() - time_phi_start
-
+        
         return phi, elapsed_time
 
-    def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
-
+    def save_results(self, path):
         # Make a dictionary for chi_n
         chi_n_mat = {}
         for key in self.chi_n:
             chi_n_mat[key] = self.chi_n[key]
-
-        # Make dictionary for data
-        mdic = {
-            "initial_params": self.params,
+            
+        # Make a dictionary for data
+        m_dic = {"initial_params": self.params,
             "dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], 
-            "eigenvalues": self.mpt.eigenvalues,
-            "aux_fields_real": self.mpt.aux_fields_real_idx,
-            "aux_fields_imag": self.mpt.aux_fields_imag_idx,
-            "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv, 
-            "langevin_step":langevin_step,
-            "random_generator":self.random_bg.state["bit_generator"],
-            "random_state_state":str(self.random_bg.state["state"]["state"]),
-            "random_state_inc":str(self.random_bg.state["state"]["inc"]),
-            "normal_noise_prev":normal_noise_prev}
+            "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
         # Add w fields to the dictionary
         for i, name in enumerate(self.monomer_types):
-            mdic["w_" + name] = w[i]
+            m_dic["w_" + name] = self.w[i]
         
         # Add concentrations to the dictionary
         for name in self.monomer_types:
-            mdic["phi_" + name] = phi[name]
+            m_dic["phi_" + name] = self.phi[name]
 
-        # Save data with matlab format
-        savemat(path, mdic, long_field_names=True, do_compression=True)
+        # if self.mask is not None:
+        #     m_dic["mask"] = self.mask
+            
+        # if self.phi_target is not None:
+        #     m_dic["phi_target"] = self.phi_target
 
-    def continue_run(self, file_name):
+        # phi_total = np.zeros(self.cb.get_total_grid())
+        # for name in self.monomer_types:
+        #     phi_total += self.phi[name]
+        # print(np.reshape(phi_total, self.cb.get_nx())[0,0,:])
 
-        # Load_data
-        load_data = loadmat(file_name, squeeze_me=True)
-        
-        # Check if load_data["langevin_step"] is a multiple of self.recording["sf_recording_period"]
-        if load_data["langevin_step"] % self.recording["sf_recording_period"] != 0:
-            print(f"(Warning!) 'langevin_step' of {file_name} is not a multiple of 'sf_recording_period'.")
-            next_sf_langevin_step = (load_data["langevin_step"]//self.recording["sf_recording_period"] + 1)*self.recording["sf_recording_period"]
-            print(f"The structure function will be correctly recorded after {next_sf_langevin_step}th langevin_step." )
+        # Convert numpy arrays to lists
+        for data in m_dic:
+            if type(m_dic[data]).__module__ == np.__name__  :
+                m_dic[data] = m_dic[data].tolist()
 
-        # Restore random state
-        self.random_bg.state ={'bit_generator': 'PCG64',
-            'state': {'state': int(load_data["random_state_state"]),
-                      'inc':   int(load_data["random_state_inc"])},
-                      'has_uint32': 0, 'uinteger': 0}
-        print("Restored Random Number Generator: ", self.random_bg.state)
+        for data in m_dic["initial_params"]:
+            if type(m_dic["initial_params"][data]).__module__ == np.__name__  :
+                m_dic["initial_params"][data] = m_dic["initial_params"][data].tolist()
 
-        # Make initial_fields
-        initial_fields = {}
-        for name in self.monomer_types:
-            initial_fields[name] = np.array(load_data["w_" + name])
+        # Get input file extension
+        _, file_extension = os.path.splitext(path)
 
-        # Run
-        self.run(initial_fields=initial_fields,
-            normal_noise_prev=load_data["normal_noise_prev"],
-            start_langevin_step=load_data["langevin_step"]+1)
+        # Save data in matlab format
+        if file_extension == ".mat":
+            scipy.io.savemat(path, m_dic, long_field_names=True, do_compression=True)
 
-    def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
+        # Save data in json format
+        elif file_extension == ".json":
+            with open(path, "w") as f:
+                json.dump(m_dic, f, indent=2)
 
-        print("---------- Run  ----------")
+        # Save data in yaml format
+        elif file_extension == ".yaml":
+            with open(path, "w") as f:
+                f.write(yaml.dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
+        else:
+            raise("Invalid output file extension.")
+
+    def run(self, initial_fields, q_init=None):
 
         # The number of components
         S = len(self.monomer_types)
 
-        # The numbers of real and imaginary fields, respectively
-        R = len(self.mpt.aux_fields_real_idx)
-        I = len(self.mpt.aux_fields_imag_idx)
+        # Assign large initial value for the energy and error
+        energy_total = 1.0e20
+        error_level = 1.0e20
 
-        # Simulation data directory
-        pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
+        # Reset optimizer
+        self.field_optimizer.reset_count()
+        
+        print("---------- Run ----------")
+        print("iteration, mass error, total_partitions, energy_total, error_level", end="")
+        if (self.box_is_altering):
+            print(", box size")
+        else:
+            print("")
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.complex128)
+        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
+        
         for i in range(S):
-            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
+            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
+
+        # # Keep the level of field value
+        # for i in range(S):
+        #     w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
-        # Convert monomer chemical potential fields into auxiliary fields
-        w_aux = self.mpt.to_aux_fields(w)
+        # Iteration begins here
+        for scft_iter in range(1, self.max_iter+1):
 
-        # Dictionary to record history of H and dH/dχN
-        H_history = []
-        dH_history = {}
-        for key in self.chi_n:
-            dH_history[key] = []
+            # Compute total concentration for each monomer type
+            phi, _ = self.compute_concentrations(w)
 
-        # Arrays for structure function
-        sf_average = {} # <u(k) phi(-k)>
-        for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
-            sorted_pair = sorted(monomer_id_pair)
-            type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            sf_average[type_pair] = np.zeros_like(np.fft.fftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            # # Scaling phi
+            # for monomer_type in self.monomer_types:
+            #     phi[monomer_type] *= self.phi_rescaling
 
-        # Create an empty array for field update algorithm
-        if normal_noise_prev is None :
-            normal_noise_prev = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
-        else:
-            normal_noise_prev = normal_noise_prev
+            # Convert monomer fields to auxiliary fields
+            w_aux = self.mpt.to_aux_fields(w)
 
-        if start_langevin_step is None :
-            start_langevin_step = 1
+            # Calculate the total energy
+            # energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
+            total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
+            energy_total = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
 
-        # # Find saddle point
-        # print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
-        phi, _ = self.compute_concentrations(w_aux=w_aux)
-
-        # Init timers
-        total_error_level = 0
-        time_start = time.time()
-
-        # Langevin iteration begins here
-        for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
-            print("Langevin step: ", langevin_step)
-
-            # Copy data for restoring
-            w_aux_copy = w_aux.copy()
-            phi_copy = phi.copy()
+            # Calculate difference between current total density and target density
+            phi_total = np.zeros(self.cb.get_total_grid())
+            for i in range(S):
+                phi_total += phi[self.monomer_types[i]]
+            # phi_diff = phi_total-self.phi_target
+            phi_diff = phi_total-1.0
 
             # Compute functional derivatives of Hamiltonian w.r.t. fields 
-            w_lambda, _ = self.mpt.compute_func_deriv(w_aux, phi, range(S))
+            w_diff, _ = self.mpt.compute_func_deriv(w_aux, phi, range(S))
+            w_diff *= -1
 
-            # Update w_aux using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [S, self.cb.get_total_grid()])
-            for count, i in enumerate(range(S)):
-                scaling = self.dt_scaling[i]
-                if i in self.mpt.aux_fields_real_idx:
-                    sign = 1            
-                else:
-                    sign = 1j
-                w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*sign*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+            # # Keep the level of functional derivatives
+            # for i in range(S):
+            #     w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
 
-            # Swap two noise arrays
-            normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+            # error_level measures the "relative distance" between the input and output fields
+            old_error_level = error_level
+            error_level = 0.0
+            error_normal = 1.0  # add 1.0 to prevent divergence
+            for i in range(S):
+                error_level += self.cb.inner_product(w_diff[i],w_diff[i])
+                error_normal += self.cb.inner_product(w[i],w[i])
+            error_level = np.sqrt(error_level/error_normal)
 
-            # Calculate Hamiltonian
-            total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
-
-            print(hamiltonian)
-
-            # S = len(self.monomer_types)
-
-            # # Compute Hamiltonian part that is related to fields
-            # hamiltonian_fields = 4.0
-            # # hamiltonian_fields = -self.zeta_n/2
-            # hamiltonian_fields += np.mean(w_aux[0]**2)/self.chi_n["A,B"]
-            # hamiltonian_fields -= np.mean(w_aux[1]**2)/(self.chi_n["A,B"]+2*self.zeta_n)
+            # Print iteration # and error levels and check the mass conservation
+            mass_error = self.cb.integral(phi_diff)/self.cb.get_volume()
             
-            # # Compute Hamiltonian part that total partition functions
-            # hamiltonian_partition = 0.0
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
-            #                     self.molecules.get_polymer(p).get_alpha() * \
-            #                     np.log(total_partitions[p])
+            if (self.box_is_altering):
+                # Calculate stress
+                self.solver.compute_stress()
+                stress_array = np.array(self.solver.get_stress())
+                error_level += np.sqrt(np.sum(stress_array**2))
 
-            # hamiltonian2 = hamiltonian_partition + hamiltonian_fields
+                print("%8d %12.3E " %
+                (scft_iter, mass_error), end=" [ ")
+                for p in range(self.molecules.get_n_polymer_types()):
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
+                print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
+                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
+            else:
+                print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
+                for p in range(self.molecules.get_n_polymer_types()):
+                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
+                print("] %15.9f %15.7E " % (energy_total, error_level))
 
-            # # Compute Hamiltonian part that is related to fields
-            # hamiltonian_fields = self.chi_n["A,B"]/4
-            # hamiltonian_fields += np.mean(w_aux[0]**2)/self.chi_n["A,B"]
-            # hamiltonian_fields -= np.mean(w_aux[1]**2)/(self.chi_n["A,B"]+2*self.zeta_n)
-            # hamiltonian_fields -= np.mean(w_aux[1])
-            
-            # # Compute Hamiltonian part that total partition functions
-            # hamiltonian_partition = 0.0
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
-            #                     self.molecules.get_polymer(p).get_alpha() * \
-            #                     np.log(total_partitions[p])
+            # Conditions to end the iteration
+            if error_level < self.tolerance:
+                break
 
-            # hamiltonian3 = hamiltonian_partition + hamiltonian_fields
-            # print(hamiltonian1, hamiltonian2, hamiltonian3)
+            # for count, i in enumerate(range(S)):
+            #     w_aux[i] += -w_diff[count]
 
-            # Check the mass conservation
-            # mass_error = np.mean(h_deriv[I-1])
-            # print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     print(self.solver.get_total_partition(p), end=" ")
-            # for i in range(I):
-            #     print("%13.7E" % (error_level_array[i]), end=" ")
-            # print("]")
+            # Calculate new fields using simple and Anderson mixing
+            if (self.box_is_altering):
+                dlx = -stress_array
+                am_current  = np.concatenate((np.reshape(w_aux,  S*self.cb.get_total_grid()), self.cb.get_lx()))
+                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_total_grid()), self.scale_stress*dlx))
+                am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
-            # # Find saddle point of the pressure field
-            # phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
-            # total_saddle_iter += saddle_iter
-            # total_error_level += error_level
+                # Copy fields
+                w_aux = np.reshape(am_new[0:S*self.cb.get_total_grid()], (S, self.cb.get_total_grid()))
 
-            # # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
-            # if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:
-            #     if successive_fail_count < 5:                
-            #         print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
+                # Set box size
+                # Restricting |dLx| to be less than 10 % of Lx
+                old_lx = np.array(self.cb.get_lx())
+                new_lx = np.array(am_new[-self.cb.get_dim():])
+                new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
+                new_lx = (1 + new_dlx)*old_lx
+                self.cb.set_lx(new_lx)
 
-            #         # Restore w_aux and phi
-            #         w_aux = w_aux_copy
-            #         phi = phi_copy
-                    
-            #         # Increment counts and continue
-            #         successive_fail_count += 1
-            #         saddle_fail_count += 1
-            #         continue
-            #     else:
-            #         print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (successive_fail_count))
-            #         break
-            # else:
-            #     successive_fail_count = 0
+                # Update bond parameters using new lx
+                self.solver.update_laplacian_operator()
+            else:
+                w_aux = self.field_optimizer.calculate_new_fields(
+                np.reshape(w_aux,  S*self.cb.get_total_grid()),
+                np.reshape(w_diff, S*self.cb.get_total_grid()), old_error_level, error_level)
+                w_aux = np.reshape(w_aux, (S, self.cb.get_total_grid()))
 
-            # Compute H and dH/dχN
-            if langevin_step % self.recording["sf_computing_period"] == 0:
-                H_history.append(hamiltonian)
-                dH = self.mpt.compute_h_deriv_chin(self.chi_n, w_aux)
-                for key in self.chi_n:
-                    dH_history[key].append(dH[key])
+            # Convert auxiliary fields to monomer fields
+            w = self.mpt.to_monomer_fields(w_aux)
+        
+        # Print free energy as per chain expression
+        print("Free energy per chain (for each chain type):")
+        for p in range(self.molecules.get_n_polymer_types()):
+            energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
+                                                  self.molecules.get_polymer(p).get_volume_fraction()
+            print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
 
-            # Save H and dH/dχN
-            if langevin_step % self.recording["sf_recording_period"] == 0:
-                H_history = np.array(H_history)
-                mdic = {"H_history": H_history}
-                for key in self.chi_n:
-                    dH_history[key] = np.array(dH_history[key])
-                    monomer_pair = sorted(key.split(","))
-                    mdic["dH_history_" + monomer_pair[0] + "_" + monomer_pair[1]] = dH_history[key]
-                savemat(os.path.join(self.recording["dir"], "dH_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
-                # Reset dictionary
-                H_history = []
-                for key in self.chi_n:
-                    dH_history[key] = []
-                    
-            # Calculate structure function
-            if langevin_step % self.recording["sf_computing_period"] == 0:
-                # Perform Fourier transforms
-                mu_fourier = {}
-                phi_fourier = {}
-                for i in range(S):
-                    key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.fftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
-                    mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(S-1) :
-                        mu_fourier[key] += np.fft.fftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
-                # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
-                for key in sf_average:
-                    monomer_pair = sorted(key.split(","))
-                    # TODO: introduce a mapping to compute <phi(-k)>
-                    sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
+        # Store phi and w
+        self.phi = phi
+        self.w = w
 
-            # Save structure function
-            if langevin_step % self.recording["sf_recording_period"] == 0:
-                # Make a dictionary for chi_n
-                chi_n_mat = {}
-                for key in self.chi_n:
-                    monomer_pair = sorted(key.split(","))
-                    chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
-                mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
-                        "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-                        "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
-                # Add structure functions to the dictionary
-                for key in sf_average:
-                    sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
-                    monomer_pair = sorted(key.split(","))
-                    mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
-                savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
-                # Reset arrays
-                for key in sf_average:
-                    sf_average[key][:,:,:] = 0.0
-
-            # Save simulation data
-            if langevin_step % self.recording["recording_period"] == 0:
-                w = self.mpt.to_monomer_fields(w_aux)
-                self.save_simulation_data(
-                    path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
-                    w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
-
-        # Estimate execution time
-        time_duration = time.time() - time_start
-
-        print("total time: %f, time per step: %f" %
-            (time_duration, time_duration/(langevin_step+1-start_langevin_step)) )
+    # def get_concentrations(self,):
+    #     return self.phi
+    
+    # def get_fields(self,):
+    #     w_dict = {}
+    #     for idx, monomer_type in enumerate(self.monomer_types):
+    #         w_dict[monomer_type] = self.w[idx,:]
+    #     return w_dict
