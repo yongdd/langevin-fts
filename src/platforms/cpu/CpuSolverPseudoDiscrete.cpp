@@ -166,7 +166,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
         const double* _fourier_basis_x = pseudo->get_fourier_basis_x();
         const double* _fourier_basis_y = pseudo->get_fourier_basis_y();
         const double* _fourier_basis_z = pseudo->get_fourier_basis_z();
-        const int* _k_idx = pseudo->get_negative_frequency_mapping();
+        const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
 
         if (is_half_bond_length)
         {
@@ -191,7 +191,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
                 stress[0] += coeff*_fourier_basis_x[i];
                 stress[1] += coeff*_fourier_basis_y[i];
                 stress[2] += coeff*_fourier_basis_z[i];
@@ -203,7 +203,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
                 stress[0] += coeff*_fourier_basis_y[i];
                 stress[1] += coeff*_fourier_basis_z[i];
             }
@@ -214,7 +214,7 @@ std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_k_idx[i]];
+                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
                 stress[0] += coeff*_fourier_basis_z[i];
             }
         }

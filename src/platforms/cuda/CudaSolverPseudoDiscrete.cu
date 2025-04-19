@@ -311,7 +311,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         const double* _d_fourier_basis_x = pseudo->get_fourier_basis_x();
         const double* _d_fourier_basis_y = pseudo->get_fourier_basis_y();
         const double* _d_fourier_basis_z = pseudo->get_fourier_basis_z();
-        const int* _d_k_idx = pseudo->get_negative_frequency_mapping();
+        const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
         if (is_half_bond_length)
         {
@@ -335,7 +335,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
         else
         {
-            ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_k_idx, M_COMPLEX);
+            ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_1_one[STREAM], 1.0, M_COMPLEX);
         }
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);

@@ -8,7 +8,7 @@ import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
-from langevinfts import *
+from polymerfts import *
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.mse import *

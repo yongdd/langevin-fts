@@ -2,7 +2,7 @@
 
 import os
 import numpy as np
-from langevinfts import *
+from polymerfts import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1

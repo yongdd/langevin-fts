@@ -3,7 +3,7 @@ import numpy as np
 import time
 from scipy.io import savemat
 import scipy.optimize
-from langevinfts import *
+from polymerfts import *
 
 def find_saddle_point(lx):
 

@@ -34,9 +34,9 @@ CudaPseudo<T>::CudaPseudo(
 
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
-            const int* k_idx = Pseudo<T>::get_negative_frequency_mapping();
-            gpu_error_check(cudaMalloc((void**)&d_k_idx, sizeof(int)*M_COMPLEX));
-            gpu_error_check(cudaMemcpy(d_k_idx, k_idx,   sizeof(int)*M_COMPLEX, cudaMemcpyHostToDevice));
+            const int* negative_k_idx = Pseudo<T>::get_negative_frequency_mapping();
+            gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
+            gpu_error_check(cudaMemcpy(d_negative_k_idx, negative_k_idx, sizeof(int)*M_COMPLEX, cudaMemcpyHostToDevice));
         }
     }
     catch(std::exception& exc)
@@ -58,7 +58,7 @@ CudaPseudo<T>::~CudaPseudo()
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
     if constexpr (std::is_same<T, std::complex<double>>::value)
-        cudaFree(d_k_idx);
+        cudaFree(d_negative_k_idx);
 }
 template <typename T>
 void CudaPseudo<T>::update(

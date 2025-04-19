@@ -125,15 +125,15 @@ INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
-# PYBIND11_ADD_MODULE(langevinfts src/pybind11/langevinfts.cpp) // new find python mode can cause segfault error depending on compile environment
-ADD_LIBRARY(langevinfts MODULE src/pybind11/langevinfts.cpp) 
-SET_TARGET_PROPERTIES(langevinfts PROPERTIES PREFIX "" SUFFIX ".so")
+# PYBIND11_ADD_MODULE(polymerfts_core src/pybind11/polymerfts_core.cpp) // new find python mode can cause segfault error depending on compile environment
+ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp) 
+SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
 
 IF(CMAKE_BUILD_TYPE STREQUAL Release)
-    TARGET_COMPILE_OPTIONS(langevinfts PRIVATE -ffast-math)
+    TARGET_COMPILE_OPTIONS(_core PRIVATE -ffast-math)
 ENDIF()
 
-TARGET_LINK_LIBRARIES(langevinfts PUBLIC pybind11::module PRIVATE 
+TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE 
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
@@ -148,7 +148,17 @@ TARGET_LINK_LIBRARIES(langevinfts PUBLIC pybind11::module PRIVATE
 )
 
 EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/langevinfts.so" DESTINATION ${PYTHON_SITE_PACKAGES})
+# INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/polymerfts_core.so" DESTINATION ${PYTHON_SITE_PACKAGES})
+
+# ----------------  Install rules  ----------------
+# 1. compiled extension  → platform‑dependent site‑packages dir
+install(TARGETS  _core
+        LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux
+        ARCHIVE  DESTINATION ${Python3_SITEARCH}/polymerfts)
+
+# 2. pure‑Python files   → platform‑independent site‑packages dir
+install(DIRECTORY  src/python/                         # contains __init__.py scfy.py lfts.py …
+        DESTINATION ${Python3_SITELIB}/polymerfts)     # keeps sub‑dir structure intact
 
 #---------- Test -----------
 ENABLE_TESTING()

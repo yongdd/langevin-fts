@@ -54,11 +54,11 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Installation
 ```Shell
 # Create virtual environment 
-conda create -n lfts python=3.9 cmake=3.19 pybind11=2.9 \
+conda create -n polymerfts python=3.9 cmake=3.31 pybind11=2.13 \
     make conda git pip scipy openmpi matplotlib pyyaml networkx pygraphviz
 # Activate virtual environment  
-conda activate lfts  
-# Download L-FTS  
+conda activate polymerfts  
+# Download the source code
 git clone https://github.com/yongdd/langevin-fts.git  
 # Build  
 cd langevin-fts && mkdir build && cd build  
@@ -77,10 +77,10 @@ export OMP_STACKSIZE=1G   # Stack size for OpenMP
 *  If you want to remove all installations :cry:, type following commands.   
 ```Shell
 conda deactivate  
-conda env remove -n lfts  
+conda env remove -n polymerfts  
 ```
 # User Guide
-+ To use this library, first activate virtual environment by typing `conda activate lfts` in command line. In Python script, import the package by adding  `from langevinfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
++ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. In Python script, import the package by adding  `from polymerfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
 + Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate multiple CPUs as much as `OMP_NUM_THREADS` when submitting a job.
 + The SCFT and L-FTS are implemented on the python shared library in `examples/scft` and `examples/fts`, respectively.
   + Set 'reduce_gpu_memory_usage=True' if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size.
