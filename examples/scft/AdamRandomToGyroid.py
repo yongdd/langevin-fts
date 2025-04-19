@@ -4,7 +4,7 @@ import time
 import numpy as np
 from scipy.io import savemat
 from scipy.ndimage import gaussian_filter
-import scft
+from polymerfts import scft
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1

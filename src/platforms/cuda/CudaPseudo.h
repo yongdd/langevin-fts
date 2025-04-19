@@ -24,7 +24,7 @@ private:
     double *d_fourier_basis_z;
     
     // Mapping array for negative frequency
-    int *d_k_idx;
+    int *d_negative_k_idx;
 
     // GPU arrays for pseudo-spectral
     std::map<std::string, double*> d_boltz_bond;        // Boltzmann factor for the single bond
@@ -45,7 +45,7 @@ public:
     const double* get_fourier_basis_y() override { return d_fourier_basis_y;};
     const double* get_fourier_basis_z() override { return d_fourier_basis_z;};
 
-    const int* get_negative_frequency_mapping() override { return d_k_idx;};
+    const int* get_negative_frequency_mapping() override { return d_negative_k_idx;};
 
     void update(
         std::vector<BoundaryCondition> bc,

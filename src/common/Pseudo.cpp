@@ -34,7 +34,7 @@ Pseudo<T>::Pseudo(
         fourier_basis_z = new double[M_COMPLEX];
 
         if constexpr (std::is_same<T, std::complex<double>>::value)
-            k_idx = new int[M_COMPLEX];
+            negative_k_idx = new int[M_COMPLEX];
 
         update_boltz_bond();
         update_weighted_fourier_basis();
@@ -53,7 +53,7 @@ Pseudo<T>::~Pseudo()
     delete[] fourier_basis_y;
     delete[] fourier_basis_z;
     if constexpr (std::is_same<T, std::complex<double>>::value)
-        delete[] k_idx;
+        delete[] negative_k_idx;
 
     for(const auto& item: boltz_bond)
         delete[] item.second;
@@ -93,7 +93,7 @@ const double* Pseudo<T>::get_fourier_basis_z()
 template <typename T>
 const int* Pseudo<T>::get_negative_frequency_mapping()
 {
-    return k_idx;
+    return negative_k_idx;
 }
 
 //----------------- update_boltz_bond -------------------
@@ -348,7 +348,7 @@ void Pseudo<std::complex<double>>::update_negative_frequency_mapping()
                 idx       = i    *tnx[1]*tnx[2] + j    *tnx[2] + k;
                 idx_minus = itemp*tnx[1]*tnx[2] + jtemp*tnx[2] + ktemp;
 
-                k_idx[idx] = idx_minus;
+                negative_k_idx[idx] = idx_minus;
 
             //     0   0   0
             //     1   1   6
@@ -372,7 +372,7 @@ void Pseudo<std::complex<double>>::update_negative_frequency_mapping()
     }
     // const int M_COMPLEX = get_total_complex_grid();
     // for(int i=0;i<M_COMPLEX;i++)
-    //     std::cout << i << ", " << k_idx[i] << ", " << std::endl;
+    //     std::cout << i << ", " << negative_k_idx[i] << ", " << std::endl;
 }
 
 // Explicit template instantiation

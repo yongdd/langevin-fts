@@ -10,7 +10,7 @@ import time
 import numpy as np
 import scipy.special as sp
 from scipy.io import loadmat, savemat
-from langevinfts import *
+from polymerfts import *
 
 def find_saddle_point(cb, molecules, pseudo, am, chi_n,
     w_plus, w_minus, saddle_max_iter, saddle_tolerance, verbose_level):

@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 from scipy.io import savemat, loadmat
-import scft
+from polymerfts import scft
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1

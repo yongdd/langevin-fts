@@ -393,7 +393,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         .def("display_info", &AbstractFactory<T>::display_info);
 }
 
-PYBIND11_MODULE(langevinfts, m)
+PYBIND11_MODULE(_core, m)
 {
     // py::class_<Array>(m, "Array")
     //     .def("set_data", [](Array& obj, py::array_t<const double> data)

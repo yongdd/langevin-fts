@@ -24,7 +24,7 @@ protected:
     double ds;
 
     // Mapping array for negative frequency
-    int *k_idx;
+    int *negative_k_idx;
 
     // For stress calculation: compute_stress()
     double *fourier_basis_x;

@@ -8,7 +8,7 @@ import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
-from langevinfts import *
+from polymerfts import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
