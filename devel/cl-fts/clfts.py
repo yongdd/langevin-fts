@@ -17,245 +17,6 @@ os.environ["OMP_STACKSIZE"] = "1G"
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
         return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
 
-class SymmetricPolymerTheoryCompressible:
-    def __init__(self, monomer_types, chi_n, zeta_n):
-        self.monomer_types = monomer_types
-        S = len(self.monomer_types)
-        
-        # self.matrix_q = np.ones((S,S))/S
-        # self.matrix_p = np.identity(S) - self.matrix_q
-        
-        # Compute eigenvalues and orthogonal matrix
-        eigenvalues, matrix_o,  = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
-
-        # Construct chi_n matrix
-        matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    matrix_chi[i,j] = chi_n[key]
-                    matrix_chi[j,i] = chi_n[key]
-
-        matrix_chi = matrix_chi
-        self.vector_large_s = -zeta_n*np.matmul(np.transpose(matrix_o), np.ones(S))
-
-        print("vector_large_s", self.vector_large_s)
-
-        # Indices whose auxiliary fields are real
-        self.aux_fields_real_idx = []
-        # Indices whose auxiliary fields are imaginary including the pressure field
-        self.aux_fields_imag_idx = []
-        for i in range(S):
-            # assert(not np.isclose(eigenvalues[i], 0.0)), \
-            #     "One of eigenvalues is zero for given chiN values."
-            if np.isclose(eigenvalues[i], 0.0):
-                print("One of eigenvalues is zero for given chiN values.")
-            elif eigenvalues[i] > 0:
-                self.aux_fields_imag_idx.append(i)
-            else:
-                self.aux_fields_real_idx.append(i)
-
-        # The numbers of real and imaginary fields, respectively
-        self.R = len(self.aux_fields_real_idx)
-        self.I = len(self.aux_fields_imag_idx)
-
-        if self.I > 1:
-            print("(Warning!) For a given χN interaction parameter set, at least one of the auxiliary fields is an imaginary field. ", end="")
-            print("The field fluctuations would not be fully reflected. Run this simulation at your own risk.")
-
-        # Compute coefficients for Hamiltonian computation
-        h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(chi_n, eigenvalues, zeta_n)
-
-        # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
-        matrix_a = matrix_o.copy()
-        matrix_a_inv = np.transpose(matrix_o).copy()/S
-
-        # Check the inverse matrix
-        error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(S))
-        assert(np.isclose(error, 0.0)), \
-            "Invalid inverse of matrix A. Perhaps matrix O is not orthogonal."
-
-        # Compute derivatives of Hamiltonian coefficients w.r.t. χN
-        epsilon = 1e-5
-        self.h_const_deriv_chin = {}
-        self.h_coef_mu1_deriv_chin = {}
-        self.h_coef_mu2_deriv_chin = {}
-        for key in chi_n:
-            
-            chi_n_p = chi_n.copy()
-            chi_n_n = chi_n.copy()
-            
-            chi_n_p[key] += epsilon
-            chi_n_n[key] -= epsilon
-
-            # Compute eigenvalues and orthogonal matrix
-            eigenvalues_p, _ = self.compute_eigen_system(monomer_types, chi_n_p, zeta_n)
-            eigenvalues_n, _ = self.compute_eigen_system(monomer_types, chi_n_n, zeta_n)
-            
-            # Compute coefficients for Hamiltonian computation
-            h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(chi_n_p, eigenvalues_p, zeta_n)
-            h_const_n, h_coef_mu1_n, h_coef_mu2_n = self.compute_h_coef(chi_n_n, eigenvalues_n, zeta_n)
-            
-            # Compute derivatives using finite difference
-            self.h_const_deriv_chin[key] = (h_const_p - h_const_n)/(2*epsilon)
-            self.h_coef_mu1_deriv_chin[key] = (h_coef_mu1_p - h_coef_mu1_n)/(2*epsilon)
-            self.h_coef_mu2_deriv_chin[key] = (h_coef_mu2_p - h_coef_mu2_n)/(2*epsilon)
-
-        self.h_const = h_const
-        self.h_coef_mu1 = h_coef_mu1
-        self.h_coef_mu2 = h_coef_mu2
-
-        self.eigenvalues = eigenvalues
-        self.matrix_o = matrix_o
-        self.matrix_a = matrix_a
-        self.matrix_a_inv = matrix_a_inv
-
-        print("------------ Polymer Field Theory for Multimonomer ------------")
-        print("Eigenvalues:\n\t", self.eigenvalues)
-        print("Eigenvectors [v1, v2, ...] :\n\t", str(self.matrix_o).replace("\n", "\n\t"))
-        print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
-        # print("A*Inverse[A]:\n\t", str(np.matmul(self.matrix_a, self.matrix_a_inv)).replace("\n", "\n\t"))
-        # print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
-
-        print("Real Fields: ",      self.aux_fields_real_idx)
-        print("Imaginary Fields: ", self.aux_fields_imag_idx)
-        
-        print("In Hamiltonian:")
-        print("\treference energy: ", self.h_const)
-        print("\tcoefficients of int of mu(r)/V: ", self.h_coef_mu1)
-        print("\tcoefficients of int of mu(r)^2/V: ", self.h_coef_mu2)
-        print("\tdH_ref/dχN: ", self.h_const_deriv_chin)
-        print("\td(coef of mu(r))/dχN: ", self.h_coef_mu1_deriv_chin)
-        print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
-
-    def to_aux_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
-
-    def to_monomer_fields(self, w_aux):
-        return np.matmul(self.matrix_a, w_aux)
-
-    def compute_eigen_system(self, monomer_types, chi_n, zeta_n):
-        S = len(monomer_types)
-
-        # Compute eigenvalues and eigenvectors
-        matrix_chin = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
-                monomer_pair.sort()
-                key = monomer_pair[0] + "," + monomer_pair[1]
-                if key in chi_n:
-                    matrix_chin[i,j] = chi_n[key]
-                    matrix_chin[j,i] = chi_n[key]
-        u = zeta_n*np.ones((S,S)) + matrix_chin
-        
-        eigenvalues, eigenvectors = np.linalg.eigh(u)
-
-        # Reordering eigenvalues and eigenvectors
-        sorted_indexes = np.argsort(eigenvalues)[::]
-        eigenvalues = eigenvalues[sorted_indexes]
-        eigenvectors = eigenvectors[:,sorted_indexes]
-        
-        # Make a orthogonal matrix using Gram-Schmidt
-        eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
-        eigenvalues[eigen_val_0] = 0.0
-        eigen_vec_0 = eigenvectors[:,eigen_val_0]
-        for i in range(eigen_vec_0.shape[1]-2,-1,-1):
-            vec_0 = eigen_vec_0[:,i].copy()
-            for j in range(i+1, eigen_vec_0.shape[1]):
-                eigen_vec_0[:,i] -= eigen_vec_0[:,j]*np.dot(vec_0,eigen_vec_0[:,j])
-            eigen_vec_0[:,i] /= np.linalg.norm(eigen_vec_0[:,i])
-        eigenvectors[:,eigen_val_0] = eigen_vec_0
-
-        # Make the first element of each vector positive to restore the conventional AB polymer field theory
-        for i in range(S):
-            if eigenvectors[0,i] < 0.0:
-                eigenvectors[:,i] *= -1.0
-
-        # Multiply √S to eigenvectors
-        eigenvectors *= np.sqrt(S)
-
-        return eigenvalues, eigenvectors
-
-    def compute_h_coef(self, eigenvalues, zeta_n):
-        S = len(self.monomer_types)
-
-        # Compute reference part of Hamiltonian
-        h_const = 0.5*zeta_n
-        for i in range(S):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_const -= 0.5*self.vector_large_s[i]**2/eigenvalues[i]/S
-
-        # Compute coefficients of integral of μ(r)/V
-        h_coef_mu1 = np.zeros(S)
-        for i in range(S):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu1[i] = self.vector_large_s[i]/eigenvalues[i]
-
-        # Compute coefficients of integral of μ(r)^2/V
-        h_coef_mu2 = np.zeros(S)
-        for i in range(S):
-            if not np.isclose(eigenvalues[i], 0.0):
-                h_coef_mu2[i] = -0.5/eigenvalues[i]*S
-
-        return h_const, h_coef_mu1, h_coef_mu2
-
-    # Compute total Hamiltonian
-    def compute_hamiltonian(self, molecules, w_aux, total_partitions):
-        S = len(self.monomer_types)
-
-        # Compute Hamiltonian part that is related to fields
-        hamiltonian_fields = 0.0
-        for i in range(S):
-            hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
-            hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
-        
-        # Compute Hamiltonian part that total partition functions
-        hamiltonian_partition = 0.0
-        for p in range(molecules.get_n_polymer_types()):
-            hamiltonian_partition -= molecules.get_polymer(p).get_volume_fraction()/ \
-                            molecules.get_polymer(p).get_alpha() * \
-                            np.log(total_partitions[p])
-
-        return hamiltonian_partition + hamiltonian_fields + self.h_const
-
-    # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
-    def compute_func_deriv(self, w_aux, phi, indices):
-        S = len(self.monomer_types)
-                
-        elapsed_time = {}
-        time_e_start = time.time()
-        h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=np.complex128)
-        for count, i in enumerate(indices):
-            # Return dH/dw
-            h_deriv[count] += 2*self.h_coef_mu2[i]*w_aux[i]
-            h_deriv[count] +=   self.h_coef_mu1[i]
-            for j in range(S):
-                h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
-
-            # Change the sign for the imaginary fields
-            if i in self.aux_fields_imag_idx:
-                h_deriv[count] = -h_deriv[count]
-
-        elapsed_time["h_deriv"] = time.time() - time_e_start
-        
-        return  h_deriv, elapsed_time
-
-    # Compute dH/dχN
-    def compute_h_deriv_chin(self, chi_n, w_aux):
-        S = len(self.monomer_types)
-
-        dH = {}
-        for key in chi_n:
-            dH[key] = self.h_const_deriv_chin[key]
-            for i in range(S):
-                dH[key] += self.h_coef_mu2_deriv_chin[key][i]*np.mean(w_aux[i]**2)
-                dH[key] += self.h_coef_mu1_deriv_chin[key][i]*np.mean(w_aux[i])                   
-        return dH
-
 class CLFTS:
     def __init__(self, params, random_seed=None):
 
@@ -313,7 +74,7 @@ class CLFTS:
 
         # Multimonomer polymer field theory
         self.zeta_n = 100
-        self.mpt = SymmetricPolymerTheoryCompressible(self.monomer_types, self.chi_n, self.zeta_n)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, self.zeta_n)
 
         # The numbers of real and imaginary fields, respectively
         S = len(self.monomer_types)
@@ -651,88 +412,53 @@ class CLFTS:
 
         # # Find saddle point
         # print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
-        phi, _ = self.compute_concentrations(w_aux=w_aux)
 
         # Init timers
-        total_error_level = 0
         time_start = time.time()
 
         # Langevin iteration begins here
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
-
-            # Copy data for restoring
-            w_aux_copy = w_aux.copy()
-            phi_copy = phi.copy()
+    
+            # Compute total concentrations
+            phi, _ = self.compute_concentrations(w_aux=w_aux)
 
             # Compute functional derivatives of Hamiltonian w.r.t. fields 
-            w_lambda, _ = self.mpt.compute_func_deriv(w_aux, phi, range(S))
+            w_lambda = self.mpt.compute_func_deriv(w_aux, phi, range(S))
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [S, self.cb.get_total_grid()])
-            for count, i in enumerate(range(S)):
+            for i in range(S):
                 scaling = self.dt_scaling[i]
                 if i in self.mpt.aux_fields_real_idx:
                     sign = 1            
                 else:
                     sign = 1j
-                w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*sign*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
+                w_aux[i] += -w_lambda[i]*self.langevin["dt"]*scaling + 0.5*sign*(normal_noise_prev[i] + normal_noise_current[i])*np.sqrt(scaling)
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
             # Calculate Hamiltonian
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions)
-
-            print(hamiltonian)
-
-            # S = len(self.monomer_types)
-
-            # # Compute Hamiltonian part that is related to fields
-            # hamiltonian_fields = 4.0
-            # # hamiltonian_fields = -self.zeta_n/2
-            # hamiltonian_fields += np.mean(w_aux[0]**2)/self.chi_n["A,B"]
-            # hamiltonian_fields -= np.mean(w_aux[1]**2)/(self.chi_n["A,B"]+2*self.zeta_n)
-            
-            # # Compute Hamiltonian part that total partition functions
-            # hamiltonian_partition = 0.0
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
-            #                     self.molecules.get_polymer(p).get_alpha() * \
-            #                     np.log(total_partitions[p])
-
-            # hamiltonian2 = hamiltonian_partition + hamiltonian_fields
-
-            # # Compute Hamiltonian part that is related to fields
-            # hamiltonian_fields = self.chi_n["A,B"]/4
-            # hamiltonian_fields += np.mean(w_aux[0]**2)/self.chi_n["A,B"]
-            # hamiltonian_fields -= np.mean(w_aux[1]**2)/(self.chi_n["A,B"]+2*self.zeta_n)
-            # hamiltonian_fields -= np.mean(w_aux[1])
-            
-            # # Compute Hamiltonian part that total partition functions
-            # hamiltonian_partition = 0.0
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     hamiltonian_partition -= self.molecules.get_polymer(p).get_volume_fraction()/ \
-            #                     self.molecules.get_polymer(p).get_alpha() * \
-            #                     np.log(total_partitions[p])
-
-            # hamiltonian3 = hamiltonian_partition + hamiltonian_fields
-            # print(hamiltonian1, hamiltonian2, hamiltonian3)
+            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, include_const_term=True)
 
             # Check the mass conservation
-            # mass_error = np.mean(h_deriv[I-1])
-            # print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
-            # for p in range(self.molecules.get_n_polymer_types()):
-            #     print(self.solver.get_total_partition(p), end=" ")
-            # for i in range(I):
-            #     print("%13.7E" % (error_level_array[i]), end=" ")
-            # print("]")
+            phi_total = np.zeros_like(w_aux[0,:])
+            for i in range(S):
+                phi_total += phi[self.monomer_types[i]]
+            mass_error = np.abs(np.mean(phi_total-1.0))
 
-            # # Find saddle point of the pressure field
-            # phi, hamiltonian, saddle_iter, error_level = self.find_saddle_point(w_aux=w_aux)
-            # total_saddle_iter += saddle_iter
-            # total_error_level += error_level
+            # Print total partition functions and Hamiltonian
+            print("%12.3E " % (mass_error), end="\t[ ")
+            for z in total_partitions:
+                print(f"{z.real:.6E}{z.imag:+.6E}j", end=" ]")
+            print(f"\t{hamiltonian.real:.6E}{hamiltonian.imag:+.6E}j")
+
+            # Print mean of w_aux
+            for i in range(S):
+                print(np.max(np.abs(w_aux[i].real)), np.max(np.abs(w_aux[i].imag))) #
+            # print("")
 
             # # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
             # if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:

@@ -1,7 +1,7 @@
 # Polymer Field Theory Simulations with Python
 
 # Features
-This repository contains a library for polymer field theory simulations and its applications, such as SCFT, L-FTS and CL-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
+This repository contains a library for polymer field theory simulations and its applications, such as SCFT and L-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
   * Any number of monomer types
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers

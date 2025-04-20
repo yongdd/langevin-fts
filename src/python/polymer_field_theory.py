@@ -71,22 +71,6 @@ class SymmetricPolymerTheory:
             self.h_coef_mu1_deriv_chin[key] = (h_coef_mu1_p - h_coef_mu1_n)/(2*epsilon)
             self.h_coef_mu2_deriv_chin[key] = (h_coef_mu2_p - h_coef_mu2_n)/(2*epsilon)
 
-        # # Matsen's Notation
-        # h_const = chi_n["A,B"]/4.0
-        # h_coef_mu1[0] = 0.0
-        # h_coef_mu2[0] = 1.0/(chi_n["A,B"])
-
-        # h_coef_mu1[1] = -1.0
-        # h_coef_mu2[1] = -1.0/(chi_n["A,B"] + 2*zeta_n)
-
-        # # Simple's Notation
-        # h_const = -zeta_n/2
-        # h_coef_mu1[0] = 0.0
-        # h_coef_mu2[0] = 1.0/(chi_n["A,B"])
-
-        # h_coef_mu1[1] = 0.0
-        # h_coef_mu2[1] = -1.0/(chi_n["A,B"] + 2*zeta_n)
-
         self.h_const = h_const
         self.h_coef_mu1 = h_coef_mu1
         self.h_coef_mu2 = h_coef_mu2
@@ -261,7 +245,7 @@ class SymmetricPolymerTheory:
             if i in self.aux_fields_imag_idx:
                 h_deriv[count] = -h_deriv[count]
 
-        return  h_deriv
+        return h_deriv
 
     # Compute dH/dχN
     def compute_h_deriv_chin(self, chi_n, w_aux):
