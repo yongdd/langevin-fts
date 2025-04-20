@@ -598,7 +598,7 @@ class LFTS:
         # Saddle point iteration begins here
         for saddle_iter in range(1,self.saddle["max_iter"]+1):
             
-            # Compute total concentrations with noised w_aux
+            # Compute total concentrations
             phi, _ = self.compute_concentrations(w_aux)
 
             # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
