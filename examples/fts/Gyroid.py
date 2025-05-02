@@ -24,8 +24,8 @@ params = {
     "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
-        "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
+        "A":1.0, 
+        "B":1.0, },
 
     "chi_n": {"A,B": 18.35},     # Bare interaction parameter, Flory-Huggins params * N_Ref
 

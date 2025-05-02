@@ -9,9 +9,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
 
-from . import _core
-from .polymer_field_theory import *
-from .compressor import *
+from polymerfts import _core
+from polymer_field_theory import *
+# from .compressor import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -26,7 +26,12 @@ class LFTS:
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
-        self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
+        self.molecules = copy.deepcopy(params["molecules"])
+
+        if "chi_monomers" in params:
+            self.chi_monomers = copy.deepcopy(params["chi_monomers"])
+        else:
+            self.chi_monomers = copy.deepcopy(params["molecules"])
 
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
@@ -68,7 +73,7 @@ class LFTS:
                 f"There are duplicated χN ({sorted_monomer_pair}) parameters."
             self.chi_n[sorted_monomer_pair] = chin_value
 
-        for monomer_pair in itertools.combinations(self.monomer_types, 2):
+        for monomer_pair in itertools.combinations(self.chi_monomers, 2):
             monomer_pair = list(monomer_pair)
             monomer_pair.sort()
             sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
@@ -76,24 +81,24 @@ class LFTS:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
         # Multimonomer polymer field theory
-        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_monomers, self.chi_n, params["charges"], params["radiuses"], zeta_n=None)
 
         # The numbers of real and imaginary fields, respectively
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
         # Total volume fraction
-        assert(len(self.distinct_polymers) >= 1), \
+        assert(len(self.molecules) >= 1), \
             "There is no polymer chain."
 
         total_volume_fraction = 0.0
-        for polymer in self.distinct_polymers:
+        for polymer in self.molecules:
             total_volume_fraction += polymer["volume_fraction"]
         assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
 
         # Polymer chains
-        for polymer_counter, polymer in enumerate(self.distinct_polymers):
+        for polymer_counter, polymer in enumerate(self.molecules):
             blocks_input = []
             alpha = 0.0             # total_relative_contour_length
             has_node_number = not "v" in polymer["blocks"][0]
@@ -115,7 +120,7 @@ class LFTS:
 
         # Random copolymer chains
         self.random_fraction = {}
-        for polymer in self.distinct_polymers:
+        for polymer in self.molecules:
 
             is_random = False
             for block in polymer["blocks"]:
@@ -157,7 +162,7 @@ class LFTS:
         print("Monomer color: ", dict_color)
             
         # Draw polymer chain architectures
-        for idx, polymer in enumerate(self.distinct_polymers):
+        for idx, polymer in enumerate(self.molecules):
         
             # Make a graph
             G = nx.Graph()
@@ -195,7 +200,7 @@ class LFTS:
         molecules = factory.create_molecules_information(params["chain_model"], params["ds"], self.segment_lengths)
 
         # Add polymer chains
-        for polymer in self.distinct_polymers:
+        for polymer in self.molecules:
             molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
         # (C++ class) Propagator Computation Optimizer
@@ -275,7 +280,7 @@ class LFTS:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
         for p in range(molecules.get_n_polymer_types()):
-            print("distinct_polymers[%d]:" % (p) )
+            print("molecules[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
                 (molecules.get_polymer(p).get_volume_fraction(),
                  molecules.get_polymer(p).get_alpha(),
@@ -304,7 +309,7 @@ class LFTS:
         self.propagator_computation_optimizer = propagator_computation_optimizer
 
     def compute_concentrations(self, w_aux):
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
         elapsed_time = {}
 
         # Convert auxiliary fields to monomer fields
@@ -313,11 +318,15 @@ class LFTS:
         # Make a dictionary for input fields 
         w_input = {}
         for i in range(S):
-            w_input[self.monomer_types[i]] = w[i]
+            w_input[self.chi_monomers[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
             w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
+
+        w_input["C"] = np.zeros_like(w[0])
+        w_input["SP"] = np.zeros_like(w[0])
+        w_input["SM"] = np.zeros_like(w[0])
 
         # For the given fields, compute propagators
         time_solver_start = time.time()
@@ -407,7 +416,7 @@ class LFTS:
         print("---------- Run  ----------")
 
         # The number of components
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
 
         # The numbers of real and imaginary fields, respectively
         R = len(self.mpt.aux_fields_real_idx)
@@ -419,7 +428,7 @@ class LFTS:
         # Reshape initial fields
         w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
         for i in range(S):
-            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
+            w[i] = np.reshape(initial_fields[self.chi_monomers[i]],  self.cb.get_total_grid())
             
         # Convert monomer chemical potential fields into auxiliary fields
         w_aux = self.mpt.to_aux_fields(w)
@@ -534,8 +543,9 @@ class LFTS:
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(S-1) :
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
-                # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
+                        if not np.isclose(self.mpt.eigenvalues[k], 0.0):
+                            mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
+                # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
                     sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
@@ -583,7 +593,7 @@ class LFTS:
     def find_saddle_point(self, w_aux):
 
         # The number of components
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
 
         # The numbers of real and imaginary fields, respectively
         R = len(self.mpt.aux_fields_real_idx)
