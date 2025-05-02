@@ -1,12 +1,18 @@
 import numpy as np
 
 class SymmetricPolymerTheory:
-    def __init__(self, monomer_types, chi_n, zeta_n):
+    def __init__(self, monomer_types, chi_monomers, chi_n, charges, radiuses, zeta_n):
         self.monomer_types = monomer_types
-        S = len(self.monomer_types)
+        self.chi_monomers = chi_monomers
         
+        S = len(self.chi_monomers)
+
+        # "C":1.0,
+        # "SP":1.0,
+        # "SM":1.0,
+
         # Compute eigenvalues, orthogonal matrix, vector_s and vector_S
-        eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(monomer_types, chi_n, zeta_n)
+        eigenvalues, matrix_o, vector_s, vector_large_s = self.compute_eigen_system(chi_monomers, chi_n, zeta_n)
 
         # Indices whose auxiliary fields are real
         self.aux_fields_real_idx = []
@@ -59,8 +65,8 @@ class SymmetricPolymerTheory:
             chi_n_n[key] -= epsilon
 
             # Compute eigenvalues and orthogonal matrix
-            eigenvalues_p, _, vector_s_p, vector_large_s_p = self.compute_eigen_system(monomer_types, chi_n_p, zeta_n)
-            eigenvalues_n, _, vector_s_n, vector_large_s_n = self.compute_eigen_system(monomer_types, chi_n_n, zeta_n)
+            eigenvalues_p, _, vector_s_p, vector_large_s_p = self.compute_eigen_system(chi_monomers, chi_n_p, zeta_n)
+            eigenvalues_n, _, vector_s_n, vector_large_s_n = self.compute_eigen_system(chi_monomers, chi_n_n, zeta_n)
             
             # Compute coefficients for Hamiltonian computation
             h_const_p, h_coef_mu1_p, h_coef_mu2_p = self.compute_h_coef(eigenvalues_p, vector_s_p, vector_large_s_p, zeta_n)
@@ -104,14 +110,14 @@ class SymmetricPolymerTheory:
     def to_monomer_fields(self, w_aux):
         return np.matmul(self.matrix_a, w_aux)
 
-    def compute_eigen_system(self, monomer_types, chi_n, zeta_n):
-        S = len(monomer_types)
+    def compute_eigen_system(self, chi_monomers, chi_n, zeta_n):
+        S = len(chi_monomers)
 
         # Construct chi_n matrix
         matrix_chin = np.zeros((S,S))
         for i in range(S):
             for j in range(i+1,S):
-                monomer_pair = [self.monomer_types[i], self.monomer_types[j]]
+                monomer_pair = [self.chi_monomers[i], self.chi_monomers[j]]
                 monomer_pair.sort()
                 key = monomer_pair[0] + "," + monomer_pair[1]
                 if key in chi_n:
@@ -154,7 +160,7 @@ class SymmetricPolymerTheory:
             # Reordering eigenvalues and eigenvectors
             sorted_indexes = np.argsort(eigenvalues)[::]
             eigenvalues = eigenvalues[sorted_indexes]
-            eigenvectors = eigenvectors[:,sorted_indexes]     
+            eigenvectors = eigenvectors[:,sorted_indexes]
 
             # Construct vector_s and vector_S
             vector_s = np.zeros(S)
@@ -164,6 +170,7 @@ class SymmetricPolymerTheory:
         eigen_val_0 = np.isclose(eigenvalues, 0.0, atol=1e-12)
         eigenvalues[eigen_val_0] = 0.0
         eigen_vec_0 = eigenvectors[:,eigen_val_0]
+
         for i in range(eigen_vec_0.shape[1]-2,-1,-1):
             vec_0 = eigen_vec_0[:,i].copy()
             for j in range(i+1, eigen_vec_0.shape[1]):
@@ -182,7 +189,7 @@ class SymmetricPolymerTheory:
         return eigenvalues, eigenvectors, vector_s, vector_large_s
 
     def compute_h_coef(self, eigenvalues, vector_s, vector_large_s, zeta_n):
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
         
         # Compute reference part of Hamiltonian
         h_const = 0.0
@@ -213,7 +220,7 @@ class SymmetricPolymerTheory:
 
     # Compute total Hamiltonian
     def compute_hamiltonian(self, molecules, w_aux, total_partitions, include_const_term=False):
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
 
         # Compute Hamiltonian part that is related to fields
         hamiltonian_fields = 0.0
@@ -237,7 +244,7 @@ class SymmetricPolymerTheory:
     
     # Compute functional derivatives of Hamiltonian w.r.t. fields of selected indices
     def compute_func_deriv(self, w_aux, phi, indices):
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
 
         h_deriv = np.zeros([len(indices), w_aux.shape[1]], dtype=type(w_aux[0,0]))
         for count, i in enumerate(indices):
@@ -245,7 +252,7 @@ class SymmetricPolymerTheory:
             h_deriv[count] += 2*self.h_coef_mu2[i]*w_aux[i]
             h_deriv[count] +=   self.h_coef_mu1[i]
             for j in range(S):
-                h_deriv[count] += self.matrix_a[j,i]*phi[self.monomer_types[j]]
+                h_deriv[count] += self.matrix_a[j,i]*phi[self.chi_monomers[j]]
 
             # Change the sign for the imaginary fields
             if i in self.aux_fields_imag_idx:
@@ -255,7 +262,7 @@ class SymmetricPolymerTheory:
 
     # Compute dH/dχN
     def compute_h_deriv_chin(self, chi_n, w_aux):
-        S = len(self.monomer_types)
+        S = len(self.chi_monomers)
 
         dH = {}
         for key in chi_n:

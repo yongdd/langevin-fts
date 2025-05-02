@@ -3,14 +3,20 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-from polymerfts import lfts
+import lfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
-f = 0.4        # A-fraction of major BCP chain, f
-eps = 1.0       # a_A/a_B, conformational asymmetry
+plus_salt_ion_valency = 1
+
+polymer_fraction = 0.1
+solvent_fraction = 1.0 - polymer_fraction
+
+# minus_salt_ion_fraction = 0.0
+# plus_salt_ion_fraction = minus_salt_ion_fraction/plus_salt_ion_valency
+# sovlent_polymer_fraction = 1.0 - (polymer_fraction + solvent_fraction + plus_salt_ion_fraction + minus_salt_ion_fraction)
 
 params = {
     #---------------- Simulation parameters -----------------------------
@@ -20,20 +26,69 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "chain_model":"discrete",   # "discrete" or "continuous" chain model
-    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "ds":1/100,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":1.0, 
-        "B":1.0, },
+        "P":1.0, 
+        "S":1.0,
+        "C":1.0,
+        "SP":1.0,
+        "SM":1.0,
+        },
 
-    "chi_n": {"A,B":17.0},     # Bare interaction parameter, Flory-Huggins params * N_Ref
+    "chi_monomers":["P", "S"],
 
-    "distinct_polymers":[{      # Distinct Polymers
-        "volume_fraction":1.0,  # Volume fraction of polymer chain
-        "blocks":[              # AB diBlock Copolymer
-            {"type":"A", "length":f, }, # A-block
-            {"type":"B", "length":1-f}, # B-block
-        ],},],
+    "charges":{                           
+        "P": 1.0,                         # Polymer
+        "S": None,                        # Solvent
+        "C":-1.0,                         # Counter Ion
+        "SP": plus_salt_ion_valency,      # + ion
+        "SM":-1.0,                        # - ion
+        },
+
+    "radiuses":{           
+        "P": 0.025,        # Polymer
+        "S": None,         # Solvent
+        "C": 0.025,        # Counter Ion
+        "SP": 0.025,       # + ion
+        "SM": 0.025,       # - ion
+        },
+
+    "chi_n": {"P,S":50},     # Bare interaction parameter, Flory-Huggins params * N_Ref
+
+    "molecules":[
+        { 
+            # Polymer
+            "volume_fraction":polymer_fraction,
+            "blocks":[
+                {"type":"P", "length":1, },
+            ],
+        },
+        {   # Solvent
+            "volume_fraction":solvent_fraction,
+            "blocks":[
+                {"type":"S", "length":0.01, }, 
+            ],
+        }, 
+        {   # Counter ion
+            "volume_fraction":0.0,
+            "blocks":[
+                {"type":"C", "length":0.01, },
+            ],
+        },
+        {   # + Salt ion
+            "volume_fraction":0.0,
+            "blocks":[            
+                {"type":"SP", "length":0.01, },
+            ],
+        },
+        {   # - Salt ion
+            "volume_fraction":0.0,
+            "blocks":[
+                {"type":"SM", "length":0.01, },
+            ],
+        },
+        ],
         
     "langevin":{                # Langevin Dynamics
         "max_step":500000,      # Langevin steps for simulation
@@ -54,9 +109,7 @@ params = {
     },
 
     "compressor":{
-        # "name":"am",                # Anderson Mixing
-        # "name":"lr",                # Linear Response
-        "name":"lram",              # Linear Response + Anderson Mixing
+        "name":"am",                # Anderson Mixing
         "max_hist":20,              # Maximum number of history
         "start_error":5e-1,         # When switch to AM from simple mixing
         "mix_min":0.01,             # Minimum mixing rate of simple mixing
@@ -71,10 +124,22 @@ params = {
 random_seed = 12345
 np.random.seed(random_seed)
 
+# # Set initial fields
+# input_data = loadmat("LamellaInput.mat", squeeze_me=True)
+# w_A = input_data["w_A"]
+# w_B = input_data["w_B"]
+
 # Set initial fields
-input_data = loadmat("LamellaInput.mat", squeeze_me=True)
-w_A = input_data["w_A"]
-w_B = input_data["w_B"]
+w_P = np.zeros(list(params["nx"]), dtype=np.float64)
+w_S = np.zeros(list(params["nx"]), dtype=np.float64)
+w_C = np.zeros(list(params["nx"]), dtype=np.float64)
+w_SP = np.zeros(list(params["nx"]), dtype=np.float64)
+w_SM = np.zeros(list(params["nx"]), dtype=np.float64)
+
+print("w_A and w_B are initialized to lamellar phase.")
+for i in range(0,params["nx"][2]):
+    w_P[:,:,i] =  np.cos(3*2*np.pi*i/params["nx"][2])
+    w_S[:,:,i] = -np.cos(3*2*np.pi*i/params["nx"][2])
 
 # Initialize calculation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
@@ -86,7 +151,7 @@ time_start = time.time()
 # simulation.continue_run(file_name="fields_010000.mat")
 
 # Run
-simulation.run(initial_fields={"A": w_A, "B": w_B})
+simulation.run(initial_fields={"P": w_P, "S": w_S, "C": w_C, "SP": w_SP, "SM": w_SM})
 
 # # Recording first a few iteration results for debugging and refactoring
 # ---------- Run  ----------

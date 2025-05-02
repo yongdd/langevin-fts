@@ -511,11 +511,11 @@ class CLFTS:
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(S-1) :
                         mu_fourier[key] += np.fft.fftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
-                # Accumulate S_ij(K), assuming that <u(k)>*<phi(-k)> is zero
+                # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
                     # TODO: introduce a mapping to compute <phi(-k)>
-                    sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
+                    # sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
