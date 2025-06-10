@@ -125,9 +125,15 @@ INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
-# PYBIND11_ADD_MODULE(polymerfts_core src/pybind11/polymerfts_core.cpp) // new find python mode can cause segfault error depending on compile environment
+# Set correct module suffix for macOS (.so -> .dylib for modules, but Python expects .so)
+if(APPLE)
+    set(PYTHON_MODULE_SUFFIX ".dylib")
+else()
+    set(PYTHON_MODULE_SUFFIX ".so")
+endif()
+
 ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp) 
-SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX ".so")
+SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX "${PYTHON_MODULE_SUFFIX}")
 
 IF(CMAKE_BUILD_TYPE STREQUAL Release)
     TARGET_COMPILE_OPTIONS(_core PRIVATE -ffast-math)
@@ -147,13 +153,20 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     common
 )
 
-EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
-# INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/polymerfts_core.so" DESTINATION ${PYTHON_SITE_PACKAGES})
+# Set install paths for Python modules
+if(APPLE)
+    execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('platlib'))" OUTPUT_VARIABLE Python3_SITEARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('purelib'))" OUTPUT_VARIABLE Python3_SITELIB OUTPUT_STRIP_TRAILING_WHITESPACE)
+else()
+    EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(Python3_SITEARCH "${PYTHON_SITE_PACKAGES}")
+    set(Python3_SITELIB "${PYTHON_SITE_PACKAGES}")
+endif()
 
 # ----------------  Install rules  ----------------
 # 1. compiled extension  → platform‑dependent site‑packages dir
 install(TARGETS  _core
-        LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux
+        LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux/macOS
         ARCHIVE  DESTINATION ${Python3_SITEARCH}/polymerfts)
 
 # 2. pure‑Python files   → platform‑independent site‑packages dir
