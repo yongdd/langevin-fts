@@ -80,7 +80,7 @@ class SymmetricPolymerTheory:
         self.matrix_a = matrix_a
         self.matrix_a_inv = matrix_a_inv
 
-        print("------------ Polymer Field Theory for Multimonomer ------------")
+        print("------------ Polymer Field Theory for Multimonomer System------------")
         print("Eigenvalues:\n\t", self.eigenvalues)
         print("Eigenvectors [v1, v2, ...] :\n\t", str(self.matrix_o).replace("\n", "\n\t"))
         print("Mapping matrix A:\n\t", str(self.matrix_a).replace("\n", "\n\t"))
