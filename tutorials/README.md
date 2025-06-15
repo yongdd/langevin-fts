@@ -11,5 +11,5 @@ Read the jupyter notebook files in the following order.
     2. IncompressibleModel.ipynb
     3. CompressibleModel.ipynb
 3. SelfConsistentFieldTheory
-    1. SelfConsistentFieldTheory.ipynb
-    2. 
+    1. SimpleExample.ipynb
+    2. AndersonMixing.ipynb
