@@ -80,7 +80,7 @@ conda deactivate
 conda env remove -n polymerfts  
 ```
 # User Guide
-+ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. In Python script, import the package by adding  `from polymerfts import *`. To learn how to use it, please see 'examples/ComputeConcentration.py'.
++ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. In Python script, import the package by adding  `from polymerfts import *`. To learn how to use it, please read files in 'tutorials'.
 + Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate multiple CPUs as much as `OMP_NUM_THREADS` when submitting a job.
 + The SCFT and L-FTS are implemented on the python shared library in `examples/scft` and `examples/fts`, respectively.
   + Set 'reduce_gpu_memory_usage=True' if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size.
