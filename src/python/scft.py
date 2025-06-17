@@ -21,14 +21,14 @@ os.environ["OMP_STACKSIZE"] = "1G"
 
 # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
 class Adam:
-    def __init__(self, M,
+    def __init__(self, total_grid,
                     lr = 1e-2,       # initial learning rate, γ
                     b1 = 0.9,        # β1
                     b2 = 0.999,      # β2
                     eps = 1e-8,      # epsilon, small number to prevent dividing by zero
                     gamma = 1.0,     # learning rate at Tth iteration is lr*γ^(T-1)
                     ):
-        self.M = M
+        self.total_grid = total_grid
         self.lr = lr
         self.b1 = b1
         self.b2 = b2
@@ -36,8 +36,8 @@ class Adam:
         self.gamma = gamma
         self.count = 1
         
-        self.m = np.zeros(M, dtype=np.float64) # first moment
-        self.v = np.zeros(M, dtype=np.float64) # second moment
+        self.m = np.zeros(total_grid, dtype=np.float64) # first moment
+        self.v = np.zeros(total_grid, dtype=np.float64) # second moment
         
     def reset_count(self,):
         self.count = 1
@@ -118,10 +118,10 @@ class SCFT:
 
         # Matrix for field residuals.
         # See *J. Chem. Phys.* **2017**, 146, 244902
-        S = len(self.monomer_types)
-        matrix_chi = np.zeros((S,S))
-        for i in range(S):
-            for j in range(i+1,S):
+        M = len(self.monomer_types)
+        matrix_chi = np.zeros((M,M))
+        for i in range(M):
+            for j in range(i+1,M):
                 key = self.monomer_types[i] + "," + self.monomer_types[j]
                 if key in self.chi_n:
                     matrix_chi[i,j] = self.chi_n[key]
@@ -129,7 +129,7 @@ class SCFT:
         
         self.matrix_chi = matrix_chi
         matrix_chi_inv = np.linalg.inv(matrix_chi)
-        self.matrix_p = np.identity(S) - np.matmul(np.ones((S,S)), matrix_chi_inv)/np.sum(matrix_chi_inv)
+        self.matrix_p = np.identity(M) - np.matmul(np.ones((M,M)), matrix_chi_inv)/np.sum(matrix_chi_inv)
         # print(matrix_chi)
         # print(matrix_chin)
 
@@ -296,7 +296,7 @@ class SCFT:
 
         # (Python class) ADAM optimizer for finding saddle point
         elif params["optimizer"]["name"] == "adam":
-            self.field_optimizer = Adam(M = n_var,
+            self.field_optimizer = Adam(total_grid = n_var,
                 lr = params["optimizer"]["lr"],
                 gamma = params["optimizer"]["gamma"])
         else:
@@ -359,12 +359,12 @@ class SCFT:
         self.solver = solver
 
     def compute_concentrations(self, w):
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
         elapsed_time = {}
 
         # Make a dictionary for input fields 
         w_input = {}
-        for i in range(S):
+        for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
             w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
@@ -454,7 +454,7 @@ class SCFT:
     def run(self, initial_fields, q_init=None):
 
         # The number of components
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
 
         # Assign large initial value for the energy and error
         energy_total = 1.0e20
@@ -471,13 +471,13 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
+        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
         
-        for i in range(S):
+        for i in range(M):
             w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
 
         # Keep the level of field value
-        for i in range(S):
+        for i in range(M):
             w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
         # Iteration begins here
@@ -494,26 +494,26 @@ class SCFT:
             w_aux = self.mpt.to_aux_fields(w)
 
             # Calculate the total energy
-            # energy_total = - self.cb.integral(self.phi_target*w_exchange[S-1])/self.cb.get_volume()
+            # energy_total = - self.cb.integral(self.phi_target*w_exchange[M-1])/self.cb.get_volume()
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
             energy_total = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, include_const_term=False)
 
             # Calculate difference between current total density and target density
             phi_total = np.zeros(self.cb.get_total_grid())
-            for i in range(S):
+            for i in range(M):
                 phi_total += phi[self.monomer_types[i]]
             # phi_diff = phi_total-self.phi_target
             phi_diff = phi_total-1.0
 
             # Calculate self-consistency error
-            w_diff = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64) # array for output fields
-            for i in range(S):
-                for j in range(S):
+            w_diff = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64) # array for output fields
+            for i in range(M):
+                for j in range(M):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
                 # w_diff[i,:] -= self.phi_target_pressure
 
             # Keep the level of functional derivatives
-            for i in range(S):
+            for i in range(M):
                 # w_diff[i] *= self.mask
                 w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
 
@@ -521,7 +521,7 @@ class SCFT:
             old_error_level = error_level
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
-            for i in range(S):
+            for i in range(M):
                 error_level += self.cb.inner_product(w_diff[i],w_diff[i])
                 error_normal += self.cb.inner_product(w[i],w[i])
             error_level = np.sqrt(error_level/error_normal)
@@ -554,12 +554,12 @@ class SCFT:
             # Calculate new fields using simple and Anderson mixing
             if (self.box_is_altering):
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w,      S*self.cb.get_total_grid()), self.cb.get_lx()))
-                am_diff     = np.concatenate((np.reshape(w_diff, S*self.cb.get_total_grid()), self.scale_stress*dlx))
+                am_current  = np.concatenate((np.reshape(w,      M*self.cb.get_total_grid()), self.cb.get_lx()))
+                am_diff     = np.concatenate((np.reshape(w_diff, M*self.cb.get_total_grid()), self.scale_stress*dlx))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
-                w = np.reshape(am_new[0:S*self.cb.get_total_grid()], (S, self.cb.get_total_grid()))
+                w = np.reshape(am_new[0:M*self.cb.get_total_grid()], (M, self.cb.get_total_grid()))
 
                 # Set box size
                 # Restricting |dLx| to be less than 10 % of Lx
@@ -573,12 +573,12 @@ class SCFT:
                 self.solver.update_laplacian_operator()
             else:
                 w = self.field_optimizer.calculate_new_fields(
-                np.reshape(w,      S*self.cb.get_total_grid()),
-                np.reshape(w_diff, S*self.cb.get_total_grid()), old_error_level, error_level)
-                w = np.reshape(w, (S, self.cb.get_total_grid()))
+                np.reshape(w,      M*self.cb.get_total_grid()),
+                np.reshape(w_diff, M*self.cb.get_total_grid()), old_error_level, error_level)
+                w = np.reshape(w, (M, self.cb.get_total_grid()))
                         
             # Keep the level of field value
-            for i in range(S):
+            for i in range(M):
                 # w[i] *= self.mask
                 w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
         

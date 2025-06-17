@@ -79,7 +79,7 @@ class LFTS:
         self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
 
         # The numbers of real and imaginary fields, respectively
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
@@ -221,9 +221,9 @@ class LFTS:
             assert(I == 1), \
                 f"Currently, LR methods are not working for imaginary-valued auxiliary fields."
 
-            w_aux_perturbed = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
-            w_aux_perturbed[S-1,0] = 1e-3 # add a small perturbation at the pressure field
-            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[S-1], self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            w_aux_perturbed = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
+            w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field
+            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.cb.get_nx()))/np.prod(self.cb.get_nx())
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
@@ -245,8 +245,8 @@ class LFTS:
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
         # dH/dw_aux[i] is scaled by dt_scaling[i]
-        self.dt_scaling = np.ones(S)
-        for i in range(S-1):
+        self.dt_scaling = np.ones(M)
+        for i in range(M-1):
             self.dt_scaling[i] = np.abs(self.mpt.eigenvalues[i])/np.max(np.abs(self.mpt.eigenvalues))
 
         # Set random generator
@@ -304,7 +304,7 @@ class LFTS:
         self.propagator_computation_optimizer = propagator_computation_optimizer
 
     def compute_concentrations(self, w_aux):
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
         elapsed_time = {}
 
         # Convert auxiliary fields to monomer fields
@@ -312,7 +312,7 @@ class LFTS:
 
         # Make a dictionary for input fields 
         w_input = {}
-        for i in range(S):
+        for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
             w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
@@ -407,7 +407,7 @@ class LFTS:
         print("---------- Run  ----------")
 
         # The number of components
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
 
         # The numbers of real and imaginary fields, respectively
         R = len(self.mpt.aux_fields_real_idx)
@@ -417,8 +417,8 @@ class LFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields
-        w = np.zeros([S, self.cb.get_total_grid()], dtype=np.float64)
-        for i in range(S):
+        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
+        for i in range(M):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
             
         # Convert monomer chemical potential fields into auxiliary fields
@@ -436,7 +436,7 @@ class LFTS:
 
         # Arrays for structure function
         sf_average = {} # <u(k) phi(-k)>
-        for monomer_id_pair in itertools.combinations_with_replacement(list(range(S)),2):
+        for monomer_id_pair in itertools.combinations_with_replacement(list(range(M)),2):
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
             sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
@@ -529,11 +529,11 @@ class LFTS:
                 # Perform Fourier transforms
                 mu_fourier = {}
                 phi_fourier = {}
-                for i in range(S):
+                for i in range(M):
                     key = self.monomer_types[i]
                     phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
-                    for k in range(S-1) :
+                    for k in range(M-1) :
                         mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
@@ -583,7 +583,7 @@ class LFTS:
     def find_saddle_point(self, w_aux):
 
         # The number of components
-        S = len(self.monomer_types)
+        M = len(self.monomer_types)
 
         # The numbers of real and imaginary fields, respectively
         R = len(self.mpt.aux_fields_real_idx)
@@ -639,6 +639,6 @@ class LFTS:
             w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_total_grid()])
 
         # Set mean of pressure field to zero
-        w_aux[S-1] -= np.mean(w_aux[S-1])
+        w_aux[M-1] -= np.mean(w_aux[M-1])
 
         return phi, hamiltonian, saddle_iter, error_level
