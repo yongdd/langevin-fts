@@ -1,6 +1,6 @@
 Read the jupyter notebook files in the following order.
 
-1. SingleChainsInPotentialFields
+1. NonInteractingChainsInPotentialFields
     1. Diblock.ipynb
     2. MultiArmStar.ipynb
     3. Comb.ipynb
