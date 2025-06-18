@@ -48,6 +48,15 @@ This open-source code is distributed under the Apache license 2.0. This license 
 #### Anaconda
   https://www.anaconda.com/
 
+#### (Optional) Visual Studio Code
+  https://code.visualstudio.com/  
+  Install the following extensions in the 'Extensions' tab:
+  * C/C++
+  * CMake Tools
+  * Remote - SSH
+  * Jupyter
+  * Python
+
 * * *
 Environment variables must be set so that `nvcc` and `conda` can be executed in the command line (Type `which nvcc` and `which conda` to check the installation).
 
@@ -55,7 +64,7 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 ```Shell
 # Create virtual environment 
 conda create -n polymerfts python=3.9 cmake=3.31 pybind11=2.13 \
-    make conda git pip scipy openmpi matplotlib pyyaml networkx pygraphviz
+    make conda git pip scipy openmpi matplotlib pyyaml networkx pygraphviz plotly
 # Activate virtual environment  
 conda activate polymerfts  
 # Download the source code
