@@ -36,7 +36,7 @@ class SymmetricPolymerTheory:
         # Compute coefficients for Hamiltonian computation
         h_const, h_coef_mu1, h_coef_mu2 = self.compute_h_coef(eigenvalues, vector_s, vector_large_s, zeta_n)
 
-        # Matrix A and Inverse for converting between auxiliary fields and monomer chemical potential fields
+        # Matrix A and Inverse for converting between auxiliary potential fields and monomer potential fields
         matrix_a = matrix_o.copy()
         matrix_a_inv = np.transpose(matrix_o).copy()/M
 

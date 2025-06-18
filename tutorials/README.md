@@ -7,7 +7,7 @@ Read the jupyter notebook files in the following order.
     4. Mixture.ipynb
     5. GraftingPoint.ipynb
 2. PolymerFieldTheory
-    1. ChemicalPotentialFields.ipynb
+    1. MonomerPotentialFields.ipynb
     2. IncompressibleModel.ipynb
     3. CompressibleModel.ipynb
 3. SelfConsistentFieldTheory
