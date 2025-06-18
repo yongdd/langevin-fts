@@ -89,7 +89,7 @@ for x,y,z in sphere_positions:
     w_A[molecules,my,mz] = -50/(np.prod(params["lx"])/np.prod(params["nx"]))
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/5, mode='wrap')
 
-# Initialize calculation
+# Initialize simulation
 simulation = lfts.LFTS(params=params, random_seed=12345)
 
 # Set a timer

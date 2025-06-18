@@ -78,7 +78,7 @@ print("w_A and w_B are initialized to random Gaussian.")
 w_A = np.random.normal(0.0, 1.0, params["nx"])
 w_B = np.random.normal(0.0, 1.0, params["nx"])
 
-# Initialize calculation
+# Initialize simulation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
 
 # Set a timer

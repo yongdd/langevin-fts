@@ -76,7 +76,7 @@ input_data = loadmat("LamellaInput.mat", squeeze_me=True)
 w_A = input_data["w_A"]
 w_B = input_data["w_B"]
 
-# Initialize calculation
+# Initialize simulation
 simulation = lfts.LFTS(params=params, random_seed=random_seed)
 
 # Set a timer

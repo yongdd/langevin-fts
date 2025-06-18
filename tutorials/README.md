@@ -5,7 +5,7 @@ Read the jupyter notebook files in the following order.
     2. BranchedMultiArmStar.ipynb
     3. BranchedComb.ipynb
     4. Mixture.ipynb
-    5. GraftingPoint.ipynb
+    5. GraftingPoints.ipynb
 2. PolymerFieldTheory
     1. MonomerPotentialFields.ipynb
     2. IncompressibleModel.ipynb
@@ -15,4 +15,4 @@ Read the jupyter notebook files in the following order.
     2. Cylinder.ipynb
 4. LangevinFieldTheoreticSimulation
     1. NaiveLFTS.ipynb
-    2. 
+    2. Lamellar.ipynb
