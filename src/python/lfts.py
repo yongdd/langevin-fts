@@ -421,7 +421,7 @@ class LFTS:
         for i in range(M):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
             
-        # Convert monomer chemical potential fields into auxiliary fields
+        # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
 
         # Find saddle point
