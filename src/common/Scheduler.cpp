@@ -13,7 +13,7 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
     try
     {
         int min_stream, minimum_time;
-        int job_finish_time[N_STREAM] = {0,};
+        std::vector<int> job_finish_time(N_STREAM, 0);
 
         std::vector<std::string> job_queue[N_STREAM];
         auto propagator_hierarchies = make_propagator_hierarchies(computation_propagators);
