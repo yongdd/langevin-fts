@@ -125,12 +125,12 @@ INCLUDE_DIRECTORIES(${Python3_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Python3_NumPy_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${pybind11_INCLUDE_DIRS})
 
-# Set correct module suffix for macOS (.so -> .dylib for modules, but Python expects .so)
-if(APPLE)
-    set(PYTHON_MODULE_SUFFIX ".dylib")
-else()
+# # Set correct module suffix for macOS (.so -> .dylib for modules, but Python expects .so)
+# if(APPLE)
+#     set(PYTHON_MODULE_SUFFIX ".dylib")
+# else()
     set(PYTHON_MODULE_SUFFIX ".so")
-endif()
+# endif()
 
 ADD_LIBRARY(_core MODULE src/pybind11/polymerfts_core.cpp) 
 SET_TARGET_PROPERTIES(_core PROPERTIES PREFIX "" SUFFIX "${PYTHON_MODULE_SUFFIX}")
@@ -154,14 +154,14 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
 )
 
 # Set install paths for Python modules
-if(APPLE)
-    execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('platlib'))" OUTPUT_VARIABLE Python3_SITEARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
-    execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('purelib'))" OUTPUT_VARIABLE Python3_SITELIB OUTPUT_STRIP_TRAILING_WHITESPACE)
-else()
+# if(APPLE)
+#     execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('platlib'))" OUTPUT_VARIABLE Python3_SITEARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+#     execute_process(COMMAND python3 -c "import sysconfig; print(sysconfig.get_path('purelib'))" OUTPUT_VARIABLE Python3_SITELIB OUTPUT_STRIP_TRAILING_WHITESPACE)
+# else()
     EXECUTE_PROCESS(COMMAND python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_VARIABLE PYTHON_SITE_PACKAGES OUTPUT_STRIP_TRAILING_WHITESPACE)
     set(Python3_SITEARCH "${PYTHON_SITE_PACKAGES}")
     set(Python3_SITELIB "${PYTHON_SITE_PACKAGES}")
-endif()
+# endif()
 
 # ----------------  Install rules  ----------------
 # 1. compiled extension  → platform‑dependent site‑packages dir
