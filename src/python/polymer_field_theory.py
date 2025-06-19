@@ -99,10 +99,27 @@ class SymmetricPolymerTheory:
         print("\td(coef of mu(r)^2)/dχN: ", self.h_coef_mu2_deriv_chin)
 
     def to_aux_fields(self, w):
-        return np.matmul(self.matrix_a_inv, w)
+        if isinstance(w, dict):
+            # Make an array of w
+            M = len(self.monomer_types)
+            total_grid = len(w[next(iter(w))])
+            w_temp = np.zeros((M, total_grid))
+            for count, type in enumerate(self.monomer_types):
+                w_temp[count,:] = w[type]
+                
+            return np.matmul(self.matrix_a_inv, w_temp)
+        else:
+            return np.matmul(self.matrix_a_inv, w)
 
     def to_monomer_fields(self, w_aux):
         return np.matmul(self.matrix_a, w_aux)
+
+    def to_monomer_fields_dict(self, w_aux):
+        w_temp = np.matmul(self.matrix_a, w_aux)
+        w = {}
+        for count, type in enumerate(self.monomer_types):
+            w[type] = w_temp[count]
+        return w
 
     def compute_eigen_system(self, monomer_types, chi_n, zeta_n):
         M = len(monomer_types)
