@@ -587,7 +587,7 @@ class SCFT:
         for p in range(self.molecules.get_n_polymer_types()):
             energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
                                                   self.molecules.get_polymer(p).get_volume_fraction()
-            print("\tβF/n_%d : %12.7f" % (p+1, energy_total_per_chain))
+            print("\tβF/n_%d : %12.7f" % (p, energy_total_per_chain))
 
         # Store phi and w
         self.phi = phi
