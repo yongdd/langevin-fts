@@ -22,9 +22,9 @@ public:
         temp_storage_bytes = 0;
         d_temp_storage = nullptr;
 
-        std::cout << "temp_storage_bytes " << temp_storage_bytes << std::endl; 
+        std::cout << "temp_storage_bytes before: " << temp_storage_bytes << std::endl; 
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_array, d_array_sum, M);
-        std::cout << "temp_storage_bytes " << temp_storage_bytes << std::endl;
+        std::cout << "temp_storage_bytes after: " << temp_storage_bytes << std::endl;
     };
 
     ~TestCudaCub()
@@ -39,10 +39,13 @@ int main()
 {
     try{
         TestCudaCub testcub = TestCudaCub();
-        if (testcub.temp_storage_bytes == 0)
+        if (testcub.temp_storage_bytes == 0) {
+            std::cout << "ERROR: temp_storage_bytes is 0" << std::endl;
             return -1;
-        else
+        } else {
+            std::cout << "SUCCESS: temp_storage_bytes: " << testcub.temp_storage_bytes << std::endl;
             return 0;
+        }
     }
     catch(std::exception& exc)
     {

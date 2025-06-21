@@ -98,7 +98,7 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaAndersonMixingReduceMemory.cu
         src/platforms/cuda/CudaFactory.cu
     )
-    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES OFF)
+    SET_PROPERTY(TARGET cuda PROPERTY CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90")
 
     IF (OPENMP_FOUND)
         TARGET_COMPILE_OPTIONS(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>: -Xcompiler=-fopenmp>)
