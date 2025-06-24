@@ -81,6 +81,9 @@ make test
 # Install  
 make install   
 ```
+* **If you encounter `Unsupported gpu architecture 'compute_89'`, try one of the followings**     
+  * Remove `;89;90` in `CUDA_ARCHITECTURES` in `CMakeLists.txt`.
+  * Update CUDA Toolkit
 * **If you encounter `segmentation fault`, type following commands.**     
 ```Shell
 ulimit -s unlimited       # Add this command in ~/.bashrc
@@ -92,20 +95,18 @@ conda deactivate
 conda env remove -n polymerfts  
 ```
 # User Guide
-+ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. In Python script, import the package by adding  `from polymerfts import *`. To learn how to use it, please read files in 'tutorials'.
++ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. 
++ To learn how to use it, please read files in `tutorials` folder.
++ The unit of length in this library is ${bN^{1/2}}$ for both `Continuous` and `Discrete` chain models, where $b$ is a reference statistical segment length and $N$ is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the`per reference segment` potential, multiply $ds$ to each field.
++ Set 'reduce_gpu_memory_usage=True' if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size.
 + Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate multiple CPUs as much as `OMP_NUM_THREADS` when submitting a job.
-+ The SCFT and L-FTS are implemented on the python shared library in `examples/scft` and `examples/fts`, respectively.
-  + Set 'reduce_gpu_memory_usage=True' if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size.
-  + Set 'aggregate_propagator_computation=False, (default: True) if you want to use 'solver.get_block_concentration()', which returns block-wise concentrations of a selected polymer species, and 'solver.get_chain_propagator()', which returns a propagator of a selected branch.
++ To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script.
++ The `scft.py` and `lfts.py` are implemented on the `_core` library and `polymer_field_theory.py`.
+  + There are examples in `examples/scft` and `examples/fts`, respectively.
   + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in parameter set.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
-  + Use FTS in 1D and 2D only for the tests. It does not have a physical meaning.
-  + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script. As an example, please see 'examples/scft/Gyroid.py'.
-  + The structure function is computed under the assumption that <w(k)><phi(-k)> is zero.
-  + The Hamiltonian and free energy in `examples/scft` and `examples/fts` are defined as *βH × R_0^3/(V√N)* and *βF × R_0^3/(V√N)*, respectively. They become per chain expressions only when `volume_fraction` and `alpha` are 1.
-  + L-FTS is one of the partial saddle-point approximation methods, applying the saddle-point approximation to all imaginary fields. L-FTS is known to give accurate results for AB-type block copolymers, where the saddle-point approximation is applied only to the pressure field. However, it has not been confirmed whether L-FTS yields accurate results for ABC-type block copolymers, where one of the exchange fields can be an imaginary field. In this case, field fluctuations may not be fully captured. Use L-FTS in this situation at your own risk (see G. H. Fredrickson and K. T. Delaney, **2023**, Oxford).
+  + In `lfts.py`, the structure function is computed under the assumption that $\left<w({\bf k})\right>\left<\phi(-{\bf k})\right>$ is zero.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
-+ The unit of length in this library is *aN^(1/2)* for both `Continuous` and `Discrete` chain models, where *a* is a reference statistical segment length and *N* is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the same fields used in [*Polymers* **2021**, 13, 2437], multiply *ds* to each field. Please refer to [*J. Chem. Phys.* **2014**, 141, 174103] to learn how to formulate polymer mixtures composed of multiple distinct polymers in the reference polymer length unit.
 + Open-source has no warranty. Make sure that this program reproduces the results of previous SCFT and FTS studies, and also produces reasonable results. For acyclic branched polymers adopting the `Continuous` model with an even number of contour steps, the results must be identical to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results must be identical to those of code in [*Polymers* **2021**, 13, 2437].
 + It must produce the same results within the machine precision regardless of platform (CUDA or MKL), use of superposition, and use of GPU memory saving option. After changing 'platform' and 'aggregate_propagator_computation', run a few iterations with the same simulation parameters. And check if it outputs the same results.
 
