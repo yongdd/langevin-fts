@@ -128,9 +128,9 @@ conda env remove -n polymerfts
 #### Chain Propagator Computation
   Please refer to *J. Chem. Theory Comput.* **2025**, 21, 3676.
 
-#### Reducing GPU Memory Usage
-  1. Propagators of all segments are stored in the GPU's global memory to minimize data transfer between main memory and global memory, because data transfer operations are expensive. However, this method limits the sizes of the grid number and segment number. If the GPU memory space is not enough to run simulations, the propagators should be stored in main memory instead of GPU memory. To reduce data transfer time, `device overlap` can be utilized, which simultaneously transfers data and executes kernels. An example applied to AB diblock copolymers is provided in the supporting information of [*Macromolecules* **2021**, 54, 11304]. To enable this option, set 'reduce_gpu_memory_usage' to 'True' in the example script. If this option is enabled, the factory will create an instance of CudaComputationReduceMemoryDiscrete or CudaComputationReduceMemoryDiscrete.
-  2. In addition, when 'reduce_gpu_memory_usage' is enabled, field history for Anderson Mixing is also stored in main memory, and the factory will create CudaAndersonMixingReduceMemory.
+#### CUDA Programming
+  `streams`, `concurrency` and `cuFFT` are utilized.  
+  https://developer.download.nvidia.com/CUDA/training/StreamsAndConcurrencyWebinar.pdf
 
 #### Platforms  
   This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
