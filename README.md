@@ -129,7 +129,7 @@ conda env remove -n polymerfts
   Please refer to *J. Chem. Theory Comput.* **2025**, 21, 3676.
 
 #### CUDA Programming
-  `streams`, `concurrency` and `cuFFT` are utilized.  
+  `streams` and `cuFFT` are utilized.  
   https://developer.download.nvidia.com/CUDA/training/StreamsAndConcurrencyWebinar.pdf
 
 #### Platforms  
