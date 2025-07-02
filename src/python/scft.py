@@ -14,6 +14,7 @@ import scipy.io
 
 from . import _core
 from .polymer_field_theory import *
+from .space_group import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -279,11 +280,46 @@ class SCFT:
         else:
             self.scale_stress = 1
 
-        # Total number of variables to be adjusted to minimize the Hamiltonian
-        if params["box_is_altering"]:
-            n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
-        else :
-            n_var = len(self.monomer_types)*np.prod(params["nx"])
+        # Space group symmetry operations
+        if "space_group" in params:
+            # Create a space group object
+            if "number" in params["space_group"]:
+                self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
+            else:
+                self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"])
+                
+            if not self.sg.crystal_system in "Orthorhombic, Tetragonal, Cubic":
+                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, or Cubic. " +
+                    "The current crystal system is " + self.sg.crystal_system + ".")
+
+            if self.sg.crystal_system == "Orthorhombic":
+                self.lx_reduced_indices = [0, 1, 2]
+                self.lx_full_indices = [0, 1, 2]
+            elif self.sg.crystal_system == "Tetragonal":
+                self.lx_reduced_indices = [0, 2]
+                self.lx_full_indices = [0, 1, 1]
+            elif self.sg.crystal_system == "Cubic":
+                self.lx_reduced_indices = [0]
+                self.lx_full_indices = [0, 0, 0]
+
+            # Total number of variables to be adjusted to minimize the Hamiltonian
+            if params["box_is_altering"]:
+                n_var = len(self.monomer_types)*len(self.sg.irreducible_mesh) + len(self.sg.lattice_parameters)
+            else :
+                n_var = len(self.monomer_types)*len(self.sg.irreducible_mesh)
+
+            # # Set symmetry operations to the solver
+            # solver.set_symmetry_operations(sg.get_symmetry_operations())
+        else:
+            self.sg = None
+            self.lx_reduced_indices = [0, 1, 2]
+            self.lx_full_indices = [0, 1, 2]
+            
+            # Total number of variables to be adjusted to minimize the Hamiltonian
+            if params["box_is_altering"]:
+                n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
+            else :
+                n_var = len(self.monomer_types)*np.prod(params["nx"])
             
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point        
         # (C++ class) Anderson Mixing method for finding saddle point
@@ -551,32 +587,45 @@ class SCFT:
             if error_level < self.tolerance:
                 break
 
+            # Convert the fields into the reduced basis functions for chosen space group
+            if self.sg is None:
+                w_reduced_basis = w
+                w_diff_reduced_basis = w_diff
+            else:
+                w_reduced_basis = self.sg.to_reduced_basis(w)
+                w_diff_reduced_basis = self.sg.to_reduced_basis(w_diff)
+
             # Calculate new fields using simple and Anderson mixing
-            if (self.box_is_altering):
+            if self.box_is_altering:
                 dlx = -stress_array
-                am_current  = np.concatenate((np.reshape(w,      M*self.cb.get_total_grid()), self.cb.get_lx()))
-                am_diff     = np.concatenate((np.reshape(w_diff, M*self.cb.get_total_grid()), self.scale_stress*dlx))
+                am_current  = np.concatenate((w_reduced_basis.flatten(),      np.array(self.cb.get_lx())[self.lx_reduced_indices]))
+                am_diff     = np.concatenate((w_diff_reduced_basis.flatten(), self.scale_stress*dlx[self.lx_reduced_indices]))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
-                w = np.reshape(am_new[0:M*self.cb.get_total_grid()], (M, self.cb.get_total_grid()))
+                w_reduced_basis = np.reshape(am_new[0:len(w_reduced_basis.flatten())], (M, -1))
 
                 # Set box size
                 # Restricting |dLx| to be less than 10 % of Lx
-                old_lx = np.array(self.cb.get_lx())
-                new_lx = np.array(am_new[-self.cb.get_dim():])
+                old_lx = np.array(np.array(self.cb.get_lx())[self.lx_reduced_indices])
+                new_lx = np.array(am_new[-len(self.lx_reduced_indices):])
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
-                self.cb.set_lx(new_lx)
+                
+                self.cb.set_lx(np.array(new_lx)[self.lx_full_indices])
 
                 # Update bond parameters using new lx
                 self.solver.update_laplacian_operator()
             else:
-                w = self.field_optimizer.calculate_new_fields(
-                np.reshape(w,      M*self.cb.get_total_grid()),
-                np.reshape(w_diff, M*self.cb.get_total_grid()), old_error_level, error_level)
-                w = np.reshape(w, (M, self.cb.get_total_grid()))
-                        
+                w_reduced_basis = self.field_optimizer.calculate_new_fields(w_reduced_basis.flatten(), w_diff_reduced_basis.flatten(), old_error_level, error_level)
+                w_reduced_basis = np.reshape(w_reduced_basis, (M, -1))
+            
+            # Convert the reduced basis functions into full grids
+            if self.sg is None:
+                w = w_reduced_basis
+            else:
+                w = self.sg.from_reduced_basis(w_reduced_basis)
+            
             # Keep the level of field value
             for i in range(M):
                 # w[i] *= self.mask

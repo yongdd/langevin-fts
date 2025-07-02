@@ -14,8 +14,8 @@ f = 0.25        # A-fraction of major BCP chain, f
 eps = 2.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    "nx":[64,64,32],            # Simulation grid numbers
-    "lx":[7.0,7.0,4.0],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "nx":[32,64,64],            # Simulation grid numbers
+    "lx":[4.0,7.0,7.0],        # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -29,6 +29,11 @@ params = {
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
 
     "chi_n": {"A,B": 25},       # Interaction parameter, Flory-Huggins params * N_Ref
+
+    "space_group" :{
+        "symbol":"P4_2/mnm",   # IT symbol of the space group
+        "number": 419,     # (optional) Hall number of the space group
+    },
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -54,14 +59,16 @@ w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
 print("w_A and w_B are initialized to Sigma phase.")
 # [Ref: https://doi.org/10.3390/app2030654]
-sphere_positions = [[0.00,0.00,0.00],[0.50,0.50,0.50], #A
-[0.40,0.40,0.00],[0.60,0.60,0.00],[0.10,0.90,0.50],[0.90,0.10,0.50], #B
-[0.13,0.46,0.00],[0.46,0.13,0.00],[0.54,0.87,0.00],[0.87,0.54,0.00], #C
-[0.04,0.63,0.50],[0.63,0.04,0.50],[0.37,0.96,0.50],[0.96,0.37,0.50], #C
-[0.07,0.74,0.00],[0.74,0.07,0.00],[0.26,0.93,0.00],[0.93,0.26,0.00], #D
-[0.24,0.43,0.50],[0.43,0.24,0.50],[0.57,0.76,0.50],[0.77,0.56,0.50], #D
-[0.18,0.18,0.25],[0.82,0.82,0.25],[0.32,0.68,0.25],[0.68,0.32,0.25], #E
-[0.18,0.18,0.75],[0.82,0.82,0.75],[0.32,0.68,0.75],[0.68,0.32,0.75]] #E
+sphere_positions = [
+    [0.00, 0.00, 0.00], [0.50, 0.50, 0.50],  # A
+    [0.00, 0.40, 0.40], [0.00, 0.60, 0.60], [0.50, 0.90, 0.10], [0.50, 0.10, 0.90],  # B
+    [0.00, 0.46, 0.13], [0.00, 0.13, 0.46], [0.00, 0.87, 0.54], [0.00, 0.54, 0.87],  # C
+    [0.50, 0.63, 0.04], [0.50, 0.04, 0.63], [0.50, 0.96, 0.37], [0.50, 0.37, 0.96],  # C
+    [0.00, 0.74, 0.07], [0.00, 0.07, 0.74], [0.00, 0.93, 0.26], [0.00, 0.26, 0.93],  # D
+    [0.50, 0.43, 0.24], [0.50, 0.24, 0.43], [0.50, 0.76, 0.57], [0.50, 0.56, 0.77],  # D
+    [0.25, 0.18, 0.18], [0.25, 0.82, 0.82], [0.25, 0.68, 0.32], [0.25, 0.32, 0.68],  # E
+    [0.75, 0.18, 0.18], [0.75, 0.82, 0.82], [0.75, 0.68, 0.32], [0.75, 0.32, 0.68]   # E
+]
 
 for x,y,z in sphere_positions:
     molecules, my, mz = np.round((np.array([x, y, z])*params["nx"])).astype(np.int32)

@@ -39,6 +39,11 @@ params = {
             {"type":"B", "length":1-f}, # B-block
         ],},],
 
+    "space_group" :{
+        "symbol":"Pm-3n",   # IT symbol of the space group
+        "number": 520,     # (optional) Hall number of the space group
+    },
+
     "optimizer":{
         "name":"am",            # Anderson Mixing
         "max_hist":20,          # Maximum number of history
