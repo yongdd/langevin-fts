@@ -1,7 +1,10 @@
 1. Adding API tutorial
 2. Realspace methods with boundary conditions
-3. Setting impenetrable region (nano-particles)
 4. Adding comments for dynamic programming tables
-5. Polymer Solutions
-6. Renormalization
 7. Add explantions and purporses
+8. Add topics
+    1. Polymer Solutions
+    2. Renormalization
+    3. Environment various
+    4. conversion from/to PSCF
+    5. Tools
