@@ -38,7 +38,7 @@ params = {
     
     "space_group" :{
         "symbol":"Fm-3m",   # IT symbol of the space group
-        "number": 523,     # (optional) Hall number of the space group
+        "number": 523,      # (optional) Hall number of the space group
     },
 
     "optimizer":{

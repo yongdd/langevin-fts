@@ -440,6 +440,10 @@ class SCFT:
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
+        if self.sg is not None:
+            m_dic["space_group_symbol"] = self.sg.spacegroup_symbol
+            m_dic["space_group_hall_number"] = self.sg.hall_number
+
         # Add w fields to the dictionary
         for i, name in enumerate(self.monomer_types):
             m_dic["w_" + name] = self.w[i]
