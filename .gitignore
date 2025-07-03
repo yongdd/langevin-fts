@@ -20,6 +20,7 @@ examples/scft*/*.m
 examples/fts*/*.m
 examples/scft*/Test*
 examples/fts*/Test*
+examples/scft*/plot*.*
 examples/temp*
 examples/test*
 devel/test*

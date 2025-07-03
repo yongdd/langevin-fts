@@ -30,6 +30,7 @@ class SpaceGroup:
         print(f"Using Hall number: {hall_number} for symbol '{international_short_symbol}'")
 
         # Use spglib to get information from the Hall number
+        self.hall_number = hall_number
         spg_type_info = spglib.get_spacegroup_type(hall_number)
 
         # Extract the international space group number

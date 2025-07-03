@@ -32,7 +32,7 @@ params = {
 
     "space_group" :{
         "symbol":"P4_2/mnm",   # IT symbol of the space group
-        "number": 419,     # (optional) Hall number of the space group
+        "number": 419,         # (optional) Hall number of the space group
     },
 
     "distinct_polymers":[{      # Distinct Polymers

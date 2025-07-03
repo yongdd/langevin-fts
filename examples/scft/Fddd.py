@@ -1,7 +1,7 @@
 import os
 import time
 import numpy as np
-from scipy.io import savemat, loadmat
+import scipy.io
 from scipy.ndimage import gaussian_filter
 from polymerfts import scft
 
@@ -15,8 +15,8 @@ f = 0.43        # A-fraction of major BCP chain, f
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[24,48,84],            # Simulation grid numbers
-    "lx":[1.59,3.17,5.58],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "nx":[84,48,24],            # Simulation grid numbers
+    "lx":[5.58,3.17,1.59],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -29,7 +29,7 @@ params = {
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": {"A,B": 12.0},     # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 14.0},     # Interaction parameter, Flory-Huggins params * N_Ref
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -38,10 +38,10 @@ params = {
             {"type":"B", "length":1-f}, # B-block
         ],},],
 
-    # "space_group" :{
-    #     "symbol":"Fddd",   # IT symbol of the space group
-    #     "number": 336,     # (optional) Hall number of the space group
-    # },
+    "space_group" :{
+        "symbol":"Fddd",   # IT symbol of the space group
+        "number": 336,     # (optional) Hall number of the space group
+    },
 
     "optimizer":{       
         # "name":"adam",     # ADAM optimizer
@@ -61,22 +61,13 @@ params = {
 
 # Set initial fields
 print("w_A and w_B are initialized to Fddd phase.")
-x = np.arange(params["nx"][0])*2*np.pi/params["nx"][0]
-y = np.arange(params["nx"][1])*2*np.pi/params["nx"][1]
-z = np.arange(params["nx"][2])*2*np.pi/params["nx"][2]
-xx, yy, zz = np.meshgrid(x, y, z, indexing='ij')
+input_data = scipy.io.loadmat("FdddInput.mat", squeeze_me=True)
+w_A = input_data["w_A"]
+w_B = input_data["w_B"]
 
-w_A = np.zeros(params["nx"], dtype=np.complex128)
-w_A += ( 0.02+0.39j)*np.exp(             4j*zz)
-w_A += ( 0.22+0.36j)*np.exp(       2j*yy+2j*zz)
-w_A += ( 0.37+0.20j)*np.exp(      -2j*yy+2j*zz)
-w_A += (-0.81-0.32j)*np.exp( 1j*xx+1j*yy+1j*zz)
-w_A += (-0.09+0.86j)*np.exp( 1j*xx-1j*yy+1j*zz)
-w_A += ( 0.69+0.52j)*np.exp(-1j*xx+1j*yy+1j*zz)
-w_A += (-0.37+0.80j)*np.exp(-1j*xx-1j*yy+1j*zz)
-w_A = (w_A + np.conjugate(w_A)).real
-
-w_B = -w_A
+# Interpolate input data on params["nx"], if necessary
+w_A = scipy.ndimage.zoom(np.reshape(w_A, input_data["nx"]), params["nx"]/input_data["nx"])
+w_B = scipy.ndimage.zoom(np.reshape(w_B, input_data["nx"]), params["nx"]/input_data["nx"])
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
@@ -95,8 +86,16 @@ print("total time: %f " % time_duration)
 calculation.save_results("fields.mat")
 
 # Recording first a few iteration results for debugging and refactoring
-#     1   -1.310E-15  [ 1.9020053E+00  ]    -0.053408744   3.0154096E-01  [  1.5900000, 3.1700000, 5.5800000 ]
-#     2   -4.743E-13  [ 1.8986511E+00  ]    -0.045996110   2.5355729E-01  [  1.5886964, 3.1698418, 5.5799942 ]
-#     3    4.679E-13  [ 1.8971220E+00  ]    -0.040438763   2.1459982E-01  [  1.5873977, 3.1696502, 5.5799545 ]
-#     4    4.350E-13  [ 1.8964810E+00  ]    -0.036232923   1.8280298E-01  [  1.5861457, 3.1694431, 5.5798945 ]
-#     5    6.299E-13  [ 1.8961600E+00  ]    -0.033036051   1.5680863E-01  [  1.5849674, 3.1692325, 5.5798231 ]
+# (without space group)
+#    1   -9.816E-16  [ 1.7113060E+00  ]    -0.026635221   1.1182156E-03  [  5.5800000, 3.1700000, 1.5900000 ]
+#    2    3.273E-13  [ 1.7113039E+00  ]    -0.026635248   1.0560161E-03  [  5.5799986, 3.1699924, 1.5899349 ]
+#    3   -1.255E-12  [ 1.7114120E+00  ]    -0.026635755   6.1469774E-04  [  5.5799774, 3.1698765, 1.5889437 ]
+#    4   -9.190E-13  [ 1.7115022E+00  ]    -0.026635886   5.6580261E-04  [  5.5799711, 3.1698435, 1.5886610 ]
+#    5    1.010E-12  [ 1.7116056E+00  ]    -0.026636007   4.1350304E-04  [  5.5799640, 3.1698058, 1.5883267 ]
+
+# (with space group)
+#    1   -9.816E-16  [ 1.7113060E+00  ]    -0.026635221   1.1182156E-03  [  5.5800000, 3.1700000, 1.5900000 ]
+#    2    1.970E-12  [ 1.7113044E+00  ]    -0.026635590   8.4505486E-04  [  5.5799860, 3.1699237, 1.5893487 ]
+#    3    1.234E-12  [ 1.7113566E+00  ]    -0.026636098   5.9584334E-04  [  5.5799089, 3.1695182, 1.5856175 ]
+#    4   -1.557E-12  [ 1.7113659E+00  ]    -0.026636183   3.8796429E-04  [  5.5799196, 3.1695916, 1.5860956 ]
+#    5   -1.332E-12  [ 1.7113697E+00  ]    -0.026636219   2.0767394E-04  [  5.5799293, 3.1696664, 1.5864523 ]
