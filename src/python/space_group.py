@@ -201,7 +201,7 @@ class SpaceGroup:
                     # It rounds to nearest integer, casts to int, and applies modulo.
                     coords = np.round(new_coord_frac * grid_size_arr).astype(int)
                     assert np.all(np.isclose(np.abs(coords - new_coord_frac * grid_size_arr), 0.0)) == True, \
-                        f"Coordinates should be close to integers after rounding {new_coord_frac}."
+                        f"Coordinates should be close to integers after rounding {new_coord_frac*grid_size_arr}."
                     
                     new_coord_int_arr = np.mod(coords, grid_size_arr)
                     
