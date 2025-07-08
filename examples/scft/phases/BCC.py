@@ -14,14 +14,14 @@ f = 24/90       # A-fraction of major BCP chain, f
 
 params = {
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[1.9,1.9,1.9],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[1.9,1.9,1.9],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/90,                       # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
@@ -83,11 +83,11 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields.mat")
+calculation.save_results("BCC.json")
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1   -2.610E-16  [ 1.1357415E+00  ]    -0.083971693   2.4626838E+00  [  1.9000000, 1.9000000, 1.9000000 ]
-    #    2    7.674E-13  [ 1.0736574E+00  ]    -0.022388384   1.1675790E+00  [  1.9048585, 1.9048585, 1.9048585 ]
-    #    3    7.092E-13  [ 1.0625471E+00  ]    -0.008873460   7.6200267E-01  [  1.9069310, 1.9069310, 1.9069310 ]
-    #    4    2.106E-13  [ 1.0589720E+00  ]    -0.003514022   5.8227955E-01  [  1.9084046, 1.9084046, 1.9084046 ]
-    #    5   -4.642E-13  [ 1.0577087E+00  ]    -0.000996500   4.9532866E-01  [  1.9096084, 1.9096084, 1.9096084 ]
+#    1   -5.920E-16  [ 1.1346224E+00  ]    -0.082985825   2.4403483E+00  [  1.9000000, 1.9000000, 1.9000000 ]
+#    2   -4.286E-13  [ 1.0731186E+00  ]    -0.022087932   1.1596955E+00  [  1.9048528, 1.9048528, 1.9048528 ]
+#    3   -4.408E-13  [ 1.0619809E+00  ]    -0.008674228   7.5699691E-01  [  1.9069336, 1.9069336, 1.9069336 ]
+#    4   -1.326E-13  [ 1.0583713E+00  ]    -0.003380199   5.7917010E-01  [  1.9084127, 1.9084127, 1.9084127 ]
+#    5   -5.210E-13  [ 1.0570798E+00  ]    -0.000910820   4.9361682E-01  [  1.9096203, 1.9096203, 1.9096203 ]

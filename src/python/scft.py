@@ -312,8 +312,8 @@ class SCFT:
             # solver.set_symmetry_operations(sg.get_symmetry_operations())
         else:
             self.sg = None
-            self.lx_reduced_indices = [0, 1, 2]
-            self.lx_full_indices = [0, 1, 2]
+            self.lx_reduced_indices = list(range(len(params["lx"])))
+            self.lx_full_indices = list(range(len(params["lx"])))
             
             # Total number of variables to be adjusted to minimize the Hamiltonian
             if params["box_is_altering"]:

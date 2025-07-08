@@ -21,9 +21,9 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/100,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
@@ -83,19 +83,11 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields.mat")
+calculation.save_results("Fddd.json")
 
 # Recording first a few iteration results for debugging and refactoring
-# (without space group)
-#    1   -9.816E-16  [ 1.7113060E+00  ]    -0.026635221   1.1182156E-03  [  5.5800000, 3.1700000, 1.5900000 ]
-#    2    3.273E-13  [ 1.7113039E+00  ]    -0.026635248   1.0560161E-03  [  5.5799986, 3.1699924, 1.5899349 ]
-#    3   -1.255E-12  [ 1.7114120E+00  ]    -0.026635755   6.1469774E-04  [  5.5799774, 3.1698765, 1.5889437 ]
-#    4   -9.190E-13  [ 1.7115022E+00  ]    -0.026635886   5.6580261E-04  [  5.5799711, 3.1698435, 1.5886610 ]
-#    5    1.010E-12  [ 1.7116056E+00  ]    -0.026636007   4.1350304E-04  [  5.5799640, 3.1698058, 1.5883267 ]
-
-# (with space group)
-#    1   -9.816E-16  [ 1.7113060E+00  ]    -0.026635221   1.1182156E-03  [  5.5800000, 3.1700000, 1.5900000 ]
-#    2    1.970E-12  [ 1.7113044E+00  ]    -0.026635590   8.4505486E-04  [  5.5799860, 3.1699237, 1.5893487 ]
-#    3    1.234E-12  [ 1.7113566E+00  ]    -0.026636098   5.9584334E-04  [  5.5799089, 3.1695182, 1.5856175 ]
-#    4   -1.557E-12  [ 1.7113659E+00  ]    -0.026636183   3.8796429E-04  [  5.5799196, 3.1695916, 1.5860956 ]
-#    5   -1.332E-12  [ 1.7113697E+00  ]    -0.026636219   2.0767394E-04  [  5.5799293, 3.1696664, 1.5864523 ]
+#    1   -4.716E-17  [ 1.7113060E+00  ]    -0.099581166   1.6450075E-01  [  5.5800000, 3.1700000, 1.5900000 ]
+#    2    3.283E-13  [ 1.7411991E+00  ]    -0.102040548   1.6251983E-01  [  5.5799986, 3.1699924, 1.5899349 ]
+#    3   -1.650E-12  [ 1.7724644E+00  ]    -0.104533095   1.6033448E-01  [  5.5799966, 3.1699828, 1.5898623 ]
+#    4    9.538E-13  [ 1.8050994E+00  ]    -0.107044909   1.5791765E-01  [  5.5799944, 3.1699729, 1.5897906 ]
+#    5    1.732E-12  [ 1.8390979E+00  ]    -0.109563065   1.5525652E-01  [  5.5799926, 3.1699643, 1.5897281 ]

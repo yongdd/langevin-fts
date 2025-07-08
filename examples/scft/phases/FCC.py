@@ -19,9 +19,9 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/90,                       # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
@@ -85,11 +85,12 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields.mat")
+calculation.save_results("FCC.json")
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1    3.490E-17  [ 1.2357278E+00  ]    -0.129993803   1.9797895E+00  [  1.9100000, 1.9100000, 1.9100000 ]
-    #    2    3.659E-13  [ 1.1496105E+00  ]    -0.050647547   1.2179429E+00  [  1.9177727, 1.9177727, 1.9177727 ]
-    #    3   -4.691E-13  [ 1.1240766E+00  ]    -0.023067731   8.5182029E-01  [  1.9219990, 1.9219990, 1.9219990 ]
-    #    4    6.768E-13  [ 1.1144044E+00  ]    -0.010774352   6.5169543E-01  [  1.9250324, 1.9250324, 1.9250324 ]
-    #    5    6.987E-13  [ 1.1107171E+00  ]    -0.004797123   5.3966576E-01  [  1.9274962, 1.9274962, 1.9274962 ]
+#    1   -4.029E-16  [ 1.2337934E+00  ]    -0.128427199   1.9628365E+00  [  1.9100000, 1.9100000, 1.9100000 ]
+#    2    1.110E-13  [ 1.1484981E+00  ]    -0.049976631   1.2095702E+00  [  1.9177695, 1.9177695, 1.9177695 ]
+#    3    4.775E-13  [ 1.1229914E+00  ]    -0.022635534   8.4654058E-01  [  1.9220083, 1.9220083, 1.9220083 ]
+#    4    1.993E-13  [ 1.1132682E+00  ]    -0.010476977   6.4828036E-01  [  1.9250511, 1.9250511, 1.9250511 ]
+#    5    2.525E-13  [ 1.1095218E+00  ]    -0.004593014   5.3757043E-01  [  1.9275214, 1.9275214, 1.9275214 ]
+#    6    5.157E-13  [ 1.1084661E+00  ]    -0.001735953   4.7514483E-01  [  1.9296643, 1.9296643, 1.9296643 ]

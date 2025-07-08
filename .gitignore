@@ -16,11 +16,12 @@ fields*.json
 fields*.yaml
 structure_function*.mat
 examples/*.m
-examples/scft*/*.m
 examples/fts*/*.m
-examples/scft*/Test*
 examples/fts*/Test*
+examples/scft*/*.m
+examples/scft*/Test*
 examples/scft*/plot*.*
+examples/scft/phases/*.json
 examples/temp*
 examples/test*
 devel/test*

@@ -14,7 +14,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 # Major Simulation params
 f = 0.40       # A-fraction of major BCP chain, f
 
-# Open and read the JSON file
+# Open and read the MAT file
 input_data = scipy.io.loadmat("DP.mat", squeeze_me=True)
 print(input_data["nx"])
 print(input_data["lx"])
@@ -26,9 +26,9 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "scale_stress": 1.0,
 
@@ -59,7 +59,7 @@ params = {
     },
     
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-9     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 w_A = input_data["w_A"]
@@ -84,3 +84,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("DP.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#    1    3.177E-16  [ 3.6333857E+00  ]    -0.144400048   2.0079163E-02  [  2.3750164, 2.3750164, 2.3750164 ]
+#    2   -2.528E-12  [ 3.7176055E+00  ]    -0.144510217   2.7268780E-02  [  2.3749483, 2.3749483, 2.3749483 ]
+#    3    1.514E-12  [ 3.7145873E+00  ]    -0.144460000   2.4078266E-02  [  2.3750288, 2.3750288, 2.3750288 ]
+#    4   -1.666E-12  [ 3.7120704E+00  ]    -0.144423273   2.1221430E-02  [  2.3750974, 2.3750974, 2.3750974 ]
+#    5    6.907E-13  [ 3.7099894E+00  ]    -0.144398394   1.8692226E-02  [  2.3751533, 2.3751533, 2.3751533 ]
