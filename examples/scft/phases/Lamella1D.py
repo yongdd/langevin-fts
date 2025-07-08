@@ -71,7 +71,7 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("Lamellar1D.json")
+calculation.save_results("L1D.json")
 
 # Recording first a few iteration results for debugging and refactoring
 #    1    1.388E-15  [ 1.0476635E+00  ]    -0.008883496   1.9193450E-01  [  1.5000000 ]
