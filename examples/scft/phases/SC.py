@@ -14,14 +14,14 @@ f = 0.2       # A-fraction of major BCP chain, f
 
 params = {
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":[1.5,1.5,1.5],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[1.5,1.5,1.5],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
@@ -50,7 +50,7 @@ params = {
     },
     
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-12     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 # Set initial fields
@@ -83,3 +83,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("SC.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#    1    1.242E-15  [ 1.2994727E+00  ]    -0.196319958   4.7555397E+00  [  1.5000000, 1.5000000, 1.5000000 ]
+#    2    5.221E-13  [ 1.1180125E+00  ]    -0.014933580   1.1719980E+00  [  1.5188909, 1.5188909, 1.5188909 ]
+#    3    9.087E-14  [ 1.1129996E+00  ]    -0.000825794   8.2812183E-01  [  1.5238229, 1.5238229, 1.5238229 ]
+#    4    3.368E-13  [ 1.1117618E+00  ]     0.005749807   6.7685416E-01  [  1.5276098, 1.5276098, 1.5276098 ]
+#    5    1.712E-13  [ 1.1114038E+00  ]     0.009002711   5.9790125E-01  [  1.5307422, 1.5307422, 1.5307422 ]

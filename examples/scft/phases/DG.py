@@ -14,21 +14,21 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 # Major Simulation params
 f = 0.4       # A-fraction of major BCP chain, f
 
-# Open and read the JSON file
+# Open and read the MAT file
 input_data = scipy.io.loadmat("DG.mat", squeeze_me=True)
 print(input_data["nx"])
 print(input_data["lx"])
 
 params = {
-    "nx":[64,64,64],            # Simulation grid numbers
+    "nx":[32,32,32],            # Simulation grid numbers
     "lx":input_data["lx"],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "scale_stress": 1.0,
 
@@ -59,7 +59,7 @@ params = {
     },
     
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-11    # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-8    # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 w_A = input_data["w_A"]
@@ -84,3 +84,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("DG.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#    1   -3.928E-16  [ 5.0824951E+00  ]    -0.213182408   2.2881821E-05  [  3.6543042, 3.6543042, 3.6543042 ]
+#    2   -1.947E-13  [ 5.0824897E+00  ]    -0.213182408   2.1227876E-05  [  3.6543040, 3.6543040, 3.6543040 ]
+#    3    2.943E-13  [ 5.0824819E+00  ]    -0.213182407   1.8431003E-05  [  3.6543016, 3.6543016, 3.6543016 ]
+#    4   -6.841E-13  [ 5.0824559E+00  ]    -0.213182406   1.5441443E-05  [  3.6542974, 3.6542974, 3.6542974 ]
+#    5    2.847E-13  [ 5.0824546E+00  ]    -0.213182406   1.4254684E-05  [  3.6542969, 3.6542969, 3.6542969 ]

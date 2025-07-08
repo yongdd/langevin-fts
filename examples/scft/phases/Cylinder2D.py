@@ -15,23 +15,21 @@ f = 1.0/3.0     # A-fraction of major BCP chain, f
 params = {
     # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[48,32],                        # Simulation grid numbers
-    "lx":[2.7,1.6],  # Simulation box size as a_Ref * N_Ref^(1/2) unit,
-                                            # where "a_Ref" is reference statistical segment length
-                                            # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+    "nx":[48,32],                  # Simulation grid numbers
+    "lx":[2.7,1.6],                # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+                                   # where "a_Ref" is reference statistical segment length
+                                   # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/90,                       # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
         "B":1.0, },
 
     "chi_n": {"A,B": 15},       # Interaction parameter, Flory-Huggins params * N_Ref
-
-    "scale_stress": 1,
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -49,7 +47,7 @@ params = {
     },
 
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-12     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 # Set initial fields
@@ -80,8 +78,8 @@ print("total time: %f " % time_duration)
 calculation.save_results("C2D.json")
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1    2.707E-13  [ 1.7014499E+00  ]    -0.347066724   1.8831697E+00  [  6.4000000, 5.5200000, 4.7804602 ]
-    #    2    6.994E-14  [ 1.3989400E+00  ]    -0.167789774   1.3639553E+00  [  6.4000000, 5.5228865, 4.7847663 ]
-    #    3   -1.612E-13  [ 1.2904067E+00  ]    -0.093092899   9.8796237E-01  [  6.4000000, 5.5238851, 4.7865062 ]
-    #    4   -1.229E-13  [ 1.2456786E+00  ]    -0.059003091   7.1297764E-01  [  6.4000000, 5.5241884, 4.7872102 ]
-    #    5   -1.305E-13  [ 1.2273191E+00  ]    -0.042734208   5.1541767E-01  [  6.4000000, 5.5242091, 4.7874487 ]
+#    1   -3.364E-15  [ 1.1072987E+00  ]    -0.057523751   1.5324187E+00  [  2.7000000, 1.6000000 ]
+#    2    5.452E-15  [ 1.0699399E+00  ]    -0.024326094   1.0238845E+00  [  2.7025811, 1.6048410 ]
+#    3   -4.180E-14  [ 1.0554717E+00  ]    -0.011536990   7.2534463E-01  [  2.7040263, 1.6076075 ]
+#    4   -8.636E-15  [ 1.0490457E+00  ]    -0.006099893   5.5394703E-01  [  2.7050075, 1.6095148 ]
+#    5    1.372E-14  [ 1.0459471E+00  ]    -0.003673710   4.5908209E-01  [  2.7057610, 1.6109921 ]

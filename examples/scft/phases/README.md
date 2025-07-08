@@ -1,4 +1,6 @@
-Available phases
+Initial configurations of network phases are obtained from the Kevin Dorfman's publicly available data.
+
+Available phases:
 * Lamellar1D.py
 * Cylinder2D.py
 * PL.py (perforated lamellar)

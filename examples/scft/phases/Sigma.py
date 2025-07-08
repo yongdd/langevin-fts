@@ -15,14 +15,14 @@ eps = 2.0       # a_A/a_B, conformational asymmetry
 
 params = {
     "nx":[32,64,64],            # Simulation grid numbers
-    "lx":[4.0,7.0,7.0],        # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":[4.0,7.0,7.0],         # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous", # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
@@ -90,3 +90,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("Sigma.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#    1   -1.462E-15  [ 1.0040000E+00  ]    -0.001859583   1.9215121E+00  [  4.0000000, 7.0000000, 7.0000000 ]
+#    2    4.736E-13  [ 1.0022061E+00  ]    -0.000570350   1.1293870E+00  [  4.0000299, 7.0000203, 7.0000203 ]
+#    3    3.036E-12  [ 1.0016441E+00  ]    -0.000238806   6.6231791E-01  [  4.0000421, 7.0000294, 7.0000294 ]
+#    4   -1.754E-12  [ 1.0014360E+00  ]    -0.000146152   4.2737822E-01  [  4.0000485, 7.0000346, 7.0000346 ]
+#    5   -1.246E-12  [ 1.0013535E+00  ]    -0.000121015   3.3566219E-01  [  4.0000524, 7.0000379, 7.0000379 ]

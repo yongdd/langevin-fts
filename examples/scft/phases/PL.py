@@ -26,9 +26,9 @@ params = {
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
-    "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"continuous",   # "discrete" or "continuous" chain model
-    "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
+    "box_is_altering":True,          # Find box size that minimizes the free energy during saddle point iteration.
+    "chain_model":"continuous",      # "discrete" or "continuous" chain model
+    "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "scale_stress": 1.0,
 
@@ -58,7 +58,7 @@ params = {
     },
     
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-9     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 w_A = input_data["w_A"]
@@ -83,3 +83,10 @@ print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
 calculation.save_results("PL.json")
+
+# Recording first a few iteration results for debugging and refactoring
+#    1    1.688E-16  [ 3.3282272E+04  ]     8.543126219   2.3374074E+00  [  1.7547415, 1.2021598, 1.2021598 ]
+#    2    1.254E-12  [ 1.6403619E+04  ]     7.050990161   1.8765011E+00  [  1.9115585, 1.2570578, 1.2570578 ]
+#    3    2.677E-14  [ 7.9971332E+03  ]     5.871700645   1.5899486E+00  [  2.0287933, 1.3007231, 1.3007231 ]
+#    4   -1.201E-12  [ 4.0556552E+03  ]     4.901541934   1.3949141E+00  [  2.1224039, 1.3371794, 1.3371794 ]
+#    5   -1.217E-13  [ 2.1738442E+03  ]     4.084484179   1.2557275E+00  [  2.2005246, 1.3687938, 1.3687938 ]
