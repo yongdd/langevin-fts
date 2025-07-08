@@ -288,7 +288,7 @@ class SCFT:
             else:
                 self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"])
                 
-            if not self.sg.crystal_system in "Orthorhombic, Tetragonal, Cubic":
+            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Cubic"]:
                 raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, or Cubic. " +
                     "The current crystal system is " + self.sg.crystal_system + ".")
 

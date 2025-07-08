@@ -2,6 +2,7 @@ import os
 import time
 import numpy as np
 from scipy.io import savemat
+from scipy.ndimage import gaussian_filter
 from polymerfts import scft
 
 # OpenMP environment variables
@@ -9,26 +10,28 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.5         # A-fraction of major BCP chain, f
+f = 1.0/3.0     # A-fraction of major BCP chain, f
 
 params = {
-    # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
     
-    "nx":[32],          # Simulation grid numbers
-    "lx":[4.36],        # Simulation box size as a_Ref * N_Ref^(1/2) unit,
-                        # where "a_Ref" is reference statistical segment length
-                        # and "N_Ref" is the number of segments of reference linear homopolymer chain.
+    "nx":[48,32],                        # Simulation grid numbers
+    "lx":[2.7,1.6],  # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+                                            # where "a_Ref" is reference statistical segment length
+                                            # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
     "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
-    "chain_model":"discrete",   # "discrete" or "continuous" chain model
+    "chain_model":"continuous",   # "discrete" or "continuous" chain model
     "ds":1/90,                  # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
         "A":1.0, 
         "B":1.0, },
 
-    "chi_n": {"A,B": 13.27},    # Interaction parameter, Flory-Huggins params * N_Ref
+    "chi_n": {"A,B": 15},       # Interaction parameter, Flory-Huggins params * N_Ref
+
+    "scale_stress": 1,
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
@@ -46,16 +49,19 @@ params = {
     },
 
     "max_iter":2000,     # The maximum relaxation iterations
-    "tolerance":1e-8     # Terminate iteration if the self-consistency error is less than tolerance
+    "tolerance":1e-12     # Terminate iteration if the self-consistency error is less than tolerance
 }
 
 # Set initial fields
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to lamellar phase.")
-for i in range(0,params["nx"][0]):
-    w_A[i] =  np.cos(3*2*np.pi*i/params["nx"][0])
-    w_B[i] = -np.cos(3*2*np.pi*i/params["nx"][0])
+print("w_A and w_B are initialized to cylindrical phase.")
+cylinder_positions = [
+[0.0,0.0],[1/2,1/2]]
+for y,z in cylinder_positions:
+    my, mz = np.round((np.array([y, z])*params["nx"])).astype(np.int32)
+    w_A[my,mz] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
@@ -71,11 +77,11 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields.json")
+calculation.save_results("C2D.json")
 
 # Recording first a few iteration results for debugging and refactoring
-    #    1    2.220E-16  [ 1.0481009E+00  ]    -0.009300846   2.2442714E-01  [  4.3600000 ]
-    #    2    0.000E+00  [ 1.0505473E+00  ]    -0.009752572   2.2487508E-01  [  4.3597350 ]
-    #    3    0.000E+00  [ 1.0530913E+00  ]    -0.010221266   2.2532266E-01  [  4.3594606 ]
-    #    4   -6.661E-16  [ 1.0557620E+00  ]    -0.010712001   2.2576538E-01  [  4.3591738 ]
-    #    5    0.000E+00  [ 1.0585655E+00  ]    -0.011225570   2.2619631E-01  [  4.3588742 ]
+    #    1    2.707E-13  [ 1.7014499E+00  ]    -0.347066724   1.8831697E+00  [  6.4000000, 5.5200000, 4.7804602 ]
+    #    2    6.994E-14  [ 1.3989400E+00  ]    -0.167789774   1.3639553E+00  [  6.4000000, 5.5228865, 4.7847663 ]
+    #    3   -1.612E-13  [ 1.2904067E+00  ]    -0.093092899   9.8796237E-01  [  6.4000000, 5.5238851, 4.7865062 ]
+    #    4   -1.229E-13  [ 1.2456786E+00  ]    -0.059003091   7.1297764E-01  [  6.4000000, 5.5241884, 4.7872102 ]
+    #    5   -1.305E-13  [ 1.2273191E+00  ]    -0.042734208   5.1541767E-01  [  6.4000000, 5.5242091, 4.7874487 ]

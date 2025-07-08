@@ -89,11 +89,4 @@ time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
 # Save final results (.mat, .json or .yaml format)
-calculation.save_results("fields.mat")
-
-# Recording first a few iteration results for debugging and refactoring
-    #    1    1.776E-15  [ 1.0040000E+00  ]    -0.001859583   1.9215121E+00  [  7.0000000, 7.0000000, 4.0000000 ]
-    #    2   -3.220E-15  [ 1.0022061E+00  ]    -0.000570350   1.1293870E+00  [  7.0000203, 7.0000203, 4.0000299 ]
-    #    3    6.439E-15  [ 1.0016441E+00  ]    -0.000238806   6.6231790E-01  [  7.0000294, 7.0000294, 4.0000421 ]
-    #    4    2.243E-14  [ 1.0014360E+00  ]    -0.000146151   4.2737821E-01  [  7.0000346, 7.0000346, 4.0000485 ]
-    #    5   -1.943E-14  [ 1.0013535E+00  ]    -0.000121015   3.3566217E-01  [  7.0000379, 7.0000379, 4.0000524 ]
+calculation.save_results("Sigma.json")

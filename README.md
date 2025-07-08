@@ -20,6 +20,7 @@ This repository contains a library for polymer field theory simulations and its 
     * Support only continuous chain
     * Support periodic, reflecting, absorbing boundaries
   * Can set impenetrable region using a mask (**beta**)
+  * Can constraint space group symmetries during the SCFT iterations (orthorhombic, tetragonal, and cubic only) (**beta**)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
   * Parallel computations of propagators with multi-core CPUs (up to 8), or multi CUDA streams (up to 4) to maximize GPU usage
