@@ -521,7 +521,7 @@ class SCFT:
             w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
             
         # Iteration begins here
-        for scft_iter in range(1, self.max_iter+1):
+        for iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
             phi, _ = self.compute_concentrations(w)
@@ -576,13 +576,13 @@ class SCFT:
                 error_level += np.sqrt(np.sum(stress_array**2))
 
                 print("%8d %12.3E " %
-                (scft_iter, mass_error), end=" [ ")
+                (iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
             else:
-                print("%8d %12.3E " % (scft_iter, mass_error), end=" [ ")
+                print("%8d %12.3E " % (iter, mass_error), end=" [ ")
                 for p in range(self.molecules.get_n_polymer_types()):
                     print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
@@ -645,6 +645,11 @@ class SCFT:
         # Store phi and w
         self.phi = phi
         self.w = w
+        
+        # Store free energy
+        self.free_energy = energy_total
+        self.error_level = error_level
+        self.iter = iter
 
     # def get_concentrations(self,):
     #     return self.phi
