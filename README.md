@@ -67,9 +67,9 @@ Environment variables must be set so that `nvcc` and `conda` can be executed in 
 # Installation
 ```Shell
 # Create virtual environment 
-conda create -n polymerfts python=3.9 cmake=3.31 pybind11=2.13 \ 
-    make conda git pip scipy openmpi matplotlib pyyaml spglib \ 
-    jupyter networkx pygraphviz pygments plotly nbformat 
+conda create -n polymerfts python=3.9 cmake=3.31 pybind11=2.13 \
+    make conda git pip scipy openmpi matplotlib pyyaml spglib \
+    jupyter networkx pygraphviz pygments plotly nbformat -c conda-forge
 # Activate virtual environment  
 conda activate polymerfts  
 # Download the source code

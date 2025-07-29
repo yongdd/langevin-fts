@@ -96,7 +96,7 @@ class SpaceGroup:
 
     def get_crystal_system(self, spg_number):
         """
-        Maps an international space group number to its crystal system name and lattice_parameters
+        Maps an international space group number to its crystal system name and lattice parameters
         """
         if 1 <= spg_number <= 2:
             return "Triclinic", ["a", "b", "c", "alpha", "beta", "gamma"]
