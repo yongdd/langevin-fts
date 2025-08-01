@@ -24,3 +24,4 @@
 55. Add tests for stress computation with complex type
 56. Check get_negative_frequency_mapping() and compute_single_segment_stress()
 57. Add tests for Anderson mixing with complex type
+58. Figure out why 'os.environ' does not work under Python and openmp installation with conda-forge
