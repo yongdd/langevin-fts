@@ -7,9 +7,11 @@ import numpy as np
 import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 from scipy.io import savemat, loadmat
-from polymerfts import *
+
+from polymerfts import _core
+from polymerfts.polymer_field_theory import *
+from polymerfts.compressor import *
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -18,7 +20,7 @@ os.environ["OMP_STACKSIZE"] = "1G"
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
         return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
 
-class CLFTS:
+class LFTS:
     def __init__(self, params, random_seed=None):
 
         # Segment length
@@ -30,7 +32,7 @@ class CLFTS:
             "There are duplicated monomer_types"
 
         # Choose platform among [cuda, cpu-mkl]
-        avail_platforms = PlatformSelector.avail_platforms()
+        avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
         elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
@@ -42,9 +44,9 @@ class CLFTS:
 
         # (C++ class) Create a factory for given platform and chain_model
         if "reduce_gpu_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"], "complex")
+            factory = _core.PlatformSelector.create_factory(platform, params["reduce_gpu_memory_usage"], "real")
         else:
-            factory = PlatformSelector.create_factory(platform, False, "complex")
+            factory = _core.PlatformSelector.create_factory(platform, False, "real")
         factory.display_info()
 
         # (C++ class) Computation box
@@ -74,8 +76,7 @@ class CLFTS:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
         # Multimonomer polymer field theory
-        self.zeta_n = 100
-        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, self.zeta_n)
+        self.mpt = SymmetricPolymerTheory(self.monomer_types, self.chi_n, zeta_n=None)
 
         # The numbers of real and imaginary fields, respectively
         M = len(self.monomer_types)
@@ -279,7 +280,7 @@ class CLFTS:
         for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
+            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
@@ -381,11 +382,11 @@ class CLFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields
-        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.complex128)
+        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
         for i in range(M):
             w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
             
-        # Convert monomer chemical potential fields into auxiliary fields
+        # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
 
         # Dictionary to record history of H and dH/dχN
@@ -399,7 +400,7 @@ class CLFTS:
         for monomer_id_pair in itertools.combinations_with_replacement(list(range(M)),2):
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            sf_average[type_pair] = np.zeros_like(np.fft.fftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
 
         # Create an empty array for field update algorithm
         if normal_noise_prev is None :
@@ -410,101 +411,43 @@ class CLFTS:
         if start_langevin_step is None :
             start_langevin_step = 1
 
-        # # Find saddle point
-        # print("iterations, mass error, total partitions, Hamiltonian, incompressibility error (or saddle point error)")
+        # The number of times that 'find_saddle_point' has failed to find a saddle point
+        saddle_fail_count = 0
+        successive_fail_count = 0
 
         # Init timers
+        total_saddle_iter = 0
+        total_error_level = 0
         time_start = time.time()
 
         # Langevin iteration begins here
         for langevin_step in range(start_langevin_step, self.langevin["max_step"]+1):
             print("Langevin step: ", langevin_step)
-    
+
+            # # Copy data for restoring
+            # w_aux_copy = w_aux.copy()
+            # phi_copy = phi.copy()
+
             # Compute total concentrations
             phi, _ = self.compute_concentrations(w_aux=w_aux)
 
             # Compute functional derivatives of Hamiltonian w.r.t. fields 
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, range(M))
 
-            # Add dynamical stabilization
-            alpha_ds = 1e-3
-            for i in range(M):
-                if i in self.mpt.aux_fields_imag_idx:
-                    w_lambda[i] += 1j*alpha_ds*np.imag(w_lambda[i])
-
-            # # Plots
-            # if langevin_step > -1:
-            #     w_aux_copy = w_aux.copy()
-            #     w_minus = np.reshape(w_aux_copy[0], self.cb.get_nx())
-            #     w_plus = np.reshape(w_aux_copy[1], self.cb.get_nx())
-
-            #     w_lambda_minus = np.reshape(w_lambda[0], self.cb.get_nx())
-            #     w_lambda_plus  = np.reshape(w_lambda[1], self.cb.get_nx())                
-   
-            #     lx = self.cb.get_lx()
-
-            #     fig, axes = plt.subplots(4, 2, figsize=(8, 16))
-            #     fig.suptitle("Potential Fields")
-            #     im1 = axes[0,0].imshow(np.real(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet)  #, vmin=vmin, vmax=vmax)
-            #     im2 = axes[0,1].imshow(np.imag(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im3 = axes[1,0].imshow(np.real(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im4 = axes[1,1].imshow(np.imag(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-                
-            #     im5 = axes[2,0].imshow(np.real(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im6 = axes[2,1].imshow(np.imag(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im7 = axes[3,0].imshow(np.real(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im8 = axes[3,1].imshow(np.imag(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-                
-            #     axes[0,0].set(title='w_- (real)', xlabel='y', ylabel='x')
-            #     axes[0,1].set(title='w_- (imag)', xlabel='y', ylabel='x')
-            #     axes[1,0].set(title='w_+ (real)', xlabel='y', ylabel='x')
-            #     axes[1,1].set(title='w_+ (imag)', xlabel='y', ylabel='x')
-                
-            #     axes[2,0].set(title='dw_- (real)', xlabel='y', ylabel='x')
-            #     axes[2,1].set(title='dw_- (imag)', xlabel='y', ylabel='x')
-            #     axes[3,0].set(title='dw_+ (real)', xlabel='y', ylabel='x')
-            #     axes[3,1].set(title='dw_+ (imag)', xlabel='y', ylabel='x')
-                
-            #     fig.colorbar(im1, ax=axes[0, 0],)
-            #     fig.colorbar(im2, ax=axes[0, 1])
-            #     fig.colorbar(im3, ax=axes[1, 0])
-            #     fig.colorbar(im4, ax=axes[1, 1])
-
-            #     fig.colorbar(im5, ax=axes[2, 0],)
-            #     fig.colorbar(im6, ax=axes[2, 1])
-            #     fig.colorbar(im7, ax=axes[3, 0])
-            #     fig.colorbar(im8, ax=axes[3, 1])
-   
-            #     fig.subplots_adjust(right=1.0)
-            #     # fig.colorbar(im, ax=axes.ravel().tolist())
-            #     fig.show()
-
-            #     # create folder
-            #     pathlib.Path(f"images").mkdir(parents=True, exist_ok=True)
-            #     fig.savefig("images/%06d.png" % (langevin_step))
-                
-            #     plt.close()
-
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
             for i in range(M):
                 scaling = self.dt_scaling[i]
-                if i in self.mpt.aux_fields_real_idx:
-                    sign = 1            
-                else:
-                    sign = 1j
-                w_aux[i] += -w_lambda[i]*self.langevin["dt"]*scaling + 0.5*sign*(normal_noise_prev[i] + normal_noise_current[i])*np.sqrt(scaling)
+                w_aux[i] += -w_lambda[i]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[i] + normal_noise_current[i])*np.sqrt(scaling)
 
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # Compute functional derivatives of Hamiltonian w.r.t. fields
+            # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi, range(M))
 
             # Compute total error
             error_level_array = np.std(h_deriv, axis=1)
-            error_level_real_array = np.std(np.real(h_deriv), axis=1)
-            error_level_imag_array = np.std(np.imag(h_deriv), axis=1)
 
             # Calculate Hamiltonian
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
@@ -512,38 +455,13 @@ class CLFTS:
 
             # Check the mass conservation
             mass_error = np.mean(h_deriv[M-1])
-            print(f"  {mass_error.real:.3E}{mass_error.imag:+.3E}j", end="    [ ")
+            print("%12.3E " % (mass_error), end=" [ ")
             for Q in total_partitions:
-                print(f"{Q.real:.6E}{Q.imag:+.6E}j", end=" ")
-            print(f"] {hamiltonian.real:.6E}{hamiltonian.imag:+.6E}j   [", end="")
+                print("%13.7E " % (Q), end=" ")
+            print("] %15.9f   [" % (hamiltonian), end="")
             for i in range(M):
                 print("%13.7E" % (error_level_array[i]), end=" ")
-                # print(f"{error_level_real_array[i]:.6E}{error_level_imag_array[i]:+.6E}", end=" ")
             print("]")
-
-            # # Print mean of w_aux
-            # for i in range(M):
-            #     print(np.max(np.abs(w_aux[i].real)), np.max(np.abs(w_aux[i].imag))) #
-            # # print("")
-
-            # # If the tolerance of the saddle point was not met, regenerate Langevin random noise and continue
-            # if np.isnan(error_level) or error_level >= self.saddle["tolerance"]:
-            #     if successive_fail_count < 5:                
-            #         print("The tolerance of the saddle point was not met. Langevin random noise is regenerated.")
-
-            #         # Restore w_aux and phi
-            #         w_aux = w_aux_copy
-            #         phi = phi_copy
-                    
-            #         # Increment counts and continue
-            #         successive_fail_count += 1
-            #         saddle_fail_count += 1
-            #         continue
-            #     else:
-            #         print("The tolerance of the saddle point was not met %d times in a row. Simulation is aborted." % (successive_fail_count))
-            #         break
-            # else:
-            #     successive_fail_count = 0
 
             # Compute H and dH/dχN
             if langevin_step % self.recording["sf_computing_period"] == 0:
@@ -573,15 +491,14 @@ class CLFTS:
                 phi_fourier = {}
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.fftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
+                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(M-1) :
-                        mu_fourier[key] += np.fft.fftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
-                    # TODO: introduce a mapping to compute <phi(-k)>
-                    # sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
+                    sf_average[key] += mu_fourier[monomer_pair[0]]* np.conj( phi_fourier[monomer_pair[1]])
 
             # Save structure function
             if langevin_step % self.recording["sf_recording_period"] == 0:
@@ -602,7 +519,7 @@ class CLFTS:
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
-                    sf_average[key][:] = 0.0
+                    sf_average[key][:,:,:] = 0.0
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
@@ -611,8 +528,14 @@ class CLFTS:
                     path=os.path.join(self.recording["dir"], "fields_%06d.mat" % (langevin_step)),
                     w=w, phi=phi, langevin_step=langevin_step, normal_noise_prev=normal_noise_prev)
 
+        print( "The number of times that tolerance of saddle point was not met and Langevin random noise was regenerated: %d times" % 
+            (saddle_fail_count))
+
         # Estimate execution time
         time_duration = time.time() - time_start
 
         print("total time: %f, time per step: %f" %
             (time_duration, time_duration/(langevin_step+1-start_langevin_step)) )
+        
+        print("Total iterations for saddle points: %d, Iterations per Langevin step: %f" %
+            (total_saddle_iter, total_saddle_iter/(langevin_step+1-start_langevin_step)))

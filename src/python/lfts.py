@@ -559,7 +559,7 @@ class LFTS:
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
-                    sf_average[key][:,:,:] = 0.0
+                    sf_average[key][:] = 0.0
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
@@ -620,8 +620,8 @@ class LFTS:
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])
                 print("%8d %12.3E " % (saddle_iter, mass_error), end=" [ ")
-                for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
+                for Q in total_partitions:
+                    print("%13.7E " % (Q), end=" ")
                 print("] %15.9f   [" % (hamiltonian), end="")
                 for i in range(I):
                     print("%13.7E" % (error_level_array[i]), end=" ")
