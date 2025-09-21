@@ -3,8 +3,7 @@ import time
 import numpy as np
 from scipy.io import savemat, loadmat
 from scipy.ndimage import gaussian_filter
-import lfts_hotspot as lfts
-# import clfts
+import clfts
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
@@ -37,30 +36,17 @@ params = {
         ],},],
         
     "langevin":{                # Langevin Dynamics
-        "max_step":500000,      # Langevin steps for simulation
-        "dt":2,                 # Langevin step interval, delta tau*N_Ref
-        "nbar":10000,           # Invariant polymerization index, nbar of N_Ref
+        "max_step":1000000,      # Langevin steps for simulation
+        "dt":1,                 # Langevin step interval, delta tau*N_Ref
+        "nbar":100000,          # Invariant polymerization index, nbar of N_Ref
     },
     
     "recording":{                       # Recording Simulation Data
-        "dir":"lfts_hotspot",           # Directory name
+        "dir":"no_ds_test",                # Directory name
         "recording_period":10000,       # Period for recording concentrations and fields
         "sf_computing_period":10,       # Period for computing structure function
         "sf_recording_period":100000,   # Period for recording structure function
     },
-
-    # "saddle":{                # Iteration for the pressure field 
-    #     "max_iter" :100,      # Maximum number of iterations
-    #     "tolerance":1e-4,     # Tolerance of incompressibility 
-    # },
-
-    # "compressor":{
-    #     "name":"lram",              # Linear Response + Anderson Mixing
-    #     "max_hist":20,              # Maximum number of history
-    #     "start_error":5e-1,         # When switch to AM from simple mixing
-    #     "mix_min":0.01,             # Minimum mixing rate of simple mixing
-    #     "mix_init":0.01,            # Initial mixing rate of simple mixing
-    # },
 
     "verbose_level":1,      # 1 : Print at each langevin step.
                             # 2 : Print at each saddle point iteration.
@@ -75,11 +61,8 @@ input_data = loadmat("LamellaInput.mat", squeeze_me=True)
 w_A = input_data["w_A"]
 w_B = input_data["w_B"]
 
-# # Initialize simulation
-# simulation = clfts.CLFTS(params=params, random_seed=random_seed)
-
 # Initialize simulation
-simulation = lfts.LFTS(params=params, random_seed=random_seed)
+simulation = clfts.CLFTS(params=params, random_seed=random_seed)
 
 # Set a timer
 time_start = time.time()
