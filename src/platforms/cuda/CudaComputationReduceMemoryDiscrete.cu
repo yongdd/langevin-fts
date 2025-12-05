@@ -849,6 +849,28 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
     }
 }
 template <typename T>
+void CudaComputationReduceMemoryDiscrete<T>::advance_propagator_single_segment(
+    T* q_init, T *q_out, std::string monomer_type)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        const int STREAM = 0;
+        gpu_error_check(cudaMemcpy(d_q_pair[STREAM][0], q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
+
+        propagator_solver->advance_propagator(
+                        STREAM, d_q_pair[STREAM][0], d_q_pair[STREAM][1],
+                        monomer_type, d_q_mask);
+        gpu_error_check(cudaDeviceSynchronize());
+        
+        gpu_error_check(cudaMemcpy(q_out, d_q_pair[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+template <typename T>
 void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
 {
     try

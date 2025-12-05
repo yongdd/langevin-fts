@@ -42,9 +42,13 @@ public:
     int get_n_blocks(int polymer) { Polymer& pc = this->molecules->get_polymer(polymer); return pc.get_n_blocks();};
     virtual void update_laplacian_operator() = 0;
 
+    // Compute all chain propagators
     virtual void compute_propagators(
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) = 0;
+
+    // Advance propagator only single segment
+    virtual void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) = 0;
 
     virtual void compute_concentrations() = 0;
 

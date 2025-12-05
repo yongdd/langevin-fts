@@ -91,6 +91,8 @@ public:
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
+    void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) override;
+
     void compute_concentrations() override;
 
     // Compute statistics with inputs

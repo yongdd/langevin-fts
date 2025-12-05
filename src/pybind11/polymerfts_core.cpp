@@ -45,7 +45,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             const int M = obj.get_total_grid();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
             }
             return obj.integral(static_cast<T*>(buf_g.ptr));
         })
@@ -55,10 +55,10 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
             if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
             }
             if (buf_h.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
             }
             return obj.inner_product(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
         });
@@ -68,15 +68,15 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         //     py::buffer_info buf1 = g.request();
         //     py::buffer_info buf2 = h.request();
         //     if (buf1.size != n_comp*total_grid) 
-        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
+        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match.");
         //     if (buf2.size != n_comp*total_grid)
-        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match");
+        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match.");
         //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
         // };
         // Void zero_mean(py::array_t<double> g) {
         //     py::buffer_info buf = g.request();
         //     if (buf.size != total_grid) {
-        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match");
+        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match.");
         //     }
         //     zero_mean((double*) buf.ptr);
         // };
@@ -101,7 +101,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 {
                     py::buffer_info buf_w_input = it->second.request();
                     if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
                     }
                     else
                     {
@@ -117,7 +117,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                     {
                         py::buffer_info buf_q_init = it->second.request();
                         if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
                         }
                         else
                         {
@@ -133,6 +133,36 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
+        .def("advance_propagator_single_segment", [](PropagatorComputation<T>& obj, py::array_t<T> q_in, const std::string monomer_type)
+        {
+            try{
+                // Request input buffer
+                py::buffer_info buf_q_in = q_in.request();
+                T* q_in_ptr = static_cast<T*>(buf_q_in.ptr);
+
+                // Allocate output buffer
+                const int M = obj.get_total_grid();
+                py::array_t<T> q_out(M);
+                py::buffer_info buf_q_out = q_out.request();
+                T* q_out_ptr = static_cast<T*>(buf_q_out.ptr);
+
+                // Call C++ implementation
+                if (buf_q_in.size != M)
+                {
+                    throw_with_line_number("Size of input q_in (" + std::to_string(buf_q_in.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+                }
+                else
+                {
+                    obj.advance_propagator_single_segment(q_in_ptr, q_out_ptr, monomer_type);
+                }
+                return q_out;
+
+            }
+            catch(std::exception& exc)
+            {
+                throw_without_line_number(exc.what());
+            }
+        })
         .def("compute_concentrations", &PropagatorComputation<T>::compute_concentrations)
         .def("compute_statistics", [](PropagatorComputation<T>& obj, std::map<std::string,py::array_t<const T>> w_input, py::object q_init)
         {
@@ -146,7 +176,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 {
                     py::buffer_info buf_w_input = it->second.request();
                     if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
                     }
                     else
                     {
@@ -162,7 +192,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                     {
                         py::buffer_info buf_q_init = it->second.request();
                         if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
+                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
                         }
                         else
                         {
@@ -319,11 +349,11 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
                 py::buffer_info buf_w_deriv = w_deriv.request();
 
                 if (buf_w_new.size != n_var)
-                    throw_with_line_number("Size of input w_new (" + std::to_string(buf_w_new.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
+                    throw_with_line_number("Size of input w_new (" + std::to_string(buf_w_new.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match.");
                 if (buf_w_current.size != n_var)
-                    throw_with_line_number("Size of input w_current (" + std::to_string(buf_w_current.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
+                    throw_with_line_number("Size of input w_current (" + std::to_string(buf_w_current.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match.");
                 if (buf_w_deriv.size != n_var)
-                    throw_with_line_number("Size of input w_deriv (" + std::to_string(buf_w_deriv.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match");
+                    throw_with_line_number("Size of input w_deriv (" + std::to_string(buf_w_deriv.size) + ") and 'n_var' (" + std::to_string(n_var) + ") must match.");
 
                 obj.calculate_new_fields(static_cast<T*>(buf_w_new.ptr), 
                                          static_cast<T*>(buf_w_current.ptr),
