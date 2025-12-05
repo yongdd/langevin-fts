@@ -598,6 +598,23 @@ void CpuComputationDiscrete<T>::compute_propagators(
     }
 }
 template <typename T>
+void CpuComputationDiscrete<T>::advance_propagator_single_segment(
+    T* q_init, T *q_out, std::string monomer_type)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        // Assign a pointer for mask
+        const double *q_mask = this->cb->get_mask();
+        propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
+
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+template <typename T>
 void CpuComputationDiscrete<T>::compute_concentrations()
 {
     try

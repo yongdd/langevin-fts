@@ -209,6 +209,12 @@ class CLFTS:
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))
 
+        # Dynamical stabilization constant for complex Langevin simulations
+        if "dynamic_stabilization" in params:
+            self.alpha_ds = params["dynamic_stabilization"]
+        else:
+            self.alpha_ds = 0.0
+
         # dH/dw_aux[i] is scaled by dt_scaling[i]
         self.dt_scaling = np.ones(M)
         for i in range(M-1):
@@ -250,6 +256,7 @@ class CLFTS:
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
+        print("Dynamical stabilization constant: ", self.alpha_ds)
 
         propagator_computation_optimizer.display_blocks()
         propagator_computation_optimizer.display_propagators()
@@ -427,63 +434,62 @@ class CLFTS:
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, range(M))
 
             # Add dynamical stabilization
-            alpha_ds = 1e-3
             for i in range(M):
                 if i in self.mpt.aux_fields_imag_idx:
-                    w_lambda[i] += 1j*alpha_ds*np.imag(w_lambda[i])
+                    w_lambda[i] += 1j*self.alpha_ds*np.imag(w_lambda[i])
 
-            # # Plots
-            # if langevin_step > -1:
-            #     w_aux_copy = w_aux.copy()
-            #     w_minus = np.reshape(w_aux_copy[0], self.cb.get_nx())
-            #     w_plus = np.reshape(w_aux_copy[1], self.cb.get_nx())
+            # Plots
+            if langevin_step > -1:
+                w_aux_copy = w_aux.copy()
+                w_minus = np.reshape(w_aux_copy[0], self.cb.get_nx())
+                w_plus = np.reshape(w_aux_copy[1], self.cb.get_nx())
 
-            #     w_lambda_minus = np.reshape(w_lambda[0], self.cb.get_nx())
-            #     w_lambda_plus  = np.reshape(w_lambda[1], self.cb.get_nx())                
+                w_lambda_minus = np.reshape(w_lambda[0], self.cb.get_nx())
+                w_lambda_plus  = np.reshape(w_lambda[1], self.cb.get_nx())                
    
-            #     lx = self.cb.get_lx()
+                lx = self.cb.get_lx()
 
-            #     fig, axes = plt.subplots(4, 2, figsize=(8, 16))
-            #     fig.suptitle("Potential Fields")
-            #     im1 = axes[0,0].imshow(np.real(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet)  #, vmin=vmin, vmax=vmax)
-            #     im2 = axes[0,1].imshow(np.imag(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im3 = axes[1,0].imshow(np.real(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im4 = axes[1,1].imshow(np.imag(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                fig, axes = plt.subplots(4, 2, figsize=(8, 16))
+                fig.suptitle("Potential Fields")
+                im1 = axes[0,0].imshow(np.real(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet)  #, vmin=vmin, vmax=vmax)
+                im2 = axes[0,1].imshow(np.imag(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im3 = axes[1,0].imshow(np.real(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im4 = axes[1,1].imshow(np.imag(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
                 
-            #     im5 = axes[2,0].imshow(np.real(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im6 = axes[2,1].imshow(np.imag(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im7 = axes[3,0].imshow(np.real(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
-            #     im8 = axes[3,1].imshow(np.imag(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im5 = axes[2,0].imshow(np.real(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im6 = axes[2,1].imshow(np.imag(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im7 = axes[3,0].imshow(np.real(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                im8 = axes[3,1].imshow(np.imag(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
                 
-            #     axes[0,0].set(title='w_- (real)', xlabel='y', ylabel='x')
-            #     axes[0,1].set(title='w_- (imag)', xlabel='y', ylabel='x')
-            #     axes[1,0].set(title='w_+ (real)', xlabel='y', ylabel='x')
-            #     axes[1,1].set(title='w_+ (imag)', xlabel='y', ylabel='x')
+                axes[0,0].set(title='w_- (real)', xlabel='y', ylabel='x')
+                axes[0,1].set(title='w_- (imag)', xlabel='y', ylabel='x')
+                axes[1,0].set(title='w_+ (real)', xlabel='y', ylabel='x')
+                axes[1,1].set(title='w_+ (imag)', xlabel='y', ylabel='x')
                 
-            #     axes[2,0].set(title='dw_- (real)', xlabel='y', ylabel='x')
-            #     axes[2,1].set(title='dw_- (imag)', xlabel='y', ylabel='x')
-            #     axes[3,0].set(title='dw_+ (real)', xlabel='y', ylabel='x')
-            #     axes[3,1].set(title='dw_+ (imag)', xlabel='y', ylabel='x')
+                axes[2,0].set(title='dw_- (real)', xlabel='y', ylabel='x')
+                axes[2,1].set(title='dw_- (imag)', xlabel='y', ylabel='x')
+                axes[3,0].set(title='dw_+ (real)', xlabel='y', ylabel='x')
+                axes[3,1].set(title='dw_+ (imag)', xlabel='y', ylabel='x')
                 
-            #     fig.colorbar(im1, ax=axes[0, 0],)
-            #     fig.colorbar(im2, ax=axes[0, 1])
-            #     fig.colorbar(im3, ax=axes[1, 0])
-            #     fig.colorbar(im4, ax=axes[1, 1])
+                fig.colorbar(im1, ax=axes[0, 0],)
+                fig.colorbar(im2, ax=axes[0, 1])
+                fig.colorbar(im3, ax=axes[1, 0])
+                fig.colorbar(im4, ax=axes[1, 1])
 
-            #     fig.colorbar(im5, ax=axes[2, 0],)
-            #     fig.colorbar(im6, ax=axes[2, 1])
-            #     fig.colorbar(im7, ax=axes[3, 0])
-            #     fig.colorbar(im8, ax=axes[3, 1])
+                fig.colorbar(im5, ax=axes[2, 0],)
+                fig.colorbar(im6, ax=axes[2, 1])
+                fig.colorbar(im7, ax=axes[3, 0])
+                fig.colorbar(im8, ax=axes[3, 1])
    
-            #     fig.subplots_adjust(right=1.0)
-            #     # fig.colorbar(im, ax=axes.ravel().tolist())
-            #     fig.show()
+                fig.subplots_adjust(right=1.0)
+                # fig.colorbar(im, ax=axes.ravel().tolist())
+                fig.show()
 
-            #     # create folder
-            #     pathlib.Path(f"images").mkdir(parents=True, exist_ok=True)
-            #     fig.savefig("images/%06d.png" % (langevin_step))
+                # create folder
+                pathlib.Path(f"images").mkdir(parents=True, exist_ok=True)
+                fig.savefig("images/%06d.png" % (langevin_step))
                 
-            #     plt.close()
+                plt.close()
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
@@ -520,6 +526,10 @@ class CLFTS:
                 print("%13.7E" % (error_level_array[i]), end=" ")
                 # print(f"{error_level_real_array[i]:.6E}{error_level_imag_array[i]:+.6E}", end=" ")
             print("]")
+            
+            for i in range(2):
+                print(i, np.max(np.abs(w_aux[i].real)) - np.min(np.abs(w_aux[i].real)))
+            
 
             # # Print mean of w_aux
             # for i in range(M):

@@ -577,14 +577,14 @@ class SCFT:
 
                 print("%8d %12.3E " %
                 (iter, mass_error), end=" [ ")
-                for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
+                for Q in total_partitions:
+                    print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
                 print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
             else:
                 print("%8d %12.3E " % (iter, mass_error), end=" [ ")
-                for p in range(self.molecules.get_n_polymer_types()):
-                    print("%13.7E " % (self.solver.get_total_partition(p)), end=" ")
+                for Q in total_partitions:
+                    print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
             # Conditions to end the iteration
