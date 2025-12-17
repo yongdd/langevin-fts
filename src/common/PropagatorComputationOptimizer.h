@@ -80,8 +80,7 @@ public:
     // Add new polymers
     void add_polymer(Polymer& pc, int polymer_count);
 
-    // Aggregate propagators
-    static std::map<std::string, ComputationBlock> aggregate_propagator_common          (std::map<std::string, ComputationBlock> remaining_keys, int minimum_n_segment);
+    // Aggregate propagators for given left key
     static std::map<std::string, ComputationBlock> aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> u_map);
     static std::map<std::string, ComputationBlock> aggregate_propagator_discrete_chain  (std::map<std::string, ComputationBlock> u_map);
 

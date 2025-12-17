@@ -279,8 +279,9 @@ int main()
                 return -1;
 
             double QQ = solver->get_total_partition(p);
-            error = std::abs(QQ-1.5943694728e-03/(Lx*Ly*Lz));
-            std::cout<< "Total Propagator error: "<< error << std::endl;
+            double QQ_ref = 1.5943694728e-03/(Lx*Ly*Lz);
+            error = std::abs(QQ-QQ_ref);
+            std::cout<< "Total Propagator error: "<< QQ << "-" << QQ_ref << " " << error << std::endl;
             if (!std::isfinite(error) || error > 1e-7)
                 return -1;
 

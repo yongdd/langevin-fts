@@ -968,7 +968,7 @@ void CpuComputationDiscrete<T>::compute_stress()
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && N_LEFT == N_RIGHT)
+                 else if (n == 0 && N_LEFT == N_RIGHT)
                 {
                     // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction_start[key_right][0] << std::endl;
                     if (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
@@ -1025,6 +1025,10 @@ void CpuComputationDiscrete<T>::compute_stress()
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
+            #ifndef NDEBUG
+            std::cout << p << " " << key_left << ", " << key_right << "," << "x" << ": " << block_dq_dl[key][0] << std::endl;
+            #endif
+
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }

@@ -173,7 +173,8 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && N_LEFT == N_RIGHT){
+                else if (n == 0 && N_LEFT == N_RIGHT)
+                {
                     if (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_compuation_key.push_back(std::make_tuple(d_propagator_left, d_propagator_right, is_half_bond_length));
