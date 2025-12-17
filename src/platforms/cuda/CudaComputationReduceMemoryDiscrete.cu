@@ -172,7 +172,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && N_LEFT == N_RIGHT){
+                else if (n == 0 && N_LEFT == N_RIGHT)
+                {
                     if (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_compuation_key.push_back(std::make_tuple(propagator_left, propagator_right, is_half_bond_length));
@@ -1432,9 +1433,9 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
             T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
                 d_q_block_v[0],  // q
                 d_q_block_u[0],  // q^dagger
-                _d_exp_dw)*(n_repeated*this->cb->get_volume());
+                _d_exp_dw);
             
-            total_partition /= n_propagators;
+            total_partition *= n_repeated/this->cb->get_volume()/n_propagators;
             total_partitions[p].push_back(total_partition);
 
             #ifndef NDEBUG

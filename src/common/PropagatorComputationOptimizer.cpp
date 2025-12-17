@@ -166,7 +166,7 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
         }
     }
 }
-std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
+std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> set_I)
 {
     // Example)
     // 0, B:
@@ -184,10 +184,112 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     //   4, 4, 1, [(D)B0:3,(E)B0:2]B, 
     //   2, 2, 1, (F)B, 
 
-    return aggregate_propagator_common(not_aggregated_right_keys, 0);
+    const int minimum_n_segment = 0;
+
+    #ifndef NDEBUG
+    std::cout << "--------- PropagatorComputationOptimizer::aggregate_propagator (before) -----------" << std::endl;
+    std::cout << "--------- map ------------" << std::endl;
+    for(const auto& item : set_I)
+    {
+        std::cout << item.second.n_segment_right << ", " <<
+                     item.first << ", " <<
+                     item.second.n_segment_left << ", ";
+        for(const auto& v_u : item.second.v_u)
+        {
+            std::cout << "("
+            + std::to_string(std::get<0>(v_u)) + ","
+            + std::to_string(std::get<1>(v_u)) + ")" + ", ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "-----------------------" << std::endl;
+    #endif
+
+    // Make a set of n_compute
+    std::set<int> set_n_compute;
+    for(const auto& item: set_I)
+        set_n_compute.insert(item.second.n_segment_right);
+
+    // Aggregate right keys
+    for(const int n_segment_current: set_n_compute)
+    {
+        // Add elements into set_S
+        std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
+        for(const auto& item: set_I)
+        {
+            if (item.second.n_segment_right == n_segment_current)
+                set_S[item.first] = item.second;
+        }
+        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
+
+        // Skip if nothing to aggregate
+        if (set_S.size() == 1 || n_segment_current < 2*minimum_n_segment)
+            continue;
+
+        // Update 'n_segment_right'
+        for(const auto& item: set_S)
+            set_I[item.first].n_segment_right = minimum_n_segment;
+        
+        // New 'n_segment_right' and 'n_segment_left'
+        int n_segment_right = n_segment_current - minimum_n_segment;
+        int n_segment_left  = n_segment_current - minimum_n_segment;
+           
+        // New 'v_u' and propagator key
+        std::vector<std::tuple<int ,int>> v_u;
+        std::string propagator_code = "[";
+        bool is_first_sub_propagator = true;
+        std::string dep_key;
+        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        {
+            dep_key = it->first;
+
+            // Update propagator key
+            if(!is_first_sub_propagator)
+                propagator_code += ",";
+            else
+                is_first_sub_propagator = false;
+            propagator_code += dep_key + std::to_string(set_I[dep_key].n_segment_right);
+
+            // The number of repeats
+            if (set_I[dep_key].n_repeated > 1)
+                propagator_code += ":" + std::to_string(set_I[dep_key].n_repeated);
+
+            // Compute the union of v_u
+            std::vector<std::tuple<int ,int>> dep_v_u = set_I[dep_key].v_u;
+            v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
+        }
+        propagator_code += "]" + monomer_type;
+
+        // Add new aggregated key to set_I
+        set_I[propagator_code].monomer_type = monomer_type;
+        set_I[propagator_code].n_segment_right = n_segment_right;
+        set_I[propagator_code].n_segment_left = n_segment_left;
+        set_I[propagator_code].v_u = v_u;
+        set_I[propagator_code].n_repeated = 1;
+
+        #ifndef NDEBUG
+        std::cout << "---------- PropagatorComputationOptimizer::aggregate_propagator (in progress) -----------" << std::endl;
+        std::cout << "--------- map (" + std::to_string(set_I.size()) + ") -----------" << std::endl;
+        for(const auto& item : set_I)
+        {
+            std::cout << item.second.n_segment_right << ", " <<
+                        item.first << ", " <<
+                        item.second.n_segment_left << ", ";
+            for(const auto& v_u : item.second.v_u)
+            {
+                std::cout << "("
+                + std::to_string(std::get<0>(v_u)) + ","
+                + std::to_string(std::get<1>(v_u)) + ")" + ", ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "-----------------------" << std::endl;
+        #endif
+    }
+    return set_I;
 
 }
-std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> not_aggregated_right_keys)
+std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> set_I)
 {
     // Example)
     // 0, B:
@@ -205,11 +307,108 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     //   3, 3, 1, [(D)B1:3,(E)B1:2]B, 
     //   2, 2, 1, (F)B, 
 
-    return aggregate_propagator_common(not_aggregated_right_keys, 1);
-}
+    // // Copy 
+    // int minimum_n_segment = 1;
+    // std::map<std::string, ComputationBlock> set_final = set_I;
 
-std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_common(std::map<std::string, ComputationBlock> set_I, int minimum_n_segment)
-{
+    // // Minimum 'n_segment_largest' is 2 because of discrete chain
+    // for(const auto& item: set_final)
+    // {    
+    //     if (item.second.n_segment_right <= 1)
+    //         set_I.erase(item.first);
+    // }
+
+    // while(set_I.size() > 1)
+    // {
+    //     // Make a list of 'n_segment_right'
+    //     std::vector<int> vector_n_segment_right;
+    //     for(const auto& item: set_I)
+    //         vector_n_segment_right.push_back(item.second.n_segment_right);
+
+    //     // Sort the list in ascending order
+    //     std::sort(vector_n_segment_right.rbegin(), vector_n_segment_right.rend());
+
+    //     // Find the 'n_segment_largest'
+    //     int n_segment_largest = vector_n_segment_right[1]; // The second largest element.
+
+    //     // Add elements into set_S
+    //     std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
+    //     for(const auto& item: set_I)
+    //     {
+    //         if (item.second.n_segment_right >= n_segment_largest)
+    //             set_S[item.first] = item.second;
+    //     }
+
+    //     // Update 'n_segment_right'
+    //     for(const auto& item: set_S)
+    //         set_final[item.first].n_segment_right -= n_segment_largest - minimum_n_segment;
+        
+    //     // New 'n_segment_right' and 'n_segment_left'
+    //     int n_segment_right = n_segment_largest - minimum_n_segment;
+    //     int n_segment_left  = n_segment_largest - minimum_n_segment;
+           
+    //     // New 'v_u' and propagator key
+    //     std::vector<std::tuple<int ,int>> v_u;
+    //     std::string propagator_code = "[";
+    //     bool is_first_sub_propagator = true;
+    //     std::string dep_key;
+    //     for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+    //     {
+    //         dep_key = it->first;
+
+    //         // Update propagator key
+    //         if(!is_first_sub_propagator)
+    //             propagator_code += ",";
+    //         else
+    //             is_first_sub_propagator = false;
+    //         propagator_code += dep_key + std::to_string(set_final[dep_key].n_segment_right);
+
+    //         // The number of repeats
+    //         if (set_final[dep_key].n_repeated > 1)
+    //             propagator_code += ":" + std::to_string(set_final[dep_key].n_repeated);
+
+    //         // Compute the union of v_u
+    //         std::vector<std::tuple<int ,int>> dep_v_u = set_final[dep_key].v_u;
+    //         v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
+    //     }
+    //     std::string monomer_type = PropagatorCode::get_monomer_type_from_key(dep_key);
+    //     propagator_code += "]" + monomer_type;
+
+    //     // Add new aggregated key to set_final
+    //     set_final[propagator_code].monomer_type = monomer_type;
+    //     set_final[propagator_code].n_segment_right = n_segment_right;
+    //     set_final[propagator_code].n_segment_left = n_segment_left;
+    //     set_final[propagator_code].v_u = v_u;
+    //     set_final[propagator_code].n_repeated = 1;
+
+    //     // Add new aggregated key to set_I
+    //     set_I[propagator_code] = set_final[propagator_code];
+
+    //     // set_I = set_I - set_S
+    //     for(const auto& item: set_S)
+    //         set_I.erase(item.first);
+
+    //     // std::cout << "---------map (" + std::to_string(set_I.size()) + ") -----------" << std::endl;
+    //     // for(const auto& item : set_final)
+    //     // {
+    //     //     std::cout << item.second.n_segment_right << ", " <<
+    //     //                 item.first << ", " <<
+    //     //                 item.second.n_segment_left << ", ";
+    //     //     for(const auto& v_u : item.second.v_u)
+    //     //     {
+    //     //         std::cout << "("
+    //     //         + std::to_string(std::get<1>(v_u)) + ","
+    //     //         + std::to_string(std::get<0>(v_u)) + ")" + ", ";
+    //     //     }
+    //     //     std::cout << std::endl;
+    //     // }
+    //     // std::cout << "-----------------------" << std::endl;
+    // }
+
+    // return set_final;
+
+    int minimum_n_segment = 1;
+
     #ifndef NDEBUG
     std::cout << "--------- PropagatorComputationOptimizer::aggregate_propagator (before) -----------" << std::endl;
     std::cout << "--------- map ------------" << std::endl;

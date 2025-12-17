@@ -45,7 +45,7 @@ params = {
     "recording":{                       # Recording Simulation Data
         "dir":"lfts_hotspot",           # Directory name
         "recording_period":10000,       # Period for recording concentrations and fields
-        "sf_computing_period":10,       # Period for computing structure function
+        "sf_computing_period":1,        # Period for computing structure function
         "sf_recording_period":100000,   # Period for recording structure function
     },
 

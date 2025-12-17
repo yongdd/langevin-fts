@@ -7,6 +7,7 @@ import numpy as np
 import itertools
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from scipy.io import savemat, loadmat
 
 from polymerfts import _core
@@ -434,14 +435,61 @@ class LFTS:
             # Compute functional derivatives of Hamiltonian w.r.t. fields 
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, range(M))
 
+            # # Plots
+            # if langevin_step > -1:
+            #     w_aux_copy = w_aux.copy()
+            #     w_minus = np.reshape(w_aux_copy[0], self.cb.get_nx())
+            #     w_plus = np.reshape(w_aux_copy[1], self.cb.get_nx())
+
+            #     w_lambda_minus = np.reshape(w_lambda[0], self.cb.get_nx())
+            #     w_lambda_plus  = np.reshape(w_lambda[1], self.cb.get_nx())                
+   
+            #     lx = self.cb.get_lx()
+
+            #     fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+            #     fig.suptitle("Potential Fields")
+            #     im1 = axes[0,0].imshow(np.real(w_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet)  #, vmin=vmin, vmax=vmax)
+            #     im3 = axes[0,1].imshow(np.real(w_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                
+            #     im5 = axes[1,0].imshow(np.real(w_lambda_minus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+            #     im7 = axes[1,1].imshow(np.real(w_lambda_plus), extent=(0, lx[1], 0, lx[0]), origin='lower', cmap=cm.jet) #, vmin=vmin, vmax=vmax)
+                
+            #     axes[0,0].set(title='w_-', xlabel='y', ylabel='x')
+            #     axes[0,1].set(title='w_+', xlabel='y', ylabel='x')
+                
+            #     axes[1,0].set(title='dw_-', xlabel='y', ylabel='x')
+            #     axes[1,1].set(title='dw_+', xlabel='y', ylabel='x')
+                
+            #     fig.colorbar(im1, ax=axes[0, 0])
+            #     fig.colorbar(im3, ax=axes[0, 1])
+
+            #     fig.colorbar(im5, ax=axes[1, 0])
+            #     fig.colorbar(im7, ax=axes[1, 1])
+   
+            #     fig.subplots_adjust(right=1.0)
+            #     # fig.colorbar(im, ax=axes.ravel().tolist())
+            #     fig.show()
+
+            #     # create folder
+            #     pathlib.Path(f"images").mkdir(parents=True, exist_ok=True)
+            #     fig.savefig("images/%06d.png" % (langevin_step))
+                
+            #     plt.close()
+
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [M, self.cb.get_total_grid()])
             for i in range(M):
                 scaling = self.dt_scaling[i]
                 w_aux[i] += -w_lambda[i]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[i] + normal_noise_current[i])*np.sqrt(scaling)
 
+            # Set the pressure field zero
+            w_aux[M-1] -= np.mean(w_aux[M-1])
+
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
+
+            for i in range(2):
+                print(i, np.max(np.abs(w_aux[i])) - np.min(np.abs(w_aux[i])))
 
             # Compute functional derivatives of Hamiltonian w.r.t. imaginary fields 
             h_deriv = self.mpt.compute_func_deriv(w_aux, phi, range(M))
@@ -519,7 +567,7 @@ class LFTS:
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
                 # Reset arrays
                 for key in sf_average:
-                    sf_average[key][:,:,:] = 0.0
+                    sf_average[key][:] = 0.0
 
             # Save simulation data
             if langevin_step % self.recording["recording_period"] == 0:
