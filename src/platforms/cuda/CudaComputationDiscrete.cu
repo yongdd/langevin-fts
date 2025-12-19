@@ -564,6 +564,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
+                            int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // Check sub key
                             #ifndef NDEBUG
@@ -571,9 +572,12 @@ void CudaComputationDiscrete<T>::compute_propagators(
                                 std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "+1/2' is not prepared." << std::endl;
                             #endif
 
-                            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                                d_propagator_half_steps[key][0], d_propagator_half_steps[key][0],
-                                d_propagator_half_steps[sub_dep][sub_n_segment], 1.0, M);
+                            for(int r=0; r<sub_n_repeated; r++)
+                            {
+                                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                                    d_propagator_half_steps[key][0], d_propagator_half_steps[key][0],
+                                    d_propagator_half_steps[sub_dep][sub_n_segment], 1.0, M);
+                            }   
                         }
 
                         #ifndef NDEBUG

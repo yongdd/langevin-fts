@@ -363,18 +363,18 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
         // If all monomer types are same, set minimum_n_segment = 0
         bool is_same_monomer_type = true;
         std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
-        // Not sure why but 'is_first_aggregation' is necessary here.
-        if (is_first_aggregation)
-        {
-            for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
-            {
-                if (it->second.monomer_type != monomer_type || it->second.n_segment_right != n_segment_largest)
-                    is_same_monomer_type = false;
-            }
-            if (is_same_monomer_type)
-                minimum_n_segment = 0;
-            is_first_aggregation = false;
-        }
+        // // Not sure why but 'is_first_aggregation' is necessary here.
+        // if (is_first_aggregation)
+        // {
+        //     for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        //     {
+        //         if (it->second.monomer_type != monomer_type || it->second.n_segment_right != n_segment_largest)
+        //             is_same_monomer_type = false;
+        //     }
+        //     if (is_same_monomer_type)
+        //         minimum_n_segment = 0;
+        //     is_first_aggregation = false;
+        // }
 
         // Update 'n_segment_right'
         for(const auto& item: set_S)

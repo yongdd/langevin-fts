@@ -93,10 +93,39 @@ std::string PropagatorCode::generate_edge_code(
     if(queue_sub_codes.size() != 0)
     {
         std::sort(queue_sub_codes.begin(), queue_sub_codes.end());
-        code += "(";
+        // Count each sub_code
+        std::vector<std::string> unique_sub_codes;
+        std::vector<int> counts;
         for(size_t i=0; i<queue_sub_codes.size(); i++)
-            code += queue_sub_codes[i];
+        {
+            if (i==0 || queue_sub_codes[i] != queue_sub_codes[i-1])
+            {
+                unique_sub_codes.push_back(queue_sub_codes[i]);
+                counts.push_back(1);
+            }
+            else
+            {
+                counts[counts.size()-1] += 1;
+            }
+        }
+        // Merge codes
+        code += "(";
+        for(size_t i=0; i<unique_sub_codes.size(); i++)
+        {
+            code += unique_sub_codes[i];
+            if (counts[i] > 1)
+            {
+                code += ":" + std::to_string(counts[i]);
+                if (i != unique_sub_codes.size()-1)
+                    code += ",";
+            }
+        }
         code += ")";
+
+        // code += "(";
+        // for(size_t i=0; i<queue_sub_codes.size(); i++)
+        //     code += queue_sub_codes[i];
+        // code += ")";
     }
     // If in_node exists in chain_end_to_q_init
     else if (chain_end_to_q_init.find(in_node) != chain_end_to_q_init.end())

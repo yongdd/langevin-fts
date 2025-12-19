@@ -503,7 +503,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         // Copy memory from host to device
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
-                        int sub_n_repeated;
+                        int sub_n_repeated  = std::get<2>(deps[0]);
 
                         if (sub_n_segment == 0)
                         {
@@ -611,12 +611,14 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         // Copy memory from host to device
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
+                        int sub_n_repeated  = std::get<2>(deps[0]);
                         gpu_error_check(cudaMemcpy(d_propagator_sub_dep[STREAM][prev], propagator_half_steps[sub_dep][sub_n_segment], sizeof(T)*M, cudaMemcpyHostToDevice));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             sub_dep       = std::get<0>(deps[d]);
                             sub_n_segment = std::get<1>(deps[d]);
+                            sub_n_repeated= std::get<2>(deps[d]);
 
                             // Check sub key
                             #ifndef NDEBUG
@@ -635,10 +637,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                                 cudaMemcpyHostToDevice, streams[STREAM][1]));
                             }
 
-                            // STREAM 0: multiply 
-                            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                                d_q_one[STREAM][0], d_q_one[STREAM][0], d_propagator_sub_dep[STREAM][prev], 1.0, M);
-
+                            // STREAM 0: multiply
+                            for(int r=0; r<sub_n_repeated; r++)
+                            {
+                                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                                    d_q_one[STREAM][0], d_q_one[STREAM][0], d_propagator_sub_dep[STREAM][prev], 1.0, M);
+                            }
                             std::swap(prev, next);
                             cudaDeviceSynchronize();
                         }

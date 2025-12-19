@@ -288,6 +288,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
+                            int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // Check sub key
                             #ifndef NDEBUG
@@ -299,7 +300,7 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                             T **_propagator_sub_dep = propagator[sub_dep];
                             for(int i=0; i<M; i++)
-                                _propagator[0][i] *= _propagator_sub_dep[sub_n_segment][i];
+                                _propagator[0][i] *= pow(_propagator_sub_dep[sub_n_segment][i], sub_n_repeated);
                         }
 
                         #ifndef NDEBUG
