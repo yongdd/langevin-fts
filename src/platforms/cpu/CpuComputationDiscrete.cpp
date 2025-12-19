@@ -424,6 +424,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
+                            int sub_n_repeated  = std::get<2>(deps[d]);
 
                             // Check sub key
                             #ifndef NDEBUG
@@ -433,7 +434,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
 
                             T *_propagator_half_step = propagator_half_steps[sub_dep][sub_n_segment];
                             for(int i=0; i<M; i++)
-                                _q_junction_start[i] *= _propagator_half_step[i];
+                                _q_junction_start[i] *= pow(_propagator_half_step[i], sub_n_repeated);
                         }
 
                         #ifndef NDEBUG
