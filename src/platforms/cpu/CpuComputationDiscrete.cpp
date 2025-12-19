@@ -937,9 +937,16 @@ void CpuComputationDiscrete<T>::compute_stress()
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
-            // If there is no segment
-            if(N_RIGHT == 0)
-                continue;
+            #ifndef NDEBUG
+            std::cout << "key_left, key_right, N_LEFT, N_RIGHT: "
+                 << key_left << ", " << key_right << ", " << N_LEFT << ", " << N_RIGHT << std::endl;
+            std::cout << this->propagator_computation_optimizer->get_computation_propagator(key_left).deps.size() << ", "
+                 << this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() << std::endl;
+            #endif
+
+            // // If there is no segment
+            // if(N_RIGHT == 0)
+            //     continue;
 
             T **q_1 = propagator[key_left];     // dependency v
             T **q_2 = propagator[key_right];    // dependency u
@@ -948,10 +955,15 @@ void CpuComputationDiscrete<T>::compute_stress()
             T *q_segment_2;
 
             bool is_half_bond_length;
-            // std::cout << "key_left, key_right, N_LEFT, N: "
-            //      << key_left << ", " << key_right << ", " << N_LEFT << ", " << N << std::endl;
-
             std::array<T,3> _block_dq_dl = block_dq_dl[key];
+
+            // Example: N==5
+            // n:          0  1  2  3  4  5
+            // Direction:
+            // Case 1)      O--O--O--O--O    (chain ends at both ends, skip at 0 and N)
+            // Case 2)     -O--O--O--O--O-   (junctions at both ends, half bond lengths at both ends)
+            // Case 3)    --O--O--O--O--O    (aggregation junction at one end, skip at that end)
+            // Case 4)      O--O--O--O--O--  (aggregation junction at the other end, compute with full bond length)
 
             // Compute stress at each chain bond
             for(int n=0; n<=N_RIGHT; n++)
@@ -968,7 +980,7 @@ void CpuComputationDiscrete<T>::compute_stress()
                     is_half_bond_length = true;
                 }
                 // At u
-                 else if (n == 0 && N_LEFT == N_RIGHT)
+                else if (n == 0 && key_right[0] == '(')
                 {
                     // std::cout << "case 2: " << q_1[(N_LEFT-1)*M] << ", " << propagator_junction_start[key_right][0] << std::endl;
                     if (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
@@ -1005,6 +1017,11 @@ void CpuComputationDiscrete<T>::compute_stress()
                 // Compute 
                 std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
+
+                #ifndef NDEBUG
+                std::cout << b << " " << key_left << ", " << key_right << "," << n << ",x: " << segment_stress[0]*((T)n_repeated) << ", " << is_half_bond_length << std::endl;
+                #endif
+
                 for(int d=0; d<DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*((T)n_repeated);
 
@@ -1025,9 +1042,6 @@ void CpuComputationDiscrete<T>::compute_stress()
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
-            #ifndef NDEBUG
-            std::cout << p << " " << key_left << ", " << key_right << "," << "x" << ": " << block_dq_dl[key][0] << std::endl;
-            #endif
 
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];

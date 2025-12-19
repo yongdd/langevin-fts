@@ -88,13 +88,13 @@ int main()
         molecules_2->add_polymer(0.6, blocks_1, {});
         molecules_2->add_solvent(0.4, "A");
 
-        PropagatorComputationOptimizer* propagator_analyzer_1 = new PropagatorComputationOptimizer(molecules_1, false);
-        propagator_analyzer_1->display_blocks();
-        propagator_analyzer_1->display_propagators();
+        PropagatorComputationOptimizer* propagator_computation_optimizer_1 = new PropagatorComputationOptimizer(molecules_1, false);
+        propagator_computation_optimizer_1->display_blocks();
+        propagator_computation_optimizer_1->display_propagators();
 
-        PropagatorComputationOptimizer* propagator_analyzer_2 = new PropagatorComputationOptimizer(molecules_2, false);
-        propagator_analyzer_2->display_blocks();
-        propagator_analyzer_2->display_propagators();
+        PropagatorComputationOptimizer* propagator_computation_optimizer_2 = new PropagatorComputationOptimizer(molecules_2, false);
+        propagator_computation_optimizer_2->display_blocks();
+        propagator_computation_optimizer_2->display_propagators();
 
         std::vector<PropagatorComputation<double>*> solver_1_list;
         std::vector<PropagatorComputation<double>*> solver_2_list;
@@ -112,24 +112,24 @@ int main()
 
         #ifdef USE_CPU_MKL
         cb_1_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_1_list.push_back(new CpuComputationContinuous<double>(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1, "pseudospectral"));
+        solver_1_list.push_back(new CpuComputationContinuous<double>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "pseudospectral"));
         #endif
         #ifdef USE_CUDA
         cb_1_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_1_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_1_list.push_back(new CudaComputationContinuous<double>(cb_1_list.end()[-2], molecules_1, propagator_analyzer_1, "pseudospectral"));
-        solver_1_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_1_list.end()[-1], molecules_1, propagator_analyzer_1, "pseudospectral"));
+        solver_1_list.push_back(new CudaComputationContinuous<double>(cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1, "pseudospectral"));
+        solver_1_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "pseudospectral"));
         #endif
 
         #ifdef USE_CPU_MKL
         cb_2_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_2_list.push_back(new CpuComputationContinuous<double>(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2, "pseudospectral"));
+        solver_2_list.push_back(new CpuComputationContinuous<double>(cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2, "pseudospectral"));
         #endif
         #ifdef USE_CUDA
         cb_2_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_2_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_2_list.push_back(new CudaComputationContinuous<double>(cb_2_list.end()[-2], molecules_2, propagator_analyzer_2, "pseudospectral"));
-        solver_2_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_2_list.end()[-1], molecules_2, propagator_analyzer_2, "pseudospectral"));
+        solver_2_list.push_back(new CudaComputationContinuous<double>(cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2, "pseudospectral"));
+        solver_2_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2, "pseudospectral"));
         #endif
 
         // For each platform    

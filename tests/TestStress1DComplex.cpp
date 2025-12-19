@@ -127,6 +127,10 @@ int main()
                     // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;
                     // std::cout << "dx: " << cb->get_dx(0) << " " << cb->get_dx(1) << " " << cb->get_dx(2) << std::endl;
 
+                    // Display propagator computation optimizer info
+                    propagator_computation_optimizer->display_blocks();
+                    propagator_computation_optimizer->display_propagators();
+
                     // std::mt19937 rng(42); // fixed seed
                     // std::uniform_real_distribution<double> dist(-1.0, 1.0);
             
@@ -324,7 +328,7 @@ int main()
                     std:: cout << "Stress : " << stress[0] << std::endl;
                     double relative_stress_error = std::abs(dh_dl-stress[0])/std::abs(stress[0]);
                     std:: cout << "Relative stress error : " << relative_stress_error << std::endl;
-                    if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
+                    if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-5)
                         return -1;
 
                     //------------- Finalize -------------
