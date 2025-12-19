@@ -142,9 +142,9 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             const int N_RIGHT = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             const int N_LEFT  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
-            // If there is no segment
-            if(N_RIGHT == 0)
-                continue;
+            // // If there is no segment
+            // if(N_RIGHT == 0)
+            //     continue;
 
             T **q_1 = propagator[key_left];     // dependency v
             T **q_2 = propagator[key_right];    // dependency u
@@ -172,14 +172,13 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
                     is_half_bond_length = true;
                 }
                 // At u
-                else if (n == 0 && N_LEFT == N_RIGHT)
+                else if (n == 0 && key_right[0] == '(')
                 {
                     if (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0) // if u is leaf node, skip
                     {
                         _block_stress_compuation_key.push_back(std::make_tuple(propagator_left, propagator_right, is_half_bond_length));
                         continue;
                     }
-
                     propagator_left  = q_1[N_LEFT];
                     propagator_right = propagator_half_steps[key_right][0];
                     is_half_bond_length = true;
@@ -1236,9 +1235,16 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
-            // If there is no segment
-            if(N_RIGHT == 0)
-                continue;
+            #ifndef NDEBUG
+            std::cout << "key_left, key_right, N_LEFT, N_RIGHT: "
+                 << key_left << ", " << key_right << ", " << N_LEFT << ", " << N_RIGHT << std::endl;
+            std::cout << this->propagator_computation_optimizer->get_computation_propagator(key_left).deps.size() << ", "
+                 << this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() << std::endl;
+            #endif
+
+            // // If there is no segment
+            // if(N_RIGHT == 0)
+            //     continue;
 
             T **q_1 = propagator[key_left];      // Propagator q
             T **q_2 = propagator[key_right];     // Propagator q^dagger
@@ -1251,9 +1257,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             const auto& _block_stress_compuation_key = block_stress_computation_plan[key];
             if(_block_stress_compuation_key.size() != (unsigned int) (N_RIGHT+1))
             {
-                throw_with_line_number("Mismatch of block_stress_computation_plan("
-                    + std::to_string(p) + "," + key_left + "," + key_right + ") "
-                    + std::to_string(_block_stress_compuation_key.size()) + ".size() with N+1 (" + std::to_string(N_RIGHT+1) + ")");
+                throw_with_line_number("Mismatch of block_stress_computation_plan["
+                    + std::to_string(p) + "," + key_left + "," + key_right + "]=="
+                    + std::to_string(_block_stress_compuation_key.size()) + " with N+1==" + std::to_string(N_RIGHT+1) + ".");
             }
 
             // Variables for block_stress_computation_plan
@@ -1319,6 +1325,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 if (propagator_left != nullptr)
                 {
                     gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
+
+                    #ifndef NDEBUG
+                    std::cout << b << " " << key_left << ", " << key_right << "," << n << ",x: " << segment_stress[0]*((T)n_repeated) << ", " << is_half_bond_length << std::endl;
+                    #endif
+
                     for(int d=0; d<DIM; d++)
                         _block_dq_dl[d] += segment_stress[d]*static_cast<double>(n_repeated);
                 }
