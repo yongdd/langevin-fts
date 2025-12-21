@@ -206,7 +206,7 @@ int main()
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
                         std::cout << "Reducing GPU Memory Usage: " << reduce_memory_usage << std::endl;
 
-                        // display branches
+                        // Display branches
                         #ifndef NDEBUG
                         propagator_computation_optimizer->display_blocks();
                         propagator_computation_optimizer->display_propagators();

@@ -345,7 +345,7 @@ void CudaComputationContinuous<T>::compute_propagators(
                         propagator_finished[key][0] = true;
                         #endif
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         // Initialize to one
                         gpu_error_check(cudaMemcpyAsync(_d_propagator[0], d_q_unity,

@@ -507,7 +507,18 @@ void CudaComputationDiscrete<T>::compute_propagators(
                                 sub_n_repeated, _propagator_sub_dep[sub_n_segment], M);
                         }
 
-                        // if sub_n_segment == 0
+                        // Throw an error message if zero and nonzero sub_n_segments are mixed
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        for(size_t d=1; d<deps.size(); d++)
+                        {
+                            if((std::get<1>(deps[d-1]) != 0 && std::get<1>(deps[d]) == 0) ||
+                               (std::get<1>(deps[d-1]) == 0 && std::get<1>(deps[d]) != 0))
+                                std::cout << "Zero and nonzero sub_n_segments are mixed." << std::endl;
+                        }
+                        #endif
+                        
+                        // If n_segments of all deps are 0
                         if (std::get<1>(deps[0]) == 0)
                         {
                             gpu_error_check(cudaMemcpyAsync(d_propagator_half_steps[key][0], _d_propagator[1], sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
@@ -534,7 +545,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         propagator_finished[key][1] = true;
                         #endif
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         // Example (four branches)
                         //     A

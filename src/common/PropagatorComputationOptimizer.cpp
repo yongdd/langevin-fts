@@ -329,14 +329,13 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     // Copy 
     std::map<std::string, ComputationBlock> set_F = set_I;
 
-    // Minimum 'n_segment_largest' is 2 because of discrete chain
+    // Minimum 'n_segment_2nd_largest' is 2 because of discrete chain
     for(const auto& item: set_F)
     {    
         if (item.second.n_segment_right <= 1)
             set_I.erase(item.first);
     }
 
-    bool is_first_aggregation = true;
     while(set_I.size() > 1)
     {
         int minimum_n_segment = 1;
@@ -349,40 +348,43 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
         // Sort the list in ascending order
         std::sort(vector_n_segment_right.rbegin(), vector_n_segment_right.rend());
 
-        // Find the 'n_segment_largest'
-        int n_segment_largest = vector_n_segment_right[1]; // The second largest element.
+        // Find the 2nd largest n_segment
+        int n_segment_2nd_largest = vector_n_segment_right[1]; // The second largest element.
 
         // Add elements into set_S
         std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
         for(const auto& item: set_I)
         {
-            if (item.second.n_segment_right >= n_segment_largest)
+            if (item.second.n_segment_right >= n_segment_2nd_largest)
                 set_S[item.first] = item.second;
         }
 
         // If all monomer types are same, set minimum_n_segment = 0
         bool is_same_monomer_type = true;
+        bool is_first_aggregation = true;
         std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
-        // // Not sure why but 'is_first_aggregation' is necessary here.
-        // if (is_first_aggregation)
-        // {
-        //     for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
-        //     {
-        //         if (it->second.monomer_type != monomer_type || it->second.n_segment_right != n_segment_largest)
-        //             is_same_monomer_type = false;
-        //     }
-        //     if (is_same_monomer_type)
-        //         minimum_n_segment = 0;
-        //     is_first_aggregation = false;
-        // }
+
+        // To understand why 'is_first_aggregation' is necessary, consider the following cases
+        // Case 1) There are three blocks with same monomer type but different n_segment_right, e.g., 5A, 4A, 3A.
+        // With a key starting with '[' and 'max_n_segment' = 0, it causes the segmentation fault in CpuComputationDiscrete.cpp
+        // Case 2) Two 'n_segment_right' with 0 and 1. Since 0 is a half segment, they cannot be aggregated togheter.
+        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        {
+            if (it->second.monomer_type != monomer_type || it->second.n_segment_right != n_segment_2nd_largest)
+                is_same_monomer_type = false;
+            if (it->first[0] == '[')
+                is_first_aggregation = false;
+        }
+        if (is_first_aggregation && is_same_monomer_type)
+            minimum_n_segment = 0;
 
         // Update 'n_segment_right'
         for(const auto& item: set_S)
-            set_F[item.first].n_segment_right -= n_segment_largest - minimum_n_segment;
+            set_F[item.first].n_segment_right -= n_segment_2nd_largest - minimum_n_segment;
         
         // New 'n_segment_right' and 'n_segment_left'
-        int n_segment_right = n_segment_largest - minimum_n_segment;
-        int n_segment_left  = n_segment_largest - minimum_n_segment;
+        int n_segment_right = n_segment_2nd_largest - minimum_n_segment;
+        int n_segment_left  = n_segment_2nd_largest - minimum_n_segment;
            
         // New 'v_u' and propagator key
         std::vector<std::tuple<int ,int>> v_u;

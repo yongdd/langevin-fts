@@ -278,7 +278,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         for(int i=0; i<M; i++)
                             _propagator[0][i] = 1.0;

@@ -396,29 +396,28 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
         auto& branch_schedule = sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
-            // // display all jobs
-            // #ifndef NDEBUG
-            // std::cout << "jobs:" << std::endl;
-            // for(size_t job=0; job<parallel_job->size(); job++)
-            // {
-            //     auto& key = std::get<0>((*parallel_job)[job]);
-            //     int n_segment_from = std::get<1>((*parallel_job)[job]);
-            //     int n_segment_to = std::get<2>((*parallel_job)[job]);
-            //     std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
-            //     std::cout << "half_steps: ";
-            //     std::cout << "{";
-            //     for (auto it = propagator_half_steps[key].begin(); it != propagator_half_steps[key].end(); ++it)
-            //     {
-            //         std::cout << it->first+1;
-            //         if (std::next(it) != propagator_half_steps[key].end()) {
-            //             std::cout << ", ";
-            //         }
-            //     }
-            //     std::cout << "}, "<< std::endl;
-            // }
-            // auto start_time = std::chrono::duration_cast<std::chrono::microseconds>
-            //     (std::chrono::system_clock::now().time_since_epoch()).count();
-            // #endif
+            // display all jobs
+            #ifndef NDEBUG
+            std::cout << "jobs:" << std::endl;
+            for(size_t job=0; job<parallel_job->size(); job++)
+            {
+                auto& key = std::get<0>((*parallel_job)[job]);
+                int n_segment_from = std::get<1>((*parallel_job)[job]);
+                int n_segment_to = std::get<2>((*parallel_job)[job]);
+                std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
+                std::cout << "half_steps: ";
+                std::cout << "{";
+                for (int i=0; i<propagator_size[key]; i++)
+                {
+                    if (propagator_half_steps[key][i] != nullptr)
+                        std::cout << i << ", ";
+                }
+                std::cout << "}, "<< std::endl;
+            }
+
+            auto start_time = std::chrono::duration_cast<std::chrono::microseconds>
+                (std::chrono::system_clock::now().time_since_epoch()).count();
+            #endif
 
             // For each propagator
             #pragma omp parallel for num_threads(n_streams)
@@ -437,12 +436,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 // if (STREAM == 0)
                 //     std::cout << gpu << ", " << STREAM << ", " << n_segment_from << ", " << n_segment_to << ", " << monomer_type << ", " << key << ", "  << std::endl;    
 
-                // #ifndef NDEBUG
-                // #pragma omp critical
-                // std::cout << job << " started, stream: " << STREAM << ", " <<
-                //     std::chrono::duration_cast<std::chrono::microseconds>
-                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                // #endif
+                #ifndef NDEBUG
+                #pragma omp critical
+                std::cout << job << " started, stream: " << STREAM << ", " <<
+                    std::chrono::duration_cast<std::chrono::microseconds>
+                    (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                #endif
 
                 // Check key
                 #ifndef NDEBUG
@@ -527,14 +526,14 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                 std::string sub_dep_next = std::get<0>(deps[d+1]);
                                 int sub_n_segment_next   = std::get<1>(deps[d+1]);
 
-                                if (sub_n_segment == 0)
+                                if (sub_n_segment_next == 0)
                                 {
                                     // Check sub key
                                     #ifndef NDEBUG
                                     if (propagator_half_steps.find(sub_dep_next) == propagator_half_steps.end())
-                                        std::cout << "Could not find sub key '" + sub_dep_next + "'. " << std::endl;
+                                        std::cout << "Could not find sub key '" + sub_dep_next + "' (sub_n_segment == 0). " << std::endl;
                                     if (!propagator_half_steps_finished[sub_dep_next][0])
-                                        std::cout << "Could not compute '" + key +  "', since '"+ sub_dep_next + std::to_string(0) + "' is not prepared." << std::endl;
+                                        std::cout << "Could not compute '" + key +  "', since '"+ sub_dep_next + std::to_string(0) + "' is not prepared (sub_n_segment == 0)." << std::endl;
                                     #endif
 
                                     _propagator_sub_dep_next = propagator_half_steps[sub_dep_next];
@@ -544,9 +543,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                                     // Check sub key
                                     #ifndef NDEBUG
                                     if (propagator.find(sub_dep_next) == propagator.end())
-                                        std::cout<< "Could not find sub key '" + sub_dep_next + "'. " << std::endl;
+                                        std::cout<< "Could not find sub key '" + sub_dep_next + "' (sub_n_segment != 0). " << std::endl;
                                     if (!propagator_finished[sub_dep_next][sub_n_segment_next])
-                                        std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep_next + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
+                                        std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep_next + std::to_string(sub_n_segment_next) + "' is not prepared (sub_n_segment != 0)." << std::endl;
                                     #endif
 
                                     _propagator_sub_dep_next = propagator[sub_dep_next];
@@ -566,7 +565,18 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                             cudaDeviceSynchronize();
                         }
 
-                        // if sub_n_segment == 0
+                        // Throw an error message if zero and nonzero sub_n_segments are mixed
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        for(size_t d=1; d<deps.size(); d++)
+                        {
+                            if((std::get<1>(deps[d-1]) != 0 && std::get<1>(deps[d]) == 0) ||
+                               (std::get<1>(deps[d-1]) == 0 && std::get<1>(deps[d]) != 0))
+                                std::cout << "Zero and nonzero sub_n_segments are mixed." << std::endl;
+                        }
+                        #endif
+                        
+                        // If n_segments of all deps are 0
                         if (std::get<1>(deps[0]) == 0)
                         {
                             gpu_error_check(cudaMemcpyAsync(propagator_half_steps[key][0], d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost, streams[STREAM][0]));
@@ -591,7 +601,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         propagator_finished[key][1] = true;
                         #endif
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         // #ifndef NDEBUG
                         // #pragma omp critical
@@ -688,6 +698,14 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                     // q(r, 1+1/2)
                     if (propagator_half_steps[key][1] != nullptr)
                     {
+
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        std::cout << job << " q_1+1/2, " << 
+                            std::chrono::duration_cast<std::chrono::microseconds>
+                            (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        #endif
+
                         #ifndef NDEBUG
                         if (propagator_half_steps_finished[key][1])
                             std::cout << "already half_step finished: " + key + ", " + std::to_string(1) << std::endl;
@@ -736,12 +754,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
-                    // #ifndef NDEBUG
-                    // #pragma omp critical
-                    // std::cout << job << " q_s, " << n << ", " << 
-                    //     std::chrono::duration_cast<std::chrono::microseconds>
-                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                    // #endif
+                    #ifndef NDEBUG
+                    #pragma omp critical
+                    std::cout << job << " q_s, " << n << ", " << 
+                        std::chrono::duration_cast<std::chrono::microseconds>
+                        (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                    #endif
 
                     // STREAM 0: calculate propagators
                     propagator_solver->advance_propagator(
@@ -788,12 +806,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 {
                     if (propagator_half_steps[key][n+1] != nullptr)
                     {
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " q_s+1/2, " << n << ", " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        std::cout << job << " q_s+1/2, " << n << ", " << 
+                            std::chrono::duration_cast<std::chrono::microseconds>
+                            (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        #endif
 
                         #ifndef NDEBUG
                         if (propagator_half_steps_finished[key][n+1])
