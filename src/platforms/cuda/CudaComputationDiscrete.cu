@@ -460,13 +460,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
                     // If it is aggregated
                     if (key[0] == '[')
                     {
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " init 2, " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
-
                         // Initialize to zero
                         gpu_error_check(cudaMemsetAsync(_d_propagator[1], 0, sizeof(T)*M, streams[STREAM][0]));
 
