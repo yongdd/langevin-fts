@@ -266,12 +266,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                // #ifndef NDEBUG
-                // #pragma omp critical
-                // std::cout << job << " started, " << 
-                //     std::chrono::duration_cast<std::chrono::microseconds>
-                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                // #endif
+                #ifndef NDEBUG
+                #pragma omp critical
+                std::cout << job << " started, " << 
+                    std::chrono::duration_cast<std::chrono::microseconds>
+                    (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                #endif
 
                 // Check key
                 #ifndef NDEBUG
@@ -285,12 +285,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 // Calculate one block end
                 if (n_segment_from == 0 && deps.size() == 0) // if it is leaf node
                 {
-                    // #ifndef NDEBUG
-                    // #pragma omp critical
-                    // std::cout << job << " init 1, " << 
-                    //     std::chrono::duration_cast<std::chrono::microseconds>
-                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                    // #endif
+                    #ifndef NDEBUG
+                    #pragma omp critical
+                    std::cout << job << " init 1, " << 
+                        std::chrono::duration_cast<std::chrono::microseconds>
+                        (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                    #endif
 
                      // q_init
                     if (key[0] == '{')
@@ -318,19 +318,34 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     {
                         // #ifndef NDEBUG
                         // #pragma omp critical
-                        // std::cout << job << " init 2, " << 
+                        // std::cout << job << " init 2 (step 1), " << 
                         //     std::chrono::duration_cast<std::chrono::microseconds>
                         //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
                         // #endif
 
                         for(int i=0; i<M; i++)
                             _propagator[1][i] = 0.0;
+
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " init 2 (step 2), " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
+
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
                             T **_propagator_sub_dep;
+
+                            // #ifndef NDEBUG
+                            // #pragma omp critical
+                            // std::cout << job << " init 2-1, " << d << ", " <<
+                            //     std::chrono::duration_cast<std::chrono::microseconds>
+                            //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                            // #endif
 
                             if (sub_n_segment == 0)
                             {
@@ -358,6 +373,13 @@ void CpuComputationDiscrete<T>::compute_propagators(
                             }
                             for(int i=0; i<M; i++)
                                 _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i] * static_cast<double>(sub_n_repeated);
+
+                            // #ifndef NDEBUG
+                            // #pragma omp critical
+                            // std::cout << job << " init 2, finished, " << 
+                            //     std::chrono::duration_cast<std::chrono::microseconds>
+                            //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                            // #endif
                         }
 
                         #ifndef NDEBUG
@@ -365,7 +387,18 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         this->time_complexity++;
                         #endif
 
-                        // if sub_n_segment == 0
+                        // Throw an error message if zero and nonzero sub_n_segments are mixed
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        for(size_t d=1; d<deps.size(); d++)
+                        {
+                            if((std::get<1>(deps[d-1]) != 0 && std::get<1>(deps[d]) == 0) ||
+                               (std::get<1>(deps[d-1]) == 0 && std::get<1>(deps[d]) != 0))
+                                std::cout << "Zero and nonzero sub_n_segments are mixed." << std::endl;
+                        }
+                        #endif
+                        
+                        // If n_segments of all deps are 0
                         if (std::get<1>(deps[0]) == 0)
                         {
                             T *_propagator_half_step = propagator_half_steps[key][0];
@@ -394,7 +427,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         // Example (four branches)
                         //     A
@@ -409,12 +442,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         // -, |    : half bonds
                         // A, B, C : other full segments
 
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " init 3, " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        std::cout << job << " init 3, " << 
+                            std::chrono::duration_cast<std::chrono::microseconds>
+                            (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        #endif
 
                         // Combine branches
                         T *_q_junction_start = propagator_half_steps[key][0];
@@ -460,6 +493,13 @@ void CpuComputationDiscrete<T>::compute_propagators(
                             propagator_finished[key][1] = true;
                             #endif
                         }
+
+                        // #ifndef NDEBUG
+                        // #pragma omp critical
+                        // std::cout << job << " init 3, finished, " << 
+                        //     std::chrono::duration_cast<std::chrono::microseconds>
+                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        // #endif
                     }
                 }
 
@@ -511,12 +551,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
-                    // #ifndef NDEBUG
-                    // #pragma omp critical
-                    // std::cout << job << " q_s, " << n << ", " << 
-                    //     std::chrono::duration_cast<std::chrono::microseconds>
-                    //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                    // #endif
+                    #ifndef NDEBUG
+                    #pragma omp critical
+                    std::cout << job << " q_s, " << n << ", " << 
+                        std::chrono::duration_cast<std::chrono::microseconds>
+                        (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                    #endif
 
                     #ifndef NDEBUG
                     #pragma omp critical
@@ -537,12 +577,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 {
                     if (propagator_half_steps[key][n+1] != nullptr)
                     {
-                        // #ifndef NDEBUG
-                        // #pragma omp critical
-                        // std::cout << job << " q_s+1/2, " << n << ", " << 
-                        //     std::chrono::duration_cast<std::chrono::microseconds>
-                        //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                        // #endif
+                        #ifndef NDEBUG
+                        #pragma omp critical
+                        std::cout << job << " q_s+1/2, " << n << ", " << 
+                            std::chrono::duration_cast<std::chrono::microseconds>
+                            (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                        #endif
 
                         #ifndef NDEBUG
                         if (propagator_half_steps_finished[key][n+1])
@@ -565,12 +605,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     }
                 }
 
-                // #ifndef NDEBUG
-                // #pragma omp critical
-                // std::cout << job << " finished, " << 
-                //     std::chrono::duration_cast<std::chrono::microseconds>
-                //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
-                // #endif
+                #ifndef NDEBUG
+                #pragma omp critical
+                std::cout << job << " finished, " << 
+                    std::chrono::duration_cast<std::chrono::microseconds>
+                    (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
+                #endif
             }
         }
 

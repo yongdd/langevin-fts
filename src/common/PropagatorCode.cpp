@@ -116,8 +116,8 @@ std::string PropagatorCode::generate_edge_code(
             if (counts[i] > 1)
             {
                 code += ":" + std::to_string(counts[i]);
-                if (i != unique_sub_codes.size()-1)
-                    code += ",";
+                // if (i != unique_sub_codes.size()-1)
+                //     code += ",";
             }
         }
         code += ")";

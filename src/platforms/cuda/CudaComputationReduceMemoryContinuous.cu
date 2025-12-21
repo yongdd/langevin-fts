@@ -389,7 +389,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         propagator_finished[key][0] = true;
                         #endif
                     }
-                    else
+                    else if(key[0] == '(')
                     {
                         // Initialize to one
                         gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_unity, sizeof(T)*M, cudaMemcpyDeviceToDevice));
