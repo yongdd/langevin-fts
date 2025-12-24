@@ -47,6 +47,7 @@ params = {
     
     # "space_group" :{
     #     "symbol":"P6_3/mmc",  # IT symbol of the space group
+    #     "number": 488,     # (optional) Hall number of the space group
     # },
     
     "optimizer":{
