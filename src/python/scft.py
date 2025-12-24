@@ -288,13 +288,14 @@ class SCFT:
             else:
                 self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"])
                 
-            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Trigonal", "Hexagonal", "Cubic"]:
-                raise ValueError(f"Triclinic and Monoclinic are not supported yet. The current crystal system is {self.sg.crystal_system }.")
+            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Cubic"]:
+                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, or Cubic. " +
+                    "The current crystal system is " + self.sg.crystal_system + ".")
 
             if self.sg.crystal_system == "Orthorhombic":
                 self.lx_reduced_indices = [0, 1, 2]
                 self.lx_full_indices = [0, 1, 2]
-            elif self.sg.crystal_system in ["Tetragonal", "Trigonal", "Hexagonal"]:
+            elif self.sg.crystal_system == "Tetragonal":
                 self.lx_reduced_indices = [0, 2]
                 self.lx_full_indices = [0, 1, 1]
             elif self.sg.crystal_system == "Cubic":
