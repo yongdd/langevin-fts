@@ -78,7 +78,7 @@ private:
     int dim;
 
     std::string chain_model;
-    bool reduce_gpu_memory_usage;
+    bool reduce_memory_usage;
 
     // The number of parallel streams for propagator computation
     int n_streams;
@@ -133,7 +133,7 @@ private:
         double *d_q_in, double *d_q_out, std::string monomer_type);
 public:
 
-    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
     ~CudaSolverRealSpace();
 
     void update_laplacian_operator() override;

@@ -12,12 +12,15 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
+#include "CpuComputationReduceMemoryContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
 #include "CudaComputationContinuous.h"
 #include "CudaComputationReduceMemoryContinuous.h"
 #endif
+
+typedef double T;
 
 int main()
 {
@@ -180,24 +183,27 @@ int main()
         propagator_computation_optimizer->display_blocks();
         propagator_computation_optimizer->display_propagators();
 
-        std::vector<PropagatorComputation<double>*> solver_list;
-        std::vector<ComputationBox<double>*> cb_list;
+        std::vector<PropagatorComputation<T>*> solver_list;
+        std::vector<ComputationBox<T>*> cb_list;
         std::vector<std::string> solver_name_list;
 
         // Real space method
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("real space, cpu-mkl");
-        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationContinuous<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
+        solver_name_list.push_back("real space, cpu-mkl, reduce_memory_usage");
+        cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         #ifdef USE_CUDA
         solver_name_list.push_back("real space, cuda");
-        solver_name_list.push_back("real space, cuda_reduce_memory_usage");
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationContinuous<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
+        solver_name_list.push_back("real space, cuda, reduce_memory_usage");
+        cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CudaComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CudaComputationReduceMemoryContinuous<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         // For each platform

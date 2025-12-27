@@ -24,7 +24,7 @@ params = {
     "box_is_altering":False,         # Find box size that minimizes the free energy during saddle point iteration.
     "scale_stress" : 0.1,            # Scaling factor for stress, w_diff[M:] = scale_stress*dlx
     
-    "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
+    "reduce_memory_usage":False,     # Reduce memory usage by storing only check points.
     "chain_model":"continuous",      # "discrete" or "continuous" chain model
     "ds":1/500,                      # Contour step interval, which is equal to 1/N_Ref.
 

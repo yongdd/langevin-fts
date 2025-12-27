@@ -102,7 +102,7 @@ conda env remove -n polymerfts
 + To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. 
 + To learn how to use it, please read files in `tutorials` folder.
 + The unit of length in this library is ${bN^{1/2}}$ for both `Continuous` and `Discrete` chain models, where $b$ is a reference statistical segment length and $N$ is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the`per reference segment` potential, multiply $ds$ to each field.
-+ Set 'reduce_gpu_memory_usage=True' if GPU memory space is insufficient to run your simulation. Instead, performance is reduced by 10 ~ 65% depending on chain model and box size.
++ Set 'reduce_memory_usage=True' if memory space is insufficient to run your simulation. Instead, the execution time increases by several times. The method is based on the idea used in pscfplus (https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).
 + Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate multiple CPUs as much as `OMP_NUM_THREADS` when submitting a job.
 + To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script.
 + The `scft.py` and `lfts.py` are implemented on the `_core` library and `polymer_field_theory.py`.

@@ -337,8 +337,8 @@ int main()
         #ifdef USE_CUDA
         solver_name_list.push_back("pseudo, cuda");
         solver_name_list.push_back("pseudo, cuda, aggregated");
-        solver_name_list.push_back("pseudo, cuda_reduce_memory_usage");
-        solver_name_list.push_back("pseudo, cuda_reduce_memory_usage, aggregated");
+        solver_name_list.push_back("pseudo, cuda, reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cuda, reduce_memory_usage, aggregated");
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));

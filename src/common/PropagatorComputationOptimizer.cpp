@@ -90,7 +90,7 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
     // Aggregation
     if (this->aggregate_propagator_computation)
     {
-        // Aggregated keys
+        // Aggregated keys (initially empty)
         std::map<std::string, std::vector<std::string>> aggregated_blocks;
 
         // Find aggregated branches in computation_blocks_new_polymer
@@ -124,7 +124,6 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
             }
 
             // Remove right keys from other left keys related to aggregated keys, and create new right keys
-
             substitute_right_keys(
                 pc, v_u_to_right_key,
                 computation_blocks_new_polymer,
@@ -161,8 +160,8 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
                 is_junction_right = true;
 
             // Update propagators
-            update_computation_propagator_map(computation_propagators, key_v, n_segment_left,  is_junction_right);
-            update_computation_propagator_map(computation_propagators, key_u, n_segment_right, is_junction_left);
+            update_computation_propagator_map(computation_propagators, propagator_checkpoints, key_v, n_segment_left,  is_junction_right);
+            update_computation_propagator_map(computation_propagators, propagator_checkpoints, key_u, n_segment_right, is_junction_left);
         }
     }
 }
@@ -655,8 +654,11 @@ void PropagatorComputationOptimizer::substitute_right_keys(
 
 void PropagatorComputationOptimizer::update_computation_propagator_map(
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
+    std::map<std::string, MemorySavingCheckpoints, ComparePropagatorKey>& propagator_checkpoints,
     std::string new_key, int new_n_segment, bool is_junction_end)
 {
+
+    // Update computation_propagators
     if (computation_propagators.find(new_key) == computation_propagators.end())
     {
         computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
@@ -669,10 +671,18 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
         if (computation_propagators[new_key].max_n_segment < new_n_segment)
             computation_propagators[new_key].max_n_segment = new_n_segment;
     }
-
-
     if (is_junction_end)
         computation_propagators[new_key].junction_ends.insert(new_n_segment);
+
+    // Update propagator_checkpoints
+    if (propagator_checkpoints.find(new_key) == propagator_checkpoints.end())
+    {
+        propagator_checkpoints[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
+        propagator_checkpoints[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
+    }
+    propagator_checkpoints[new_key].n_segments.insert(new_n_segment);
+    if (is_junction_end)
+        propagator_checkpoints[new_key].junction_ends.insert(new_n_segment);
 }
 
 bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
@@ -709,6 +719,17 @@ ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tup
             std::get<1>(key) + ", " + std::get<2>(key) + ").");
 
     return computation_blocks[key];
+}
+std::map<std::string, MemorySavingCheckpoints, ComparePropagatorKey>& PropagatorComputationOptimizer::get_propagator_checkpoints()
+{
+    return propagator_checkpoints;
+}
+MemorySavingCheckpoints& PropagatorComputationOptimizer::get_propagator_checkpoint(std::string key)
+{
+    if (propagator_checkpoints.find(key) == propagator_checkpoints.end())
+        throw_with_line_number("There is no such key (" + key + ").");
+
+    return propagator_checkpoints[key];
 }
 void PropagatorComputationOptimizer::display_blocks() const
 {

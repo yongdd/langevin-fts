@@ -63,7 +63,7 @@ private:
     std::vector<CuDeviceData<T> *> d_phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(CuDeviceData<T> *d_phi, CuDeviceData<T> **d_q_1, CuDeviceData<T> **d_q_2, const int N_RIGHT, const int N_LEFT);
+    void calculate_phi_one_block(CuDeviceData<T> *d_phi, CuDeviceData<T> **d_q_1, CuDeviceData<T> **d_q_2, const int N_LEFT, const int N_RIGHT);
     
 public:
 

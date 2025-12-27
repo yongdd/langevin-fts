@@ -65,7 +65,7 @@ params = {
 
     "aggregate_propagator_computation":True,   # Aggregate multiple propagators when solving diffusion equations for speedup. 
                                                # To obtain concentration of each block, disable this option.
-    "reduce_gpu_memory_usage":False, # Reduce gpu memory usage by storing propagators in main memory instead of gpu memory.
+    "reduce_memory_usage":False,     # Reduce memory usage by storing only check points.
     "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"discrete",     # "discrete" or "continuous" chain model
     "ds":1/100,                   # Contour step interval, which is equal to 1/N_Ref.
