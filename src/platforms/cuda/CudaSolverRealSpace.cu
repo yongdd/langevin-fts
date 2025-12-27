@@ -7,14 +7,14 @@ CudaSolverRealSpace::CudaSolverRealSpace(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_gpu_memory_usage)
+    bool reduce_memory_usage)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
-        this->reduce_gpu_memory_usage = reduce_gpu_memory_usage;
+        this->reduce_memory_usage = reduce_memory_usage;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");     

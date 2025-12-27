@@ -13,6 +13,7 @@
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationDiscrete.h"
+#include "CpuComputationReduceMemoryContinuous.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -25,8 +26,8 @@ MklFactory<T>::MklFactory(bool reduce_memory_usage)
 
     this->reduce_memory_usage = reduce_memory_usage;
 
-    if (this->reduce_memory_usage)
-        std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
+    // if (this->reduce_memory_usage)
+    //     std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
 }
 // template <typename T>
 // Array* MklFactory<T>::create_array(
@@ -58,14 +59,15 @@ template <typename T>
 PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
 {
     std::string chain_model = molecules->get_model_name();
-    if ( chain_model == "continuous" )
-    {
+
+    if( chain_model == "continuous" && this->reduce_memory_usage == false)
         return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
-    }
-    else if ( chain_model == "discrete" )
-    {
+    else if( chain_model == "continuous" && this->reduce_memory_usage == true)
+        return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+    else if( chain_model == "discrete" && this->reduce_memory_usage == false )
         return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-    }
+    else if( chain_model == "discrete" && this->reduce_memory_usage == true)
+        return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
 template <typename T>

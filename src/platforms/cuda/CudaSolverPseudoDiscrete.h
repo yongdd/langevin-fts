@@ -52,7 +52,7 @@ private:
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
 
 public:
-    CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_gpu_memory_usage);
+    CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
     ~CudaSolverPseudoDiscrete();
 
     void update_laplacian_operator() override;

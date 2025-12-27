@@ -941,8 +941,8 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
                 propagator[key_left],       // dependency v
                 propagator[key_right],      // dependency u
                 _d_exp_dw,                  // exp_dw
-                n_segment_right,
                 n_segment_left,
+                n_segment_right,
                 norm);
         }
         // Calculate partition functions and concentrations of solvents
@@ -977,7 +977,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
 }
 template <typename T>
 void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
-    T *phi, T **q_1, T **q_2, CuDeviceData<T> *d_exp_dw, const int N_RIGHT, const int N_LEFT, const T NORM)
+    T *phi, T **q_1, T **q_2, CuDeviceData<T> *d_exp_dw, const int N_LEFT, const int N_RIGHT, const T NORM)
 {
     try
     {

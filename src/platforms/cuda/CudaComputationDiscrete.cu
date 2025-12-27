@@ -796,8 +796,9 @@ void CudaComputationDiscrete<T>::compute_concentrations()
                 d_propagator[key_left],    // dependency v
                 d_propagator[key_right],   // dependency u
                 _d_exp_dw,                 // exp_dw
-                n_segment_right,
-                n_segment_left);
+                n_segment_left,
+                n_segment_right
+            );
             
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
@@ -846,7 +847,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
 }
 template <typename T>
 void CudaComputationDiscrete<T>::calculate_phi_one_block(
-    CuDeviceData<T> *d_phi, CuDeviceData<T> **d_q_1, CuDeviceData<T> **d_q_2, CuDeviceData<T> *d_exp_dw, const int N_RIGHT, const int N_LEFT)
+    CuDeviceData<T> *d_phi, CuDeviceData<T> **d_q_1, CuDeviceData<T> **d_q_2, CuDeviceData<T> *d_exp_dw, const int N_LEFT, const int N_RIGHT)
 {
     try
     {

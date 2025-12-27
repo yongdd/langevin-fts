@@ -123,8 +123,8 @@ int main()
                 {
                     for(bool reduce_memory_usage : reduce_memory_usages)
                     {
-                        // 'cpu-mkl' does not support reduce_gpu_memory_usage
-                        if(reduce_memory_usage == true && platform == "cpu-mkl")
+                        // 'cpu-mkl' does not support reduce_memory_usage
+                        if(reduce_memory_usage == true && platform == "cpu-mkl" && chain_model == "Discrete")
                                 continue;
                         
                         AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);

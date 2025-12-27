@@ -39,10 +39,10 @@ mask[np.sqrt(xv**2 + yv**2) < nano_particle_radius] = 0.0
 print(1.0-np.mean(mask), (np.pi*nano_particle_radius**2)/np.prod(lx))
 
 aggregate_propagator_computation = False
-reduce_gpu_memory_usage = False
+reduce_memory_usage = False
 
 # Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cuda", reduce_gpu_memory_usage)
+factory = PlatformSelector.create_factory("cuda", reduce_memory_usage)
 factory.display_info()
 
 # Create an instance for computation box

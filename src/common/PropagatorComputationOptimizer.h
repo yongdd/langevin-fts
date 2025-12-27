@@ -36,6 +36,17 @@ struct ComputationBlock{
     std::vector<std::tuple<int ,int>> v_u; // node pair <polymer id, v, u>
 };
 
+struct MemorySavingCheckpoints{
+    // To reduce the memory usage, only check points are saved to compute the concentrations during the propagator computations.
+    // Otherwise, the results are not saved and recalculated during the concentrations and stress computations.
+    // These results are used only when Memory Saving option is enabled.
+
+    std::vector<std::tuple<std::string, int, int>> deps;  // Tuple <key, n_segment, n_repeated>
+    std::string monomer_type;                             // Monomer_type
+    std::set<int> n_segments;                              // Segment numbers to be saved .
+    std::set<int> junction_ends;                          // Indices where additional half bond step computation is required.
+};
+
 /* This stucture defines comparison function for branched key */
 struct ComparePropagatorKey
 {
@@ -55,6 +66,9 @@ private:
     // dictionary{key:non-duplicated unique propagator_codes, value: ComputationEdge}
     std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators; 
 
+    // Check points to save the memory usages
+    std::map<std::string, MemorySavingCheckpoints, ComparePropagatorKey> propagator_checkpoints; 
+
     // Total segment number
     std::vector<int> total_segment_numbers;
 
@@ -69,6 +83,7 @@ private:
     // Add new key. if it already exists and 'new_n_segment' is larger than 'max_n_segment', update it.
     void update_computation_propagator_map(
         std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
+        std::map<std::string, MemorySavingCheckpoints, ComparePropagatorKey>& propagator_checkpoints,
         std::string new_key, int new_n_segment, bool is_junction_end);
 
     bool is_junction(Polymer& pc, int node);
@@ -91,6 +106,10 @@ public:
     ComputationEdge& get_computation_propagator(std::string key);
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& get_computation_blocks(); 
     ComputationBlock& get_computation_block(std::tuple<int, std::string, std::string> key);
+
+    // Get information of propagator_checkpoints
+    std::map<std::string, MemorySavingCheckpoints, ComparePropagatorKey>& get_propagator_checkpoints(); 
+    MemorySavingCheckpoints& get_propagator_checkpoint(std::string key);
 
     // Display
     void display_propagators() const;

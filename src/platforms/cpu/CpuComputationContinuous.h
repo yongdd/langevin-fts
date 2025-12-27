@@ -49,7 +49,7 @@ private:
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_RIGHT, const int N_LEFT);
+    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_LEFT, const int N_RIGHT);
 public:
     CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationContinuous();

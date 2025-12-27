@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------
-* This is a derived CpuComputationDiscrete class
+* This is a derived CpuComputationReduceMemoryContinuous class
 *------------------------------------------------------------*/
 
-#ifndef CPU_PSEUDO_DISCRETE_H_
-#define CPU_PSEUDO_DISCRETE_H_
+#ifndef CPU_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
+#define CPU_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
 
 #include <string>
 #include <vector>
@@ -14,47 +14,51 @@
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
 #include "PropagatorComputation.h"
-#include "CpuSolverPseudoDiscrete.h"
+#include "CpuSolver.h"
 #include "Scheduler.h"
 
 template <typename T>
-class CpuComputationDiscrete : public PropagatorComputation<T>
+class CpuComputationReduceMemoryContinuous : public PropagatorComputation<T>
 {
 private:
-    // Pseudo-spectral integral solver
+    // Pseudo-spectral PDE solver
     CpuSolver<T> *propagator_solver;
+    std::string method;
+    
     // Scheduler for propagator
     Scheduler *sc;
     // The number of parallel streams for propagator computation
     int n_streams;
-    // Map for propagator q(r,s; code)
-    std::map<std::string, T **> propagator;
-    // Map for q(r,1/2+s; code)
-    std::map<std::string, T **> propagator_half_steps;
+    // key: (dep) + monomer_type, value: propagator
+    std::map<std::string, T **> propagator; 
+
+    // check point propagator
+    std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
+    std::map<std::string, std::set<int>> check_points; 
+
     // Map for deallocation of propagator
     std::map<std::string, int> propagator_size;
+    
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
-    std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
-    int time_complexity;
     #endif
 
     // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, monomer_type, n_repeated)
-    std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
+    // (polymer id, propagator forward, propagator backward, n_repeated)
+    std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
-    // key: (polymer id, dep_v, dep_u) (assert(dep_v <= dep_u)), value: concentrations
+    // key: (polymer id, key_left, key_right) (assert(key_left <= key_right)), value: concentrations
     std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
 
     // Solvent concentrations
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const T *exp_dw, const int N_LEFT, const int N_RIGHT);
+    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_LEFT, const int N_RIGHT, std::string monomer_type);
 public:
-    CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
-    ~CpuComputationDiscrete();
+    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
+    ~CpuComputationReduceMemoryContinuous();
     
     void update_laplacian_operator() override;
 
@@ -88,4 +92,4 @@ public:
     // For tests
     bool check_total_partition() override;
 };
-#endif    
+#endif

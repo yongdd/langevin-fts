@@ -667,8 +667,9 @@ void CpuComputationDiscrete<T>::compute_concentrations()
                 propagator[key_left],   // dependency v
                 propagator[key_right],  // dependency u
                 _exp_dw,                // exp_dw
-                n_segment_right,
-                n_segment_left);
+                n_segment_left,
+                n_segment_right
+            );
             
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
@@ -697,7 +698,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
 }
 template <typename T>
 void CpuComputationDiscrete<T>::calculate_phi_one_block(
-    T *phi, T **q_1, T **q_2, const T *exp_dw, const int N_RIGHT, const int N_LEFT)
+    T *phi, T **q_1, T **q_2, const T *exp_dw, const int N_LEFT, const int N_RIGHT)
 {
     try
     {

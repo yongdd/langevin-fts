@@ -201,7 +201,7 @@ int main()
 
         #ifdef USE_CUDA
         solver_name_list.push_back("pseudo, cuda");
-        solver_name_list.push_back("pseudo, cuda_reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cuda, reduce_memory_usage");
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationContinuous<T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
