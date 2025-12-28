@@ -95,7 +95,7 @@ int main()
         solver_name_list.push_back("cpu-mkl, absorbing");
         solver_name_list.push_back("cpu-mkl, absorbing, reduce_memory_usage");
         solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         #ifdef USE_CUDA
@@ -110,7 +110,7 @@ int main()
         solver_name_list.push_back("cpu-mkl, reflecting");
         solver_name_list.push_back("cpu-mkl, reflecting, reduce_memory_usage");
         solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         #endif
         
         #ifdef USE_CUDA
@@ -124,7 +124,7 @@ int main()
         solver_name_list.push_back("cpu-mkl, periodic");
         solver_name_list.push_back("cpu-mkl, periodic, reduce_memory_usage");
         solver_list.push_back(new CpuComputationContinuous             <double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
-        solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II,JJ}, {Lx,Ly}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         #endif
         
         #ifdef USE_CUDA
@@ -147,7 +147,8 @@ int main()
             solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
             solver->compute_concentrations();
 
-            solver->get_chain_propagator(q_next, 0, 1, 2, 1);
+            Polymer& pc = molecules->get_polymer(0);
+            solver->get_chain_propagator(q_next, 0, 1, 2, pc.get_block(1,2).n_segment);
             if (n % repeat != 0)
             {
                 //--------------- check --------------------

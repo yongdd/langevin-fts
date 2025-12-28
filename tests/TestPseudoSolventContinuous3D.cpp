@@ -103,15 +103,15 @@ int main()
         std::vector<PropagatorComputation<T>*> solver_2_list;
         std::vector<ComputationBox<T>*> cb_1_list;
         std::vector<ComputationBox<T>*> cb_2_list;
-        std::vector<std::string> solver_name;
+        std::vector<std::string> solver_name_list;
 
         #ifdef USE_CPU_MKL
-        solver_name.push_back("CpuComputationContinuous, Aggregation=false");
-        solver_name.push_back("CpuComputationReduceMemoryContinuous, Aggregation=false");
+        solver_name_list.push_back("CpuComputationContinuous, Aggregation=false");
+        solver_name_list.push_back("CpuComputationReduceMemoryContinuous, Aggregation=false");
         #endif
         #ifdef USE_CUDA
-        solver_name.push_back("CudaComputationContinuous, Aggregation=false");
-        solver_name.push_back("CudaComputationReduceMemoryContinuous, Aggregation=false");
+        solver_name_list.push_back("CudaComputationContinuous, Aggregation=false");
+        solver_name_list.push_back("CudaComputationReduceMemoryContinuous, Aggregation=false");
         #endif
 
         #ifdef USE_CPU_MKL
@@ -153,7 +153,7 @@ int main()
             const int s = 0;
 
             //---------------- run --------------------
-            std::cout<< "Running Pseudo " << std::endl;
+            std::cout<< std::endl << "Running Pseudo: " << n << ", " << solver_name_list[n] << std::endl;
             solver_1_list[n]->compute_propagators({{"A",w_a},{"B",w_b}},{});
             solver_1_list[n]->compute_concentrations();
             solver_1_list[n]->get_total_concentration(p, "A", phi_a);

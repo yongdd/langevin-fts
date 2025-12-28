@@ -29,16 +29,15 @@ private:
     Scheduler *sc;
     // The number of parallel streams for propagator computation
     int n_streams;
-    // key: (dep) + monomer_type, value: propagator
-    std::map<std::string, T **> propagator; 
+
+    int total_max_n_segment;
+    // Temporary memories for calculating propagators
+    T** q_recal;     // size: total_max_n_segment
+    T*  q_pair[2];   // size: 2 (one for prev, the other for next)
 
     // check point propagator
     std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
-    std::map<std::string, std::set<int>> check_points; 
 
-    // Map for deallocation of propagator
-    std::map<std::string, int> propagator_size;
-    
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
@@ -55,7 +54,7 @@ private:
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_LEFT, const int N_RIGHT, std::string monomer_type);
+    void calculate_phi_one_block(T *phi, T *q_left_begin, T *q_right_begin, const int N_RIGHT, std::string monomer_type);
 public:
     CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationReduceMemoryContinuous();
