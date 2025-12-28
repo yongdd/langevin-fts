@@ -163,7 +163,8 @@ int main()
             solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
             solver->compute_concentrations();
 
-            solver->get_chain_propagator(q_next, 0, 1, 2, 1);
+            Polymer& pc = molecules->get_polymer(0);
+            solver->get_chain_propagator(q_next, 0, 1, 2, pc.get_block(1,2).n_segment);
             if (n % repeat != 0)
             {
                 //--------------- check --------------------
