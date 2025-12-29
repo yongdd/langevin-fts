@@ -30,8 +30,8 @@ private:
     // The number of parallel streams for propagator computation
     int n_streams;
 
-    int total_max_n_segment;
     // Temporary memories for calculating propagators
+    int total_max_n_segment;
     T** q_recal;     // size: total_max_n_segment
     T*  q_pair[2];   // size: 2 (one for prev, the other for next)
 
@@ -54,7 +54,10 @@ private:
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T *q_left_begin, T *q_right_begin, const int N_RIGHT, std::string monomer_type);
+    void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type);
+
+    // Recalcaulte propagator from the check point
+    void recalcaulte_propagator(T **q_out, std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
 public:
     CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationReduceMemoryContinuous();

@@ -41,6 +41,13 @@ private:
     CuDeviceData<T> *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
     CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
 
+    // Temporary memories for calculating propagators
+    int total_max_n_segment;
+    T** q_recal;     // size: total_max_n_segment
+    
+    // check point propagator
+    std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
+
     // All elements are 1 for initializing propagators
     CuDeviceData<T> *d_q_unity;
 
@@ -58,10 +65,6 @@ private:
     // Scheduler for propagator computation 
     Scheduler *sc;
 
-    // Host pinned memory space to store propagator, key: (dep) + monomer_type, value: propagator
-    std::map<std::string, T **> propagator;
-    // Map for deallocation of d_propagator
-    std::map<std::string, int> propagator_size;
     // Check if computation of propagator is finished
     #ifndef NDEBUG
     std::map<std::string, bool *> propagator_finished;
@@ -78,8 +81,10 @@ private:
     std::vector<T *> phi_solvent;
 
     // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, T **q_1, T **q_2, const int N_LEFT, const int N_RIGHT, const T NORM);
+    void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM);
 
+    // Recalcaulte propagator from the check point
+    void recalcaulte_propagator(T **q_out, std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
 public:
 
     CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
