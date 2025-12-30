@@ -146,6 +146,11 @@ CudaSolverRealSpace::CudaSolverRealSpace(
             gpu_error_check(cudaMemset(d_offset, 0, sizeof(int)));
         }
 
+        // Set max dynamic shared memory size for tridiagonal solver kernels
+        int max_shmem = 96000;
+        cudaFuncSetAttribute(tridiagonal, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem);
+        cudaFuncSetAttribute(tridiagonal_periodic, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem);
+
         update_laplacian_operator();
     }
     catch(std::exception& exc)
@@ -348,6 +353,7 @@ void CudaSolverRealSpace::advance_propagator(
 
         // Evaluate exp(-w*ds/2) in real space
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         if(DIM == 3)           // input, output
             advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
@@ -358,10 +364,14 @@ void CudaSolverRealSpace::advance_propagator(
 
         // Evaluate exp(-w*ds/2) in real space
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // Multiply mask
         if (d_q_mask != nullptr)
+        {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
     }
     catch(std::exception& exc)
     {
@@ -392,6 +402,11 @@ void CudaSolverRealSpace::advance_propagator_3d(
         double *_d_zd = d_zd[monomer_type];
         double *_d_zh = d_zh[monomer_type];
 
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+        size_t shmem_y = 3 * nx[1] * sizeof(double);
+        size_t shmem_z = 3 * nx[2] * sizeof(double);
+
         // Calculate q_star
         compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1], bc[2], bc[3], bc[4], bc[5], 
@@ -399,6 +414,7 @@ void CudaSolverRealSpace::advance_propagator_3d(
             _d_yl, _d_yd, _d_yh, nx[1],
             _d_zl, _d_zd, _d_zh, nx[2],
             d_temp[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
@@ -409,17 +425,19 @@ void CudaSolverRealSpace::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
         }
+        gpu_error_check(cudaPeekAtLastError());
 
         // Calculate q_dstar
         compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3], 
             _d_yl, _d_yd, _d_yh, nx[1], nx[2],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -430,17 +448,19 @@ void CudaSolverRealSpace::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
                 d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
         }
+        gpu_error_check(cudaPeekAtLastError());
 
         // Calculate q^(n+1)
         compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[4], bc[5], 
             _d_zl, _d_zd, _d_zh, nx[1], nx[2],
             d_temp[STREAM], d_q_dstar[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         if (bc[4] == BoundaryCondition::PERIODIC)
         {
@@ -451,11 +471,12 @@ void CudaSolverRealSpace::advance_propagator_3d(
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_z, streams[STREAM][0]>>>(
                 _d_zl, _d_zd, _d_zh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_xy, nx[0]*nx[1], 1, nx[2]);
         }
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -482,12 +503,17 @@ void CudaSolverRealSpace::advance_propagator_2d(
         double *_d_yd = d_yd[monomer_type];
         double *_d_yh = d_yh[monomer_type];
 
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+        size_t shmem_y = 3 * nx[1] * sizeof(double);
+
         // Calculate q_star
         compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1], bc[2], bc[3],
             _d_xl, _d_xd, _d_xh, nx[0],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // gpu_error_check(cudaMemcpy(d_q_out, d_q_star, sizeof(double)*M, cudaMemcpyDeviceToDevice));
 
@@ -500,17 +526,19 @@ void CudaSolverRealSpace::advance_propagator_2d(
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
                 d_offset_y, nx[1], nx[1], nx[0]);
         }
+        gpu_error_check(cudaPeekAtLastError());
 
         // Calculate q_dstar
         compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[2], bc[3],
             _d_yl, _d_yd, _d_yh, nx[1],
             d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         if (bc[2] == BoundaryCondition::PERIODIC)
         {
@@ -521,11 +549,12 @@ void CudaSolverRealSpace::advance_propagator_2d(
         }
         else
         {
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
                 _d_yl, _d_yd, _d_yh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
                 d_offset_x, nx[0], 1, nx[1]);
         }
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -548,10 +577,14 @@ void CudaSolverRealSpace::advance_propagator_1d(
         double *_d_xd = d_xd[monomer_type];
         double *_d_xh = d_xh[monomer_type];
 
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+
         compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             bc[0], bc[1],
             _d_xl, _d_xd, _d_xh,
             d_q_star[STREAM], d_q_in, nx[0]);
+        gpu_error_check(cudaPeekAtLastError());
 
         if (bc[0] == BoundaryCondition::PERIODIC)
             tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
@@ -559,9 +592,10 @@ void CudaSolverRealSpace::advance_propagator_1d(
                 d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
                 d_offset, 1, 1, nx[0]);
         else
-            tridiagonal<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -839,21 +873,31 @@ __global__ void tridiagonal(
     const int* __restrict__ d_offset, 
     const int REPEAT, const int INTERVAL, const int M)
 {
+    // Shared memory layout: [xl (M), xd (M), xh (M)]
+    extern __shared__ double s_coeffs[];
+    double* s_xl = s_coeffs;
+    double* s_xd = s_coeffs + M;
+    double* s_xh = s_coeffs + 2 * M;
+
+    // Collaborative load of coefficients into shared memory
+    for (int i = threadIdx.x; i < M; i += blockDim.x) {
+        s_xl[i] = d_xl[i];
+        s_xd[i] = d_xd[i];
+        s_xh[i] = d_xh[i];
+    }
+    __syncthreads();
+
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     while (n < REPEAT)
     {
-        // Local pointers to this thread's system
         const int start_idx = d_offset[n];
         const double* _d_d = &d_d[start_idx];
         double*       _d_x = &d_x[start_idx];
         double*  _d_c_star = &d_c_star[start_idx];
 
-        // Forward sweep
-        // Cache variables in registers to reduce global memory latency
-        double current_xd = FETCH(d_xd, 0);
-        double inv_temp = 1.0 / current_xd;
-        
-        double c_prev = FETCH(d_xh, 0) * inv_temp;
+        // Forward sweep using shared memory
+        double inv_temp = 1.0 / s_xd[0];
+        double c_prev = s_xh[0] * inv_temp;
         double x_prev = _d_d[0] * inv_temp;
 
         _d_c_star[0] = c_prev;
@@ -861,24 +905,20 @@ __global__ void tridiagonal(
 
         for (int i = 1; i < M; i++)
         {
-            double xl_i = FETCH(d_xl, i);
-            // temp = d_xd[i] - d_xl[i] * c_star[i-1]
-            double temp = FETCH(d_xd, i) - xl_i * c_prev;
+            double xl_i = s_xl[i];
+            double temp = s_xd[i] - xl_i * c_prev;
             inv_temp = 1.0 / temp;
 
-            // Calculate and store c_star
             if (i < M - 1) {
-                c_prev = FETCH(d_xh, i) * inv_temp;
+                c_prev = s_xh[i] * inv_temp;
                 _d_c_star[i * INTERVAL] = c_prev;
             }
 
-            // Calculate and store x
             x_prev = (_d_d[i * INTERVAL] - xl_i * x_prev) * inv_temp;
             _d_x[i * INTERVAL] = x_prev;
         }
 
         // Backward substitution
-        // x_prev currently holds _d_x[(M-1)*INTERVAL]
         for (int i = M - 2; i >= 0; i--)
         {
             x_prev = _d_x[i * INTERVAL] - _d_c_star[i * INTERVAL] * x_prev;
@@ -908,6 +948,7 @@ __global__ void tridiagonal_periodic(
         double*       _d_x = &d_x[start_idx];
         double*  _d_c_star = &d_c_star[start_idx];
         double* _d_q_sparse = &d_q_sparse[start_idx];
+
         // Forward sweep
         double inv_temp = 1.0 / (FETCH(d_xd, 0) - 1.0);
         double c_prev = FETCH(d_xh, 0) * inv_temp;

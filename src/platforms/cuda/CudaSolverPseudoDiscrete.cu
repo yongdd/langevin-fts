@@ -277,13 +277,18 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
             cufftExecD2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM]);
         else
             cufftExecZ2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+        gpu_error_check(cudaPeekAtLastError());
+
         // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
+        gpu_error_check(cudaPeekAtLastError());
+
         // 3D fourier discrete transform, backward and inplace
         if constexpr (std::is_same<T, double>::value)
             cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out);
         else
             cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out, CUFFT_INVERSE);
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -329,6 +334,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
         else
             cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+        gpu_error_check(cudaPeekAtLastError());
 
         // Multiply two propagators in the fourier spaces
         if constexpr (std::is_same<T, double>::value)
@@ -338,56 +344,69 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_1_one[STREAM], 1.0, M_COMPLEX);
         }
+        gpu_error_check(cudaPeekAtLastError());
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
+        gpu_error_check(cudaPeekAtLastError());
         
         if ( DIM == 3 )
         {
             // x direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // y direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
         }
         if ( DIM == 2 )
         {
             // y direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-
+            gpu_error_check(cudaPeekAtLastError());
         }
         if ( DIM == 1 )
         {
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
         }
 
     }
