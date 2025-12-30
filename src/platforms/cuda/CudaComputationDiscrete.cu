@@ -444,6 +444,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                             std::cout<< "Could not find q_init[\"" + g + "\"]." << std::endl;
                         gpu_error_check(cudaMemcpyAsync(_d_propagator[1], q_init[g], sizeof(T)*M, cudaMemcpyInputToDevice, streams[STREAM][0]));
                         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
+                        gpu_error_check(cudaPeekAtLastError());
                     }
                     else
                     {
@@ -498,6 +499,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                             ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 _d_propagator[1], 1.0, _d_propagator[1],
                                 sub_n_repeated, _propagator_sub_dep[sub_n_segment], M);
+                            gpu_error_check(cudaPeekAtLastError());
                         }
 
                         // Throw an error message if zero and nonzero sub_n_segments are mixed
@@ -523,7 +525,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
 
                             // Add full segment
                             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
-
+                            gpu_error_check(cudaPeekAtLastError());
                         }
                         else
                         {
@@ -581,6 +583,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                     d_propagator_half_steps[key][0], d_propagator_half_steps[key][0],
                                     d_propagator_half_steps[sub_dep][sub_n_segment], 1.0, M);
+                                gpu_error_check(cudaPeekAtLastError());
                             }   
                         }
 
@@ -597,6 +600,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
 
                             // Add full segment
                             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[1], _d_propagator[1], _d_exp_dw, 1.0, M);
+                            gpu_error_check(cudaPeekAtLastError());
 
                             #ifndef NDEBUG
                             propagator_finished[key][1] = true;
@@ -814,6 +818,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_polymer_partitions[p]));
             }
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
+            gpu_error_check(cudaPeekAtLastError());
         }
 
         // Calculate partition functions and concentrations of solvents
@@ -838,6 +843,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_solvent_partitions[s]));
             }
             ker_linear_scaling<<<N_BLOCKS, N_THREADS>>>(d_phi_, _d_exp_dw, norm, 0.0, M);
+            gpu_error_check(cudaPeekAtLastError());
         }
     }
     catch(std::exception& exc)
@@ -862,6 +868,7 @@ void CudaComputationDiscrete<T>::calculate_phi_one_block(
             ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_LEFT-n+1], d_q_2[n], 1.0, M);
         }
         ker_divide<<<N_BLOCKS, N_THREADS>>>(d_phi, d_phi, d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -901,6 +908,7 @@ void CudaComputationDiscrete<T>::get_total_concentration(std::string monomer_typ
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
+        gpu_error_check(cudaPeekAtLastError());
 
         // For each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
@@ -908,6 +916,7 @@ void CudaComputationDiscrete<T>::get_total_concentration(std::string monomer_typ
             if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_phi_solvent[s], M);
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -942,6 +951,7 @@ void CudaComputationDiscrete<T>::get_total_concentration(int p, std::string mono
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -985,6 +995,7 @@ void CudaComputationDiscrete<T>::get_total_concentration_gce(double fugacity, in
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_block.second, 1.0, d_phi, M);
             }
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -1023,6 +1034,7 @@ void CudaComputationDiscrete<T>::get_block_concentration(int p, T *phi)
                 key_left.swap(key_right);
 
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, key_left, key_right)], M);
+            gpu_error_check(cudaPeekAtLastError());
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }

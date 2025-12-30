@@ -219,7 +219,7 @@ void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::
                 (this->d_exp_dw[monomer_type],      this->d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
             ker_exp<<<N_BLOCKS, N_THREADS>>>
                 (this->d_exp_dw_half[monomer_type], this->d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
-
+            gpu_error_check(cudaPeekAtLastError());
             gpu_error_check(cudaDeviceSynchronize());
         }
     }
@@ -253,6 +253,7 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
         ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
             &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/2: Execute a forward FFT
         // step 1/4: Execute a forward FFT
@@ -260,12 +261,14 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
             cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
         else
             cufftExecZ2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
         ker_complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             &d_qk_in_1_two[STREAM][0],         _d_boltz_bond,
             &d_qk_in_1_two[STREAM][M_COMPLEX], _d_boltz_bond_half, M_COMPLEX);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/2: Execute a backward FFT
         // step 1/4: Execute a backward FFT
@@ -273,37 +276,47 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
             cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
         else
             cufftExecZ2Z(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM], CUFFT_INVERSE);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/2: Evaluate exp(-w*ds/2) in real space
         // step 1/4: Evaluate exp(-w*ds/2) in real space
         ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             d_q_step_1_one[STREAM], &d_q_step_1_two[STREAM][0], _d_exp_dw,
             d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/static_cast<double>(M), M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/4: Execute a forward FFT
         if constexpr (std::is_same<T, double>::value)
             cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
         else
             cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM], CUFFT_FORWARD);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
         ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/4: Execute a backward FFT
         if constexpr (std::is_same<T, double>::value)
             cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
         else
             cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], CUFFT_INVERSE);
+        gpu_error_check(cudaPeekAtLastError());
 
         // step 1/4: Evaluate exp(-w*ds/4) in real space.
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/static_cast<double>(M), M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // Compute linear combination with 4/3 and -1/3 ratio
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
+        gpu_error_check(cudaPeekAtLastError());
 
         // Multiply mask
         if (d_q_mask != nullptr)
+        {
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
     }
     catch(std::exception& exc)
     {
@@ -337,6 +350,7 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
             cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
         else
             cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+        gpu_error_check(cudaPeekAtLastError());
 
         // Multiply two propagators in the fourier spaces
         if constexpr (std::is_same<T, double>::value)
@@ -346,53 +360,67 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
             ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_2_one[STREAM], 1.0, M_COMPLEX);
         }
+        gpu_error_check(cudaPeekAtLastError());
+
         if ( DIM == 3 )
         {
             // x direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // y direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
         }
         if ( DIM == 2 )
         {
             // y direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
 
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
         }
         if ( DIM == 1 )
         {
             // z direction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
             else
                 cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+            gpu_error_check(cudaPeekAtLastError());
         }
     }
     catch(std::exception& exc)

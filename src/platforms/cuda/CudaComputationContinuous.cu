@@ -339,6 +339,7 @@ void CudaComputationContinuous<T>::compute_propagators(
                             ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                 _d_propagator[0], 1.0, _d_propagator[0],
                                 sub_n_repeated, d_propagator[sub_dep][sub_n_segment], M);
+                            gpu_error_check(cudaPeekAtLastError());
                         }
 
                         #ifndef NDEBUG
@@ -371,6 +372,7 @@ void CudaComputationContinuous<T>::compute_propagators(
                                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                                     _d_propagator[0], _d_propagator[0],
                                     d_propagator[sub_dep][sub_n_segment], 1.0, M);
+                                gpu_error_check(cudaPeekAtLastError());
                             }
                         }
                         
@@ -382,7 +384,10 @@ void CudaComputationContinuous<T>::compute_propagators(
 
                 // Multiply mask
                 if (n_segment_from == 0 && d_q_mask != nullptr)
+                {
                     ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(_d_propagator[0], _d_propagator[0], d_q_mask, 1.0, M);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
@@ -510,6 +515,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
             else
                 norm = stdToCuDoubleComplex(_norm);
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
+            gpu_error_check(cudaPeekAtLastError());
         }
 
         // Calculate partition functions and concentrations of solvents
@@ -534,6 +540,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_solvent_partitions[s]));
             }
             ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi_,_d_exp_dw, _d_exp_dw, norm, M);
+            gpu_error_check(cudaPeekAtLastError());
         }
     }
     catch(std::exception& exc)
@@ -559,6 +566,7 @@ void CudaComputationContinuous<T>::calculate_phi_one_block(
         {
             ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1[N_LEFT-n], d_q_2[n], simpson_rule_coeff[n], M);
         }
+        gpu_error_check(cudaPeekAtLastError());
     }
     catch(std::exception& exc)
     {
@@ -598,6 +606,7 @@ void CudaComputationContinuous<T>::get_total_concentration(std::string monomer_t
             if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
+        gpu_error_check(cudaPeekAtLastError());
 
         // For each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
@@ -605,6 +614,7 @@ void CudaComputationContinuous<T>::get_total_concentration(std::string monomer_t
             if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_phi_solvent[s], M);
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -639,6 +649,7 @@ void CudaComputationContinuous<T>::get_total_concentration(int p, std::string mo
             if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 1.0, d_phi, 1.0, d_block.second, M);
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -682,6 +693,7 @@ void CudaComputationContinuous<T>::get_total_concentration_gce(double fugacity, 
                 ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm, d_block.second, 1.0, d_phi, M);
             }
         }
+        gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaMemcpy(phi, d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
@@ -720,6 +732,7 @@ void CudaComputationContinuous<T>::get_block_concentration(int p, T *phi)
                 key_left.swap(key_right);
 
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 0.0, d_phi, 1.0, d_phi_block[std::make_tuple(p, key_left, key_right)], M);
+            gpu_error_check(cudaPeekAtLastError());
             gpu_error_check(cudaMemcpy(&phi[b*M], d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }
