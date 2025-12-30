@@ -99,36 +99,3 @@ print(np.std(phi))
 
 # 1.1264970742563165
 # 1.126497074256316
-
-# phi = np.reshape(solver.get_total_concentration("A"), nx)
-# file_name = "phi"
-# plt.imshow(phi[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
-# plt.colorbar()
-# plt.savefig(file_name)
-# print("phi(r) is written to file '%s'." % (file_name))
-# plt.close()
-
-# N = round(1.0/ds)
-# for n in range(0, round(N)+1, round(N/5)):
-#                                                   # p, v, u, n
-#      q_out = np.reshape(solver.get_chain_propagator(0, 0, 1, n), nx)
-#      plt.imshow(q_out[:,:,round(nx[2]/2)], extent=[0, lx[0], 0, lx[1]], aspect='auto', interpolation='nearest')
-#      plt.colorbar()
-#      file_name = "q_forward_%03d_xy.png" % (n)
-#      plt.savefig(file_name)
-#      print("q(%3.1f,x,y,Lz/2) is written to file '%s'." % (n*ds, file_name))
-#      plt.close()
-     
-#      plt.imshow(q_out[:,round(nx[1]/2),:], extent=[0, lx[0], 0, lx[2]], aspect='auto', interpolation='nearest')
-#      plt.colorbar()
-#      file_name = "q_forward_%03d_xz.png" % (n)
-#      plt.savefig(file_name)
-#      print("q(%3.1f,x,Ly/2,z) is written to file '%s'." % (n*ds, file_name))
-#      plt.close()
-
-#      plt.imshow(q_out[round(nx[0]/2),:,:], extent=[0, lx[1], 0, lx[2]], aspect='auto', interpolation='nearest')
-#      plt.colorbar()
-#      file_name = "q_forward_%03d_yz.png" % (n)
-#      plt.savefig(file_name)
-#      print("q(%3.1f,Lx/2,y,z) is written to file '%s'." % (n*ds, file_name))
-#      plt.close()
