@@ -24,8 +24,6 @@ int main()
 {
     try
     {
-        // Math constants
-        const double PI = 3.14159265358979323846;
         // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;
 
@@ -43,8 +41,6 @@ int main()
         std::ofstream print_stream;
         std::stringstream ss;
         std::string print_file_name;
-        // Temp
-        int idx;
 
         // -------------- Initialize ------------
         // Platform type, [cuda, cpu-mkl]

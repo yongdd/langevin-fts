@@ -43,7 +43,7 @@ private:
 
     // Temporary memories for calculating propagators
     int total_max_n_segment;
-    T** q_recal;     // size: total_max_n_segment
+    std::vector<T*> q_recal;     // size: total_max_n_segment + 1 (to store the recalculation point)
     
     // check point propagator
     std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
@@ -84,7 +84,7 @@ private:
     void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM);
 
     // Recalcaulte propagator from the check point
-    void recalcaulte_propagator(T **q_out, std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
+    std::vector<T*> recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
 public:
 
     CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);

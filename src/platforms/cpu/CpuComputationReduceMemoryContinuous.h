@@ -32,8 +32,8 @@ private:
 
     // Temporary memories for calculating propagators
     int total_max_n_segment;
-    T** q_recal;     // size: total_max_n_segment
-    T*  q_pair[2];   // size: 2 (one for prev, the other for next)
+    std::vector<T*> q_recal;   // size: total_max_n_segment+1 (to store the recalculation point)
+    std::array<T*,2> q_pair;   // size: 2 (one for prev, the other for next)
 
     // check point propagator
     std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
@@ -57,7 +57,7 @@ private:
     void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type);
 
     // Recalcaulte propagator from the check point
-    void recalcaulte_propagator(T **q_out, std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
+    std::vector<T*> recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
 public:
     CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
     ~CpuComputationReduceMemoryContinuous();

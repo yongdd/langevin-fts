@@ -13,6 +13,7 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
+#include "CpuComputationReduceMemoryContinuous.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
@@ -195,8 +196,11 @@ int main()
         // Pseudo-spectral method
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("pseudo, cpu-mkl");
+        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory_usage");
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationContinuous<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
+        cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
+        solver_list.push_back(new CpuComputationReduceMemoryContinuous<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
         #endif
 
         #ifdef USE_CUDA
@@ -204,7 +208,7 @@ int main()
         solver_name_list.push_back("pseudo, cuda, reduce_memory_usage");
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CudaComputationContinuous<T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
+        solver_list.push_back(new CudaComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
         solver_list.push_back(new CudaComputationReduceMemoryContinuous<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
         #endif
 
