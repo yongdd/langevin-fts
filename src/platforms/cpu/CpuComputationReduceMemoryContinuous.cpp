@@ -93,7 +93,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             total_max_n_segment = std::max(total_max_n_segment, n_segment_right);
         }
-        this->q_recal = new T*[total_max_n_segment+1];
+        this->q_recal.resize(total_max_n_segment+1);
         for(int n=0; n<=total_max_n_segment; n++)
             this->q_recal[n] = new T[M];
         this->q_pair[0] = new T[M];
@@ -163,7 +163,6 @@ CpuComputationReduceMemoryContinuous<T>::~CpuComputationReduceMemoryContinuous()
 
     for(int n=0; n<=total_max_n_segment; n++)
         delete[] this->q_recal[n];
-    delete[] this->q_recal;
 
     delete[] this->q_pair[0];
     delete[] this->q_pair[1];
@@ -324,7 +323,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                         propagator_finished[key][0] = true;
                         #endif
 
-                        std::cout << "finished, key, n: " + key + ", 0" << std::endl;
+                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else if(key[0] == '(')
                     {
@@ -357,7 +356,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                         propagator_finished[key][0] = true;
                         #endif
 
-                        std::cout << "finished, key, n: " + key + ", 0" << std::endl;
+                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                 }
         
@@ -548,7 +547,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
     }
 }
 template <typename T>
-void CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(T **q_out, std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
+std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
 {
     // If a propagator is in check_point_propagator reuse it, otherwise compute it again with allocated memory space.
     try
@@ -556,13 +555,17 @@ void CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(T **q_out, 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
 
+        // An array of pointers for q_out (use dynamic container to avoid VLA/stack overflow)
+        std::vector<T*> q_out(total_max_n_segment + 1);
+
         // Compute the q_out
         for(int n=0; n<=N_RIGHT; n++)
         {
             // Use check_point_propagator if exists
-            if(check_point_propagator.find(std::make_tuple(key, N_START+n)) != check_point_propagator.end())
+            auto it = check_point_propagator.find(std::make_tuple(key, N_START+n));
+            if(it != check_point_propagator.end())
             {
-                q_out[n] = check_point_propagator[std::make_tuple(key, N_START+n)];
+                q_out[n] = it->second;
                 #ifndef NDEBUG
                 std::cout << "Use check_point_propagator if exists: (phi, left) " << key << ", " << N_START+n << std::endl;
                 #endif
@@ -574,6 +577,7 @@ void CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(T **q_out, 
                 propagator_solver->advance_propagator(q_out[n-1], q_out[n], monomer_type, q_mask);
             }
         }
+        return q_out;
     }
     catch(std::exception& exc)
     {
@@ -597,16 +601,12 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
 
-        // An array of pointers for q_left
-        T* q_left[total_max_n_segment];
-
         // Recalcaulte q_left from the check point
-        recalcaulte_propagator(q_left, key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
+        std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
 
         // Pointers for q_right
         T *q_prev = nullptr;
         T *q_next = nullptr;
-
         int prev = 0;
         int next = 1;
 
@@ -616,9 +616,10 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         for(int n=0; n<=N_RIGHT; n++)
         {
             // Use check_point_propagator if exists
-            if(check_point_propagator.find(std::make_tuple(key_right, n)) != check_point_propagator.end())
+            auto it = check_point_propagator.find(std::make_tuple(key_right, n));
+            if(it != check_point_propagator.end())
             {
-                q_next = check_point_propagator[std::make_tuple(key_right, n)];
+                q_next = it->second;
                 #ifndef NDEBUG
                 std::cout << "Use check_point_propagator if exists: (phi, right) " << key_right << ", " <<  n << std::endl;
                 #endif
@@ -877,11 +878,8 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
             if(N_RIGHT == 0)
                 continue;
 
-            // An array of pointers for q_left
-            T* q_left[total_max_n_segment];
-
             // Recalcaulte q_left from the check point
-            recalcaulte_propagator(q_left, key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
+            std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
 
             // Pointers for q_right
             T *q_prev = nullptr;
@@ -896,9 +894,10 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
             for(int n=0; n<=N_RIGHT; n++)
             {
                 // Use check_point_propagator if exists
-                if(check_point_propagator.find(std::make_tuple(key_right, n)) != check_point_propagator.end())
+                auto it = check_point_propagator.find(std::make_tuple(key_right, n));
+                if(it != check_point_propagator.end())
                 {
-                    q_next = check_point_propagator[std::make_tuple(key_right, n)];
+                    q_next = it->second;
                     #ifndef NDEBUG
                     std::cout << "Use check_point_propagator if exists: (stress, right) " << key_right << ", " <<  n << std::endl;
                     #endif
@@ -1012,11 +1011,8 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;
         #endif
 
-        // An array of pointers for q_left
-        T* q_left[total_max_n_segment];
-
         // Recalcaulte q_left from the check point
-        recalcaulte_propagator(q_left, key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
+        std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
 
         // Pointers for q_right
         T *q_prev = nullptr;
@@ -1029,9 +1025,10 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
         for(int n=0; n<=N_RIGHT; n++)
         {
             // Use check_point_propagator if exists
-            if(check_point_propagator.find(std::make_tuple(key_right, n)) != check_point_propagator.end())
+            auto it = check_point_propagator.find(std::make_tuple(key_right, n));
+            if(it != check_point_propagator.end())
             {
-                q_next = check_point_propagator[std::make_tuple(key_right, n)];
+                q_next = it->second;
                 #ifndef NDEBUG
                 std::cout << "Use check_point_propagator if exists: (check_total_partition, right) " << key_right << ", " <<  n << std::endl;
                 #endif
