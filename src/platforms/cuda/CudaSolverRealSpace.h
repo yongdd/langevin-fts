@@ -56,17 +56,25 @@ __global__ void compute_crank_3d_step_3(
     double *d_q_out, const double *d_q_dstar, const double *d_q_in, const int M);
 
 __global__ void tridiagonal(
-    const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star,  const double *d_d, double *d_x,
-    const int *d_offset, const int REPEAT,
-    const int INTERVAL, const int M);
+    const double* __restrict__ d_xl, 
+    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star,   
+    const double* __restrict__ d_d, 
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset, 
+    const int REPEAT, const int INTERVAL, const int M);
 
-__global__  void tridiagonal_periodic(
-    const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star, double *d_q_sparse, 
-     const double *d_d, double *d_x,
-    const int *d_offset, const int REPEAT,
-    const int INTERVAL, const int M);
+__global__ void tridiagonal_periodic(
+    const double* __restrict__ d_xl, 
+    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star, 
+    double* __restrict__ d_q_sparse, 
+    const double* __restrict__ d_d, 
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset, 
+    const int REPEAT, const int INTERVAL, const int M);
 
 class CudaSolverRealSpace : public CudaSolver<double>
 {

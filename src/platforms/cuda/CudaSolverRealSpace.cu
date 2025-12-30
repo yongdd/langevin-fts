@@ -309,6 +309,13 @@ void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, co
                 sizeof(double)*M, cudaMemcpyInputToDevice));
 
             // Compute d_exp_dw and d_exp_dw_half
+            // ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>
+            //     ((double*) d_exp_dw[monomer_type],
+            //     (double*) d_exp_dw[monomer_type], 1.0, -0.50*ds, M);
+            // ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>
+            //     ((double*) d_exp_dw_half[monomer_type],
+            //     (double*) d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
+
             ker_exp<<<N_BLOCKS, N_THREADS>>>
                 ((double*) d_exp_dw[monomer_type],
                  (double*) d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
@@ -816,99 +823,148 @@ __global__ void compute_crank_1d(
     }
 }
 
-// This method solves CX=Y, where C is a tridiagonal matrix 
+// This method solves CX=Y, where C is a tridiagonal matrix
+
+// Use constant restrict for pointers to allow compiler optimizations
+// and utilize the Read-Only Data Cache (__ldg).
+#define FETCH(arr, i) __ldg(&arr[i])
+
 __global__ void tridiagonal(
-    const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star,  const double *d_d, double *d_x,
-    const int *d_offset, const int REPEAT,
-    const int INTERVAL, const int M)
+    const double* __restrict__ d_xl, 
+    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star,   
+    const double* __restrict__ d_d, 
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset, 
+    const int REPEAT, const int INTERVAL, const int M)
 {
-    // d_xl: a
-    // d_xd: b
-    // d_xh: c
-
-    double temp;
-
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     while (n < REPEAT)
     {
-        const double *_d_d = &d_d[d_offset[n]];
-        double       *_d_x = &d_x[d_offset[n]];
-        double  *_d_c_star = &d_c_star[d_offset[n]];
+        // Local pointers to this thread's system
+        const int start_idx = d_offset[n];
+        const double* _d_d = &d_d[start_idx];
+        double*       _d_x = &d_x[start_idx];
+        double*  _d_c_star = &d_c_star[start_idx];
 
         // Forward sweep
-        temp = d_xd[0];
-        _d_c_star[0] = d_xh[0]/d_xd[0];
-        _d_x[0] = _d_d[0]/d_xd[0];
+        // Cache variables in registers to reduce global memory latency
+        double current_xd = FETCH(d_xd, 0);
+        double inv_temp = 1.0 / current_xd;
+        
+        double c_prev = FETCH(d_xh, 0) * inv_temp;
+        double x_prev = _d_d[0] * inv_temp;
 
-        for(int i=1; i<M; i++)
+        _d_c_star[0] = c_prev;
+        _d_x[0] = x_prev;
+
+        for (int i = 1; i < M; i++)
         {
-            _d_c_star[(i-1)*INTERVAL] = d_xh[i-1]/temp;
-            temp = d_xd[i]-d_xl[i]*_d_c_star[(i-1)*INTERVAL];
-            _d_x[i*INTERVAL] = (_d_d[i*INTERVAL]-d_xl[i]*_d_x[(i-1)*INTERVAL])/temp;
+            double xl_i = FETCH(d_xl, i);
+            // temp = d_xd[i] - d_xl[i] * c_star[i-1]
+            double temp = FETCH(d_xd, i) - xl_i * c_prev;
+            inv_temp = 1.0 / temp;
+
+            // Calculate and store c_star
+            if (i < M - 1) {
+                c_prev = FETCH(d_xh, i) * inv_temp;
+                _d_c_star[i * INTERVAL] = c_prev;
+            }
+
+            // Calculate and store x
+            x_prev = (_d_d[i * INTERVAL] - xl_i * x_prev) * inv_temp;
+            _d_x[i * INTERVAL] = x_prev;
         }
 
         // Backward substitution
-        for(int i=M-2;i>=0; i--)
-            _d_x[i*INTERVAL] = _d_x[i*INTERVAL] - _d_c_star[i*INTERVAL]*_d_x[(i+1)*INTERVAL];
-        
+        // x_prev currently holds _d_x[(M-1)*INTERVAL]
+        for (int i = M - 2; i >= 0; i--)
+        {
+            x_prev = _d_x[i * INTERVAL] - _d_c_star[i * INTERVAL] * x_prev;
+            _d_x[i * INTERVAL] = x_prev;
+        }
         n += blockDim.x * gridDim.x;
     }
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
 __global__ void tridiagonal_periodic(
-    const double *d_xl, const double *d_xd, const double *d_xh,
-    double *d_c_star, double *d_q_sparse, 
-    const double *d_d, double *d_x,
-    const int *d_offset, const int REPEAT,
-    const int INTERVAL, const int M)
+    const double* __restrict__ d_xl, 
+    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xh,
+    double* __restrict__ d_c_star, 
+    double* __restrict__ d_q_sparse, 
+    const double* __restrict__ d_d, 
+    double* __restrict__ d_x,
+    const int* __restrict__ d_offset, 
+    const int REPEAT, const int INTERVAL, const int M)
 {
-    // xl: a
-    // xd: b
-    // xh: c
-    // gamma = 1.0
-
-    double temp, value;
-
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     while (n < REPEAT)
     {
-        const double *_d_d = &d_d[d_offset[n]];
-        double       *_d_x = &d_x[d_offset[n]];
-        double  *_d_c_star = &d_c_star[d_offset[n]];
-        double *_d_q_sparse = &d_q_sparse[d_offset[n]];
-
+        const int start_idx = d_offset[n];
+        const double* _d_d = &d_d[start_idx];
+        double*       _d_x = &d_x[start_idx];
+        double*  _d_c_star = &d_c_star[start_idx];
+        double* _d_q_sparse = &d_q_sparse[start_idx];
         // Forward sweep
-        temp = d_xd[0] - 1.0 ;
-        _d_c_star[0] = d_xh[0]/temp;
-        _d_x[0] = _d_d[0]/temp;
-        _d_q_sparse[0] =  1.0/temp;
+        double inv_temp = 1.0 / (FETCH(d_xd, 0) - 1.0);
+        double c_prev = FETCH(d_xh, 0) * inv_temp;
+        double x_prev = _d_d[0] * inv_temp;
+        double q_prev = inv_temp;
 
-        for(int i=1; i<M-1; i++)
+        _d_c_star[0] = c_prev;
+        _d_x[0] = x_prev;
+        _d_q_sparse[0] = q_prev;
+
+        for (int i = 1; i < M - 1; i++)
         {
-            _d_c_star[(i-1)*INTERVAL] = d_xh[i-1]/temp;
-            temp = d_xd[i]-d_xl[i]*_d_c_star[(i-1)*INTERVAL];
-            _d_x[i*INTERVAL] = (_d_d[i*INTERVAL]-d_xl[i]*_d_x[(i-1)*INTERVAL])/temp;
-            _d_q_sparse[i*INTERVAL] =   (-d_xl[i]*_d_q_sparse[(i-1)*INTERVAL])/temp;
+            double xl_i = FETCH(d_xl, i);
+            inv_temp = 1.0 / (FETCH(d_xd, i) - xl_i * c_prev);
+            
+            c_prev = FETCH(d_xh, i) * inv_temp;
+            x_prev = (_d_d[i * INTERVAL] - xl_i * x_prev) * inv_temp;
+            q_prev = (-xl_i * q_prev) * inv_temp;
+
+            _d_c_star[i * INTERVAL] = c_prev;
+            _d_x[i * INTERVAL] = x_prev;
+            _d_q_sparse[i * INTERVAL] = q_prev;
         }
 
-        _d_c_star[(M-2)*INTERVAL] = d_xh[M-2]/temp;
-        temp = d_xd[M-1]-d_xh[M-1]*d_xl[0] - d_xl[M-1]*_d_c_star[(M-2)*INTERVAL];
-        _d_x[(M-1)*INTERVAL] =    (_d_d[(M-1)*INTERVAL]-d_xl[M-1]*_d_x[(M-2)*INTERVAL])/temp;
-        _d_q_sparse[(M-1)*INTERVAL] = (d_xh[M-1]-d_xl[M-1]*_d_q_sparse[(M-2)*INTERVAL])/temp;
+        // Final element of forward sweep
+        double xl_M_1 = FETCH(d_xl, M - 1);
+        inv_temp = 1.0 / (FETCH(d_xd, M - 1) - FETCH(d_xh, M - 1) * FETCH(d_xl, 0) - xl_M_1 * c_prev);
+        x_prev = (_d_d[(M - 1) * INTERVAL] - xl_M_1 * x_prev) * inv_temp;
+        q_prev = (FETCH(d_xh, M - 1) - xl_M_1 * q_prev) * inv_temp;
+        
+        _d_x[(M - 1) * INTERVAL] = x_prev;
+        _d_q_sparse[(M - 1) * INTERVAL] = q_prev;
 
         // Backward substitution
-        for(int i=M-2;i>=0; i--)
+        // Note: c_star[M-1] is not used in back-substitution, we use registers for trailing values
+        for (int i = M - 2; i >= 0; i--)
         {
-            _d_x[i*INTERVAL] = _d_x[i*INTERVAL] - _d_c_star[i*INTERVAL]*_d_x[(i+1)*INTERVAL];
-            _d_q_sparse[i*INTERVAL] = _d_q_sparse[i*INTERVAL] - _d_c_star[i*INTERVAL]*_d_q_sparse[(i+1)*INTERVAL];
+            double c_star_i = _d_c_star[i * INTERVAL];
+            x_prev = _d_x[i * INTERVAL] - c_star_i * x_prev;
+            q_prev = _d_q_sparse[i * INTERVAL] - c_star_i * q_prev;
+            
+            _d_x[i * INTERVAL] = x_prev;
+            _d_q_sparse[i * INTERVAL] = q_prev;
         }
 
-        value = (_d_x[0]+d_xl[0]*_d_x[(M-1)*INTERVAL])/(1.0+_d_q_sparse[0]+d_xl[0]*_d_q_sparse[(M-1)*INTERVAL]);
-        for(int i=0; i<M; i++)
-            _d_x[i*INTERVAL] = _d_x[i*INTERVAL] - _d_q_sparse[i*INTERVAL]*value;
+        // Sherman-Morrison Correction
+        double x_0 = _d_x[0];
+        double q_0 = _d_q_sparse[0];
+        double x_M_1 = _d_x[(M-1)*INTERVAL];
+        double q_M_1 = _d_q_sparse[(M-1)*INTERVAL];
+        double xl_0 = FETCH(d_xl, 0);
 
+        double value = (x_0 + xl_0 * x_M_1) / (1.0 + q_0 + xl_0 * q_M_1);
+
+        for (int i = 0; i < M; i++) {
+            _d_x[i * INTERVAL] -= _d_q_sparse[i * INTERVAL] * value;
+        }
         n += blockDim.x * gridDim.x;
     }
 }
