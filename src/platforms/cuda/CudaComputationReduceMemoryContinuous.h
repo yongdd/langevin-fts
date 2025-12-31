@@ -45,8 +45,8 @@ private:
     int total_max_n_segment;
     std::vector<T*> q_recal;     // size: total_max_n_segment + 1 (to store the recalculation point)
     
-    // check point propagator
-    std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
+    // propagator at check point
+    std::map<std::tuple<std::string, int>, T *> propagator_at_check_point; 
 
     // All elements are 1 for initializing propagators
     CuDeviceData<T> *d_q_unity;

@@ -35,8 +35,8 @@ private:
     std::vector<T*> q_recal;   // size: total_max_n_segment+1 (to store the recalculation point)
     std::array<T*,2> q_pair;   // size: 2 (one for prev, the other for next)
 
-    // check point propagator
-    std::map<std::tuple<std::string, int>, T *> check_point_propagator; 
+    // propagator at check point
+    std::map<std::tuple<std::string, int>, T *> propagator_at_check_point; 
 
     // Check if computation of propagator is finished
     #ifndef NDEBUG
