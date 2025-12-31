@@ -55,20 +55,20 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
             int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
 
-            if(check_point_propagator.find(std::make_tuple(key, 0)) == check_point_propagator.end())
-                check_point_propagator[std::make_tuple(key, 0)] = new T[M];
+            if(propagator_at_check_point.find(std::make_tuple(key, 0)) == propagator_at_check_point.end())
+                propagator_at_check_point[std::make_tuple(key, 0)] = new T[M];
 
             // Add 'max_n_segment' to pass the tests
-            if(check_point_propagator.find(std::make_tuple(key, max_n_segment)) == check_point_propagator.end())
-                check_point_propagator[std::make_tuple(key, max_n_segment)] = new T[M];
+            if(propagator_at_check_point.find(std::make_tuple(key, max_n_segment)) == propagator_at_check_point.end())
+                propagator_at_check_point[std::make_tuple(key, max_n_segment)] = new T[M];
 
             for(size_t d=0; d<deps.size(); d++)
             {
                 std::string sub_dep = std::get<0>(deps[d]);
                 int sub_n_segment   = std::get<1>(deps[d]);
 
-                if(check_point_propagator.find(std::make_tuple(sub_dep, sub_n_segment)) == check_point_propagator.end())
-                    check_point_propagator[std::make_tuple(sub_dep, sub_n_segment)] = new T[M];
+                if(propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == propagator_at_check_point.end())
+                    propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)] = new T[M];
             }
 
             #ifndef NDEBUG
@@ -80,7 +80,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
 
         // Iterate through each element in the map
         #ifndef NDEBUG
-        for (const auto& pair : check_point_propagator) {
+        for (const auto& pair : propagator_at_check_point) {
             std::cout << "Key: " << std::get<0>(pair.first) << ", Value: " << std::get<1>(pair.first) << std::endl;
         }
         #endif
@@ -116,17 +116,17 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
                                  this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
             int n_segment_left = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
-            if(check_point_propagator.find(std::make_tuple(key_left, n_segment_left)) == check_point_propagator.end())
+            if(propagator_at_check_point.find(std::make_tuple(key_left, n_segment_left)) == propagator_at_check_point.end())
             {
-                check_point_propagator[std::make_tuple(key_left, n_segment_left)] = new T[M];
+                propagator_at_check_point[std::make_tuple(key_left, n_segment_left)] = new T[M];
                 #ifndef NDEBUG
                 std::cout << "Allocated, " + key_left + ", " << n_segment_left << std::endl;
                 #endif
             }
 
-            if(check_point_propagator.find(std::make_tuple(key_right, 0)) == check_point_propagator.end())
+            if(propagator_at_check_point.find(std::make_tuple(key_right, 0)) == propagator_at_check_point.end())
             {
-                check_point_propagator[std::make_tuple(key_right, 0)] = new T[M];
+                propagator_at_check_point[std::make_tuple(key_right, 0)] = new T[M];
                 #ifndef NDEBUG
                 std::cout << "Allocated, " + key_right + ", " << 0 << std::endl;
                 #endif
@@ -134,8 +134,8 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                check_point_propagator[std::make_tuple(key_left, n_segment_left)],  // q
-                check_point_propagator[std::make_tuple(key_right, 0)],              // q_dagger
+                propagator_at_check_point[std::make_tuple(key_left, n_segment_left)],  // q
+                propagator_at_check_point[std::make_tuple(key_right, 0)],              // q_dagger
                 n_aggregated                                                        // how many propagators are aggregated
                 ));
 
@@ -167,7 +167,7 @@ CpuComputationReduceMemoryContinuous<T>::~CpuComputationReduceMemoryContinuous()
     delete[] this->q_pair[0];
     delete[] this->q_pair[1];
 
-    for(const auto& item: check_point_propagator)
+    for(const auto& item: propagator_at_check_point)
         delete[] item.second;
     for(const auto& item: phi_block)
         delete[] item.second;
@@ -262,7 +262,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
 
                 // Check key
                 #ifndef NDEBUG
-                if (check_point_propagator.find(std::make_tuple(key, n_segment_from)) == check_point_propagator.end())
+                if (propagator_at_check_point.find(std::make_tuple(key, n_segment_from)) == propagator_at_check_point.end())
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
@@ -309,13 +309,13 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (check_point_propagator.find(std::make_tuple(sub_dep, sub_n_segment)) == check_point_propagator.end())
+                            if (propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == propagator_at_check_point.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "[" + std::to_string(sub_n_segment) + "]. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            T* _q_sub = check_point_propagator[std::make_tuple(sub_dep, sub_n_segment)];
+                            T* _q_sub = propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
                             for(int i=0; i<M; i++)
                                 q_pair[0][i] += _q_sub[i]*static_cast<double>(sub_n_repeated);
                         }
@@ -339,13 +339,13 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (check_point_propagator.find(std::make_tuple(sub_dep, sub_n_segment)) == check_point_propagator.end())
+                            if (propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == propagator_at_check_point.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "[" + std::to_string(sub_n_segment) + "]. " << std::endl;
                             if (!propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            T* _q_sub = check_point_propagator[std::make_tuple(sub_dep, sub_n_segment)];
+                            T* _q_sub = propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
                             if (_q_sub == nullptr)
                                 std::cout <<"_q_sub is a null pointer: " + sub_dep + "[" + std::to_string(sub_n_segment) + "]." << std::endl;
                             for(int i=0; i<M; i++)
@@ -367,16 +367,16 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                         q_pair[0][i] *= q_mask[i];
                 }
 
-                // Copy q_pair[0] to the check_point_propagator
+                // Copy q_pair[0] to the propagator_at_check_point
                 if(n_segment_from == 0)
                 {
-                    T* _q_target =  check_point_propagator[std::make_tuple(key, 0)];
+                    T* _q_target =  propagator_at_check_point[std::make_tuple(key, 0)];
                     for(int i=0; i<M; i++)
                         _q_target[i] = q_pair[0][i];
                 }
                 else
                 {
-                    T* _q_from = check_point_propagator[std::make_tuple(key, n_segment_from)];
+                    T* _q_from = propagator_at_check_point[std::make_tuple(key, n_segment_from)];
                     for(int i=0; i<M; i++)
                         q_pair[0][i] = _q_from[i];
                 }
@@ -400,10 +400,10 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                     propagator_finished[key][n+1] = true;
                     #endif
 
-                    // Copy q_pair[next] to the check_point_propagator
-                    if (check_point_propagator.find(std::make_tuple(key, n+1)) != check_point_propagator.end())
+                    // Copy q_pair[next] to the propagator_at_check_point
+                    if (propagator_at_check_point.find(std::make_tuple(key, n+1)) != propagator_at_check_point.end())
                     {
-                        T* _q_target =  check_point_propagator[std::make_tuple(key, n+1)];
+                        T* _q_target =  propagator_at_check_point[std::make_tuple(key, n+1)];
                         for(int i=0; i<M; i++)
                             _q_target[i] = q_pair[next][i];
                     }
@@ -496,9 +496,9 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
 
             // Check keys
             #ifndef NDEBUG
-            if (check_point_propagator.find(std::make_tuple(key_left, n_segment_left-n_segment_right)) == check_point_propagator.end())
+            if (propagator_at_check_point.find(std::make_tuple(key_left, n_segment_left-n_segment_right)) == propagator_at_check_point.end())
                 std::cout << "Check point at " + key_left + "[" + std::to_string(n_segment_left-n_segment_right) + "] is missing. ";
-            if (check_point_propagator.find(std::make_tuple(key_right, 0)) == check_point_propagator.end())
+            if (propagator_at_check_point.find(std::make_tuple(key_right, 0)) == propagator_at_check_point.end())
                 std::cout << "Check point at " + key_right + "[" + std::to_string(0) + "] is missing. ";
             #endif
 
@@ -549,7 +549,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
 template <typename T>
 std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
 {
-    // If a propagator is in check_point_propagator reuse it, otherwise compute it again with allocated memory space.
+    // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
     try
     {
         // Assign a pointer for mask
@@ -561,13 +561,13 @@ std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(
         // Compute the q_out
         for(int n=0; n<=N_RIGHT; n++)
         {
-            // Use check_point_propagator if exists
-            auto it = check_point_propagator.find(std::make_tuple(key, N_START+n));
-            if(it != check_point_propagator.end())
+            // Use propagator_at_check_point if exists
+            auto it = propagator_at_check_point.find(std::make_tuple(key, N_START+n));
+            if(it != propagator_at_check_point.end())
             {
                 q_out[n] = it->second;
                 #ifndef NDEBUG
-                std::cout << "Use check_point_propagator if exists: (phi, left) " << key << ", " << N_START+n << std::endl;
+                std::cout << "Use propagator_at_check_point if exists: (phi, left) " << key << ", " << N_START+n << std::endl;
                 #endif
             }
             // Assign q_recal memory space, and compute the next propagator from the check point
@@ -594,7 +594,7 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
     try
     {
         // In this method, propagators are recalculcated from the check points.
-        // If a propagator is in check_point_propagator reuse it, otherwise compute it again with allocated memory space.
+        // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
         const int M = this->cb->get_total_grid();
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
@@ -615,13 +615,13 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             phi[i] = 0.0;
         for(int n=0; n<=N_RIGHT; n++)
         {
-            // Use check_point_propagator if exists
-            auto it = check_point_propagator.find(std::make_tuple(key_right, n));
-            if(it != check_point_propagator.end())
+            // Use propagator_at_check_point if exists
+            auto it = propagator_at_check_point.find(std::make_tuple(key_right, n));
+            if(it != propagator_at_check_point.end())
             {
                 q_next = it->second;
                 #ifndef NDEBUG
-                std::cout << "Use check_point_propagator if exists: (phi, right) " << key_right << ", " <<  n << std::endl;
+                std::cout << "Use propagator_at_check_point if exists: (phi, right) " << key_right << ", " <<  n << std::endl;
                 #endif
             }
             // Assign this->q_pair memory space, and compute the next propagator from the check point
@@ -835,7 +835,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
     // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
     // We only need the real part of stress calculation.
 
-    // If a propagator is in check_point_propagator reuse it, otherwise compute it again with allocated memory space.
+    // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
     try
     {
         // if constexpr (std::is_same<T, std::complex<double>>::value)
@@ -893,13 +893,13 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
             std::array<T,3> _block_dq_dl = block_dq_dl[key];
             for(int n=0; n<=N_RIGHT; n++)
             {
-                // Use check_point_propagator if exists
-                auto it = check_point_propagator.find(std::make_tuple(key_right, n));
-                if(it != check_point_propagator.end())
+                // Use propagator_at_check_point if exists
+                auto it = propagator_at_check_point.find(std::make_tuple(key_right, n));
+                if(it != propagator_at_check_point.end())
                 {
                     q_next = it->second;
                     #ifndef NDEBUG
-                    std::cout << "Use check_point_propagator if exists: (stress, right) " << key_right << ", " <<  n << std::endl;
+                    std::cout << "Use propagator_at_check_point if exists: (stress, right) " << key_right << ", " <<  n << std::endl;
                     #endif
                 }
                 // Assign this->q_pair memory space, and compute the next propagator from the check point
@@ -966,10 +966,10 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
-        if (check_point_propagator.find(std::make_tuple(dep, n)) == check_point_propagator.end())
+        if (propagator_at_check_point.find(std::make_tuple(dep, n)) == propagator_at_check_point.end())
             throw_with_line_number("The propagator " + dep + "[" + std::to_string(n) + "] is not stored'. Disable 'reduce_memory_usage' option to obtain propagator_computation_optimizer.");
 
-        T *_q_from = check_point_propagator[std::make_tuple(dep, n)];
+        T *_q_from = propagator_at_check_point[std::make_tuple(dep, n)];
         for(int i=0; i<M; i++)
             q_out[i] = _q_from[i];
     }
@@ -1024,13 +1024,13 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
         // Compute the q_right and total partition
         for(int n=0; n<=N_RIGHT; n++)
         {
-            // Use check_point_propagator if exists
-            auto it = check_point_propagator.find(std::make_tuple(key_right, n));
-            if(it != check_point_propagator.end())
+            // Use propagator_at_check_point if exists
+            auto it = propagator_at_check_point.find(std::make_tuple(key_right, n));
+            if(it != propagator_at_check_point.end())
             {
                 q_next = it->second;
                 #ifndef NDEBUG
-                std::cout << "Use check_point_propagator if exists: (check_total_partition, right) " << key_right << ", " <<  n << std::endl;
+                std::cout << "Use propagator_at_check_point if exists: (check_total_partition, right) " << key_right << ", " <<  n << std::endl;
                 #endif
             }
             // Assign this->q_pair memory space, and compute the next propagator from the check point
