@@ -2,6 +2,7 @@
 #include <fstream>
 #include <chrono>
 #include <cmath>
+#include <numbers>
 
 #include "Exception.h"
 #include "Array.h"
@@ -16,7 +17,7 @@ int main()
         const int N_REPEATS = 1;
 
         // Math constants
-        const double PI = 3.14159265358979323846;
+        const double PI = std::numbers::pi;
 
         // Chrono timer
         std::chrono::system_clock::time_point chrono_start, chrono_end;

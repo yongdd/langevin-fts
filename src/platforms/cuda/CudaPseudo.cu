@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 
 #include "CudaCommon.h"
 #include "CudaPseudo.h"

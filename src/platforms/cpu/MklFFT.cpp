@@ -1,6 +1,7 @@
 /* This module defines parameters and subroutines to conduct fast
 * Fourier transform (FFT) using the Math Kernel Library (MKL). */
 #include <iostream>
+#include <vector>
 #include "MklFFT.h"
 
 template <typename T, int DIM>

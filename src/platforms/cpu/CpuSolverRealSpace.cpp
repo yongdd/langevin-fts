@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 
 #include "CpuSolverRealSpace.h"
 CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules)

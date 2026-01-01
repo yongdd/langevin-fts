@@ -40,7 +40,7 @@ This open-source code is distributed under the Apache license 2.0. This license 
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++17 standard or higher. To use MKL, install Intel oneAPI toolkit (without Intel Distribution for Python).
+  Any C++ compiler that supports C++20 standard or higher. To use MKL, install Intel oneAPI toolkit (without Intel Distribution for Python).
 
 #### CUDA Toolkit
   https://developer.nvidia.com/cuda-toolkit   

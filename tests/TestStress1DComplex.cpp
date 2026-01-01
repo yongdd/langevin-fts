@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
+#include <numbers>
 #include <string>
 #include <array>
 #include <chrono>
@@ -140,7 +141,7 @@ int main()
                     // }
 
                     // // std::cout<< "w_a and w_b are initialized to a lamellar." << std::endl;
-                    // const double PI = 3.141592653589793238;
+                    // const double PI = std::numbers::pi;
                     // for(int i=0; i<M; i++)
                     // {
                     //     w[i]   =  T{ cos(2.0*PI*i/cb->get_nx(0))*5, sin(2.0*PI*i/cb->get_nx(0))*5};

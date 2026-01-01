@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 #include "CudaSolverRealSpace.h"
 
 CudaSolverRealSpace::CudaSolverRealSpace(
