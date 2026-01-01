@@ -1,4 +1,5 @@
 #include <cmath>
+#include <numbers>
 #include <chrono>
 
 #include "CpuComputationDiscrete.h"

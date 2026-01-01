@@ -2,6 +2,7 @@
 #include <complex>
 
 #include <cmath>
+#include <numbers>
 #include "CudaComputationBox.h"
 
 int main()

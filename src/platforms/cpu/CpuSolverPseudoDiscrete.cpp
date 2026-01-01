@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 
 #include "CpuSolverPseudoDiscrete.h"
 #include "MklFFT.h"

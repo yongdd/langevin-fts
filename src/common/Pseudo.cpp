@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 #include "Pseudo.h"
 
 //----------------- Constructor -----------------------------
@@ -130,7 +131,7 @@ void Pseudo<T>::update_boltz_bond()
     try
     {
         int itemp, jtemp, ktemp, idx;
-        const double PI{3.14159265358979323846};
+        const double PI = std::numbers::pi;
         double xfactor[3];
 
         const int DIM = nx.size();

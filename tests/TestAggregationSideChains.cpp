@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <numbers>
 #include <string>
 #include <array>
 #include <chrono>
@@ -22,7 +23,7 @@ int main()
     try
     {
         // Math constants
-        const double PI = 3.14159265358979323846;
+        const double PI = std::numbers::pi;
 
         double energy_total;
         // error_level = variable to check convergence of the iteration

@@ -1,4 +1,5 @@
 #include <cmath>
+#include <numbers>
 #include <omp.h>
 
 #include "CpuComputationContinuous.h"
