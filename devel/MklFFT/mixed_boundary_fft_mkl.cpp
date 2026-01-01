@@ -2,7 +2,7 @@
 
 // Demo and testing
 int main() {
-    std::cout << "Multi-Dimensional Mixed Boundary FFT with MKL (Optimized)\n";
+    std::cout << "Multi-Dimensional Mixed Boundary FFT with MKL\n";
     std::cout << "=========================================================\n\n";
     
     try {
@@ -45,13 +45,7 @@ int main() {
                 std::cout << std::setw(7) << std::fixed 
                          << std::setprecision(3) << reconstructed[i] << " ";
             }
-            
-            // Compute error
-            double max_err = 0.0;
-            for (int i = 0; i < 8; ++i) {
-                max_err = std::max(max_err, std::abs(signal[i] - reconstructed[i]));
-            }
-            std::cout << "\nMax error: " << std::scientific << max_err << "\n\n";
+            std::cout << "\n\n";
         }
         
         // Example 2: 2D case
@@ -90,8 +84,7 @@ int main() {
                 max_error = std::max(max_error, 
                                     std::abs(data[i] - reconstructed[i]));
             }
-            std::cout << "Max reconstruction error: " << std::scientific 
-                     << max_error << std::fixed << "\n\n";
+            std::cout << "Max reconstruction error: " << max_error << "\n\n";
         }
         
         // Example 3: 3D case with all boundary types
@@ -147,8 +140,8 @@ int main() {
             }
             avg_error /= data.size();
             
-            std::cout << "Max reconstruction error: " << std::scientific << max_error << "\n";
-            std::cout << "Avg reconstruction error: " << avg_error << std::fixed << "\n\n";
+            std::cout << "Max reconstruction error: " << max_error << "\n";
+            std::cout << "Avg reconstruction error: " << avg_error << "\n\n";
         }
         
         // Example 4: Larger 3D benchmark
@@ -193,10 +186,3 @@ int main() {
     
     return 0;
 }
-
-// Compilation command:
-/*
-g++ -O3 -std=c++11 mixed_boundary_fft_mkl.cpp -o mixed_fft \
-    -I${MKLROOT}/include -L${MKLROOT}/lib/intel64 \
-    -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
-*/
