@@ -2,7 +2,6 @@
 #include <vector>
 #include <complex>
 #include <cmath>
-#include <numbers>
 #include <memory>
 #include <stdexcept>
 #include <iomanip>
@@ -70,7 +69,7 @@ public:
         cleanup();
     }
     
-    // Forward transform (optimized)
+    // Forward transform
     void forward(const std::vector<double>& input, 
                  std::vector<double>& output) {
         if (input.size() != static_cast<size_t>(total_size_)) {
@@ -101,7 +100,7 @@ public:
         }
     }
     
-    // Backward transform (optimized)
+    // Backward transform
     void backward(const std::vector<double>& input,
                   std::vector<double>& output) {
         if (input.size() != static_cast<size_t>(total_size_)) {
@@ -133,7 +132,7 @@ public:
     }
     
     void printConfig() const {
-        std::cout << "MKL FFT Configuration (Optimized):\n";
+        std::cout << "MKL FFT Configuration:\n";
         std::cout << "Dimensions: ";
         for (MKL_INT d : dims_) std::cout << d << " ";
         std::cout << "\nBoundary types:\n";
@@ -231,25 +230,25 @@ private:
     
     void applyForwardTransform(int dim) {
         if (boundaries_[dim] == BoundaryType::PERIODIC) {
-            applyFFT_Optimized(dim, true);
+            applyFFT(dim, true);
         } else if (boundaries_[dim] == BoundaryType::ABSORBING) {
-            applyDST_Optimized(dim);
+            applyDST(dim);
         } else if (boundaries_[dim] == BoundaryType::REFLECTING) {
-            applyDCT_Optimized(dim, true);
+            applyDCT(dim, true);
         }
     }
     
     void applyBackwardTransform(int dim) {
         if (boundaries_[dim] == BoundaryType::PERIODIC) {
-            applyFFT_Optimized(dim, false);
+            applyFFT(dim, false);
         } else if (boundaries_[dim] == BoundaryType::ABSORBING) {
-            applyDST_Optimized(dim); // Self-inverse
+            applyDST(dim); // Self-inverse
         } else if (boundaries_[dim] == BoundaryType::REFLECTING) {
-            applyDCT_Optimized(dim, false);
+            applyDCT(dim, false);
         }
     }
     
-    void applyFFT_Optimized(int dim, bool forward) {
+    void applyFFT(int dim, bool forward) {
         MKL_INT n = dims_[dim];
         MKL_INT stride = strides_[dim];
         MKL_INT num_trans = num_transforms_[dim];
@@ -311,7 +310,7 @@ private:
         is_complex_ = true;
     }
     
-    void applyDST_Optimized(int dim) {
+    void applyDST(int dim) {
         MKL_INT n = dims_[dim];
         MKL_INT stride = strides_[dim];
         MKL_INT num_trans = num_transforms_[dim];
@@ -342,7 +341,7 @@ private:
         real_buffer_ = result_buffer;
     }
     
-    void applyDCT_Optimized(int dim, bool forward) {
+    void applyDCT(int dim, bool forward) {
         MKL_INT n = dims_[dim];
         MKL_INT stride = strides_[dim];
         MKL_INT num_trans = num_transforms_[dim];

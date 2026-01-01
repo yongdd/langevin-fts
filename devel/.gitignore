@@ -1,2 +1,7 @@
 matsen
 AnBn
+MklFFT/mixed_fft
+MklFFT/bcp_psd_fftw_4th
+MklFFT/bcp_psd_fftw_uniform_grid_4th
+MklFFT/*.dat
+MklFFT/*.mod
