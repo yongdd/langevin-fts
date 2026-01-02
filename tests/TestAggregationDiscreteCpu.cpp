@@ -52,18 +52,20 @@ int main()
         double w      [2*M+nx.size()];
         double phi_a  [M];
         double phi_b  [M];
-        bool reduce_memory_usage=false;
 
         // Choose platform
         std::string chain_model = "Discrete";
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<bool> aggregate_propagator_computations = {false, true};
+        std::vector<bool> reduce_memory_usages = {false, true};
         std::vector<double> total_partition_list;
         for(std::string platform : avail_platforms)
         {
             if(platform != "cpu-mkl")
                 continue;
 
+            for(bool reduce_memory_usage : reduce_memory_usages)
+            {
             for(bool aggregate_propagator_computation : aggregate_propagator_computations)
             {
                 AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
@@ -130,6 +132,7 @@ int main()
                 delete molecules;
                 delete propagator_computation_optimizer;
                 delete solver;
+            }
             }
             double mean = std::accumulate(total_partition_list.begin(), total_partition_list.end(), 0.0)/total_partition_list.size();
             double sq_sum = std::inner_product(total_partition_list.begin(), total_partition_list.end(), total_partition_list.begin(), 0.0);

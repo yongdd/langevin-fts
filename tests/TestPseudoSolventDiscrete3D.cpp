@@ -13,6 +13,7 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
+#include "CpuComputationReduceMemoryDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
@@ -105,6 +106,7 @@ int main()
 
         #ifdef USE_CPU_MKL
         solver_name.push_back("CpuComputationDiscrete, Aggregation=false");
+        solver_name.push_back("CpuComputationReduceMemoryDiscrete, Aggregation=false");
         #endif
         #ifdef USE_CUDA
         solver_name.push_back("CudaComputationDiscrete, Aggregation=false");
@@ -113,7 +115,9 @@ int main()
 
         #ifdef USE_CPU_MKL
         cb_1_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_1_list.push_back(new CpuComputationDiscrete<double>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1));
+        cb_1_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_1_list.push_back(new CpuComputationDiscrete<double>(cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1));
+        solver_1_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1));
         #endif
         #ifdef USE_CUDA
         cb_1_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
@@ -124,7 +128,9 @@ int main()
 
         #ifdef USE_CPU_MKL
         cb_2_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_2_list.push_back(new CpuComputationDiscrete<double>(cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2));
+        cb_2_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_2_list.push_back(new CpuComputationDiscrete<double>(cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2));
+        solver_2_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_2_list.end()[-1], molecules_2, propagator_computation_optimizer_2));
         #endif
         #ifdef USE_CUDA
         cb_2_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
