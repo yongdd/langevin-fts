@@ -1,3 +1,30 @@
+/**
+ * @file CudaCommon.h
+ * @brief CUDA utilities, kernel declarations, and common GPU infrastructure.
+ *
+ * This header provides essential CUDA infrastructure including:
+ *
+ * - **CudaCommon singleton**: GPU configuration (blocks, threads)
+ * - **Type mappings**: std::complex<double> ↔ cuDoubleComplex
+ * - **Error handling**: GPU error checking macros
+ * - **CUDA kernels**: Element-wise operations on GPU arrays
+ *
+ * **Multi-Stream Architecture:**
+ *
+ * The library supports up to MAX_STREAMS (4) parallel CUDA streams for
+ * concurrent propagator computation. Each stream has two sub-streams:
+ * one for kernel execution and one for memory transfers, enabling
+ * overlap of computation and data movement.
+ *
+ * **Type System:**
+ *
+ * The template type T is mapped to CUDA types via CuDeviceData<T>:
+ * - double → double (real fields)
+ * - std::complex<double> → cuDoubleComplex (complex fields)
+ *
+ * @see CudaFactory for creating CUDA-based simulation objects
+ */
+
 #ifndef CUDA_COMMON_H_
 #define CUDA_COMMON_H_
 
@@ -12,17 +39,48 @@
 // // The maximum of GPUs
 // #define MAX_GPUS 2
 
-// The maximum of computation streams
+/**
+ * @def MAX_STREAMS
+ * @brief Maximum number of parallel CUDA streams for propagator computation.
+ *
+ * Each stream enables independent propagator computations to run
+ * concurrently on the GPU. More streams can hide memory latency
+ * but increase memory usage.
+ */
 #define MAX_STREAMS 4
 
+/**
+ * @typedef ftsComplex
+ * @brief Alias for cuDoubleComplex (CUDA double-precision complex).
+ */
 typedef cuDoubleComplex ftsComplex;
 
+/**
+ * @brief Type mapping from C++ types to CUDA device types.
+ *
+ * Maps template parameter T to appropriate CUDA type:
+ * - double → double
+ * - std::complex<double> → cuDoubleComplex
+ *
+ * @tparam T C++ numeric type (double or std::complex<double>)
+ *
+ * @example
+ * @code
+ * CuDeviceData<double>* d_real;              // double*
+ * CuDeviceData<std::complex<double>>* d_cplx; // cuDoubleComplex*
+ * @endcode
+ */
 template<typename T>
 using CuDeviceData = std::conditional_t<std::is_same_v<T, double>,               double,
                      std::conditional_t<std::is_same_v<T, std::complex<double>>, cuDoubleComplex, void>
 >;
 
-// Define custom reduction operator for cuDoubleComplex
+/**
+ * @struct ComplexSumOp
+ * @brief Custom reduction operator for cuDoubleComplex summation.
+ *
+ * Used with CUB or Thrust reduction algorithms for summing complex arrays.
+ */
 struct ComplexSumOp {
     __device__ __forceinline__
     cuDoubleComplex operator()(const cuDoubleComplex& a, const cuDoubleComplex& b) const {
@@ -33,12 +91,55 @@ struct ComplexSumOp {
     }
 };
 
+/**
+ * @brief Convert cuDoubleComplex to std::complex<double>.
+ * @param z CUDA complex number
+ * @return Equivalent std::complex<double>
+ */
 std::complex<double> cuDoubleToStdComplex(cuDoubleComplex z);
+
+/**
+ * @brief Convert std::complex<double> to cuDoubleComplex.
+ * @param z Standard library complex number
+ * @return Equivalent cuDoubleComplex
+ */
 cuDoubleComplex stdToCuDoubleComplex(const std::complex<double>& z);
+
+/**
+ * @brief Reinterpret a map of pointers from one type to another.
+ * @tparam From Source pointer type
+ * @tparam To Target pointer type
+ * @param input Map with From* values
+ * @return Map with To* values (reinterpret_cast)
+ */
 template<typename From, typename To>
 std::map<std::string, const To*> reinterpret_map(const std::map<std::string, const From*>& input);
 
-// Design Pattern : Singleton (Scott Meyer)
+/**
+ * @class CudaCommon
+ * @brief Singleton class for CUDA GPU configuration.
+ *
+ * Manages GPU settings including:
+ * - Number of thread blocks for kernel launches
+ * - Number of threads per block
+ * - GPU device selection
+ *
+ * Uses Scott Meyer's singleton pattern for thread-safe initialization.
+ *
+ * **Typical Configuration:**
+ *
+ * - n_blocks: ceil(n_grid / n_threads)
+ * - n_threads: 256-512 (depends on GPU architecture)
+ *
+ * @example
+ * @code
+ * CudaCommon& cuda = CudaCommon::get_instance();
+ * cuda.set(128, 256, 0);  // 128 blocks, 256 threads, GPU 0
+ *
+ * // Launch kernel
+ * my_kernel<<<cuda.get_n_blocks(), cuda.get_n_threads()>>>(...);
+ * @endcode
+ */
 class CudaCommon
 {
 private:
@@ -54,6 +155,10 @@ private:
     CudaCommon& operator= (const CudaCommon &) = delete;
 public:
 
+    /**
+     * @brief Get singleton instance.
+     * @return Reference to the CudaCommon singleton
+     */
     static CudaCommon& get_instance()
     {
         try{
@@ -65,18 +170,64 @@ public:
             throw_without_line_number(exc.what());
         }
     };
+
+    /**
+     * @brief Configure GPU settings.
+     * @param n_blocks    Number of thread blocks
+     * @param n_threads   Threads per block
+     * @param process_idx GPU device index
+     */
     void set(int n_blocks, int n_threads, int process_idx);
-    
+
+    /**
+     * @brief Get number of thread blocks.
+     */
     int get_n_blocks();
+
+    /**
+     * @brief Get threads per block.
+     */
     int get_n_threads();
     // int get_n_gpus();
-    
+
+    /**
+     * @brief Set number of thread blocks.
+     */
     void set_n_blocks(int n_blocks);
+
+    /**
+     * @brief Set threads per block.
+     */
     void set_n_threads(int n_threads);
+
+    /**
+     * @brief Set GPU device index.
+     */
     void set_idx(int process_idx);
 };
 
+/**
+ * @def gpu_error_check
+ * @brief Macro for CUDA error checking with source location.
+ *
+ * Wraps CUDA API calls and throws an exception on error.
+ *
+ * @example
+ * @code
+ * gpu_error_check(cudaMalloc(&ptr, size));
+ * gpu_error_check(cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost));
+ * @endcode
+ */
 #define gpu_error_check(code) throw_on_cuda_error((code), __FILE__, __LINE__, __func__);
+
+/**
+ * @brief Throw exception on CUDA error.
+ * @param code CUDA error code
+ * @param file Source file name
+ * @param line Line number
+ * @param func Function name
+ * @throws Exception if code != cudaSuccess
+ */
 void throw_on_cuda_error(cudaError_t code, const char *file, int line, const char *func);
 
 __global__ void ker_copy_data_with_idx(cuDoubleComplex* dst, const cuDoubleComplex* src, const int* negative_k_idx, const int M);

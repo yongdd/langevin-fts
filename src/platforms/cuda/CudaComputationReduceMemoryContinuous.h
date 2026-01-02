@@ -1,13 +1,37 @@
-/*-------------------------------------------------------------
-This is a derived CudaComputationReduceMemoryContinuous class
-
-GPU memory usage is reduced by storing propagators in main memory.
-In the GPU memory, array space that can store only two steps of propagator is allocated.
-There are two streams. One is responsible for data transfers between CPU and GPU, another is responsible
-for kernel executions. Overlapping of kernel execution and data transfers is utilized so that 
-they can be simultaneously executed. As a result, data transfer time can be hided. For more explanation,
-please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
-*------------------------------------------------------------*/
+/**
+ * @file CudaComputationReduceMemoryContinuous.h
+ * @brief Memory-efficient GPU propagator computation for continuous chains.
+ *
+ * This header provides CudaComputationReduceMemoryContinuous, a GPU
+ * implementation that minimizes GPU memory usage by storing propagators
+ * in pinned host memory and using checkpointing for recalculation.
+ *
+ * **Memory-Saving Strategy:**
+ *
+ * Instead of storing all propagator values in GPU memory:
+ * - Store checkpoints at intervals in pinned host memory
+ * - Recalculate intermediate values as needed
+ * - Use async transfers to overlap computation and memory copy
+ *
+ * **Async Transfer Optimization:**
+ *
+ * Two CUDA streams per propagator:
+ * - streams[i][0]: Kernel execution
+ * - streams[i][1]: Host-device memory transfers
+ *
+ * Overlapping hides PCIe transfer latency. See supporting information
+ * of Macromolecules 2021, 54, 24, 11304 for details.
+ *
+ * **Trade-offs:**
+ *
+ * - GPU memory: O(1) per propagator instead of O(N_segments)
+ * - Computation: 2-4× slower due to recalculation
+ * - Suitable for large grids or long chains where GPU memory is limited
+ *
+ * @see PropagatorComputation for the abstract interface
+ * @see CudaComputationContinuous for full GPU memory version
+ * @see CpuComputationReduceMemoryContinuous for CPU version
+ */
 
 #ifndef CUDA_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
 #define CUDA_PSEUDO_REDUCE_MEMORY_CONTINUOUS_H_
@@ -23,104 +47,217 @@ please see the supporting information of [Macromolecules 2021, 54, 24, 11304].
 #include "CudaSolver.h"
 #include "Scheduler.h"
 
+/**
+ * @class CudaComputationReduceMemoryContinuous
+ * @brief Memory-efficient GPU computation for continuous chains.
+ *
+ * Uses checkpointing and recalculation to minimize GPU memory footprint.
+ * Propagators stored in pinned host memory with async transfers.
+ *
+ * @tparam T Numeric type (double or std::complex<double>)
+ *
+ * **Checkpointing:**
+ *
+ * Stores propagator values at regular intervals (checkpoints):
+ * - propagator_at_check_point[(key, n)]: Checkpoint values
+ * - q_recal: Workspace for recalculating from checkpoints
+ *
+ * **Memory Layout:**
+ *
+ * Device memory (minimal):
+ * - d_q_one[stream][2]: Current and next propagator values
+ * - d_q_block_v/u[2]: Concentration computation workspace
+ *
+ * Host memory (pinned):
+ * - phi_block: Concentrations
+ * - single_partition_segment: Partition function data
+ */
 template <typename T>
 class CudaComputationReduceMemoryContinuous : public PropagatorComputation<T>
 {
 private:
-    // Pseudo-spectral PDE solver
-    CudaSolver<T> *propagator_solver;
-    std::string method;
+    CudaSolver<T> *propagator_solver;  ///< PDE solver
+    std::string method;                 ///< Solver method ("pseudo" or "real")
 
-    // The number of parallel streams for propagator computation
-    int n_streams;
+    int n_streams;  ///< Number of parallel streams
 
-    // Two streams for each gpu
-    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
-    // For pseudo-spectral: advance_one propagator()
-    CuDeviceData<T> *d_q_one[MAX_STREAMS][2];               // one for prev, the other for next
-    CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2];  // one for prev, the other for next
+    /// @name Minimal GPU Workspace
+    /// @{
+    CuDeviceData<T> *d_q_one[MAX_STREAMS][2];              ///< Current/next propagator
+    CuDeviceData<T> *d_propagator_sub_dep[MAX_STREAMS][2]; ///< Sub-dependency workspace
+    /// @}
 
-    // Temporary memories for calculating propagators
-    int total_max_n_segment;
-    std::vector<T*> q_recal;     // size: total_max_n_segment + 1 (to store the recalculation point)
-    
-    // propagator at check point
-    std::map<std::tuple<std::string, int>, T *> propagator_at_check_point; 
+    /// @name Recalculation Workspace
+    /// @{
+    int total_max_n_segment;    ///< Maximum segments for allocation
+    std::vector<T*> q_recal;    ///< Recalculation temporary (size: max_segments+1)
+    /// @}
 
-    // All elements are 1 for initializing propagators
-    CuDeviceData<T> *d_q_unity;
+    /**
+     * @brief Checkpoint storage in pinned host memory.
+     *
+     * Key: (propagator_key, segment_index)
+     * Value: Propagator at checkpoint (pinned host)
+     */
+    std::map<std::tuple<std::string, int>, T *> propagator_at_check_point;
 
-    // q_mask to make impenetrable region for nano particles
-    double *d_q_mask;
+    CuDeviceData<T> *d_q_unity;  ///< Unity array for initialization
 
-    // For concentration computation
-    CuDeviceData<T> *d_q_block_v[2];    // one for prev, the other for next
-    CuDeviceData<T> *d_q_block_u[2];    // one for prev, the other for next
-    CuDeviceData<T> *d_phi;
+    double *d_q_mask;  ///< Mask for impenetrable regions
 
-    // For stress calculation: compute_stress()
-    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  // one for prev, the other for next
+    /// @name Concentration Computation Workspace
+    /// @{
+    CuDeviceData<T> *d_q_block_v[2];  ///< Forward propagator [prev, next]
+    CuDeviceData<T> *d_q_block_u[2];  ///< Backward propagator [prev, next]
+    CuDeviceData<T> *d_phi;           ///< Temporary concentration
+    /// @}
 
-    // Scheduler for propagator computation 
-    Scheduler *sc;
+    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  ///< Stress computation workspace
 
-    // Check if computation of propagator is finished
+    Scheduler *sc;  ///< Propagator execution scheduler
+
     #ifndef NDEBUG
-    std::map<std::string, bool *> propagator_finished;
+    std::map<std::string, bool *> propagator_finished;  ///< Debug tracking
     #endif
 
-    // Remember one segment for each polymer chain to compute total partition function
-    // (polymer id, propagator forward, propagator backward, n_repeated)
+    /**
+     * @brief Partition function data in pinned host memory.
+     *
+     * Tuple: (polymer_id, q_forward, q_backward, n_repeated)
+     */
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
-    // Host pinned space to store concentration, key: (polymer id, key_left, key_right) (assert(key_left <= key_right)), value: concentration
+    /**
+     * @brief Block concentrations in pinned host memory.
+     *
+     * Key: (polymer_id, key_left, key_right)
+     */
     std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
 
-    // Solvent concentrations
-    std::vector<T *> phi_solvent;
+    std::vector<T *> phi_solvent;  ///< Solvent concentrations (pinned)
 
-    // Calculate concentration of one block
-    void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right, const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM);
+    /**
+     * @brief Compute concentration for one block.
+     *
+     * Uses recalculated propagators from checkpoints.
+     *
+     * @param phi         Output concentration (pinned host)
+     * @param key_left    Left propagator key
+     * @param key_right   Right propagator key
+     * @param N_LEFT      Left segment count
+     * @param N_RIGHT     Right segment count
+     * @param monomer_type Monomer type
+     * @param NORM        Normalization factor
+     */
+    void calculate_phi_one_block(T *phi, std::string key_left, std::string key_right,
+        const int N_LEFT, const int N_RIGHT, std::string monomer_type, const T NORM);
 
-    // Recalcaulte propagator from the check point
-    std::vector<T*> recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
+    /**
+     * @brief Recalculate propagator from nearest checkpoint.
+     *
+     * @param key          Propagator key
+     * @param N_START      Starting segment (from checkpoint)
+     * @param N_RIGHT      Ending segment
+     * @param monomer_type Monomer type
+     * @return Vector of recalculated propagator pointers
+     */
+    std::vector<T*> recalcaulte_propagator(std::string key,
+        const int N_START, const int N_RIGHT, std::string monomer_type);
+
 public:
+    /**
+     * @brief Construct memory-efficient GPU computation.
+     *
+     * Allocates minimal GPU workspace and pinned host buffers.
+     *
+     * @param cb          Computation box
+     * @param pc          Molecules container
+     * @param propagator_computation_optimizer Optimization strategy
+     * @param method      Solver method ("pseudo" or "real")
+     */
+    CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc,
+        PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
 
-    CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc, PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
+    /** @brief Destructor. Frees GPU and pinned memory. */
     ~CudaComputationReduceMemoryContinuous();
 
+    /** @brief Update operators for new box dimensions. */
     void update_laplacian_operator() override;
 
+    /**
+     * @brief Compute propagators with checkpointing.
+     *
+     * Stores only checkpoints to pinned memory, not full history.
+     *
+     * @param w_block Potential fields (device)
+     * @param q_init  Optional initial conditions
+     */
     void compute_propagators(
         std::map<std::string, const T*> w_block,
         std::map<std::string, const T*> q_init = {}) override;
 
+    /**
+     * @brief Advance single segment (utility).
+     *
+     * @param q_init       Input propagator
+     * @param q_out        Output propagator
+     * @param monomer_type Monomer type
+     */
     void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) override;
 
+    /** @brief Compute concentrations using recalculation. */
     void compute_concentrations() override;
 
-    // Compute statistics with inputs
+    /**
+     * @brief Complete SCFT statistics with memory efficiency.
+     *
+     * @param w_input Potential fields
+     * @param q_init  Optional initial conditions
+     */
     void compute_statistics(
         std::map<std::string, const T*> w_input,
         std::map<std::string, const T*> q_init = {}) override;
 
+    /** @brief Compute stress using recalculated propagators. */
     void compute_stress() override;
+
+    /**
+     * @brief Get partition function.
+     * @param polymer Polymer index
+     * @return log(Q) normalized by volume
+     */
     T get_total_partition(int polymer) override;
+
+    /**
+     * @brief Extract chain propagator (requires recalculation).
+     *
+     * @param q_out   Output array (host)
+     * @param polymer Polymer index
+     * @param v, u    Block indices
+     * @param n       Contour step
+     */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
 
-    // Canonical ensemble
+    /// @name Canonical Ensemble Concentrations
+    /// @{
     void get_total_concentration(std::string monomer_type, T *phi) override;
     void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
     void get_block_concentration(int polymer, T *phi) override;
+    /// @}
 
+    /// @name Solvent Methods
+    /// @{
     T get_solvent_partition(int s) override;
     void get_solvent_concentration(int s, T *phi) override;
+    /// @}
 
-    // Grand canonical ensemble
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
+    /** @brief Grand canonical concentration. */
+    void get_total_concentration_gce(double fugacity, int polymer,
+        std::string monomer_type, T *phi) override;
 
-    // For tests
+    /** @brief Verify partition function consistency. */
     bool check_total_partition() override;
 };
 
