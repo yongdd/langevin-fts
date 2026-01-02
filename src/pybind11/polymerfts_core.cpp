@@ -1,3 +1,48 @@
+/**
+ * @file polymerfts_core.cpp
+ * @brief Python bindings for the polymer field theory simulation library.
+ *
+ * This file uses pybind11 to expose C++ classes and functions to Python,
+ * creating the `_core` module that is imported by the Python layer.
+ *
+ * **Exposed Classes:**
+ *
+ * - ComputationBox (Real/Complex): Grid and FFT operations
+ * - Molecules: Polymer architecture definitions
+ * - Polymer: Individual polymer chain data
+ * - PropagatorComputation (Real/Complex): Propagator solving
+ * - AndersonMixing (Real/Complex): Field mixing acceleration
+ * - AbstractFactory (Real/Complex): Platform-specific object creation
+ * - PlatformSelector: Platform detection and factory creation
+ * - PropagatorComputationOptimizer: Propagator computation planning
+ *
+ * **Type Support:**
+ *
+ * Classes are templated for both real (double) and complex (std::complex<double>)
+ * types. Python class names use suffixes: _Real, _Complex.
+ *
+ * **NumPy Integration:**
+ *
+ * All array parameters use py::array_t for zero-copy NumPy interoperability.
+ * Size validation is performed to ensure array dimensions match grid size.
+ *
+ * **Usage from Python:**
+ *
+ * @code{.py}
+ * from langevinfts import _core
+ *
+ * # Create platform factory
+ * factory = _core.PlatformSelector.create_factory("cuda", reduce_memory_usage=False)
+ *
+ * # Create computation objects
+ * cb = factory.create_computation_box(nx=[32,32,32], lx=[4.0,4.0,4.0])
+ * molecules = factory.create_molecules_information("continuous", 0.1, {"A": 1.0, "B": 1.0})
+ * @endcode
+ *
+ * @see scft.py for high-level SCFT interface
+ * @see lfts.py for Langevin dynamics interface
+ */
+
 #include <tuple>
 #include <map>
 
@@ -18,11 +63,34 @@
 
 namespace py = pybind11;
 
+/**
+ * @brief Helper for method overload resolution in pybind11.
+ *
+ * Used to disambiguate overloaded C++ methods when binding to Python.
+ */
 template <typename... Args>
 using overload_cast_ = py::detail::overload_cast_impl<Args...>;
 
 
-// Define a template function to bind ComputationBox for any type T
+/**
+ * @brief Bind ComputationBox<T> class to Python.
+ *
+ * Creates Python class "ComputationBox{Real|Complex}" with methods:
+ * - get_dim(): Grid dimensionality (1, 2, or 3)
+ * - get_nx(): Grid points per dimension
+ * - get_lx(): Box lengths
+ * - get_dx(): Grid spacing
+ * - get_dv(): Volume element
+ * - get_total_grid(): Total grid points
+ * - get_volume(): Total box volume
+ * - set_lx(): Update box dimensions
+ * - integral(): Volume integral of field
+ * - inner_product(): Inner product of two fields
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module to add class to
+ * @param type_name Suffix for class name ("Real" or "Complex")
+ */
 template<typename T>
 void bind_computation_box(py::module &m, const std::string &type_name) {
     std::string class_name = "ComputationBox" + type_name;
@@ -82,7 +150,34 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         // };
 }
 
-// Define a template function to bind PropagatorComputation for any type T
+/**
+ * @brief Bind PropagatorComputation<T> class to Python.
+ *
+ * Creates Python class "PropagatorComputation_{Real|Complex}" with methods:
+ * - update_laplacian_operator(): Refresh operators after box change
+ * - compute_propagators(w_input, q_init=None): Solve propagator equations
+ * - advance_propagator_single_segment(q_in, monomer_type): Single step
+ * - compute_concentrations(): Calculate segment densities
+ * - compute_statistics(w_input, q_init=None): Full SCFT computation
+ * - get_total_concentration(monomer_type): Total density by monomer
+ * - get_total_concentration(polymer, monomer_type): Per-polymer density
+ * - get_total_concentration_gce(fugacity, polymer, monomer_type): Grand canonical
+ * - get_block_concentration(polymer): Block-resolved density
+ * - get_total_partition(polymer): Partition function
+ * - get_solvent_partition(s): Solvent partition
+ * - get_solvent_concentration(s): Solvent density
+ * - get_chain_propagator(polymer, v, u, n): Extract propagator at step n
+ * - compute_stress(): Calculate stress tensor
+ * - get_stress(): Retrieve computed stress
+ * - get_stress_gce(): Grand canonical stress
+ * - check_total_partition(): Validate partition function
+ *
+ * All array inputs/outputs use NumPy arrays with automatic size validation.
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module
+ * @param type_name Suffix ("Real" or "Complex")
+ */
 template<typename T>
 void bind_propagator_computation(py::module &m, const std::string &type_name) {
     std::string class_name = "PropagatorComputation_" + type_name;
@@ -329,7 +424,24 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
 }
 
-// Define a template function to bind AndersonMixing for any type T
+/**
+ * @brief Bind AndersonMixing<T> class to Python.
+ *
+ * Creates Python class "AndersonMixing_{Real|Complex}" with methods:
+ * - reset_count(): Clear history and restart mixing
+ * - calculate_new_fields(w_current, w_deriv, old_error, error): Compute mixed field
+ *
+ * The calculate_new_fields method takes NumPy arrays for:
+ * - w_current: Current field values
+ * - w_deriv: Field residual (w_new - w_current from SCFT equations)
+ * - old_error_level, error_level: Error norms for adaptive mixing
+ *
+ * Returns: w_new NumPy array with the mixed field
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module
+ * @param type_name Suffix ("Real" or "Complex")
+ */
 template<typename T>
 void bind_anderson_mixing(py::module &m, const std::string &type_name) {
     std::string class_name = "AndersonMixing_" + type_name;
@@ -367,7 +479,25 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
         });
 }
 
-// Define a template function to bind AbstractFactory for any type T
+/**
+ * @brief Bind AbstractFactory<T> class to Python.
+ *
+ * Creates Python class "AbstractFactory_{Real|Complex}" with factory methods:
+ * - create_computation_box(nx, lx, bc=None, mask=None): Create ComputationBox
+ * - create_molecules_information(): Create Molecules container
+ * - create_propagator_computation_optimizer(): Create optimizer
+ * - create_pseudospectral_solver(): Create pseudo-spectral solver
+ * - create_realspace_solver(): Create real-space solver
+ * - create_anderson_mixing(): Create Anderson mixing
+ * - display_info(): Print platform information
+ *
+ * The factory pattern ensures all created objects are compatible with
+ * the selected platform (CPU-MKL or CUDA).
+ *
+ * @tparam T Field type (double or std::complex<double>)
+ * @param m Python module
+ * @param type_name Suffix ("Real" or "Complex")
+ */
 template<typename T>
 void bind_abstract_factory(py::module &m, const std::string &type_name)
 {
@@ -423,6 +553,35 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         .def("display_info", &AbstractFactory<T>::display_info);
 }
 
+/**
+ * @brief Main pybind11 module definition.
+ *
+ * Creates the `_core` Python module containing all bindings.
+ *
+ * **Module Contents:**
+ *
+ * Classes (non-templated):
+ * - Polymer: Single polymer chain with topology
+ * - Molecules: Container for all polymers and solvents
+ * - PropagatorComputationOptimizer: Optimized propagator scheduling
+ * - PlatformSelector: Platform detection and factory creation
+ *
+ * Template classes (Real and Complex variants):
+ * - ComputationBoxReal, ComputationBoxComplex
+ * - PropagatorComputation_Real, PropagatorComputation_Complex
+ * - AndersonMixing_Real, AndersonMixing_Complex
+ * - AbstractFactory_Real, AbstractFactory_Complex
+ *
+ * **Platform Selection:**
+ *
+ * Use PlatformSelector.create_factory() to get the appropriate factory:
+ * @code{.py}
+ * factory = _core.PlatformSelector.create_factory("cuda", type="real")
+ * factory = _core.PlatformSelector.create_factory("cpu-mkl", type="complex")
+ * @endcode
+ *
+ * The factory then creates all necessary platform-specific objects.
+ */
 PYBIND11_MODULE(_core, m)
 {
     // py::class_<Array>(m, "Array")
