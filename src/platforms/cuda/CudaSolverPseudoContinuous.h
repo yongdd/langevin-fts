@@ -1,6 +1,35 @@
-/*----------------------------------------------------------
-* This class defines a class for pseudo-spectral method
-*-----------------------------------------------------------*/
+/**
+ * @file CudaSolverPseudoContinuous.h
+ * @brief GPU pseudo-spectral solver for continuous chain model.
+ *
+ * This header provides CudaSolverPseudoContinuous, the CUDA implementation
+ * of the pseudo-spectral method with 4th-order Richardson extrapolation
+ * for continuous Gaussian chains.
+ *
+ * **GPU Architecture:**
+ *
+ * - Multiple CUDA streams for concurrent propagator computation
+ * - cuFFT for GPU-accelerated FFT operations
+ * - Custom CUDA kernels for element-wise operations
+ *
+ * **Stream Organization:**
+ *
+ * For each stream index, two CUDA streams are used:
+ * - streams[STREAM][0]: Kernel execution
+ * - streams[STREAM][1]: Memory transfers (async)
+ *
+ * **cuFFT Plans:**
+ *
+ * Pre-created FFT plans for efficiency:
+ * - plan_for_one: Single r2c transform
+ * - plan_bak_one: Single c2r transform
+ * - plan_for_two: Batched r2c (for half-step pairs)
+ * - plan_bak_two: Batched c2r (for half-step pairs)
+ *
+ * @see CudaSolver for the abstract interface
+ * @see CudaSolverPseudoDiscrete for discrete chain version
+ * @see CpuSolverPseudoContinuous for CPU version
+ */
 
 #ifndef CUDA_SOLVER_PSEUDO_CONTINUOUS_H_
 #define CUDA_SOLVER_PSEUDO_CONTINUOUS_H_
@@ -16,60 +45,129 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 
+/**
+ * @class CudaSolverPseudoContinuous
+ * @brief GPU pseudo-spectral solver for continuous Gaussian chains.
+ *
+ * Implements operator splitting with Richardson extrapolation on GPU
+ * using cuFFT and custom CUDA kernels.
+ *
+ * @tparam T Numeric type (double or std::complex<double>)
+ *
+ * **Richardson Extrapolation:**
+ *
+ * Same algorithm as CPU version:
+ *     q(s+ds) = (4/3) q^(ds/2,ds/2) - (1/3) q^(ds)
+ *
+ * But both terms computed in parallel using batched FFTs.
+ *
+ * **Memory per Stream:**
+ *
+ * - d_q_step_1_one, d_q_step_2_one: Full step workspace
+ * - d_q_step_1_two, d_q_step_2_two: Half step workspace
+ * - d_qk_in_*: Fourier space buffers
+ */
 template <typename T>
 class CudaSolverPseudoContinuous : public CudaSolver<T>
 {
 private:
-    ComputationBox<T>* cb;
-    Molecules *molecules;
-    Pseudo<T> *pseudo;
-    std::string chain_model;
+    ComputationBox<T>* cb;       ///< Computation box
+    Molecules *molecules;         ///< Molecules container
+    Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities
+    std::string chain_model;      ///< Chain model ("continuous")
 
-    // The number of parallel streams for propagator computation
-    int n_streams;
+    int n_streams;                ///< Number of parallel streams
 
-    // Two streams for each gpu
-    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
+    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy] per index
 
-    // For pseudo-spectral: advance_propagator()
-    CuDeviceData<T> *d_q_unity; // All elements are 1 for initializing propagators
-    cufftHandle plan_for_one[MAX_STREAMS], plan_bak_one[MAX_STREAMS];
-    cufftHandle plan_for_two[MAX_STREAMS], plan_bak_two[MAX_STREAMS];
+    /// @name cuFFT Resources
+    /// @{
+    CuDeviceData<T> *d_q_unity;                        ///< Unity array for initialization
+    cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT plans
+    cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT plans
+    cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT plans
+    cufftHandle plan_bak_two[MAX_STREAMS];             ///< Batched backward FFT plans
+    /// @}
 
-    CuDeviceData<T> *d_q_step_1_one[MAX_STREAMS], *d_q_step_2_one[MAX_STREAMS];
-    CuDeviceData<T> *d_q_step_1_two[MAX_STREAMS], *d_q_step_2_two[MAX_STREAMS];
+    /// @name Workspace Arrays (per stream)
+    /// @{
+    CuDeviceData<T> *d_q_step_1_one[MAX_STREAMS];      ///< Full step workspace 1
+    CuDeviceData<T> *d_q_step_2_one[MAX_STREAMS];      ///< Full step workspace 2
+    CuDeviceData<T> *d_q_step_1_two[MAX_STREAMS];      ///< Half step workspace 1
+    CuDeviceData<T> *d_q_step_2_two[MAX_STREAMS];      ///< Half step workspace 2
+    /// @}
 
+    /// @name Fourier Space Buffers
+    /// @{
     cuDoubleComplex *d_qk_in_1_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
+    /// @}
 
-    // Variables for cub reduction sum
+    /// @name CUB Reduction Storage (per stream)
+    /// @{
     size_t temp_storage_bytes[MAX_STREAMS];
     CuDeviceData<T> *d_temp_storage[MAX_STREAMS];
     CuDeviceData<T> *d_stress_sum[MAX_STREAMS];
     CuDeviceData<T> *d_stress_sum_out[MAX_STREAMS];
     CuDeviceData<T> *d_q_multi[MAX_STREAMS];
+    /// @}
 
 public:
+    /**
+     * @brief Construct GPU pseudo-spectral solver for continuous chains.
+     *
+     * @param cb                  Computation box
+     * @param molecules           Molecules container
+     * @param n_streams           Number of parallel streams
+     * @param streams             Pre-created CUDA streams
+     * @param reduce_memory_usage Memory saving mode (affects workspace allocation)
+     */
     CudaSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+
+    /**
+     * @brief Destructor. Frees GPU memory and cuFFT plans.
+     */
     ~CudaSolverPseudoContinuous();
 
+    /** @brief Update Fourier-space operators for new box dimensions. */
     void update_laplacian_operator() override;
+
+    /**
+     * @brief Update Boltzmann factors.
+     * @param device  "device" or "host" for w_input location
+     * @param w_input Potential fields
+     */
     void update_dw(std::string device, std::map<std::string, const T*> w_input) override;
 
-    //---------- Continuous chain model -------------
-    // Advance propagator by one contour step
+    /**
+     * @brief Advance propagator by one step using Richardson extrapolation.
+     *
+     * @param STREAM      Stream index for concurrent execution
+     * @param d_q_in      Input propagator (device)
+     * @param d_q_out     Output propagator (device)
+     * @param monomer_type Monomer type
+     * @param d_q_mask    Optional mask (device, nullptr if none)
+     */
     void advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type, double *d_q_mask) override;
 
-    // Advance propagator by half bond step
+    /** @brief Half-bond step (empty for continuous chains). */
     void advance_propagator_half_bond_step(
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
-    // Compute stress of single segment
+    /**
+     * @brief Compute stress from one segment.
+     *
+     * @param STREAM           Stream index
+     * @param d_q_pair         Product of forward and backward propagators
+     * @param d_segment_stress Output stress contribution
+     * @param monomer_type     Monomer type
+     * @param is_half_bond_length Ignored for continuous
+     */
     void compute_single_segment_stress(
         const int STREAM,
         CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,

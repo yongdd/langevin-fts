@@ -1,6 +1,38 @@
-/*----------------------------------------------------------
-* This class defines a class for real-space method
-*-----------------------------------------------------------*/
+/**
+ * @file CudaSolverRealSpace.h
+ * @brief GPU real-space solver using Crank-Nicolson finite difference.
+ *
+ * This header provides CudaSolverRealSpace, the CUDA implementation
+ * of the real-space finite difference method for propagator computation.
+ * Uses ADI (Alternating Direction Implicit) splitting for multi-dimensional
+ * problems with parallel tridiagonal solves on GPU.
+ *
+ * **Crank-Nicolson Method:**
+ *
+ * Implicit time-stepping with second-order accuracy:
+ *     (I - ds/2 L) q(n+1) = (I + ds/2 L) q(n)
+ *
+ * **ADI Splitting:**
+ *
+ * Multi-dimensional problems split into 1D tridiagonal systems:
+ * - 2D: X-sweep → Y-sweep
+ * - 3D: X-sweep → Y-sweep → Z-sweep
+ *
+ * **GPU Parallelization:**
+ *
+ * Each tridiagonal system solved independently in parallel:
+ * - 2D: ny systems for X-sweep, nx systems for Y-sweep
+ * - 3D: ny×nz, nx×nz, nx×ny systems respectively
+ *
+ * **Boundary Conditions:**
+ *
+ * Supports non-periodic boundaries (reflecting, absorbing)
+ * which are not available in pseudo-spectral methods.
+ *
+ * @see CudaSolver for the abstract interface
+ * @see CpuSolverRealSpace for CPU version
+ * @see FiniteDifference for coefficient computation
+ */
 
 #ifndef CUDA_SOLVER_REAL_SPACE_H_
 #define CUDA_SOLVER_REAL_SPACE_H_
@@ -16,14 +48,50 @@
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 
+/**
+ * @brief Device function: max of two integers.
+ */
 __device__ int d_max_of_two(int x, int y);
+
+/**
+ * @brief Device function: min of two integers.
+ */
 __device__ int d_min_of_two(int x, int y);
 
+/**
+ * @brief CUDA kernel: 1D Crank-Nicolson RHS computation.
+ *
+ * Computes the right-hand side (I + ds/2 Lx) q for 1D problems.
+ *
+ * @param bc_xl  Boundary condition at x-low
+ * @param bc_xh  Boundary condition at x-high
+ * @param d_xl   Lower diagonal coefficients
+ * @param d_xd   Main diagonal coefficients
+ * @param d_xh   Upper diagonal coefficients
+ * @param d_q_out Output RHS vector
+ * @param d_q_in  Input propagator
+ * @param M       Grid size
+ */
 __global__ void compute_crank_1d(
     BoundaryCondition bc_xl, BoundaryCondition bc_xh,
     const double *d_xl, const double *d_xd, const double *d_xh,
     double *d_q_out, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: 2D ADI step 1 (X-direction).
+ *
+ * Computes RHS for X-sweep: (I + ds/2 Lx) q
+ *
+ * @param bc_xl, bc_xh  X-direction boundary conditions
+ * @param bc_yl, bc_yh  Y-direction boundary conditions
+ * @param d_xl, d_xd, d_xh  X-direction tridiagonal coefficients
+ * @param I             X grid size
+ * @param d_yl, d_yd, d_yh  Y-direction tridiagonal coefficients
+ * @param J             Y grid size
+ * @param d_q_out       Output RHS
+ * @param d_q_in        Input propagator
+ * @param M             Total grid size
+ */
 __global__ void compute_crank_2d_step_1(
     BoundaryCondition bc_xl, BoundaryCondition bc_xh,
     BoundaryCondition bc_yl, BoundaryCondition bc_yh,
@@ -31,11 +99,42 @@ __global__ void compute_crank_2d_step_1(
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: 2D ADI step 2 (Y-direction).
+ *
+ * Computes RHS for Y-sweep using intermediate solution q*.
+ *
+ * @param bc_yl, bc_yh  Y-direction boundary conditions
+ * @param d_yl, d_yd, d_yh  Y-direction tridiagonal coefficients
+ * @param J             Y grid size
+ * @param d_q_out       Output RHS
+ * @param d_q_star      Intermediate solution from step 1
+ * @param d_q_in        Original input propagator
+ * @param M             Total grid size
+ */
 __global__ void compute_crank_2d_step_2(
     BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: 3D ADI step 1 (X-direction).
+ *
+ * First ADI sweep in X-direction for 3D problems.
+ *
+ * @param bc_xl, bc_xh  X-direction boundary conditions
+ * @param bc_yl, bc_yh  Y-direction boundary conditions
+ * @param bc_zl, bc_zh  Z-direction boundary conditions
+ * @param d_xl, d_xd, d_xh  X-direction coefficients
+ * @param I             X grid size
+ * @param d_yl, d_yd, d_yh  Y-direction coefficients
+ * @param J             Y grid size
+ * @param d_zl, d_zd, d_zh  Z-direction coefficients
+ * @param K             Z grid size
+ * @param d_q_out       Output RHS
+ * @param d_q_in        Input propagator
+ * @param M             Total grid size
+ */
 __global__ void compute_crank_3d_step_1(
     BoundaryCondition bc_xl, BoundaryCondition bc_xh,
     BoundaryCondition bc_yl, BoundaryCondition bc_yh,
@@ -45,124 +144,265 @@ __global__ void compute_crank_3d_step_1(
     const double *d_zl, const double *d_zd, const double *d_zh, const int K,
     double *d_q_out, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: 3D ADI step 2 (Y-direction).
+ *
+ * Second ADI sweep in Y-direction using intermediate q*.
+ *
+ * @param bc_yl, bc_yh  Y-direction boundary conditions
+ * @param d_yl, d_yd, d_yh  Y-direction coefficients
+ * @param J, K          Y and Z grid sizes
+ * @param d_q_out       Output RHS
+ * @param d_q_star      Intermediate from step 1
+ * @param d_q_in        Original input
+ * @param M             Total grid size
+ */
 __global__ void compute_crank_3d_step_2(
     BoundaryCondition bc_yl, BoundaryCondition bc_yh,
     const double *d_yl, const double *d_yd, const double *d_yh, const int J, const int K,
     double *d_q_out, const double *d_q_star, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: 3D ADI step 3 (Z-direction).
+ *
+ * Final ADI sweep in Z-direction using intermediate q**.
+ *
+ * @param bc_zl, bc_zh  Z-direction boundary conditions
+ * @param d_zl, d_zd, d_zh  Z-direction coefficients
+ * @param J, K          Y and Z grid sizes
+ * @param d_q_out       Output RHS
+ * @param d_q_dstar     Intermediate from step 2
+ * @param d_q_in        Original input
+ * @param M             Total grid size
+ */
 __global__ void compute_crank_3d_step_3(
     BoundaryCondition bc_zl, BoundaryCondition bc_zh,
     const double *d_zl, const double *d_zd, const double *d_zh, const int J, const int K,
     double *d_q_out, const double *d_q_dstar, const double *d_q_in, const int M);
 
+/**
+ * @brief CUDA kernel: Parallel tridiagonal solver (Thomas algorithm).
+ *
+ * Solves multiple independent tridiagonal systems in parallel.
+ * Uses shared memory for high performance.
+ *
+ * @param d_xl      Lower diagonal (subdiagonal)
+ * @param d_xd      Main diagonal
+ * @param d_xh      Upper diagonal (superdiagonal)
+ * @param d_c_star  Workspace for modified upper diagonal
+ * @param d_d       Right-hand side vector
+ * @param d_x       Solution output
+ * @param d_offset  Starting offset for each system
+ * @param REPEAT    Number of systems to solve
+ * @param INTERVAL  Stride between systems
+ * @param M         System size
+ */
 __global__ void tridiagonal(
-    const double* __restrict__ d_xl, 
-    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xl,
+    const double* __restrict__ d_xd,
     const double* __restrict__ d_xh,
-    double* __restrict__ d_c_star,   
-    const double* __restrict__ d_d, 
+    double* __restrict__ d_c_star,
+    const double* __restrict__ d_d,
     double* __restrict__ d_x,
-    const int* __restrict__ d_offset, 
+    const int* __restrict__ d_offset,
     const int REPEAT, const int INTERVAL, const int M);
 
+/**
+ * @brief CUDA kernel: Parallel tridiagonal solver for periodic boundaries.
+ *
+ * Handles cyclic tridiagonal systems using Sherman-Morrison formula.
+ * More complex than non-periodic due to corner coupling.
+ *
+ * @param d_xl       Lower diagonal
+ * @param d_xd       Main diagonal
+ * @param d_xh       Upper diagonal
+ * @param d_c_star   Workspace for modified coefficients
+ * @param d_q_sparse Workspace for Sherman-Morrison correction
+ * @param d_d        Right-hand side
+ * @param d_x        Solution output
+ * @param d_offset   Starting offsets
+ * @param REPEAT     Number of systems
+ * @param INTERVAL   Stride
+ * @param M          System size
+ */
 __global__ void tridiagonal_periodic(
-    const double* __restrict__ d_xl, 
-    const double* __restrict__ d_xd, 
+    const double* __restrict__ d_xl,
+    const double* __restrict__ d_xd,
     const double* __restrict__ d_xh,
-    double* __restrict__ d_c_star, 
-    double* __restrict__ d_q_sparse, 
-    const double* __restrict__ d_d, 
+    double* __restrict__ d_c_star,
+    double* __restrict__ d_q_sparse,
+    const double* __restrict__ d_d,
     double* __restrict__ d_x,
-    const int* __restrict__ d_offset, 
+    const int* __restrict__ d_offset,
     const int REPEAT, const int INTERVAL, const int M);
 
+/**
+ * @class CudaSolverRealSpace
+ * @brief GPU real-space solver using Crank-Nicolson finite difference.
+ *
+ * Implements propagator advancement using ADI (Alternating Direction Implicit)
+ * method with parallel tridiagonal solves on GPU. Supports non-periodic
+ * boundary conditions.
+ *
+ * **Tridiagonal Systems:**
+ *
+ * For each direction (x, y, z), stores coefficients:
+ * - d_xl: Lower diagonal (subdiagonal)
+ * - d_xd: Main diagonal
+ * - d_xh: Upper diagonal (superdiagonal)
+ *
+ * **Workspace Arrays:**
+ *
+ * Per-stream workspace for tridiagonal solves:
+ * - d_q_star: Intermediate ADI solution (after first sweep)
+ * - d_q_dstar: Second intermediate (3D only)
+ * - d_c_star: Modified coefficients for Thomas algorithm
+ * - d_q_sparse: Sherman-Morrison workspace (periodic BCs)
+ *
+ * **Offset Arrays:**
+ *
+ * Index mappings for parallel system solving:
+ * - d_offset_xy, d_offset_yz, d_offset_xz: 3D sweeps
+ * - d_offset_x, d_offset_y: 2D sweeps
+ *
+ * @note Only supports double type (not complex) as real-space method
+ *       is primarily for continuous chains with non-periodic BCs.
+ */
 class CudaSolverRealSpace : public CudaSolver<double>
 {
 private:
-    ComputationBox<double>* cb;
-    Molecules *molecules;
+    ComputationBox<double>* cb;  ///< Computation box
+    Molecules *molecules;        ///< Molecules container
 
-    // for memory free
-    int dim;
+    int dim;                     ///< Dimensionality (1, 2, or 3)
 
-    std::string chain_model;
-    bool reduce_memory_usage;
+    std::string chain_model;     ///< Chain model type
+    bool reduce_memory_usage;    ///< Memory-saving mode flag
 
-    // The number of parallel streams for propagator computation
-    int n_streams;
+    int n_streams;               ///< Number of parallel streams
 
-    // Two streams for each gpu
-    cudaStream_t streams[MAX_STREAMS][2]; // one for kernel execution, the other for memcpy
-    
-    // Trigonal matrix for x direction
-    std::map<std::string, double*> d_xl;
-    std::map<std::string, double*> d_xd;
-    std::map<std::string, double*> d_xh;
+    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
-    // Trigonal matrix for y direction
-    std::map<std::string, double*> d_yl;
-    std::map<std::string, double*> d_yd;
-    std::map<std::string, double*> d_yh;
+    /// @name X-direction Tridiagonal Coefficients
+    /// @{
+    std::map<std::string, double*> d_xl;  ///< Lower diagonal by monomer type
+    std::map<std::string, double*> d_xd;  ///< Main diagonal by monomer type
+    std::map<std::string, double*> d_xh;  ///< Upper diagonal by monomer type
+    /// @}
 
-    // Trigonal matrix for z direction
-    std::map<std::string, double*> d_zl;
-    std::map<std::string, double*> d_zd;
-    std::map<std::string, double*> d_zh;
+    /// @name Y-direction Tridiagonal Coefficients
+    /// @{
+    std::map<std::string, double*> d_yl;  ///< Lower diagonal
+    std::map<std::string, double*> d_yd;  ///< Main diagonal
+    std::map<std::string, double*> d_yh;  ///< Upper diagonal
+    /// @}
 
-    // Arrays for tridiagonal computation
-    double *d_q_star  [MAX_STREAMS];
-    double *d_q_dstar [MAX_STREAMS];
-    double *d_c_star  [MAX_STREAMS];
-    double *d_q_sparse[MAX_STREAMS];
-    double *d_temp    [MAX_STREAMS];
+    /// @name Z-direction Tridiagonal Coefficients
+    /// @{
+    std::map<std::string, double*> d_zl;  ///< Lower diagonal
+    std::map<std::string, double*> d_zd;  ///< Main diagonal
+    std::map<std::string, double*> d_zh;  ///< Upper diagonal
+    /// @}
 
-    // Offset 
-    // For 3D
-    int* d_offset_xy;
-    int* d_offset_yz;
-    int* d_offset_xz;
-    // For 2D
-    int* d_offset_x;
-    int* d_offset_y;
-    // For 1D
-    int* d_offset;
+    /// @name Tridiagonal Solver Workspace (per stream)
+    /// @{
+    double *d_q_star  [MAX_STREAMS];  ///< First intermediate solution
+    double *d_q_dstar [MAX_STREAMS];  ///< Second intermediate (3D)
+    double *d_c_star  [MAX_STREAMS];  ///< Modified upper diagonal
+    double *d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
+    double *d_temp    [MAX_STREAMS];  ///< General temporary
+    /// @}
 
+    /// @name Index Offset Arrays
+    /// @{
+    int* d_offset_xy;  ///< 3D: XY-plane offsets
+    int* d_offset_yz;  ///< 3D: YZ-plane offsets
+    int* d_offset_xz;  ///< 3D: XZ-plane offsets
+    int* d_offset_x;   ///< 2D: X-direction offsets
+    int* d_offset_y;   ///< 2D: Y-direction offsets
+    int* d_offset;     ///< 1D: System offsets
+    /// @}
+
+    /**
+     * @brief 3D ADI propagator advancement.
+     */
     void advance_propagator_3d(
-        std::vector<BoundaryCondition> bc,      
+        std::vector<BoundaryCondition> bc,
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
+
+    /**
+     * @brief 2D ADI propagator advancement.
+     */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
+
+    /**
+     * @brief 1D Crank-Nicolson propagator advancement.
+     */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
-public:
 
-    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+public:
+    /**
+     * @brief Construct GPU real-space solver.
+     *
+     * @param cb                  Computation box
+     * @param molecules           Molecules container
+     * @param n_streams           Number of parallel streams
+     * @param streams             Pre-created CUDA streams
+     * @param reduce_memory_usage Memory-saving mode
+     */
+    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules,
+        int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+
+    /**
+     * @brief Destructor. Frees GPU resources.
+     */
     ~CudaSolverRealSpace();
 
+    /** @brief Update finite difference coefficients for new box. */
     void update_laplacian_operator() override;
+
+    /** @brief Update Boltzmann factors from potential fields. */
     void update_dw(std::string device, std::map<std::string, const double*> w_input) override;
 
-    //---------- Continuous chain model -------------
-    // Advance propagator by one contour step
+    /**
+     * @brief Advance propagator by one contour step.
+     *
+     * Uses ADI method: X-sweep → Y-sweep → Z-sweep (for 3D).
+     *
+     * @param STREAM       Stream index
+     * @param d_q_in       Input propagator (device)
+     * @param d_q_out      Output propagator (device)
+     * @param monomer_type Monomer type
+     * @param d_q_mask     Optional mask (device)
+     */
     void advance_propagator(
         const int STREAM,
         double *d_q_in, double *d_q_out,
         std::string monomer_type, double *d_q_mask) override;
 
-    // Advance propagator by half bond step
+    /** @brief Half-bond step (not applicable for real-space continuous). */
     void advance_propagator_half_bond_step(
         const int, double *, double *, std::string) override {};
 
-    // Compute stress of single segment
+    /**
+     * @brief Compute stress contribution from one segment.
+     *
+     * @param STREAM            Stream index
+     * @param d_q_pair          Propagator product (device)
+     * @param d_segment_stress  Output stress (device)
+     * @param monomer_type      Monomer type
+     * @param is_half_bond_length Ignored for real-space
+     */
     void compute_single_segment_stress(
         const int STREAM,
         double *d_q_pair, double *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) override;
-
 };
 #endif

@@ -1,6 +1,22 @@
-/*----------------------------------------------------------
-* This class contains static methods for pseudo-spectral Method
-*-----------------------------------------------------------*/
+/**
+ * @file CudaPseudo.h
+ * @brief GPU implementation of pseudo-spectral method utilities.
+ *
+ * This header provides CudaPseudo, the GPU-specific implementation
+ * of Pseudo that stores Boltzmann factors and Fourier basis vectors
+ * in GPU device memory.
+ *
+ * **GPU Memory Contents:**
+ *
+ * - d_boltz_bond: exp(-k²b²ds/6) for each monomer type
+ * - d_boltz_bond_half: exp(-k²b²ds/12) for half-bond steps
+ * - d_fourier_basis_*: Weighted wavenumbers for stress calculation
+ * - d_negative_k_idx: Index mapping for Hermitian symmetry
+ *
+ * @see Pseudo for the abstract interface
+ * @see CudaSolverPseudoContinuous for usage in continuous chains
+ * @see CudaSolverPseudoDiscrete for usage in discrete chains
+ */
 
 #ifndef CUDA_PSEUDO_H_
 #define CUDA_PSEUDO_H_
@@ -14,39 +30,103 @@
 #include "ComputationBox.h"
 #include "Molecules.h"
 
+/**
+ * @class CudaPseudo
+ * @brief GPU implementation of pseudo-spectral utilities.
+ *
+ * Stores pseudo-spectral operators in GPU device memory for efficient
+ * access during propagator computation.
+ *
+ * @tparam T Numeric type (double or std::complex<double>)
+ *
+ * **Boltzmann Factors:**
+ *
+ * Stored in Fourier space for efficient multiplication:
+ * - boltz_bond[k] = exp(-k²b²ds/6) for continuous chains
+ * - boltz_bond_half[k] = exp(-k²b²ds/12) for discrete chains
+ *
+ * **Fourier Basis:**
+ *
+ * Weighted wavenumbers for stress calculation:
+ * - d_fourier_basis_x = kx² × weight
+ * - Used in ∂H/∂Lx calculation
+ */
 template <typename T>
 class CudaPseudo : public Pseudo<T>
 {
 private:
-    // For stress calculation: compute_stress()
-    double *d_fourier_basis_x;
-    double *d_fourier_basis_y;
-    double *d_fourier_basis_z;
-    
-    // Mapping array for negative frequency
-    int *d_negative_k_idx;
+    /// @name Stress Calculation Arrays
+    /// @{
+    double *d_fourier_basis_x;  ///< Weighted kx² in device memory
+    double *d_fourier_basis_y;  ///< Weighted ky² in device memory
+    double *d_fourier_basis_z;  ///< Weighted kz² in device memory
+    /// @}
 
-    // GPU arrays for pseudo-spectral
-    std::map<std::string, double*> d_boltz_bond;        // Boltzmann factor for the single bond
-    std::map<std::string, double*> d_boltz_bond_half;   // Boltzmann factor for the half bond
+    int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
 
-    // void update_boltz_bond() override;
-    // void update_weighted_fourier_basis() override;
+    /// @name Pseudo-Spectral Operators
+    /// @{
+    std::map<std::string, double*> d_boltz_bond;       ///< Full bond diffusion (device)
+    std::map<std::string, double*> d_boltz_bond_half;  ///< Half bond diffusion (device)
+    /// @}
+
 public:
+    /**
+     * @brief Construct GPU pseudo-spectral utility.
+     *
+     * Computes and uploads Boltzmann factors and Fourier basis to GPU.
+     *
+     * @param bond_lengths Statistical segment lengths squared by monomer type
+     * @param bc           Boundary conditions
+     * @param nx           Grid dimensions
+     * @param dx           Grid spacing [dx, dy, dz]
+     * @param ds           Contour step size
+     */
     CudaPseudo(
         std::map<std::string, double> bond_lengths,
         std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds);
+
+    /**
+     * @brief Destructor. Frees GPU memory.
+     */
     ~CudaPseudo();
 
-    double* get_boltz_bond     (std::string monomer_type) override { return d_boltz_bond[monomer_type]; };
+    /**
+     * @brief Get full bond Boltzmann factor (device pointer).
+     * @param monomer_type Monomer type
+     * @return Device pointer to exp(-k²b²ds/6)
+     */
+    double* get_boltz_bond(std::string monomer_type) override { return d_boltz_bond[monomer_type]; };
+
+    /**
+     * @brief Get half bond Boltzmann factor (device pointer).
+     * @param monomer_type Monomer type
+     * @return Device pointer to exp(-k²b²ds/12)
+     */
     double* get_boltz_bond_half(std::string monomer_type) override { return d_boltz_bond_half[monomer_type];};
-    
+
+    /** @brief Get x-direction Fourier basis (device pointer). */
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};
+
+    /** @brief Get y-direction Fourier basis (device pointer). */
     const double* get_fourier_basis_y() override { return d_fourier_basis_y;};
+
+    /** @brief Get z-direction Fourier basis (device pointer). */
     const double* get_fourier_basis_z() override { return d_fourier_basis_z;};
 
+    /** @brief Get negative frequency mapping (device pointer). */
     const int* get_negative_frequency_mapping() override { return d_negative_k_idx;};
 
+    /**
+     * @brief Update operators for new box dimensions.
+     *
+     * Called when box size changes during stress relaxation.
+     *
+     * @param bc           Boundary conditions
+     * @param bond_lengths Segment lengths
+     * @param dx           New grid spacing
+     * @param ds           Contour step
+     */
     void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
