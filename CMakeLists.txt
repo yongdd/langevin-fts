@@ -46,6 +46,7 @@ ADD_LIBRARY(common
     src/common/PropagatorComputationOptimizer.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
+    src/common/PseudoMixedBC.cpp
     src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
@@ -60,9 +61,11 @@ IF(MKL_FOUND)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
         src/platforms/cpu/MklFFT.cpp
+        src/platforms/cpu/MklFFTMixedBC.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoContinuous.cpp
+        src/platforms/cpu/CpuSolverPseudoMixedBC.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverRealSpace.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
