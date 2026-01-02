@@ -22,6 +22,91 @@ os.environ["OMP_STACKSIZE"] = "1G"
 
 # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
 class Adam:
+    """ADAM optimizer for SCFT field optimization.
+
+    Implements the ADAM (Adaptive Moment Estimation) optimization algorithm
+    for finding saddle points in self-consistent field theory calculations.
+    This is an alternative to Anderson Mixing for field optimization.
+
+    The algorithm maintains first and second moment estimates of gradients
+    and uses them to adapt the learning rate for each parameter. This can
+    provide more stable convergence for some systems.
+
+    Parameters
+    ----------
+    total_grid : int
+        Total number of grid points (size of field arrays to optimize).
+    lr : float, optional
+        Initial learning rate, γ (default: 1e-2). Controls step size.
+    b1 : float, optional
+        Exponential decay rate for first moment estimates, β₁ (default: 0.9).
+        Should be in [0, 1).
+    b2 : float, optional
+        Exponential decay rate for second moment estimates, β₂ (default: 0.999).
+        Should be in [0, 1).
+    eps : float, optional
+        Small constant for numerical stability, ε (default: 1e-8).
+        Prevents division by zero.
+    gamma : float, optional
+        Learning rate decay factor (default: 1.0).
+        Learning rate at iteration T is lr * γ^(T-1).
+
+    Attributes
+    ----------
+    total_grid : int
+        Size of field arrays.
+    lr : float
+        Base learning rate.
+    b1, b2 : float
+        Moment decay rates.
+    eps : float
+        Numerical stability constant.
+    gamma : float
+        Learning rate decay factor.
+    count : int
+        Current iteration number.
+    m : ndarray
+        First moment estimates (moving average of gradients).
+    v : ndarray
+        Second moment estimates (moving average of squared gradients).
+
+    See Also
+    --------
+    SCFT : Main SCFT class that uses this optimizer.
+
+    Notes
+    -----
+    This implementation follows the ADAM algorithm from [1]_. The update rule is:
+
+    .. math::
+        m_t = β_1 m_{t-1} + (1-β_1) g_t
+
+        v_t = β_2 v_{t-1} + (1-β_2) g_t^2
+
+        \\hat{m}_t = m_t / (1 - β_1^t)
+
+        \\hat{v}_t = v_t / (1 - β_2^t)
+
+        w_t = w_{t-1} + γ_t \\hat{m}_t / (\\sqrt{\\hat{v}_t} + ε)
+
+    where g_t is the gradient (field difference) at iteration t.
+
+    References
+    ----------
+    .. [1] Kingma, D. P., & Ba, J. (2015). Adam: A method for stochastic
+           optimization. ICLR 2015.
+
+    .. [2] https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
+
+    Examples
+    --------
+    >>> # Create ADAM optimizer for 32x32x32 grid
+    >>> optimizer = Adam(total_grid=32*32*32, lr=1e-2)
+    >>>
+    >>> # In SCFT iteration loop
+    >>> w_new = optimizer.calculate_new_fields(w_current, w_diff,
+    ...                                        old_error, error_level)
+    """
     def __init__(self, total_grid,
                     lr = 1e-2,       # initial learning rate, γ
                     b1 = 0.9,        # β1
@@ -41,25 +126,373 @@ class Adam:
         self.v = np.zeros(total_grid, dtype=np.float64) # second moment
         
     def reset_count(self,):
+        """Reset optimizer state for a new optimization run.
+
+        Resets the iteration counter to 1 and clears the moment estimates.
+        This should be called when starting a new SCFT run with different
+        initial conditions.
+
+        Notes
+        -----
+        This method reinitializes:
+        - Iteration counter (count) to 1
+        - First moment estimate (m) to zeros
+        - Second moment estimate (v) to zeros
+        """
         self.count = 1
         self.m[:] = 0.0
         self.v[:] = 0.0        
         
     def calculate_new_fields(self, w_current, w_diff, old_error_level, error_level):
+        """Compute updated fields using ADAM optimization algorithm.
 
+        Performs one step of ADAM optimization to update the field values
+        based on the current fields and their gradients (field differences).
+
+        Parameters
+        ----------
+        w_current : ndarray
+            Current field values, shape (total_grid,) or (M, grid_size).
+        w_diff : ndarray
+            Field gradients (self-consistency error), same shape as w_current.
+        old_error_level : float
+            Error level from previous iteration (not used in ADAM, kept for
+            compatibility with Anderson Mixing interface).
+        error_level : float
+            Current error level (not used in ADAM, kept for compatibility).
+
+        Returns
+        -------
+        w_new : ndarray
+            Updated field values, same shape as w_current.
+
+        Notes
+        -----
+        The ADAM update includes:
+
+        1. Decay learning rate: lr_t = lr * γ^(t-1)
+        2. Update biased first moment: m_t = β₁ m_{t-1} + (1-β₁) g_t
+        3. Update biased second moment: v_t = β₂ v_{t-1} + (1-β₂) g_t²
+        4. Bias correction: m̂_t = m_t/(1-β₁^t), v̂_t = v_t/(1-β₂^t)
+        5. Update fields: w_t = w_{t-1} + lr_t * m̂_t / (√v̂_t + ε)
+
+        The bias correction in steps 4 compensates for the initialization
+        of moment estimates at zero, particularly important in early iterations.
+        """
         lr = self.lr*self.gamma**(self.count-1)
-        
+
         self.m = self.b1*self.m + (1.0-self.b1)*w_diff
         self.v = self.b2*self.v + (1.0-self.b2)*w_diff**2
         m_hat = self.m/(1.0-self.b1**self.count)
         v_hat = self.v/(1.0-self.b2**self.count)
-                
+
         w_new = w_current + lr*m_hat/(np.sqrt(v_hat) + self.eps)
-        
+
         self.count += 1
         return w_new
 
 class SCFT:
+    """Self-Consistent Field Theory solver for polymer systems.
+
+    This class implements SCFT calculations for arbitrary polymer architectures
+    including linear, branched, and random copolymers with multiple monomer types.
+    It supports both Anderson Mixing and ADAM optimization algorithms for finding
+    saddle points of the field-theoretic Hamiltonian.
+
+    The implementation uses a platform-independent interface to computational backends
+    (CUDA GPU or CPU with Intel MKL), automatic propagator computation optimization
+    for complex polymer architectures, and optional space group symmetry constraints.
+
+    Parameters
+    ----------
+    params : dict
+        Simulation parameters dictionary containing:
+
+        **Grid and Box Parameters:**
+
+        - nx : list of int
+            Number of grid points in each dimension, e.g., [32, 32, 32] for 3D.
+        - lx : list of float
+            Box dimensions in each direction, units: a_Ref * N_Ref^(1/2).
+        - box_is_altering : bool
+            If True, optimize box size along with fields to minimize stress.
+
+        **Chain Model Parameters:**
+
+        - chain_model : {'discrete', 'continuous'}
+            Chain propagation model. 'discrete' for discrete Gaussian chains,
+            'continuous' for continuous Gaussian chains (pseudo-spectral method).
+        - ds : float
+            Contour step size, typically 1/N_Ref where N_Ref is the reference
+            polymerization index.
+
+        **Monomer and Interaction Parameters:**
+
+        - segment_lengths : dict
+            Relative statistical segment lengths, {monomer_type: length}.
+            Example: {"A": 1.0, "B": 1.0} for symmetric AB diblock.
+        - chi_n : dict
+            Flory-Huggins interaction parameters × N_Ref,
+            {monomer_pair: chi*N_Ref}. Example: {"A,B": 15.0}.
+            Self-interactions (e.g., "A,A") should not be included.
+
+        **Polymer Architecture:**
+
+        - distinct_polymers : list of dict
+            List of polymer chain specifications. Each dict contains:
+
+            - volume_fraction : float
+                Volume fraction of this polymer species.
+            - blocks : list of dict
+                Block definitions. Each block has:
+
+                - type : str
+                    Monomer type label.
+                - length : float
+                    Block length (contour fraction).
+                - v, u : int (optional)
+                    Vertex indices for branched polymers.
+
+        **Platform Selection:**
+
+        - platform : {'cuda', 'cpu-mkl'}, optional
+            Computational backend. Auto-selected if not specified:
+            1D → cpu-mkl, 2D/3D → cuda (if available).
+        - reduce_memory_usage : bool, optional
+            Enable memory-saving mode (CUDA only, default: False).
+            Stores only checkpoints, recomputes propagators as needed.
+
+        **Optimization Parameters:**
+
+        - optimizer : dict
+            Optimizer configuration:
+
+            For Anderson Mixing (name='am'):
+
+            - name : str
+                'am' for Anderson Mixing.
+            - max_hist : int
+                Maximum number of history vectors (default: 20).
+            - start_error : float
+                Error threshold to switch from simple mixing to AM (default: 1e-1).
+            - mix_min : float
+                Minimum mixing parameter (default: 0.1).
+            - mix_init : float
+                Initial mixing parameter (default: 0.1).
+
+            For ADAM (name='adam'):
+
+            - name : str
+                'adam' for ADAM optimizer.
+            - lr : float
+                Learning rate (default: 1e-2).
+            - gamma : float
+                Learning rate decay (default: 1.0, no decay).
+
+        **Convergence Parameters:**
+
+        - max_iter : int, optional
+            Maximum number of iterations (default: 2000).
+        - tolerance : float, optional
+            Convergence tolerance for error_level (default: 1e-8).
+
+        **Advanced Options:**
+
+        - space_group : dict, optional
+            Space group symmetry constraints (beta feature):
+
+            - symbol : str
+                Hermann-Mauguin symbol (e.g., 'Ia-3d' for gyroid).
+            - number : int, optional
+                Hall number for space group.
+
+        - scale_stress : float, optional
+            Scaling factor for stress in box relaxation (default: 1.0).
+        - aggregate_propagator_computation : bool, optional
+            Enable propagator aggregation optimization (default: True).
+
+    Attributes
+    ----------
+    monomer_types : list of str
+        Sorted list of monomer type labels.
+    segment_lengths : dict
+        Statistical segment lengths for each monomer type.
+    chi_n : dict
+        Flory-Huggins interaction parameters (sorted pairs).
+    distinct_polymers : list
+        Polymer specifications with block information.
+    cb : ComputationBox
+        Computation box managing grid, FFT, and integrals.
+    molecules : Molecules
+        C++ Molecules object containing polymer chain definitions.
+    solver : PropagatorComputation
+        C++ propagator solver object.
+    field_optimizer : AndersonMixing or Adam
+        Field optimization algorithm instance.
+    mpt : SymmetricPolymerTheory
+        Multi-monomer field theory transformations.
+    matrix_chi : ndarray
+        Interaction parameter matrix (M×M).
+    matrix_p : ndarray
+        Projection matrix for field residuals (M×M).
+    phi : dict
+        Final monomer concentration fields {monomer_type: array}.
+    w : ndarray
+        Final potential fields, shape (M, total_grid).
+    free_energy : float
+        Final free energy per unit volume.
+    error_level : float
+        Final convergence error.
+    iter : int
+        Number of iterations performed.
+
+    Raises
+    ------
+    AssertionError
+        If parameter validation fails (e.g., volume fractions don't sum to 1,
+        invalid monomer types in chi_n, etc.).
+    ValueError
+        If invalid space group or optimizer name is specified.
+
+    See Also
+    --------
+    LFTS : Langevin field-theoretic simulation class.
+    SymmetricPolymerTheory : Multi-monomer field theory transformations.
+    Adam : ADAM optimizer for field updates.
+
+    Notes
+    -----
+    **Units and Conventions:**
+
+    - Length unit: a_Ref * N_Ref^(1/2) where a_Ref is reference statistical
+      segment length, N_Ref is reference polymerization index.
+    - Fields w are "per reference chain" potentials. Multiply by ds for
+      "per segment" potentials.
+    - Free energy is reported as βF/V (dimensionless free energy per volume).
+
+    **Computational Details:**
+
+    - Pseudo-spectral method uses 4th-order Richardson extrapolation for accuracy.
+    - Propagators use dynamic programming to avoid redundant calculations for
+      branched polymers (see [1]_).
+    - Anderson Mixing accelerates SCFT convergence by mixing field history.
+    - ADAM can be more stable than Anderson Mixing for some systems.
+
+    **Random Copolymers:**
+
+    Define random copolymers by adding "fraction" dict to a single-block polymer:
+
+    .. code-block:: python
+
+        {
+            "volume_fraction": 0.5,
+            "blocks": [{
+                "type": "Random_AB",
+                "length": 1.0,
+                "fraction": {"A": 0.3, "B": 0.7}
+            }]
+        }
+
+    **Performance:**
+
+    - 1D simulations: cpu-mkl is recommended
+    - 2D/3D simulations: cuda provides 10-20x speedup over cpu-mkl
+    - Memory usage: ~500MB for 64³ grid (standard), ~50MB (reduce_memory_usage)
+
+    References
+    ----------
+    .. [1] Kang, H., et al. "Efficient Computation of Chain Propagators for
+           Polymers with Complex Architectures." J. Chem. Theory Comput. 2025,
+           21, 3676.
+    .. [2] Delaney Vigil, D. L., et al. "Multimonomer Field Theory of
+           Conformationally Asymmetric Polymer Blends." Macromolecules 2025,
+           58, 816.
+
+    Examples
+    --------
+    **AB Diblock Copolymer Lamellar Phase:**
+
+    >>> import numpy as np
+    >>> from polymerfts import scft
+    >>>
+    >>> # Define parameters
+    >>> params = {
+    ...     "nx": [32, 32, 32],
+    ...     "lx": [4.36, 4.36, 4.36],
+    ...     "chain_model": "discrete",
+    ...     "ds": 1/90,
+    ...     "segment_lengths": {"A": 1.0, "B": 1.0},
+    ...     "chi_n": {"A,B": 15.0},
+    ...     "distinct_polymers": [{
+    ...         "volume_fraction": 1.0,
+    ...         "blocks": [
+    ...             {"type": "A", "length": 0.5},
+    ...             {"type": "B", "length": 0.5}
+    ...         ]
+    ...     }],
+    ...     "optimizer": {
+    ...         "name": "am",
+    ...         "max_hist": 20,
+    ...         "start_error": 1e-1,
+    ...         "mix_min": 0.1,
+    ...         "mix_init": 0.1
+    ...     },
+    ...     "max_iter": 2000,
+    ...     "tolerance": 1e-8,
+    ...     "box_is_altering": False
+    ... }
+    >>>
+    >>> # Initialize SCFT solver
+    >>> calc = scft.SCFT(params)
+    >>>
+    >>> # Prepare initial fields (small random perturbation)
+    >>> nx_total = np.prod(params["nx"])
+    >>> w_init = {
+    ...     "A": 0.01 * np.random.normal(size=nx_total),
+    ...     "B": 0.01 * np.random.normal(size=nx_total)
+    ... }
+    >>>
+    >>> # Run SCFT iteration
+    >>> calc.run(initial_fields=w_init)
+    >>>
+    >>> # Save results
+    >>> calc.save_results("scft_lamellar.mat")
+    >>>
+    >>> # Access final fields and concentrations
+    >>> print(f"Free energy: {calc.free_energy:.6f}")
+    >>> print(f"Error level: {calc.error_level:.3e}")
+    >>> phi_A = calc.phi["A"]  # Concentration field for monomer A
+    >>> w_A = calc.w[0]        # Potential field for monomer A
+
+    **ABC Triblock Copolymer:**
+
+    >>> params_abc = {
+    ...     "nx": [64, 64, 64],
+    ...     "lx": [8.0, 8.0, 8.0],
+    ...     "chain_model": "continuous",
+    ...     "ds": 1/100,
+    ...     "segment_lengths": {"A": 1.0, "B": 1.0, "C": 1.0},
+    ...     "chi_n": {"A,B": 20.0, "B,C": 20.0, "A,C": 20.0},
+    ...     "distinct_polymers": [{
+    ...         "volume_fraction": 1.0,
+    ...         "blocks": [
+    ...             {"type": "A", "length": 0.33},
+    ...             {"type": "B", "length": 0.34},
+    ...             {"type": "C", "length": 0.33}
+    ...         ]
+    ...     }],
+    ...     "optimizer": {"name": "adam", "lr": 1e-2, "gamma": 0.999},
+    ...     "box_is_altering": False
+    ... }
+    >>> calc_abc = scft.SCFT(params_abc)
+
+    For complete working examples, see:
+
+    - examples/scft/Lamella3D.py - Lamellar phase
+    - examples/scft/Gyroid.py - Gyroid phase with box relaxation
+    - examples/scft/ABC_Triblock_Sphere3D.py - Spherical phase
+    - examples/scft/phases/ - Various morphologies
+    """
     def __init__(self, params): #, phi_target=None, mask=None):
 
         # Segment length
@@ -395,10 +828,80 @@ class SCFT:
         self.solver = solver
 
     def compute_concentrations(self, w):
+        """Compute monomer concentration fields for given potential fields.
+
+        Solves the modified diffusion equations to compute chain propagators,
+        then integrates over chain contours to obtain monomer concentration
+        distributions. Handles both block copolymers and random copolymers.
+
+        Parameters
+        ----------
+        w : ndarray
+            Potential fields, shape (M, total_grid) where M is the number
+            of monomer types. Each row contains the field for one monomer type.
+
+        Returns
+        -------
+        phi : dict
+            Monomer concentration fields, {monomer_type: concentration_array}.
+            Each array has length total_grid.
+        elapsed_time : dict
+            Timing information:
+
+            - 'pseudo' : float
+                Time (seconds) for propagator computation.
+            - 'phi' : float
+                Time (seconds) for concentration integration.
+
+        Notes
+        -----
+        **Propagator Computation:**
+
+        For each polymer chain, solves the modified diffusion equation:
+
+        .. math::
+            \\frac{\\partial q}{\\partial s} = \\frac{a^2}{6} \\nabla^2 q - w q
+
+        where q(r,s) is the chain propagator, a is the statistical segment
+        length, w(r) is the potential field, and s is the contour variable.
+
+        **Concentration Calculation:**
+
+        Monomer concentration at position r is computed by integrating
+        propagators over chain contours:
+
+        .. math::
+            \\phi_A(\\mathbf{r}) = \\frac{V}{Q} \\int_0^{\\alpha_A} ds \\, q(\\mathbf{r},s) q^\\dagger(\\mathbf{r},s)
+
+        where Q is the single-chain partition function, V is volume, and
+        q†(r,s) is the complementary propagator.
+
+        **Random Copolymers:**
+
+        For random copolymers, the effective field is computed as:
+
+        .. math::
+            w_{\\text{random}} = \\sum_i f_i w_i
+
+        where f_i is the fraction of monomer type i in the random copolymer.
+        Concentrations are then distributed to individual monomer types
+        according to these fractions.
+
+        **Performance:**
+
+        - Propagator computation dominates runtime (~95% of total).
+        - CUDA: ~0.5s for 32³ grid, 100 segments.
+        - CPU-MKL: ~5s for 32³ grid, 100 segments.
+
+        See Also
+        --------
+        run : Main SCFT iteration loop that calls this method.
+        SCFT.solver.compute_propagators : C++ method for propagator computation.
+        """
         M = len(self.monomer_types)
         elapsed_time = {}
 
-        # Make a dictionary for input fields 
+        # Make a dictionary for input fields
         w_input = {}
         for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
@@ -425,15 +928,115 @@ class SCFT:
             phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
-        
+
         return phi, elapsed_time
 
     def save_results(self, path):
+        """Save SCFT results to file in MATLAB, JSON, or YAML format.
+
+        Exports the computed fields, concentrations, and simulation parameters
+        to a file. The format is determined by the file extension (.mat, .json,
+        or .yaml).
+
+        Parameters
+        ----------
+        path : str
+            Output file path. Extension determines format:
+
+            - '.mat' : MATLAB format (scipy.io.savemat)
+            - '.json' : JSON format (human-readable, larger files)
+            - '.yaml' : YAML format (human-readable, structured)
+
+        Raises
+        ------
+        ValueError
+            If file extension is not .mat, .json, or .yaml.
+
+        Notes
+        -----
+        **Saved Data Structure:**
+
+        The output file contains a dictionary with these keys:
+
+        - initial_params : dict
+            Original params dict passed to __init__.
+        - dim, nx, lx : int, list, list
+            Grid dimension, grid points, box sizes.
+        - monomer_types : list of str
+            Monomer type labels.
+        - chi_n : dict
+            Flory-Huggins interaction parameters.
+        - chain_model : str
+            'discrete' or 'continuous'.
+        - ds : float
+            Contour step size.
+        - eigenvalues : ndarray
+            Eigenvalues of interaction matrix (from field theory).
+        - matrix_a, matrix_a_inverse : ndarray
+            Eigenvector matrices for field transformations.
+        - w_{monomer_type} : ndarray
+            Potential field for each monomer type.
+        - phi_{monomer_type} : ndarray
+            Concentration field for each monomer type.
+        - space_group_symbol, space_group_hall_number : str, int (optional)
+            Space group information if symmetry constraints were used.
+
+        **File Formats:**
+
+        *MATLAB (.mat):*
+        - Binary format, compact, fast I/O
+        - Compatible with MATLAB and Python (scipy.io)
+        - Recommended for large datasets
+
+        *JSON (.json):*
+        - Text format, human-readable
+        - Easy to inspect and parse
+        - Larger file size than .mat
+
+        *YAML (.yaml):*
+        - Text format, most human-readable
+        - Preserves structure well
+        - Good for configuration files
+
+        **Loading Results:**
+
+        .. code-block:: python
+
+            # MATLAB format
+            import scipy.io
+            data = scipy.io.loadmat("scft_results.mat")
+            w_A = data["w_A"]
+            phi_A = data["phi_A"]
+
+            # JSON format
+            import json
+            with open("scft_results.json", "r") as f:
+                data = json.load(f)
+
+            # YAML format
+            import yaml
+            with open("scft_results.yaml", "r") as f:
+                data = yaml.safe_load(f)
+
+        See Also
+        --------
+        run : Main SCFT iteration that produces results to save.
+
+        Examples
+        --------
+        >>> # After running SCFT
+        >>> calc.run(initial_fields=w_init)
+        >>>
+        >>> # Save in different formats
+        >>> calc.save_results("lamellar.mat")    # MATLAB format
+        >>> calc.save_results("lamellar.json")   # JSON format
+        >>> calc.save_results("lamellar.yaml")   # YAML format
+        """
         # Make a dictionary for chi_n
         chi_n_mat = {}
         for key in self.chi_n:
             chi_n_mat[key] = self.chi_n[key]
-            
+
         # Make a dictionary for data
         m_dic = {"initial_params": self.params,
             "dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
@@ -447,7 +1050,7 @@ class SCFT:
         # Add w fields to the dictionary
         for i, name in enumerate(self.monomer_types):
             m_dic["w_" + name] = self.w[i]
-        
+
         # Add concentrations to the dictionary
         for name in self.monomer_types:
             m_dic["phi_" + name] = self.phi[name]
@@ -492,6 +1095,189 @@ class SCFT:
             raise("Invalid output file extension.")
 
     def run(self, initial_fields, q_init=None):
+        """Run SCFT iteration to find saddle point of the Hamiltonian.
+
+        Iteratively solves the self-consistent field equations until convergence
+        or maximum iterations reached. At each iteration:
+
+        1. Computes monomer concentrations φ for current fields w
+        2. Calculates self-consistency error and free energy
+        3. Updates fields using optimizer (Anderson Mixing or ADAM)
+        4. Optionally adjusts box size to minimize stress (if box_is_altering=True)
+
+        The iteration continues until the error_level falls below tolerance or
+        max_iter is reached.
+
+        Parameters
+        ----------
+        initial_fields : dict
+            Initial potential fields, {monomer_type: field_array}.
+            Each field_array should have shape matching nx (can be flattened or
+            shaped). Typical initialization: small random perturbations around zero.
+        q_init : dict, optional
+            Initial propagator values for grafted polymers (default: None).
+            Format: {propagator_key: value_array}. Rarely used; for advanced
+            applications like brush layers.
+
+        Attributes Set
+        --------------
+        phi : dict
+            Final monomer concentration fields {monomer_type: array}.
+        w : ndarray
+            Final potential fields, shape (M, total_grid).
+        free_energy : float
+            Final free energy per unit volume, βF/V.
+        error_level : float
+            Final convergence error (L2 norm of field residuals).
+        iter : int
+            Number of iterations performed.
+
+        Notes
+        -----
+        **SCFT Equations:**
+
+        The self-consistent field equations to be solved are:
+
+        .. math::
+            w_A(\\mathbf{r}) = \\sum_B \\chi_{AB} N_{\\text{ref}} \\phi_B(\\mathbf{r}) + \\xi(\\mathbf{r})
+
+            \\sum_A \\phi_A(\\mathbf{r}) = 1
+
+        where χ_AB is the Flory-Huggins parameter, N_ref is the reference
+        polymerization index, and ξ(r) is a Lagrange multiplier field enforcing
+        incompressibility.
+
+        **Convergence Criterion:**
+
+        Iteration stops when:
+
+        .. math::
+            \\text{error\\_level} = \\sqrt{\\frac{\\sum_i \\langle (w_{\\text{new},i} - w_{\\text{old},i})^2 \\rangle}{1 + \\sum_i \\langle w_{\\text{old},i}^2 \\rangle}} < \\text{tolerance}
+
+        where <·> denotes spatial averaging and i ranges over monomer types.
+
+        **Free Energy:**
+
+        The free energy per volume is computed from the field-theoretic Hamiltonian:
+
+        .. math::
+            \\frac{\\beta F}{V} = -\\sum_p \\frac{\\phi_p}{\\alpha_p} \\ln Q_p + \\mathbf{w}^T \\mathbf{A}^{-1} \\mathbf{w}
+
+        where p indexes polymer types, φ_p is volume fraction, α_p is relative
+        chain length, Q_p is the single-chain partition function, and A is related
+        to the interaction matrix.
+
+        **Box Relaxation:**
+
+        If box_is_altering=True, the code simultaneously optimizes box dimensions
+        to minimize stress:
+
+        .. math::
+            \\sigma_{ij} = -\\frac{\\partial (\\beta F/V)}{\\partial L_{ij}}
+
+        Box size updates are restricted to |ΔL_x / L_x| < 0.1 per iteration for
+        stability.
+
+        **Optimization Algorithms:**
+
+        *Anderson Mixing:*
+        - Accelerates convergence by mixing history of previous iterations
+        - More robust for most polymer systems
+        - Parameters: mix_min, mix_init, max_hist, start_error
+
+        *ADAM:*
+        - Adaptive learning rate optimization
+        - Can be more stable for difficult cases
+        - Parameters: lr (learning rate), gamma (decay factor)
+
+        **Performance Tips:**
+
+        - Start with small mix_min/mix_init (0.01-0.1) for stability
+        - Use good initial guess (e.g., from similar parameters) for faster convergence
+        - For box relaxation, start with fixed box, then restart with box_is_altering=True
+        - CUDA is 10-20x faster than CPU for 2D/3D systems
+
+        **Common Issues:**
+
+        *Non-convergence:*
+        - Reduce mixing parameters (mix_min, mix_init)
+        - Try different optimizer (AM ↔ ADAM)
+        - Improve initial guess
+        - Check for phase coexistence (try different box sizes)
+
+        *Negative concentrations:*
+        - Reduce ds (contour step size)
+        - Check chi_n parameters are reasonable
+        - Indicates numerical instability
+
+        *Slow convergence:*
+        - Increase mixing parameters (if stable)
+        - Use better initial guess
+        - For symmetric systems, use space group symmetry
+
+        See Also
+        --------
+        compute_concentrations : Compute φ for given w.
+        save_results : Save converged results to file.
+        Adam : ADAM optimizer details.
+
+        Examples
+        --------
+        **Basic SCFT run:**
+
+        >>> import numpy as np
+        >>> from polymerfts import scft
+        >>>
+        >>> # Initialize (params defined earlier)
+        >>> calc = scft.SCFT(params)
+        >>>
+        >>> # Random initial fields
+        >>> nx_total = np.prod(params["nx"])
+        >>> w_init = {
+        ...     "A": 0.01 * np.random.normal(size=nx_total),
+        ...     "B": 0.01 * np.random.normal(size=nx_total)
+        ... }
+        >>>
+        >>> # Run SCFT
+        >>> calc.run(initial_fields=w_init)
+        >>>
+        >>> # Check convergence
+        >>> if calc.error_level < calc.tolerance:
+        ...     print(f"Converged in {calc.iter} iterations")
+        ...     print(f"Free energy: {calc.free_energy:.6f}")
+        ... else:
+        ...     print(f"Not converged after {calc.max_iter} iterations")
+
+        **Restarting from previous results:**
+
+        >>> # Load previous results
+        >>> import scipy.io
+        >>> data = scipy.io.loadmat("previous_run.mat")
+        >>>
+        >>> # Use previous fields as initial guess
+        >>> w_restart = {
+        ...     "A": data["w_A"].flatten(),
+        ...     "B": data["w_B"].flatten()
+        ... }
+        >>>
+        >>> # Run with new parameters
+        >>> calc_new = scft.SCFT(params_new)
+        >>> calc_new.run(initial_fields=w_restart)
+
+        **Box relaxation workflow:**
+
+        >>> # Step 1: Fixed box SCFT
+        >>> params["box_is_altering"] = False
+        >>> calc1 = scft.SCFT(params)
+        >>> calc1.run(initial_fields=w_init)
+        >>>
+        >>> # Step 2: Box relaxation from converged state
+        >>> params["box_is_altering"] = True
+        >>> calc2 = scft.SCFT(params)
+        >>> w_converged = {m: calc1.w[i] for i, m in enumerate(calc1.monomer_types)}
+        >>> calc2.run(initial_fields=w_converged)
+        >>> print(f"Optimized box: {calc2.cb.get_lx()}")
+        """
 
         # The number of components
         M = len(self.monomer_types)
