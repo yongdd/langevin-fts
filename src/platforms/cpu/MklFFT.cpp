@@ -1,9 +1,47 @@
-/* This module defines parameters and subroutines to conduct fast
-* Fourier transform (FFT) using the Math Kernel Library (MKL). */
+/**
+ * @file MklFFT.cpp
+ * @brief Intel MKL FFT implementation for 1D, 2D, and 3D transforms.
+ *
+ * Provides Fast Fourier Transform functionality using Intel Math Kernel
+ * Library (MKL) DFTI interface. Supports both real-to-complex (r2c) and
+ * complex-to-complex (c2c) transforms.
+ *
+ * **Transform Types:**
+ *
+ * - Real fields (T=double): Uses r2c transform with Hermitian symmetry
+ * - Complex fields (T=std::complex<double>): Uses c2c transform
+ *
+ * **Normalization:**
+ *
+ * Forward transform is unnormalized. Backward transform includes 1/N
+ * scaling so that forward(backward(x)) = x.
+ *
+ * **Memory Layout:**
+ *
+ * Uses out-of-place transforms with proper stride configuration for
+ * multi-dimensional data. For r2c transforms, the last dimension
+ * is halved (nx/2+1) due to Hermitian symmetry.
+ *
+ * **Template Parameters:**
+ *
+ * - T: Data type (double or std::complex<double>)
+ * - DIM: Number of dimensions (1, 2, or 3)
+ *
+ * @see CpuComputationBox for FFT usage context
+ */
+
 #include <iostream>
 #include <vector>
 #include "MklFFT.h"
 
+/**
+ * @brief Construct MKL FFT descriptor for given dimensions.
+ *
+ * Creates forward and backward transform descriptors with appropriate
+ * strides and scaling. Configures out-of-place transforms.
+ *
+ * @param nx Array of grid points per dimension
+ */
 template <typename T, int DIM>
 MklFFT<T, DIM>::MklFFT(std::array<int, DIM> nx)
 {

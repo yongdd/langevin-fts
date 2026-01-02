@@ -1,3 +1,38 @@
+/**
+ * @file CpuComputationContinuous.cpp
+ * @brief CPU implementation of propagator computation for continuous chains.
+ *
+ * Implements the PropagatorComputation interface for Gaussian (continuous)
+ * chain models using OpenMP parallelization. Supports both pseudo-spectral
+ * and real-space solvers.
+ *
+ * **Propagator Algorithm:**
+ *
+ * Solves the modified diffusion equation:
+ *     ∂q/∂s = (b²/6)∇²q - w(r)q
+ *
+ * using either pseudo-spectral (4th-order Richardson) or real-space
+ * (Crank-Nicolson) methods.
+ *
+ * **Parallelization:**
+ *
+ * Uses OpenMP for parallel propagator computation. Number of threads
+ * determined by OMP_NUM_THREADS environment variable (default: 8).
+ *
+ * **Concentration Calculation:**
+ *
+ * Uses Simpson's rule integration along the contour:
+ *     φ(r) = (1/Q) ∫ q(r,s) × q†(r,1-s) ds
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuComputationContinuous<double>: Real fields
+ * - CpuComputationContinuous<std::complex<double>>: Complex fields
+ *
+ * @see CpuSolverPseudoContinuous for pseudo-spectral solver
+ * @see CpuSolverRealSpace for real-space solver
+ */
+
 #include <cmath>
 #include <numbers>
 #include <omp.h>
@@ -7,6 +42,17 @@
 #include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
 
+/**
+ * @brief Construct CPU propagator computation for continuous chains.
+ *
+ * Allocates propagator arrays, sets up parallelization, and creates
+ * the appropriate solver (pseudo-spectral or real-space).
+ *
+ * @param cb                             Computation box for grid operations
+ * @param molecules                      Polymer/solvent species definitions
+ * @param propagator_computation_optimizer Optimized computation schedule
+ * @param method                         "pseudospectral" or "realspace"
+ */
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
     ComputationBox<T>* cb,

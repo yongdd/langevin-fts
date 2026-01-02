@@ -1,3 +1,32 @@
+/**
+ * @file CpuSolverPseudoDiscrete.cpp
+ * @brief CPU pseudo-spectral solver for discrete chain propagators.
+ *
+ * Implements the pseudo-spectral method for discrete (freely-jointed)
+ * chain models. Unlike continuous chains, discrete chains use single
+ * diffusion/potential steps per segment with half-bond step support.
+ *
+ * **Propagator Equation:**
+ *
+ * For discrete chains, the propagator satisfies:
+ *     q(r,n+1) = exp(-w(r)·ds) × FFT⁻¹[exp(-b²k²ds/6) × FFT[q(r,n)]]
+ *
+ * **Half-Bond Steps:**
+ *
+ * At junction points, half-bond steps are used:
+ *     exp(-b²k²ds/12)
+ *
+ * This ensures proper handling of chain junctions where multiple
+ * propagators meet.
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuSolverPseudoDiscrete<double>: Real fields
+ * - CpuSolverPseudoDiscrete<std::complex<double>>: Complex fields
+ *
+ * @see CpuComputationDiscrete for usage context
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -5,6 +34,15 @@
 #include "CpuSolverPseudoDiscrete.h"
 #include "MklFFT.h"
 
+/**
+ * @brief Construct pseudo-spectral solver for discrete chains.
+ *
+ * Initializes FFT plan and Boltzmann factor arrays including
+ * half-step factors for junction handling.
+ *
+ * @param cb        Computation box for grid info
+ * @param molecules Molecular system for segment lengths
+ */
 template <typename T>
 CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules)
 {

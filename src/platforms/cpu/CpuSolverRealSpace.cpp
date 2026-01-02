@@ -1,8 +1,55 @@
+/**
+ * @file CpuSolverRealSpace.cpp
+ * @brief CPU real-space Crank-Nicolson solver for chain propagators.
+ *
+ * Implements the Crank-Nicolson finite difference method with ADI
+ * (Alternating Direction Implicit) splitting for solving the modified
+ * diffusion equation in real space.
+ *
+ * **Crank-Nicolson Scheme:**
+ *
+ * Semi-implicit discretization:
+ *     (I - ds/2·L) q^(n+1) = (I + ds/2·L) q^n
+ *
+ * where L is the discrete Laplacian operator.
+ *
+ * **ADI Splitting (3D):**
+ *
+ * The 3D solve is split into three 1D tridiagonal solves:
+ * 1. X-direction sweep: compute q*
+ * 2. Y-direction sweep: compute q**
+ * 3. Z-direction sweep: compute q^(n+1)
+ *
+ * **Boundary Conditions:**
+ *
+ * Supports periodic, reflecting (Neumann), and absorbing (Dirichlet)
+ * boundaries. Uses cyclic Thomas algorithm for periodic boundaries.
+ *
+ * **Limitation:**
+ *
+ * Only supports continuous chain model (not discrete).
+ * Stress computation not yet implemented.
+ *
+ * @see FiniteDifference for matrix coefficient computation
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
 
 #include "CpuSolverRealSpace.h"
+
+/**
+ * @brief Construct real-space solver for continuous chains.
+ *
+ * Allocates tridiagonal matrix coefficients for each dimension
+ * and monomer type.
+ *
+ * @param cb        Computation box for grid and boundary info
+ * @param molecules Molecular system (must use continuous model)
+ *
+ * @throws Exception if discrete chain model is specified
+ */
 CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules)
 {
     try{
