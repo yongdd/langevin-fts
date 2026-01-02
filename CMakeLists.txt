@@ -90,7 +90,10 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudo.cu
+        src/platforms/cuda/CudaFFTMixedBC.cu
+        src/platforms/cuda/CudaPseudoMixedBC.cu
         src/platforms/cuda/CudaSolverPseudoContinuous.cu
+        src/platforms/cuda/CudaSolverPseudoMixedBC.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverRealSpace.cu
         src/platforms/cuda/CudaComputationContinuous.cu
