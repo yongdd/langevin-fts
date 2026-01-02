@@ -50,7 +50,15 @@ IF(CUDAToolkit_FOUND)
 
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
         TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-            factory cuda CUDA::cufft common)
+            factory cuda CUDA::cufft
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
+            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
+            common)
 
         SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
