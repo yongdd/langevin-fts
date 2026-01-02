@@ -1,3 +1,36 @@
+/**
+ * @file PropagatorComputation.cpp
+ * @brief Implementation of PropagatorComputation base class.
+ *
+ * Provides the base implementation for computing chain propagators and
+ * partition functions in polymer field theory. Platform-specific solvers
+ * (CpuComputationContinuous, CudaComputationDiscrete, etc.) derive from
+ * this class to implement the actual propagator integration.
+ *
+ * **Propagator Computation:**
+ *
+ * Chain propagators q(r,s) satisfy the modified diffusion equation:
+ *     ∂q/∂s = (b²/6)∇²q - w(r)q
+ *
+ * where b is statistical segment length and w(r) is the potential field.
+ *
+ * **Stress Calculation:**
+ *
+ * Box stress is computed from the derivative of partition function:
+ *     σ_d = -(1/Q) × Σ_p φ_p/α_p × dQ_p/dL_d
+ *
+ * where φ_p is volume fraction, α_p is chain length, and dQ_p/dL_d is
+ * the box length derivative of single-chain partition function.
+ *
+ * **Template Instantiations:**
+ *
+ * - PropagatorComputation<double>: Real fields (periodic boundaries)
+ * - PropagatorComputation<std::complex<double>>: Complex fields
+ *
+ * @see CpuComputationContinuous for CPU implementation
+ * @see CudaComputationContinuous for GPU implementation
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -5,6 +38,18 @@
 
 #include "PropagatorComputation.h"
 
+/**
+ * @brief Construct propagator computation engine.
+ *
+ * Initializes storage for partition functions and stress derivatives.
+ * Actual propagator memory is allocated in derived classes.
+ *
+ * @param cb                             Computation box for grid operations
+ * @param molecules                      Polymer/solvent species definitions
+ * @param propagator_computation_optimizer Optimized computation schedule
+ *
+ * @throws Exception if cb or molecules is null
+ */
 template <typename T>
 PropagatorComputation<T>::PropagatorComputation(
     ComputationBox<T>* cb,
@@ -37,6 +82,18 @@ PropagatorComputation<T>::~PropagatorComputation()
     delete[] single_polymer_partitions;
     delete[] single_solvent_partitions;
 }
+
+/**
+ * @brief Compute stress tensor from propagator derivatives.
+ *
+ * Calculates the stress in each spatial dimension using the
+ * canonical ensemble formula:
+ *     σ_d = Σ_p (φ_p/α_p) × (dQ_p/dL_d) / Q_p
+ *
+ * @return Vector of stress values for each dimension [σ_x, σ_y, σ_z]
+ *
+ * @note dq_dl must be populated by compute_stress() in derived class
+ */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
 { 
@@ -57,6 +114,18 @@ std::vector<T> PropagatorComputation<T>::get_stress()
     }
     return stress;
 }
+
+/**
+ * @brief Compute stress tensor for grand canonical ensemble.
+ *
+ * Uses fugacities instead of volume fractions for stress calculation:
+ *     σ_d = Σ_p z_p × (dQ_p/dL_d)
+ *
+ * where z_p is the fugacity of polymer species p.
+ *
+ * @param fugacities Vector of polymer fugacities
+ * @return Vector of stress values for each dimension
+ */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
 { 

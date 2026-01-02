@@ -1,3 +1,35 @@
+/**
+ * @file Scheduler.cpp
+ * @brief Implementation of parallel propagator scheduling.
+ *
+ * Creates an execution schedule for computing propagators across multiple
+ * GPU streams or CPU threads. Respects dependency ordering while maximizing
+ * parallelism through list scheduling with greedy stream assignment.
+ *
+ * **Scheduling Algorithm:**
+ *
+ * 1. **Hierarchy construction**: Group propagators by height (dependency depth)
+ * 2. **Dependency resolution**: For each propagator, find when all dependencies
+ *    complete (resolved_time)
+ * 3. **Greedy assignment**: Assign each ready propagator to the stream with
+ *    earliest available time
+ * 4. **Time slicing**: Divide execution into time spans for interleaved progress
+ *
+ * **Schedule Format:**
+ *
+ * The schedule is a vector of time slices, where each slice contains:
+ * - Vector of (key, n_segment_from, n_segment_to) tuples
+ * - Each tuple specifies which segments to compute for that propagator
+ *
+ * **Example:**
+ *
+ * Time 0-10: [("A", 0, 10), ("B", 0, 10)]  // A and B in parallel
+ * Time 10-15: [("A", 10, 15)]               // Only A continues
+ * Time 15-20: [("(AB)C", 0, 5)]            // Dependent C starts
+ *
+ * @see PropagatorComputationOptimizer for propagator dependency analysis
+ */
+
 #include <iostream>
 #include <algorithm>
 #include <string>
@@ -8,6 +40,17 @@
 
 #include "Scheduler.h"
 
+/**
+ * @brief Construct scheduler for given propagators and stream count.
+ *
+ * Builds the complete execution schedule using list scheduling with
+ * greedy stream assignment. Respects dependency ordering.
+ *
+ * @param computation_propagators Map of propagator keys to metadata
+ * @param N_STREAM               Number of parallel streams/threads
+ *
+ * @throws Exception if dependency resolution fails
+ */
 Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators, const int N_STREAM)
 {
     try
@@ -188,6 +231,16 @@ Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey
         throw_without_line_number(exc.what());
     }
 }
+
+/**
+ * @brief Group propagators by dependency height.
+ *
+ * Creates layers where each layer's propagators only depend on
+ * propagators in previous layers. Height 0 has no dependencies.
+ *
+ * @param computation_propagators Map of all propagators
+ * @return Vector of layers, each containing propagator keys at that height
+ */
 std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
     std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators)
 {
@@ -252,10 +305,28 @@ std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
         throw_without_line_number(exc.what());
     }
 }
+
+/**
+ * @brief Get the computed execution schedule.
+ *
+ * Returns the schedule as time slices, where each slice contains
+ * (key, start_segment, end_segment) for each active propagator.
+ *
+ * @return Reference to schedule vector
+ */
 std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_schedule()
 {
     return schedule;
 }
+
+/**
+ * @brief Print schedule for debugging.
+ *
+ * Displays each propagator's timing and the full schedule with
+ * time slices and parallel job assignments.
+ *
+ * @param computation_propagators Map of propagator metadata for display
+ */
 void Scheduler::display(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators)
 {
     for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)

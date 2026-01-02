@@ -1,3 +1,33 @@
+/**
+ * @file PropagatorCode.cpp
+ * @brief Implementation of propagator key generation and parsing.
+ *
+ * Provides static utility functions for generating unique string codes
+ * that identify propagator computations. These codes encode the polymer
+ * topology and enable detection of equivalent propagators across different
+ * chains in a mixture.
+ *
+ * **Code Format:**
+ *
+ * Propagator keys encode the path from chain ends to a given edge:
+ * - Simple chain end: "A10" (monomer type A, 10 segments)
+ * - Junction: "(A10B5)C8" (two branches meeting, then C block)
+ * - Aggregated: "[A10:2,B5]C8" (two identical A branches aggregated)
+ * - Custom q_init: "{init_key}A10" (custom initial condition)
+ *
+ * **Key Components:**
+ *
+ * - Monomer type: Single letter or string (e.g., "A", "B_long")
+ * - Segment count: Integer following monomer type
+ * - Parentheses (): Junction point merging multiple branches
+ * - Brackets []: Aggregated computation of identical branches
+ * - Braces {}: Custom initial condition reference
+ * - Colon: Repetition count (e.g., "A10:3" = three identical A10 branches)
+ *
+ * @see PropagatorComputationOptimizer for optimization using these codes
+ * @see Polymer for chain topology
+ */
+
 #include <iostream>
 #include <cstdio>
 #include <cctype>
@@ -12,11 +42,20 @@
 #include "PropagatorCode.h"
 #include "Exception.h"
 
-// //----------------- Constructor ----------------------------
-// PropagatorCode::PropagatorCode()
-// {
-// }
-
+/**
+ * @brief Generate propagator codes for all edges in a polymer.
+ *
+ * Traverses the polymer graph and generates unique string codes for
+ * each directed edge (v→u). Uses memoization to avoid recomputing
+ * codes for shared sub-paths.
+ *
+ * @param pc                  Polymer graph to process
+ * @param chain_end_to_q_init Map of chain ends to custom initial conditions
+ *
+ * @return Vector of (v, u, code) tuples for each directed edge
+ *
+ * @see generate_edge_code for recursive code generation
+ */
 std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes(
     Polymer& pc, std::map<int, std::string>& chain_end_to_q_init)
 {
@@ -52,6 +91,30 @@ std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes(
     return propagator_codes;
 }
 
+/**
+ * @brief Recursively generate code for a single directed edge.
+ *
+ * Builds the propagator code by recursively traversing from chain ends
+ * toward the target edge. At junctions, child codes are sorted and
+ * merged with parentheses notation.
+ *
+ * **Algorithm:**
+ *
+ * 1. Check memoization cache for existing result
+ * 2. Recursively generate codes for all incoming edges (except outgoing)
+ * 3. Sort and merge child codes with repetition counts
+ * 4. Append current block's monomer type and segment count
+ *
+ * @param memory             Memoization cache (modified in place)
+ * @param blocks             Polymer blocks
+ * @param adjacent_nodes     Adjacency list for polymer graph
+ * @param edge_to_block_index Map from (v,u) to block index
+ * @param chain_end_to_q_init Custom initial conditions
+ * @param in_node            Source node of edge
+ * @param out_node           Target node of edge
+ *
+ * @return String code for the edge (in_node → out_node)
+ */
 std::string PropagatorCode::generate_edge_code(
     std::map<std::pair<int, int>, std::string>& memory,
     std::vector<Block>& blocks,
@@ -144,6 +207,15 @@ std::string PropagatorCode::generate_edge_code(
     return code;
 }
 
+/**
+ * @brief Extract propagator key by removing trailing segment count.
+ *
+ * Given a full code like "A10", returns "A" (the key without segment count).
+ * For complex codes like "(A10B5)C8", returns "(A10B5)C".
+ *
+ * @param code Full propagator code with segment count
+ * @return Key portion (code without trailing digits)
+ */
 std::string PropagatorCode::get_key_from_code(std::string code)
 {
     int pos;
@@ -159,6 +231,21 @@ std::string PropagatorCode::get_key_from_code(std::string code)
     return code.substr(0, pos);
 }
 
+/**
+ * @brief Parse dependency information from a propagator key.
+ *
+ * Extracts the sub-propagators that must be computed before this one.
+ * Parses the nested structure to find immediate dependencies.
+ *
+ * **Example:**
+ *
+ * Key "(A10B5:2)C" has dependencies:
+ * - ("A", 10, 1) - one A propagator with 10 segments
+ * - ("B", 5, 2) - two identical B propagators with 5 segments
+ *
+ * @param key Propagator key to parse
+ * @return Vector of (sub_key, n_segment, n_repeated) tuples
+ */
 std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key(std::string key)
 {
     // sub_key, sub_n_segment, sub_n_repeated
@@ -243,6 +330,15 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     return sub_deps;
 }
 
+/**
+ * @brief Remove outer monomer type from key, returning inner content.
+ *
+ * For keys like "(A10B5)C", returns "A10B5" (content inside parentheses).
+ * For simple keys like "A", returns empty string.
+ *
+ * @param key Propagator key
+ * @return Inner content without outer monomer type, or empty if no nesting
+ */
 std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
 {
     if (key[0] != '[' && key[0] != '(' && key[0] != '{')
@@ -274,6 +370,15 @@ std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
     }
 }
 
+/**
+ * @brief Extract monomer type from the end of a propagator key.
+ *
+ * Returns the monomer type string at the outermost level of the key.
+ * For "(A10B5)C", returns "C". For "A", returns "A".
+ *
+ * @param key Propagator key
+ * @return Monomer type string
+ */
 std::string PropagatorCode::get_monomer_type_from_key(std::string key)
 {
     int pos_start = 0;
@@ -289,6 +394,17 @@ std::string PropagatorCode::get_monomer_type_from_key(std::string key)
     //std::cout << key.substr(pos_start, key.size()-pos_start) << std::endl;
     return key.substr(pos_start, key.size()-pos_start);
 }
+
+/**
+ * @brief Extract custom initial condition identifier from key.
+ *
+ * For keys starting with "{...}", extracts the identifier inside braces.
+ * Used when chain ends have custom initial conditions (q_init).
+ *
+ * @param key Propagator key starting with "{"
+ * @return Initial condition identifier
+ * @throws Exception if key doesn't start with "{"
+ */
 std::string PropagatorCode::get_q_input_idx_from_key(std::string key)
 {
     if (key[0] != '{')
@@ -306,6 +422,22 @@ std::string PropagatorCode::get_q_input_idx_from_key(std::string key)
     // std::cout << key.substr(1, pos_start-1) << std::endl;
     return key.substr(1, pos_start-1);
 }
+
+/**
+ * @brief Get nesting depth (height) of a propagator key.
+ *
+ * Counts the number of opening parentheses/brackets at the start.
+ * Height 0 = chain end, Height 1+ = junction with merged branches.
+ *
+ * **Examples:**
+ *
+ * - "A" → height 0 (chain end)
+ * - "(A10)B" → height 1 (one junction)
+ * - "((A10)B5)C" → height 2 (nested junctions)
+ *
+ * @param key Propagator key
+ * @return Nesting depth (0 for chain ends)
+ */
 int PropagatorCode::get_height_from_key(std::string key)
 {
     int height_count = 0;

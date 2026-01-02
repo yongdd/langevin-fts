@@ -1,3 +1,34 @@
+/**
+ * @file PropagatorComputationOptimizer.cpp
+ * @brief Implementation of propagator computation optimizer.
+ *
+ * Analyzes polymer architectures to identify equivalent propagator computations
+ * that can be shared across chains or within branched structures. This
+ * optimization significantly reduces computational cost for complex mixtures.
+ *
+ * **Optimization Strategy:**
+ *
+ * The optimizer identifies two types of redundancy:
+ *
+ * 1. **Intra-polymer aggregation**: Identical branches within a single chain
+ *    (e.g., star polymers with identical arms) can share propagator computation
+ *
+ * 2. **Inter-polymer sharing**: Different polymer species with identical
+ *    sub-structures can reuse computed propagators
+ *
+ * **Data Structures:**
+ *
+ * - computation_propagators: Map of propagator keys to computation metadata
+ * - computation_blocks: Map of (polymer_id, left_key, right_key) to block info
+ *
+ * **Algorithm Reference:**
+ *
+ * See *J. Chem. Theory Comput.* **2025**, 21, 3676 for the optimization algorithm.
+ *
+ * @see PropagatorCode for key generation
+ * @see Scheduler for parallel execution scheduling
+ */
+
 #include <iostream>
 #include <cctype>
 #include <cmath>
@@ -12,6 +43,16 @@
 #include "Polymer.h"
 #include "Exception.h"
 
+/**
+ * @brief Compare propagator keys for ordered storage.
+ *
+ * Keys are compared first by height (nesting depth), then lexicographically.
+ * This ordering ensures that dependencies are processed before dependents.
+ *
+ * @param str1 First propagator key
+ * @param str2 Second propagator key
+ * @return true if str1 should come before str2
+ */
 bool ComparePropagatorKey::operator()(const std::string& str1, const std::string& str2) const
 {
     // First compare heights
@@ -27,6 +68,17 @@ bool ComparePropagatorKey::operator()(const std::string& str1, const std::string
     return str1 > str2;
 }
 
+/**
+ * @brief Construct optimizer for given molecular system.
+ *
+ * Analyzes all polymer species and builds optimized computation schedule.
+ * If aggregation is enabled, identifies equivalent propagators.
+ *
+ * @param molecules                       Molecular system to optimize
+ * @param aggregate_propagator_computation Enable branch aggregation
+ *
+ * @throws Exception if no polymers in the system
+ */
 PropagatorComputationOptimizer::PropagatorComputationOptimizer(Molecules* molecules, bool aggregate_propagator_computation)
 {
     if(molecules->get_n_polymer_types() == 0)
@@ -39,6 +91,22 @@ PropagatorComputationOptimizer::PropagatorComputationOptimizer(Molecules* molecu
         add_polymer(molecules->get_polymer(p), p);
     }
 }
+
+/**
+ * @brief Add a polymer to the optimization analysis.
+ *
+ * Processes the polymer's block structure and identifies computation blocks.
+ * If aggregation is enabled, merges equivalent branches.
+ *
+ * **Steps:**
+ *
+ * 1. Extract all edges and their propagator keys
+ * 2. Apply aggregation algorithm (if enabled)
+ * 3. Update global computation_blocks and computation_propagators maps
+ *
+ * @param pc         Polymer to add
+ * @param polymer_id Index of polymer in the system
+ */
 void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
 {
     // Temporary map for the new polymer
@@ -166,6 +234,23 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
         }
     }
 }
+
+/**
+ * @brief Aggregate propagators for continuous chain model.
+ *
+ * Merges branches with the same segment count into aggregated computations.
+ * Creates new keys with bracket notation (e.g., "[A10:2,B10]C").
+ *
+ * **Algorithm:**
+ *
+ * For each unique segment count:
+ * 1. Collect all propagators with that count
+ * 2. Create aggregated key combining all branches
+ * 3. Set individual branch segment counts to 0
+ *
+ * @param set_I Input set of computation blocks
+ * @return Modified set with aggregated blocks
+ */
 std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> set_I)
 {
     // Example)
@@ -289,6 +374,21 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     return set_I;
 
 }
+
+/**
+ * @brief Aggregate propagators for discrete chain model.
+ *
+ * Similar to continuous chain aggregation but accounts for discrete
+ * chain specifics where minimum segment count is 1 (not 0).
+ *
+ * **Algorithm:**
+ *
+ * Iteratively merges the two largest segment counts until only one
+ * aggregated propagator remains, creating a hierarchical structure.
+ *
+ * @param set_I Input set of computation blocks
+ * @return Modified set with aggregated blocks
+ */
 std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregate_propagator_discrete_chain(std::map<std::string, ComputationBlock> set_I)
 {
     // Example)
@@ -569,11 +669,24 @@ std::map<std::string, ComputationBlock> PropagatorComputationOptimizer::aggregat
     // }
     // return set_I;
 }
+/** @brief Check if aggregation is enabled. */
 bool PropagatorComputationOptimizer::use_aggregation() const
 {
     return aggregate_propagator_computation;
 }
 
+/**
+ * @brief Update right keys after aggregation.
+ *
+ * When branches are aggregated, the keys of dependent propagators must
+ * be updated to reference the new aggregated key.
+ *
+ * @param pc                              Polymer graph
+ * @param v_u_to_right_key               Map from (v,u) to right key
+ * @param computation_blocks_new_polymer Block map to update
+ * @param aggregated_blocks              Newly aggregated keys
+ * @param left_key                       Left key being processed
+ */
 void PropagatorComputationOptimizer::substitute_right_keys(
     Polymer& pc, 
     std::map<std::tuple<int, int>, std::string>& v_u_to_right_key,
@@ -653,6 +766,17 @@ void PropagatorComputationOptimizer::substitute_right_keys(
     }
 }
 
+/**
+ * @brief Update computation_propagators map with new key.
+ *
+ * Adds or updates entry for a propagator key, tracking maximum segment
+ * count and junction end positions.
+ *
+ * @param computation_propagators Map to update
+ * @param new_key                 Propagator key
+ * @param new_n_segment          Segment count for this usage
+ * @param is_junction_end        Whether this ends at a junction
+ */
 void PropagatorComputationOptimizer::update_computation_propagator_map(
     std::map<std::string, ComputationEdge, ComparePropagatorKey>& computation_propagators,
     std::string new_key, int new_n_segment, bool is_junction_end)
@@ -673,6 +797,16 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
         computation_propagators[new_key].junction_ends.insert(new_n_segment);
 }
 
+/**
+ * @brief Check if a node is a junction point.
+ *
+ * Junctions have more than one adjacent node (branching points).
+ * Chain ends have exactly one adjacent node.
+ *
+ * @param pc   Polymer graph
+ * @param node Node index to check
+ * @return true if node is a junction
+ */
 bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
 {
     if (pc.get_adjacent_nodes()[node].size() == 1)
@@ -681,14 +815,19 @@ bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
         return true;
 }
 
+/** @brief Get number of unique propagator computations. */
 int PropagatorComputationOptimizer::get_n_computation_propagator_codes() const
 {
     return computation_propagators.size();
 }
+
+/** @brief Get all computation propagators. */
 std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorComputationOptimizer::get_computation_propagators()
 {
     return computation_propagators;
 }
+
+/** @brief Get computation propagator by key. */
 ComputationEdge& PropagatorComputationOptimizer::get_computation_propagator(std::string key)
 {
     if (computation_propagators.find(key) == computation_propagators.end())
@@ -696,10 +835,14 @@ ComputationEdge& PropagatorComputationOptimizer::get_computation_propagator(std:
 
     return computation_propagators[key];
 }
+
+/** @brief Get all computation blocks. */
 std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& PropagatorComputationOptimizer::get_computation_blocks()
 {
     return computation_blocks;
 }
+
+/** @brief Get computation block by (polymer_id, left_key, right_key). */
 ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tuple<int, std::string, std::string> key)
 {
     if (computation_blocks.find(key) == computation_blocks.end())
@@ -708,6 +851,13 @@ ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tup
 
     return computation_blocks[key];
 }
+
+/**
+ * @brief Print computation blocks for debugging.
+ *
+ * Displays all blocks with their aggregation status, junction flags,
+ * segment counts, and (v,u) node pairs.
+ */
 void PropagatorComputationOptimizer::display_blocks() const
 {
     // Print blocks
@@ -775,6 +925,13 @@ void PropagatorComputationOptimizer::display_blocks() const
     }
     //std::cout << "------------------------------------" << std::endl;
 }
+
+/**
+ * @brief Print propagator list with optimization statistics.
+ *
+ * Shows each propagator's height, aggregation status, max segment count,
+ * and dependencies. Also reports total computational cost reduction.
+ */
 void PropagatorComputationOptimizer::display_propagators() const
 {
     // Print propagators
@@ -844,6 +1001,12 @@ void PropagatorComputationOptimizer::display_propagators() const
     //std::cout << "------------------------------------" << std::endl;
 }
 
+/**
+ * @brief Print sub-propagators with dependency information.
+ *
+ * Alternative display format showing propagator dependencies
+ * in a compact format.
+ */
 void PropagatorComputationOptimizer::display_sub_propagators() const
 {
     // Print sub propagators

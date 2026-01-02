@@ -1,3 +1,25 @@
+/**
+ * @file Molecules.cpp
+ * @brief Implementation of Molecules container class.
+ *
+ * Manages collections of polymer and solvent species for field theory
+ * simulations. Stores chain model parameters (continuous/discrete),
+ * contour step size, and statistical segment lengths.
+ *
+ * **Chain Models:**
+ *
+ * - Continuous: Modified diffusion equation (Gaussian chain)
+ * - Discrete: Integral equation (freely-jointed chain)
+ *
+ * **Species Management:**
+ *
+ * - Polymers: Added via add_polymer() with block architecture
+ * - Solvents: Added via add_solvent() with monomer type
+ *
+ * @see Polymer for individual chain architecture
+ * @see PropagatorComputation for field theory calculations
+ */
+
 #include <iostream>
 #include <cctype>
 #include <cmath>
@@ -11,7 +33,17 @@
 #include "PropagatorCode.h"
 #include "Exception.h"
 
-//----------------- Constructor ----------------------------
+/**
+ * @brief Construct Molecules container.
+ *
+ * Validates chain model name and stores simulation parameters.
+ *
+ * @param model_name    Chain model: "continuous" or "discrete"
+ * @param ds            Contour step size (1/N_Ref typically)
+ * @param bond_lengths  Statistical segment lengths by monomer type
+ *
+ * @throws Exception if model_name is invalid
+ */
 Molecules::Molecules(
     std::string model_name, double ds, std::map<std::string, double> bond_lengths)
 {
@@ -40,15 +72,38 @@ Molecules::Molecules(
         throw_without_line_number(exc.what());
     }
 }
+
+/**
+ * @brief Add a polymer species to the mixture.
+ *
+ * Creates a new Polymer object with the given architecture and appends
+ * it to the polymer_types vector.
+ *
+ * @param volume_fraction     Volume fraction of this polymer species
+ * @param block_inputs        Block definitions [monomer, length, v, u]
+ * @param chain_end_to_q_init Custom initial conditions at chain ends
+ *
+ * @see Polymer::Polymer for block validation
+ */
 void Molecules::add_polymer(
     double volume_fraction,
     std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
     // Add new polymer type
-    polymer_types.push_back(Polymer(ds, bond_lengths, 
+    polymer_types.push_back(Polymer(ds, bond_lengths,
         volume_fraction, block_inputs, chain_end_to_q_init));
 }
+
+/**
+ * @brief Add a solvent species to the mixture.
+ *
+ * Solvents are point particles (no chain contour) identified by
+ * their monomer type for field interactions.
+ *
+ * @param volume_fraction Volume fraction of this solvent
+ * @param monomer_type    Monomer type for χ interactions
+ */
 void Molecules::add_solvent(
     double volume_fraction, std::string monomer_type)
 {
