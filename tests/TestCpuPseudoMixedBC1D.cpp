@@ -26,6 +26,7 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuSolverPseudoMixedBC.h"
+#include "CpuSolverPseudoContinuous.h"
 #include "MklFFTMixedBC.h"
 #endif
 
@@ -303,6 +304,178 @@ int main()
         if (mass_3d_out >= mass_3d_init)
         {
             std::cout << "  WARNING: Mass did not decrease (may be ok for short time step)" << std::endl;
+        }
+        std::cout << "  PASSED!" << std::endl;
+
+        //=======================================================================
+        // Test 7: DCT-based propagator vs DFT-based propagator (symmetric input)
+        //=======================================================================
+        // Mathematical relationship:
+        // For symmetric input f(x) = f(L-x), the DCT-based solver on domain [0,L]
+        // should give identical results to the DFT-based solver on domain [0,2L]
+        // with symmetric extension f(x) = f(2L-x).
+        //
+        // This tests that reflecting BC (DCT) correctly implements the physics
+        // of a reflecting wall by showing equivalence to periodic BC with
+        // symmetric extension (method of images).
+        //=======================================================================
+        std::cout << "\nTest 7: DCT-based propagator vs DFT-based propagator (symmetric input)" << std::endl;
+
+        const int N_DCT = 16;
+        const double L_DCT = 4.0;
+        const double dx_DCT = L_DCT / N_DCT;
+        const double ds_DCT = 0.01;
+        const int n_steps_DCT = 10;
+
+        // Create symmetric initial condition on [0, L]: Gaussian centered at L/2
+        std::vector<double> q_dct_init(N_DCT);
+        for (int i = 0; i < N_DCT; ++i)
+        {
+            double x = (i + 0.5) * dx_DCT;
+            q_dct_init[i] = std::exp(-std::pow(x - L_DCT/2, 2) / (2 * 0.5 * 0.5));
+        }
+
+        // Create symmetric extension on [0, 2L] for DFT
+        // y[n] = x[n] for n=0..N-1
+        // y[2N-1-n] = x[n] for n=0..N-1
+        const int N2_DFT = 2 * N_DCT;
+        const double L2_DFT = 2 * L_DCT;
+        std::vector<double> q_dft_init(N2_DFT);
+        for (int n = 0; n < N_DCT; ++n)
+        {
+            q_dft_init[n] = q_dct_init[n];
+            q_dft_init[N2_DFT - 1 - n] = q_dct_init[n];
+        }
+
+        // Set up DCT-based solver (reflecting BC)
+        std::map<std::string, double> bond_lengths_dct = {{"A", 1.0}};
+        Molecules molecules_dct("Continuous", ds_DCT, bond_lengths_dct);
+        std::vector<BlockInput> blocks_dct = {{"A", 1.0, 0, 1}};
+        molecules_dct.add_polymer(1.0, blocks_dct, {});
+
+        CpuComputationBox<double> cb_dct({N_DCT}, {L_DCT}, {"reflecting", "reflecting"});
+        CpuSolverPseudoMixedBC<double> solver_dct(&cb_dct, &molecules_dct);
+
+        std::vector<double> w_dct(N_DCT, 0.0);
+        solver_dct.update_dw({{"A", w_dct.data()}});
+
+        // Set up DFT-based solver (periodic BC on 2L domain)
+        Molecules molecules_dft("Continuous", ds_DCT, bond_lengths_dct);
+        molecules_dft.add_polymer(1.0, blocks_dct, {});
+
+        CpuComputationBox<double> cb_dft({N2_DFT}, {L2_DFT}, {"periodic", "periodic"});
+        CpuSolverPseudoContinuous<double> solver_dft(&cb_dft, &molecules_dft);
+
+        std::vector<double> w_dft(N2_DFT, 0.0);
+        solver_dft.update_dw({{"A", w_dft.data()}});
+
+        // Evolve both propagators
+        std::vector<double> q_dct_in(N_DCT), q_dct_out(N_DCT);
+        std::vector<double> q_dft_in(N2_DFT), q_dft_out(N2_DFT);
+
+        for (int i = 0; i < N_DCT; ++i)
+            q_dct_in[i] = q_dct_init[i];
+        for (int i = 0; i < N2_DFT; ++i)
+            q_dft_in[i] = q_dft_init[i];
+
+        for (int step = 0; step < n_steps_DCT; ++step)
+        {
+            solver_dct.advance_propagator(q_dct_in.data(), q_dct_out.data(), "A", nullptr);
+            solver_dft.advance_propagator(q_dft_in.data(), q_dft_out.data(), "A", nullptr);
+
+            for (int i = 0; i < N_DCT; ++i)
+                q_dct_in[i] = q_dct_out[i];
+            for (int i = 0; i < N2_DFT; ++i)
+                q_dft_in[i] = q_dft_out[i];
+        }
+
+        // Compare results: DCT result should match first N points of DFT result
+        double dct_dft_error = 0.0;
+        for (int i = 0; i < N_DCT; ++i)
+        {
+            dct_dft_error = std::max(dct_dft_error, std::abs(q_dct_out[i] - q_dft_out[i]));
+        }
+
+        std::cout << "  DCT vs DFT propagator max error: " << dct_dft_error << std::endl;
+        if (!std::isfinite(dct_dft_error) || dct_dft_error > 1e-10)
+        {
+            std::cout << "  FAILED! DCT and DFT propagators should match for symmetric input." << std::endl;
+            return -1;
+        }
+        std::cout << "  PASSED!" << std::endl;
+
+        //=======================================================================
+        // Test 8: DST-based propagator vs DFT-based propagator (antisymmetric input)
+        //=======================================================================
+        // Mathematical relationship:
+        // For antisymmetric input f(x) = -f(L-x) (about x=L), the DST-based solver
+        // on domain [0,L] should give identical results to the DFT-based solver
+        // on domain [0,2L] with antisymmetric extension f(x) = -f(2L-x).
+        //
+        // This tests that absorbing BC (DST) correctly implements the physics
+        // of an absorbing boundary by showing equivalence to periodic BC with
+        // antisymmetric extension (method of images with opposite sign).
+        //=======================================================================
+        std::cout << "\nTest 8: DST-based propagator vs DFT-based propagator (antisymmetric input)" << std::endl;
+
+        // Create antisymmetric initial condition on [0, L]
+        // Using sin(π*x/L) which satisfies f(0)=f(L)=0 (absorbing BC)
+        std::vector<double> q_dst_init(N_DCT);
+        for (int i = 0; i < N_DCT; ++i)
+        {
+            double x = (i + 0.5) * dx_DCT;
+            // Use a function that is antisymmetric about x=L when extended
+            // sin(π*(x+0.5*dx)/L) gives antisymmetric extension
+            q_dst_init[i] = std::sin(std::numbers::pi * x / L_DCT);
+        }
+
+        // Create antisymmetric extension on [0, 2L] for DFT
+        // y[n] = x[n] for n=0..N-1
+        // y[2N-1-n] = -x[n] for n=0..N-1
+        std::vector<double> q_dft_antisym_init(N2_DFT);
+        for (int n = 0; n < N_DCT; ++n)
+        {
+            q_dft_antisym_init[n] = q_dst_init[n];
+            q_dft_antisym_init[N2_DFT - 1 - n] = -q_dst_init[n];
+        }
+
+        // Set up DST-based solver (absorbing BC)
+        CpuComputationBox<double> cb_dst({N_DCT}, {L_DCT}, {"absorbing", "absorbing"});
+        CpuSolverPseudoMixedBC<double> solver_dst(&cb_dst, &molecules_dct);
+        solver_dst.update_dw({{"A", w_dct.data()}});
+
+        // Evolve both propagators
+        std::vector<double> q_dst_in(N_DCT), q_dst_out(N_DCT);
+        std::vector<double> q_dft_antisym_in(N2_DFT), q_dft_antisym_out(N2_DFT);
+
+        for (int i = 0; i < N_DCT; ++i)
+            q_dst_in[i] = q_dst_init[i];
+        for (int i = 0; i < N2_DFT; ++i)
+            q_dft_antisym_in[i] = q_dft_antisym_init[i];
+
+        for (int step = 0; step < n_steps_DCT; ++step)
+        {
+            solver_dst.advance_propagator(q_dst_in.data(), q_dst_out.data(), "A", nullptr);
+            solver_dft.advance_propagator(q_dft_antisym_in.data(), q_dft_antisym_out.data(), "A", nullptr);
+
+            for (int i = 0; i < N_DCT; ++i)
+                q_dst_in[i] = q_dst_out[i];
+            for (int i = 0; i < N2_DFT; ++i)
+                q_dft_antisym_in[i] = q_dft_antisym_out[i];
+        }
+
+        // Compare results: DST result should match first N points of DFT result
+        double dst_dft_error = 0.0;
+        for (int i = 0; i < N_DCT; ++i)
+        {
+            dst_dft_error = std::max(dst_dft_error, std::abs(q_dst_out[i] - q_dft_antisym_out[i]));
+        }
+
+        std::cout << "  DST vs DFT propagator max error: " << dst_dft_error << std::endl;
+        if (!std::isfinite(dst_dft_error) || dst_dft_error > 1e-10)
+        {
+            std::cout << "  FAILED! DST and DFT propagators should match for antisymmetric input." << std::endl;
+            return -1;
         }
         std::cout << "  PASSED!" << std::endl;
 
