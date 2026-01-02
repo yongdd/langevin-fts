@@ -15,6 +15,7 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
+#include "CpuComputationReduceMemoryDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
@@ -203,8 +204,11 @@ int main()
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl");
+        solver_name_list.push_back("cpu-mkl, reduce_memory_usage");
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationDiscrete<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer));
+        cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationDiscrete<T>(cb_list.end()[-2], molecules, propagator_computation_optimizer));
+        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<T>(cb_list.end()[-1], molecules, propagator_computation_optimizer));
         #endif
         
         #ifdef USE_CUDA

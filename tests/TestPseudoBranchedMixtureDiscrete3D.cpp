@@ -13,6 +13,7 @@
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
+#include "CpuComputationReduceMemoryDiscrete.h"
 #endif
 #ifdef USE_CUDA
 #include "CudaComputationBox.h"
@@ -330,10 +331,16 @@ int main()
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("pseudo, cpu-mkl");
         solver_name_list.push_back("pseudo, cpu-mkl, aggregated");
+        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory_usage, aggregated");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
-        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
+        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-4], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-3], molecules, propagator_computation_optimizer_2));
+        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer_1));
+        solver_list.push_back(new CpuComputationReduceMemoryDiscrete<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer_2));
         #endif
         #ifdef USE_CUDA
         solver_name_list.push_back("pseudo, cuda");

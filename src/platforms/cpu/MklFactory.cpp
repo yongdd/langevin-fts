@@ -40,6 +40,7 @@
 #include "CpuComputationContinuous.h"
 #include "CpuComputationDiscrete.h"
 #include "CpuComputationReduceMemoryContinuous.h"
+#include "CpuComputationReduceMemoryDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -98,7 +99,7 @@ PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(Computatio
     else if( chain_model == "discrete" && this->reduce_memory_usage == false )
         return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     else if( chain_model == "discrete" && this->reduce_memory_usage == true)
-        return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+        return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     return NULL;
 }
 template <typename T>
