@@ -1,3 +1,38 @@
+/**
+ * @file CudaSolverPseudoContinuous.cu
+ * @brief CUDA pseudo-spectral solver for continuous Gaussian chains.
+ *
+ * Implements 4th-order Richardson extrapolation for advancing chain
+ * propagators using cuFFT for Fourier transforms and multiple CUDA streams
+ * for concurrent computation.
+ *
+ * **Richardson Extrapolation:**
+ *
+ * The propagator is advanced using two step sizes combined for 4th-order:
+ * - Full step ds: O(ds²) accuracy
+ * - Two half steps ds/2: O(ds²) accuracy
+ * - Combination: (4*q_half - q_full)/3 gives O(ds⁴) accuracy
+ *
+ * **cuFFT Plans:**
+ *
+ * - plan_for_one/two: Forward FFT for 1 or 2 fields simultaneously
+ * - plan_bak_one/two: Backward FFT for 1 or 2 fields
+ * - Stream-associated for concurrent execution
+ *
+ * **Stress Calculation:**
+ *
+ * compute_single_segment_stress() computes dQ/dL by multiplying propagator
+ * products in Fourier space by weighted basis functions.
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaSolverPseudoContinuous<double>: Real field solver
+ * - CudaSolverPseudoContinuous<std::complex<double>>: Complex field solver
+ *
+ * @see CudaPseudo for Boltzmann factors
+ * @see CudaComputationContinuous for propagator orchestration
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>

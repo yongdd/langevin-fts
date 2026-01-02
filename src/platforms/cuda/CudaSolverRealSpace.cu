@@ -1,3 +1,37 @@
+/**
+ * @file CudaSolverRealSpace.cu
+ * @brief CUDA real-space solver using Crank-Nicolson ADI method.
+ *
+ * Implements propagator advancement for continuous chains using finite
+ * differences instead of FFT. Supports non-periodic boundary conditions
+ * (reflecting, absorbing) and uses ADI splitting with GPU-accelerated
+ * tridiagonal solvers.
+ *
+ * **Crank-Nicolson ADI:**
+ *
+ * The modified diffusion equation is split dimensionally:
+ * - 3D: Three sequential tridiagonal solves (x, y, z directions)
+ * - 2D: Two tridiagonal solves
+ * - 1D: Single tridiagonal solve
+ *
+ * **Tridiagonal Solvers:**
+ *
+ * - tridiagonal(): Standard Thomas algorithm with shared memory
+ * - tridiagonal_periodic(): Sherman-Morrison for periodic boundaries
+ * - Both use dynamic shared memory for coefficient caching
+ *
+ * **Boundary Conditions:**
+ *
+ * - PERIODIC: Cyclic boundary with Sherman-Morrison correction
+ * - REFLECTING: Zero flux (Neumann) boundary
+ * - ABSORBING: Zero value (Dirichlet) boundary
+ *
+ * **Note:** Stress computation not yet supported for real-space method.
+ *
+ * @see FiniteDifference for matrix construction
+ * @see CudaComputationContinuous for integration
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>

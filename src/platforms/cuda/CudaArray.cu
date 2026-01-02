@@ -1,8 +1,38 @@
+/**
+ * @file CudaArray.cu
+ * @brief CUDA implementation of GPU memory array management.
+ *
+ * Provides GPU-side memory allocation and arithmetic operations using
+ * CUDA kernels. Implements the abstract Array interface for device memory.
+ *
+ * **Memory Management:**
+ *
+ * - Uses cudaMalloc/cudaFree for device memory
+ * - Tracks device ID for multi-GPU validation
+ * - Supports host-device and device-device transfers
+ *
+ * **Arithmetic Operations:**
+ *
+ * Uses CUDA kernels from CudaCommon for element-wise operations:
+ * - ker_lin_comb: Linear combination dst = a*src1 + b*src2
+ * - ker_multi: Element-wise multiplication
+ * - ker_divide: Element-wise division
+ * - ker_linear_scaling: dst = a*src + b
+ *
+ * @see Array for abstract interface
+ * @see CpuArray for CPU equivalent
+ * @see CudaCommon for kernel definitions
+ */
 
 #include <iostream>
 #include "CudaCommon.h"
 #include "CudaArray.h"
 
+/**
+ * @brief Construct CUDA array with given size on current device.
+ *
+ * @param new_size Number of elements to allocate
+ */
 CudaArray::CudaArray(unsigned new_size)
 {
     gpu_error_check(cudaMalloc((void**)&this->d_data, sizeof(double)*new_size));

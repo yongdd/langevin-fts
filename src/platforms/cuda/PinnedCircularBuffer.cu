@@ -1,3 +1,32 @@
+/**
+ * @file PinnedCircularBuffer.cu
+ * @brief CUDA pinned memory circular buffer implementation.
+ *
+ * Provides a circular buffer using CUDA pinned (page-locked) host memory
+ * for efficient asynchronous host-device transfers. Used in memory-saving
+ * mode to store propagator history on host while enabling fast GPU access.
+ *
+ * **Memory Benefits:**
+ *
+ * - cudaMallocHost allocates page-locked memory
+ * - Enables DMA transfers without CPU involvement
+ * - Allows overlapping computation with memory transfer
+ *
+ * **Operations:**
+ *
+ * - insert(): Add new array to buffer (circular overwrite)
+ * - get_array(): Retrieve by relative index (0 = most recent)
+ * - reset(): Clear buffer state
+ *
+ * **Template Instantiations:**
+ *
+ * - PinnedCircularBuffer<double>: Real field history
+ * - PinnedCircularBuffer<std::complex<double>>: Complex field history
+ *
+ * @see CudaAndersonMixingReduceMemory for memory-saving mode
+ * @see CudaCircularBuffer for device memory version
+ */
+
 #include <algorithm>
 #include "CudaCommon.h"
 #include "PinnedCircularBuffer.h"

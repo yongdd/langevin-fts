@@ -1,3 +1,45 @@
+/**
+ * @file CudaComputationReduceMemoryContinuous.cu
+ * @brief Memory-efficient CUDA propagator computation for continuous chains.
+ *
+ * Implements checkpointing strategy that stores only selected propagator
+ * values, recomputing intermediate values when needed. Trades computation
+ * time (2-4x slower) for significantly reduced GPU memory usage.
+ *
+ * **Checkpointing Strategy:**
+ *
+ * - propagator_at_check_point: Stores propagators at key contour positions
+ * - Check points include: s=0, block junctions, block ends
+ * - Intermediate propagators recomputed from nearest checkpoint
+ *
+ * **Memory Layout:**
+ *
+ * - Uses pinned (page-locked) host memory for checkpoints
+ * - Only 2 GPU arrays needed for current computation
+ * - q_recal: Temporary host arrays for recomputation
+ *
+ * **Concentration Calculation:**
+ *
+ * For each block:
+ * 1. Load checkpoint q(r, N_LEFT-N_RIGHT) from host
+ * 2. Recompute forward propagators q(r, N_LEFT-n) for n=0..N_RIGHT
+ * 3. Simultaneously advance backward propagator
+ * 4. Accumulate concentration with Simpson's rule
+ *
+ * **Stream Usage:**
+ *
+ * Single stream (n_streams=1) to minimize memory:
+ * - streams[0][0]: Kernel execution
+ * - streams[0][1]: Host-device memory transfers
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaComputationReduceMemoryContinuous<double>: Real field
+ * - CudaComputationReduceMemoryContinuous<std::complex<double>>: Complex field
+ *
+ * @see CudaComputationContinuous for full memory version
+ */
+
 #include <complex>
 #include <vector>
 #include <omp.h>

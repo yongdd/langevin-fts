@@ -1,3 +1,32 @@
+/**
+ * @file CudaCircularBuffer.cu
+ * @brief CUDA implementation of circular buffer for device memory.
+ *
+ * Provides a fixed-size circular buffer storing arrays in GPU device memory.
+ * Used for Anderson mixing history storage where only the most recent entries
+ * are needed.
+ *
+ * **Memory Layout:**
+ *
+ * - d_elems: Array of device pointers, each pointing to an array of width T
+ * - Uses cudaMalloc for device memory allocation
+ * - Circular indexing avoids memory reallocation
+ *
+ * **Operations:**
+ *
+ * - insert(): Add new array, overwriting oldest if full
+ * - get_array(): Retrieve array by relative index (0 = most recent)
+ * - reset(): Clear buffer state without deallocating memory
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaCircularBuffer<double>: Real field history
+ * - CudaCircularBuffer<std::complex<double>>: Complex field history
+ *
+ * @see AndersonMixing for usage in field iteration
+ * @see CircularBuffer for CPU equivalent
+ */
+
 #include <algorithm>
 
 #include "CudaCommon.h"

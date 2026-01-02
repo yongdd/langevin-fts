@@ -1,9 +1,47 @@
+/**
+ * @file FiniteDifference.cpp
+ * @brief Implementation of finite difference coefficients.
+ *
+ * Provides utility functions for computing tridiagonal matrix coefficients
+ * used in the Crank-Nicolson real-space solver. The matrices represent
+ * the discretized Laplacian operator with various boundary conditions.
+ *
+ * **Crank-Nicolson Discretization:**
+ *
+ * The diffusion equation ∂q/∂s = (b²/6)∇²q is discretized as:
+ *     (I - ds/2 · L) q^(n+1) = (I + ds/2 · L) q^n
+ *
+ * where L is the discrete Laplacian with coefficients:
+ *     L[i,i-1] = L[i,i+1] = factor = b²ds/(6dx²)
+ *     L[i,i] = -2·factor
+ *
+ * **Boundary Condition Modifications:**
+ *
+ * - PERIODIC: No modification (handled by cyclic tridiagonal solver)
+ * - REFLECTING: Add off-diagonal to diagonal, zero off-diagonal
+ * - ABSORBING: Zero off-diagonal only
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
 #include "FiniteDifference.h"
 
-//----------------- get_laplacian_matrix -------------------
+/**
+ * @brief Compute tridiagonal Laplacian matrix coefficients.
+ *
+ * Fills arrays with coefficients for each spatial direction,
+ * applying boundary condition modifications at domain edges.
+ *
+ * @param bc             Boundary conditions [xl, xh, yl, yh, zl, zh]
+ * @param nx             Grid points per dimension
+ * @param dx             Grid spacing per dimension
+ * @param xl,xd,xh       X-direction: lower, diagonal, upper (size nx[0])
+ * @param yl,yd,yh       Y-direction coefficients (size nx[1])
+ * @param zl,zd,zh       Z-direction coefficients (size nx[2])
+ * @param bond_length_sq Statistical segment length squared (b²)
+ * @param ds             Contour step size
+ */
 void FiniteDifference::get_laplacian_matrix(
         std::vector<BoundaryCondition> bc,
         std::vector<int> nx, std::vector<double> dx,

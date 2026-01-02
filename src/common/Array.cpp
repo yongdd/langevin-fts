@@ -1,3 +1,14 @@
+/**
+ * @file Array.cpp
+ * @brief Implementation of abstract Array class.
+ *
+ * This file contains global operator overloading implementations for
+ * the Array class. Currently disabled (commented out) as these operations
+ * are implemented within platform-specific derived classes.
+ *
+ * @note The Array class itself is abstract; see CpuArray and CudaArray
+ *       for concrete implementations.
+ */
 
 #include <iostream>
 #include "Array.h"

@@ -1,3 +1,32 @@
+/**
+ * @file CudaAndersonMixing.cu
+ * @brief CUDA implementation of Anderson mixing algorithm.
+ *
+ * Provides GPU-accelerated Anderson mixing for SCFT convergence using
+ * device memory and CUB parallel reductions.
+ *
+ * **GPU Optimization:**
+ *
+ * - Field history stored in CudaCircularBuffer (device memory)
+ * - Inner products computed with CUB reduction kernels
+ * - CUDA streams for overlapping computation and memory transfer
+ *
+ * **Algorithm:**
+ *
+ * 1. Store w_i and d_i history on GPU
+ * 2. Compute U matrix inner products using CUB reduction
+ * 3. Solve least-squares on CPU (small system)
+ * 4. Apply mixing coefficients with CUDA kernels
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaAndersonMixing<double>: Real field mixing
+ * - CudaAndersonMixing<std::complex<double>>: Complex field mixing
+ *
+ * @see CudaCircularBuffer for GPU history storage
+ * @see AndersonMixing for algorithm description
+ */
+
 #include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>
@@ -6,6 +35,15 @@
 #include "CudaCircularBuffer.h"
 #include "CudaAndersonMixing.h"
 
+/**
+ * @brief Construct CUDA Anderson mixing with GPU buffers.
+ *
+ * @param n_var       Number of field variables
+ * @param max_hist    Maximum history length
+ * @param start_error Error threshold to begin Anderson mixing
+ * @param mix_min     Minimum mixing parameter
+ * @param mix_init    Initial mixing parameter
+ */
 template <typename T>
 CudaAndersonMixing<T>::CudaAndersonMixing(
     int n_var, int max_hist, double start_error,

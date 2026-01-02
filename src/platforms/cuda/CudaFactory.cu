@@ -1,6 +1,38 @@
-/*----------------------------------------------------------
-* class CudaFactory
-*-----------------------------------------------------------*/
+/**
+ * @file CudaFactory.cu
+ * @brief Implementation of CUDA-based abstract factory.
+ *
+ * Provides the abstract factory implementation for creating GPU-based
+ * computational objects using CUDA. Creates all platform-specific classes
+ * needed for SCFT/L-FTS simulations on NVIDIA GPUs.
+ *
+ * **Created Objects:**
+ *
+ * - CudaComputationBox: Grid with cuFFT support
+ * - CudaAndersonMixing: GPU-accelerated field mixing
+ * - CudaComputationContinuous/Discrete: Multi-stream propagators
+ *
+ * **Memory Modes:**
+ *
+ * - Normal: Full propagator storage for maximum speed
+ * - Reduce memory: Checkpointing with recomputation (2-4x slower)
+ *
+ * **Device Information:**
+ *
+ * display_info() prints GPU capabilities including:
+ * - Compute capability
+ * - Memory sizes
+ * - Block/thread limits
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaFactory<double>: Real field factory
+ * - CudaFactory<std::complex<double>>: Complex field factory
+ *
+ * @see AbstractFactory for factory interface
+ * @see PlatformSelector for factory creation
+ */
+
 #include <iostream>
 #include <array>
 #include <vector>
@@ -16,6 +48,11 @@
 #include "CudaFactory.h"
 #include "CudaArray.h"
 
+/**
+ * @brief Construct CUDA factory with optional memory reduction.
+ *
+ * @param reduce_memory_usage Enable checkpointing mode
+ */
 template <typename T>
 CudaFactory<T>::CudaFactory(bool reduce_memory_usage)
 {

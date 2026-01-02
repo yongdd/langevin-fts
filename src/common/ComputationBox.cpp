@@ -1,3 +1,30 @@
+/**
+ * @file ComputationBox.cpp
+ * @brief Implementation of ComputationBox simulation domain.
+ *
+ * Provides the abstract base implementation for managing the computational
+ * grid, including grid dimensions, volume elements, boundary conditions,
+ * and integral operations. Platform-specific FFT operations are implemented
+ * in derived classes (CpuComputationBox, CudaComputationBox).
+ *
+ * **Grid Structure:**
+ *
+ * - Supports 1D, 2D, and 3D grids
+ * - Grid spacing: dx[d] = lx[d] / nx[d]
+ * - Volume element: dv[i] = Π dx[d] × mask[i]
+ *
+ * **Boundary Conditions:**
+ *
+ * Each dimension has two boundaries (low/high):
+ * - PERIODIC: Wrap-around (default, required for pseudo-spectral)
+ * - REFLECTING: Zero derivative (Neumann)
+ * - ABSORBING: Zero value (Dirichlet)
+ *
+ * **Template Instantiations:**
+ *
+ * - ComputationBox<double>: Real-valued fields
+ * - ComputationBox<std::complex<double>>: Complex-valued fields
+ */
 
 #include <iostream>
 #include <sstream>
@@ -8,7 +35,16 @@
 
 #include "ComputationBox.h"
 
-//----------------- Constructor -----------------------------
+/**
+ * @brief Construct computation box with given grid and boundaries.
+ *
+ * @param new_nx Grid points per dimension [nx, ny, nz]
+ * @param new_lx Box lengths per dimension [Lx, Ly, Lz]
+ * @param bc     Boundary conditions (2 per dimension: low, high)
+ * @param mask   Optional mask for impenetrable regions (nullptr = no mask)
+ *
+ * @throws Exception if dimensions mismatch or invalid parameters
+ */
 template <typename T>
 ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
     std::vector<std::string> bc, const double* mask)

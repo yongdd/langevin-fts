@@ -1,3 +1,41 @@
+/**
+ * @file CudaComputationDiscrete.cu
+ * @brief CUDA propagator computation for discrete chain model.
+ *
+ * Orchestrates GPU-based propagator computation for discrete chains using
+ * multiple CUDA streams. Handles half-bond steps at junctions and stores
+ * both full-step and half-step propagators.
+ *
+ * **Discrete Chain Model:**
+ *
+ * Segments are discrete units connected by bonds:
+ * - O--O--O--O--O  (5 segments, 4 full bonds)
+ * - Half-bond steps needed at junctions for proper statistical weight
+ *
+ * **Propagator Storage:**
+ *
+ * - d_propagator[key][n]: Full segment propagators q(r,n)
+ * - d_propagator_half_steps[key][n]: Junction propagators q(r,n+1/2)
+ * - Index 0 unused for d_propagator (segments start at 1)
+ *
+ * **Concentration Calculation:**
+ *
+ * Direct summation (no Simpson's rule):
+ * φ(r) = (ds/Q) * Σ_n q(r,n) * q†(r,n) / exp(-w*ds)
+ *
+ * **Stress Computation:**
+ *
+ * block_stress_computation_plan stores pre-computed propagator pairs
+ * and bond length flags for efficient stress calculation.
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaComputationDiscrete<double>: Real field simulations
+ * - CudaComputationDiscrete<std::complex<double>>: L-FTS simulations
+ *
+ * @see CudaSolverPseudoDiscrete for propagator advancement
+ */
+
 #include <complex>
 #include <iostream>
 #include <chrono>

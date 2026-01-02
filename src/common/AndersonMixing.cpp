@@ -1,7 +1,39 @@
+/**
+ * @file AndersonMixing.cpp
+ * @brief Implementation of AndersonMixing base class.
+ *
+ * Provides the constructor and Gaussian elimination solver for the
+ * Anderson mixing algorithm. The actual mixing computation is implemented
+ * in platform-specific derived classes (CpuAndersonMixing, CudaAndersonMixing).
+ *
+ * **Anderson Mixing Algorithm:**
+ *
+ * Given field history {w_i} and residual history {d_i}, find coefficients
+ * {a_i} that minimize the linear combination of residuals:
+ *
+ *     min || Σ a_i d_i ||²  subject to Σ a_i = 1
+ *
+ * This leads to a least-squares problem solved by Gaussian elimination.
+ *
+ * **Template Instantiations:**
+ *
+ * - AndersonMixing<double>: Real field mixing
+ * - AndersonMixing<std::complex<double>>: Complex field mixing
+ */
+
 #include <complex>
 
 #include "AndersonMixing.h"
 
+/**
+ * @brief Construct Anderson mixing with given parameters.
+ *
+ * @param n_var       Number of field variables
+ * @param max_hist    Maximum history length for mixing
+ * @param start_error Error threshold to begin Anderson mixing
+ * @param mix_min     Minimum mixing parameter (prevents instability)
+ * @param mix_init    Initial mixing parameter
+ */
 template <typename T>
 AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
@@ -18,6 +50,26 @@ AndersonMixing<T>::AndersonMixing(int n_var, int max_hist,
     this->mix = mix_init;
     this->mix_init = mix_init;
 }
+
+/**
+ * @brief Solve linear system Ua = v using Gaussian elimination.
+ *
+ * Implements forward elimination followed by back substitution to solve
+ * the normal equations arising from the Anderson mixing least-squares problem.
+ *
+ * **Algorithm:**
+ *
+ * 1. Forward elimination: Transform U to upper triangular form
+ * 2. Back substitution: Solve for coefficients a_i
+ *
+ * @param u Input matrix U (n × n), modified in place
+ * @param v Input/output vector (size n), modified to intermediate values
+ * @param a Output solution vector (size n)
+ * @param n System size (number of history entries used)
+ *
+ * @warning Matrix u is modified during elimination. Caller should
+ *          provide a copy if original values are needed.
+ */
 template <typename T>
 void AndersonMixing<T>::find_an(T **u, T *v, T *a, int n)
 {

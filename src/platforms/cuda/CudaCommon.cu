@@ -1,3 +1,36 @@
+/**
+ * @file CudaCommon.cu
+ * @brief CUDA common utilities and kernel implementations.
+ *
+ * Provides GPU configuration management and a comprehensive library of
+ * CUDA kernels for element-wise array operations used throughout the
+ * SCFT/L-FTS computations.
+ *
+ * **Configuration:**
+ *
+ * - CudaCommon singleton manages GPU blocks/threads configuration
+ * - Environment variables: LFTS_GPU_NUM_BLOCKS, LFTS_GPU_NUM_THREADS
+ * - Default: 256 blocks, 256 threads per block
+ *
+ * **Kernel Categories:**
+ *
+ * - Linear scaling: ker_linear_scaling (dst = a*src + b)
+ * - Exponential: ker_exp (dst = a*exp(b*src))
+ * - Multiplication: ker_multi, ker_add_multi (element-wise products)
+ * - Division: ker_divide (element-wise division)
+ * - Linear combination: ker_lin_comb, ker_add_lin_comb
+ * - Complex operations: ker_multi_complex_conjugate, ker_multi_complex_real
+ * - Batched exp-dw: ker_multi_exp_dw_two, ker_multi_exp_dw_four
+ *
+ * **Type Conversion:**
+ *
+ * - cuDoubleToStdComplex: CUDA to std::complex conversion
+ * - stdToCuDoubleComplex: std::complex to CUDA conversion
+ * - reinterpret_map: Convert pointer maps between types
+ *
+ * @see CudaCommon for singleton interface
+ */
+
 #include <iostream>
 #include <cstdlib>
 #include <string>

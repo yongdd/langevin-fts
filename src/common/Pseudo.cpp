@@ -1,9 +1,54 @@
+/**
+ * @file Pseudo.cpp
+ * @brief Implementation of pseudo-spectral method utilities.
+ *
+ * Provides the base implementation for computing Fourier-space operators
+ * used in the pseudo-spectral propagator solver. Platform-specific versions
+ * (CpuPseudo, CudaPseudo) copy these arrays to appropriate memory.
+ *
+ * **Boltzmann Factors:**
+ *
+ * In Fourier space, the diffusion operator becomes multiplication:
+ *     exp(-b²k²ds/6) for full step
+ *     exp(-b²k²ds/12) for half step (discrete chains)
+ *
+ * **Fourier Basis Vectors:**
+ *
+ * Weighted wavenumber squares for stress calculation:
+ *     fourier_basis_x[k] = kx² × weight
+ *
+ * Weight factor of 2 for interior k modes in r2c transform (Hermitian symmetry).
+ *
+ * **Negative Frequency Mapping:**
+ *
+ * For complex fields, maps each frequency to its conjugate partner:
+ *     negative_k_idx[k] = index of -k
+ *
+ * Required for computing real-valued stress from complex propagators.
+ *
+ * **Template Instantiations:**
+ *
+ * - Pseudo<double>: Real fields with r2c FFT (reduced storage)
+ * - Pseudo<std::complex<double>>: Complex fields with c2c FFT
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
 #include "Pseudo.h"
 
-//----------------- Constructor -----------------------------
+/**
+ * @brief Construct pseudo-spectral utilities.
+ *
+ * Allocates Boltzmann factors and Fourier basis arrays, then initializes
+ * all operators for the given grid and contour step.
+ *
+ * @param bond_lengths Map of monomer type to segment length (b)
+ * @param bc           Boundary conditions (must be periodic)
+ * @param nx           Grid points per dimension
+ * @param dx           Grid spacing per dimension
+ * @param ds           Contour step size
+ */
 template <typename T>
 Pseudo<T>::Pseudo(
     std::map<std::string, double> bond_lengths,

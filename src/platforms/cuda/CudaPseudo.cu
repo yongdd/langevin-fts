@@ -1,3 +1,32 @@
+/**
+ * @file CudaPseudo.cu
+ * @brief CUDA implementation of pseudo-spectral method base class.
+ *
+ * Extends Pseudo base class with GPU device memory for Boltzmann bond
+ * factors and Fourier basis arrays used in stress calculations.
+ *
+ * **Device Arrays:**
+ *
+ * - d_boltz_bond: exp(-k² b² ds/6) for full step propagation
+ * - d_boltz_bond_half: exp(-k² b² ds/12) for half step
+ * - d_fourier_basis_x/y/z: Fourier basis for stress computation
+ * - d_negative_k_idx: Mapping for conjugate symmetry (complex fields)
+ *
+ * **Update Mechanism:**
+ *
+ * When box dimensions change, update() recalculates Fourier space
+ * operators and copies them to device memory.
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaPseudo<double>: Real field computations
+ * - CudaPseudo<std::complex<double>>: Complex field computations
+ *
+ * @see Pseudo for base class interface
+ * @see CudaSolverPseudoContinuous for continuous chain solver
+ * @see CudaSolverPseudoDiscrete for discrete chain solver
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>

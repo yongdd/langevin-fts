@@ -1,3 +1,37 @@
+/**
+ * @file CudaSolverPseudoDiscrete.cu
+ * @brief CUDA pseudo-spectral solver for discrete chain model.
+ *
+ * Implements propagator advancement for discrete chain representation
+ * using cuFFT for Fourier transforms. Handles full bond steps and
+ * half-bond steps at junctions between blocks.
+ *
+ * **Discrete Chain Model:**
+ *
+ * Propagator advancement: q(s+1) = exp(-w*ds) * F⁻¹[exp(-k²b²ds/6) * F[q(s)]]
+ * - Simpler than continuous model (no Richardson extrapolation needed)
+ * - Half-bond steps at block junctions for proper normalization
+ *
+ * **Methods:**
+ *
+ * - advance_propagator(): Full bond step with potential application
+ * - advance_propagator_half_bond_step(): Half bond step at junctions
+ * - compute_single_segment_stress(): Stress contribution per segment
+ *
+ * **cuFFT Plans:**
+ *
+ * - plan_for_one/two: Forward FFTs (D2Z for real, Z2Z for complex)
+ * - plan_bak_one/two: Backward FFTs
+ * - Stream-associated for concurrent execution
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaSolverPseudoDiscrete<double>: Real field solver
+ * - CudaSolverPseudoDiscrete<std::complex<double>>: Complex field solver
+ *
+ * @see CudaComputationDiscrete for discrete chain orchestration
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
