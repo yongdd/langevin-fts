@@ -1,9 +1,138 @@
+"""Crystallographic space group symmetry constraints for polymer simulations.
+
+This module provides the SpaceGroup class for applying space group symmetry
+to reduce computational cost in polymer field theory simulations. By exploiting
+crystallographic symmetry, fields can be represented using only irreducible
+mesh points rather than the full simulation grid.
+
+Notes
+-----
+**Beta Feature**: Space group symmetry is an experimental feature. Use with
+caution and validate results against full simulations.
+
+**Requires**:
+- spglib: Crystallographic space group database and operations
+- numpy: Array operations
+- scipy: MATLAB file I/O (for testing)
+"""
+
 import numpy as np
 import json
 import spglib
 import scipy.io
 
 class SpaceGroup:
+    """Space group symmetry operations for polymer field theory.
+
+    Reduces computational cost by exploiting crystallographic symmetry. Finds
+    the minimal irreducible set of grid points and provides transformations
+    between full and reduced field representations.
+
+    Parameters
+    ----------
+    nx : list of int
+        Grid dimensions [nx, ny, nz]. Must be compatible with the space group
+        symmetry (e.g., cubic space groups require nx=ny=nz).
+    symbol : str
+        International Tables for Crystallography (ITA) short symbol.
+        Examples: "Im-3m" (BCC), "Ia-3d" (gyroid), "Pm-3m" (simple cubic).
+    hall_number : int, optional
+        Hall number uniquely identifying the space group setting. Required if
+        the ITA symbol has multiple settings. If None, uses the first Hall
+        number for the symbol (raises error if multiple exist).
+
+    Attributes
+    ----------
+    hall_number : int
+        Hall number used (1-530).
+    spacegroup_number : int
+        International space group number (1-230).
+    spacegroup_symbol : str
+        ITA short symbol.
+    crystal_system : str
+        Crystal system: "Triclinic", "Monoclinic", "Orthorhombic",
+        "Tetragonal", "Trigonal", "Hexagonal", or "Cubic".
+    lattice_parameters : list of str
+        Free lattice parameters for this crystal system.
+        Example: ["a"] for cubic, ["a", "c"] for tetragonal.
+    symmetry_operations : list of tuple
+        Symmetry operations as (rotation_matrix, translation_vector) pairs.
+    nx : list of int
+        Grid dimensions.
+    irreducible_mesh : list of tuple
+        Irreducible mesh points as (ix, iy, iz) tuples. These are the minimal
+        set of grid points needed to represent the full field under symmetry.
+    indices : ndarray
+        Map from full grid to irreducible point indices. Shape matches nx.
+        indices[i,j,k] gives the index in irreducible_mesh for grid point (i,j,k).
+
+    Raises
+    ------
+    ValueError
+        If ITA symbol is invalid, Hall number is invalid, or grid size is
+        incompatible with space group.
+
+    Notes
+    -----
+    **Space Group Database:**
+
+    This class uses the spglib library which implements the International Tables
+    for Crystallography. Hall numbers (1-530) uniquely identify space group
+    settings, while ITA numbers (1-230) may have multiple settings.
+
+    **Irreducible Mesh:**
+
+    The algorithm finds the minimal set of grid points by:
+    1. Starting with the first unvisited point
+    2. Computing its orbit (all symmetrically equivalent points)
+    3. Marking all orbit points as visited
+    4. Repeating until all grid points are visited
+
+    **Performance:**
+
+    - Reduces field storage by factor of symmetry operation count
+    - Speeds up field updates in SCFT iterations
+    - Pre-computes flat index maps for fast to_reduced_basis/from_reduced_basis
+
+    **Limitations:**
+
+    - Only periodic boundary conditions supported
+    - Grid must be compatible with space group (e.g., cubic groups need nx=ny=nz)
+    - Beta feature - validate results carefully
+
+    See Also
+    --------
+    to_reduced_basis : Convert full fields to reduced representation.
+    from_reduced_basis : Convert reduced fields to full representation.
+
+    Examples
+    --------
+    >>> # Gyroid phase with Ia-3d symmetry
+    >>> nx = [64, 64, 64]
+    >>> sg = SpaceGroup(nx, "Ia-3d", hall_number=530)
+    Using Hall number: 530 for symbol 'Ia-3d'
+    International space group number: 230
+    Crystal system: Cubic
+    The number of symmetry operations: 48
+    Original mesh size: 262144
+    Irreducible mesh size: 5461
+
+    >>> # Convert fields to reduced basis (48x smaller)
+    >>> w_full = np.random.randn(2, 64*64*64)  # 2 fields
+    >>> w_reduced = sg.to_reduced_basis(w_full)
+    >>> w_reduced.shape
+    (2, 5461)
+
+    >>> # Reconstruct full fields
+    >>> w_reconstructed = sg.from_reduced_basis(w_reduced)
+    >>> w_reconstructed.shape
+    (2, 262144)
+
+    References
+    ----------
+    .. [1] International Tables for Crystallography, Vol. A (2016)
+    .. [2] spglib documentation: https://spglib.github.io/spglib/
+    """
 
     def __init__(self, nx, symbol, hall_number=None):
 

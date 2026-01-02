@@ -18,9 +18,314 @@ os.environ["MKL_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
-        return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
+    """Calculate Langevin noise strength for L-FTS simulations.
+
+    Computes the standard deviation of Gaussian noise to be added at each
+    Langevin step, ensuring correct statistical weighting of field configurations
+    in the field-theoretic ensemble.
+
+    Parameters
+    ----------
+    langevin_nbar : float
+        Average polymerization index N̄ for the Langevin scheme. Related to
+        the prefactor of the Hamiltonian. Typical values: 1-100.
+    langevin_dt : float
+        Langevin time step size Δt. Controls the magnitude of field updates.
+        Typical values: 0.001-0.1.
+    n_grids : int
+        Total number of grid points M (product of nx dimensions).
+    volume : float
+        System volume V in units of (a_Ref * N_Ref^0.5)³.
+
+    Returns
+    -------
+    sigma : float
+        Standard deviation of Gaussian noise for each field component.
+
+    Notes
+    -----
+    The noise strength is derived from the fluctuation-dissipation theorem:
+
+    .. math::
+        \\sigma = \\sqrt{\\frac{2 \\Delta t M}{V \\sqrt{\\bar{N}}}}
+
+    This ensures that the Langevin dynamics samples the field-theoretic
+    partition function correctly, with Boltzmann weighting ∝ exp(-H/√N̄).
+
+    **Physical Interpretation:**
+
+    - Larger N̄: Reduces thermal fluctuations (mean-field limit as N̄→∞)
+    - Larger Δt: Larger noise for faster equilibration (but less accurate)
+    - Larger M or V: Reduces noise per grid point (larger system)
+
+    See Also
+    --------
+    LFTS.run : Main Langevin dynamics loop that uses this noise.
+
+    Examples
+    --------
+    >>> # Calculate noise for typical L-FTS parameters
+    >>> sigma = calculate_sigma(langevin_nbar=10.0, langevin_dt=0.01,
+    ...                         n_grids=32**3, volume=4.0**3)
+    >>> print(f"Noise standard deviation: {sigma:.6f}")
+    """
+    return np.sqrt(2*langevin_dt*n_grids/(volume*np.sqrt(langevin_nbar)))
 
 class LFTS:
+    """Langevin Field-Theoretic Simulation solver for polymer systems.
+
+    This class implements L-FTS calculations for polymer melts and solutions,
+    simulating thermal fluctuations in the field-theoretic representation.
+    Unlike SCFT which finds the saddle point, L-FTS samples the full partition
+    function including fluctuation effects via Langevin dynamics.
+
+    The implementation uses auxiliary fields obtained from eigenvalue decomposition
+    of the interaction matrix, enabling efficient simulation of multi-monomer systems.
+    Real-valued auxiliary fields evolve via Langevin dynamics, while imaginary-valued
+    fields are compressed to their saddle point values using Anderson Mixing or
+    Linear Response methods.
+
+    Parameters
+    ----------
+    params : dict
+        Simulation parameters dictionary containing:
+
+        **Grid and Box Parameters:**
+
+        - nx : list of int
+            Number of grid points in each dimension, e.g., [32, 32, 32] for 3D.
+        - lx : list of float
+            Box dimensions in each direction, units: a_Ref * N_Ref^(1/2).
+
+        **Chain Model Parameters:**
+
+        - chain_model : {'discrete', 'continuous'}
+            Chain propagation model. 'continuous' is typical for L-FTS.
+        - ds : float
+            Contour step size, typically 1/N_Ref.
+
+        **Monomer and Interaction Parameters:**
+
+        - segment_lengths : dict
+            Relative statistical segment lengths, {monomer_type: length}.
+        - chi_n : dict
+            Flory-Huggins interaction parameters × N_Ref, {pair: value}.
+
+        **Polymer Architecture:**
+
+        - distinct_polymers : list of dict
+            Polymer chain specifications (same format as SCFT).
+
+        **Langevin Dynamics Parameters:**
+
+        - langevin_dt : float
+            Langevin time step Δt. Typical values: 0.001-0.1.
+            Smaller values → more accurate but slower.
+        - langevin_nbar : float
+            Average polymerization index N̄. Typical values: 1-100.
+            Controls thermal fluctuation strength (larger → weaker fluctuations).
+
+        **Field Compression Parameters:**
+
+        - compressor : dict
+            Configuration for compressing imaginary auxiliary fields:
+
+            For Linear Response (name='lr'):
+
+            - name : str
+                'lr' for Linear Response method.
+            - lr_saddle_n_iter : int
+                Iterations for finding saddle point.
+            - lr_tolerance : float
+                Convergence tolerance for saddle point.
+            - lr_sep_delta : float
+                Finite difference step for Hessian calculation.
+
+            For Anderson Mixing (name='am'):
+
+            - name : str
+                'am' for Anderson Mixing.
+            - max_hist, start_error, mix_min, mix_init : parameters
+                Same as SCFT optimizer parameters.
+
+            For LRAM (name='lram'):
+
+            - Uses both Linear Response and Anderson Mixing.
+            - Requires both sets of parameters above.
+
+        **Simulation Control:**
+
+        - recording_period : int
+            Number of Langevin steps between data recordings.
+        - total_recorded_iterations : int
+            Total number of recorded snapshots.
+
+        **Platform Selection:**
+
+        - platform : {'cuda', 'cpu-mkl'}, optional
+            Computational backend (auto-selected if not specified).
+        - reduce_memory_usage : bool, optional
+            Enable memory-saving mode (CUDA only).
+
+        **Advanced Options:**
+
+        - aggregate_propagator_computation : bool, optional
+            Enable propagator optimization (default: True).
+
+    random_seed : int, optional
+        Seed for random number generator (for reproducible noise).
+        If None, uses system time.
+
+    Attributes
+    ----------
+    monomer_types : list of str
+        Sorted list of monomer type labels.
+    segment_lengths : dict
+        Statistical segment lengths for each monomer type.
+    chi_n : dict
+        Flory-Huggins interaction parameters.
+    cb : ComputationBox
+        Computation box managing grid and FFT.
+    solver : PropagatorComputation
+        Propagator solver object.
+    mpt : SymmetricPolymerTheory
+        Multi-monomer field theory transformations.
+    random_g : PCG64
+        Random number generator for Langevin noise.
+
+    Raises
+    ------
+    AssertionError
+        If parameter validation fails (volume fractions, monomer types, etc.).
+
+    See Also
+    --------
+    SCFT : Self-consistent field theory (saddle point approximation).
+    SymmetricPolymerTheory : Field theory transformations.
+    calculate_sigma : Noise strength calculation.
+    LR : Linear Response compressor.
+    LRAM : Linear Response + Anderson Mixing compressor.
+
+    Notes
+    -----
+    **Theoretical Background:**
+
+    L-FTS samples configurations from the field-theoretic partition function:
+
+    .. math::
+        Z = \\int \\mathcal{D}w \\, \\exp\\left(-\\frac{H[w]}{\\sqrt{\\bar{N}}}\\right)
+
+    where H is the field-theoretic Hamiltonian and N̄ controls fluctuation strength.
+
+    **Auxiliary Field Representation:**
+
+    The multi-monomer Hamiltonian is transformed via eigenvalue decomposition:
+
+    .. math::
+        H = \\sum_i \\lambda_i w_i^2 + \\text{(other terms)}
+
+    This yields auxiliary fields, some real-valued (thermally fluctuating) and
+    some imaginary-valued (compressed to saddle point).
+
+    **Langevin Update Scheme:**
+
+    Real auxiliary fields evolve via the Leimkuhler-Matthews method:
+
+    .. math::
+        w_{t+1} = w_t - \\Delta t \\frac{\\delta H}{\\delta w} + \\sqrt{2\\Delta t} \\eta
+
+    where η is Gaussian noise with variance 1/√N̄.
+
+    **Field Compression:**
+
+    Imaginary fields are compressed each Langevin step:
+
+    - **LR**: Uses linear response (local Hessian) to find saddle point
+    - **AM**: Uses Anderson Mixing iteration
+    - **LRAM**: Combines LR for coarse optimization, AM for final convergence
+
+    **Performance:**
+
+    - L-FTS is more expensive than SCFT (~10-100x depending on recording frequency)
+    - CUDA provides 10-20x speedup over CPU for 2D/3D
+    - Memory usage: ~1GB for 64³ grid with compression history
+
+    **Structure Function Calculation:**
+
+    L-FTS enables computation of structure functions S(k) to characterize
+    fluctuations and compare with scattering experiments.
+
+    References
+    ----------
+    .. [1] Delaney, K. T., & Fredrickson, G. H. "Recent Developments in Fully
+           Fluctuating Field-Theoretic Simulations of Polymer Melts and
+           Solutions." J. Phys. Chem. B 2016, 120, 7615.
+    .. [2] Lee, W.-B., et al. "Fluctuation Effects in Ternary AB+A+B Polymeric
+           Emulsions." Macromolecules 2013, 46, 8037.
+    .. [3] Kang, H., et al. "Leimkuhler-Matthews Method for Langevin Dynamics."
+           Polymers 2021, 13, 2437.
+
+    Examples
+    --------
+    **Basic L-FTS run for AB diblock:**
+
+    >>> import numpy as np
+    >>> from polymerfts import lfts
+    >>>
+    >>> # Define parameters
+    >>> params = {
+    ...     "nx": [32, 32, 32],
+    ...     "lx": [4.36, 4.36, 4.36],
+    ...     "chain_model": "continuous",
+    ...     "ds": 1/100,
+    ...     "segment_lengths": {"A": 1.0, "B": 1.0},
+    ...     "chi_n": {"A,B": 15.0},
+    ...     "distinct_polymers": [{
+    ...         "volume_fraction": 1.0,
+    ...         "blocks": [
+    ...             {"type": "A", "length": 0.5},
+    ...             {"type": "B", "length": 0.5}
+    ...         ]
+    ...     }],
+    ...     "langevin_dt": 0.01,
+    ...     "langevin_nbar": 10.0,
+    ...     "compressor": {
+    ...         "name": "am",
+    ...         "max_hist": 20,
+    ...         "start_error": 1e-1,
+    ...         "mix_min": 0.1,
+    ...         "mix_init": 0.1
+    ...     },
+    ...     "recording_period": 100,
+    ...     "total_recorded_iterations": 1000
+    ... }
+    >>>
+    >>> # Initialize L-FTS with random seed for reproducibility
+    >>> sim = lfts.LFTS(params, random_seed=12345)
+    >>>
+    >>> # Start from SCFT saddle point (recommended)
+    >>> # (assuming w_scft obtained from prior SCFT calculation)
+    >>> sim.run(initial_fields=w_scft)
+    >>>
+    >>> # Access recorded data
+    >>> # Data is saved automatically during run to "fields_*.mat" files
+
+    **Continue from checkpoint:**
+
+    >>> # Continue from previous L-FTS run
+    >>> sim.continue_run("simulation_data.mat")
+
+    **Compute structure function:**
+
+    >>> # After L-FTS run, compute S(k) from recorded configurations
+    >>> # (requires loading saved field data and post-processing)
+
+    For complete examples, see:
+
+    - examples/fts/Lamella.py - L-FTS for lamellar phase
+    - examples/fts/Gyroid.py - Gyroid phase with fluctuations
+    - examples/fts/MixtureBlockRandom.py - Block/random copolymer mixture
+    """
     def __init__(self, params, random_seed=None):
 
         # Segment length
@@ -304,6 +609,53 @@ class LFTS:
         self.propagator_computation_optimizer = propagator_computation_optimizer
 
     def compute_concentrations(self, w_aux):
+        """Compute monomer concentration fields from auxiliary fields.
+
+        Converts auxiliary fields to monomer potential fields via inverse
+        field transformation, then computes chain propagators and monomer
+        concentrations.
+
+        Parameters
+        ----------
+        w_aux : ndarray
+            Auxiliary potential fields, shape (M, total_grid) where M is
+            the number of auxiliary fields (= number of monomer types).
+
+        Returns
+        -------
+        phi : dict
+            Monomer concentration fields, {monomer_type: concentration_array}.
+        elapsed_time : dict
+            Timing information:
+
+            - 'solver' : float
+                Time (seconds) for propagator computation.
+            - 'phi' : float
+                Time (seconds) for concentration integration.
+
+        Notes
+        -----
+        **Field Transformation:**
+
+        Auxiliary fields w_aux are related to monomer fields w via:
+
+        .. math::
+            \\mathbf{w} = \\mathbf{A} \\mathbf{w}_{\\text{aux}}
+
+        where A is the eigenvector matrix from field theory eigendecomposition.
+
+        This method:
+
+        1. Transforms w_aux → w using matrix_a_inv
+        2. Calls solver.compute_propagators(w) to solve diffusion equations
+        3. Calls solver.compute_concentrations() to integrate propagators
+        4. Returns concentration dict and timing info
+
+        See Also
+        --------
+        run : Main L-FTS loop that calls this method.
+        find_saddle_point : Finds saddle point of imaginary auxiliary fields.
+        """
         M = len(self.monomer_types)
         elapsed_time = {}
 
@@ -341,6 +693,71 @@ class LFTS:
         return phi, elapsed_time
 
     def save_simulation_data(self, path, w, phi, langevin_step, normal_noise_prev):
+        """Save L-FTS simulation checkpoint data to MATLAB file.
+
+        Saves the current state of the simulation including fields, concentrations,
+        random generator state, and all parameters needed to continue the simulation.
+
+        Parameters
+        ----------
+        path : str
+            Output file path (should end with '.mat').
+        w : ndarray
+            Current monomer potential fields, shape (M, total_grid).
+        phi : dict
+            Current monomer concentration fields, {monomer_type: array}.
+        langevin_step : int
+            Current Langevin iteration number.
+        normal_noise_prev : ndarray
+            Previous Langevin noise (needed for Leimkuhler-Matthews method),
+            shape (R, total_grid) where R is number of real auxiliary fields.
+
+        Notes
+        -----
+        **Saved Data Structure:**
+
+        The MATLAB file contains:
+
+        - initial_params : dict
+            Original params dict from __init__.
+        - dim, nx, lx : int, list, list
+            Grid dimension, points, box sizes.
+        - monomer_types, chi_n, chain_model, ds : simulation parameters
+        - dt, nbar : Langevin parameters
+        - eigenvalues, aux_fields_real, aux_fields_imag : field theory data
+        - matrix_a, matrix_a_inverse : field transformation matrices
+        - langevin_step : current iteration number
+        - random_generator, random_state_state, random_state_inc : RNG state
+        - normal_noise_prev : previous Langevin noise
+        - w_{monomer_type} : potential fields for each monomer
+        - phi_{monomer_type} : concentration fields for each monomer
+
+        **Random Generator State:**
+
+        The PCG64 random number generator state is saved to enable exact
+        continuation of the stochastic dynamics. This ensures reproducibility
+        when restarting simulations.
+
+        **File Format:**
+
+        - MATLAB .mat format (scipy.io.savemat)
+        - Uses compression (do_compression=True)
+        - Supports long field names (long_field_names=True)
+
+        See Also
+        --------
+        continue_run : Load checkpoint and continue simulation.
+        run : Main L-FTS loop that calls this method.
+
+        Examples
+        --------
+        >>> # During L-FTS run, save checkpoint
+        >>> sim.save_simulation_data("checkpoint_step_1000.mat", w, phi,
+        ...                          langevin_step=1000, normal_noise_prev=noise)
+        >>>
+        >>> # Later, continue from this checkpoint
+        >>> sim.continue_run("checkpoint_step_1000.mat")
+        """
 
         # Make a dictionary for chi_n
         chi_n_mat = {}
@@ -375,6 +792,57 @@ class LFTS:
         savemat(path, mdic, long_field_names=True, do_compression=True)
 
     def continue_run(self, file_name):
+        """Continue L-FTS simulation from a saved checkpoint file.
+
+        Loads simulation state from a MATLAB .mat file (created by save_simulation_data)
+        and continues the Langevin dynamics from where it left off, preserving the
+        random number generator state for reproducibility.
+
+        Parameters
+        ----------
+        file_name : str
+            Path to checkpoint file (MATLAB .mat format created by save_simulation_data).
+
+        Notes
+        -----
+        **Restored State:**
+
+        This method restores:
+
+        - Random number generator (PCG64) state for exact continuation
+        - Field configurations (w fields)
+        - Langevin step counter
+        - Previous noise array (normal_noise_prev) for Leimkuhler-Matthews scheme
+
+        **Structure Function Recording:**
+
+        If the checkpoint's langevin_step is not a multiple of sf_recording_period,
+        a warning is printed. The structure function will only be correctly recorded
+        after the next multiple of sf_recording_period.
+
+        **Workflow:**
+
+        1. Load checkpoint data from file
+        2. Restore random generator state
+        3. Extract field configurations
+        4. Call run() with restored state and start_langevin_step = loaded_step + 1
+
+        See Also
+        --------
+        save_simulation_data : Save checkpoint file.
+        run : Main L-FTS loop called by this method.
+
+        Examples
+        --------
+        >>> # Start new L-FTS simulation
+        >>> sim = lfts.LFTS(params, random_seed=12345)
+        >>> sim.run(initial_fields=w_init)
+        >>>
+        >>> # Simulation saves checkpoints automatically during run
+        >>> # Later, continue from last checkpoint
+        >>> sim_continued = lfts.LFTS(params)  # Create new instance
+        >>> sim_continued.continue_run("simulation_data.mat")
+        """
 
         # Load_data
         load_data = loadmat(file_name, squeeze_me=True)
@@ -403,6 +871,167 @@ class LFTS:
             start_langevin_step=load_data["langevin_step"]+1)
 
     def run(self, initial_fields, normal_noise_prev=None, start_langevin_step=None):
+        """Run Langevin Field-Theoretic Simulation (L-FTS).
+
+        Performs Langevin dynamics to sample thermal fluctuations in the
+        field-theoretic representation of the polymer system. At each Langevin
+        step:
+
+        1. Computes functional derivative δH/δw for real auxiliary fields
+        2. Updates real fields via Leimkuhler-Matthews method with Gaussian noise
+        3. Finds saddle point of imaginary auxiliary fields via compression
+        4. Records fields, Hamiltonian, and structure function data
+        5. Saves checkpoint periodically
+
+        The simulation continues for langevin.max_step iterations or until
+        total_recorded_iterations snapshots are recorded.
+
+        Parameters
+        ----------
+        initial_fields : dict
+            Initial monomer potential fields, {monomer_type: field_array}.
+            Typically initialized from SCFT saddle point for faster equilibration.
+            Each array has length total_grid.
+        normal_noise_prev : ndarray, optional
+            Previous Langevin noise array for Leimkuhler-Matthews method,
+            shape (R, total_grid) where R = number of real auxiliary fields.
+            Default: None (initialized as zeros). Used when continuing from checkpoint.
+        start_langevin_step : int, optional
+            Starting Langevin iteration number. Default: 1.
+            Used when continuing from checkpoint.
+
+        Notes
+        -----
+        **Langevin Dynamics Update:**
+
+        Real-valued auxiliary fields evolve via the Leimkuhler-Matthews method:
+
+        .. math::
+            w_{t+1} = w_t - \\Delta t \\frac{\\delta H}{\\delta w} + \\frac{1}{2}(\\eta_t + \\eta_{t+1})
+
+        where η_t is Gaussian noise with standard deviation σ (from calculate_sigma).
+        This 2nd-order scheme provides better accuracy than Euler-Maruyama.
+
+        **Field Compression:**
+
+        Imaginary-valued auxiliary fields are compressed to their saddle point
+        at each Langevin step using the configured compressor:
+
+        - **AM**: Anderson Mixing iteration
+        - **LR**: Linear Response (local Hessian approximation)
+        - **LRAM**: Linear Response with Anderson Mixing refinement
+
+        If saddle point finding fails (error > tolerance), the Langevin step
+        is rejected and noise is regenerated. After 5 successive failures,
+        the simulation continues anyway (prints warning).
+
+        **Data Recording:**
+
+        Fields are periodically saved according to recording parameters:
+
+        - Fields saved to "dir/fields_*.mat" every field_recording_period steps
+        - Hamiltonian H and derivatives dH/dχN recorded every recording_period steps
+        - Structure functions <φ(k)φ(-k)> accumulated every sf_recording_period steps
+
+        **Structure Function:**
+
+        The structure function quantifies density fluctuations in Fourier space:
+
+        .. math::
+            S(\\mathbf{k}) = \\langle \\phi(\\mathbf{k}) \\phi^*(-\\mathbf{k}) \\rangle
+
+        Averaged over recorded configurations to compare with scattering experiments.
+
+        **Performance:**
+
+        L-FTS is computationally expensive:
+
+        - Each Langevin step requires 1+ saddle point iterations
+        - Typical runs: 10,000-100,000 Langevin steps
+        - Runtime: hours to days depending on system size and recording frequency
+        - CUDA provides 10-20x speedup over CPU
+
+        **Checkpointing:**
+
+        Simulation data is automatically saved to enable restart:
+
+        - Checkpoint: "dir/simulation_data.mat" (latest state)
+        - Field snapshots: "dir/fields_<step>.mat" (periodic)
+        - Contains all state needed for continue_run()
+
+        **Error Handling:**
+
+        - If saddle point fails repeatedly, step is accepted with warning
+        - NaN in concentrations/Hamiltonian triggers step rejection
+        - Random noise is regenerated on failed steps
+
+        See Also
+        --------
+        compute_concentrations : Compute φ from auxiliary fields.
+        find_saddle_point : Find saddle point of imaginary fields.
+        save_simulation_data : Save checkpoint data.
+        continue_run : Resume from checkpoint.
+        calculate_sigma : Noise strength calculation.
+
+        Examples
+        --------
+        **Basic L-FTS run starting from SCFT:**
+
+        >>> import numpy as np
+        >>> from polymerfts import scft, lfts
+        >>>
+        >>> # First, run SCFT to find saddle point
+        >>> scft_calc = scft.SCFT(scft_params)
+        >>> scft_calc.run(initial_fields=w_random)
+        >>>
+        >>> # Use SCFT result as initial condition for L-FTS
+        >>> w_scft = {m: scft_calc.w[i] for i, m in enumerate(scft_calc.monomer_types)}
+        >>>
+        >>> # Run L-FTS
+        >>> lfts_params = {
+        ...     # ... (grid, polymers, chi_n same as SCFT)
+        ...     "langevin": {
+        ...         "max_step": 100000,
+        ...         "dt": 0.01,
+        ...         "nbar": 10.0
+        ...     },
+        ...     "recording": {
+        ...         "dir": "recording",
+        ...         "recording_period": 100,
+        ...         "sf_recording_period": 10,
+        ...         "field_recording_period": 1000
+        ...     },
+        ...     "compressor": {
+        ...         "name": "am",
+        ...         "max_hist": 20,
+        ...         "start_error": 1e-1,
+        ...         "mix_min": 0.1,
+        ...         "mix_init": 0.1
+        ...     },
+        ...     # ... other params
+        ... }
+        >>> sim = lfts.LFTS(lfts_params, random_seed=12345)
+        >>> sim.run(initial_fields=w_scft)
+
+        **Continue from checkpoint:**
+
+        >>> # If simulation was interrupted, continue from last checkpoint
+        >>> sim_new = lfts.LFTS(lfts_params)
+        >>> sim_new.continue_run("recording/simulation_data.mat")
+
+        **Analyze structure function:**
+
+        >>> # After L-FTS run, load and analyze structure function data
+        >>> import scipy.io
+        >>> data = scipy.io.loadmat("recording/fields_statistics.mat")
+        >>> S_k = data["structure_function"]
+        >>> # ... analyze S(k) for comparison with experiments
+
+        For complete examples, see:
+
+        - examples/fts/Lamella.py - Basic L-FTS workflow
+        - examples/fts/Gyroid.py - Gyroid phase with fluctuations
+        """
 
         print("---------- Run  ----------")
 
@@ -581,6 +1210,98 @@ class LFTS:
             (total_saddle_iter, total_saddle_iter/(langevin_step+1-start_langevin_step)))
 
     def find_saddle_point(self, w_aux):
+        """Find saddle point of imaginary auxiliary fields.
+
+        Iteratively compresses imaginary-valued auxiliary fields to their saddle
+        point values while keeping real-valued fields fixed. This is performed at
+        each Langevin step to ensure imaginary fields remain at their saddle point.
+
+        The saddle point satisfies δH/δw_imag = 0, enforcing incompressibility and
+        other constraints.
+
+        Parameters
+        ----------
+        w_aux : ndarray
+            Auxiliary potential fields, shape (M, total_grid).
+            Real auxiliary fields (indices in aux_fields_real_idx) remain fixed.
+            Imaginary fields (indices in aux_fields_imag_idx) are optimized.
+
+        Returns
+        -------
+        phi : dict
+            Final monomer concentration fields {monomer_type: array}.
+        hamiltonian : float
+            Hamiltonian value at converged saddle point.
+        saddle_iter : int
+            Number of iterations performed to find saddle point.
+        error_level : float
+            Final convergence error (max standard deviation of δH/δw_imag).
+
+        Notes
+        -----
+        **Saddle Point Condition:**
+
+        For imaginary auxiliary fields, the Hamiltonian must be stationary:
+
+        .. math::
+            \\frac{\\delta H}{\\delta w_{\\text{imag},i}} = 0
+
+        This is solved iteratively using the configured compressor:
+
+        - **AM**: Anderson Mixing iteration
+        - **LR**: Linear Response using local Hessian
+        - **LRAM**: LR for coarse optimization, AM for refinement
+
+        **Incompressibility:**
+
+        The last imaginary field (w_aux[M-1]) is the pressure field enforcing
+        incompressibility constraint Σ_i φ_i = 1. Its saddle point condition
+        ensures ⟨Σφ_i - 1⟩ = 0.
+
+        **Convergence Criterion:**
+
+        Iteration stops when:
+
+        .. math::
+            \\text{error\\_level} = \\max_i \\text{std}(\\delta H / \\delta w_{\\text{imag},i}) < \\text{tolerance}
+
+        **Error Handling:**
+
+        - If error_level > tolerance after max_iter, returns with NaN
+        - If concentrations become negative, returns with high error
+        - Calling code (run method) may regenerate Langevin noise on failure
+
+        **Computational Cost:**
+
+        - Each iteration calls compute_concentrations (propagator solve)
+        - Typical: 5-20 iterations per Langevin step
+        - Dominates L-FTS runtime
+
+        **Pressure Field Normalization:**
+
+        After convergence, the pressure field mean is set to zero:
+        w_aux[M-1] -= mean(w_aux[M-1]). This gauge choice doesn't affect
+        physics but improves numerical stability.
+
+        See Also
+        --------
+        run : Main L-FTS loop that calls this method.
+        compute_concentrations : Computes φ for given w_aux.
+        LR : Linear Response compressor.
+        LRAM : Combined Linear Response + Anderson Mixing.
+
+        Examples
+        --------
+        >>> # Called internally by run() at each Langevin step
+        >>> phi, H, iterations, error = sim.find_saddle_point(w_aux)
+        >>>
+        >>> # Check convergence
+        >>> if error < sim.saddle["tolerance"]:
+        ...     print(f"Converged in {iterations} iterations")
+        ...     print(f"Hamiltonian: {H:.6f}")
+        ... else:
+        ...     print(f"Failed to converge, error: {error:.3e}")
+        """
 
         # The number of components
         M = len(self.monomer_types)
