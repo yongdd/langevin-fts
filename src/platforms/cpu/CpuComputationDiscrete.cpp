@@ -1,3 +1,36 @@
+/**
+ * @file CpuComputationDiscrete.cpp
+ * @brief CPU implementation of propagator computation for discrete chains.
+ *
+ * Implements the PropagatorComputation interface for freely-jointed
+ * (discrete) chain models using OpenMP parallelization. Discrete chains
+ * require half-bond steps at junction points.
+ *
+ * **Discrete Chain Model:**
+ *
+ * Unlike continuous chains, discrete chains have:
+ * - Full segments at regular positions
+ * - Half-bond steps at junction points
+ * - Different concentration calculation (no Simpson's rule)
+ *
+ * **Memory Layout:**
+ *
+ * - propagator[key]: Full segment propagators q(r,n)
+ * - propagator_half_steps[key]: Half-bond step values at junctions
+ *
+ * **Parallelization:**
+ *
+ * Uses OpenMP for parallel propagator computation across independent
+ * branches of the polymer graph.
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuComputationDiscrete<double>: Real fields
+ * - CpuComputationDiscrete<std::complex<double>>: Complex fields
+ *
+ * @see CpuSolverPseudoDiscrete for pseudo-spectral solver
+ */
+
 #include <cmath>
 #include <numbers>
 #include <chrono>
@@ -6,6 +39,16 @@
 #include "CpuSolverPseudoDiscrete.h"
 #include "SimpsonRule.h"
 
+/**
+ * @brief Construct CPU propagator computation for discrete chains.
+ *
+ * Allocates propagator arrays including half-step storage at junctions.
+ * Sets up parallel execution scheduler.
+ *
+ * @param cb                             Computation box for grid operations
+ * @param molecules                      Polymer/solvent species definitions
+ * @param propagator_computation_optimizer Optimized computation schedule
+ */
 template <typename T>
 CpuComputationDiscrete<T>::CpuComputationDiscrete(
     ComputationBox<T>* cb,

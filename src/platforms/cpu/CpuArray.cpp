@@ -1,7 +1,34 @@
+/**
+ * @file CpuArray.cpp
+ * @brief CPU implementation of memory array management.
+ *
+ * Provides CPU-side memory allocation and basic arithmetic operations
+ * using standard C++ new/delete. Implements the abstract Array interface
+ * for host memory operations.
+ *
+ * **Memory Layout:**
+ *
+ * Arrays are allocated contiguously in host memory for optimal cache access.
+ * Standard C++ allocation ensures proper alignment for vectorization.
+ *
+ * **Operations:**
+ *
+ * - Element-wise arithmetic: add, subtract, multiply, divide
+ * - Linear scaling: dst[i] = a * src[i] + b
+ * - Data transfer: set_data, to_vector
+ *
+ * @see Array for abstract interface
+ * @see CudaArray for GPU equivalent
+ */
 
 #include <iostream>
 #include "CpuArray.h"
 
+/**
+ * @brief Construct CPU array with given size.
+ *
+ * @param new_size Number of elements to allocate
+ */
 CpuArray::CpuArray(unsigned new_size)
 {
     this->data = new double[new_size];

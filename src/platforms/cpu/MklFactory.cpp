@@ -1,6 +1,32 @@
-/*----------------------------------------------------------
-* class MklFactory
-*-----------------------------------------------------------*/
+/**
+ * @file MklFactory.cpp
+ * @brief Implementation of Intel MKL-based abstract factory.
+ *
+ * Provides the abstract factory implementation for creating CPU-based
+ * computational objects using Intel Math Kernel Library. This factory
+ * creates all platform-specific classes needed for SCFT/L-FTS simulations.
+ *
+ * **Created Objects:**
+ *
+ * - CpuComputationBox: Grid with MKL FFT support
+ * - CpuAndersonMixing: CPU-optimized field mixing
+ * - CpuComputationContinuous: Propagator computation (continuous chains)
+ * - CpuComputationDiscrete: Propagator computation (discrete chains)
+ *
+ * **Memory Mode:**
+ *
+ * When reduce_memory_usage=true, creates CpuComputationReduceMemory* variants
+ * that store only checkpoint propagators and recompute intermediate values.
+ * This trades computation time for reduced memory footprint.
+ *
+ * **Template Instantiations:**
+ *
+ * - MklFactory<double>: Factory for real field simulations
+ * - MklFactory<std::complex<double>>: Factory for complex field simulations
+ *
+ * @see AbstractFactory for factory interface
+ * @see PlatformSelector for factory creation
+ */
 
 #include <iostream>
 #include <array>
@@ -17,6 +43,11 @@
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
+/**
+ * @brief Construct MKL factory with optional memory reduction.
+ *
+ * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
+ */
 template <typename T>
 MklFactory<T>::MklFactory(bool reduce_memory_usage)
 {

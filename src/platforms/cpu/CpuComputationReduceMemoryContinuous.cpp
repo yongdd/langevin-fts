@@ -1,3 +1,36 @@
+/**
+ * @file CpuComputationReduceMemoryContinuous.cpp
+ * @brief Memory-efficient CPU propagator computation with checkpointing.
+ *
+ * Implements propagator computation for continuous chains with reduced
+ * memory footprint. Instead of storing all propagator slices, stores
+ * only checkpoints and recomputes intermediate values as needed.
+ *
+ * **Memory Reduction Strategy:**
+ *
+ * - Store propagators only at dependency points (junctions, chain ends)
+ * - Recompute intermediate propagators from nearest checkpoint
+ * - Trades computation time for reduced memory usage
+ *
+ * **Use Case:**
+ *
+ * Useful for long chains or large grids where storing all propagator
+ * slices would exceed available memory. Memory usage is O(N_checkpoints)
+ * instead of O(N_segments).
+ *
+ * **Performance:**
+ *
+ * Approximately 2-4x slower than full storage mode due to recomputation.
+ * Single-threaded to minimize memory usage during recomputation.
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuComputationReduceMemoryContinuous<double>: Real fields
+ * - CpuComputationReduceMemoryContinuous<std::complex<double>>: Complex fields
+ *
+ * @see CpuComputationContinuous for full storage version
+ */
+
 #include <cmath>
 #include <numbers>
 #include <omp.h>
@@ -7,6 +40,17 @@
 #include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
 
+/**
+ * @brief Construct memory-efficient propagator computation.
+ *
+ * Allocates checkpoint storage and temporary arrays for recomputation.
+ * Uses single thread to minimize memory during propagator advancement.
+ *
+ * @param cb                             Computation box for grid operations
+ * @param molecules                      Polymer/solvent species definitions
+ * @param propagator_computation_optimizer Optimized computation schedule
+ * @param method                         "pseudospectral" or "realspace"
+ */
 template <typename T>
 CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
     ComputationBox<T>* cb,

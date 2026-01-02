@@ -1,9 +1,46 @@
+/**
+ * @file CpuAndersonMixing.cpp
+ * @brief CPU implementation of Anderson mixing algorithm.
+ *
+ * Provides CPU-optimized Anderson mixing for accelerating SCFT convergence.
+ * Uses stored history of field and residual values to compute optimal
+ * mixing coefficients via least-squares fitting.
+ *
+ * **Algorithm:**
+ *
+ * 1. Store field history w_i and residual history d_i in circular buffers
+ * 2. Compute U matrix: U_ij = <d_i, d_j> (inner products of residuals)
+ * 3. Solve least-squares problem for coefficients a_i
+ * 4. Update field: w_new = Σ a_i (w_i + λ d_i)
+ *
+ * **Circular Buffer Storage:**
+ *
+ * Uses CircularBuffer to efficiently manage rolling history without
+ * memory reallocation. Oldest entries are automatically overwritten.
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuAndersonMixing<double>: Real field mixing
+ * - CpuAndersonMixing<std::complex<double>>: Complex field mixing
+ *
+ * @see AndersonMixing for base class and algorithm description
+ */
+
 #include <iostream>
 #include <algorithm>
 #include "CpuAndersonMixing.h"
 
+/**
+ * @brief Construct CPU Anderson mixing with given parameters.
+ *
+ * @param n_var       Number of field variables
+ * @param max_hist    Maximum history length
+ * @param start_error Error threshold to begin Anderson mixing
+ * @param mix_min     Minimum mixing parameter
+ * @param mix_init    Initial mixing parameter
+ */
 template <typename T>
-CpuAndersonMixing<T>::CpuAndersonMixing(int n_var, int max_hist, 
+CpuAndersonMixing<T>::CpuAndersonMixing(int n_var, int max_hist,
     double start_error, double mix_min, double mix_init)
     :AndersonMixing<T>(n_var, max_hist, start_error,
                     mix_min,  mix_init)

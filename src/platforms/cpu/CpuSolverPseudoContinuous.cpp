@@ -1,3 +1,33 @@
+/**
+ * @file CpuSolverPseudoContinuous.cpp
+ * @brief CPU pseudo-spectral solver for continuous chain propagators.
+ *
+ * Implements the operator splitting pseudo-spectral method with
+ * 4th-order Richardson extrapolation for continuous Gaussian chains.
+ *
+ * **Operator Splitting Scheme:**
+ *
+ * The diffusion equation ∂q/∂s = (b²/6)∇²q - w(r)q is split as:
+ * 1. Potential half-step: exp(-w·ds/2)
+ * 2. Diffusion step: FFT → multiply by exp(-b²k²ds/6) → IFFT
+ * 3. Potential half-step: exp(-w·ds/2)
+ *
+ * **Richardson Extrapolation:**
+ *
+ * Combines one full step (ds) and two half-steps (ds/2 each):
+ *     q_out = (4·q_half - q_full) / 3
+ *
+ * This yields 4th-order accuracy in ds.
+ *
+ * **Template Instantiations:**
+ *
+ * - CpuSolverPseudoContinuous<double>: Real fields with r2c FFT
+ * - CpuSolverPseudoContinuous<std::complex<double>>: Complex fields
+ *
+ * @see Pseudo for Boltzmann factor computation
+ * @see CpuComputationContinuous for usage context
+ */
+
 #include <iostream>
 #include <cmath>
 #include <numbers>
@@ -5,6 +35,14 @@
 #include "CpuSolverPseudoContinuous.h"
 #include "MklFFT.h"
 
+/**
+ * @brief Construct pseudo-spectral solver for continuous chains.
+ *
+ * Initializes FFT plan and Boltzmann factor arrays.
+ *
+ * @param cb        Computation box for grid info
+ * @param molecules Molecular system for segment lengths
+ */
 template <typename T>
 CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules)
 {
