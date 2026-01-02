@@ -1,7 +1,36 @@
-/*-------------------------------------------------------------
-* This class defines simulation grids and Lengths parameters and provide
-* methods that compute inner product in a given geometry.
-*--------------------------------------------------------------*/
+/**
+ * @file CudaComputationBox.cu
+ * @brief CUDA implementation of computation box with GPU operations.
+ *
+ * Extends ComputationBox with GPU-accelerated integral and inner product
+ * operations using CUB parallel reductions.
+ *
+ * **GPU Operations:**
+ *
+ * - integral_device(): Volume-weighted sum on GPU
+ * - inner_product_device(): <f,g> = ∫ f(r)g(r) dv
+ * - zero_mean_device(): Remove mean from field
+ *
+ * **CUB Reductions:**
+ *
+ * Uses CUB library for high-performance parallel reductions:
+ * - DeviceReduce::Sum for real fields
+ * - Custom ComplexSumOp for complex fields
+ *
+ * **Memory Layout:**
+ *
+ * - d_dv: Device copy of volume elements
+ * - d_sum, d_sum_out: Temporary arrays for reduction
+ * - d_temp_storage: CUB workspace
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaComputationBox<double>: Real fields
+ * - CudaComputationBox<std::complex<double>>: Complex fields
+ *
+ * @see ComputationBox for base class interface
+ */
+
 #include <iostream>
 #include <complex>
 #include <cuda_runtime.h>
@@ -11,7 +40,14 @@
 #include "CudaComputationBox.h"
 #include "CudaCommon.h"
 
-//----------------- Constructor -----------------------------
+/**
+ * @brief Construct CUDA computation box with device memory.
+ *
+ * @param nx   Grid points per dimension
+ * @param lx   Box lengths per dimension
+ * @param bc   Boundary conditions
+ * @param mask Optional mask for impenetrable regions
+ */
 template <typename T>
 CudaComputationBox<T>::CudaComputationBox(
     std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask)

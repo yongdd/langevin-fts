@@ -1,3 +1,34 @@
+/**
+ * @file CudaAndersonMixingReduceMemory.cu
+ * @brief Memory-efficient CUDA Anderson mixing implementation.
+ *
+ * Provides GPU-accelerated Anderson mixing that stores field history in
+ * pinned host memory rather than device memory, reducing GPU memory usage
+ * at the cost of additional host-device transfers.
+ *
+ * **Memory Strategy:**
+ *
+ * - Field history stored in PinnedCircularBuffer (pinned host memory)
+ * - Temporary GPU arrays for current iteration only
+ * - Enables larger simulations on memory-limited GPUs
+ *
+ * **Algorithm Flow:**
+ *
+ * 1. Copy current fields from host to device
+ * 2. Compute inner products using CUB reduction on GPU
+ * 3. Solve small least-squares system on CPU
+ * 4. Apply mixing coefficients with GPU kernels
+ * 5. Copy result back to host
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaAndersonMixingReduceMemory<double>: Real field mixing
+ * - CudaAndersonMixingReduceMemory<std::complex<double>>: Complex field mixing
+ *
+ * @see CudaAndersonMixing for full GPU memory version
+ * @see PinnedCircularBuffer for host memory storage
+ */
+
 #include <iostream>
 #include <algorithm>
 #include <thrust/reduce.h>

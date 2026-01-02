@@ -1,3 +1,43 @@
+/**
+ * @file CudaComputationContinuous.cu
+ * @brief CUDA propagator computation for continuous Gaussian chains.
+ *
+ * Orchestrates GPU-based propagator computation using multiple CUDA streams
+ * for concurrent propagator advancement. Implements the continuous chain
+ * model with Simpson's rule integration for concentration calculation.
+ *
+ * **Multi-Stream Architecture:**
+ *
+ * - Up to MAX_STREAMS concurrent propagator computations
+ * - Each stream has dedicated cuFFT plans and workspace
+ * - OpenMP threads map to CUDA streams for parallel scheduling
+ *
+ * **Propagator Storage:**
+ *
+ * - d_propagator[key][n]: Full propagator history on GPU
+ * - All contour steps stored for concentration calculation
+ * - Memory-intensive but maximum performance
+ *
+ * **Concentration Calculation:**
+ *
+ * Uses Simpson's rule for contour integration:
+ * φ(r) = (ds/Q) * Σ_n w_n * q(r,n) * q†(r,N-n)
+ * where w_n are Simpson coefficients (1, 4, 2, 4, ..., 1)/3
+ *
+ * **Supported Methods:**
+ *
+ * - "pseudospectral": FFT-based solver (default)
+ * - "realspace": Finite difference solver (beta)
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaComputationContinuous<double>: Real field simulations
+ * - CudaComputationContinuous<std::complex<double>>: L-FTS simulations
+ *
+ * @see CudaSolverPseudoContinuous for propagator advancement
+ * @see Scheduler for computation ordering
+ */
+
 #include <complex>
 #include <omp.h>
 #include <cuComplex.h>

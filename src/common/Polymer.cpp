@@ -1,3 +1,29 @@
+/**
+ * @file Polymer.cpp
+ * @brief Implementation of Polymer class for chain architecture.
+ *
+ * Handles polymer topology as a graph structure where:
+ * - Nodes: Junction points and chain ends
+ * - Edges: Polymer blocks (connecting nodes v and u)
+ *
+ * **Graph Validation:**
+ *
+ * The constructor validates that the polymer graph is:
+ * 1. Acyclic (no closed loops)
+ * 2. Connected (all nodes reachable from first block)
+ * 3. Has unique edges (no duplicate blocks between same nodes)
+ *
+ * Uses depth-first search to detect cycles and isolated nodes.
+ *
+ * **Propagator Key Assignment:**
+ *
+ * Each directed edge (v→u) is assigned a unique propagator key
+ * using PropagatorCode::generate_codes() for efficient computation.
+ *
+ * @see PropagatorCode for key generation algorithm
+ * @see Molecules for polymer container
+ */
+
 #include <iostream>
 #include <cctype>
 #include <cmath>
@@ -11,7 +37,20 @@
 #include "PropagatorCode.h"
 #include "Exception.h"
 
-//----------------- Constructor ----------------------------
+/**
+ * @brief Construct polymer from block specification.
+ *
+ * Builds the polymer graph, validates acyclicity and connectivity,
+ * then generates optimized propagator codes.
+ *
+ * @param ds                  Contour step size
+ * @param bond_lengths        Segment lengths by monomer type
+ * @param volume_fraction     Polymer volume fraction in blend
+ * @param block_inputs        Block definitions [monomer, length, v, u]
+ * @param chain_end_to_q_init Custom initial conditions at chain ends
+ *
+ * @throws Exception if graph has cycles, is disconnected, or has invalid blocks
+ */
 Polymer::Polymer(
     double ds, std::map<std::string, double> bond_lengths, 
     double volume_fraction, std::vector<BlockInput> block_inputs,

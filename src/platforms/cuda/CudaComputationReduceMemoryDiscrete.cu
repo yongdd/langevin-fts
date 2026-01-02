@@ -1,3 +1,43 @@
+/**
+ * @file CudaComputationReduceMemoryDiscrete.cu
+ * @brief Memory-efficient CUDA propagator computation for discrete chains.
+ *
+ * Implements memory-saving mode for discrete chain model by storing
+ * propagators in pinned host memory and transferring to GPU as needed.
+ * Enables larger simulations on memory-limited GPUs.
+ *
+ * **Memory Strategy:**
+ *
+ * - propagator[key][n]: Full segment propagators in pinned host memory
+ * - propagator_half_steps[key][n]: Junction propagators in pinned memory
+ * - GPU arrays: Only current computation needs device memory
+ *
+ * **Pinned Memory Benefits:**
+ *
+ * - cudaMallocHost allocates page-locked memory
+ * - Enables async transfers overlapped with computation
+ * - Higher bandwidth than pageable memory
+ *
+ * **Computation Flow:**
+ *
+ * 1. Copy current propagator from host to device
+ * 2. Advance propagator on GPU
+ * 3. Copy result back to host (async with next computation)
+ * 4. Repeat for all segments
+ *
+ * **Concentration Calculation:**
+ *
+ * Same as CudaComputationDiscrete but with additional host-device
+ * transfers for each propagator pair multiplication.
+ *
+ * **Template Instantiations:**
+ *
+ * - CudaComputationReduceMemoryDiscrete<double>: Real field
+ * - CudaComputationReduceMemoryDiscrete<std::complex<double>>: Complex field
+ *
+ * @see CudaComputationDiscrete for full GPU memory version
+ */
+
 #include <complex>
 #include <iostream>
 #include <chrono>
