@@ -120,6 +120,6 @@ calculation.save_results("HexC2D.json")
 #    5   -1.062E-15  [ 8.3726206E+00  ]    -0.332119022   3.5866068E-01  lx=[  4.557651, 4.557651 ]
 
 # Expected converged results:
-# - Free energy per chain: approximately -0.37 kT
-# - Converged lattice constant: approximately L = 4.63 (aN^1/2)
+# - Free energy per chain: -0.3726 kT
+# - Converged lattice constant: L = 5.34 (aN^1/2)
 # - The hexagonal cell accommodates one cylinder with 6-fold symmetry

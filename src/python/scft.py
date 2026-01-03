@@ -759,15 +759,41 @@ class SCFT:
 
             # Crystal system determines which lattice parameters can be optimized
             # Default: all box lengths can vary, angles are fixed at their initial values
-            crystal_system = params.get("crystal_system", "Orthorhombic")
-            self.crystal_system = crystal_system
             dim = len(params["nx"])
 
-            # Non-orthogonal crystal systems require 3D
+            # Auto-detect crystal system from angles for 2D non-orthogonal systems
+            if "crystal_system" not in params and dim == 2 and "angles" in params:
+                gamma = params["angles"][2]  # gamma is the angle between a and b
+                if abs(gamma - 120.0) < 1e-6:
+                    # Hexagonal 2D: gamma = 120°, a = b
+                    crystal_system = "Hexagonal2D"
+                elif abs(gamma - 90.0) > 1e-6:
+                    # General oblique 2D: gamma ≠ 90°
+                    crystal_system = "Oblique2D"
+                else:
+                    crystal_system = "Orthorhombic"
+            else:
+                crystal_system = params.get("crystal_system", "Orthorhombic")
+
+            self.crystal_system = crystal_system
+
+            # Non-orthogonal 3D crystal systems require 3D
             if crystal_system in ["Monoclinic", "Triclinic", "Hexagonal"] and dim != 3:
                 raise ValueError(f"Crystal system '{crystal_system}' requires 3D simulation (nx must have 3 elements).")
 
-            if crystal_system == "Orthorhombic":
+            if crystal_system == "Hexagonal2D":
+                # 2D hexagonal: γ = 120°, a = b (single lattice parameter)
+                self.lx_reduced_indices = [0]  # Only a (b = a enforced)
+                self.lx_full_indices = [0, 0]  # a, a
+                self.angles_reduced_indices = []  # γ fixed at 120°
+                self.angles_full_indices = []
+            elif crystal_system == "Oblique2D":
+                # 2D oblique: γ ≠ 90°, a and b can vary independently, γ fixed
+                self.lx_reduced_indices = [0, 1]  # a and b
+                self.lx_full_indices = [0, 1]  # a, b
+                self.angles_reduced_indices = []  # γ fixed at initial value
+                self.angles_full_indices = []
+            elif crystal_system == "Orthorhombic":
                 # α = β = γ = 90°, a, b, c can all vary
                 self.lx_reduced_indices = list(range(len(params["lx"])))
                 self.lx_full_indices = list(range(len(params["lx"])))
@@ -1420,7 +1446,21 @@ class SCFT:
                 # Calculate stress
                 self.solver.compute_stress()
                 stress_array = np.array(self.solver.get_stress())
-                error_level += np.sqrt(np.sum(stress_array**2))
+
+                # Only include stress components that are being optimized
+                # Diagonal stress [0:3] for box lengths, off-diagonal [3:6] for angles
+                dim = self.cb.get_dim()
+                # For 1D/2D, only include stress components for existing dimensions
+                diagonal_stress = stress_array[0:dim]
+                # For non-orthogonal systems, include off-diagonal stress if angles are being optimized
+                angle_stress_indices = []
+                if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
+                    angle_stress_map = {0: 5, 1: 4, 2: 3}  # α→σ_yz, β→σ_xz, γ→σ_xy
+                    for i in self.angles_reduced_indices:
+                        angle_stress_indices.append(angle_stress_map[i])
+                off_diagonal_stress = stress_array[angle_stress_indices] if angle_stress_indices else np.array([])
+                relevant_stress = np.concatenate([diagonal_stress, off_diagonal_stress])
+                error_level += np.sqrt(np.sum(relevant_stress**2))
 
                 print("%8d %12.3E " %
                 (iter, mass_error), end=" [ ")
@@ -1455,7 +1495,24 @@ class SCFT:
                 # Stress components:
                 # [0,1,2] = σ_xx, σ_yy, σ_zz (diagonal) - for box lengths
                 # [3,4,5] = σ_xy, σ_xz, σ_yz (off-diagonal) - for angles
-                dlx = -stress_array[0:3]  # Diagonal stress for lengths
+                dlx_full = -stress_array[0:3]  # Diagonal stress for lengths
+
+                # For crystal systems with constraints (a=b or a=b=c), average the constrained stress components
+                if hasattr(self, 'crystal_system'):
+                    if self.crystal_system == "Hexagonal2D":
+                        # 2D hexagonal: a = b, average σ_xx and σ_yy for the combined parameter
+                        dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1])])
+                    elif self.crystal_system == "Tetragonal" or (self.crystal_system == "Hexagonal" and len(self.lx_reduced_indices) == 2):
+                        # Tetragonal/3D Hexagonal: a = b ≠ c, average σ_xx and σ_yy for a, keep σ_zz for c
+                        dlx_reduced = np.array([0.5 * (dlx_full[0] + dlx_full[1]), dlx_full[2]])
+                    elif self.crystal_system == "Cubic":
+                        # Cubic: a = b = c, average all three components
+                        dlx_reduced = np.array([np.mean(dlx_full)])
+                    else:
+                        # No constraints: use stress directly for reduced indices
+                        dlx_reduced = dlx_full[self.lx_reduced_indices]
+                else:
+                    dlx_reduced = dlx_full[self.lx_reduced_indices]
 
                 # Map off-diagonal stress to angle gradients
                 # For Monoclinic: σ_xz (index 4) drives β angle
@@ -1470,7 +1527,7 @@ class SCFT:
                 # Build optimization vectors
                 am_current = np.concatenate((w_reduced_basis.flatten(), current_lx, current_angles))
                 am_diff = np.concatenate((w_diff_reduced_basis.flatten(),
-                                         self.scale_stress*dlx[self.lx_reduced_indices],
+                                         self.scale_stress*dlx_reduced,
                                          self.scale_stress*dangle))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
