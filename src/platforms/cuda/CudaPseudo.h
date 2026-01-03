@@ -77,6 +77,16 @@ private:
     std::map<std::string, double*> d_boltz_bond_half;  ///< Half bond diffusion (device)
     /// @}
 
+    /**
+     * @brief Upload Boltzmann factors to GPU.
+     */
+    void upload_boltz_bond();
+
+    /**
+     * @brief Upload Fourier basis to GPU.
+     */
+    void upload_fourier_basis();
+
 public:
     /**
      * @brief Construct GPU pseudo-spectral utility.
@@ -89,11 +99,12 @@ public:
      * @param dx           Grid spacing [dx, dy, dz]
      * @param ds           Contour step size
      * @param recip_metric Reciprocal metric tensor [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     *                     Default is identity for orthogonal systems.
      */
     CudaPseudo(
         std::map<std::string, double> bond_lengths,
         std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric);
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0});
 
     /**
      * @brief Destructor. Frees GPU memory.
@@ -150,6 +161,6 @@ public:
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
         std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric) override;
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0}) override;
 };
 #endif

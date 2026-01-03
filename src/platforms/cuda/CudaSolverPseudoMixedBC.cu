@@ -92,7 +92,7 @@ CudaSolverPseudoMixedBC<T>::CudaSolverPseudoMixedBC(
         }
 
         // Create Pseudo object (GPU version)
-        pseudo = new CudaPseudoMixedBC<T>(
+        pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             bc_per_dim,
             cb->get_nx(), cb->get_dx(), molecules->get_ds());

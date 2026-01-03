@@ -84,7 +84,7 @@ CpuSolverPseudoMixedBC<T>::CpuSolverPseudoMixedBC(ComputationBox<T>* cb, Molecul
         for (int d = 0; d < dim; ++d)
             bc_per_dim.push_back(bc_vec[2 * d]);  // Take low boundary (high must match)
 
-        pseudo = new PseudoMixedBC<T>(
+        pseudo = new Pseudo<T>(
             molecules->get_bond_lengths(),
             bc_per_dim,
             cb->get_nx(), cb->get_dx(), molecules->get_ds());
