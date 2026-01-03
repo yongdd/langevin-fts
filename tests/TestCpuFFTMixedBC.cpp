@@ -1,10 +1,12 @@
 /**
- * @file TestCpuFFTMixedBC1D.cpp
+ * @file TestCpuFFTMixedBC.cpp
  * @brief Test DCT-II/III and DST-II/III transforms for mixed boundary conditions.
  *
  * This test verifies that MklFFTMixedBC correctly implements:
  * - DCT-II forward / DCT-III backward for reflecting (Neumann) BCs
  * - DST-II forward / DST-III backward for absorbing (Dirichlet) BCs
+ *
+ * Tests cover 1D, 2D, and 3D cases.
  *
  * The primary verification is round-trip: backward(forward(x)) = x
  *
