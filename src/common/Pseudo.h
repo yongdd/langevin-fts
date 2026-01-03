@@ -89,17 +89,40 @@ protected:
     std::vector<double> dx;                  ///< Grid spacings [dx, dy, dz]
     double ds;                               ///< Contour step size
 
+    /**
+     * @brief Reciprocal metric tensor for wavenumber calculation.
+     *
+     * G*_ij = e*_i · e*_j where e* are reciprocal basis vectors.
+     * Layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     *
+     * For orthogonal systems: G*_ii = 1/L_i², cross terms = 0.
+     * Used to compute |k|² = G*_ij k_i k_j for non-orthogonal lattices.
+     */
+    std::array<double, 6> recip_metric_;
+
     int *negative_k_idx;  ///< Mapping from k to -k indices for stress calculation
 
     /**
-     * @brief Weighted Fourier basis for stress calculation.
+     * @brief Weighted Fourier basis for stress calculation (diagonal terms).
      *
+     * For orthogonal systems (diagonal stress):
      * fourier_basis_x[k] = (2π/Lx)² * nx² for stress derivative computation.
      * Similar for y and z directions.
      */
     double *fourier_basis_x;
     double *fourier_basis_y;
     double *fourier_basis_z;
+
+    /**
+     * @brief Weighted Fourier basis for stress calculation (off-diagonal terms).
+     *
+     * For non-orthogonal systems, cross-terms are needed for full stress tensor:
+     * fourier_basis_xy[k] = 2 * kx * ky * weight (factor of 2 for symmetry)
+     * Similar for xz and yz directions.
+     */
+    double *fourier_basis_xy;
+    double *fourier_basis_xz;
+    double *fourier_basis_yz;
 
     /**
      * @brief Boltzmann factors for full contour step.
@@ -142,15 +165,17 @@ public:
     /**
      * @brief Construct Pseudo with given parameters.
      *
-     * @param bond_lengths Segment lengths squared: {type: (a/a_Ref)²}
-     * @param bc          Boundary conditions (must all be PERIODIC)
-     * @param nx          Grid dimensions
-     * @param dx          Grid spacings
-     * @param ds          Contour step size
+     * @param bond_lengths  Segment lengths: {type: a/a_Ref}
+     * @param bc            Boundary conditions (must all be PERIODIC)
+     * @param nx            Grid dimensions
+     * @param dx            Grid spacings
+     * @param ds            Contour step size
+     * @param recip_metric  Reciprocal metric tensor [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
      */
     Pseudo(
         std::map<std::string, double> bond_lengths,
-        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds);
+        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds,
+        std::array<double, 6> recip_metric);
 
     /**
      * @brief Virtual destructor.
@@ -202,24 +227,45 @@ public:
     virtual const int* get_negative_frequency_mapping();
 
     /**
+     * @brief Get xy cross-term Fourier basis for stress.
+     * @return Pointer to basis array
+     */
+    virtual const double* get_fourier_basis_xy();
+
+    /**
+     * @brief Get xz cross-term Fourier basis for stress.
+     * @return Pointer to basis array
+     */
+    virtual const double* get_fourier_basis_xz();
+
+    /**
+     * @brief Get yz cross-term Fourier basis for stress.
+     * @return Pointer to basis array
+     */
+    virtual const double* get_fourier_basis_yz();
+
+    /**
      * @brief Update all arrays after parameter changes.
      *
      * Call this after changing box dimensions (for box relaxation).
      *
-     * @param bc          New boundary conditions
+     * @param bc           New boundary conditions
      * @param bond_lengths New segment lengths
-     * @param dx          New grid spacings
-     * @param ds          New contour step (usually unchanged)
+     * @param dx           New grid spacings
+     * @param ds           New contour step (usually unchanged)
+     * @param recip_metric New reciprocal metric tensor
      */
     virtual void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
-        std::vector<double> dx, double ds)
+        std::vector<double> dx, double ds,
+        std::array<double, 6> recip_metric)
     {
         this->bond_lengths = bond_lengths;
         this->bc = bc;
         this->dx = dx;
         this->ds = ds;
+        this->recip_metric_ = recip_metric;
 
         update_total_complex_grid();
         update_boltz_bond();

@@ -56,6 +56,14 @@ CudaComputationBox<T>::CudaComputationBox(
     initialize();
 }
 template <typename T>
+CudaComputationBox<T>::CudaComputationBox(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+    std::vector<double> angles, const double* mask)
+    : ComputationBox<T>(nx, lx, bc, angles, mask)
+{
+    initialize();
+}
+template <typename T>
 void CudaComputationBox<T>::initialize()
 {
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*this->total_grid));
@@ -87,9 +95,16 @@ CudaComputationBox<T>::~CudaComputationBox()
 }
 //-----------------------------------------------------------
 template <typename T>
-void CudaComputationBox<T>::set_lx(std::vector<double> new_lx)
+void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx)
 {
-    ComputationBox<T>::set_lx(new_lx);
+    ComputationBox<T>::set_lattice_parameters(new_lx);
+    gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
+}
+//-----------------------------------------------------------
+template <typename T>
+void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles)
+{
+    ComputationBox<T>::set_lattice_parameters(new_lx, new_angles);
     gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------

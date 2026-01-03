@@ -113,6 +113,23 @@ public :
         const double* mask=nullptr) override;
 
     /**
+     * @brief Create a CUDA computation box with lattice angles.
+     *
+     * @param nx     Grid dimensions [Nx, Ny, Nz]
+     * @param lx     Box lengths [Lx, Ly, Lz]
+     * @param bc     Boundary conditions
+     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param mask   Optional mask for impenetrable regions
+     * @return CudaComputationBox instance
+     */
+    ComputationBox<T>* create_computation_box(
+        std::vector<int> nx,
+        std::vector<double> lx,
+        std::vector<std::string> bc,
+        std::vector<double> angles,
+        const double* mask=nullptr) override;
+
+    /**
      * @brief Create molecules container.
      *
      * @param chain_model  "continuous" or "discrete"

@@ -355,7 +355,10 @@ class LFTS:
         factory.display_info()
 
         # (C++ class) Computation box
-        self.cb = factory.create_computation_box(params["nx"], params["lx"])
+        if "angles" in params:
+            self.cb = factory.create_computation_box(params["nx"], params["lx"], angles=params["angles"])
+        else:
+            self.cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}

@@ -126,6 +126,23 @@ public :
         const double* mask=nullptr) = 0;
 
     /**
+     * @brief Create ComputationBox with lattice angles for non-orthogonal systems.
+     *
+     * @param nx     Grid points per dimension [Nx, Ny, Nz]
+     * @param lx     Box lengths [Lx, Ly, Lz]
+     * @param bc     Boundary conditions (e.g., "periodic", "reflecting")
+     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param mask   Optional mask for impenetrable regions
+     * @return Pointer to created ComputationBox
+     */
+    virtual ComputationBox<T>* create_computation_box(
+        std::vector<int> nx,
+        std::vector<double> lx,
+        std::vector<std::string> bc,
+        std::vector<double> angles,
+        const double* mask=nullptr) = 0;
+
+    /**
      * @brief Create a Molecules container.
      *
      * @param chain_model  "continuous" or "discrete"

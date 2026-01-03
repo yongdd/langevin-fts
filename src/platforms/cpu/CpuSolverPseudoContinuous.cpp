@@ -61,7 +61,8 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
         pseudo = new Pseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_ds());
+            cb->get_nx(), cb->get_dx(), molecules->get_ds(),
+            cb->get_recip_metric());
 
         // Create exp_dw, and exp_dw_half
         const int M = cb->get_total_grid();
@@ -97,7 +98,8 @@ void CpuSolverPseudoContinuous<T>::update_laplacian_operator()
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_ds());
+            this->cb->get_dx(), this->molecules->get_ds(),
+            this->cb->get_recip_metric());
     }
     catch(std::exception& exc)
     {
@@ -206,25 +208,30 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
     try
     {
         const int DIM  = this->cb->get_dim();
-        // const int M    = this->cb->get_total_grid();
+        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int M_COMPLEX = pseudo->get_total_complex_grid();
         auto bond_lengths = this->molecules->get_bond_lengths();
         double bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
         T coeff;
-        
-        std::vector<T> stress(DIM);
+
+        std::vector<T> stress(N_STRESS);
         std::complex<double> qk_1[M_COMPLEX];
         std::complex<double> qk_2[M_COMPLEX];
 
+        // Diagonal Fourier basis
         const double* _fourier_basis_x = pseudo->get_fourier_basis_x();
         const double* _fourier_basis_y = pseudo->get_fourier_basis_y();
         const double* _fourier_basis_z = pseudo->get_fourier_basis_z();
+        // Cross-term Fourier basis
+        const double* _fourier_basis_xy = pseudo->get_fourier_basis_xy();
+        const double* _fourier_basis_xz = pseudo->get_fourier_basis_xz();
+        const double* _fourier_basis_yz = pseudo->get_fourier_basis_yz();
         const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
 
         fft->forward(q_1, qk_1);
         fft->forward(q_2, qk_2);
 
-        for(int d=0; d<DIM; d++)
+        for(int d=0; d<N_STRESS; d++)
             stress[d] = 0.0;
 
         if ( DIM == 3 )
@@ -233,32 +240,42 @@ std::vector<T> CpuSolverPseudoContinuous<T>::compute_single_segment_stress(
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq* qk_1[i]*qk_2[_negative_k_idx[i]];
+                    coeff = bond_length_sq*qk_1[i]*qk_2[_negative_k_idx[i]];
 
-                stress[0] += coeff*_fourier_basis_x[i];
-                stress[1] += coeff*_fourier_basis_y[i];
-                stress[2] += coeff*_fourier_basis_z[i];
+                // Diagonal components
+                stress[0] += coeff*_fourier_basis_x[i];   // xx
+                stress[1] += coeff*_fourier_basis_y[i];   // yy
+                stress[2] += coeff*_fourier_basis_z[i];   // zz
+                // Cross-term components (for non-orthogonal systems)
+                stress[3] += coeff*_fourier_basis_xy[i];  // xy
+                stress[4] += coeff*_fourier_basis_xz[i];  // xz
+                stress[5] += coeff*_fourier_basis_yz[i];  // yz
             }
         }
         if ( DIM == 2 )
         {
+            // For 2D: stress[0] for lx[0], stress[1] for lx[1], stress[2] for cross term
+            // fourier_basis_x/y/xy are remapped to logical dimensions in Pseudo::update_weighted_fourier_basis
             for(int i=0; i<M_COMPLEX; i++){
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq* qk_1[i]*qk_2[_negative_k_idx[i]];
-                stress[0] += coeff*_fourier_basis_y[i];
-                stress[1] += coeff*_fourier_basis_z[i];
+                    coeff = bond_length_sq*qk_1[i]*qk_2[_negative_k_idx[i]];
+                stress[0] += coeff*_fourier_basis_x[i];   // lx[0] dimension
+                stress[1] += coeff*_fourier_basis_y[i];   // lx[1] dimension
+                stress[2] += coeff*_fourier_basis_xy[i];  // cross term
             }
         }
         if ( DIM == 1 )
         {
+            // For 1D: stress[0] for lx[0]
+            // fourier_basis_x is remapped to logical dimension in Pseudo::update_weighted_fourier_basis
             for(int i=0; i<M_COMPLEX; i++){
                 if constexpr (std::is_same<T, double>::value)
                     coeff = bond_length_sq*(qk_1[i]*std::conj(qk_2[i])).real();
                 else
-                    coeff = bond_length_sq* qk_1[i]*qk_2[_negative_k_idx[i]];
-                stress[0] += coeff*_fourier_basis_z[i];
+                    coeff = bond_length_sq*qk_1[i]*qk_2[_negative_k_idx[i]];
+                stress[0] += coeff*_fourier_basis_x[i];   // lx[0] dimension
             }
         }
         return stress;

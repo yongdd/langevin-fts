@@ -776,7 +776,7 @@ class SCFT:
                 new_lx = np.array(am_new[-self.cb.get_dim():])
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
-                self.cb.set_lx(new_lx)
+                self.cb.set_lattice_parameters(new_lx)
 
                 # Update bond parameters using new lx
                 self.solver.update_laplacian_operator()

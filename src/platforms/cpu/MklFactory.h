@@ -92,6 +92,22 @@ public :
         const double* mask=nullptr) override;
 
     /**
+     * @brief Create a CPU computation box with lattice angles.
+     * @param nx     Grid dimensions
+     * @param lx     Box lengths
+     * @param bc     Boundary conditions
+     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param mask   Optional mask for impenetrable regions
+     * @return CpuComputationBox instance
+     */
+    ComputationBox<T>* create_computation_box(
+        std::vector<int> nx,
+        std::vector<double> lx,
+        std::vector<std::string> bc,
+        std::vector<double> angles,
+        const double* mask=nullptr) override;
+
+    /**
      * @brief Create molecules container.
      * @param chain_model  "continuous" or "discrete"
      * @param ds           Contour step size

@@ -8,7 +8,7 @@ from polymerfts import *
 def find_saddle_point(lx):
 
     # set box size
-    cb.set_lx(lx)
+    cb.set_lattice_parameters(lx)
     # update bond parameters using new lx
     solver.update_laplacian_operator()
 

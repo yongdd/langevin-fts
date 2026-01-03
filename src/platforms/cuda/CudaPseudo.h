@@ -55,11 +55,18 @@ template <typename T>
 class CudaPseudo : public Pseudo<T>
 {
 private:
-    /// @name Stress Calculation Arrays
+    /// @name Stress Calculation Arrays (Diagonal)
     /// @{
     double *d_fourier_basis_x;  ///< Weighted kx² in device memory
     double *d_fourier_basis_y;  ///< Weighted ky² in device memory
     double *d_fourier_basis_z;  ///< Weighted kz² in device memory
+    /// @}
+
+    /// @name Stress Calculation Arrays (Cross-terms for non-orthogonal)
+    /// @{
+    double *d_fourier_basis_xy;  ///< Weighted 2*kx*ky in device memory
+    double *d_fourier_basis_xz;  ///< Weighted 2*kx*kz in device memory
+    double *d_fourier_basis_yz;  ///< Weighted 2*ky*kz in device memory
     /// @}
 
     int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
@@ -81,10 +88,12 @@ public:
      * @param nx           Grid dimensions
      * @param dx           Grid spacing [dx, dy, dz]
      * @param ds           Contour step size
+     * @param recip_metric Reciprocal metric tensor [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
      */
     CudaPseudo(
         std::map<std::string, double> bond_lengths,
-        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds);
+        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds,
+        std::array<double, 6> recip_metric);
 
     /**
      * @brief Destructor. Frees GPU memory.
@@ -117,6 +126,15 @@ public:
     /** @brief Get negative frequency mapping (device pointer). */
     const int* get_negative_frequency_mapping() override { return d_negative_k_idx;};
 
+    /** @brief Get xy cross-term Fourier basis (device pointer). */
+    const double* get_fourier_basis_xy() override { return d_fourier_basis_xy;};
+
+    /** @brief Get xz cross-term Fourier basis (device pointer). */
+    const double* get_fourier_basis_xz() override { return d_fourier_basis_xz;};
+
+    /** @brief Get yz cross-term Fourier basis (device pointer). */
+    const double* get_fourier_basis_yz() override { return d_fourier_basis_yz;};
+
     /**
      * @brief Update operators for new box dimensions.
      *
@@ -126,10 +144,12 @@ public:
      * @param bond_lengths Segment lengths
      * @param dx           New grid spacing
      * @param ds           Contour step
+     * @param recip_metric Reciprocal metric tensor
      */
     void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
-        std::vector<double> dx, double ds) override;
+        std::vector<double> dx, double ds,
+        std::array<double, 6> recip_metric) override;
 };
 #endif

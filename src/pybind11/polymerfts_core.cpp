@@ -83,7 +83,7 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
  * - get_dv(): Volume element
  * - get_total_grid(): Total grid points
  * - get_volume(): Total box volume
- * - set_lx(): Update box dimensions
+ * - set_lattice_parameters(): Update box dimensions and angles
  * - integral(): Volume integral of field
  * - inner_product(): Inner product of two fields
  *
@@ -107,7 +107,11 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_dv", &ComputationBox<T>::get_dv)
         .def("get_total_grid", &ComputationBox<T>::get_total_grid)
         .def("get_volume", &ComputationBox<T>::get_volume)
-        .def("set_lx", &ComputationBox<T>::set_lx)
+        .def("get_angles", &ComputationBox<T>::get_angles)
+        .def("get_angles_degrees", &ComputationBox<T>::get_angles_degrees)
+        .def("is_orthogonal", &ComputationBox<T>::is_orthogonal)
+        .def("set_lattice_parameters", overload_cast_<std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
+        .def("set_lattice_parameters", overload_cast_<std::vector<double>, std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
         .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
         {
             const int M = obj.get_total_grid();
@@ -510,6 +514,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         .def("create_computation_box", [](
             AbstractFactory<T>& obj,
             std::vector<int> nx, std::vector<double> lx,
+            py::object angles,
             py::object bc,
             py::object mask)
         {
@@ -538,13 +543,26 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
                         throw_with_line_number("Size of input (" + std::to_string(buf_mask.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match");
                     }
                 }
-                return obj.create_computation_box(nx, lx, bc_vec, static_cast<double*>(buf_mask.ptr));
+
+                // Check if angles is provided
+                if (!angles.is_none())
+                {
+                    py::list angles_list = py::cast<py::list>(angles);
+                    std::vector<double> angles_vec;
+                    for (size_t i = 0; i < py::len(angles_list); ++i)
+                        angles_vec.push_back(py::cast<double>(angles_list[i]));
+                    return obj.create_computation_box(nx, lx, bc_vec, angles_vec, static_cast<double*>(buf_mask.ptr));
+                }
+                else
+                {
+                    return obj.create_computation_box(nx, lx, bc_vec, static_cast<double*>(buf_mask.ptr));
+                }
             }
             catch(std::exception& exc)
             {
                 throw_without_line_number(exc.what());
             }
-        }, py::arg("nx"), py::arg("lx"), py::arg("bc") = py::none(), py::arg("mask") = py::none())
+        }, py::arg("nx"), py::arg("lx"), py::arg("angles") = py::none(), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory<T>::create_molecules_information)
         .def("create_propagator_computation_optimizer", &AbstractFactory<T>::create_propagator_computation_optimizer)
         .def("create_pseudospectral_solver", &AbstractFactory<T>::create_pseudospectral_solver)

@@ -251,7 +251,7 @@ for langevin_step in range(1, langevin_max_step+1):
     print("new Lx:", new_lx)
     
     # change box size
-    cb.set_lx(new_lx)
+    cb.set_lattice_parameters(new_lx)
     # update bond parameters using new lx
     solver.update_laplacian_operator()
 

@@ -82,6 +82,13 @@ ComputationBox<T>* MklFactory<T>::create_computation_box(
     return new CpuComputationBox<T>(nx, lx, bc, mask);
 }
 template <typename T>
+ComputationBox<T>* MklFactory<T>::create_computation_box(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+    std::vector<double> angles, const double *mask)
+{
+    return new CpuComputationBox<T>(nx, lx, bc, angles, mask);
+}
+template <typename T>
 Molecules* MklFactory<T>::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {

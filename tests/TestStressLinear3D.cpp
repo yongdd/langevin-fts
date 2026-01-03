@@ -272,7 +272,7 @@ int main()
                     {
                         //----------- Compute derivate of H: lx + delta ----------------
                         lx[0] = old_lx + dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
@@ -296,7 +296,7 @@ int main()
 
                         //----------- Compute derivate of H: lx - delta ----------------
                         lx[0] = old_lx - dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
@@ -332,7 +332,7 @@ int main()
                     {
                         //----------- Compute derivate of H: ly + delta ----------------
                         lx[1] = old_ly + dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
@@ -356,7 +356,7 @@ int main()
 
                         //----------- Compute derivate of H: ly - delta ----------------
                         lx[1] = old_ly - dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
@@ -393,7 +393,7 @@ int main()
                     {
                         //----------- Compute derivate of H: lz + delta ----------------
                         lx[2] = old_lz + dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics
@@ -417,7 +417,7 @@ int main()
 
                         //----------- Compute derivate of H: ly - delta ----------------
                         lx[2] = old_lz - dL/2;
-                        cb->set_lx(lx);
+                        cb->set_lattice_parameters(lx);
                         solver->update_laplacian_operator();
 
                         // For the given fields find the polymer statistics

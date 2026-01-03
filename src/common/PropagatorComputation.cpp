@@ -71,9 +71,9 @@ PropagatorComputation<T>::PropagatorComputation(
     // Total partition functions for each solvent
     single_solvent_partitions = new T[molecules->get_n_solvent_types()];
 
-    // Allocate memory for dq_dl
+    // Allocate memory for dq_dl (6 components: xx, yy, zz, xy, xz, yz)
     for(int p=0; p<molecules->get_n_polymer_types(); p++){
-        dq_dl.push_back({0.0, 0.0, 0.0});
+        dq_dl.push_back({0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
     }
 }
 template <typename T>
@@ -86,28 +86,27 @@ PropagatorComputation<T>::~PropagatorComputation()
 /**
  * @brief Compute stress tensor from propagator derivatives.
  *
- * Calculates the stress in each spatial dimension using the
- * canonical ensemble formula:
- *     σ_d = Σ_p (φ_p/α_p) × (dQ_p/dL_d) / Q_p
+ * Calculates the stress tensor using the canonical ensemble formula:
+ *     σ_ij = Σ_p (φ_p/α_p) × (dQ_p/dε_ij) / Q_p
  *
- * @return Vector of stress values for each dimension [σ_x, σ_y, σ_z]
+ * @return Vector of stress values [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+ *         For 1D/2D: cross-terms are zero, only relevant components used.
  *
  * @note dq_dl must be populated by compute_stress() in derived class
  */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress()
-{ 
-    const int DIM  = this->cb->get_dim();
-    // const int M    = this->cb->get_total_grid();
-    std::vector<T> stress(DIM);
+{
+    const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
+    std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
-    for(int d=0; d<DIM; d++)
+    for(int d=0; d<N_STRESS; d++)
         stress[d] = 0.0;
-    
+
     for(int p=0; p<n_polymer_types; p++){
         Polymer& pc = this->molecules->get_polymer(p);
-        for(int d=0; d<DIM; d++){
+        for(int d=0; d<N_STRESS; d++){
             stress[d] += (this->dq_dl[p][d] * pc.get_volume_fraction() /
                  pc.get_alpha()) / this->single_polymer_partitions[p];
         }
@@ -119,26 +118,25 @@ std::vector<T> PropagatorComputation<T>::get_stress()
  * @brief Compute stress tensor for grand canonical ensemble.
  *
  * Uses fugacities instead of volume fractions for stress calculation:
- *     σ_d = Σ_p z_p × (dQ_p/dL_d)
+ *     σ_ij = Σ_p z_p × (dQ_p/dε_ij)
  *
  * where z_p is the fugacity of polymer species p.
  *
  * @param fugacities Vector of polymer fugacities
- * @return Vector of stress values for each dimension
+ * @return Vector of stress values [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
  */
 template <typename T>
 std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fugacities)
-{ 
-    const int DIM  = this->cb->get_dim();
-    // const int M    = this->cb->get_total_grid();
-    std::vector<T> stress(DIM);
+{
+    const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
+    std::vector<T> stress(N_STRESS);
 
     int n_polymer_types = this->molecules->get_n_polymer_types();
-    for(int d=0; d<DIM; d++)
+    for(int d=0; d<N_STRESS; d++)
         stress[d] = 0.0;
-    
+
     for(int p=0; p<n_polymer_types; p++){
-        for(int d=0; d<DIM; d++){
+        for(int d=0; d<N_STRESS; d++){
             stress[d] += static_cast<T>(fugacities[p]) * this->dq_dl[p][d];
         }
     }

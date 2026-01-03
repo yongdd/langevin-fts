@@ -1009,10 +1009,11 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
     // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
     try
     {
-        const int DIM  = this->cb->get_dim();
+        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
+        const int DIM = this->cb->get_dim();
         const int M    = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -1020,7 +1021,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
         // Reset stress map
         for(const auto& item: phi_block)
         {
-            for(int d=0; d<3; d++)
+            for(int d=0; d<N_STRESS; d++)
                 block_dq_dl[item.first][d] = 0.0;
         }
 
@@ -1087,7 +1088,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
             }
 
             // Compute the q_right and stress
-            std::array<T,3> _block_dq_dl = block_dq_dl[key];
+            std::array<T,6> _block_dq_dl = block_dq_dl[key];
 
             T *q_segment_1;
             T *q_segment_2;
@@ -1159,7 +1160,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                 std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
 
-                for(int d=0; d<DIM; d++)
+                for(int d=0; d<N_STRESS; d++)
                     _block_dq_dl[d] += segment_stress[d]*((T)n_repeated);
 
                 q_prev = q_next;
@@ -1171,7 +1172,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
         // Compute total stress
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] = 0.0;
         for(const auto& block: phi_block)
         {
@@ -1179,12 +1180,27 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
             int p                 = std::get<0>(key);
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }
-        for(int p=0; p<n_polymer_types; p++){
+        // Normalize stress components
+        for(int p=0; p<n_polymer_types; p++)
+        {
+            // Diagonal components: xx, yy, zz
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_ds();
+            // Cross-term components for 3D: xy, xz, yz
+            if (DIM == 3)
+            {
+                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+            }
+            // Cross-term component for 2D: yz
+            else if (DIM == 2)
+            {
+                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+            }
         }
     }
     catch(std::exception& exc)

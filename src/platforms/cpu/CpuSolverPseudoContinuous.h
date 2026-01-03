@@ -149,7 +149,7 @@ public:
     /**
      * @brief Compute stress contribution from one segment.
      *
-     * Calculates ∂H/∂L_αβ contribution from correlating forward and
+     * Calculates ∂H/∂ε_αβ contribution from correlating forward and
      * backward propagators.
      *
      * @param q_1                Forward propagator
@@ -157,7 +157,7 @@ public:
      * @param monomer_type       Monomer type for segment length
      * @param is_half_bond_length Ignored (always false for continuous)
      *
-     * @return Stress components [σ_xx, σ_yy, σ_zz]
+     * @return Stress components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
      */
     std::vector<T> compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) override;

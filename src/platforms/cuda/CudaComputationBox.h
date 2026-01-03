@@ -94,15 +94,34 @@ public:
     CudaComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr);
 
     /**
+     * @brief Construct CUDA computation box with lattice angles.
+     *
+     * @param nx     Grid dimensions [Nx, Ny, Nz]
+     * @param lx     Box lengths [Lx, Ly, Lz]
+     * @param bc     Boundary conditions
+     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param mask   Optional mask for impenetrable regions
+     */
+    CudaComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+                       std::vector<double> angles, const double* mask=nullptr);
+
+    /**
      * @brief Destructor. Frees GPU memory.
      */
     ~CudaComputationBox() override;
 
     /**
-     * @brief Update box lengths and recompute grid spacing.
+     * @brief Update lattice parameters (box lengths) and recompute grid spacing.
      * @param new_lx New box lengths [Lx, Ly, Lz]
      */
-    void set_lx(std::vector<double> new_lx) override;
+    void set_lattice_parameters(std::vector<double> new_lx) override;
+
+    /**
+     * @brief Update lattice parameters (box lengths and angles), recompute lattice vectors.
+     * @param new_lx     New box lengths [Lx, Ly, Lz]
+     * @param new_angles New lattice angles [alpha, beta, gamma] in degrees
+     */
+    void set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles) override;
 
     /// @name Device-Side Operations
     /// @{
