@@ -279,35 +279,49 @@ void Pseudo<T>::update_boltz_bond()
             // Pre-compute constant factor: -b² * (2π)² * ds / 6
             double prefactor = -bond_length_sq * FOUR_PI_SQ * ds / 6.0;
 
+            // For cross terms in non-orthogonal cells, we need SIGNED frequency indices
+            // For diagonal terms (h², j², k²), absolute value is fine since (-h)² = h²
+            // For cross terms (h*j, h*k, j*k), sign matters: (-h)*j ≠ h*j
+            int i_signed, j_signed, k_signed;
+
             for(int i=0; i<tnx[0]; i++)
             {
-                if( i > tnx[0]/2)
-                    itemp = tnx[0]-i;
-                else
+                if( i > tnx[0]/2) {
+                    itemp = tnx[0]-i;      // absolute value for diagonal term
+                    i_signed = i - tnx[0]; // signed value for cross terms
+                } else {
                     itemp = i;
+                    i_signed = i;
+                }
                 for(int j=0; j<tnx[1]; j++)
                 {
-                    if( j > tnx[1]/2)
-                        jtemp = tnx[1]-j;
-                    else
+                    if( j > tnx[1]/2) {
+                        jtemp = tnx[1]-j;      // absolute value for diagonal term
+                        j_signed = j - tnx[1]; // signed value for cross terms
+                    } else {
                         jtemp = j;
+                        j_signed = j;
+                    }
 
                     if constexpr (std::is_same<T, double>::value)
                     {
+                        // For real-to-complex FFT, k only goes from 0 to N/2, all positive
                         for(int k=0; k<tnx[2]/2+1; k++)
                         {
                             ktemp = k;
+                            k_signed = k;  // always positive for real-to-complex FFT
                             idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
                             // |k|² = (2π)² * (G*_ij h_i h_j)
                             // mag_q2 = -b²*ds/6 * |k|²
+                            // Use absolute values for diagonal terms, signed values for cross terms
                             mag_q2 = prefactor * (
                                 Gii * itemp * itemp +
                                 Gjj * jtemp * jtemp +
                                 Gkk * ktemp * ktemp +
-                                2.0 * Gij * itemp * jtemp +
-                                2.0 * Gik * itemp * ktemp +
-                                2.0 * Gjk * jtemp * ktemp
+                                2.0 * Gij * i_signed * j_signed +
+                                2.0 * Gik * i_signed * k_signed +
+                                2.0 * Gjk * j_signed * k_signed
                             );
                             _boltz_bond     [idx] = exp(mag_q2);
                             _boltz_bond_half[idx] = exp(mag_q2/2.0);
@@ -317,20 +331,24 @@ void Pseudo<T>::update_boltz_bond()
                     {
                         for(int k=0; k<tnx[2]; k++)
                         {
-                            if( k > tnx[2]/2)
-                                ktemp = tnx[2]-k;
-                            else
+                            if( k > tnx[2]/2) {
+                                ktemp = tnx[2]-k;      // absolute value for diagonal term
+                                k_signed = k - tnx[2]; // signed value for cross terms
+                            } else {
                                 ktemp = k;
+                                k_signed = k;
+                            }
                             idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
 
                             // |k|² = (2π)² * (G*_ij h_i h_j)
+                            // Use absolute values for diagonal terms, signed values for cross terms
                             mag_q2 = prefactor * (
                                 Gii * itemp * itemp +
                                 Gjj * jtemp * jtemp +
                                 Gkk * ktemp * ktemp +
-                                2.0 * Gij * itemp * jtemp +
-                                2.0 * Gik * itemp * ktemp +
-                                2.0 * Gjk * jtemp * ktemp
+                                2.0 * Gij * i_signed * j_signed +
+                                2.0 * Gik * i_signed * k_signed +
+                                2.0 * Gjk * j_signed * k_signed
                             );
                             _boltz_bond     [idx] = exp(mag_q2);
                             _boltz_bond_half[idx] = exp(mag_q2/2.0);
@@ -410,47 +428,63 @@ void Pseudo<T>::update_weighted_fourier_basis()
     double cross_factor_02 = (DIM >= 3) ? 2.0 * k_factor[0] * k_factor[2] * Gstar_02 : 0.0;
     double cross_factor_12 = (DIM >= 3) ? 2.0 * k_factor[1] * k_factor[2] * Gstar_12 : 0.0;
 
+    // For cross terms in non-orthogonal cells, we need SIGNED frequency indices
+    int i_signed, j_signed, k_signed;
+
     for(int i=0; i<tnx[0]; i++)
     {
-        if( i > tnx[0]/2)
-            itemp = tnx[0]-i;
-        else
+        if( i > tnx[0]/2) {
+            itemp = tnx[0]-i;      // absolute value for diagonal term
+            i_signed = i - tnx[0]; // signed value for cross terms
+        } else {
             itemp = i;
+            i_signed = i;
+        }
         for(int j=0; j<tnx[1]; j++)
         {
-            if( j > tnx[1]/2)
-                jtemp = tnx[1]-j;
-            else
+            if( j > tnx[1]/2) {
+                jtemp = tnx[1]-j;      // absolute value for diagonal term
+                j_signed = j - tnx[1]; // signed value for cross terms
+            } else {
                 jtemp = j;
+                j_signed = j;
+            }
 
             if constexpr (std::is_same<T, double>::value)
             {
+                // For real-to-complex FFT, k only goes from 0 to N/2, all positive
                 for(int k=0; k<tnx[2]/2+1; k++)
                 {
                     ktemp = k;
+                    k_signed = k;  // always positive for real-to-complex FFT
                     idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
                     // Map loop indices to real dimension indices based on DIM
-                    // For 3D: n0=itemp, n1=jtemp, n2=ktemp
+                    // For 3D: n0=itemp, n1=jtemp, n2=ktemp (absolute for diagonal)
                     // For 2D: n0=jtemp, n1=ktemp (itemp=0)
                     // For 1D: n0=ktemp (itemp=jtemp=0)
+                    // Also compute signed versions for cross terms
                     int n0, n1, n2;
+                    int n0_s, n1_s, n2_s;  // signed versions
                     if (DIM == 3) {
                         n0 = itemp; n1 = jtemp; n2 = ktemp;
+                        n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
                     } else if (DIM == 2) {
                         n0 = jtemp; n1 = ktemp; n2 = 0;
+                        n0_s = j_signed; n1_s = k_signed; n2_s = 0;
                     } else { // DIM == 1
                         n0 = ktemp; n1 = 0; n2 = 0;
+                        n0_s = k_signed; n1_s = 0; n2_s = 0;
                     }
 
-                    // Diagonal terms: fourier_basis_x for lx[0], etc.
+                    // Diagonal terms: use absolute value (n0*n0 = n0_s*n0_s)
                     fourier_basis_x[idx] = n0*n0*xfactor[0];
                     fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
                     fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    // Cross-terms
-                    fourier_basis_xy[idx] = (DIM >= 2) ? n0*n1*cross_factor_01 : 0.0;
-                    fourier_basis_xz[idx] = (DIM >= 3) ? n0*n2*cross_factor_02 : 0.0;
-                    fourier_basis_yz[idx] = (DIM >= 3) ? n1*n2*cross_factor_12 : 0.0;
+                    // Cross-terms: use SIGNED values for correct sign
+                    fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
+                    fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
+                    fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
 
                     // Weight factor of 2 for interior k modes (Hermitian symmetry in r2c)
                     if (k != 0 && 2*k != tnx[2])
@@ -468,30 +502,38 @@ void Pseudo<T>::update_weighted_fourier_basis()
             {
                 for(int k=0; k<tnx[2]; k++)
                 {
-                    if( k > tnx[2]/2)
-                        ktemp = tnx[2]-k;
-                    else
+                    if( k > tnx[2]/2) {
+                        ktemp = tnx[2]-k;      // absolute value for diagonal term
+                        k_signed = k - tnx[2]; // signed value for cross terms
+                    } else {
                         ktemp = k;
+                        k_signed = k;
+                    }
                     idx = i* tnx[1]*tnx[2] + j*tnx[2] + k;
 
                     // Map loop indices to real dimension indices based on DIM
+                    // Compute both absolute (for diagonal) and signed (for cross-terms) versions
                     int n0, n1, n2;
+                    int n0_s, n1_s, n2_s;  // signed versions
                     if (DIM == 3) {
                         n0 = itemp; n1 = jtemp; n2 = ktemp;
+                        n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
                     } else if (DIM == 2) {
                         n0 = jtemp; n1 = ktemp; n2 = 0;
+                        n0_s = j_signed; n1_s = k_signed; n2_s = 0;
                     } else { // DIM == 1
                         n0 = ktemp; n1 = 0; n2 = 0;
+                        n0_s = k_signed; n1_s = 0; n2_s = 0;
                     }
 
-                    // Diagonal terms
+                    // Diagonal terms: use absolute values (n0*n0 = n0_s*n0_s)
                     fourier_basis_x[idx] = n0*n0*xfactor[0];
                     fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
                     fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    // Cross-terms
-                    fourier_basis_xy[idx] = (DIM >= 2) ? n0*n1*cross_factor_01 : 0.0;
-                    fourier_basis_xz[idx] = (DIM >= 3) ? n0*n2*cross_factor_02 : 0.0;
-                    fourier_basis_yz[idx] = (DIM >= 3) ? n1*n2*cross_factor_12 : 0.0;
+                    // Cross-terms: use SIGNED values for correct sign in non-orthogonal cells
+                    fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
+                    fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
+                    fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
                 }
             }
         }

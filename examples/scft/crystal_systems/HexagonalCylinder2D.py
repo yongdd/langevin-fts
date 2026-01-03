@@ -29,11 +29,13 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.3     # A-fraction of major BCP chain, f (minority forms cylinders)
+# Use same parameters as Cylinder2D.py for comparison
+f = 1.0/3.0     # A-fraction of major BCP chain, f (minority forms cylinders)
 
 # Initial lattice constant for hexagonal cell
-# The equilibrium value is approximately L ~ 4.6 for chi_n=20, f=0.3
-L = 4.5     # a = b = L
+# For hexagonal packing, a_hex equals the nearest-neighbor distance
+# which is b_rect from the rectangular cell (≈1.6 for chi_n=15, f=1/3)
+L = 1.6     # a = b = L
 
 params = {
     # "platform":"cuda",             # choose platform among [cuda, cpu-mkl]
@@ -45,14 +47,14 @@ params = {
     "reduce_memory_usage": False,    # Reduce memory usage by storing only check points
     "box_is_altering": True,         # Find box size that minimizes the free energy
     "chain_model": "continuous",     # "discrete" or "continuous" chain model
-    "ds": 1/100,                     # Contour step interval = 1/N_Ref
+    "ds": 1/90,                      # Contour step interval = 1/N_Ref
 
     "segment_lengths": {             # Statistical segment lengths relative to a_Ref
         "A": 1.0,
         "B": 1.0,
     },
 
-    "chi_n": {"A,B": 20},            # Flory-Huggins parameter * N_Ref
+    "chi_n": {"A,B": 15},            # Flory-Huggins parameter * N_Ref
 
     "distinct_polymers": [{          # Polymer species
         "volume_fraction": 1.0,      # Volume fraction
@@ -64,8 +66,7 @@ params = {
 
     # Note: "crystal_system" parameter is only for 3D simulations.
     # For 2D hexagonal, we use "angles" directly.
-    # The hexagonal constraint (a = b) should be enforced manually or
-    # by setting appropriate initial conditions.
+    # The hexagonal constraint (a = b) is automatically enforced.
 
     "optimizer": {
         "name": "am",                # Anderson Mixing optimizer
@@ -86,9 +87,10 @@ w_B = np.zeros(list(params["nx"]), dtype=np.float64)
 print("Initializing fields for hexagonal cylinder phase...")
 print("Crystal system: Hexagonal (gamma = 120 degrees)")
 
-# Place a single cylinder at the center of the unit cell
-# In fractional coordinates, the center is at (0.5, 0.5)
-cylinder_position = [0.5, 0.5]
+# Place a single cylinder at the lattice point (corner) of the unit cell
+# For hexagonal lattice, cylinders must be at lattice points (0, 0), (1, 0), etc.
+# to create the proper hexagonal array when the cell tiles space
+cylinder_position = [0.0, 0.0]
 cy, cz = np.round((np.array(cylinder_position) * params["nx"])).astype(np.int32)
 w_A[cy, cz] = -1 / (np.prod(params["lx"]) / np.prod(params["nx"]))
 
@@ -112,14 +114,11 @@ print("total time: %f " % time_duration)
 calculation.save_results("HexC2D.json")
 
 # Recording first a few iteration results for debugging and refactoring
-# (chi_n=20, f=0.3, L_init=4.5)
-#    1   -1.099E-15  [ 8.6287139E+00  ]    -0.353653416   1.0206411E+00  lx=[  4.500000, 4.500000 ]
-#    2    1.609E-15  [ 8.3716547E+00  ]    -0.314971880   6.5478428E-01  lx=[  4.526188, 4.526188 ]
-#    3   -1.081E-15  [ 8.3179927E+00  ]    -0.314001693   4.9295800E-01  lx=[  4.540371, 4.540371 ]
-#    4   -2.198E-15  [ 8.3329556E+00  ]    -0.322010814   4.0889628E-01  lx=[  4.550167, 4.550167 ]
-#    5   -1.062E-15  [ 8.3726206E+00  ]    -0.332119022   3.5866068E-01  lx=[  4.557651, 4.557651 ]
+# (chi_n=15, f=1/3, L_init=1.6)
+# Results should match Cylinder2D.py which uses a rectangular cell with 2 cylinders
 
-# Expected converged results:
-# - Free energy per chain: -0.3726 kT
-# - Converged lattice constant: L = 5.34 (aN^1/2)
-# - The hexagonal cell accommodates one cylinder with 6-fold symmetry
+# Expected converged results (should match Cylinder2D.py):
+# - Free energy per chain: -0.0892 kT (same as Cylinder2D.py)
+# - Converged lattice constant: L ≈ 1.60 (aN^1/2)
+# - The hexagonal cell contains one cylinder; rectangular cell contains two
+# - Both represent the same hexagonal cylinder packing
