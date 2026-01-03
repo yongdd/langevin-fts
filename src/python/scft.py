@@ -522,10 +522,9 @@ class SCFT:
         factory.display_info()
 
         # (C++ class) Computation box
-        if "angles" in params:
-            cb = factory.create_computation_box(params["nx"], params["lx"], angles=params["angles"])
-        else:
-            cb = factory.create_computation_box(params["nx"], params["lx"])
+        bc = params.get("bc", None)
+        angles = params.get("angles", None)
+        cb = factory.create_computation_box(params["nx"], params["lx"], angles=angles, bc=bc)
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}

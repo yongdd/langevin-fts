@@ -13,9 +13,9 @@ Example usage:
     # Create a solver for 1D problem with reflecting boundaries
     solver = PropagatorSolver(
         nx=[64], lx=[4.0],
-        bc=["reflecting", "reflecting"],
         ds=0.01,
-        bond_lengths={"A": 1.0}
+        bond_lengths={"A": 1.0},
+        bc=["reflecting", "reflecting"]
     )
 
     # Add a homopolymer
@@ -49,6 +49,10 @@ class PropagatorSolver:
         Number of grid points in each dimension. Length determines dimensionality.
     lx : list of float
         Box size in each dimension.
+    ds : float
+        Contour step size for chain discretization (e.g., 0.01 for N=100 segments).
+    bond_lengths : dict
+        Statistical segment lengths for each monomer type, e.g., {"A": 1.0, "B": 1.0}.
     bc : list of str, optional
         Boundary conditions. Format depends on dimensionality:
         - 1D: [x_low, x_high]
@@ -56,18 +60,12 @@ class PropagatorSolver:
         - 3D: [x_low, x_high, y_low, y_high, z_low, z_high]
         Options: "periodic", "reflecting", "absorbing"
         Default: all periodic
-    ds : float, optional
-        Contour step size for chain discretization. Default: 0.01
-    bond_lengths : dict, optional
-        Statistical segment lengths for each monomer type.
-        Default: {"A": 1.0}
     chain_model : str, optional
         Chain model type: "continuous" or "discrete". Default: "continuous"
     method : str, optional
         Numerical method: "pseudospectral" or "realspace". Default: "pseudospectral"
     platform : str, optional
-        Computational platform: "auto", "cpu-mkl", or "cuda".
-        "auto" selects cuda for 2D/3D, cpu-mkl for 1D. Default: "auto"
+        Computational platform: "cpu-mkl" or "cuda". Default: "cpu-mkl"
 
     Attributes
     ----------
@@ -86,8 +84,9 @@ class PropagatorSolver:
 
     >>> solver = PropagatorSolver(
     ...     nx=[64], lx=[4.0],
-    ...     bc=["reflecting", "reflecting"],
-    ...     ds=0.01
+    ...     ds=0.01,
+    ...     bond_lengths={"A": 1.0},
+    ...     bc=["reflecting", "reflecting"]
     ... )
     >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
     >>> solver.set_fields({"A": np.zeros(64)})
@@ -97,8 +96,9 @@ class PropagatorSolver:
 
     >>> solver = PropagatorSolver(
     ...     nx=[32, 24], lx=[4.0, 3.0],
-    ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     ds=0.01,
+    ...     bond_lengths={"A": 1.0},
+    ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     platform="cuda"
     ... )
     """
@@ -107,12 +107,12 @@ class PropagatorSolver:
         self,
         nx,
         lx,
+        ds,
+        bond_lengths,
         bc=None,
-        ds=0.01,
-        bond_lengths=None,
         chain_model="continuous",
         method="pseudospectral",
-        platform="auto"
+        platform="cpu-mkl"
     ):
         """Initialize the propagator solver."""
 
@@ -142,10 +142,6 @@ class PropagatorSolver:
         self.ds = ds
         self.chain_model = chain_model.lower()
         self.method = method.lower()
-
-        # Default bond lengths
-        if bond_lengths is None:
-            bond_lengths = {"A": 1.0}
         self.bond_lengths = dict(bond_lengths)
 
         # Determine platform

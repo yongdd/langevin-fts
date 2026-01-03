@@ -65,9 +65,9 @@ from polymerfts import PropagatorSolver
 
 solver = PropagatorSolver(
     nx=[64, 64], lx=[4.0, 4.0],
-    bc=["periodic", "periodic", "reflecting", "reflecting"],
     ds=0.01,
-    bond_lengths={"A": 1.0, "B": 1.0}
+    bond_lengths={"A": 1.0, "B": 1.0},
+    bc=["periodic", "periodic", "reflecting", "reflecting"]
 )
 solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
 solver.set_fields({"A": w_A, "B": w_B})
@@ -87,14 +87,40 @@ prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
 solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
 ```
 
-## Key Concepts
+## Notation and Units
 
-| Concept | Description |
-|---------|-------------|
-| **Propagator** $q(\mathbf{r}, s)$ | Statistical weight of chain conformations ending at position $\mathbf{r}$ at contour $s$ |
-| **Partition function** $Q$ | Normalization for all chain conformations |
-| **Concentration** $\phi(\mathbf{r})$ | Ensemble-averaged monomer density |
-| **Potential field** $w(\mathbf{r})$ | External or self-consistent field acting on monomers |
+### Dimensionless Units
+
+All quantities in `polymerfts` are expressed in **dimensionless units** based on a reference polymer:
+
+| Symbol | Name | Definition |
+|--------|------|------------|
+| $b$ | Reference segment length | Statistical segment length of reference monomer |
+| $N$ | Reference chain length | Number of statistical segments in reference chain |
+| $R_0 = b\sqrt{N}$ | Reference length scale | Unperturbed end-to-end distance |
+
+**Length**: Measured in units of $R_0$. A box with `lx = [4.0]` is 4 times the polymer size.
+
+**Contour**: The chain backbone is parameterized by $s \in [0, 1]$, where $s=0$ is one end and $s=1$ is the other. The step size `ds = 0.01` corresponds to $N = 100$ segments.
+
+### Key Physical Quantities
+
+| Symbol | Name | Physical Meaning |
+|--------|------|------------------|
+| $q(\mathbf{r}, s)$ | **Propagator** | Statistical weight of all chain conformations with segment $s$ at position $\mathbf{r}$ |
+| $Q$ | **Partition function** | Total statistical weight of all chain conformations (normalization) |
+| $\phi(\mathbf{r})$ | **Concentration** | Ensemble-averaged monomer density at $\mathbf{r}$ |
+| $w(\mathbf{r})$ | **Potential field** | Dimensionless free energy penalty for placing a monomer at $\mathbf{r}$ |
+
+### Boltzmann Weighting
+
+The potential field affects chain statistics through:
+
+$$\text{local weight} \propto e^{-w(\mathbf{r})}$$
+
+- $w > 0$: Repulsive (monomers avoid this region)
+- $w < 0$: Attractive (monomers prefer this region)
+- $w = 0$: No bias (reference state)
 
 ## Requirements
 
