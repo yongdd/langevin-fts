@@ -387,9 +387,28 @@ void Pseudo<T>::update_weighted_fourier_basis()
     }
 
     // Cross factors for non-orthogonal systems
-    double cross_factor_01 = (DIM >= 2) ? 2.0 * k_factor[0] * k_factor[1] : 0.0;
-    double cross_factor_02 = (DIM >= 3) ? 2.0 * k_factor[0] * k_factor[2] : 0.0;
-    double cross_factor_12 = (DIM >= 3) ? 2.0 * k_factor[1] * k_factor[2] : 0.0;
+    // Must use reciprocal metric tensor - for orthogonal systems G*_01 = G*_02 = G*_12 = 0
+    // Layout of recip_metric_: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+    double Gstar_01, Gstar_02, Gstar_12;
+    if (DIM == 3) {
+        Gstar_01 = recip_metric_[1];  // G*_01
+        Gstar_02 = recip_metric_[2];  // G*_02
+        Gstar_12 = recip_metric_[4];  // G*_12
+    } else if (DIM == 2) {
+        Gstar_01 = recip_metric_[1];  // G*_01 for lx[0]-lx[1]
+        Gstar_02 = 0.0;
+        Gstar_12 = 0.0;
+    } else {
+        Gstar_01 = 0.0;
+        Gstar_02 = 0.0;
+        Gstar_12 = 0.0;
+    }
+
+    // Cross factors: 2 * (2π/L_i) * (2π/L_j) * G*_ij
+    // For orthogonal systems, G*_ij = 0 for i != j, so cross terms vanish
+    double cross_factor_01 = (DIM >= 2) ? 2.0 * k_factor[0] * k_factor[1] * Gstar_01 : 0.0;
+    double cross_factor_02 = (DIM >= 3) ? 2.0 * k_factor[0] * k_factor[2] * Gstar_02 : 0.0;
+    double cross_factor_12 = (DIM >= 3) ? 2.0 * k_factor[1] * k_factor[2] * Gstar_12 : 0.0;
 
     for(int i=0; i<tnx[0]; i++)
     {
