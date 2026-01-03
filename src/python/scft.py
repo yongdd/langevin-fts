@@ -742,6 +742,10 @@ class SCFT:
                 self.lx_reduced_indices = [0, 2]  # Only a and c can vary independently
                 self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
 
+            # For space groups, angles are fixed by the crystal system
+            self.angles_reduced_indices = []
+            self.angles_full_indices = []
+
             # Total number of variables to be adjusted to minimize the Hamiltonian
             if params["box_is_altering"]:
                 n_var = len(self.monomer_types)*len(self.sg.irreducible_mesh) + len(self.sg.lattice_parameters)
