@@ -70,10 +70,12 @@ CudaPseudo<T>::CudaPseudo(
 
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
-            const int* negative_k_idx = Pseudo<T>::get_negative_frequency_mapping();
             gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
-            gpu_error_check(cudaMemcpy(d_negative_k_idx, negative_k_idx, sizeof(int)*M_COMPLEX, cudaMemcpyHostToDevice));
         }
+
+        // Upload computed data to GPU
+        upload_boltz_bond();
+        upload_fourier_basis();
     }
     catch(std::exception& exc)
     {
@@ -102,6 +104,59 @@ CudaPseudo<T>::~CudaPseudo()
     if constexpr (std::is_same<T, std::complex<double>>::value)
         cudaFree(d_negative_k_idx);
 }
+
+//----------------- Upload Boltzmann factors to GPU -----------------------------
+template <typename T>
+void CudaPseudo<T>::upload_boltz_bond()
+{
+    const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
+
+    for (const auto& item : this->boltz_bond)
+    {
+        std::string monomer_type = item.first;
+        gpu_error_check(cudaMemcpy(d_boltz_bond[monomer_type], item.second,
+                                   sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    }
+
+    for (const auto& item : this->boltz_bond_half)
+    {
+        std::string monomer_type = item.first;
+        gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], item.second,
+                                   sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    }
+}
+
+//----------------- Upload Fourier basis to GPU -----------------------------
+template <typename T>
+void CudaPseudo<T>::upload_fourier_basis()
+{
+    const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
+
+    // Diagonal terms
+    gpu_error_check(cudaMemcpy(d_fourier_basis_x, this->fourier_basis_x,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_y, this->fourier_basis_y,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_z, this->fourier_basis_z,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    // Cross-terms for non-orthogonal systems
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xy, this->fourier_basis_xy,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xz, this->fourier_basis_xz,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_yz, this->fourier_basis_yz,
+                               sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+
+    // negative_k_idx for complex fields with periodic BC
+    if constexpr (std::is_same<T, std::complex<double>>::value)
+    {
+        const int* negative_k_idx = Pseudo<T>::get_negative_frequency_mapping();
+        gpu_error_check(cudaMemcpy(d_negative_k_idx, negative_k_idx,
+                                   sizeof(int) * M_COMPLEX, cudaMemcpyHostToDevice));
+    }
+}
+
+//----------------- Update -----------------------------
 template <typename T>
 void CudaPseudo<T>::update(
     std::vector<BoundaryCondition> bc,
@@ -111,23 +166,9 @@ void CudaPseudo<T>::update(
 {
     Pseudo<T>::update(bc, bond_lengths, dx, ds, recip_metric);
 
-    const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();;
-    for(const auto& item: this->bond_lengths)
-    {
-        std::string monomer_type = item.first;
-        gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], this->boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], this->boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    }
-    // Diagonal terms
-    gpu_error_check(cudaMemcpy(d_fourier_basis_x, this->fourier_basis_x, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_y, this->fourier_basis_y, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_z, this->fourier_basis_z, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    // Cross-terms
-    gpu_error_check(cudaMemcpy(d_fourier_basis_xy, this->fourier_basis_xy, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_xz, this->fourier_basis_xz, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-    gpu_error_check(cudaMemcpy(d_fourier_basis_yz, this->fourier_basis_yz, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
-
-    // update_negative_frequency_mapping();
+    // Upload updated data to GPU
+    upload_boltz_bond();
+    upload_fourier_basis();
 } 
 
 // Explicit template instantiation

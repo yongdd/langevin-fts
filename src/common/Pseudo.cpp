@@ -1,35 +1,13 @@
 /**
  * @file Pseudo.cpp
- * @brief Implementation of pseudo-spectral method utilities.
+ * @brief Unified implementation of pseudo-spectral method utilities.
  *
- * Provides the base implementation for computing Fourier-space operators
- * used in the pseudo-spectral propagator solver. Platform-specific versions
- * (CpuPseudo, CudaPseudo) copy these arrays to appropriate memory.
+ * Supports all boundary conditions and non-orthogonal crystal systems:
+ * - PERIODIC: FFT with recip_metric for non-orthogonal lattices
+ * - REFLECTING (DCT): k = π*n/L, n = 0, 1, ..., N-1
+ * - ABSORBING (DST): k = π*(n+1)/L, n = 0, 1, ..., N-1
  *
- * **Boltzmann Factors:**
- *
- * In Fourier space, the diffusion operator becomes multiplication:
- *     exp(-b²k²ds/6) for full step
- *     exp(-b²k²ds/12) for half step (discrete chains)
- *
- * **Fourier Basis Vectors:**
- *
- * Weighted wavenumber squares for stress calculation:
- *     fourier_basis_x[k] = kx² × weight
- *
- * Weight factor of 2 for interior k modes in r2c transform (Hermitian symmetry).
- *
- * **Negative Frequency Mapping:**
- *
- * For complex fields, maps each frequency to its conjugate partner:
- *     negative_k_idx[k] = index of -k
- *
- * Required for computing real-valued stress from complex propagators.
- *
- * **Template Instantiations:**
- *
- * - Pseudo<double>: Real fields with r2c FFT (reduced storage)
- * - Pseudo<std::complex<double>>: Complex fields with c2c FFT
+ * @see Pseudo.h for class documentation
  */
 
 #include <iostream>
@@ -38,19 +16,9 @@
 #include <array>
 #include "Pseudo.h"
 
-/**
- * @brief Construct pseudo-spectral utilities.
- *
- * Allocates Boltzmann factors and Fourier basis arrays, then initializes
- * all operators for the given grid and contour step.
- *
- * @param bond_lengths  Map of monomer type to segment length (b)
- * @param bc            Boundary conditions (must be periodic)
- * @param nx            Grid points per dimension
- * @param dx            Grid spacing per dimension
- * @param ds            Contour step size
- * @param recip_metric  Reciprocal metric tensor [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
- */
+//------------------------------------------------------------------------------
+// Constructor
+//------------------------------------------------------------------------------
 template <typename T>
 Pseudo<T>::Pseudo(
     std::map<std::string, double> bond_lengths,
@@ -67,40 +35,53 @@ Pseudo<T>::Pseudo(
         this->ds = ds;
         this->recip_metric_ = recip_metric;
 
+        // Compute total grid
+        total_grid = 1;
+        for (size_t d = 0; d < nx.size(); ++d)
+            total_grid *= nx[d];
+
         update_total_complex_grid();
         const int M_COMPLEX = get_total_complex_grid();
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
-        for(const auto& item: bond_lengths)
+        // Allocate Boltzmann factors
+        for (const auto& item : bond_lengths)
         {
             std::string monomer_type = item.first;
-            boltz_bond     [monomer_type] = new double[M_COMPLEX];
+            boltz_bond[monomer_type] = new double[M_COMPLEX];
             boltz_bond_half[monomer_type] = new double[M_COMPLEX];
         }
 
-        // Allocate memory for stress calculation: compute_stress()
-        // Diagonal terms
+        // Allocate Fourier basis arrays (diagonal terms)
         fourier_basis_x = new double[M_COMPLEX];
         fourier_basis_y = new double[M_COMPLEX];
         fourier_basis_z = new double[M_COMPLEX];
-        // Cross-terms for non-orthogonal systems
+        // Cross-terms for non-orthogonal systems (only used for periodic BC)
         fourier_basis_xy = new double[M_COMPLEX];
         fourier_basis_xz = new double[M_COMPLEX];
         fourier_basis_yz = new double[M_COMPLEX];
 
+        // Negative frequency mapping only for complex fields with periodic BC
         if constexpr (std::is_same<T, std::complex<double>>::value)
-            negative_k_idx = new int[M_COMPLEX];
+        {
+            if (is_all_periodic())
+                negative_k_idx = new int[M_COMPLEX];
+            else
+                negative_k_idx = nullptr;
+        }
 
         update_boltz_bond();
         update_weighted_fourier_basis();
         update_negative_frequency_mapping();
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
-//----------------- Destructor -----------------------------
+
+//------------------------------------------------------------------------------
+// Destructor
+//------------------------------------------------------------------------------
 template <typename T>
 Pseudo<T>::~Pseudo()
 {
@@ -114,381 +95,434 @@ Pseudo<T>::~Pseudo()
     delete[] fourier_basis_yz;
 
     if constexpr (std::is_same<T, std::complex<double>>::value)
-        delete[] negative_k_idx;
+    {
+        if (negative_k_idx != nullptr)
+            delete[] negative_k_idx;
+    }
 
-    for(const auto& item: boltz_bond)
+    for (const auto& item : boltz_bond)
         delete[] item.second;
-    for(const auto& item: boltz_bond_half)
+    for (const auto& item : boltz_bond_half)
         delete[] item.second;
 }
+
+//------------------------------------------------------------------------------
+// Check if all BCs are periodic
+//------------------------------------------------------------------------------
+template <typename T>
+bool Pseudo<T>::is_all_periodic() const
+{
+    for (const auto& b : bc)
+    {
+        if (b != BoundaryCondition::PERIODIC)
+            return false;
+    }
+    return true;
+}
+
+//------------------------------------------------------------------------------
+// Getters
+//------------------------------------------------------------------------------
 template <typename T>
 int Pseudo<T>::get_total_complex_grid()
 {
     return total_complex_grid;
 }
+
 template <typename T>
 double* Pseudo<T>::get_boltz_bond(std::string monomer_type)
 {
     return boltz_bond[monomer_type];
 }
+
 template <typename T>
 double* Pseudo<T>::get_boltz_bond_half(std::string monomer_type)
 {
     return boltz_bond_half[monomer_type];
 }
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_x()
 {
     return fourier_basis_x;
 }
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_y()
 {
     return fourier_basis_y;
 }
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_z()
 {
     return fourier_basis_z;
 }
-template <typename T>
-const int* Pseudo<T>::get_negative_frequency_mapping()
-{
-    return negative_k_idx;
-}
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_xy()
 {
     return fourier_basis_xy;
 }
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_xz()
 {
     return fourier_basis_xz;
 }
+
 template <typename T>
 const double* Pseudo<T>::get_fourier_basis_yz()
 {
     return fourier_basis_yz;
 }
 
-//----------------- update_boltz_bond -------------------
+template <typename T>
+const int* Pseudo<T>::get_negative_frequency_mapping()
+{
+    return negative_k_idx;
+}
+
+//------------------------------------------------------------------------------
+// Update total complex grid size
+//------------------------------------------------------------------------------
 template <typename T>
 void Pseudo<T>::update_total_complex_grid()
 {
-    std::vector<int> nx = this->nx;
-    int total_complex_grid;
-    if constexpr (std::is_same<T, double>::value)
+    if (is_all_periodic())
     {
-        if (nx.size() == 3)
-            total_complex_grid = nx[0]*nx[1]*(nx[2]/2+1);
-        else if (nx.size() == 2)
-            total_complex_grid = nx[0]*(nx[1]/2+1);
-        else if (nx.size() == 1)
-            total_complex_grid = nx[0]/2+1;
+        // Periodic BC: use r2c FFT for double, c2c for complex
+        if constexpr (std::is_same<T, double>::value)
+        {
+            if (nx.size() == 3)
+                total_complex_grid = nx[0] * nx[1] * (nx[2] / 2 + 1);
+            else if (nx.size() == 2)
+                total_complex_grid = nx[0] * (nx[1] / 2 + 1);
+            else if (nx.size() == 1)
+                total_complex_grid = nx[0] / 2 + 1;
+        }
+        else
+        {
+            total_complex_grid = total_grid;
+        }
     }
     else
     {
-        if (nx.size() == 3)
-            total_complex_grid = nx[0]*nx[1]*nx[2];
-        else if (nx.size() == 2)
-            total_complex_grid = nx[0]*nx[1];
-        else if (nx.size() == 1)
-            total_complex_grid = nx[0];
+        // Non-periodic BC: DCT/DST uses full grid
+        total_complex_grid = total_grid;
     }
-    this->total_complex_grid = total_complex_grid;
 }
 
-//----------------- update_boltz_bond -------------------
-/**
- * @brief Update Boltzmann factors using reciprocal metric tensor.
- *
- * Computes exp(-b²|k|²ds/6) where |k|² = (2π)² * G*_ij h_i h_j
- * and G* is the reciprocal metric tensor, h_i are Miller indices.
- *
- * For orthogonal systems (G*_ij diagonal): reduces to standard formula.
- * For non-orthogonal systems: includes cross-term contributions.
- */
+//------------------------------------------------------------------------------
+// Update Boltzmann factors
+//------------------------------------------------------------------------------
 template <typename T>
 void Pseudo<T>::update_boltz_bond()
 {
     try
     {
-        int itemp, jtemp, ktemp, idx;
         const double PI = std::numbers::pi;
-        const double FOUR_PI_SQ = 4.0 * PI * PI;
-
         const int DIM = nx.size();
-        std::vector<int> tnx;
 
-        // Set up grid dimensions (pad to 3D for unified loop)
-        if (DIM == 3)
-            tnx = {nx[0], nx[1], nx[2]};
-        else if (DIM == 2)
-            tnx = {1, nx[0], nx[1]};
-        else if (DIM == 1)
-            tnx = {1, 1, nx[0]};
-
-        for(size_t i=0; i<bc.size(); i++)
+        if (is_all_periodic())
         {
-            if (bc[i] != BoundaryCondition::PERIODIC)
-                throw_with_line_number("Currently, pseudo-spectral method only supports periodic boundary conditions");
+            // Periodic BC: use recip_metric for non-orthogonal systems
+            update_boltz_bond_periodic();
         }
-
-        // Extract reciprocal metric components and remap based on dimension
-        // The metric tensor is computed from lx[0], lx[1], lx[2] (or padded with 1.0)
-        // But the loop indices are padded differently:
-        //   3D: (i,j,k) -> (lx[0], lx[1], lx[2]) -> use G00, G11, G22 directly
-        //   2D: (i,j,k) = (pad, nx[0], nx[1]) -> need G00 for j, G11 for k
-        //   1D: (i,j,k) = (pad, pad, nx[0]) -> need G00 for k
-        // Layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
-        double Gii, Gjj, Gkk, Gij, Gik, Gjk;
-        if (DIM == 3) {
-            Gii = recip_metric_[0];  // G*_00
-            Gjj = recip_metric_[3];  // G*_11
-            Gkk = recip_metric_[5];  // G*_22
-            Gij = recip_metric_[1];  // G*_01
-            Gik = recip_metric_[2];  // G*_02
-            Gjk = recip_metric_[4];  // G*_12
-        } else if (DIM == 2) {
-            // For 2D: j corresponds to lx[0], k corresponds to lx[1]
-            Gii = 0.0;               // padded dimension, no contribution
-            Gjj = recip_metric_[0];  // G*_00 for lx[0]
-            Gkk = recip_metric_[3];  // G*_11 for lx[1]
-            Gij = 0.0;               // cross with padded dimension
-            Gik = 0.0;               // cross with padded dimension
-            Gjk = recip_metric_[1];  // G*_01 for lx[0]-lx[1] cross term
-        } else { // DIM == 1
-            // For 1D: k corresponds to lx[0]
-            Gii = 0.0;               // padded dimension
-            Gjj = 0.0;               // padded dimension
-            Gkk = recip_metric_[0];  // G*_00 for lx[0]
-            Gij = 0.0;               // cross with padded dimension
-            Gik = 0.0;               // cross with padded dimension
-            Gjk = 0.0;               // cross with padded dimension
-        }
-
-        for(const auto& item: this->bond_lengths)
+        else
         {
-            std::string monomer_type = item.first;
-            double bond_length_sq    = item.second*item.second;
-            double* _boltz_bond      = boltz_bond[monomer_type];
-            double* _boltz_bond_half = boltz_bond_half[monomer_type];
-            double mag_q2;
+            // Non-periodic BC: use mixed BC formula
+            update_boltz_bond_mixed();
+        }
+    }
+    catch (std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
 
-            // Pre-compute constant factor: -b² * (2π)² * ds / 6
-            double prefactor = -bond_length_sq * FOUR_PI_SQ * ds / 6.0;
+//------------------------------------------------------------------------------
+// Update Boltzmann factors for periodic BC (with recip_metric support)
+//------------------------------------------------------------------------------
+template <typename T>
+void update_boltz_bond_periodic_impl(
+    Pseudo<T>* self,
+    std::map<std::string, double>& bond_lengths,
+    std::map<std::string, double*>& boltz_bond,
+    std::map<std::string, double*>& boltz_bond_half,
+    const std::vector<int>& nx,
+    double ds,
+    const std::array<double, 6>& recip_metric_)
+{
+    const double PI = std::numbers::pi;
+    const double FOUR_PI_SQ = 4.0 * PI * PI;
+    const int DIM = nx.size();
 
-            // For cross terms in non-orthogonal cells, we need SIGNED frequency indices
-            // For diagonal terms (h², j², k²), absolute value is fine since (-h)² = h²
-            // For cross terms (h*j, h*k, j*k), sign matters: (-h)*j ≠ h*j
-            int i_signed, j_signed, k_signed;
+    // Pad to 3D for unified loop
+    std::vector<int> tnx(3, 1);
+    if (DIM == 3)
+        tnx = {nx[0], nx[1], nx[2]};
+    else if (DIM == 2)
+        tnx = {1, nx[0], nx[1]};
+    else if (DIM == 1)
+        tnx = {1, 1, nx[0]};
 
-            for(int i=0; i<tnx[0]; i++)
+    // Extract reciprocal metric components
+    double Gii, Gjj, Gkk, Gij, Gik, Gjk;
+    if (DIM == 3) {
+        Gii = recip_metric_[0]; Gjj = recip_metric_[3]; Gkk = recip_metric_[5];
+        Gij = recip_metric_[1]; Gik = recip_metric_[2]; Gjk = recip_metric_[4];
+    } else if (DIM == 2) {
+        Gii = 0.0; Gjj = recip_metric_[0]; Gkk = recip_metric_[3];
+        Gij = 0.0; Gik = 0.0; Gjk = recip_metric_[1];
+    } else {
+        Gii = 0.0; Gjj = 0.0; Gkk = recip_metric_[0];
+        Gij = 0.0; Gik = 0.0; Gjk = 0.0;
+    }
+
+    for (const auto& item : bond_lengths)
+    {
+        std::string monomer_type = item.first;
+        double bond_length_sq = item.second * item.second;
+        double* _boltz_bond = boltz_bond[monomer_type];
+        double* _boltz_bond_half = boltz_bond_half[monomer_type];
+
+        double prefactor = -bond_length_sq * FOUR_PI_SQ * ds / 6.0;
+
+        for (int i = 0; i < tnx[0]; i++)
+        {
+            int itemp = (i > tnx[0]/2) ? tnx[0] - i : i;
+            int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
+
+            for (int j = 0; j < tnx[1]; j++)
             {
-                if( i > tnx[0]/2) {
-                    itemp = tnx[0]-i;      // absolute value for diagonal term
-                    i_signed = i - tnx[0]; // signed value for cross terms
-                } else {
-                    itemp = i;
-                    i_signed = i;
-                }
-                for(int j=0; j<tnx[1]; j++)
+                int jtemp = (j > tnx[1]/2) ? tnx[1] - j : j;
+                int j_signed = (j > tnx[1]/2) ? j - tnx[1] : j;
+
+                if constexpr (std::is_same<T, double>::value)
                 {
-                    if( j > tnx[1]/2) {
-                        jtemp = tnx[1]-j;      // absolute value for diagonal term
-                        j_signed = j - tnx[1]; // signed value for cross terms
-                    } else {
-                        jtemp = j;
-                        j_signed = j;
-                    }
-
-                    if constexpr (std::is_same<T, double>::value)
+                    for (int k = 0; k < tnx[2]/2+1; k++)
                     {
-                        // For real-to-complex FFT, k only goes from 0 to N/2, all positive
-                        for(int k=0; k<tnx[2]/2+1; k++)
-                        {
-                            ktemp = k;
-                            k_signed = k;  // always positive for real-to-complex FFT
-                            idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
+                        int ktemp = k;
+                        int k_signed = k;
+                        int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
-                            // |k|² = (2π)² * (G*_ij h_i h_j)
-                            // mag_q2 = -b²*ds/6 * |k|²
-                            // Use absolute values for diagonal terms, signed values for cross terms
-                            mag_q2 = prefactor * (
-                                Gii * itemp * itemp +
-                                Gjj * jtemp * jtemp +
-                                Gkk * ktemp * ktemp +
-                                2.0 * Gij * i_signed * j_signed +
-                                2.0 * Gik * i_signed * k_signed +
-                                2.0 * Gjk * j_signed * k_signed
-                            );
-                            _boltz_bond     [idx] = exp(mag_q2);
-                            _boltz_bond_half[idx] = exp(mag_q2/2.0);
-                        }
+                        double mag_q2 = prefactor * (
+                            Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
+                            2.0 * Gij * i_signed * j_signed +
+                            2.0 * Gik * i_signed * k_signed +
+                            2.0 * Gjk * j_signed * k_signed
+                        );
+                        _boltz_bond[idx] = std::exp(mag_q2);
+                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                     }
-                    else
+                }
+                else
+                {
+                    for (int k = 0; k < tnx[2]; k++)
                     {
-                        for(int k=0; k<tnx[2]; k++)
-                        {
-                            if( k > tnx[2]/2) {
-                                ktemp = tnx[2]-k;      // absolute value for diagonal term
-                                k_signed = k - tnx[2]; // signed value for cross terms
-                            } else {
-                                ktemp = k;
-                                k_signed = k;
-                            }
-                            idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
+                        int ktemp = (k > tnx[2]/2) ? tnx[2] - k : k;
+                        int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
+                        int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
 
-                            // |k|² = (2π)² * (G*_ij h_i h_j)
-                            // Use absolute values for diagonal terms, signed values for cross terms
-                            mag_q2 = prefactor * (
-                                Gii * itemp * itemp +
-                                Gjj * jtemp * jtemp +
-                                Gkk * ktemp * ktemp +
-                                2.0 * Gij * i_signed * j_signed +
-                                2.0 * Gik * i_signed * k_signed +
-                                2.0 * Gjk * j_signed * k_signed
-                            );
-                            _boltz_bond     [idx] = exp(mag_q2);
-                            _boltz_bond_half[idx] = exp(mag_q2/2.0);
-                        }
+                        double mag_q2 = prefactor * (
+                            Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
+                            2.0 * Gij * i_signed * j_signed +
+                            2.0 * Gik * i_signed * k_signed +
+                            2.0 * Gjk * j_signed * k_signed
+                        );
+                        _boltz_bond[idx] = std::exp(mag_q2);
+                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                     }
                 }
             }
         }
     }
-    catch(std::exception& exc)
+}
+
+template <typename T>
+void Pseudo<T>::update_boltz_bond_periodic()
+{
+    update_boltz_bond_periodic_impl(this, bond_lengths, boltz_bond, boltz_bond_half,
+                                     nx, ds, recip_metric_);
+}
+
+//------------------------------------------------------------------------------
+// Update Boltzmann factors for mixed BC
+//------------------------------------------------------------------------------
+template <typename T>
+void Pseudo<T>::update_boltz_bond_mixed()
+{
+    const double PI = std::numbers::pi;
+    const int DIM = nx.size();
+
+    // Expand to 3D
+    std::vector<int> tnx(3, 1);
+    std::vector<double> tdx(3, 1.0);
+    std::vector<BoundaryCondition> tbc(3, BoundaryCondition::PERIODIC);
+
+    for (int d = 0; d < DIM; ++d)
     {
-        throw_without_line_number(exc.what());
+        tnx[3 - DIM + d] = nx[d];
+        tdx[3 - DIM + d] = dx[d];
+        tbc[3 - DIM + d] = bc[d];
+    }
+
+    for (const auto& item : bond_lengths)
+    {
+        std::string monomer_type = item.first;
+        double bond_length_sq = item.second * item.second;
+        double* _boltz_bond = boltz_bond[monomer_type];
+        double* _boltz_bond_half = boltz_bond_half[monomer_type];
+
+        // Compute wavenumber factors based on BC
+        double xfactor[3];
+        for (int d = 0; d < 3; ++d)
+        {
+            double L = tnx[d] * tdx[d];
+            if (tbc[d] == BoundaryCondition::PERIODIC)
+                xfactor[d] = -bond_length_sq * std::pow(2 * PI / L, 2) * ds / 6.0;
+            else
+                xfactor[d] = -bond_length_sq * std::pow(PI / L, 2) * ds / 6.0;
+        }
+
+        for (int i = 0; i < tnx[0]; ++i)
+        {
+            int ki;
+            if (tbc[0] == BoundaryCondition::PERIODIC)
+                ki = (i > tnx[0]/2) ? tnx[0] - i : i;
+            else if (tbc[0] == BoundaryCondition::REFLECTING)
+                ki = i;
+            else
+                ki = i + 1;
+
+            for (int j = 0; j < tnx[1]; ++j)
+            {
+                int kj;
+                if (tbc[1] == BoundaryCondition::PERIODIC)
+                    kj = (j > tnx[1]/2) ? tnx[1] - j : j;
+                else if (tbc[1] == BoundaryCondition::REFLECTING)
+                    kj = j;
+                else
+                    kj = j + 1;
+
+                for (int k = 0; k < tnx[2]; ++k)
+                {
+                    int kk;
+                    if (tbc[2] == BoundaryCondition::PERIODIC)
+                        kk = (k > tnx[2]/2) ? tnx[2] - k : k;
+                    else if (tbc[2] == BoundaryCondition::REFLECTING)
+                        kk = k;
+                    else
+                        kk = k + 1;
+
+                    int idx = i * tnx[1] * tnx[2] + j * tnx[2] + k;
+                    double mag_q2 = ki*ki*xfactor[0] + kj*kj*xfactor[1] + kk*kk*xfactor[2];
+
+                    _boltz_bond[idx] = std::exp(mag_q2);
+                    _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
+                }
+            }
+        }
     }
 }
+
+//------------------------------------------------------------------------------
+// Update weighted Fourier basis for stress calculation
+//------------------------------------------------------------------------------
 template <typename T>
 void Pseudo<T>::update_weighted_fourier_basis()
 {
-    int itemp, jtemp, ktemp, idx;
-    const double PI = std::numbers::pi;
+    if (is_all_periodic())
+        update_weighted_fourier_basis_periodic();
+    else
+        update_weighted_fourier_basis_mixed();
+}
 
+//------------------------------------------------------------------------------
+// Update Fourier basis for periodic BC (with cross-terms)
+//------------------------------------------------------------------------------
+template <typename T>
+void update_weighted_fourier_basis_periodic_impl(
+    double* fourier_basis_x, double* fourier_basis_y, double* fourier_basis_z,
+    double* fourier_basis_xy, double* fourier_basis_xz, double* fourier_basis_yz,
+    const std::vector<int>& nx, const std::vector<double>& dx,
+    const std::array<double, 6>& recip_metric_)
+{
+    const double PI = std::numbers::pi;
     const int DIM = nx.size();
-    std::vector<int> tnx;
-    std::vector<double> tdx;
-    if (DIM == 3)
-    {
+
+    // Pad to 3D
+    std::vector<int> tnx(3, 1);
+    std::vector<double> tdx(3, 1.0);
+    if (DIM == 3) {
         tnx = {nx[0], nx[1], nx[2]};
         tdx = {dx[0], dx[1], dx[2]};
-    }
-    else if (DIM == 2)
-    {
-        tnx = {1,   nx[0], nx[1]};
+    } else if (DIM == 2) {
+        tnx = {1, nx[0], nx[1]};
         tdx = {1.0, dx[0], dx[1]};
-    }
-    else if (DIM == 1)
-    {
-        tnx = {1,   1,   nx[0]};
+    } else {
+        tnx = {1, 1, nx[0]};
         tdx = {1.0, 1.0, dx[0]};
     }
 
-    for(size_t i=0; i<bc.size(); i++)
-    {
-        if (bc[i] != BoundaryCondition::PERIODIC)
-            throw_with_line_number("Currently, pseudo-spectral method only supports periodic boundary conditions");
-    }
-
-    // Calculate diagonal factors for each real dimension: (2π/L_i)²
-    // xfactor[d] corresponds to lx[d], not to the padded loop index
+    // Calculate factors
     double xfactor[3] = {0.0, 0.0, 0.0};
-    double k_factor[3] = {0.0, 0.0, 0.0};  // 2π/L_i for each real dimension
-    for(int d=0; d<DIM; d++) {
+    double k_factor[3] = {0.0, 0.0, 0.0};
+    for (int d = 0; d < DIM; d++) {
         double L = nx[d] * dx[d];
         xfactor[d] = std::pow(2*PI/L, 2);
         k_factor[d] = 2*PI/L;
     }
 
-    // Cross factors for non-orthogonal systems
-    // Must use reciprocal metric tensor - for orthogonal systems G*_01 = G*_02 = G*_12 = 0
-    // Layout of recip_metric_: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
-    double Gstar_01, Gstar_02, Gstar_12;
-    if (DIM == 3) {
-        Gstar_01 = recip_metric_[1];  // G*_01
-        Gstar_02 = recip_metric_[2];  // G*_02
-        Gstar_12 = recip_metric_[4];  // G*_12
-    } else if (DIM == 2) {
-        Gstar_01 = recip_metric_[1];  // G*_01 for lx[0]-lx[1]
-        Gstar_02 = 0.0;
-        Gstar_12 = 0.0;
-    } else {
-        Gstar_01 = 0.0;
-        Gstar_02 = 0.0;
-        Gstar_12 = 0.0;
-    }
+    // Cross factors
+    double Gstar_01 = (DIM >= 2) ? recip_metric_[1] : 0.0;
+    double Gstar_02 = (DIM >= 3) ? recip_metric_[2] : 0.0;
+    double Gstar_12 = (DIM >= 3) ? recip_metric_[4] : 0.0;
 
-    // Cross factors: 2 * (2π/L_i) * (2π/L_j) * G*_ij
-    // For orthogonal systems, G*_ij = 0 for i != j, so cross terms vanish
     double cross_factor_01 = (DIM >= 2) ? 2.0 * k_factor[0] * k_factor[1] * Gstar_01 : 0.0;
     double cross_factor_02 = (DIM >= 3) ? 2.0 * k_factor[0] * k_factor[2] * Gstar_02 : 0.0;
     double cross_factor_12 = (DIM >= 3) ? 2.0 * k_factor[1] * k_factor[2] * Gstar_12 : 0.0;
 
-    // For cross terms in non-orthogonal cells, we need SIGNED frequency indices
-    int i_signed, j_signed, k_signed;
-
-    for(int i=0; i<tnx[0]; i++)
+    for (int i = 0; i < tnx[0]; i++)
     {
-        if( i > tnx[0]/2) {
-            itemp = tnx[0]-i;      // absolute value for diagonal term
-            i_signed = i - tnx[0]; // signed value for cross terms
-        } else {
-            itemp = i;
-            i_signed = i;
-        }
-        for(int j=0; j<tnx[1]; j++)
+        int itemp = (i > tnx[0]/2) ? tnx[0] - i : i;
+        int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
+
+        for (int j = 0; j < tnx[1]; j++)
         {
-            if( j > tnx[1]/2) {
-                jtemp = tnx[1]-j;      // absolute value for diagonal term
-                j_signed = j - tnx[1]; // signed value for cross terms
-            } else {
-                jtemp = j;
-                j_signed = j;
-            }
+            int jtemp = (j > tnx[1]/2) ? tnx[1] - j : j;
+            int j_signed = (j > tnx[1]/2) ? j - tnx[1] : j;
 
             if constexpr (std::is_same<T, double>::value)
             {
-                // For real-to-complex FFT, k only goes from 0 to N/2, all positive
-                for(int k=0; k<tnx[2]/2+1; k++)
+                for (int k = 0; k < tnx[2]/2+1; k++)
                 {
-                    ktemp = k;
-                    k_signed = k;  // always positive for real-to-complex FFT
-                    idx = i* tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
+                    int ktemp = k;
+                    int k_signed = k;
+                    int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
-                    // Map loop indices to real dimension indices based on DIM
-                    // For 3D: n0=itemp, n1=jtemp, n2=ktemp (absolute for diagonal)
-                    // For 2D: n0=jtemp, n1=ktemp (itemp=0)
-                    // For 1D: n0=ktemp (itemp=jtemp=0)
-                    // Also compute signed versions for cross terms
-                    int n0, n1, n2;
-                    int n0_s, n1_s, n2_s;  // signed versions
+                    int n0, n1, n2, n0_s, n1_s, n2_s;
                     if (DIM == 3) {
                         n0 = itemp; n1 = jtemp; n2 = ktemp;
                         n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
                     } else if (DIM == 2) {
                         n0 = jtemp; n1 = ktemp; n2 = 0;
                         n0_s = j_signed; n1_s = k_signed; n2_s = 0;
-                    } else { // DIM == 1
+                    } else {
                         n0 = ktemp; n1 = 0; n2 = 0;
                         n0_s = k_signed; n1_s = 0; n2_s = 0;
                     }
 
-                    // Diagonal terms: use absolute value (n0*n0 = n0_s*n0_s)
                     fourier_basis_x[idx] = n0*n0*xfactor[0];
                     fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
                     fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    // Cross-terms: use SIGNED values for correct sign
                     fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
                     fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
                     fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
 
-                    // Weight factor of 2 for interior k modes (Hermitian symmetry in r2c)
-                    if (k != 0 && 2*k != tnx[2])
-                    {
+                    // Weight factor of 2 for interior k modes
+                    if (k != 0 && 2*k != tnx[2]) {
                         fourier_basis_x[idx] *= 2;
                         fourier_basis_y[idx] *= 2;
                         fourier_basis_z[idx] *= 2;
@@ -500,37 +534,27 @@ void Pseudo<T>::update_weighted_fourier_basis()
             }
             else
             {
-                for(int k=0; k<tnx[2]; k++)
+                for (int k = 0; k < tnx[2]; k++)
                 {
-                    if( k > tnx[2]/2) {
-                        ktemp = tnx[2]-k;      // absolute value for diagonal term
-                        k_signed = k - tnx[2]; // signed value for cross terms
-                    } else {
-                        ktemp = k;
-                        k_signed = k;
-                    }
-                    idx = i* tnx[1]*tnx[2] + j*tnx[2] + k;
+                    int ktemp = (k > tnx[2]/2) ? tnx[2] - k : k;
+                    int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
+                    int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
 
-                    // Map loop indices to real dimension indices based on DIM
-                    // Compute both absolute (for diagonal) and signed (for cross-terms) versions
-                    int n0, n1, n2;
-                    int n0_s, n1_s, n2_s;  // signed versions
+                    int n0, n1, n2, n0_s, n1_s, n2_s;
                     if (DIM == 3) {
                         n0 = itemp; n1 = jtemp; n2 = ktemp;
                         n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
                     } else if (DIM == 2) {
                         n0 = jtemp; n1 = ktemp; n2 = 0;
                         n0_s = j_signed; n1_s = k_signed; n2_s = 0;
-                    } else { // DIM == 1
+                    } else {
                         n0 = ktemp; n1 = 0; n2 = 0;
                         n0_s = k_signed; n1_s = 0; n2_s = 0;
                     }
 
-                    // Diagonal terms: use absolute values (n0*n0 = n0_s*n0_s)
                     fourier_basis_x[idx] = n0*n0*xfactor[0];
                     fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
                     fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    // Cross-terms: use SIGNED values for correct sign in non-orthogonal cells
                     fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
                     fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
                     fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
@@ -541,75 +565,150 @@ void Pseudo<T>::update_weighted_fourier_basis()
 }
 
 template <typename T>
-void Pseudo<T>::update_negative_frequency_mapping(){}
+void Pseudo<T>::update_weighted_fourier_basis_periodic()
+{
+    update_weighted_fourier_basis_periodic_impl<T>(
+        fourier_basis_x, fourier_basis_y, fourier_basis_z,
+        fourier_basis_xy, fourier_basis_xz, fourier_basis_yz,
+        nx, dx, recip_metric_);
+}
+
+//------------------------------------------------------------------------------
+// Update Fourier basis for mixed BC (no cross-terms)
+//------------------------------------------------------------------------------
+template <typename T>
+void Pseudo<T>::update_weighted_fourier_basis_mixed()
+{
+    const double PI = std::numbers::pi;
+    const int DIM = nx.size();
+
+    // Expand to 3D
+    std::vector<int> tnx(3, 1);
+    std::vector<double> tdx(3, 1.0);
+    std::vector<BoundaryCondition> tbc(3, BoundaryCondition::PERIODIC);
+
+    for (int d = 0; d < DIM; ++d)
+    {
+        tnx[3 - DIM + d] = nx[d];
+        tdx[3 - DIM + d] = dx[d];
+        tbc[3 - DIM + d] = bc[d];
+    }
+
+    // Compute wavenumber factors
+    double xfactor[3];
+    for (int d = 0; d < 3; ++d)
+    {
+        double L = tnx[d] * tdx[d];
+        if (tbc[d] == BoundaryCondition::PERIODIC)
+            xfactor[d] = std::pow(2 * PI / L, 2);
+        else
+            xfactor[d] = std::pow(PI / L, 2);
+    }
+
+    for (int i = 0; i < tnx[0]; ++i)
+    {
+        int ki;
+        if (tbc[0] == BoundaryCondition::PERIODIC)
+            ki = (i > tnx[0]/2) ? tnx[0] - i : i;
+        else if (tbc[0] == BoundaryCondition::REFLECTING)
+            ki = i;
+        else
+            ki = i + 1;
+
+        for (int j = 0; j < tnx[1]; ++j)
+        {
+            int kj;
+            if (tbc[1] == BoundaryCondition::PERIODIC)
+                kj = (j > tnx[1]/2) ? tnx[1] - j : j;
+            else if (tbc[1] == BoundaryCondition::REFLECTING)
+                kj = j;
+            else
+                kj = j + 1;
+
+            for (int k = 0; k < tnx[2]; ++k)
+            {
+                int kk;
+                if (tbc[2] == BoundaryCondition::PERIODIC)
+                    kk = (k > tnx[2]/2) ? tnx[2] - k : k;
+                else if (tbc[2] == BoundaryCondition::REFLECTING)
+                    kk = k;
+                else
+                    kk = k + 1;
+
+                int idx = i * tnx[1] * tnx[2] + j * tnx[2] + k;
+
+                fourier_basis_x[idx] = ki * ki * xfactor[0];
+                fourier_basis_y[idx] = kj * kj * xfactor[1];
+                fourier_basis_z[idx] = kk * kk * xfactor[2];
+                // Cross-terms are zero for non-periodic BC
+                fourier_basis_xy[idx] = 0.0;
+                fourier_basis_xz[idx] = 0.0;
+                fourier_basis_yz[idx] = 0.0;
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+// Update negative frequency mapping (only for periodic BC with complex fields)
+//------------------------------------------------------------------------------
+template <typename T>
+void Pseudo<T>::update_negative_frequency_mapping() {}
 
 template <>
 void Pseudo<std::complex<double>>::update_negative_frequency_mapping()
 {
+    if (!is_all_periodic() || negative_k_idx == nullptr)
+        return;
+
     const int DIM = nx.size();
-    int itemp, jtemp, ktemp, idx, idx_minus;
-    std::vector<int> tnx;
+    std::vector<int> tnx(3, 1);
 
     if (DIM == 3)
-    {
         tnx = {nx[0], nx[1], nx[2]};
-    }
     else if (DIM == 2)
-    {
-        tnx = {1,   nx[0], nx[1]};
-    }
+        tnx = {1, nx[0], nx[1]};
     else if (DIM == 1)
-    {
-        tnx = {1,   1,   nx[0]};
-    }
+        tnx = {1, 1, nx[0]};
 
-    for(int i=0; i<tnx[0]; i++)
+    for (int i = 0; i < tnx[0]; i++)
     {
-        if(i == 0)
-            itemp = 0;
-        else
-            itemp = tnx[0]-i;
-        for(int j=0; j<tnx[1]; j++)
+        int itemp = (i == 0) ? 0 : tnx[0] - i;
+        for (int j = 0; j < tnx[1]; j++)
         {
-            if(j == 0)
-                jtemp = 0;
-            else
-                jtemp = tnx[1]-j;
-            for(int k=0; k<tnx[2]; k++)
+            int jtemp = (j == 0) ? 0 : tnx[1] - j;
+            for (int k = 0; k < tnx[2]; k++)
             {
-                if(k == 0)
-                    ktemp = 0;
-                else
-                    ktemp = tnx[2]-k;
+                int ktemp = (k == 0) ? 0 : tnx[2] - k;
 
-                idx       = i    *tnx[1]*tnx[2] + j    *tnx[2] + k;
-                idx_minus = itemp*tnx[1]*tnx[2] + jtemp*tnx[2] + ktemp;
+                int idx = i * tnx[1] * tnx[2] + j * tnx[2] + k;
+                int idx_minus = itemp * tnx[1] * tnx[2] + jtemp * tnx[2] + ktemp;
 
                 negative_k_idx[idx] = idx_minus;
-
-            //     0   0   0
-            //     1   1   6
-            //     2   2   5
-            //     3   3   4
-            //    -3   4   3
-            //    -2   5   2
-            //    -1   6   1
-
-            //     0   0   0
-            //     1   1   7
-            //     2   2   6
-            //     3   3   5
-            //    -4   4   4
-            //    -3   5   3
-            //    -2   6   2
-            //    -1   7   1
-
             }
         }
     }
-    // const int M_COMPLEX = get_total_complex_grid();
-    // for(int i=0;i<M_COMPLEX;i++)
-    //     std::cout << i << ", " << negative_k_idx[i] << ", " << std::endl;
+}
+
+//------------------------------------------------------------------------------
+// Update all arrays
+//------------------------------------------------------------------------------
+template <typename T>
+void Pseudo<T>::update(
+    std::vector<BoundaryCondition> bc,
+    std::map<std::string, double> bond_lengths,
+    std::vector<double> dx, double ds,
+    std::array<double, 6> recip_metric)
+{
+    this->bond_lengths = bond_lengths;
+    this->bc = bc;
+    this->dx = dx;
+    this->ds = ds;
+    this->recip_metric_ = recip_metric;
+
+    update_total_complex_grid();
+    update_boltz_bond();
+    update_weighted_fourier_basis();
 }
 
 // Explicit template instantiation

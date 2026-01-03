@@ -30,7 +30,7 @@
 #include "Molecules.h"
 #include "ComputationBox.h"
 #include "CpuSolver.h"
-#include "PseudoMixedBC.h"
+#include "Pseudo.h"
 #include "MklFFT.h"
 #include "MklFFTMixedBC.h"
 
@@ -58,7 +58,7 @@ private:
     MklFFTMixedBC<T, 2>* fft_mixed_2d;  ///< Mixed BC FFT for 2D
     MklFFTMixedBC<T, 3>* fft_mixed_3d;  ///< Mixed BC FFT for 3D
 
-    PseudoMixedBC<T>* pseudo;         ///< Pseudo-spectral operator helper
+    Pseudo<T>* pseudo;                ///< Pseudo-spectral operator helper
 
     bool is_periodic_;                ///< True if all BCs are periodic
 

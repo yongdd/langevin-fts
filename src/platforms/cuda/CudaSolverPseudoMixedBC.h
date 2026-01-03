@@ -32,11 +32,11 @@
 #include "Exception.h"
 #include "Molecules.h"
 #include "ComputationBox.h"
-#include "PseudoMixedBC.h"
+#include "Pseudo.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
 #include "CudaFFTMixedBC.h"
-#include "CudaPseudoMixedBC.h"
+#include "CudaPseudo.h"
 
 /**
  * @class CudaSolverPseudoMixedBC
@@ -63,7 +63,7 @@ class CudaSolverPseudoMixedBC : public CudaSolver<T>
 private:
     ComputationBox<T>* cb;             ///< Computation box
     Molecules* molecules;               ///< Molecules container
-    CudaPseudoMixedBC<T>* pseudo;       ///< Pseudo-spectral utilities (GPU)
+    CudaPseudo<T>* pseudo;              ///< Pseudo-spectral utilities (GPU)
     std::string chain_model;            ///< Chain model ("continuous")
 
     int n_streams;                      ///< Number of parallel streams

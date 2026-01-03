@@ -46,7 +46,6 @@ ADD_LIBRARY(common
     src/common/PropagatorComputationOptimizer.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
-    src/common/PseudoMixedBC.cpp
     src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
@@ -91,7 +90,6 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaFFTMixedBC.cu
-        src/platforms/cuda/CudaPseudoMixedBC.cu
         src/platforms/cuda/CudaSolverPseudoContinuous.cu
         src/platforms/cuda/CudaSolverPseudoMixedBC.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
