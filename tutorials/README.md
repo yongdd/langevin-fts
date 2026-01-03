@@ -19,7 +19,7 @@ Learn how to compute chain propagators and concentrations without self-consisten
 | # | Tutorial | Description |
 |---|----------|-------------|
 | 1 | `Diblock.ipynb` | AB diblock copolymer basics: propagators, partition functions, concentrations |
-| 2 | `NonPeriodicBC.ipynb` | **NEW!** Reflecting and absorbing boundary conditions for confined systems |
+| 2 | `NonPeriodicBC.ipynb` | Reflecting and absorbing boundary conditions for confined systems |
 | 3 | `BranchedMultiArmStar.ipynb` | Multi-arm star polymers and computational optimization |
 | 4 | `BranchedComb.ipynb` | Comb polymers with backbone and side chains |
 | 5 | `Mixture.ipynb` | Polymer mixtures (multiple species) |
@@ -128,6 +128,18 @@ $$\text{local weight} \propto e^{-w(\mathbf{r})}$$
 - NumPy, Matplotlib
 - `polymerfts` installed (`make install` from build directory)
 - Jupyter notebook or JupyterLab
+
+## Environment Setup
+
+For optimal performance, set these environment variables at the start of each notebook:
+
+```python
+import os
+os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
+os.environ["MKL_NUM_THREADS"] = "1"      # Single-threaded MKL
+```
+
+This prevents thread oversubscription when running multiple calculations.
 
 ## Running Tutorials
 
