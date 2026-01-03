@@ -1,8 +1,8 @@
 /**
- * @file TestCudaFFTMixedBC.cu
+ * @file TestCudaFFT.cu
  * @brief Test CUDA DCT-II/III and DST-II/III transforms for mixed boundary conditions.
  *
- * This test verifies that CudaFFTMixedBC correctly implements:
+ * This test verifies that CudaFFT correctly implements:
  * - DCT-II forward / DCT-III backward for reflecting (Neumann) BCs
  * - DST-II forward / DST-III backward for absorbing (Dirichlet) BCs
  *
@@ -21,7 +21,7 @@
 #include <array>
 
 #include "CudaCommon.h"
-#include "CudaFFTMixedBC.h"
+#include "CudaFFT.h"
 
 int main()
 {
@@ -52,7 +52,7 @@ int main()
 
         std::array<int, 1> nx_1d = {N};
         std::array<BoundaryCondition, 1> bc_reflect = {BoundaryCondition::REFLECTING};
-        CudaFFTMixedBC<double, 1> fft_dct(nx_1d, bc_reflect);
+        CudaFFT<double, 1> fft_dct(nx_1d, bc_reflect);
 
         // Copy input to device
         gpu_error_check(cudaMemcpy(d_data_r, data_init.data(),
@@ -88,7 +88,7 @@ int main()
         std::cout << "\nTest 2: DST-II/III (Absorbing BC) Round-trip" << std::endl;
 
         std::array<BoundaryCondition, 1> bc_absorb = {BoundaryCondition::ABSORBING};
-        CudaFFTMixedBC<double, 1> fft_dst(nx_1d, bc_absorb);
+        CudaFFT<double, 1> fft_dst(nx_1d, bc_absorb);
 
         // Copy input to device
         gpu_error_check(cudaMemcpy(d_data_r, data_init.data(),
@@ -200,7 +200,7 @@ int main()
 
         std::array<int, 2> nx_2d = {NX, NY};
         std::array<BoundaryCondition, 2> bc_2d = {BoundaryCondition::REFLECTING, BoundaryCondition::ABSORBING};
-        CudaFFTMixedBC<double, 2> fft_2d(nx_2d, bc_2d);
+        CudaFFT<double, 2> fft_2d(nx_2d, bc_2d);
 
         gpu_error_check(cudaMemcpy(d_data2d_r, data2d_init.data(),
                                    sizeof(double) * M, cudaMemcpyHostToDevice));
@@ -252,7 +252,7 @@ int main()
             BoundaryCondition::ABSORBING,
             BoundaryCondition::REFLECTING
         };
-        CudaFFTMixedBC<double, 3> fft_3d(nx_3d, bc_3d);
+        CudaFFT<double, 3> fft_3d(nx_3d, bc_3d);
 
         gpu_error_check(cudaMemcpy(d_data3d_r, data3d_init.data(),
                                    sizeof(double) * M3, cudaMemcpyHostToDevice));

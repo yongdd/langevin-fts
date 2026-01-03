@@ -2,7 +2,7 @@
  * @file TestCpuFFTMixedBC.cpp
  * @brief Test DCT-II/III and DST-II/III transforms for mixed boundary conditions.
  *
- * This test verifies that MklFFTMixedBC correctly implements:
+ * This test verifies that MklFFT correctly implements:
  * - DCT-II forward / DCT-III backward for reflecting (Neumann) BCs
  * - DST-II forward / DST-III backward for absorbing (Dirichlet) BCs
  *
@@ -26,7 +26,6 @@
 #include "Exception.h"
 #include "ComputationBox.h"
 #ifdef USE_CPU_MKL
-#include "MklFFTMixedBC.h"
 #include "MklFFT.h"
 #endif
 
@@ -54,7 +53,7 @@ int main()
 
         std::array<int, 1> nx_1d = {N};
         std::array<BoundaryCondition, 1> bc_reflect = {BoundaryCondition::REFLECTING};
-        MklFFTMixedBC<double, 1> fft_dct(nx_1d, bc_reflect);
+        MklFFT<double, 1> fft_dct(nx_1d, bc_reflect);
 
         // Forward DCT-II
         for (int i = 0; i < N; ++i)
@@ -83,7 +82,7 @@ int main()
         std::cout << "\nTest 2: DST-II/III (Absorbing BC)" << std::endl;
 
         std::array<BoundaryCondition, 1> bc_absorb = {BoundaryCondition::ABSORBING};
-        MklFFTMixedBC<double, 1> fft_dst(nx_1d, bc_absorb);
+        MklFFT<double, 1> fft_dst(nx_1d, bc_absorb);
 
         // Forward DST-II
         for (int i = 0; i < N; ++i)
@@ -170,7 +169,7 @@ int main()
 
         std::array<int, 2> nx_2d = {NX, NY};
         std::array<BoundaryCondition, 2> bc_2d = {BoundaryCondition::REFLECTING, BoundaryCondition::ABSORBING};
-        MklFFTMixedBC<double, 2> fft_2d(nx_2d, bc_2d);
+        MklFFT<double, 2> fft_2d(nx_2d, bc_2d);
 
         for (int i = 0; i < M; ++i)
             data2d_r[i] = data2d_init[i];
@@ -209,7 +208,7 @@ int main()
             BoundaryCondition::ABSORBING,
             BoundaryCondition::REFLECTING
         };
-        MklFFTMixedBC<double, 3> fft_3d(nx_3d, bc_3d);
+        MklFFT<double, 3> fft_3d(nx_3d, bc_3d);
 
         for (int i = 0; i < M3; ++i)
             data3d_r[i] = data3d_init[i];
@@ -256,7 +255,7 @@ int main()
         std::vector<double> dct_result(N_TEST);
         std::array<int, 1> nx_test = {N_TEST};
         std::array<BoundaryCondition, 1> bc_test_reflect = {BoundaryCondition::REFLECTING};
-        MklFFTMixedBC<double, 1> fft_dct_test(nx_test, bc_test_reflect);
+        MklFFT<double, 1> fft_dct_test(nx_test, bc_test_reflect);
         fft_dct_test.forward(x_data.data(), dct_result.data());
 
         // Create symmetric extension for DFT (whole-sample symmetric)
@@ -326,7 +325,7 @@ int main()
         // Compute DST-2 using our implementation
         std::vector<double> dst_result(N_TEST);
         std::array<BoundaryCondition, 1> bc_test_absorb = {BoundaryCondition::ABSORBING};
-        MklFFTMixedBC<double, 1> fft_dst_test(nx_test, bc_test_absorb);
+        MklFFT<double, 1> fft_dst_test(nx_test, bc_test_absorb);
         fft_dst_test.forward(x_data.data(), dst_result.data());
 
         // Create antisymmetric extension for DFT (whole-sample antisymmetric)
