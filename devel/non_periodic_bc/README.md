@@ -76,17 +76,17 @@ import numpy as np
 # 1D with reflecting BC on both sides
 solver = PropagatorSolver(
     nx=[32], lx=[4.0],
-    bc=["reflecting", "reflecting"],
     ds=0.01,
-    bond_lengths={"A": 1.0}
+    bond_lengths={"A": 1.0},
+    bc=["reflecting", "reflecting"]
 )
 
 # 2D with mixed BC (reflecting in x, absorbing in y)
 solver = PropagatorSolver(
     nx=[32, 24], lx=[4.0, 3.0],
-    bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ds=0.01,
-    bond_lengths={"A": 1.0}
+    bond_lengths={"A": 1.0},
+    bc=["reflecting", "reflecting", "absorbing", "absorbing"]
 )
 ```
 
