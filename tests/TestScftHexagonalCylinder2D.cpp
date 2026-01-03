@@ -53,7 +53,7 @@ int main()
         double sum;
 
         // -------------- Simulation Parameters ------------
-        int max_scft_iter = 200;
+        int max_scft_iter = 400;
         double tolerance = 1e-7;
 
         // AB diblock copolymer parameters
@@ -62,7 +62,7 @@ int main()
 
         // Hexagonal unit cell parameters
         // For hexagonal: a = b, gamma = 120 degrees
-        double L = 3.5;           // Lattice constant (a = b = L)
+        double L = 1.8;           // Lattice constant (a = b = L) - optimized for cylinder phase
         std::vector<int> nx = {32, 32};
         std::vector<double> lx = {L, L};
         std::vector<double> angles = {90.0, 90.0, 120.0};  // Hexagonal: gamma = 120 degrees
