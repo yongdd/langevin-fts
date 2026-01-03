@@ -1,11 +1,13 @@
 /**
- * @file TestCudaPseudoMixedBC1D.cu
+ * @file TestCudaPseudoMixedBC.cu
  * @brief Test CUDA pseudo-spectral solver with mixed boundary conditions.
  *
  * This test verifies that CudaSolverPseudoMixedBC correctly computes
  * propagator evolution with:
  * - REFLECTING: DCT-based method (Neumann BC, zero flux)
  * - ABSORBING: DST-based method (Dirichlet BC, zero value at boundary)
+ *
+ * Tests cover 1D, 2D, and 3D cases.
  *
  * Physical verification:
  * - REFLECTING: Mass should be conserved (no flux through boundaries)
