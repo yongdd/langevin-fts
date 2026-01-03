@@ -3,18 +3,19 @@
  * @brief CPU pseudo-spectral solver for discrete chain propagators.
  *
  * Implements the pseudo-spectral method for discrete (freely-jointed)
- * chain models. Unlike continuous chains, discrete chains use single
+ * chain models. Supports all boundary conditions (periodic, reflecting,
+ * absorbing). Unlike continuous chains, discrete chains use single
  * diffusion/potential steps per segment with half-bond step support.
  *
  * **Propagator Equation:**
  *
  * For discrete chains, the propagator satisfies:
- *     q(r,n+1) = exp(-w(r)·ds) × FFT⁻¹[exp(-b²k²ds/6) × FFT[q(r,n)]]
+ *     q(r,n+1) = exp(-w(r)*ds) * FFT^-1[exp(-b^2 k^2 ds/6) * FFT[q(r,n)]]
  *
  * **Half-Bond Steps:**
  *
  * At junction points, half-bond steps are used:
- *     exp(-b²k²ds/12)
+ *     exp(-b^2 k^2 ds/12)
  *
  * This ensures proper handling of chain junctions where multiple
  * propagators meet.
@@ -29,255 +30,182 @@
 
 #include <iostream>
 #include <cmath>
-#include <numbers>
+#include <complex>
 
 #include "CpuSolverPseudoDiscrete.h"
-#include "MklFFT.h"
 
-/**
- * @brief Construct pseudo-spectral solver for discrete chains.
- *
- * Initializes FFT plan and Boltzmann factor arrays including
- * half-step factors for junction handling.
- *
- * @param cb        Computation box for grid info
- * @param molecules Molecular system for segment lengths
- */
+//------------------------------------------------------------------------------
+// Constructor
+//------------------------------------------------------------------------------
 template <typename T>
 CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules)
 {
-    try{
-        if (cb->get_dim() == 3)
-            this->fft = new MklFFT<T, 3>({cb->get_nx(0),cb->get_nx(1),cb->get_nx(2)});
-        else if (cb->get_dim() == 2)
-            this->fft = new MklFFT<T, 2>({cb->get_nx(0),cb->get_nx(1)});
-        else if (cb->get_dim() == 1)
-            this->fft = new MklFFT<T, 1>({cb->get_nx(0)});
+    try
+    {
+        // Initialize shared components (FFT, Pseudo, etc.)
+        this->init_shared(cb, molecules);
 
-        this->cb = cb;
-        this->molecules = molecules;
-        this->chain_model = molecules->get_model_name();
-
-        pseudo = new Pseudo<T>(
-            molecules->get_bond_lengths(),
-            cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_ds(),
-            cb->get_recip_metric());
-
-        // Create exp_dw
+        // Create exp_dw arrays for discrete chains (no exp_dw_half needed)
         const int M = cb->get_total_grid();
-        for(const auto& item: molecules->get_bond_lengths())
+        for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw   [monomer_type] = new T[M];
+            this->exp_dw[monomer_type] = new T[M];
         }
-        update_laplacian_operator();
+
+        this->update_laplacian_operator();
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
+
+//------------------------------------------------------------------------------
+// Destructor
+//------------------------------------------------------------------------------
 template <typename T>
 CpuSolverPseudoDiscrete<T>::~CpuSolverPseudoDiscrete()
 {
-    delete fft;
-    delete pseudo;
-
-    for(const auto& item: this->exp_dw)
+    // Clean up exp_dw arrays
+    for (const auto& item : this->exp_dw)
         delete[] item.second;
+
+    // Clean up shared components (FFT, Pseudo)
+    this->cleanup_shared();
 }
+
+//------------------------------------------------------------------------------
+// Get stress Boltzmann bond factor
+//------------------------------------------------------------------------------
 template <typename T>
-void CpuSolverPseudoDiscrete<T>::update_laplacian_operator()
+const double* CpuSolverPseudoDiscrete<T>::get_stress_boltz_bond(
+    std::string monomer_type, bool is_half_bond_length) const
 {
-    try
-    {
-        pseudo->update(
-            this->cb->get_boundary_conditions(),
-            this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_ds(),
-            this->cb->get_recip_metric());
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    // Discrete chains include boltz_bond factor in stress computation
+    if (is_half_bond_length)
+        return this->pseudo->get_boltz_bond_half(monomer_type);
+    else
+        return this->pseudo->get_boltz_bond(monomer_type);
 }
+
+//------------------------------------------------------------------------------
+// Update dw (Boltzmann factors from field)
+//------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
 
-    for(const auto& item: w_input)
+    for (const auto& item : w_input)
     {
-        if( this->exp_dw.find(item.first) == this->exp_dw.end())
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");     
+        if (this->exp_dw.find(item.first) == this->exp_dw.end())
+            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
     }
 
-    for(const auto& item: w_input)
+    for (const auto& item : w_input)
     {
         std::string monomer_type = item.first;
-        const T *w = item.second;
+        const T* w = item.second;
 
-        for(int i=0; i<M; i++)
-            this->exp_dw[monomer_type][i] = exp(-w[i]*ds);
+        for (int i = 0; i < M; ++i)
+            this->exp_dw[monomer_type][i] = std::exp(-w[i] * ds);
     }
 }
+
+//------------------------------------------------------------------------------
+// Advance propagator
+//------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoDiscrete<T>::advance_propagator(
-    T *q_in, T *q_out, std::string monomer_type, const double *q_mask)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask)
 {
     try
     {
         const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = pseudo->get_total_complex_grid();
-        std::complex<double> k_q_in[M_COMPLEX];
+        const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
-        T *_exp_dw = this->exp_dw[monomer_type];
-        const double* _boltz_bond = pseudo->get_boltz_bond(monomer_type);
+        // For periodic BC, coefficient array is actually complex (interleaved real/imag)
+        int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        std::vector<double> k_q_in(coeff_size);
 
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_in,k_q_in);
-        // Multiply exp(-k^2 ds/6) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in[i] *= _boltz_bond[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in,q_out);
-        // Normalization calculation and evaluate exp(-w*ds) in real space
-        for(int i=0; i<M; i++)
-            q_out[i] *= _exp_dw[i];
-        
-        // Multiply mask
-        if (q_mask != nullptr)
+        T* _exp_dw = this->exp_dw[monomer_type];
+        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type);
+
+        // Forward transform
+        this->transform_forward(q_in, k_q_in.data());
+
+        // Multiply exp(-k^2 ds/6) in Fourier space
+        if (this->is_periodic_)
         {
-            for(int i=0; i<M; i++)
-                q_out[i] *= q_mask[i];
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
-    T *q_in, T *q_out, std::string monomer_type)
-{
-    try
-    {
-        // Const int M = this->cb->get_total_grid();
-        const int M_COMPLEX = pseudo->get_total_complex_grid();
-        std::complex<double> k_q_in[M_COMPLEX];
-
-        const double* _boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
-
-        // 3D fourier discrete transform, forward and inplace
-        fft->forward(q_in, k_q_in);
-        // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
-        for(int i=0; i<M_COMPLEX; i++)
-            k_q_in[i] *= _boltz_bond_half[i];
-        // 3D fourier discrete transform, backward and inplace
-        fft->backward(k_q_in, q_out);
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-std::vector<T> CpuSolverPseudoDiscrete<T>::compute_single_segment_stress(
-                T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length)
-{
-    try
-    {
-        const int DIM  = this->cb->get_dim();
-        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
-        const int M_COMPLEX = pseudo->get_total_complex_grid();
-        T coeff;
-
-        std::vector<T> stress(N_STRESS);
-        std::complex<double> qk_1[M_COMPLEX];
-        std::complex<double> qk_2[M_COMPLEX];
-
-        auto bond_lengths = this->molecules->get_bond_lengths();
-        double bond_length_sq;
-        double *_boltz_bond;
-
-        // Diagonal Fourier basis
-        const double* _fourier_basis_x = pseudo->get_fourier_basis_x();
-        const double* _fourier_basis_y = pseudo->get_fourier_basis_y();
-        const double* _fourier_basis_z = pseudo->get_fourier_basis_z();
-        // Cross-term Fourier basis
-        const double* _fourier_basis_xy = pseudo->get_fourier_basis_xy();
-        const double* _fourier_basis_xz = pseudo->get_fourier_basis_xz();
-        const double* _fourier_basis_yz = pseudo->get_fourier_basis_yz();
-        const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
-
-        if (is_half_bond_length)
-        {
-            bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _boltz_bond = pseudo->get_boltz_bond_half(monomer_type);
+            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
+            for (int i = 0; i < M_COMPLEX; ++i)
+                k_q_complex[i] *= _boltz_bond[i];
         }
         else
         {
-            bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _boltz_bond = pseudo->get_boltz_bond(monomer_type);
+            for (int i = 0; i < M_COMPLEX; ++i)
+                k_q_in[i] *= _boltz_bond[i];
         }
 
-        fft->forward(q_1, qk_1);
-        fft->forward(q_2, qk_2);
+        // Backward transform
+        this->transform_backward(k_q_in.data(), q_out);
 
-        for(int d=0; d<N_STRESS; d++)
-            stress[d] = 0.0;
+        // Evaluate exp(-w*ds) in real space
+        for (int i = 0; i < M; ++i)
+            q_out[i] *= _exp_dw[i];
 
-        if ( DIM == 3 )
+        // Apply mask if provided
+        if (q_mask != nullptr)
         {
-            for(int i=0; i<M_COMPLEX; i++){
-                if constexpr (std::is_same<T, double>::value)
-                    coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-                else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
-
-                // Diagonal components
-                stress[0] += coeff*_fourier_basis_x[i];   // xx
-                stress[1] += coeff*_fourier_basis_y[i];   // yy
-                stress[2] += coeff*_fourier_basis_z[i];   // zz
-                // Cross-term components
-                stress[3] += coeff*_fourier_basis_xy[i];  // xy
-                stress[4] += coeff*_fourier_basis_xz[i];  // xz
-                stress[5] += coeff*_fourier_basis_yz[i];  // yz
-            }
+            for (int i = 0; i < M; ++i)
+                q_out[i] *= q_mask[i];
         }
-        if ( DIM == 2 )
-        {
-            // For 2D: stress[0] for lx[0], stress[1] for lx[1], stress[2] for cross term
-            // fourier_basis_x/y/xy are remapped to logical dimensions in Pseudo::update_weighted_fourier_basis
-            for(int i=0; i<M_COMPLEX; i++){
-                if constexpr (std::is_same<T, double>::value)
-                    coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-                else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
-                stress[0] += coeff*_fourier_basis_x[i];   // lx[0] dimension
-                stress[1] += coeff*_fourier_basis_y[i];   // lx[1] dimension
-                stress[2] += coeff*_fourier_basis_xy[i];  // cross term
-            }
-        }
-        if ( DIM == 1 )
-        {
-            // For 1D: stress[0] for lx[0]
-            // fourier_basis_x is remapped to logical dimension in Pseudo::update_weighted_fourier_basis
-            for(int i=0; i<M_COMPLEX; i++){
-                if constexpr (std::is_same<T, double>::value)
-                    coeff = bond_length_sq*_boltz_bond[i]*(qk_1[i]*std::conj(qk_2[i])).real();
-                else
-                    coeff = bond_length_sq*_boltz_bond[i]*qk_1[i]*qk_2[_negative_k_idx[i]];
-                stress[0] += coeff*_fourier_basis_x[i];   // lx[0] dimension
-            }
-        }
-        return stress;
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Advance propagator half bond step
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
+    T* q_in, T* q_out, std::string monomer_type)
+{
+    try
+    {
+        const int M_COMPLEX = this->pseudo->get_total_complex_grid();
+
+        // For periodic BC, coefficient array is actually complex (interleaved real/imag)
+        int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
+        std::vector<double> k_q_in(coeff_size);
+
+        const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type);
+
+        // Forward transform
+        this->transform_forward(q_in, k_q_in.data());
+
+        // Multiply exp(-k^2 ds/12) in Fourier space
+        if (this->is_periodic_)
+        {
+            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
+            for (int i = 0; i < M_COMPLEX; ++i)
+                k_q_complex[i] *= _boltz_bond_half[i];
+        }
+        else
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+                k_q_in[i] *= _boltz_bond_half[i];
+        }
+
+        // Backward transform
+        this->transform_backward(k_q_in.data(), q_out);
+    }
+    catch (std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }

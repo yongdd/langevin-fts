@@ -6,6 +6,13 @@
  * pseudo-spectral method for solving the modified diffusion equation
  * with continuous Gaussian chains.
  *
+ * **Boundary Conditions:**
+ *
+ * Supports all boundary conditions via the unified MklFFT class:
+ * - PERIODIC: Standard FFT (complex coefficients)
+ * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
+ * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
+ *
  * **Numerical Method:**
  *
  * Uses 4th-order Richardson extrapolation for high accuracy:
@@ -22,7 +29,7 @@
  * - 4th-order accurate in ds (contour discretization)
  * - Spectral accuracy in spatial discretization
  *
- * @see CpuSolver for the abstract interface
+ * @see CpuSolverPseudoBase for shared functionality
  * @see CpuSolverPseudoDiscrete for discrete chain version
  * @see Pseudo for the pseudo-spectral implementation details
  */
@@ -37,16 +44,15 @@
 #include "Exception.h"
 #include "Molecules.h"
 #include "ComputationBox.h"
-#include "CpuSolver.h"
-#include "Pseudo.h"
-#include "FFT.h"
+#include "CpuSolverPseudoBase.h"
 
 /**
  * @class CpuSolverPseudoContinuous
  * @brief CPU pseudo-spectral solver for continuous Gaussian chains.
  *
  * Implements operator splitting with 4th-order Richardson extrapolation
- * for solving the continuous chain diffusion equation.
+ * for solving the continuous chain diffusion equation. Supports all
+ * boundary conditions (periodic, reflecting, absorbing).
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
@@ -76,15 +82,19 @@
  * @endcode
  */
 template <typename T>
-class CpuSolverPseudoContinuous : public CpuSolver<T>
+class CpuSolverPseudoContinuous : public CpuSolverPseudoBase<T>
 {
-private:
-    ComputationBox<T>* cb;      ///< Computation box for grid info
-    Molecules *molecules;        ///< Molecules container
-    std::string chain_model;     ///< Chain model identifier ("continuous")
-
-    FFT<T> *fft;                 ///< FFT object for transforms
-    Pseudo<T> *pseudo;           ///< Pseudo-spectral operator helper
+protected:
+    /**
+     * @brief Get Boltzmann bond factor for stress computation.
+     *
+     * For continuous chains, stress computation does not include the
+     * Boltzmann bond factor (it's absorbed into the Richardson scheme).
+     *
+     * @return nullptr (continuous chains don't use boltz_bond in stress)
+     */
+    const double* get_stress_boltz_bond(
+        std::string monomer_type, bool is_half_bond_length) const override;
 
 public:
     /**
@@ -93,25 +103,17 @@ public:
      * Initializes FFT objects and allocates Boltzmann factor arrays
      * for each monomer type defined in molecules.
      *
-     * @param cb        Computation box defining the grid
+     * @param cb        Computation box defining the grid and BCs
      * @param molecules Molecules container with monomer types
      *
-     * @note Uses MklFFT for the FFT implementation.
+     * @note Uses MklFFT for the FFT implementation with BC support.
      */
     CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules);
 
     /**
-     * @brief Destructor. Frees FFT and Pseudo objects.
+     * @brief Destructor. Frees exp_dw arrays.
      */
     ~CpuSolverPseudoContinuous();
-
-    /**
-     * @brief Update Fourier-space diffusion operators.
-     *
-     * Recomputes exp(-k²b²ds/6) for each monomer type when box
-     * dimensions change. Required after box size updates.
-     */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Update Boltzmann factors from potential fields.
@@ -145,21 +147,5 @@ public:
      * @param monomer_type Ignored
      */
     void advance_propagator_half_bond_step(T *, T *, std::string) override {};
-
-    /**
-     * @brief Compute stress contribution from one segment.
-     *
-     * Calculates ∂H/∂ε_αβ contribution from correlating forward and
-     * backward propagators.
-     *
-     * @param q_1                Forward propagator
-     * @param q_2                Backward propagator
-     * @param monomer_type       Monomer type for segment length
-     * @param is_half_bond_length Ignored (always false for continuous)
-     *
-     * @return Stress components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
-     */
-    std::vector<T> compute_single_segment_stress(
-                T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) override;
 };
 #endif

@@ -214,6 +214,37 @@ Simulations are configured via Python dictionaries with keys:
 
 4. The propagator computation optimizer (`PropagatorComputationOptimizer`) automatically detects redundant calculations using hash tables of `PropagatorCode` objects - avoid manual optimization
 
+### Design Decisions
+
+**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoContinuous` and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
+- FFT object management (`init_shared`/`cleanup_shared`)
+- Transform dispatch (`transform_forward`/`transform_backward`)
+- Laplacian operator updates (`update_laplacian_operator`)
+- Stress computation with customizable coefficient factor (`compute_single_segment_stress` + `get_stress_boltz_bond`)
+
+Derived classes implement chain-model-specific behavior:
+- `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
+- `advance_propagator`: Different algorithms (Richardson extrapolation vs simple step)
+- `advance_propagator_half_bond_step`: Discrete-specific implementation
+- `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
+
+**Spectral Transform Hierarchy**: `FFT<T>` is the abstract base class for all spectral transforms. Platform implementations:
+```
+      FFT<T>              (abstract base - double* and complex* interfaces)
+        ↑
+   MklFFT<T, DIM>         (CPU: Intel MKL for FFT, DCT, DST)
+   CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
+```
+`FFT<T>` provides both interfaces:
+- `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
+- `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only
+
+`CudaFFT` additionally provides stream-aware methods for async execution:
+- `forward_stream(T*, double*, cudaStream_t)` / `backward_stream(double*, T*, cudaStream_t)`
+- `forward_stream(T*, complex<double>*, cudaStream_t)` / `backward_stream(complex<double>*, T*, cudaStream_t)`
+
+Solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimension-specific casting.
+
 ### When Modifying Python Code
 
 Changes to `src/python/*.py` take effect after `make install` from build directory. No recompilation needed.

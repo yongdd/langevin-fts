@@ -60,11 +60,10 @@ IF(MKL_FOUND)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
         src/platforms/cpu/MklFFT.cpp
-        src/platforms/cpu/MklFFTMixedBC.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
+        src/platforms/cpu/CpuSolverPseudoBase.cpp
         src/platforms/cpu/CpuSolverPseudoContinuous.cpp
-        src/platforms/cpu/CpuSolverPseudoMixedBC.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverRealSpace.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
@@ -89,9 +88,8 @@ IF(CUDAToolkit_FOUND)
         src/platforms/cuda/CudaArray.cu
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudo.cu
-        src/platforms/cuda/CudaFFTMixedBC.cu
+        src/platforms/cuda/CudaFFT.cu
         src/platforms/cuda/CudaSolverPseudoContinuous.cu
-        src/platforms/cuda/CudaSolverPseudoMixedBC.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverRealSpace.cu
         src/platforms/cuda/CudaComputationContinuous.cu

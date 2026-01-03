@@ -2,7 +2,7 @@
  * @file TestCpuPseudoMixedBC.cpp
  * @brief Test pseudo-spectral solver with mixed boundary conditions.
  *
- * This test verifies that CpuSolverPseudoMixedBC correctly computes
+ * This test verifies that CpuSolverPseudoContinuous correctly computes
  * propagator evolution with:
  * - PERIODIC: Standard FFT-based pseudo-spectral method
  * - REFLECTING: DCT-based method (Neumann BC, zero flux)
@@ -27,9 +27,7 @@
 #include "Polymer.h"
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuSolverPseudoMixedBC.h"
 #include "CpuSolverPseudoContinuous.h"
-#include "MklFFTMixedBC.h"
 #endif
 
 int main()
@@ -71,7 +69,7 @@ int main()
         CpuComputationBox<double> cb_reflect(
             {N}, {L}, {"reflecting", "reflecting"});
 
-        CpuSolverPseudoMixedBC<double> solver_reflect(&cb_reflect, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_reflect(&cb_reflect, &molecules_reflect);
         solver_reflect.update_dw({{"A", w_zero.data()}});
 
         std::vector<double> q_in(N), q_out(N);
@@ -117,7 +115,7 @@ int main()
         CpuComputationBox<double> cb_absorb(
             {N}, {L}, {"absorbing", "absorbing"});
 
-        CpuSolverPseudoMixedBC<double> solver_absorb(&cb_absorb, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_absorb(&cb_absorb, &molecules_reflect);
         solver_absorb.update_dw({{"A", w_zero.data()}});
 
         for (int i = 0; i < N; ++i)
@@ -154,7 +152,7 @@ int main()
         std::cout << "\nTest 3: Reflecting BC - Uniform field test" << std::endl;
 
         // Reset reflecting solver
-        CpuSolverPseudoMixedBC<double> solver_reflect2(&cb_reflect, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_reflect2(&cb_reflect, &molecules_reflect);
         solver_reflect2.update_dw({{"A", w_zero.data()}});
 
         // For uniform initial condition with zero potential, field should remain uniform
@@ -192,7 +190,7 @@ int main()
             q_sym[i] = std::exp(-std::pow(x - L/2, 2) / (2 * 0.5 * 0.5));  // Symmetric about L/2
         }
 
-        CpuSolverPseudoMixedBC<double> solver_sym(&cb_reflect, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_sym(&cb_reflect, &molecules_reflect);
         solver_sym.update_dw({{"A", w_zero.data()}});
 
         std::vector<double> q_out_sym(N);
@@ -227,7 +225,7 @@ int main()
             {NX, NY}, {LX, LY},
             {"reflecting", "reflecting", "absorbing", "absorbing"});
 
-        CpuSolverPseudoMixedBC<double> solver_2d(&cb_2d, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_2d(&cb_2d, &molecules_reflect);
 
         std::vector<double> w_2d(M, 0.0);
         solver_2d.update_dw({{"A", w_2d.data()}});
@@ -280,7 +278,7 @@ int main()
             {NX3, NY3, NZ3}, {LX3, LY3, LZ3},
             {"reflecting", "reflecting", "reflecting", "reflecting", "absorbing", "absorbing"});
 
-        CpuSolverPseudoMixedBC<double> solver_3d(&cb_3d, &molecules_reflect);
+        CpuSolverPseudoContinuous<double> solver_3d(&cb_3d, &molecules_reflect);
 
         std::vector<double> w_3d(M3, 0.0);
         solver_3d.update_dw({{"A", w_3d.data()}});
@@ -356,7 +354,7 @@ int main()
         molecules_dct.add_polymer(1.0, blocks_dct, {});
 
         CpuComputationBox<double> cb_dct({N_DCT}, {L_DCT}, {"reflecting", "reflecting"});
-        CpuSolverPseudoMixedBC<double> solver_dct(&cb_dct, &molecules_dct);
+        CpuSolverPseudoContinuous<double> solver_dct(&cb_dct, &molecules_dct);
 
         std::vector<double> w_dct(N_DCT, 0.0);
         solver_dct.update_dw({{"A", w_dct.data()}});
@@ -455,7 +453,7 @@ int main()
 
         // Set up DST-based solver (absorbing BC)
         CpuComputationBox<double> cb_dst({N_DCT}, {L_DCT}, {"absorbing", "absorbing"});
-        CpuSolverPseudoMixedBC<double> solver_dst(&cb_dst, &molecules_dct);
+        CpuSolverPseudoContinuous<double> solver_dst(&cb_dst, &molecules_dct);
         solver_dst.update_dw({{"A", w_dct.data()}});
 
         // Evolve both propagators
