@@ -54,6 +54,21 @@ public:
         : ComputationBox<T>(nx, lx, bc, mask) {};
 
     /**
+     * @brief Construct a CPU computation box with lattice angles.
+     *
+     * Delegates to base class constructor with angles for non-orthogonal systems.
+     *
+     * @param nx     Grid dimensions [Nx, Ny, Nz]
+     * @param lx     Box lengths [Lx, Ly, Lz]
+     * @param bc     Boundary conditions
+     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param mask   Optional mask array for impenetrable regions
+     */
+    CpuComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+                      std::vector<double> angles, const double* mask=nullptr)
+        : ComputationBox<T>(nx, lx, bc, angles, mask) {};
+
+    /**
      * @brief Virtual destructor.
      */
     virtual ~CpuComputationBox() {};

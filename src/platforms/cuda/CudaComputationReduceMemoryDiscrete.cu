@@ -29,6 +29,7 @@
  */
 
 #include <complex>
+#include <cmath>
 #include <iostream>
 #include <chrono>
 #include <omp.h>
@@ -1071,14 +1072,16 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
         const int STREAM = 0;
 
         // Reset stress
+        // N_STRESS: 3D->6, 2D->3, 1D->1
+        const int N_STRESS = (DIM == 3) ? 6 : ((DIM == 2) ? 3 : 1);
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] = 0.0;
 
         CuDeviceData<T> *d_segment_stress;
-        T segment_stress[DIM];
-        gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
+        T segment_stress[N_STRESS];
+        gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS));
 
         // Compute stress for each block
         for(const auto& block: phi_block)
@@ -1113,7 +1116,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             int prev = 0;
             int next = 1;
 
-            std::array<T,3> _block_dq_dl = {0.0, 0.0, 0.0};
+            std::array<T,6> _block_dq_dl = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
             T *q_segment_1;
             T *q_segment_2;
@@ -1184,9 +1187,9 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 propagator_solver->compute_single_segment_stress(
                     STREAM, d_q_pair[STREAM][0], d_segment_stress, monomer_type, is_half_bond_length);
 
-                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS, cudaMemcpyDeviceToHost));
 
-                for(int d=0; d<DIM; d++)
+                for(int d=0; d<N_STRESS; d++)
                     _block_dq_dl[d] += segment_stress[d]*static_cast<double>(n_repeated);
 
                 q_prev = q_next;
@@ -1194,15 +1197,28 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
             }
 
             // Accumulate stress for this polymer
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] += _block_dq_dl[d];
         }
 
         // Normalize stress
         for(int p=0; p<n_polymer_types; p++)
         {
+            // Diagonal components: xx, yy, zz
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_ds();
+            // Cross-term components for 3D: xy, xz, yz
+            if (DIM == 3)
+            {
+                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+            }
+            // Cross-term component for 2D: yz
+            else if (DIM == 2)
+            {
+                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+            }
         }
 
         cudaFree(d_segment_stress);

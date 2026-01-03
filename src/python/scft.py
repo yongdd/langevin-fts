@@ -522,7 +522,10 @@ class SCFT:
         factory.display_info()
 
         # (C++ class) Computation box
-        cb = factory.create_computation_box(params["nx"], params["lx"])
+        if "angles" in params:
+            cb = factory.create_computation_box(params["nx"], params["lx"], angles=params["angles"])
+        else:
+            cb = factory.create_computation_box(params["nx"], params["lx"])
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
@@ -721,8 +724,8 @@ class SCFT:
             else:
                 self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"])
                 
-            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Cubic"]:
-                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, or Cubic. " +
+            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
+                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
                     "The current crystal system is " + self.sg.crystal_system + ".")
 
             if self.sg.crystal_system == "Orthorhombic":
@@ -734,6 +737,10 @@ class SCFT:
             elif self.sg.crystal_system == "Cubic":
                 self.lx_reduced_indices = [0]
                 self.lx_full_indices = [0, 0, 0]
+            elif self.sg.crystal_system == "Hexagonal" or self.sg.crystal_system == "Trigonal":
+                # Hexagonal: a = b ≠ c, α = β = 90°, γ = 120°
+                self.lx_reduced_indices = [0, 2]  # Only a and c can vary independently
+                self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
             if params["box_is_altering"]:
@@ -745,12 +752,62 @@ class SCFT:
             # solver.set_symmetry_operations(sg.get_symmetry_operations())
         else:
             self.sg = None
-            self.lx_reduced_indices = list(range(len(params["lx"])))
-            self.lx_full_indices = list(range(len(params["lx"])))
-            
+
+            # Crystal system determines which lattice parameters can be optimized
+            # Default: all box lengths can vary, angles are fixed at their initial values
+            crystal_system = params.get("crystal_system", "Orthorhombic")
+            self.crystal_system = crystal_system
+            dim = len(params["nx"])
+
+            # Non-orthogonal crystal systems require 3D
+            if crystal_system in ["Monoclinic", "Triclinic", "Hexagonal"] and dim != 3:
+                raise ValueError(f"Crystal system '{crystal_system}' requires 3D simulation (nx must have 3 elements).")
+
+            if crystal_system == "Orthorhombic":
+                # α = β = γ = 90°, a, b, c can all vary
+                self.lx_reduced_indices = list(range(len(params["lx"])))
+                self.lx_full_indices = list(range(len(params["lx"])))
+                self.angles_reduced_indices = []  # No angles to optimize
+                self.angles_full_indices = []
+            elif crystal_system == "Tetragonal":
+                # α = β = γ = 90°, a = b ≠ c
+                self.lx_reduced_indices = [0, 2]  # a and c
+                self.lx_full_indices = [0, 0, 1]  # a, a, c
+                self.angles_reduced_indices = []
+                self.angles_full_indices = []
+            elif crystal_system == "Cubic":
+                # α = β = γ = 90°, a = b = c
+                self.lx_reduced_indices = [0]
+                self.lx_full_indices = [0, 0, 0]
+                self.angles_reduced_indices = []
+                self.angles_full_indices = []
+            elif crystal_system == "Hexagonal":
+                # α = β = 90°, γ = 120°, a = b ≠ c
+                self.lx_reduced_indices = [0, 2]  # a and c
+                self.lx_full_indices = [0, 0, 1]  # a, a, c
+                self.angles_reduced_indices = []  # γ fixed at 120°
+                self.angles_full_indices = []
+            elif crystal_system == "Monoclinic":
+                # α = γ = 90°, β ≠ 90°, a, b, c can all vary
+                # β is the angle between a and c axes (index 1 in [α, β, γ])
+                self.lx_reduced_indices = [0, 1, 2]  # a, b, c
+                self.lx_full_indices = [0, 1, 2]
+                self.angles_reduced_indices = [1]  # Only β can vary
+                self.angles_full_indices = [1]  # Maps to β
+            elif crystal_system == "Triclinic":
+                # All angles and lengths can vary
+                self.lx_reduced_indices = [0, 1, 2]
+                self.lx_full_indices = [0, 1, 2]
+                self.angles_reduced_indices = [0, 1, 2]  # α, β, γ
+                self.angles_full_indices = [0, 1, 2]
+            else:
+                raise ValueError(f"Unknown crystal system: {crystal_system}. " +
+                    "Choose from: Orthorhombic, Tetragonal, Cubic, Hexagonal, Monoclinic, Triclinic.")
+
             # Total number of variables to be adjusted to minimize the Hamiltonian
+            n_angles = len(self.angles_reduced_indices)
             if params["box_is_altering"]:
-                n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(params["lx"])
+                n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
             
@@ -1366,7 +1423,11 @@ class SCFT:
                 for Q in total_partitions:
                     print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("[", ",".join(["%10.7f" % (x) for x in self.cb.get_lx()]), "]")
+                print("lx=[", ",".join(["%9.6f" % (x) for x in self.cb.get_lx()]), "]", end="")
+                # Also print angles if optimizing non-orthogonal system
+                if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
+                    print(" angles=[", ",".join(["%7.2f" % (x) for x in self.cb.get_angles_degrees()]), "]", end="")
+                print()
             else:
                 print("%8d %12.3E " % (iter, mass_error), end=" [ ")
                 for Q in total_partitions:
@@ -1387,22 +1448,59 @@ class SCFT:
 
             # Calculate new fields using simple and Anderson mixing
             if self.box_is_altering:
-                dlx = -stress_array
-                am_current  = np.concatenate((w_reduced_basis.flatten(),      np.array(self.cb.get_lx())[self.lx_reduced_indices]))
-                am_diff     = np.concatenate((w_diff_reduced_basis.flatten(), self.scale_stress*dlx[self.lx_reduced_indices]))
+                # Stress components:
+                # [0,1,2] = σ_xx, σ_yy, σ_zz (diagonal) - for box lengths
+                # [3,4,5] = σ_xy, σ_xz, σ_yz (off-diagonal) - for angles
+                dlx = -stress_array[0:3]  # Diagonal stress for lengths
+
+                # Map off-diagonal stress to angle gradients
+                # For Monoclinic: σ_xz (index 4) drives β angle
+                # For Triclinic: σ_xy→γ, σ_xz→β, σ_yz→α
+                angle_stress_map = {0: 5, 1: 4, 2: 3}  # angle index → stress index (α→σ_yz, β→σ_xz, γ→σ_xy)
+                dangle = np.array([-stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices])
+
+                # Current values
+                current_lx = np.array(self.cb.get_lx())[self.lx_reduced_indices]
+                current_angles = np.array(self.cb.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
+
+                # Build optimization vectors
+                am_current = np.concatenate((w_reduced_basis.flatten(), current_lx, current_angles))
+                am_diff = np.concatenate((w_diff_reduced_basis.flatten(),
+                                         self.scale_stress*dlx[self.lx_reduced_indices],
+                                         self.scale_stress*dangle))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
                 w_reduced_basis = np.reshape(am_new[0:len(w_reduced_basis.flatten())], (M, -1))
 
+                # Extract new box lengths
+                n_lx = len(self.lx_reduced_indices)
+                n_angles = len(self.angles_reduced_indices)
+
                 # Set box size
                 # Restricting |dLx| to be less than 10 % of Lx
-                old_lx = np.array(np.array(self.cb.get_lx())[self.lx_reduced_indices])
-                new_lx = np.array(am_new[-len(self.lx_reduced_indices):])
+                old_lx = current_lx
+                new_lx = np.array(am_new[-(n_lx + n_angles):-(n_angles)] if n_angles > 0 else am_new[-n_lx:])
                 new_dlx = np.clip((new_lx-old_lx)/old_lx, -0.1, 0.1)
                 new_lx = (1 + new_dlx)*old_lx
-                
-                self.cb.set_lx(np.array(new_lx)[self.lx_full_indices])
+
+                # Set box angles (if optimizing angles)
+                if n_angles > 0:
+                    old_angles = current_angles
+                    new_angles = np.array(am_new[-n_angles:])
+                    # Restrict angle change to 5 degrees per step
+                    new_dangle = np.clip(new_angles - old_angles, -5.0, 5.0)
+                    new_angles = old_angles + new_dangle
+
+                    # Build full angles array (in degrees)
+                    full_angles = list(self.cb.get_angles_degrees())
+                    for i, idx in enumerate(self.angles_full_indices):
+                        full_angles[idx] = new_angles[i]
+
+                    # Update box with both lengths and angles
+                    self.cb.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
+                else:
+                    self.cb.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]))
 
                 # Update bond parameters using new lx
                 self.solver.update_laplacian_operator()

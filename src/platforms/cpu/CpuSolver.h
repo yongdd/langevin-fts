@@ -175,14 +175,15 @@ public:
      * Calculates the stress tensor contribution from correlating two
      * propagators (forward and backward) at a single contour point:
      *
-     *     σ_αβ = ∫ q₁(r) · (∂/∂L_αβ)[Propagator] · q₂(r) dr
+     *     σ_αβ = ∫ q₁(r) · (∂/∂ε_αβ)[Propagator] · q₂(r) dr
      *
      * @param q_1                First propagator (typically forward)
      * @param q_2                Second propagator (typically backward)
      * @param monomer_type       Monomer type for segment length
      * @param is_half_bond_length Whether using half bond length (discrete model)
      *
-     * @return Vector of stress components [σ_xx, σ_yy, σ_zz] (diagonal only)
+     * @return Vector of stress components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+     *         Full 6-component stress tensor for non-orthogonal systems.
      *
      * @note Used in box size optimization to find stress-free unit cell.
      */

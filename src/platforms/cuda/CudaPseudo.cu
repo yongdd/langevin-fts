@@ -39,8 +39,9 @@ template <typename T>
 CudaPseudo<T>::CudaPseudo(
     std::map<std::string, double> bond_lengths,
     std::vector<BoundaryCondition> bc,
-    std::vector<int> nx, std::vector<double> dx, double ds)
-        : Pseudo<T>(bond_lengths, bc, nx, dx, ds)
+    std::vector<int> nx, std::vector<double> dx, double ds,
+    std::array<double, 6> recip_metric)
+        : Pseudo<T>(bond_lengths, bc, nx, dx, ds, recip_metric)
 {
     try
     {
@@ -58,9 +59,14 @@ CudaPseudo<T>::CudaPseudo(
         }
 
         // Allocate memory for stress calculation: compute_stress()
+        // Diagonal terms
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_x, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_y, sizeof(double)*M_COMPLEX));
         gpu_error_check(cudaMalloc((void**)&d_fourier_basis_z, sizeof(double)*M_COMPLEX));
+        // Cross-terms for non-orthogonal systems
+        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_xy, sizeof(double)*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_xz, sizeof(double)*M_COMPLEX));
+        gpu_error_check(cudaMalloc((void**)&d_fourier_basis_yz, sizeof(double)*M_COMPLEX));
 
         if constexpr (std::is_same<T, std::complex<double>>::value)
         {
@@ -84,9 +90,15 @@ CudaPseudo<T>::~CudaPseudo()
         cudaFree(item.second);
 
     // For stress calculation: compute_stress()
+    // Diagonal terms
     cudaFree(d_fourier_basis_x);
     cudaFree(d_fourier_basis_y);
     cudaFree(d_fourier_basis_z);
+    // Cross-terms
+    cudaFree(d_fourier_basis_xy);
+    cudaFree(d_fourier_basis_xz);
+    cudaFree(d_fourier_basis_yz);
+
     if constexpr (std::is_same<T, std::complex<double>>::value)
         cudaFree(d_negative_k_idx);
 }
@@ -94,9 +106,10 @@ template <typename T>
 void CudaPseudo<T>::update(
     std::vector<BoundaryCondition> bc,
     std::map<std::string, double> bond_lengths,
-    std::vector<double> dx, double ds)
+    std::vector<double> dx, double ds,
+    std::array<double, 6> recip_metric)
 {
-    Pseudo<T>::update(bc, bond_lengths, dx, ds);
+    Pseudo<T>::update(bc, bond_lengths, dx, ds, recip_metric);
 
     const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();;
     for(const auto& item: this->bond_lengths)
@@ -105,9 +118,14 @@ void CudaPseudo<T>::update(
         gpu_error_check(cudaMemcpy(d_boltz_bond     [monomer_type], this->boltz_bond     [monomer_type], sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
         gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], this->boltz_bond_half[monomer_type], sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
     }
+    // Diagonal terms
     gpu_error_check(cudaMemcpy(d_fourier_basis_x, this->fourier_basis_x, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
     gpu_error_check(cudaMemcpy(d_fourier_basis_y, this->fourier_basis_y, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
     gpu_error_check(cudaMemcpy(d_fourier_basis_z, this->fourier_basis_z, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+    // Cross-terms
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xy, this->fourier_basis_xy, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_xz, this->fourier_basis_xz, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_fourier_basis_yz, this->fourier_basis_yz, sizeof(double)*M_COMPLEX, cudaMemcpyHostToDevice));
 
     // update_negative_frequency_mapping();
 } 

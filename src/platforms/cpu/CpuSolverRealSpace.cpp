@@ -57,7 +57,11 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
         this->molecules = molecules;
 
         if(molecules->get_model_name() != "continuous")
-            throw_with_line_number("Real-space method only support 'continuous' chain model.");     
+            throw_with_line_number("Real-space method only support 'continuous' chain model.");
+
+        if(!cb->is_orthogonal())
+            throw_with_line_number("Real-space method only supports orthogonal unit cells. "
+                                   "Use pseudo-spectral method (chain_model='continuous') for non-orthogonal systems.");
 
         // for(size_t i=0; i<cb->get_boundary_conditions().size(); i++)
         // {

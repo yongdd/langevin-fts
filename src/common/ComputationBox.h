@@ -12,6 +12,17 @@
  * - Reflecting: Zero-flux Neumann boundary conditions (for real-space method)
  * - Absorbing: Zero-value Dirichlet boundary conditions (for real-space method)
  *
+ * **Crystal System Support:**
+ *
+ * Supports all crystal systems through lattice angles:
+ * - Cubic/Tetragonal/Orthorhombic: α = β = γ = 90°
+ * - Monoclinic: α = γ = 90°, β ≠ 90°
+ * - Hexagonal/Trigonal: α = β = 90°, γ = 120°
+ * - Triclinic: Arbitrary angles
+ *
+ * For non-orthogonal systems, lattice vectors and reciprocal metric tensor
+ * are computed for use in Fourier-space wavenumber calculations.
+ *
  * @note All lengths are in units of a_Ref * N_Ref^(1/2), where a_Ref is the
  *       reference statistical segment length and N_Ref is the reference
  *       polymerization index.
@@ -33,6 +44,10 @@
  *
  * // Compute inner product <g|h> = integral(g * h)
  * double ip = cb->inner_product(g, h);
+ *
+ * // Create hexagonal box (γ = 120°)
+ * std::vector<double> angles = {90.0, 90.0, 120.0};
+ * ComputationBox<double>* hex_cb = factory->create_computation_box(nx, lx, bc, angles);
  * @endcode
  */
 #ifndef COMPUTATION_BOX_H_
@@ -102,8 +117,62 @@ protected:
     int total_grid;               ///< Total number of grid points M = Nx*Ny*Nz
     double *mask;                 ///< Mask array for impenetrable regions (0=blocked, 1=accessible)
     double *dv;                   ///< Volume element weights for integration (includes mask)
-    double volume;                ///< Total system volume V = Lx*Ly*Lz
+    double volume;                ///< Total system volume V = a·(b×c) for general lattice
     double accessible_volume;     ///< Accessible volume (excluding masked regions)
+
+    /**
+     * @brief Lattice angles [alpha, beta, gamma] in radians.
+     *
+     * Crystal system convention:
+     * - alpha: angle between b and c lattice vectors
+     * - beta:  angle between a and c lattice vectors
+     * - gamma: angle between a and b lattice vectors
+     *
+     * Default: [π/2, π/2, π/2] for orthogonal systems.
+     */
+    std::vector<double> angles_;
+
+    /**
+     * @brief 3x3 lattice vector matrix in column-major order.
+     *
+     * Stores [a|b|c] where a, b, c are lattice vectors.
+     * Layout: [a_x, a_y, a_z, b_x, b_y, b_z, c_x, c_y, c_z]
+     *
+     * Standard parameterization:
+     * - a = (lx[0], 0, 0)
+     * - b = (lx[1]*cos(γ), lx[1]*sin(γ), 0)
+     * - c = (c_x, c_y, c_z) computed from angles
+     */
+    std::array<double, 9> lattice_vec_;
+
+    /**
+     * @brief 3x3 reciprocal lattice vector matrix in column-major order.
+     *
+     * Stores [a*|b*|c*] where:
+     * - a* = (b × c) / V
+     * - b* = (c × a) / V
+     * - c* = (a × b) / V
+     * and V = a · (b × c) is the cell volume.
+     */
+    std::array<double, 9> recip_vec_;
+
+    /**
+     * @brief Symmetric reciprocal metric tensor (6 components).
+     *
+     * G*_ij = e*_i · e*_j where e* are reciprocal basis vectors.
+     * Layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     *
+     * Used in wavenumber calculation: |k|² = G*_ij k_i k_j
+     */
+    std::array<double, 6> recip_metric_;
+
+    /**
+     * @brief Whether the lattice is orthogonal (all angles = 90°).
+     *
+     * Orthogonal systems can use simplified wavenumber calculation:
+     * |k|² = kx² + ky² + kz² (no cross terms)
+     */
+    bool is_orthogonal_;
 
     /**
      * @brief Boundary conditions for each face.
@@ -114,6 +183,30 @@ protected:
      * - For 3D: all 6 indices are used
      */
     std::vector<BoundaryCondition> bc;
+
+    /**
+     * @brief Compute lattice vectors from box lengths and angles.
+     *
+     * Uses standard crystallographic parameterization:
+     * - a along x-axis
+     * - b in xy-plane
+     * - c general direction
+     */
+    void compute_lattice_vectors();
+
+    /**
+     * @brief Compute reciprocal lattice vectors from direct lattice.
+     *
+     * a* = (b × c) / V, etc.
+     */
+    void compute_reciprocal_lattice();
+
+    /**
+     * @brief Compute reciprocal metric tensor from reciprocal vectors.
+     *
+     * G*_ij = e*_i · e*_j
+     */
+    void compute_recip_metric();
 
 public:
     /**
@@ -141,6 +234,34 @@ public:
      * @endcode
      */
     ComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc, const double* mask=nullptr);
+
+    /**
+     * @brief Construct a ComputationBox with lattice angles for non-orthogonal systems.
+     *
+     * @param nx     Number of grid points in each direction, e.g., {32, 32, 32}
+     * @param lx     Box lengths (lattice constants) in each direction, e.g., {4.0, 4.0, 4.0}
+     * @param bc     Boundary condition strings
+     * @param angles Lattice angles [alpha, beta, gamma] in DEGREES
+     *               - alpha: angle between b and c vectors
+     *               - beta:  angle between a and c vectors
+     *               - gamma: angle between a and b vectors
+     * @param mask   Optional mask array for impenetrable regions
+     *
+     * @throws Exception if angles are invalid (must be > 0 and < 180, and form valid cell)
+     *
+     * @example
+     * @code
+     * // Hexagonal box (gamma = 120°)
+     * std::vector<int> nx = {32, 32, 32};
+     * std::vector<double> lx = {4.0, 4.0, 6.0};
+     * std::vector<std::string> bc = {"periodic", "periodic", "periodic",
+     *                                 "periodic", "periodic", "periodic"};
+     * std::vector<double> angles = {90.0, 90.0, 120.0};
+     * ComputationBox<double> cb(nx, lx, bc, angles);
+     * @endcode
+     */
+    ComputationBox(std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+                   std::vector<double> angles, const double* mask=nullptr);
 
     /**
      * @brief Virtual destructor.
@@ -237,6 +358,42 @@ public:
     BoundaryCondition get_boundary_condition(int i);
 
     /**
+     * @brief Get lattice angles in radians.
+     * @return Vector [alpha, beta, gamma] in radians
+     */
+    std::vector<double> get_angles();
+
+    /**
+     * @brief Get lattice angles in degrees.
+     * @return Vector [alpha, beta, gamma] in degrees
+     */
+    std::vector<double> get_angles_degrees();
+
+    /**
+     * @brief Get lattice vectors (3x3 matrix).
+     * @return Array [a_x, a_y, a_z, b_x, b_y, b_z, c_x, c_y, c_z] (column-major)
+     */
+    const std::array<double, 9>& get_lattice_vec();
+
+    /**
+     * @brief Get reciprocal lattice vectors (3x3 matrix).
+     * @return Array [a*_x, a*_y, a*_z, b*_x, b*_y, b*_z, c*_x, c*_y, c*_z] (column-major)
+     */
+    const std::array<double, 9>& get_recip_vec();
+
+    /**
+     * @brief Get reciprocal metric tensor.
+     * @return Array [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22] (symmetric)
+     */
+    const std::array<double, 6>& get_recip_metric();
+
+    /**
+     * @brief Check if the lattice is orthogonal.
+     * @return True if all angles are 90°, false otherwise
+     */
+    bool is_orthogonal();
+
+    /**
      * @brief Compute volume integral of a field.
      *
      * Computes: integral(g) = sum_i g[i] * dV[i]
@@ -312,16 +469,31 @@ public:
     void zero_mean(T *g);
 
     /**
-     * @brief Update box lengths (for box relaxation in SCFT).
+     * @brief Update lattice parameters - box lengths only (for box relaxation in SCFT).
      *
-     * Updates lx, dx, dv, and volume. Used when optimizing box dimensions
-     * to minimize free energy.
+     * Updates lx, dx, dv, volume, and recomputes lattice/reciprocal vectors.
+     * Used when optimizing box dimensions to minimize free energy.
      *
      * @param new_lx New box lengths [Lx, Ly, Lz]
      *
-     * @note After calling set_lx(), you should also update the Laplacian
+     * @note After calling set_lattice_parameters(), you should also update the Laplacian
      *       operator in the propagator solver.
      */
-    virtual void set_lx(std::vector<double> new_lx);
+    virtual void set_lattice_parameters(std::vector<double> new_lx);
+
+    /**
+     * @brief Update lattice parameters - box lengths and angles (for box relaxation in SCFT).
+     *
+     * Updates lx, angles, dx, dv, volume, lattice vectors, reciprocal
+     * vectors, and metric tensor. Used when optimizing both box dimensions
+     * and angles to minimize free energy.
+     *
+     * @param new_lx     New box lengths [Lx, Ly, Lz]
+     * @param new_angles New lattice angles [alpha, beta, gamma] in DEGREES
+     *
+     * @note After calling set_lattice_parameters(), you should also update the Laplacian
+     *       operator in the propagator solver.
+     */
+    virtual void set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles);
 };
 #endif

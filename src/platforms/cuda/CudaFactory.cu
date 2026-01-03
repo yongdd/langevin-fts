@@ -82,6 +82,13 @@ ComputationBox<T>* CudaFactory<T>::create_computation_box(
     return new CudaComputationBox<T>(nx, lx, bc, mask);
 }
 template <typename T>
+ComputationBox<T>* CudaFactory<T>::create_computation_box(
+    std::vector<int> nx, std::vector<double> lx, std::vector<std::string> bc,
+    std::vector<double> angles, const double* mask)
+{
+    return new CudaComputationBox<T>(nx, lx, bc, angles, mask);
+}
+template <typename T>
 Molecules* CudaFactory<T>::create_molecules_information(
     std::string chain_model, double ds, std::map<std::string, double> bond_lengths) 
 {

@@ -121,10 +121,11 @@ protected:
     /**
      * @brief Stress contributions from each polymer.
      *
-     * dq_dl[p][i] = d(ln Q_p)/d(L_i) where L_i is box length in direction i.
+     * dq_dl[p][i] = d(ln Q_p)/d(ε_ij) where ε_ij is strain component.
+     * Layout: [xx, yy, zz, xy, xz, yz] for full stress tensor.
      * Used for box relaxation in SCFT.
      */
-    std::vector<std::array<T,3>> dq_dl;
+    std::vector<std::array<T,6>> dq_dl;
 
 public:
     /**
@@ -157,7 +158,7 @@ public:
     /**
      * @brief Update Laplacian operator after box size change.
      *
-     * Must be called after ComputationBox::set_lx() to update the
+     * Must be called after ComputationBox::set_lattice_parameters() to update the
      * Fourier-space Laplacian for the new box dimensions.
      */
     virtual void update_laplacian_operator() = 0;

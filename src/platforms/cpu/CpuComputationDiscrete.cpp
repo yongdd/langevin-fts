@@ -960,15 +960,16 @@ void CpuComputationDiscrete<T>::compute_stress()
         // if constexpr (std::is_same<T, std::complex<double>>::value)
         //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
+        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl;
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 
         // Reset stress map
         for(const auto& item: phi_block)
         {
-            for(int d=0; d<3; d++)
+            for(int d=0; d<N_STRESS; d++)
                 block_dq_dl[item.first][d] = 0.0;
         }
 
@@ -1006,7 +1007,7 @@ void CpuComputationDiscrete<T>::compute_stress()
             T *q_segment_2;
 
             bool is_half_bond_length;
-            std::array<T,3> _block_dq_dl = block_dq_dl[key];
+            std::array<T,6> _block_dq_dl = block_dq_dl[key];
 
             // Example: N==5
             // n:          0  1  2  3  4  5
@@ -1073,7 +1074,7 @@ void CpuComputationDiscrete<T>::compute_stress()
                 std::cout << b << " " << key_left << ", " << key_right << "," << n << ",x: " << segment_stress[0]*((T)n_repeated) << ", " << is_half_bond_length << std::endl;
                 #endif
 
-                for(int d=0; d<DIM; d++)
+                for(int d=0; d<N_STRESS; d++)
                     _block_dq_dl[d] += segment_stress[d]*((T)n_repeated);
 
                 // std::cout << "n: " << n << ", " << is_half_bond_length << ", " << segment_stress[0] << std::endl;
@@ -1085,7 +1086,7 @@ void CpuComputationDiscrete<T>::compute_stress()
         // Compute total stress
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] = 0.0;
         for(const auto& block: phi_block)
         {
@@ -1094,12 +1095,27 @@ void CpuComputationDiscrete<T>::compute_stress()
             std::string key_left  = std::get<1>(key);
             std::string key_right = std::get<2>(key);
 
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }
-        for(int p=0; p<n_polymer_types; p++){
+        // Normalize stress components
+        for(int p=0; p<n_polymer_types; p++)
+        {
+            // Diagonal components: xx, yy, zz
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_ds();
+            // Cross-term components for 3D: xy, xz, yz
+            if (DIM == 3)
+            {
+                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+            }
+            // Cross-term component for 2D: yz
+            else if (DIM == 2)
+            {
+                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+            }
         }
     }
     catch(std::exception& exc)

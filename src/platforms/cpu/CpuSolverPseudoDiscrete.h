@@ -163,7 +163,7 @@ public:
      * @param monomer_type       Monomer type
      * @param is_half_bond_length True for half-bond contribution at ends
      *
-     * @return Stress components [σ_xx, σ_yy, σ_zz]
+     * @return Stress components [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
      */
     std::vector<T> compute_single_segment_stress(
                 T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) override;

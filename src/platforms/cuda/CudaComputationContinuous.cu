@@ -39,6 +39,7 @@
  */
 
 #include <complex>
+#include <cmath>
 #include <omp.h>
 #include <cuComplex.h>
 #include <cufft.h>
@@ -836,13 +837,14 @@ void CudaComputationContinuous<T>::compute_stress()
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
 
-        std::map<std::tuple<int, std::string, std::string>, std::array<T,3>> block_dq_dl[n_streams];
+        const int N_STRESS = 6;
+        std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>> block_dq_dl[n_streams];
 
         // Reset stress map
         for(const auto& item: d_phi_block)
         {
             for(int i=0; i<n_streams; i++)
-                for(int d=0; d<3; d++)
+                for(int d=0; d<N_STRESS; d++)
                     block_dq_dl[i][item.first][d] = 0.0;
         }
 
@@ -877,13 +879,15 @@ void CudaComputationContinuous<T>::compute_stress()
             CuDeviceData<T>** d_q_1 = d_propagator[key_left];     // dependency v
             CuDeviceData<T>** d_q_2 = d_propagator[key_right];    // dependency u
 
-            std::array<T,3> _block_dq_dl;
-            for(int i=0; i<3; i++)
+            std::array<T,N_STRESS> _block_dq_dl;
+            for(int i=0; i<N_STRESS; i++)
                 _block_dq_dl[i] = 0.0;
-            
+
+            // Number of stress components for this dimension: 3D->6, 2D->3, 1D->1
+            const int N_STRESS_DIM = (DIM == 3) ? 6 : ((DIM == 2) ? 3 : 1);
             CuDeviceData<T> *d_segment_stress;
-            T segment_stress[DIM];
-            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*3));
+            T segment_stress[N_STRESS_DIM];
+            gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS_DIM));
                 
             int prev, next;
             prev = 0;
@@ -925,8 +929,8 @@ void CudaComputationContinuous<T>::compute_stress()
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][1], kernel_done, 0));
                 gpu_error_check(cudaStreamWaitEvent(streams[STREAM][0], memcpy_done, 0));
 
-                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*DIM, cudaMemcpyDeviceToHost));
-                for(int d=0; d<DIM; d++)
+                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS_DIM, cudaMemcpyDeviceToHost));
+                for(int d=0; d<N_STRESS_DIM; d++)
                     _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
 
                 // std::cout << key_left << ", "  << key_right << ", " << n << ", " << segment_stress[0] << ", " << segment_stress[1] << ", " << segment_stress[2] << std::endl;
@@ -941,7 +945,7 @@ void CudaComputationContinuous<T>::compute_stress()
             // std::cout << p << ", " << key_left << ", " << key_right << ", " << N << ", " << N_LEFT << std::endl;
             // std::cout << "STREAM, _block_dq_dl[0] " << STREAM  << ", " << _block_dq_dl[0] << std::endl;
 
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS_DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
 
             cudaFree(d_segment_stress);
@@ -949,9 +953,11 @@ void CudaComputationContinuous<T>::compute_stress()
         gpu_error_check(cudaDeviceSynchronize());
 
         // Compute total stress
+        // N_STRESS_TOTAL: 3D->6, 2D->3, 1D->1
+        const int N_STRESS_TOTAL = (DIM == 3) ? 6 : ((DIM == 2) ? 3 : 1);
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
-            for(int d=0; d<DIM; d++)
+            for(int d=0; d<N_STRESS_TOTAL; d++)
                 this->dq_dl[p][d] = 0.0;
         for(const auto& d_block: d_phi_block)
         {
@@ -961,13 +967,26 @@ void CudaComputationContinuous<T>::compute_stress()
             std::string key_right = std::get<2>(key);
 
             for(int i=0; i<n_streams; i++)
-                for(int d=0; d<DIM; d++)
+                for(int d=0; d<N_STRESS_TOTAL; d++)
                     this->dq_dl[p][d] += block_dq_dl[i][key][d];
         }
         for(int p=0; p<n_polymer_types; p++)
         {
+            // Diagonal components: xx, yy, zz
             for(int d=0; d<DIM; d++)
                 this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_ds();
+            // Cross-term components for 3D: xy, xz, yz
+            if (DIM == 3)
+            {
+                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M/this->molecules->get_ds();
+            }
+            // Cross-term component for 2D: yz
+            else if (DIM == 2)
+            {
+                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_ds();
+            }
         }
     }
     catch(std::exception& exc)
