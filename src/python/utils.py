@@ -4,9 +4,13 @@ This module provides common utility functions and constants used across
 the SCFT and LFTS simulation classes to reduce code duplication.
 """
 
+import functools
 import logging
+import os
 import re
-from typing import Dict, List, Any, Optional, Tuple
+import sys
+import warnings
+from typing import Dict, List, Any, Optional, Tuple, Callable
 
 import numpy as np
 import networkx as nx
@@ -16,6 +20,189 @@ from .validation import ValidationError
 
 # Module-level logger
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+
+def configure_logging(
+    level: Optional[str] = None,
+    format_string: Optional[str] = None,
+    stream: Any = None
+) -> None:
+    """Configure logging for the polymerfts package.
+
+    Sets up logging based on parameters, environment variables, or defaults.
+    Priority: parameters > environment variables > defaults.
+
+    Parameters
+    ----------
+    level : str, optional
+        Logging level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
+        If not specified, reads from POLYMERFTS_LOG_LEVEL env var,
+        defaults to "WARNING".
+    format_string : str, optional
+        Log message format string.
+        If not specified, reads from POLYMERFTS_LOG_FORMAT env var.
+    stream : file-like, optional
+        Output stream. Defaults to sys.stderr.
+
+    Examples
+    --------
+    >>> from polymerfts.utils import configure_logging
+    >>> configure_logging(level="DEBUG")  # Enable debug output
+    >>> configure_logging(level="ERROR")  # Only show errors
+
+    >>> # Or via environment variable before running
+    >>> # export POLYMERFTS_LOG_LEVEL=DEBUG
+    """
+    # Determine level
+    if level is None:
+        level = os.environ.get("POLYMERFTS_LOG_LEVEL", "WARNING")
+
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+
+    if level.upper() not in level_map:
+        raise ValueError(
+            f"Invalid log level: {level}. "
+            f"Choose from: {', '.join(level_map.keys())}"
+        )
+
+    log_level = level_map[level.upper()]
+
+    # Determine format
+    if format_string is None:
+        format_string = os.environ.get(
+            "POLYMERFTS_LOG_FORMAT",
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
+    # Configure root logger for polymerfts
+    pkg_logger = logging.getLogger("polymerfts")
+    pkg_logger.setLevel(log_level)
+
+    # Remove existing handlers
+    pkg_logger.handlers.clear()
+
+    # Add new handler
+    handler = logging.StreamHandler(stream or sys.stderr)
+    handler.setLevel(log_level)
+    handler.setFormatter(logging.Formatter(format_string))
+    pkg_logger.addHandler(handler)
+
+
+def get_verbose_level(params: Dict[str, Any]) -> int:
+    """Get verbose level from params dict.
+
+    Parameters
+    ----------
+    params : dict
+        Simulation parameters.
+
+    Returns
+    -------
+    int
+        Verbose level (0=quiet, 1=normal, 2=verbose).
+    """
+    return params.get("verbose_level", 1)
+
+
+# =============================================================================
+# Deprecation Warnings
+# =============================================================================
+
+def deprecated(
+    reason: str = "",
+    version: Optional[str] = None,
+    replacement: Optional[str] = None
+) -> Callable:
+    """Decorator to mark functions/methods as deprecated.
+
+    Parameters
+    ----------
+    reason : str
+        Explanation for why it's deprecated.
+    version : str, optional
+        Version when it will be removed.
+    replacement : str, optional
+        Name of replacement function/method.
+
+    Returns
+    -------
+    Callable
+        Decorated function that emits deprecation warning.
+
+    Examples
+    --------
+    >>> @deprecated(reason="Use new_function instead", version="2.0")
+    ... def old_function():
+    ...     pass
+
+    >>> @deprecated(replacement="SCFT.run")
+    ... def legacy_run():
+    ...     pass
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            msg = f"{func.__name__} is deprecated"
+            if reason:
+                msg += f": {reason}"
+            if replacement:
+                msg += f". Use {replacement} instead"
+            if version:
+                msg += f". Will be removed in version {version}"
+
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
+            return func(*args, **kwargs)
+
+        # Update docstring
+        doc = func.__doc__ or ""
+        deprecation_note = f"\n\n.. deprecated::\n   {reason or 'This function is deprecated.'}"
+        if replacement:
+            deprecation_note += f"\n   Use :func:`{replacement}` instead."
+        wrapper.__doc__ = doc + deprecation_note
+
+        return wrapper
+    return decorator
+
+
+def warn_deprecated_param(
+    param_name: str,
+    replacement: Optional[str] = None,
+    version: Optional[str] = None
+) -> None:
+    """Emit a deprecation warning for a parameter.
+
+    Parameters
+    ----------
+    param_name : str
+        Name of the deprecated parameter.
+    replacement : str, optional
+        Name of replacement parameter.
+    version : str, optional
+        Version when it will be removed.
+
+    Examples
+    --------
+    >>> if "old_param" in params:
+    ...     warn_deprecated_param("old_param", replacement="new_param")
+    ...     params["new_param"] = params["old_param"]
+    """
+    msg = f"Parameter '{param_name}' is deprecated"
+    if replacement:
+        msg += f". Use '{replacement}' instead"
+    if version:
+        msg += f". Will be removed in version {version}"
+
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
 # Default colors for monomer visualization
 DEFAULT_MONOMER_COLORS: List[str] = [

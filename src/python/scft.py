@@ -9,6 +9,8 @@ import json
 import yaml
 import copy
 import itertools
+from pathlib import Path
+from typing import Dict, Any, Optional, Callable, Union
 import networkx as nx
 import matplotlib.pyplot as plt
 import scipy.io
@@ -18,6 +20,8 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .space_group import SpaceGroup
 from .propagator_solver import PropagatorSolver
 from .validation import validate_scft_params, ValidationError
+from .config import load_config
+from .result import SCFTResult, IterationInfo
 from .utils import (
     create_monomer_color_dict,
     draw_polymer_architecture,
@@ -26,6 +30,7 @@ from .utils import (
     process_polymer_blocks,
     process_random_copolymer,
     DEFAULT_MONOMER_COLORS,
+    configure_logging,
 )
 
 # Module-level logger
@@ -861,6 +866,97 @@ class SCFT:
         self.max_iter = max_iter
         self.tolerance = tolerance
 
+        # For context manager
+        self._is_open = True
+
+    # =========================================================================
+    # Class Methods
+    # =========================================================================
+
+    @classmethod
+    def from_file(cls, path: Union[str, Path], **overrides) -> "SCFT":
+        """Create SCFT instance from configuration file.
+
+        Loads parameters from YAML or JSON configuration file and
+        creates an SCFT instance. Supports parameter overrides.
+
+        Parameters
+        ----------
+        path : str or Path
+            Path to configuration file (.yaml, .yml, or .json).
+        **overrides : Any
+            Parameter values to override from the file.
+
+        Returns
+        -------
+        SCFT
+            Configured SCFT instance.
+
+        Examples
+        --------
+        >>> calc = SCFT.from_file("simulation.yaml")
+        >>> calc.run(initial_fields)
+
+        >>> # Override specific parameters
+        >>> calc = SCFT.from_file("base.yaml", max_iter=500, tolerance=1e-7)
+        """
+        params = load_config(path)
+        params.update(overrides)
+        return cls(params)
+
+    # =========================================================================
+    # Context Manager Protocol
+    # =========================================================================
+
+    def __enter__(self) -> "SCFT":
+        """Enter context manager.
+
+        Returns
+        -------
+        SCFT
+            Self for use in with statement.
+
+        Examples
+        --------
+        >>> with SCFT(params) as calc:
+        ...     calc.run(initial_fields)
+        ...     # Resources automatically cleaned up on exit
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        """Exit context manager, cleaning up resources.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type if an exception occurred.
+        exc_val : Exception or None
+            Exception value if an exception occurred.
+        exc_tb : traceback or None
+            Exception traceback if an exception occurred.
+
+        Returns
+        -------
+        bool
+            False to propagate any exceptions.
+        """
+        self.close()
+        return False
+
+    def close(self) -> None:
+        """Release resources held by the SCFT instance.
+
+        Call this method when done with the SCFT instance if not
+        using the context manager. Safe to call multiple times.
+        """
+        if self._is_open:
+            # Release propagator solver resources
+            if hasattr(self, 'prop_solver'):
+                # PropagatorSolver cleanup if needed
+                pass
+            self._is_open = False
+
     def compute_concentrations(self, w):
         """Compute monomer concentration fields for given potential fields.
 
@@ -1128,7 +1224,13 @@ class SCFT:
         else:
             raise("Invalid output file extension.")
 
-    def run(self, initial_fields, q_init=None):
+    def run(
+        self,
+        initial_fields: Dict[str, np.ndarray],
+        q_init: Optional[Dict] = None,
+        on_iteration: Optional[Callable[[IterationInfo], Optional[bool]]] = None,
+        return_result: bool = False
+    ) -> Optional[SCFTResult]:
         """Run SCFT iteration to find saddle point of the Hamiltonian.
 
         Iteratively solves the self-consistent field equations until convergence
@@ -1152,6 +1254,14 @@ class SCFT:
             Initial propagator values for grafted polymers (default: None).
             Format: {propagator_key: value_array}. Rarely used; for advanced
             applications like brush layers.
+        on_iteration : callable, optional
+            Callback function called after each iteration.
+            Signature: on_iteration(info: IterationInfo) -> Optional[bool]
+            If callback returns False, iteration stops early.
+            Use for monitoring, checkpointing, or custom stopping criteria.
+        return_result : bool, optional
+            If True, return an SCFTResult object (default: False).
+            For backward compatibility, results are also stored as attributes.
 
         Attributes Set
         --------------
@@ -1430,6 +1540,25 @@ class SCFT:
                     print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level))
 
+            # Call progress callback if provided
+            if on_iteration is not None:
+                info = IterationInfo(
+                    iteration=iter,
+                    error_level=error_level,
+                    energy=energy_total,
+                    mass_error=mass_error,
+                    partition_functions=total_partitions,
+                    lx=list(self.prop_solver.get_lx()) if self.box_is_altering else None,
+                    angles=list(self.prop_solver.get_angles_degrees()) if (
+                        self.box_is_altering and hasattr(self, 'angles_reduced_indices')
+                        and len(self.angles_reduced_indices) > 0
+                    ) else None
+                )
+                callback_result = on_iteration(info)
+                if callback_result is False:
+                    logger.info(f"Iteration stopped by callback at iteration {iter}")
+                    break
+
             # Conditions to end the iteration
             if error_level < self.tolerance:
                 break
@@ -1551,17 +1680,29 @@ class SCFT:
         # Store phi and w
         self.phi = phi
         self.w = w
-        
+
         # Store free energy
         self.free_energy = energy_total
         self.error_level = error_level
         self.iter = iter
 
-    # def get_concentrations(self,):
-    #     return self.phi
-    
-    # def get_fields(self,):
-    #     w_dict = {}
-    #     for idx, monomer_type in enumerate(self.monomer_types):
-    #         w_dict[monomer_type] = self.w[idx,:]
-    #     return w_dict
+        # Return SCFTResult if requested
+        if return_result:
+            return SCFTResult(
+                converged=error_level < self.tolerance,
+                free_energy=energy_total,
+                error_level=error_level,
+                iterations=iter,
+                phi=phi,
+                w=w,
+                partition_functions=total_partitions,
+                lx=list(self.prop_solver.get_lx()),
+                nx=list(self.prop_solver.nx),
+                monomer_types=self.monomer_types,
+                params=self.params,
+                stress=stress_array if self.box_is_altering else None,
+                angles=list(self.prop_solver.get_angles_degrees()) if (
+                    hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0
+                ) else None
+            )
+        return None
