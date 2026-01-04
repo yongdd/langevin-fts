@@ -980,10 +980,11 @@ void CudaComputationDiscrete<T>::compute_stress()
             CuDeviceData<T> *d_propagator_left;
             CuDeviceData<T> *d_propagator_right;
 
-            // Number of stress components for this dimension: 3D->6, 2D->3, 1D->1
-            const int N_STRESS_DIM = (DIM == 3) ? 6 : ((DIM == 2) ? 3 : 1);
+            // Number of stress components: 3D orthogonal->3, 3D non-orthogonal->6, 2D->3, 1D->1
+            const bool is_ortho = this->cb->is_orthogonal();
+            const int N_STRESS_DIM = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
             CuDeviceData<T> *d_segment_stress;
-            T segment_stress[N_STRESS_DIM];
+            T segment_stress[6];  // Max size to avoid VLA issues
             gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS_DIM));
 
             int prev, next;
@@ -1065,8 +1066,9 @@ void CudaComputationDiscrete<T>::compute_stress()
         gpu_error_check(cudaDeviceSynchronize());
 
         // Compute total stress
-        // N_STRESS_TOTAL: 3D->6, 2D->3, 1D->1
-        const int N_STRESS_TOTAL = (DIM == 3) ? 6 : ((DIM == 2) ? 3 : 1);
+        // N_STRESS_TOTAL: 3D orthogonal->3, 3D non-orthogonal->6, 2D->3, 1D->1
+        const bool is_ortho = this->cb->is_orthogonal();
+        const int N_STRESS_TOTAL = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
         int n_polymer_types = this->molecules->get_n_polymer_types();
         for(int p=0; p<n_polymer_types; p++)
             for(int d=0; d<N_STRESS_TOTAL; d++)
