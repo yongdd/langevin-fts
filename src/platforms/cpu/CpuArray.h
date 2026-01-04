@@ -14,6 +14,7 @@
 #define CPU_ARRAY_H_
 
 #include <vector>
+#include <memory>
 
 #include "Exception.h"
 #include "Array.h"
@@ -27,15 +28,15 @@
  *
  * **Memory Management:**
  *
- * - Allocates memory using new[] in constructor
- * - Frees memory using delete[] in destructor
+ * - Uses std::unique_ptr<double[]> for automatic memory management
+ * - RAII ensures proper cleanup even on exceptions
  * - Copy operations perform deep copies
  */
 class CpuArray : public Array
 {
 
 private:
-    double *data = nullptr;  ///< Pointer to array data in host memory
+    std::unique_ptr<double[]> data_;  ///< Smart pointer to array data in host memory
 
 public:
     /**

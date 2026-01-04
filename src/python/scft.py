@@ -13,9 +13,10 @@ import matplotlib.pyplot as plt
 import scipy.io
 
 from . import _core
-from .polymer_field_theory import *
-from .space_group import *
+from .polymer_field_theory import SymmetricPolymerTheory
+from .space_group import SpaceGroup
 from .propagator_solver import PropagatorSolver
+from .validation import validate_scft_params, ValidationError
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -495,6 +496,9 @@ class SCFT:
     - examples/scft/phases/ - Various morphologies
     """
     def __init__(self, params): #, phi_target=None, mask=None):
+
+        # Validate input parameters
+        validate_scft_params(params)
 
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))

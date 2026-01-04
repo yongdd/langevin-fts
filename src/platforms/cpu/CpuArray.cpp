@@ -30,36 +30,28 @@
  * @param new_size Number of elements to allocate
  */
 CpuArray::CpuArray(unsigned new_size)
+    : data_(std::make_unique<double[]>(new_size))
 {
-    this->data = new double[new_size];
     this->size = new_size;
 }
 CpuArray::CpuArray(double* new_data, unsigned int new_size)
+    : data_(std::make_unique<double[]>(new_size))
 {
-    this->data = new double[new_size];
     this->size = new_size;
     for(unsigned int i=0; i<new_size; i++)
-        this->data[i] = new_data[i];
+        this->data_[i] = new_data[i];
 }
 CpuArray::CpuArray(const Array& array)
+    : data_(std::make_unique<double[]>(array.get_size()))
 {
     unsigned int new_size = array.get_size();
     double *new_data = array.get_ptr();
 
-    this->data = new double[new_size];
     this->size = new_size;
     for(unsigned int i=0; i<size; i++)
-        this->data[i] = new_data[i];
+        this->data_[i] = new_data[i];
 }
-CpuArray::~CpuArray()
-{
-    if (this->data != nullptr)
-    {
-        delete [] this->data;
-        this->size = 0;
-        // std::cout << "Memory has been deallocated" << std::endl;
-    }
-}
+CpuArray::~CpuArray() = default;
 void CpuArray::operator=(const Array& arr)
 {
     unsigned int arr_size = arr.get_size();
@@ -72,7 +64,7 @@ void CpuArray::operator=(const Array& arr)
             + std::to_string(arr_size) + ") do not match.");
     }
     for(unsigned int i=0; i<size; i++)
-        this->data[i] = arr_data[i];
+        this->data_[i] = arr_data[i];
 }
 void CpuArray::set_data(double * arr_data, unsigned int arr_size)
 {
@@ -83,18 +75,18 @@ void CpuArray::set_data(double * arr_data, unsigned int arr_size)
             + std::to_string(arr_size) + ") do not match.");
     }
     for(unsigned int i=0; i<size; i++)
-        this->data[i] = arr_data[i];
+        this->data_[i] = arr_data[i];
 }
 std::vector<double> CpuArray::to_vector() const
 {
     std::vector<double> vec(size);
     for(unsigned int i=0; i<size; i++)
-        vec[i] = this->data[i];
-    return std::move(vec);
+        vec[i] = this->data_[i];
+    return vec;
 }
 double* CpuArray::get_ptr() const
 {
-    return this->data;
+    return this->data_.get();
 }
 unsigned int CpuArray::get_size() const
 {
@@ -104,7 +96,7 @@ double CpuArray::operator[](unsigned int i) const
 {
     if (size <= i)
         throw_with_line_number("Index [" + std::to_string(i) + "] is out of bound.");
-    return data[i];
+    return data_[i];
 }
 
 // Arithmetic operations with two arrays
@@ -124,7 +116,7 @@ void CpuArray::add(const Array& src_1, const Array& src_2)
     }
 
     for (unsigned int i=0; i<size; i++)
-        data[i] = src1_data[i] + src2_data[i];
+        data_[i] = src1_data[i] + src2_data[i];
 }
 void CpuArray::subtract(const Array& src_1, const Array& src_2)
 {
@@ -142,7 +134,7 @@ void CpuArray::subtract(const Array& src_1, const Array& src_2)
     }
 
     for (unsigned int i=0; i<size; i++)
-        data[i] = src1_data[i] - src2_data[i];
+        data_[i] = src1_data[i] - src2_data[i];
 }
 void CpuArray::multiply(const Array& src_1, const Array& src_2)
 {
@@ -160,7 +152,7 @@ void CpuArray::multiply(const Array& src_1, const Array& src_2)
     }
 
     for (unsigned int i=0; i<size; i++)
-        data[i] = src1_data[i] * src2_data[i];
+        data_[i] = src1_data[i] * src2_data[i];
 }
 void CpuArray::divide(const Array& src_1, const Array& src_2)
 {
@@ -178,7 +170,7 @@ void CpuArray::divide(const Array& src_1, const Array& src_2)
     }
 
     for (unsigned int i=0; i<size; i++)
-        data[i] = src1_data[i] / src2_data[i];
+        data_[i] = src1_data[i] / src2_data[i];
 }
 // Arithmetic operations with an array and a float number
 void CpuArray::linear_scaling(const Array& src, const double a, const double b)
@@ -194,5 +186,5 @@ void CpuArray::linear_scaling(const Array& src, const double a, const double b)
     }
 
     for (unsigned int i=0; i<size; i++)
-        data[i] = a*src_data[i] + b;
+        data_[i] = a*src_data[i] + b;
 }

@@ -32,6 +32,52 @@
 #include <cuda_runtime.h>
 #include "CudaCommon.h"
 
+//------------------------------------------------------------------------------
+// Type-safe CUDA memory allocation functions
+//------------------------------------------------------------------------------
+
+/**
+ * @brief Type-safe wrapper for cudaMalloc.
+ *
+ * Eliminates the need for C-style (void**) casts when allocating device memory.
+ *
+ * @tparam T Element type
+ * @param[out] ptr Pointer to receive the allocated memory
+ * @param[in] count Number of elements of type T to allocate
+ *
+ * @example
+ * @code
+ * double* d_array;
+ * cuda_malloc(&d_array, 1000);  // Allocates 1000 doubles
+ * @endcode
+ */
+template<typename T>
+inline void cuda_malloc(T** ptr, size_t count)
+{
+    gpu_error_check(cudaMalloc(reinterpret_cast<void**>(ptr), count * sizeof(T)));
+}
+
+/**
+ * @brief Type-safe wrapper for cudaMallocHost (pinned memory).
+ *
+ * Eliminates the need for C-style (void**) casts when allocating pinned host memory.
+ *
+ * @tparam T Element type
+ * @param[out] ptr Pointer to receive the allocated memory
+ * @param[in] count Number of elements of type T to allocate
+ *
+ * @example
+ * @code
+ * double* h_pinned;
+ * cuda_malloc_host(&h_pinned, 1000);  // Allocates 1000 doubles in pinned memory
+ * @endcode
+ */
+template<typename T>
+inline void cuda_malloc_host(T** ptr, size_t count)
+{
+    gpu_error_check(cudaMallocHost(reinterpret_cast<void**>(ptr), count * sizeof(T)));
+}
+
 /**
  * @class CudaDeviceMemory
  * @brief RAII wrapper for CUDA device memory.
@@ -63,7 +109,7 @@ public:
     {
         if (n > 0)
         {
-            gpu_error_check(cudaMalloc((void**)&ptr_, n * sizeof(T)));
+            cuda_malloc(&ptr_, n);
         }
     }
 
@@ -151,7 +197,7 @@ public:
         size_ = n;
         if (n > 0)
         {
-            gpu_error_check(cudaMalloc((void**)&ptr_, n * sizeof(T)));
+            cuda_malloc(&ptr_, n);
         }
     }
 };
@@ -187,7 +233,7 @@ public:
     {
         if (n > 0)
         {
-            gpu_error_check(cudaMallocHost((void**)&ptr_, n * sizeof(T)));
+            cuda_malloc_host(&ptr_, n);
         }
     }
 
@@ -283,7 +329,7 @@ public:
         size_ = n;
         if (n > 0)
         {
-            gpu_error_check(cudaMallocHost((void**)&ptr_, n * sizeof(T)));
+            cuda_malloc_host(&ptr_, n);
         }
     }
 };
