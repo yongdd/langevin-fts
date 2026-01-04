@@ -83,6 +83,7 @@ using overload_cast_ = py::detail::overload_cast_impl<Args...>;
  * - get_dv(): Volume element
  * - get_total_grid(): Total grid points
  * - get_volume(): Total box volume
+ * - set_lx(): Update box dimensions
  * - set_lattice_parameters(): Update box dimensions and angles
  * - integral(): Volume integral of field
  * - inner_product(): Inner product of two fields
@@ -111,7 +112,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_angles_degrees", &ComputationBox<T>::get_angles_degrees)
         .def("is_orthogonal", &ComputationBox<T>::is_orthogonal)
         .def("get_recip_metric", &ComputationBox<T>::get_recip_metric)
-        .def("set_lattice_parameters", overload_cast_<std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
+        .def("set_lx", &ComputationBox<T>::set_lx)
         .def("set_lattice_parameters", overload_cast_<std::vector<double>, std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
         .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
         {

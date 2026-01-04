@@ -15,6 +15,7 @@ import scipy.io
 from . import _core
 from .polymer_field_theory import *
 from .space_group import *
+from .propagator_solver import PropagatorSolver
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -514,17 +515,14 @@ class SCFT:
         else:
             platform = avail_platforms[0]
 
-        # (C++ class) Create a factory for given platform and chain_model
-        if "reduce_memory_usage" in params and platform == "cuda":
-            factory = _core.PlatformSelector.create_factory(platform, params["reduce_memory_usage"], "real")
-        else:
-            factory = _core.PlatformSelector.create_factory(platform, False, "real")
-        factory.display_info()
+        # Get reduce_memory_usage option
+        reduce_memory_usage = params.get("reduce_memory_usage", False) if platform == "cuda" else False
 
-        # (C++ class) Computation box
+        # Get boundary conditions
         bc = params.get("bc", None)
-        angles = params.get("angles", None)
-        cb = factory.create_computation_box(params["nx"], params["lx"], angles=angles, bc=bc)
+        if bc is None:
+            # Default to periodic boundaries
+            bc = ["periodic"] * (2 * len(params["nx"]))
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
@@ -690,24 +688,53 @@ class SCFT:
             nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
             plt.savefig("polymer_%01d.png" % (idx))
 
-        # (C++ class) Molecules list
-        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], self.segment_lengths)
+        # Get angles if provided
+        angles = params.get("angles", None)
+
+        # Create PropagatorSolver instance
+        self.prop_solver = PropagatorSolver(
+            nx=params["nx"],
+            lx=params["lx"],
+            ds=params["ds"],
+            bond_lengths=self.segment_lengths,
+            bc=bc,
+            chain_model=params["chain_model"],
+            method="pseudospectral",
+            platform=platform,
+            reduce_memory_usage=reduce_memory_usage,
+        )
+
+        # Set angles if provided (after initialization, before adding polymers)
+        if angles is not None:
+            # Re-create with angles by accessing internal factory
+            self.prop_solver._computation_box = self.prop_solver._factory.create_computation_box(
+                params["nx"], params["lx"], angles=angles, bc=bc
+            )
 
         # Add polymer chains
         for polymer in self.distinct_polymers:
             if "initial_conditions" in polymer:
-                molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"], polymer["initial_conditions"])
+                self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"], polymer["initial_conditions"])
             else:
-                molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
+                self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
-        # (C++ class) Propagator Computation Optimizer
+        # Initialize the solver (creates propagator optimizer and propagator computation)
+        self.prop_solver._initialize_solver()
+
+        # Set aggregate_propagator_computation option
         if "aggregate_propagator_computation" in params:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, params["aggregate_propagator_computation"])
-        else:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
+            aggregate = params["aggregate_propagator_computation"]
+            # Recreate propagator optimizer with the specified option
+            self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
+                self.prop_solver._molecules, aggregate
+            )
+            # Recreate propagator computation with the new optimizer
+            self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
+                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
+            )
 
-        # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer)
+        # Display factory info
+        self.prop_solver._factory.display_info()
 
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
@@ -840,10 +867,10 @@ class SCFT:
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
             
-        # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point        
+        # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point
         if params["optimizer"]["name"] == "am":
-            self.field_optimizer = factory.create_anderson_mixing(n_var,
+            self.field_optimizer = self.prop_solver.create_anderson_mixing(n_var,
                 params["optimizer"]["max_hist"],     # maximum number of history
                 params["optimizer"]["start_error"],  # when switch to AM from simple mixing
                 params["optimizer"]["mix_min"],      # minimum mixing rate of simple mixing
@@ -871,11 +898,11 @@ class SCFT:
 
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Box Dimension: %d" % (cb.get_dim()))
-        print("Nx:", cb.get_nx())
-        print("Lx:", cb.get_lx())
-        print("dx:", cb.get_dx())
-        print("Volume: %f" % (cb.get_volume()))
+        print("Box Dimension: %d" % (self.prop_solver.dim))
+        print("Nx:", self.prop_solver.nx)
+        print("Lx:", self.prop_solver.get_lx())
+        print("dx:", self.prop_solver.get_dx())
+        print("Volume: %f" % (self.prop_solver.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
         print("Segment lengths:\n\t", list(self.segment_lengths.items()))
@@ -889,15 +916,15 @@ class SCFT:
 
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        for p in range(molecules.get_n_polymer_types()):
+        for p in range(self.prop_solver.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (molecules.get_polymer(p).get_volume_fraction(),
-                 molecules.get_polymer(p).get_alpha(),
-                 molecules.get_polymer(p).get_n_segment_total()))
+                (self.prop_solver.get_polymer(p).get_volume_fraction(),
+                 self.prop_solver.get_polymer(p).get_alpha(),
+                 self.prop_solver.get_polymer(p).get_n_segment_total()))
 
-        propagator_computation_optimizer.display_blocks()
-        propagator_computation_optimizer.display_propagators()
+        self.prop_solver._propagator_optimizer.display_blocks()
+        self.prop_solver._propagator_optimizer.display_propagators()
 
         #  Save internal variables
         self.params = params
@@ -907,11 +934,6 @@ class SCFT:
 
         self.max_iter = max_iter
         self.tolerance = tolerance
-
-        self.cb = cb
-        self.molecules = molecules
-        self.propagator_computation_optimizer = propagator_computation_optimizer
-        self.solver = solver
 
     def compute_concentrations(self, w):
         """Compute monomer concentration fields for given potential fields.
@@ -992,26 +1014,26 @@ class SCFT:
         for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
+            w_input[random_polymer_name] = np.zeros(self.prop_solver.n_grid, dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
         # For the given fields, compute the polymer statistics
         time_p_start = time.time()
-        self.solver.compute_propagators(w_input)
-        self.solver.compute_concentrations()
+        self.prop_solver.compute_propagators(w_input)
+        self.prop_solver.compute_concentrations()
         elapsed_time["pseudo"] = time.time() - time_p_start
 
         # Compute total concentration for each monomer type
         phi = {}
         time_phi_start = time.time()
         for monomer_type in self.monomer_types:
-            phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
+            phi[monomer_type] = self.prop_solver.get_concentration(monomer_type)
         elapsed_time["phi"] = time.time() - time_phi_start
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
+            phi[random_polymer_name] = self.prop_solver.get_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
 
@@ -1125,7 +1147,7 @@ class SCFT:
 
         # Make a dictionary for data
         m_dic = {"initial_params": self.params,
-            "dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+            "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
@@ -1362,7 +1384,7 @@ class SCFT:
         >>> calc2 = scft.SCFT(params)
         >>> w_converged = {m: calc1.w[i] for i, m in enumerate(calc1.monomer_types)}
         >>> calc2.run(initial_fields=w_converged)
-        >>> print(f"Optimized box: {calc2.cb.get_lx()}")
+        >>> print(f"Optimized box: {calc2.prop_solver.get_lx()}")
         """
 
         # The number of components
@@ -1383,14 +1405,14 @@ class SCFT:
             print("")
 
         # Reshape initial fields
-        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
-        
+        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
+
         for i in range(M):
-            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
+            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
         # Keep the level of field value
         for i in range(M):
-            w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
+            w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
             
         # Iteration begins here
         for iter in range(1, self.max_iter+1):
@@ -1406,49 +1428,45 @@ class SCFT:
             w_aux = self.mpt.to_aux_fields(w)
 
             # Calculate the total energy
-            # energy_total = - self.cb.integral(self.phi_target*w_exchange[M-1])/self.cb.get_volume()
-            total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            energy_total = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, include_const_term=False)
+            total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
+            energy_total = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, include_const_term=False)
 
             # Calculate difference between current total density and target density
-            phi_total = np.zeros(self.cb.get_total_grid())
+            phi_total = np.zeros(self.prop_solver.n_grid)
             for i in range(M):
                 phi_total += phi[self.monomer_types[i]]
-            # phi_diff = phi_total-self.phi_target
             phi_diff = phi_total-1.0
 
             # Calculate self-consistency error
-            w_diff = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64) # array for output fields
+            w_diff = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64) # array for output fields
             for i in range(M):
                 for j in range(M):
                     w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
-                # w_diff[i,:] -= self.phi_target_pressure
 
             # Keep the level of functional derivatives
             for i in range(M):
-                # w_diff[i] *= self.mask
-                w_diff[i] -= self.cb.integral(w_diff[i])/self.cb.get_volume()
+                w_diff[i] -= self.prop_solver.integral(w_diff[i])/self.prop_solver.get_volume()
 
             # error_level measures the "relative distance" between the input and output fields
             old_error_level = error_level
             error_level = 0.0
             error_normal = 1.0  # add 1.0 to prevent divergence
             for i in range(M):
-                error_level += self.cb.inner_product(w_diff[i],w_diff[i])
-                error_normal += self.cb.inner_product(w[i],w[i])
+                error_level += self.prop_solver.inner_product(w_diff[i],w_diff[i])
+                error_normal += self.prop_solver.inner_product(w[i],w[i])
             error_level = np.sqrt(error_level/error_normal)
 
             # Print iteration # and error levels and check the mass conservation
-            mass_error = self.cb.integral(phi_diff)/self.cb.get_volume()
+            mass_error = self.prop_solver.integral(phi_diff)/self.prop_solver.get_volume()
             
             if (self.box_is_altering):
                 # Calculate stress
-                self.solver.compute_stress()
-                stress_array = np.array(self.solver.get_stress())
+                self.prop_solver.compute_stress()
+                stress_array = np.array(self.prop_solver.get_stress())
 
                 # Only include stress components that are being optimized
                 # Diagonal stress [0:3] for box lengths, off-diagonal [3:6] for angles
-                dim = self.cb.get_dim()
+                dim = self.prop_solver.dim
                 # For 1D/2D, only include stress components for existing dimensions
                 diagonal_stress = stress_array[0:dim]
                 # For non-orthogonal systems, include off-diagonal stress if angles are being optimized
@@ -1466,10 +1484,10 @@ class SCFT:
                 for Q in total_partitions:
                     print("%13.7E " % (Q), end=" ")
                 print("] %15.9f %15.7E " % (energy_total, error_level), end=" ")
-                print("lx=[", ",".join(["%9.6f" % (x) for x in self.cb.get_lx()]), "]", end="")
+                print("lx=[", ",".join(["%9.6f" % (x) for x in self.prop_solver.get_lx()]), "]", end="")
                 # Also print angles if optimizing non-orthogonal system
                 if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
-                    print(" angles=[", ",".join(["%7.2f" % (x) for x in self.cb.get_angles_degrees()]), "]", end="")
+                    print(" angles=[", ",".join(["%7.2f" % (x) for x in self.prop_solver.get_angles_degrees()]), "]", end="")
                 print()
             else:
                 print("%8d %12.3E " % (iter, mass_error), end=" [ ")
@@ -1520,8 +1538,8 @@ class SCFT:
                 dangle = np.array([-stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices])
 
                 # Current values
-                current_lx = np.array(self.cb.get_lx())[self.lx_reduced_indices]
-                current_angles = np.array(self.cb.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
+                current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
+                current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
 
                 # Build optimization vectors
                 am_current = np.concatenate((w_reduced_basis.flatten(), current_lx, current_angles))
@@ -1553,17 +1571,17 @@ class SCFT:
                     new_angles = old_angles + new_dangle
 
                     # Build full angles array (in degrees)
-                    full_angles = list(self.cb.get_angles_degrees())
+                    full_angles = list(self.prop_solver.get_angles_degrees())
                     for i, idx in enumerate(self.angles_full_indices):
                         full_angles[idx] = new_angles[i]
 
                     # Update box with both lengths and angles
-                    self.cb.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
+                    self.prop_solver.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]), full_angles)
                 else:
-                    self.cb.set_lattice_parameters(list(np.array(new_lx)[self.lx_full_indices]))
+                    self.prop_solver.set_lx(list(np.array(new_lx)[self.lx_full_indices]))
 
                 # Update bond parameters using new lx
-                self.solver.update_laplacian_operator()
+                self.prop_solver.update_laplacian_operator()
             else:
                 w_reduced_basis = self.field_optimizer.calculate_new_fields(w_reduced_basis.flatten(), w_diff_reduced_basis.flatten(), old_error_level, error_level)
                 w_reduced_basis = np.reshape(w_reduced_basis, (M, -1))
@@ -1576,14 +1594,13 @@ class SCFT:
             
             # Keep the level of field value
             for i in range(M):
-                # w[i] *= self.mask
-                w[i] -= self.cb.integral(w[i])/self.cb.get_volume()
-        
+                w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
+
         # Print free energy as per chain expression
         print("Free energy per chain (for each chain type):")
-        for p in range(self.molecules.get_n_polymer_types()):
-            energy_total_per_chain = energy_total*self.molecules.get_polymer(p).get_alpha()/ \
-                                                  self.molecules.get_polymer(p).get_volume_fraction()
+        for p in range(self.prop_solver.get_n_polymer_types()):
+            energy_total_per_chain = energy_total*self.prop_solver.get_polymer(p).get_alpha()/ \
+                                                  self.prop_solver.get_polymer(p).get_volume_fraction()
             print("\tβF/n_%d : %12.7f" % (p, energy_total_per_chain))
 
         # Store phi and w

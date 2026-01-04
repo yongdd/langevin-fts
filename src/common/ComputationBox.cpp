@@ -667,7 +667,7 @@ bool ComputationBox<T>::is_orthogonal()
 }
 //----------------- set methods-------------------------------------
 template <typename T>
-void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx)
+void ComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
     if ( new_lx.size() != (unsigned int) dim )
         throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");

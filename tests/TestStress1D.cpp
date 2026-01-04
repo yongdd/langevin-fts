@@ -168,20 +168,20 @@ int main()
 
                     // Compute numerical derivative dH/dL
                     lx[0] = old_lx0 + dL/2;
-                    cb->set_lattice_parameters(lx);
+                    cb->set_lx(lx);
                     solver->update_laplacian_operator();
                     solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                     double energy_total_1 = compute_energy();
 
                     lx[0] = old_lx0 - dL/2;
-                    cb->set_lattice_parameters(lx);
+                    cb->set_lx(lx);
                     solver->update_laplacian_operator();
                     solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                     double energy_total_2 = compute_energy();
 
                     // Reset to original
                     lx[0] = old_lx0;
-                    cb->set_lattice_parameters(lx);
+                    cb->set_lx(lx);
                     solver->update_laplacian_operator();
 
                     double dh_dl = (energy_total_1 - energy_total_2) / dL;
