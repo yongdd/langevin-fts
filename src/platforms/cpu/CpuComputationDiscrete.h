@@ -41,7 +41,7 @@
 #include "Polymer.h"
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
-#include "PropagatorComputation.h"
+#include "CpuComputationBase.h"
 #include "CpuSolverPseudoDiscrete.h"
 #include "Scheduler.h"
 
@@ -77,21 +77,9 @@
  * @endcode
  */
 template <typename T>
-class CpuComputationDiscrete : public PropagatorComputation<T>
+class CpuComputationDiscrete : public CpuComputationBase<T>
 {
 private:
-    CpuSolver<T> *propagator_solver;  ///< Discrete chain solver
-    Scheduler *sc;                     ///< Computation scheduler
-    int n_streams;                     ///< Number of parallel streams
-
-    /**
-     * @brief Full segment propagators q(r, n).
-     *
-     * Key: dependency code + monomer type
-     * Value: 2D array [segment][grid_point]
-     */
-    std::map<std::string, T **> propagator;
-
     /**
      * @brief Half-bond step propagators q(r, n+1/2).
      *
@@ -101,13 +89,7 @@ private:
      */
     std::map<std::string, T **> propagator_half_steps;
 
-    /**
-     * @brief Propagator sizes for deallocation.
-     */
-    std::map<std::string, int> propagator_size;
-
     #ifndef NDEBUG
-    std::map<std::string, bool *> propagator_finished;        ///< Debug: track computed steps
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;  ///< Debug: half-steps
     int time_complexity;                                       ///< Debug: operation count
     #endif
@@ -119,16 +101,6 @@ private:
      * Includes monomer_type for proper Boltzmann factor weighting.
      */
     std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
-
-    /**
-     * @brief Block concentration fields.
-     */
-    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
-
-    /**
-     * @brief Solvent concentration fields.
-     */
-    std::vector<T *> phi_solvent;
 
     /**
      * @brief Calculate concentration for one block.
@@ -159,11 +131,6 @@ public:
      * @brief Destructor. Frees propagators and concentrations.
      */
     ~CpuComputationDiscrete();
-
-    /**
-     * @brief Update solver for new box dimensions.
-     */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Compute all propagators.
@@ -205,14 +172,6 @@ public:
     void compute_stress() override;
 
     /**
-     * @brief Get polymer partition function.
-     *
-     * @param polymer Polymer index
-     * @return Partition function Q
-     */
-    T get_total_partition(int polymer) override;
-
-    /**
      * @brief Get propagator at specific point.
      *
      * @param q_out   Output array
@@ -222,28 +181,6 @@ public:
      * @param n       Segment index
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
-
-    /// @name Canonical Ensemble Methods
-    /// @{
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-    void get_block_concentration(int polymer, T *phi) override;
-    /// @}
-
-    /**
-     * @brief Get solvent partition function.
-     */
-    T get_solvent_partition(int s) override;
-
-    /**
-     * @brief Get solvent concentration.
-     */
-    void get_solvent_concentration(int s, T *phi) override;
-
-    /// @name Grand Canonical Ensemble Methods
-    /// @{
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
-    /// @}
 
     /**
      * @brief Validate partition function (testing).

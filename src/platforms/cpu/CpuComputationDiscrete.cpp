@@ -15,7 +15,7 @@
  *
  * **Memory Layout:**
  *
- * - propagator[key]: Full segment propagators q(r,n)
+ * - this->propagator[key]: Full segment propagators q(r,n)
  * - propagator_half_steps[key]: Half-bond step values at junctions
  *
  * **Parallelization:**
@@ -54,7 +54,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer)
-    : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)
+    : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
     {
@@ -69,11 +69,11 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
         if (env_omp_num_threads.empty())
-            n_streams = 8;
+            this->n_streams = 8;
         else
-            n_streams = std::stoi(env_omp_num_threads);
+            this->n_streams = std::stoi(env_omp_num_threads);
         #ifndef NDEBUG
-        std::cout << "The number of CPU threads: " << n_streams << std::endl;
+        std::cout << "The number of CPU threads: " << this->n_streams << std::endl;
         #endif
 
         // Allocate memory for propagators
@@ -92,7 +92,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment+1; 
-            propagator_size[key] = max_n_segment;
+            this->propagator_size[key] = max_n_segment;
 
             // Allocate memory for q(r,1/2)
             propagator_half_steps[key] = new T*[max_n_segment];
@@ -102,7 +102,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
                 propagator_half_steps[key][0] = nullptr;
 
             // Allocate memory for q(r,s+1/2)
-            for(int i=1; i<propagator_size[key]; i++)
+            for(int i=1; i<this->propagator_size[key]; i++)
             {
                 if (item.second.junction_ends.find(i) == item.second.junction_ends.end())
                     propagator_half_steps[key][i] = nullptr;
@@ -112,15 +112,15 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 
             // Allocate memory for q(r,s)
             // Index 0 will be not used
-            propagator[key] = new T*[max_n_segment];
-            propagator[key][0] = nullptr;
-            for(int i=1; i<propagator_size[key]; i++)
-                propagator[key][i] = new T[M];
+            this->propagator[key] = new T*[max_n_segment];
+            this->propagator[key][0] = nullptr;
+            for(int i=1; i<this->propagator_size[key]; i++)
+                this->propagator[key][i] = new T[M];
 
             #ifndef NDEBUG
-            propagator_finished[key] = new bool[max_n_segment];
+            this->propagator_finished[key] = new bool[max_n_segment];
             for(int i=0; i<max_n_segment;i++)
-                propagator_finished[key][i] = false;
+                this->propagator_finished[key][i] = false;
             for (int n: item.second.junction_ends)
                 propagator_half_steps_finished[key][n] = false;
             propagator_half_steps_finished[key][0] = false;
@@ -132,12 +132,12 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            phi_block[item.first] = new T[M];
+            this->phi_block[item.first] = new T[M];
         }
 
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
-        for(const auto& block: phi_block)
+        for(const auto& block: this->phi_block)
         {
             const auto& key = block.first;
             int p                 = std::get<0>(key);
@@ -159,8 +159,8 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 
             single_partition_segment.push_back(std::make_tuple(
                 p,
-                propagator[key_left][n_segment_left],    // q
-                propagator[key_right][1],                  // q_dagger
+                this->propagator[key_left][n_segment_left],    // q
+                this->propagator[key_right][1],                  // q_dagger
                 monomer_type,       
                 n_aggregated                               // how many propagators are aggregated
                 ));
@@ -169,12 +169,12 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 
         // Concentrations for each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
-            phi_solvent.push_back(new T[M]);
+            this->phi_solvent.push_back(new T[M]);
 
         // Create scheduler for computation of propagator
-        sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), n_streams); 
+        this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams); 
 
-        update_laplacian_operator();
+        this->update_laplacian_operator();
     }
     catch(std::exception& exc)
     {
@@ -184,12 +184,12 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 template <typename T>
 CpuComputationDiscrete<T>::~CpuComputationDiscrete()
 {
-    delete propagator_solver;
-    delete sc;
+    delete this->propagator_solver;
+    delete this->sc;
 
-    for(const auto& item: propagator)
+    for(const auto& item: this->propagator)
     {
-        for(int i=0; i<propagator_size[item.first]; i++)
+        for(int i=0; i<this->propagator_size[item.first]; i++)
         {
             if(item.second[i] != nullptr)
                 delete[] item.second[i];
@@ -198,7 +198,7 @@ CpuComputationDiscrete<T>::~CpuComputationDiscrete()
     }
     for(const auto& item: propagator_half_steps)
     {
-        for(int i=0; i<propagator_size[item.first]; i++)
+        for(int i=0; i<this->propagator_size[item.first]; i++)
         {
             if(item.second[i] != nullptr)
                 delete[] item.second[i];
@@ -206,27 +206,15 @@ CpuComputationDiscrete<T>::~CpuComputationDiscrete()
         delete[] item.second;
     }
     
-    for(const auto& item: phi_block)
+    for(const auto& item: this->phi_block)
         delete[] item.second;
-    for(const auto& item: phi_solvent)
+    for(const auto& item: this->phi_solvent)
         delete[] item; 
 
     #ifndef NDEBUG
-    for(const auto& item: propagator_finished)
+    for(const auto& item: this->propagator_finished)
         delete[] item.second;
     #endif
-}
-template <typename T>
-void CpuComputationDiscrete<T>::update_laplacian_operator()
-{
-    try
-    {
-        propagator_solver->update_laplacian_operator();
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
 }
 template <typename T>
 void CpuComputationDiscrete<T>::compute_statistics(
@@ -256,7 +244,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
         #endif
 
         // Update dw or exp_dw
-        propagator_solver->update_dw(w_input);
+        this->propagator_solver->update_dw(w_input);
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -268,14 +256,14 @@ void CpuComputationDiscrete<T>::compute_propagators(
             std::string key = item.first;
             int max_n_segment = item.second.max_n_segment+1; 
             for(int i=0; i<max_n_segment;i++)
-                propagator_finished[key][i] = false;
+                this->propagator_finished[key][i] = false;
             for (int n: item.second.junction_ends)
                 propagator_half_steps_finished[key][n] = false;
             propagator_half_steps_finished[key][0] = false;
         }
         #endif
 
-        auto& branch_schedule = sc->get_schedule();
+        auto& branch_schedule = this->sc->get_schedule();
         for (auto parallel_job = branch_schedule.begin(); parallel_job != branch_schedule.end(); parallel_job++)
         {
             // display all jobs
@@ -289,7 +277,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 std::cout << "key, n_segment_from, n_segment_to: " + key + ", " + std::to_string(n_segment_from) + ", " + std::to_string(n_segment_to) + ". " << std::endl;
                 std::cout << "half_steps: ";
                 std::cout << "{";
-                for (int i=0; i<propagator_size[key]; i++)
+                for (int i=0; i<this->propagator_size[key]; i++)
                 {
                     if (propagator_half_steps[key][i] != nullptr)
                         std::cout << i << ", ";
@@ -301,7 +289,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
             #endif
 
             // For each propagator
-            #pragma omp parallel for num_threads(n_streams)
+            #pragma omp parallel for num_threads(this->n_streams)
             for(size_t job=0; job<parallel_job->size(); job++)
             {
                 auto& key = std::get<0>((*parallel_job)[job]);
@@ -323,8 +311,8 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     std::cout << "Could not find key '" << key << "'. " << std::endl;
                 #endif
 
-                T **_propagator = propagator[key];
-                const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+                T **_propagator = this->propagator[key];
+                const T *_exp_dw = this->propagator_solver->exp_dw[monomer_type];
 
                 // Calculate one block end
                 if (n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -352,7 +340,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     }
 
                     #ifndef NDEBUG
-                    propagator_finished[key][1] = true;
+                    this->propagator_finished[key][1] = true;
                     #endif
                 }
                 else if (n_segment_from == 0 && deps.size() > 0) // if it is not leaf node
@@ -388,11 +376,11 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 #ifndef NDEBUG
                                 if (propagator.find(sub_dep) == propagator.end())
                                     std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                                if (!propagator_finished[sub_dep][sub_n_segment])
+                                if (!this->propagator_finished[sub_dep][sub_n_segment])
                                     std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                                 #endif
 
-                                _propagator_sub_dep = propagator[sub_dep];
+                                _propagator_sub_dep = this->propagator[sub_dep];
                             }
                             for(int i=0; i<M; i++)
                                 _propagator[1][i] += _propagator_sub_dep[sub_n_segment][i] * static_cast<double>(sub_n_repeated);
@@ -422,7 +410,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 _propagator_half_step[i] = _propagator[1][i];
 
                             // Add half bond
-                            propagator_solver->advance_propagator_half_bond_step(
+                            this->propagator_solver->advance_propagator_half_bond_step(
                                 _propagator[1], _propagator[1], monomer_type);
 
                             // Add full segment
@@ -431,7 +419,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         }
                         else
                         {
-                            propagator_solver->advance_propagator(
+                            this->propagator_solver->advance_propagator(
                                 _propagator[1],
                                 _propagator[1],
                                 monomer_type,
@@ -439,7 +427,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         }
 
                         #ifndef NDEBUG
-                        propagator_finished[key][1] = true;
+                        this->propagator_finished[key][1] = true;
                         #endif
                         // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
@@ -498,7 +486,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                             #endif
 
                             // Add half bond
-                            propagator_solver->advance_propagator_half_bond_step(
+                            this->propagator_solver->advance_propagator_half_bond_step(
                                 _q_junction_start, _propagator[1], monomer_type);
 
                             // Add full segment
@@ -506,7 +494,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 _propagator[1][i] *= _exp_dw[i];
                             
                             #ifndef NDEBUG
-                            propagator_finished[key][1] = true;
+                            this->propagator_finished[key][1] = true;
                             #endif
                         }
                     }
@@ -537,7 +525,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         this->time_complexity++;
                         #endif
 
-                        propagator_solver->advance_propagator_half_bond_step(
+                        this->propagator_solver->advance_propagator_half_bond_step(
                             _propagator[1],
                             propagator_half_steps[key][1],
                             monomer_type);
@@ -554,9 +542,9 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!propagator_finished[key][n])
+                    if (!this->propagator_finished[key][n])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                    if (propagator_finished[key][n+1])
+                    if (this->propagator_finished[key][n+1])
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
@@ -572,12 +560,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     this->time_complexity++;
                     #endif
 
-                    propagator_solver->advance_propagator(
+                    this->propagator_solver->advance_propagator(
                         _propagator[n], _propagator[n+1],
                         monomer_type, q_mask);
 
                     #ifndef NDEBUG
-                    propagator_finished[key][n+1] = true;
+                    this->propagator_finished[key][n+1] = true;
                     #endif
                 }
 
@@ -603,7 +591,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         this->time_complexity++;
                         #endif
 
-                        propagator_solver->advance_propagator_half_bond_step(
+                        this->propagator_solver->advance_propagator_half_bond_step(
                             _propagator[n+1],
                             propagator_half_steps[key][n+1],
                             monomer_type);
@@ -635,7 +623,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
             T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            const T *_exp_dw    = propagator_solver->exp_dw[monomer_type];
+            const T *_exp_dw    = this->propagator_solver->exp_dw[monomer_type];
 
             this->single_polymer_partitions[p]= this->cb->inner_product_inverse_weight(
                 propagator_left, propagator_right, _exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -656,7 +644,7 @@ void CpuComputationDiscrete<T>::advance_propagator_single_segment(
         const int M = this->cb->get_total_grid();
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
-        propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
 
     }
     catch(std::exception& exc)
@@ -672,10 +660,10 @@ void CpuComputationDiscrete<T>::compute_concentrations()
         const int M = this->cb->get_total_grid();
 
         // Calculate segment concentrations
-        #pragma omp parallel for num_threads(n_streams)
-        for(size_t b=0; b<phi_block.size();b++)
+        #pragma omp parallel for num_threads(this->n_streams)
+        for(size_t b=0; b<this->phi_block.size();b++)
         {
-            auto block = phi_block.begin();
+            auto block = this->phi_block.begin();
             advance(block, b);
             const auto& key = block->first;
 
@@ -687,7 +675,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             int n_segment_left  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
-            const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            const T *_exp_dw = this->propagator_solver->exp_dw[monomer_type];
 
             // If there is no segment
             if(n_segment_right == 0)
@@ -708,8 +696,8 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
                 block->second,          // phi
-                propagator[key_left],   // dependency v
-                propagator[key_right],  // dependency u
+                this->propagator[key_left],   // dependency v
+                this->propagator[key_right],  // dependency u
                 _exp_dw,                // exp_dw
                 n_segment_left,
                 n_segment_right
@@ -725,10 +713,10 @@ void CpuComputationDiscrete<T>::compute_concentrations()
         // Calculate partition functions and concentrations of solvents
         for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
-            T *_phi = phi_solvent[s];
+            T *_phi = this->phi_solvent[s];
             double volume_fraction = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            const T *_exp_dw = this->propagator_solver->exp_dw[monomer_type];
 
             this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -764,190 +752,6 @@ void CpuComputationDiscrete<T>::calculate_phi_one_block(
     }
 }
 template <typename T>
-T CpuComputationDiscrete<T>::get_total_partition(int polymer)
-{
-    try
-    {
-        return this->single_polymer_partitions[polymer];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuComputationDiscrete<T>::get_total_concentration(std::string monomer_type, T *phi)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        // Initialize array
-        for(int i=0; i<M; i++)
-            phi[i] = 0.0;
-
-        // For each block
-        for(const auto& block: phi_block)
-        {
-            std::string key_left = std::get<1>(block.first);
-            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-            if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-            {
-                for(int i=0; i<M; i++)
-                    phi[i] += block.second[i]; 
-            }
-        }
-
-        // For each solvent
-        for(int s=0;s<this->molecules->get_n_solvent_types();s++)
-        {
-            if (std::get<1>(this->molecules->get_solvent(s)) == monomer_type)
-            {
-                T *phi_solvent_ = phi_solvent[s];
-                for(int i=0; i<M; i++)
-                    phi[i] += phi_solvent_[i];
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuComputationDiscrete<T>::get_total_concentration(int p, std::string monomer_type, T *phi)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const int P = this->molecules->get_n_polymer_types();
-
-        if (p < 0 || p > P-1)
-            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
-
-        // Initialize array
-        for(int i=0; i<M; i++)
-            phi[i] = 0.0;
-
-        // For each block
-        for(const auto& block: phi_block)
-        {
-            int polymer_idx = std::get<0>(block.first);
-            std::string key_left = std::get<1>(block.first);
-            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-            {
-                for(int i=0; i<M; i++)
-                    phi[i] += block.second[i]; 
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuComputationDiscrete<T>::get_total_concentration_gce(double fugacity, int p, std::string monomer_type, T *phi)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const int P = this->molecules->get_n_polymer_types();
-
-        if (p < 0 || p > P-1)
-            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
-
-        // Initialize array
-        for(int i=0; i<M; i++)
-            phi[i] = 0.0;
-
-        // For each block
-        for(const auto& block: phi_block)
-        {
-            int polymer_idx = std::get<0>(block.first);
-            std::string key_left = std::get<1>(block.first);
-            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-            {
-                Polymer& pc = this->molecules->get_polymer(p);
-                T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
-                for(int i=0; i<M; i++)
-                    phi[i] += block.second[i]*norm;
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuComputationDiscrete<T>::get_block_concentration(int p, T *phi)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const int P = this->molecules->get_n_polymer_types();
-
-        if (p < 0 || p > P-1)
-            throw_with_line_number("Index (" + std::to_string(p) + ") must be in range [0, " + std::to_string(P-1) + "]");
-
-        if (this->propagator_computation_optimizer->use_aggregation())
-            throw_with_line_number("Disable 'aggregation' option to obtain concentration of each block.");
-
-        Polymer& pc = this->molecules->get_polymer(p);
-        std::vector<Block>& blocks = pc.get_blocks();
-
-        for(size_t b=0; b<blocks.size(); b++)
-        {
-            std::string key_left  = pc.get_propagator_key(blocks[b].v, blocks[b].u);
-            std::string key_right = pc.get_propagator_key(blocks[b].u, blocks[b].v);
-            if (key_left < key_right)
-                key_left.swap(key_right);
-
-            T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
-            for(int i=0; i<M; i++)
-                phi[i+b*M] = _essential_phi_block[i]; 
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-T CpuComputationDiscrete<T>::get_solvent_partition(int s)
-{
-    try
-    {
-        return this->single_solvent_partitions[s];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
-void CpuComputationDiscrete<T>::get_solvent_concentration(int s, T *phi_out)
-{
-    try
-    {
-        const int M = this->cb->get_total_grid();
-        const int S = this->molecules->get_n_solvent_types();
-
-        if (s < 0 || s > S-1)
-            throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
-
-        T *phi_solvent_ = phi_solvent[s];
-        for(int i=0; i<M; i++)
-            phi_out[i] = phi_solvent_[i];
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-template <typename T>
 void CpuComputationDiscrete<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
@@ -967,17 +771,17 @@ void CpuComputationDiscrete<T>::compute_stress()
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
 
         // Reset stress map
-        for(const auto& item: phi_block)
+        for(const auto& item: this->phi_block)
         {
             for(int d=0; d<N_STRESS; d++)
                 block_dq_dl[item.first][d] = 0.0;
         }
 
         // Compute stress for each block
-        #pragma omp parallel for num_threads(n_streams)
-        for(size_t b=0; b<phi_block.size();b++)
+        #pragma omp parallel for num_threads(this->n_streams)
+        for(size_t b=0; b<this->phi_block.size();b++)
         {
-            auto block = phi_block.begin();
+            auto block = this->phi_block.begin();
             advance(block, b);
             const auto& key   = block->first;
 
@@ -1000,8 +804,8 @@ void CpuComputationDiscrete<T>::compute_stress()
             // if(N_RIGHT == 0)
             //     continue;
 
-            T **q_1 = propagator[key_left];     // dependency v
-            T **q_2 = propagator[key_right];    // dependency u
+            T **q_1 = this->propagator[key_left];     // dependency v
+            T **q_2 = this->propagator[key_right];    // dependency u
 
             T *q_segment_1;
             T *q_segment_2;
@@ -1067,7 +871,7 @@ void CpuComputationDiscrete<T>::compute_stress()
                     // std::cout << "\t" << bond_length_sq << ", " << boltz_bond_now[10] << std::endl;
                 }
                 // Compute 
-                std::vector<T> segment_stress = propagator_solver->compute_single_segment_stress(
+                std::vector<T> segment_stress = this->propagator_solver->compute_single_segment_stress(
                     q_segment_1, q_segment_2, monomer_type, is_half_bond_length);
 
                 #ifndef NDEBUG
@@ -1088,7 +892,7 @@ void CpuComputationDiscrete<T>::compute_stress()
         for(int p=0; p<n_polymer_types; p++)
             for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] = 0.0;
-        for(const auto& block: phi_block)
+        for(const auto& block: this->phi_block)
         {
             const auto& key       = block.first;
             int p                 = std::get<0>(key);
@@ -1143,7 +947,7 @@ void CpuComputationDiscrete<T>::get_chain_propagator(T *q_out, int polymer, int 
         if (n < 1 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 
-        T **partition = propagator[dep];
+        T **partition = this->propagator[dep];
         for(int i=0; i<M; i++)
             q_out[i] = partition[n][i];
     }
@@ -1164,7 +968,7 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         total_partitions.push_back(total_partitions_p);
     }
 
-    for(const auto& block: phi_block)
+    for(const auto& block: this->phi_block)
     {
         const auto& key = block.first;
         int p                 = std::get<0>(key);
@@ -1177,7 +981,7 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         int n_propagators   = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+        const T *_exp_dw = this->propagator_solver->exp_dw[monomer_type];
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << this->propagator_computation_optimizer->get_computation_block(key).n_repeated << std::endl;
@@ -1186,8 +990,8 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         for(int n=1;n<=n_segment_right;n++)
         {
             T total_partition = this->cb->inner_product_inverse_weight(
-                propagator[key_left][n_segment_left-n+1],
-                propagator[key_right][n], _exp_dw)*(n_repeated/this->cb->get_volume());
+                this->propagator[key_left][n_segment_left-n+1],
+                this->propagator[key_right][n], _exp_dw)*(n_repeated/this->cb->get_volume());
             
             total_partition /= n_propagators;
             total_partitions[p].push_back(total_partition);
