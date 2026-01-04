@@ -276,7 +276,7 @@ public:
      * @param u Second vertex
      * @return Index into blocks vector
      */
-    int get_block_index_from_edge(const int v, const int u);
+    int get_block_index_from_edge(const int v, const int u) const;
 
     /**
      * @brief Get adjacency list representation.
@@ -304,6 +304,6 @@ public:
      * @param u Second vertex
      * @return Propagator code string encoding dependencies
      */
-    std::string get_propagator_key(const int v, const int u);
+    std::string get_propagator_key(const int v, const int u) const;
 };
 #endif

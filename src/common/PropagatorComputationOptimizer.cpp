@@ -43,6 +43,7 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "Exception.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Compare propagator keys for ordered storage.
@@ -401,9 +402,7 @@ std::map<std::string, ComputationEdge, ComparePropagatorKey>& PropagatorComputat
 /** @brief Get computation propagator by key. */
 ComputationEdge& PropagatorComputationOptimizer::get_computation_propagator(std::string key)
 {
-    if (computation_propagators.find(key) == computation_propagators.end())
-        throw_with_line_number("There is no such key (" + key + ").");
-
+    validation::require_string_key(computation_propagators, key, "computation_propagators");
     return computation_propagators[key];
 }
 
@@ -416,10 +415,9 @@ std::map<std::tuple<int, std::string, std::string>, ComputationBlock>& Propagato
 /** @brief Get computation block by (polymer_id, left_key, right_key). */
 ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tuple<int, std::string, std::string> key)
 {
-    if (computation_blocks.find(key) == computation_blocks.end())
-        throw_with_line_number("There is no such key (" + std::to_string(std::get<0>(key)) + ", " + 
-            std::get<1>(key) + ", " + std::get<2>(key) + ").");
-
+    validation::require_key(computation_blocks, key,
+        "computation_blocks for (" + std::to_string(std::get<0>(key)) + ", " +
+        std::get<1>(key) + ", " + std::get<2>(key) + ")");
     return computation_blocks[key];
 }
 

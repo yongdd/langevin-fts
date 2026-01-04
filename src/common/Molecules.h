@@ -259,6 +259,6 @@ public:
      * @param s Solvent index (0 to n_solvent_types-1)
      * @return Tuple of (volume_fraction, monomer_type)
      */
-    std::tuple<double, std::string> get_solvent(const int s);
+    std::tuple<double, std::string> get_solvent(const int s) const;
 };
 #endif

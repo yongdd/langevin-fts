@@ -149,14 +149,14 @@ public:
      * @brief Get total number of grid points.
      * @return M = Nx * Ny * Nz
      */
-    int get_total_grid() {return this->cb->get_total_grid();};
+    int get_total_grid() const {return this->cb->get_total_grid();};
 
     /**
      * @brief Get number of blocks in a polymer.
      * @param polymer Polymer index
      * @return Number of blocks (edges) in polymer graph
      */
-    int get_n_blocks(int polymer) { Polymer& pc = this->molecules->get_polymer(polymer); return pc.get_n_blocks();};
+    int get_n_blocks(int polymer) const { Polymer& pc = this->molecules->get_polymer(polymer); return pc.get_n_blocks();};
 
     /**
      * @brief Update Laplacian operator after box size change.

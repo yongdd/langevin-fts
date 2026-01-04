@@ -32,6 +32,7 @@
 #include "Molecules.h"
 #include "PropagatorCode.h"
 #include "Exception.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Construct Molecules container.
@@ -48,29 +49,18 @@ Molecules::Molecules(
     std::string model_name, double ds, std::map<std::string, double> bond_lengths)
 {
     // Transform into lower cases
-    std::transform(model_name.begin(), model_name.end(), model_name.begin(),
-                   [](unsigned char c)
-    {
-        return std::tolower(c);
-    });
+    std::string model_lower = validation::to_lower(model_name);
 
     // Check chain model
-    if (model_name != "continuous" && model_name != "discrete")
+    if (model_lower != "continuous" && model_lower != "discrete")
     {
-        throw_with_line_number(model_name + " is an invalid chain model. This must be 'Continuous' or 'Discrete'.");
+        throw_with_line_number(model_name + " is an invalid chain model. This must be 'Continuous' or 'Discrete'.")
     }
 
     // Save variables
-    try
-    {
-        this->ds = ds;
-        this->bond_lengths = bond_lengths;
-        this->model_name = model_name;
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    this->ds = ds;
+    this->bond_lengths = bond_lengths;
+    this->model_name = model_lower;
 }
 
 /**
@@ -134,7 +124,7 @@ int Molecules::get_n_solvent_types() const
 {
     return solvent_types.size();
 }
-std::tuple<double, std::string> Molecules::get_solvent(const int s)
+std::tuple<double, std::string> Molecules::get_solvent(const int s) const
 {
     return solvent_types[s];
 }
