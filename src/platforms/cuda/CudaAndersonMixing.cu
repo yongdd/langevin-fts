@@ -260,11 +260,15 @@ void CudaAndersonMixing<T>::calculate_new_fields(
 template <typename T>
 void CudaAndersonMixing<T>::print_array(int n, T *a)
 {
+    #ifndef NDEBUG
     for(int i=0; i<n-1; i++)
     {
         std::cout << a[i] << ", ";
     }
     std::cout << a[n-1] << std::endl;
+    #else
+    (void)n; (void)a;  // Suppress unused parameter warnings
+    #endif
 }
 
 // Explicit template instantiation

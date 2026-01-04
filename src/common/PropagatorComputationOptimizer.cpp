@@ -179,9 +179,13 @@ void PropagatorComputationOptimizer::add_polymer(Polymer& pc, int polymer_id)
             else if (model_name == "discrete")
                 set_I = PropagatorAggregator::aggregate_discrete_chain(right_keys);
             else if (model_name == "")
-                std::cout << "Chain model name is not set!" << std::endl;
+            {
+                throw_with_line_number("Chain model name is not set!")
+            }
             else
-                std::cout << "Invalid model name: " << model_name << "!" << std::endl;
+            {
+                throw_with_line_number("Invalid model name: " + model_name + "!")
+            }
 
             // Replace the second map of computation_blocks_new_polymer with 'set_I'
             computation_blocks_new_polymer[left_key] = set_I;

@@ -36,6 +36,7 @@
 #include "Polymer.h"
 #include "PropagatorCode.h"
 #include "Exception.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Construct polymer from block specification.
@@ -61,21 +62,22 @@ Polymer::Polymer(
     for(const auto& item : bond_lengths)
     {
         if (!std::all_of(item.first.begin(), item.first.end(), [](unsigned char c){ return std::isalpha(c) || c=='_' ; }))
-            throw_with_line_number("\"" + item.first + "\" is an invalid monomer_type name. Only alphabets and underscore(_) are allowed.");
-        
-        if (item.second <= 0)
-            throw_with_line_number("bond_lengths[\"" + item.first + "\"] must be a positive number.");
+        {
+            throw_with_line_number("\"" + item.first + "\" is an invalid monomer_type name. Only alphabets and underscore(_) are allowed.")
+        }
+        validation::require_positive(item.second, "bond_lengths[\"" + item.first + "\"]");
     }
 
     // Check block lengths, segments, types
     for(size_t i=0; i<block_inputs.size(); i++)
     {
-        if( block_inputs[i].contour_length <= 0)
-            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths (" +std::to_string(block_inputs[i].contour_length) + ") must be a positive number.");
+        validation::require_positive(block_inputs[i].contour_length,
+            "block_inputs[" + std::to_string(i) + "].contour_length");
         if( std::abs(std::lround(block_inputs[i].contour_length/ds)-block_inputs[i].contour_length/ds) > 1.e-6)
-            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths/ds (" + std::to_string(block_inputs[i].contour_length) + "/" + std::to_string(ds) + ") is not an integer.");
-        if( bond_lengths.count(block_inputs[i].monomer_type) == 0 )
-            throw_with_line_number("block_inputs[" + std::to_string(i) + "].monomer_type (\"" + block_inputs[i].monomer_type + "\") is not in bond_lengths.");
+        {
+            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths/ds (" + std::to_string(block_inputs[i].contour_length) + "/" + std::to_string(ds) + ") is not an integer.")
+        }
+        validation::require_string_key(bond_lengths, block_inputs[i].monomer_type, "bond_lengths");
     }
 
     // chain_end_to_q_init
@@ -121,12 +123,12 @@ Polymer::Polymer(
         adjacent_nodes[v[i]].push_back(u[i]);
         adjacent_nodes[u[i]].push_back(v[i]);
         // V and u must be a non-negative integer for depth first search
-        if( v[i] < 0 )
-            throw_with_line_number("v[" + std::to_string(i) + "] (" + std::to_string(v[i]) + ") must be a non-negative integer.");
-        if( u[i] < 0 )
-            throw_with_line_number("u[" + std::to_string(i) + "] (" + std::to_string(u[i]) + ") must be a non-negative integer.");
+        validation::require_non_negative(v[i], "v[" + std::to_string(i) + "]");
+        validation::require_non_negative(u[i], "u[" + std::to_string(i) + "]");
         if( v[i] == u[i] )
-            throw_with_line_number("v[" + std::to_string(i) + "] and u[" + std::to_string(i) + "] must be different integers.");
+        {
+            throw_with_line_number("v[" + std::to_string(i) + "] and u[" + std::to_string(i) + "] must be different integers.")
+        }
     }
 
     // // Print adjacent_nodes
@@ -250,14 +252,14 @@ double Polymer::get_volume_fraction() const
 }
 int Polymer::get_block_index_from_edge(const int v, const int u)
 {
-    if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
-        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
+    validation::require_key(edge_to_block_index, std::make_pair(v,u),
+        "edge_to_block_index for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
     return edge_to_block_index[std::make_pair(v, u)];
 }
 struct Block& Polymer::get_block(const int v, const int u)
 {
-    if (edge_to_block_index.find(std::make_pair(v,u)) == edge_to_block_index.end())
-        throw_with_line_number("There is no such edge (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
+    validation::require_key(edge_to_block_index, std::make_pair(v,u),
+        "edge_to_block_index for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
     return blocks[edge_to_block_index[std::make_pair(v, u)]];
 }
 std::vector<Block>& Polymer::get_blocks()
@@ -277,7 +279,7 @@ void Polymer::set_propagator_key(const std::string code, const int v, const int 
     edge_to_propagator_key[std::make_pair(v, u)] = code;
 }
 std::string Polymer::get_propagator_key(const int v, const int u) {
-    if (edge_to_propagator_key.find(std::make_pair(v,u)) == edge_to_propagator_key.end())
-        throw_with_line_number("There is no such block (v, u): (" + std::to_string(v) + ", " + std::to_string(u) + ")."); 
+    validation::require_key(edge_to_propagator_key, std::make_pair(v,u),
+        "edge_to_propagator_key for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
     return edge_to_propagator_key[std::make_pair(v,u)];
 }
