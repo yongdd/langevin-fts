@@ -36,6 +36,7 @@
 #include <numbers>
 
 #include "ComputationBox.h"
+#include "ValidationUtils.h"
 
 namespace {
     /// Tolerance for comparing mask values to 0.0 or 1.0
@@ -60,24 +61,13 @@ template <typename T>
 ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
     std::vector<std::string> bc, const double* mask)
 {
-    if ( new_nx.size() != new_lx.size() )
-        throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
+    validation::require_same_size(new_nx.size(), new_lx.size(), "nx", "lx");
     if ( new_nx.size() != 3 && new_nx.size() != 2 && new_nx.size() != 1)
-        throw_with_line_number("We expect 1D, 2D or 3D, but we get " + std::to_string(new_nx.size()));
-    if (std::any_of(new_nx.begin(), new_nx.end(), [](int nx) { return nx <= 0;})){
-        std::stringstream ss_nx;
-        std::copy(new_nx.begin(), new_nx.end(), std::ostream_iterator<int>(ss_nx, ", "));
-        std::string str_nx = ss_nx.str();
-        str_nx = str_nx.substr(0, str_nx.length()-2);
-        throw_with_line_number("nx (" + str_nx + ") must be positive numbers");
+    {
+        throw_with_line_number("We expect 1D, 2D or 3D, but we get " + std::to_string(new_nx.size()))
     }
-    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
-        std::stringstream ss_lx;
-        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
-        std::string str_lx = ss_lx.str();
-        str_lx = str_lx.substr(0, str_lx.length()-2);
-        throw_with_line_number("lx (" + str_lx + ") must be positive numbers");
-    }
+    validation::require_all_positive(new_nx, "nx");
+    validation::require_all_positive(new_lx, "lx");
 
     try
     {
@@ -101,16 +91,8 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         // Impenetrable region == 0.0
         if (mask != nullptr)
         {
-            this->mask.resize(total_grid);
-            for(int i=0; i<total_grid; i++)
-            {
-                if(std::abs(mask[i]) < MASK_TOLERANCE)
-                    this->mask[i] = 0.0;
-                else if(std::abs(mask[i]-1.0) < MASK_TOLERANCE)
-                    this->mask[i] = 1.0;
-                else
-                    throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
-            }
+            this->mask.assign(mask, mask + total_grid);
+            validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
         }
         // else: mask remains empty (no mask)
 
@@ -154,39 +136,20 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         {
             for(int i=0; i<2*DIM; i+=2)
             {
-                std::string bc_name_l = bc[i];
-                std::string bc_name_h = bc[i+1];
-                // Transform into lower cases
-                std::transform(bc_name_l.begin(), bc_name_l.end(), bc_name_l.begin(),
-                            [](unsigned char c)
-                {
-                    return std::tolower(c);
-                });
-
-                std::transform(bc_name_h.begin(), bc_name_h.end(), bc_name_h.begin(),
-                            [](unsigned char c)
-                {
-                    return std::tolower(c);
-                });
+                std::string bc_name_l = validation::to_lower(bc[i]);
+                std::string bc_name_h = validation::to_lower(bc[i+1]);
 
                 if((bc_name_l == "periodic" && bc_name_h != "periodic") ||
                    (bc_name_l != "periodic" && bc_name_h == "periodic"))
                 {
                    throw_with_line_number(bc_name_l + " and "  + bc_name_h + " are an invalid boundary condition combination. " +
-                    + "If one side imposes a periodic boundary condition, the other side must also be a periodic boundary condition.");
+                    + "If one side imposes a periodic boundary condition, the other side must also be a periodic boundary condition.")
                 }
-
             }
 
             for(int i=0; i<2*DIM; i++)
             {
-                std::string bc_name = bc[i];
-                // Transform into lower cases
-                std::transform(bc_name.begin(), bc_name.end(), bc_name.begin(),
-                            [](unsigned char c)
-                {
-                    return std::tolower(c);
-                });
+                std::string bc_name = validation::to_lower(bc[i]);
 
                 if(bc_name == "periodic")
                     this->bc.push_back(BoundaryCondition::PERIODIC);
@@ -195,7 +158,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                 else if(bc_name == "absorbing")
                     this->bc.push_back(BoundaryCondition::ABSORBING);
                 else
-                    throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']");
+                {
+                    throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']")
+                }
             }
         }
 
@@ -236,33 +201,22 @@ template <typename T>
 ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> new_lx,
     std::vector<std::string> bc, std::vector<double> angles, const double* mask)
 {
-    if ( new_nx.size() != new_lx.size() )
-        throw_with_line_number("The sizes of nx (" + std::to_string(new_nx.size()) + ") and lx (" + std::to_string(new_lx.size()) + ") must match.");
+    validation::require_same_size(new_nx.size(), new_lx.size(), "nx", "lx");
     if ( new_nx.size() != 3 && new_nx.size() != 2 && new_nx.size() != 1)
-        throw_with_line_number("We expect 1D, 2D or 3D, but we get " + std::to_string(new_nx.size()));
-    if (std::any_of(new_nx.begin(), new_nx.end(), [](int nx) { return nx <= 0;})){
-        std::stringstream ss_nx;
-        std::copy(new_nx.begin(), new_nx.end(), std::ostream_iterator<int>(ss_nx, ", "));
-        std::string str_nx = ss_nx.str();
-        str_nx = str_nx.substr(0, str_nx.length()-2);
-        throw_with_line_number("nx (" + str_nx + ") must be positive numbers");
+    {
+        throw_with_line_number("We expect 1D, 2D or 3D, but we get " + std::to_string(new_nx.size()))
     }
-    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
-        std::stringstream ss_lx;
-        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
-        std::string str_lx = ss_lx.str();
-        str_lx = str_lx.substr(0, str_lx.length()-2);
-        throw_with_line_number("lx (" + str_lx + ") must be positive numbers");
-    }
+    validation::require_all_positive(new_nx, "nx");
+    validation::require_all_positive(new_lx, "lx");
 
     // Validate angles
     if (angles.size() != 3)
-        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(angles.size()));
-
+    {
+        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(angles.size()))
+    }
     for (int i = 0; i < 3; i++) {
-        if (angles[i] <= 0.0 || angles[i] >= 180.0)
-            throw_with_line_number("angles[" + std::to_string(i) + "] = " + std::to_string(angles[i]) +
-                                   " is invalid. Angles must be in range (0, 180) degrees.");
+        validation::require_in_range(angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
+            "angles[" + std::to_string(i) + "]");
     }
 
     try
@@ -310,16 +264,8 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         // Mask
         if (mask != nullptr)
         {
-            this->mask.resize(total_grid);
-            for(int i=0; i<total_grid; i++)
-            {
-                if(std::abs(mask[i]) < MASK_TOLERANCE)
-                    this->mask[i] = 0.0;
-                else if(std::abs(mask[i]-1.0) < MASK_TOLERANCE)
-                    this->mask[i] = 1.0;
-                else
-                    throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
-            }
+            this->mask.assign(mask, mask + total_grid);
+            validation::validate_mask(this->mask.data(), total_grid, MASK_TOLERANCE);
         }
         // else: mask remains empty (no mask)
 
@@ -364,26 +310,20 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         {
             for(int i=0; i<2*DIM; i+=2)
             {
-                std::string bc_name_l = bc[i];
-                std::string bc_name_h = bc[i+1];
-                std::transform(bc_name_l.begin(), bc_name_l.end(), bc_name_l.begin(),
-                            [](unsigned char c) { return std::tolower(c); });
-                std::transform(bc_name_h.begin(), bc_name_h.end(), bc_name_h.begin(),
-                            [](unsigned char c) { return std::tolower(c); });
+                std::string bc_name_l = validation::to_lower(bc[i]);
+                std::string bc_name_h = validation::to_lower(bc[i+1]);
 
                 if((bc_name_l == "periodic" && bc_name_h != "periodic") ||
                    (bc_name_l != "periodic" && bc_name_h == "periodic"))
                 {
                    throw_with_line_number(bc_name_l + " and "  + bc_name_h + " are an invalid boundary condition combination. " +
-                    + "If one side imposes a periodic boundary condition, the other side must also be a periodic boundary condition.");
+                    + "If one side imposes a periodic boundary condition, the other side must also be a periodic boundary condition.")
                 }
             }
 
             for(int i=0; i<2*DIM; i++)
             {
-                std::string bc_name = bc[i];
-                std::transform(bc_name.begin(), bc_name.end(), bc_name.begin(),
-                            [](unsigned char c) { return std::tolower(c); });
+                std::string bc_name = validation::to_lower(bc[i]);
 
                 if(bc_name == "periodic")
                     this->bc.push_back(BoundaryCondition::PERIODIC);
@@ -392,7 +332,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                 else if(bc_name == "absorbing")
                     this->bc.push_back(BoundaryCondition::ABSORBING);
                 else
-                    throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']");
+                {
+                    throw_with_line_number(bc_name + " is an invalid boundary condition. Choose among ['periodic', 'reflecting', 'absorbing']")
+                }
             }
         }
     }
@@ -674,16 +616,8 @@ bool ComputationBox<T>::is_orthogonal()
 template <typename T>
 void ComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
-    if ( new_lx.size() != (unsigned int) dim )
-        throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");
-
-    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
-        std::stringstream ss_lx;
-        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
-        std::string str_lx = ss_lx.str();
-        str_lx = str_lx.substr(0, str_lx.length()-2);
-        throw_with_line_number("new lx (" + str_lx + ") must be positive numbers");
-    }
+    validation::require_same_size(new_lx.size(), (size_t)dim, "new lx", "dim");
+    validation::require_all_positive(new_lx, "new lx");
 
     lx = new_lx;
 
@@ -708,25 +642,17 @@ void ComputationBox<T>::set_lx(std::vector<double> new_lx)
 template <typename T>
 void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles)
 {
-    if ( new_lx.size() != (unsigned int) dim )
-        throw_with_line_number("The sizes of new lx (" + std::to_string(new_lx.size()) + ") and dim (" + std::to_string(dim) + ") must match.");
-
-    if (std::any_of(new_lx.begin(), new_lx.end(), [](double lx) { return lx <= 0.0;})){
-        std::stringstream ss_lx;
-        std::copy(new_lx.begin(), new_lx.end(), std::ostream_iterator<int>(ss_lx, ", "));
-        std::string str_lx = ss_lx.str();
-        str_lx = str_lx.substr(0, str_lx.length()-2);
-        throw_with_line_number("new lx (" + str_lx + ") must be positive numbers");
-    }
+    validation::require_same_size(new_lx.size(), (size_t)dim, "new lx", "dim");
+    validation::require_all_positive(new_lx, "new lx");
 
     // Validate angles
     if (new_angles.size() != 3)
-        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(new_angles.size()));
-
+    {
+        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(new_angles.size()))
+    }
     for (int i = 0; i < 3; i++) {
-        if (new_angles[i] <= 0.0 || new_angles[i] >= 180.0)
-            throw_with_line_number("angles[" + std::to_string(i) + "] = " + std::to_string(new_angles[i]) +
-                                   " is invalid. Angles must be in range (0, 180) degrees.");
+        validation::require_in_range(new_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
+            "angles[" + std::to_string(i) + "]");
     }
 
     lx = new_lx;
