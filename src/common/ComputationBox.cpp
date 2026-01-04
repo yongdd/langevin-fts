@@ -503,88 +503,94 @@ void ComputationBox<T>::compute_recip_metric()
 
 //----------------- get methods-------------------------------------
 template <typename T>
-int ComputationBox<T>::get_dim()
+int ComputationBox<T>::get_dim() const
 {
     return dim;
 }
 template <typename T>
-int ComputationBox<T>::get_nx(int i)
+int ComputationBox<T>::get_nx(int i) const
 {
     if (i < 0 or i >= dim)
-        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
+    {
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.")
+    }
     return nx[i];
 }
 template <typename T>
-double ComputationBox<T>::get_lx(int i)
+double ComputationBox<T>::get_lx(int i) const
 {
     if (i < 0 or i >= dim)
-        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
+    {
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.")
+    }
     return lx[i];
 }
 template <typename T>
-double ComputationBox<T>::get_dx(int i)
+double ComputationBox<T>::get_dx(int i) const
 {
     if (i < 0 or i >= dim)
-        throw_with_line_number("'" + std::to_string(i) + "' is out of range.");
+    {
+        throw_with_line_number("'" + std::to_string(i) + "' is out of range.")
+    }
     return dx[i];
 }
 template <typename T>
-std::vector<int> ComputationBox<T>::get_nx()
+std::vector<int> ComputationBox<T>::get_nx() const
 {
     return nx;
 }
 template <typename T>
-std::vector<double> ComputationBox<T>::get_lx()
+std::vector<double> ComputationBox<T>::get_lx() const
 {
     return lx;
 }
 template <typename T>
-std::vector<double> ComputationBox<T>::get_dx()
+std::vector<double> ComputationBox<T>::get_dx() const
 {
     return dx;
 }
 template <typename T>
-double ComputationBox<T>::get_dv(int i)
+double ComputationBox<T>::get_dv(int i) const
 {
     return dv[i];
 }
 template <typename T>
-int ComputationBox<T>::get_total_grid()
+int ComputationBox<T>::get_total_grid() const
 {
     return total_grid;
 }
 template <typename T>
-double ComputationBox<T>::get_volume()
+double ComputationBox<T>::get_volume() const
 {
     return volume;
 }
 template <typename T>
-double ComputationBox<T>::get_accessible_volume()
+double ComputationBox<T>::get_accessible_volume() const
 {
     return accessible_volume;
 }
 template <typename T>
-const double* ComputationBox<T>::get_mask()
+const double* ComputationBox<T>::get_mask() const
 {
     return mask.empty() ? nullptr : mask.data();
 }
 template <typename T>
-const std::vector<BoundaryCondition> ComputationBox<T>::get_boundary_conditions()
+const std::vector<BoundaryCondition> ComputationBox<T>::get_boundary_conditions() const
 {
     return bc;
 }
 template <typename T>
-BoundaryCondition ComputationBox<T>::get_boundary_condition(int i)
+BoundaryCondition ComputationBox<T>::get_boundary_condition(int i) const
 {
     return bc[i];
 }
 template <typename T>
-std::vector<double> ComputationBox<T>::get_angles()
+std::vector<double> ComputationBox<T>::get_angles() const
 {
     return angles_;
 }
 template <typename T>
-std::vector<double> ComputationBox<T>::get_angles_degrees()
+std::vector<double> ComputationBox<T>::get_angles_degrees() const
 {
     const double rad_to_deg = 180.0 / std::numbers::pi;
     std::vector<double> angles_deg(3);
@@ -593,22 +599,22 @@ std::vector<double> ComputationBox<T>::get_angles_degrees()
     return angles_deg;
 }
 template <typename T>
-const std::array<double, 9>& ComputationBox<T>::get_lattice_vec()
+const std::array<double, 9>& ComputationBox<T>::get_lattice_vec() const
 {
     return lattice_vec_;
 }
 template <typename T>
-const std::array<double, 9>& ComputationBox<T>::get_recip_vec()
+const std::array<double, 9>& ComputationBox<T>::get_recip_vec() const
 {
     return recip_vec_;
 }
 template <typename T>
-const std::array<double, 6>& ComputationBox<T>::get_recip_metric()
+const std::array<double, 6>& ComputationBox<T>::get_recip_metric() const
 {
     return recip_metric_;
 }
 template <typename T>
-bool ComputationBox<T>::is_orthogonal()
+bool ComputationBox<T>::is_orthogonal() const
 {
     return is_orthogonal_;
 }

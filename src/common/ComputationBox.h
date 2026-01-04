@@ -272,126 +272,126 @@ public:
      * @brief Get spatial dimension.
      * @return Dimension (1, 2, or 3)
      */
-    int get_dim();
+    int get_dim() const;
 
     /**
      * @brief Get grid dimensions vector.
      * @return Vector of grid points [Nx, Ny, Nz]
      */
-    std::vector<int> get_nx();
+    std::vector<int> get_nx() const;
 
     /**
      * @brief Get grid dimension in one direction.
      * @param i Direction index (0=x, 1=y, 2=z)
      * @return Number of grid points in direction i
      */
-    int get_nx(int i);
+    int get_nx(int i) const;
 
     /**
      * @brief Get box lengths vector.
      * @return Vector of box lengths [Lx, Ly, Lz] in units of a_Ref*N^0.5
      */
-    std::vector<double> get_lx();
+    std::vector<double> get_lx() const;
 
     /**
      * @brief Get box length in one direction.
      * @param i Direction index (0=x, 1=y, 2=z)
      * @return Box length in direction i
      */
-    double get_lx(int i);
+    double get_lx(int i) const;
 
     /**
      * @brief Get grid spacing vector.
      * @return Vector of grid spacings [dx, dy, dz] = lx/nx
      */
-    std::vector<double> get_dx();
+    std::vector<double> get_dx() const;
 
     /**
      * @brief Get grid spacing in one direction.
      * @param i Direction index (0=x, 1=y, 2=z)
      * @return Grid spacing in direction i
      */
-    double get_dx(int i);
+    double get_dx(int i) const;
 
     /**
      * @brief Get volume element weight at grid point.
      * @param i Grid point index
      * @return Volume element dV[i] (includes mask weighting)
      */
-    double get_dv(int i);
+    double get_dv(int i) const;
 
     /**
      * @brief Get total number of grid points.
      * @return M = Nx*Ny*Nz
      */
-    int get_total_grid();
+    int get_total_grid() const;
 
     /**
      * @brief Get total system volume.
      * @return V = Lx*Ly*Lz in units of (a_Ref*N^0.5)^dim
      */
-    double get_volume();
+    double get_volume() const;
 
     /**
      * @brief Get accessible volume (excluding masked regions).
      * @return Accessible volume = sum of dV over unmasked points
      */
-    double get_accessible_volume();
+    double get_accessible_volume() const;
 
     /**
      * @brief Get pointer to mask array.
      * @return Const pointer to mask array (nullptr if no mask)
      */
-    const double* get_mask() ;
+    const double* get_mask() const;
 
     /**
      * @brief Get all boundary conditions.
      * @return Vector of BoundaryCondition enums
      */
-    const std::vector<BoundaryCondition> get_boundary_conditions();
+    const std::vector<BoundaryCondition> get_boundary_conditions() const;
 
     /**
      * @brief Get boundary condition for specific face.
      * @param i Face index (0=x_low, 1=x_high, 2=y_low, ...)
      * @return BoundaryCondition enum value
      */
-    BoundaryCondition get_boundary_condition(int i);
+    BoundaryCondition get_boundary_condition(int i) const;
 
     /**
      * @brief Get lattice angles in radians.
      * @return Vector [alpha, beta, gamma] in radians
      */
-    std::vector<double> get_angles();
+    std::vector<double> get_angles() const;
 
     /**
      * @brief Get lattice angles in degrees.
      * @return Vector [alpha, beta, gamma] in degrees
      */
-    std::vector<double> get_angles_degrees();
+    std::vector<double> get_angles_degrees() const;
 
     /**
      * @brief Get lattice vectors (3x3 matrix).
      * @return Array [a_x, a_y, a_z, b_x, b_y, b_z, c_x, c_y, c_z] (column-major)
      */
-    const std::array<double, 9>& get_lattice_vec();
+    const std::array<double, 9>& get_lattice_vec() const;
 
     /**
      * @brief Get reciprocal lattice vectors (3x3 matrix).
      * @return Array [a*_x, a*_y, a*_z, b*_x, b*_y, b*_z, c*_x, c*_y, c*_z] (column-major)
      */
-    const std::array<double, 9>& get_recip_vec();
+    const std::array<double, 9>& get_recip_vec() const;
 
     /**
      * @brief Get reciprocal metric tensor.
      * @return Array [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22] (symmetric)
      */
-    const std::array<double, 6>& get_recip_metric();
+    const std::array<double, 6>& get_recip_metric() const;
 
     /**
      * @brief Check if the lattice is orthogonal.
      * @return True if all angles are 90°, false otherwise
      */
-    bool is_orthogonal();
+    bool is_orthogonal() const;
 
     /**
      * @brief Compute volume integral of a field.

@@ -171,7 +171,7 @@ public:
      * @brief Get number of field variables.
      * @return n_var value passed to constructor
      */
-    int get_n_var(){ return n_var;};
+    int get_n_var() const { return n_var;};
 
     /**
      * @brief Compute the next iterate using Anderson mixing.

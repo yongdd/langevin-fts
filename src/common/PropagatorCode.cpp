@@ -41,6 +41,7 @@
 #include "Molecules.h"
 #include "PropagatorCode.h"
 #include "Exception.h"
+#include "ValidationUtils.h"
 
 /**
  * @brief Generate propagator codes for all edges in a polymer.
@@ -127,7 +128,7 @@ std::string PropagatorCode::generate_edge_code(
     std::string sub_code;
 
     // If it is already computed
-    if (memory.find(std::make_pair(in_node, out_node)) != memory.end())
+    if (validation::contains(memory, std::make_pair(in_node, out_node)))
         return memory[std::make_pair(in_node, out_node)];
 
     // Explore neighbor nodes
@@ -138,7 +139,7 @@ std::string PropagatorCode::generate_edge_code(
         {
             //std::cout << "(" << in_node << ", " << adjacent_nodes[in_node][i] << ")";
             auto v_u_pair = std::make_pair(adjacent_nodes[in_node][i], in_node);
-            if (memory.find(v_u_pair) != memory.end())
+            if (validation::contains(memory, v_u_pair))
                 sub_code = memory[v_u_pair];
             else
             {
@@ -192,7 +193,7 @@ std::string PropagatorCode::generate_edge_code(
         // code += ")";
     }
     // If in_node exists in chain_end_to_q_init
-    else if (chain_end_to_q_init.find(in_node) != chain_end_to_q_init.end())
+    else if (validation::contains(chain_end_to_q_init, in_node))
     {
         code = "{" + chain_end_to_q_init[in_node] + "}";
     }

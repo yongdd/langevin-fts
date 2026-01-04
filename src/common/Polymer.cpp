@@ -250,11 +250,11 @@ double Polymer::get_volume_fraction() const
 {
     return volume_fraction;
 }
-int Polymer::get_block_index_from_edge(const int v, const int u)
+int Polymer::get_block_index_from_edge(const int v, const int u) const
 {
     validation::require_key(edge_to_block_index, std::make_pair(v,u),
         "edge_to_block_index for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
-    return edge_to_block_index[std::make_pair(v, u)];
+    return edge_to_block_index.at(std::make_pair(v, u));
 }
 struct Block& Polymer::get_block(const int v, const int u)
 {
@@ -278,8 +278,8 @@ void Polymer::set_propagator_key(const std::string code, const int v, const int 
 {
     edge_to_propagator_key[std::make_pair(v, u)] = code;
 }
-std::string Polymer::get_propagator_key(const int v, const int u) {
+std::string Polymer::get_propagator_key(const int v, const int u) const {
     validation::require_key(edge_to_propagator_key, std::make_pair(v,u),
         "edge_to_propagator_key for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
-    return edge_to_propagator_key[std::make_pair(v,u)];
+    return edge_to_propagator_key.at(std::make_pair(v,u));
 }
