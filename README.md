@@ -24,7 +24,7 @@ This repository contains a library for polymer field theory simulations and its 
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
   * Parallel computations of propagators with multi-core CPUs (up to 8), or multi CUDA streams (up to 4) to maximize GPU usage
-  * GPU memory saving option
+  * Memory saving option
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
 On the top the above library, SCFT and L-FTS are implemented. They support following features:
@@ -112,7 +112,7 @@ conda env remove -n polymerfts
   + In `lfts.py`, the structure function is computed under the assumption that $\left<w({\bf k})\right>\left<\phi(-{\bf k})\right>$ is zero.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
 + Open-source has no warranty. Make sure that this program reproduces the results of previous SCFT and FTS studies, and also produces reasonable results. For acyclic branched polymers adopting the `Continuous` model with an even number of contour steps, the results must be identical to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results must be identical to those of code in [*Polymers* **2021**, 13, 2437].
-+ It must produce the same results within the machine precision regardless of platform (CUDA or MKL), use of superposition, and use of GPU memory saving option. After changing 'platform' and 'aggregate_propagator_computation', run a few iterations with the same simulation parameters. And check if it outputs the same results.
++ It must produce the same results within the machine precision regardless of platform (CUDA or MKL), use of superposition, and use of memory saving option. After changing 'platform' and 'aggregate_propagator_computation', run a few iterations with the same simulation parameters. And check if it outputs the same results.
 
 + Matlab and Python tools for visualization and renormalization are included in `tools` folder.
 

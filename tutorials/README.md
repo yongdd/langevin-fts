@@ -58,33 +58,34 @@ Include compositional fluctuations beyond mean-field theory.
 
 The tutorials use two API levels:
 
-### High-Level API (Recommended for beginners)
+### High-Level API (Recommended)
 
 ```python
 from polymerfts import PropagatorSolver
 
+# Create solver
 solver = PropagatorSolver(
     nx=[64, 64], lx=[4.0, 4.0],
     ds=0.01,
     bond_lengths={"A": 1.0, "B": 1.0},
-    bc=["periodic", "periodic", "reflecting", "reflecting"]
+    bc=["periodic"]*4,
+    chain_model="continuous",
+    method="pseudospectral",
+    platform="cpu-mkl",
+    reduce_memory_usage=False
 )
+
+# Add polymer
 solver.add_polymer(1.0, [["A", 0.5, 0, 1], ["B", 0.5, 1, 2]])
-solver.set_fields({"A": w_A, "B": w_B})
-q_out = solver.advance(q_in, "A")
-```
 
-### Low-Level Factory API (For advanced control)
+# Compute propagators
+solver.compute_propagators({"A": w_A, "B": w_B})
 
-```python
-import polymerfts
-
-factory = polymerfts.PlatformSelector.create_factory("cpu-mkl", False)
-cb = factory.create_computation_box(nx, lx, bc=bc)
-molecules = factory.create_molecules_information("continuous", ds, bond_lengths)
-molecules.add_polymer(1.0, blocks)
-prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+# Get results
+Q = solver.get_partition_function(polymer=0)
+q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
+solver.compute_concentrations()
+phi_A = solver.get_concentration("A")
 ```
 
 ## Notation and Units

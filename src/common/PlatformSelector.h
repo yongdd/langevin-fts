@@ -101,9 +101,9 @@ public:
      * fields (standard SCFT and L-FTS calculations).
      *
      * @param platform            Platform name: "cuda" or "cpu-mkl"
-     * @param reduce_memory_usage Enable memory-saving mode (CUDA only).
+     * @param reduce_memory_usage Enable memory-saving mode.
      *                            Stores only propagator checkpoints to reduce
-     *                            GPU memory usage at the cost of recomputation.
+     *                            memory usage at the cost of recomputation.
      *
      * @return AbstractFactory<double>* pointer to the created factory
      *
@@ -119,8 +119,8 @@ public:
      * // Memory-efficient CUDA factory (for large grids)
      * auto* factory_mem = PlatformSelector::create_factory_real("cuda", true);
      *
-     * // CPU factory (reduce_memory_usage is ignored)
-     * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-mkl", false);
+     * // Memory-efficient CPU factory
+     * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-mkl", true);
      * @endcode
      */
     static AbstractFactory<double>* create_factory_real(std::string platform, bool reduce_memory_usage);
@@ -132,7 +132,7 @@ public:
      * fields (certain advanced applications with complex order parameters).
      *
      * @param platform            Platform name: "cuda" or "cpu-mkl"
-     * @param reduce_memory_usage Enable memory-saving mode (CUDA only)
+     * @param reduce_memory_usage Enable memory-saving mode
      *
      * @return AbstractFactory<std::complex<double>>* pointer to the created factory
      *

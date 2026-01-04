@@ -259,7 +259,7 @@ class SCFT:
             Computational backend. Auto-selected if not specified:
             1D → cpu-mkl, 2D/3D → cuda (if available).
         - reduce_memory_usage : bool, optional
-            Enable memory-saving mode (CUDA only, default: False).
+            Enable memory-saving mode (default: False).
             Stores only checkpoints, recomputes propagators as needed.
 
         **Optimization Parameters:**

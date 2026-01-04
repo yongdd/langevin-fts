@@ -15,19 +15,27 @@ Example usage:
         nx=[64], lx=[4.0],
         ds=0.01,
         bond_lengths={"A": 1.0},
-        bc=["reflecting", "reflecting"]
+        bc=["reflecting", "reflecting"],
+        chain_model="continuous",
+        method="pseudospectral",
+        platform="cpu-mkl",
+        reduce_memory_usage=False
     )
 
     # Add a homopolymer
     solver.add_polymer(volume_fraction=1.0, blocks=[["A", 1.0, 0, 1]])
 
-    # Initialize with zero potential
-    solver.set_fields({"A": np.zeros(64)})
+    # Compute all propagators
+    solver.compute_propagators({"A": np.zeros(64)})
 
-    # Evolve propagator
-    q = np.exp(-((x - 2.0)**2) / 0.32)  # Gaussian initial condition
-    for step in range(50):
-        q = solver.advance(q, "A")
+    # Get propagator at specific contour position
+    q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
+
+    # Get partition function
+    Q = solver.get_partition_function(polymer=0)
+
+    # Compute and get concentrations
+    phi_A = solver.get_concentration("A")
 """
 
 import numpy as np
@@ -53,19 +61,25 @@ class PropagatorSolver:
         Contour step size for chain discretization (e.g., 0.01 for N=100 segments).
     bond_lengths : dict
         Statistical segment lengths for each monomer type, e.g., {"A": 1.0, "B": 1.0}.
-    bc : list of str, optional
+    bc : list of str
         Boundary conditions. Format depends on dimensionality:
         - 1D: [x_low, x_high]
         - 2D: [x_low, x_high, y_low, y_high]
         - 3D: [x_low, x_high, y_low, y_high, z_low, z_high]
         Options: "periodic", "reflecting", "absorbing"
-        Default: all periodic
-    chain_model : str, optional
-        Chain model type: "continuous" or "discrete". Default: "continuous"
-    method : str, optional
-        Numerical method: "pseudospectral" or "realspace". Default: "pseudospectral"
-    platform : str, optional
-        Computational platform: "cpu-mkl" or "cuda". Default: "cpu-mkl"
+    chain_model : str
+        Chain model type: "continuous" or "discrete".
+    method : str
+        Numerical method: "pseudospectral" or "realspace".
+    platform : str
+        Computational platform: "cpu-mkl" or "cuda".
+    reduce_memory_usage : bool
+        If True, reduce memory usage by storing only propagator checkpoints
+        instead of full histories. Increases computation time by 2-4x.
+    mask : numpy.ndarray, optional
+        Mask array defining accessible (1) and impenetrable (0) regions.
+        After each propagation step, the propagator is multiplied by the mask.
+        Useful for simulating polymers around nanoparticles or in confined geometries.
 
     Attributes
     ----------
@@ -86,11 +100,16 @@ class PropagatorSolver:
     ...     nx=[64], lx=[4.0],
     ...     ds=0.01,
     ...     bond_lengths={"A": 1.0},
-    ...     bc=["reflecting", "reflecting"]
+    ...     bc=["reflecting", "reflecting"],
+    ...     chain_model="continuous",
+    ...     method="pseudospectral",
+    ...     platform="cpu-mkl",
+    ...     reduce_memory_usage=False
     ... )
     >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
-    >>> solver.set_fields({"A": np.zeros(64)})
-    >>> q_out = solver.advance(q_in, "A")
+    >>> solver.compute_propagators({"A": np.zeros(64)})
+    >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
+    >>> Q = solver.get_partition_function(polymer=0)
 
     2D thin film with mixed boundaries:
 
@@ -99,7 +118,10 @@ class PropagatorSolver:
     ...     ds=0.01,
     ...     bond_lengths={"A": 1.0},
     ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
-    ...     platform="cuda"
+    ...     chain_model="continuous",
+    ...     method="pseudospectral",
+    ...     platform="cuda",
+    ...     reduce_memory_usage=False
     ... )
     """
 
@@ -109,10 +131,12 @@ class PropagatorSolver:
         lx,
         ds,
         bond_lengths,
-        bc=None,
-        chain_model="continuous",
-        method="pseudospectral",
-        platform="cpu-mkl"
+        bc,
+        chain_model,
+        method,
+        platform,
+        reduce_memory_usage,
+        mask=None
     ):
         """Initialize the propagator solver."""
 
@@ -126,9 +150,7 @@ class PropagatorSolver:
         if len(lx) != self.dim:
             raise ValueError(f"nx and lx must have same length: {len(nx)} != {len(lx)}")
 
-        # Default boundary conditions (all periodic)
-        if bc is None:
-            bc = ["periodic"] * (2 * self.dim)
+        # Store boundary conditions
         self.bc = list(bc)
 
         # Validate boundary conditions
@@ -165,8 +187,21 @@ class PropagatorSolver:
                   "Switching to real-space method.")
             self.method = "realspace"
 
+        # Store memory usage option
+        self.reduce_memory_usage = reduce_memory_usage
+
+        # Store and validate mask
+        if mask is not None:
+            if np.size(mask) != self.n_grid:
+                raise ValueError(
+                    f"mask has wrong size: {np.size(mask)} != {self.n_grid}"
+                )
+            self.mask = np.asarray(mask)
+        else:
+            self.mask = None
+
         # Create factory
-        self._factory = _core.PlatformSelector.create_factory(self.platform, False)
+        self._factory = _core.PlatformSelector.create_factory(self.platform, self.reduce_memory_usage)
 
         # Create molecules
         self._molecules = self._factory.create_molecules_information(
@@ -182,7 +217,7 @@ class PropagatorSolver:
         self._prop_opt = None
         self._fields_set = False
 
-    def add_polymer(self, volume_fraction, blocks):
+    def add_polymer(self, volume_fraction, blocks, grafting_points=None):
         """
         Add a polymer species to the system.
 
@@ -199,6 +234,10 @@ class PropagatorSolver:
 
             For a homopolymer:
                 blocks = [["A", 1.0, 0, 1]]
+        grafting_points : dict, optional
+            Custom initial conditions for specific nodes.
+            Keys are node indices (int), values are string labels for q_init.
+            Example: {0: "G"} means node 0 uses q_init["G"] as initial condition.
 
         Examples
         --------
@@ -209,14 +248,21 @@ class PropagatorSolver:
         Add a homopolymer:
 
         >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
+
+        Add a homopolymer with grafting point at node 0:
+
+        >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]], grafting_points={0: "G"})
         """
         if self._solver is not None:
             raise RuntimeError(
                 "Cannot add polymers after solver has been initialized. "
-                "Add all polymers before calling set_fields() or advance()."
+                "Add all polymers before calling compute_propagators()."
             )
 
-        self._molecules.add_polymer(volume_fraction, blocks)
+        if grafting_points is None:
+            self._molecules.add_polymer(volume_fraction, blocks)
+        else:
+            self._molecules.add_polymer(volume_fraction, blocks, grafting_points)
         self._polymers_added = True
 
     def _initialize_solver(self):
@@ -235,9 +281,14 @@ class PropagatorSolver:
         )
 
         # Create computation box
-        self._cb = self._factory.create_computation_box(
-            nx=self.nx, lx=self.lx, bc=self.bc
-        )
+        if self.mask is not None:
+            self._cb = self._factory.create_computation_box(
+                nx=self.nx, lx=self.lx, bc=self.bc, mask=self.mask
+            )
+        else:
+            self._cb = self._factory.create_computation_box(
+                nx=self.nx, lx=self.lx, bc=self.bc
+            )
 
         # Create solver based on method
         if self.method == "pseudospectral":
@@ -251,13 +302,12 @@ class PropagatorSolver:
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
-    def set_fields(self, w_fields):
+    def compute_propagators(self, w_fields, q_init=None):
         """
-        Set the potential fields for propagator calculation.
+        Compute all chain propagators for the given potential fields.
 
-        This must be called before advancing propagators. The fields
-        determine the Boltzmann weights exp(-w*ds) used in the propagator
-        evolution.
+        This must be called after adding polymers. It computes all chain
+        propagators using the specified potential fields.
 
         Parameters
         ----------
@@ -265,16 +315,25 @@ class PropagatorSolver:
             Potential fields for each monomer type.
             Keys are monomer type strings (e.g., "A", "B").
             Values are numpy arrays of shape matching the grid.
+        q_init : dict, optional
+            Custom initial conditions for grafting points.
+            Keys are string labels matching those in grafting_points.
+            Values are numpy arrays of shape matching the grid.
+            Example: {"G": delta_function_array}
 
         Examples
         --------
-        Set zero fields for a single monomer type:
+        Compute propagators with zero fields:
 
-        >>> solver.set_fields({"A": np.zeros(64)})
+        >>> solver.compute_propagators({"A": np.zeros(64)})
 
-        Set fields for AB diblock:
+        Compute propagators for AB diblock:
 
-        >>> solver.set_fields({"A": w_A, "B": w_B})
+        >>> solver.compute_propagators({"A": w_A, "B": w_B})
+
+        Compute propagators with custom initial condition:
+
+        >>> solver.compute_propagators({"A": w_A}, q_init={"G": q_init_array})
         """
         self._initialize_solver()
 
@@ -285,81 +344,123 @@ class PropagatorSolver:
                     f"Field '{key}' has wrong size: {np.size(field)} != {self.n_grid}"
                 )
 
-        self._solver.compute_propagators(w_fields)
+        # Validate q_init shapes if provided
+        if q_init is not None:
+            for key, field in q_init.items():
+                if np.size(field) != self.n_grid:
+                    raise ValueError(
+                        f"q_init '{key}' has wrong size: {np.size(field)} != {self.n_grid}"
+                    )
+            self._solver.compute_propagators(w_fields, q_init=q_init)
+        else:
+            self._solver.compute_propagators(w_fields)
         self._fields_set = True
 
-    def advance(self, q_in, monomer_type):
+    def get_propagator(self, polymer, v, u, step):
         """
-        Advance the propagator by one contour step.
-
-        This evolves the propagator q(r, s) to q(r, s+ds) using the
-        diffusion equation with the potential field set by set_fields().
+        Get the chain propagator at a specific contour position.
 
         Parameters
         ----------
-        q_in : numpy.ndarray
-            Input propagator field.
-        monomer_type : str
-            Monomer type for this segment (e.g., "A").
+        polymer : int
+            Polymer index (0-based).
+        v : int
+            Starting node index for the block.
+        u : int
+            Ending node index for the block.
+        step : int
+            Contour step index (0 to n_segments).
 
         Returns
         -------
         numpy.ndarray
-            Output propagator after one step.
+            Propagator field q(r, s) at the specified contour position.
 
         Examples
         --------
-        Evolve propagator for 50 steps:
+        Get propagator at step 50 for a homopolymer:
 
-        >>> q = initial_condition
-        >>> for step in range(50):
-        ...     q = solver.advance(q, "A")
+        >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
         """
         if not self._fields_set:
             raise RuntimeError(
-                "Fields not set. Call set_fields() before advance()."
+                "Propagators not computed. Call compute_propagators() first."
             )
 
-        q_in = np.asarray(q_in, dtype=np.float64)
-        if q_in.size != self.n_grid:
-            raise ValueError(
-                f"q_in has wrong size: {q_in.size} != {self.n_grid}"
-            )
+        return self._solver.get_chain_propagator(polymer, v, u, step)
 
-        return self._solver.advance_propagator_single_segment(
-            q_in.ravel(), monomer_type
-        )
-
-    def propagate(self, q_init, monomer_type, n_steps):
+    def get_partition_function(self, polymer):
         """
-        Propagate for multiple contour steps.
-
-        Convenience method that calls advance() repeatedly.
+        Get the single-chain partition function.
 
         Parameters
         ----------
-        q_init : numpy.ndarray
-            Initial propagator field.
+        polymer : int
+            Polymer index (0-based).
+
+        Returns
+        -------
+        float
+            Partition function Q for the specified polymer.
+
+        Examples
+        --------
+        >>> Q = solver.get_partition_function(polymer=0)
+        """
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+
+        return self._solver.get_total_partition(polymer)
+
+    def compute_concentrations(self):
+        """
+        Compute ensemble-averaged concentrations.
+
+        Must be called after compute_propagators(). Computes the segment density
+        for each monomer type.
+
+        Examples
+        --------
+        >>> solver.compute_propagators({"A": w_A, "B": w_B})
+        >>> solver.compute_concentrations()
+        >>> phi_A = solver.get_concentration("A")
+        """
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+
+        self._solver.compute_concentrations()
+
+    def get_concentration(self, monomer_type):
+        """
+        Get the total concentration for a monomer type.
+
+        Must be called after compute_concentrations().
+
+        Parameters
+        ----------
         monomer_type : str
-            Monomer type for all segments.
-        n_steps : int
-            Number of contour steps to take.
+            Monomer type (e.g., "A", "B").
 
         Returns
         -------
         numpy.ndarray
-            Final propagator after n_steps.
+            Concentration field phi(r) for the specified monomer type.
 
         Examples
         --------
-        Propagate for the full chain length:
-
-        >>> q_final = solver.propagate(q_init, "A", n_steps=100)
+        >>> solver.compute_concentrations()
+        >>> phi_A = solver.get_concentration("A")
         """
-        q = np.asarray(q_init, dtype=np.float64).ravel()
-        for _ in range(n_steps):
-            q = self.advance(q, monomer_type)
-        return q
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+
+        return self._solver.get_total_concentration(monomer_type)
 
     def get_grid_points(self):
         """
@@ -432,6 +533,30 @@ class PropagatorSolver:
         )
 
         return np.exp(-r_squared / (2 * sigma**2))
+
+    def get_dv(self):
+        """
+        Get the volume element (grid cell volume).
+
+        This is useful for normalizing delta-function initial conditions.
+
+        Returns
+        -------
+        float
+            Volume of each grid cell: dv = (Lx/Nx) * (Ly/Ny) * ...
+
+        Examples
+        --------
+        Create normalized delta function at origin:
+
+        >>> dv = solver.get_dv()
+        >>> q_init = np.zeros(solver.nx)
+        >>> q_init[0, 0, 0] = 1.0 / dv  # Normalized delta function
+        """
+        dv = 1.0
+        for i in range(self.dim):
+            dv *= self.lx[i] / self.nx[i]
+        return dv
 
     @property
     def info(self):
