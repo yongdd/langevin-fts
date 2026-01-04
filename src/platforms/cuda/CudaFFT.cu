@@ -375,8 +375,8 @@ void CudaFFT<T, DIM>::initPeriodicFFT()
         cufft_backward = CUFFT_Z2Z;
     }
 
-    cufftPlanMany(&plan_forward_, DIM, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_forward, 1);
-    cufftPlanMany(&plan_backward_, DIM, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_backward, 1);
+    cufftPlanMany(&plan_forward_, DIM, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
+    cufftPlanMany(&plan_backward_, DIM, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
 }
 
 //------------------------------------------------------------------------------

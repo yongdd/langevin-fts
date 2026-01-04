@@ -116,10 +116,10 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
 
         for(int i=0; i<n_streams; i++)
         {
-            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_forward, 1);
-            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_forward, 2);
-            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_backward, 1);
-            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, NULL, 1, 0, NULL, 1, 0, cufft_backward, 2);
+            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
+            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 2);
+            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
+            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 2);
             cufftSetStream(plan_for_one[i], streams[i][0]);
             cufftSetStream(plan_for_two[i], streams[i][0]);
             cufftSetStream(plan_bak_one[i], streams[i][0]);

@@ -10,9 +10,10 @@ import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
 
 from . import _core
-from .polymer_field_theory import *
-from .compressor import *
+from .polymer_field_theory import SymmetricPolymerTheory
+from .compressor import LR, LRAM
 from .propagator_solver import PropagatorSolver
+from .validation import validate_lfts_params, ValidationError
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -329,13 +330,13 @@ class LFTS:
     """
     def __init__(self, params, random_seed=None):
 
+        # Validate input parameters
+        validate_lfts_params(params)
+
         # Segment length
         self.monomer_types = sorted(list(params["segment_lengths"].keys()))
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
-
-        assert(len(self.monomer_types) == len(set(self.monomer_types))), \
-            "There are duplicated monomer_types"
 
         # Choose platform among [cuda, cpu-mkl]
         avail_platforms = _core.PlatformSelector.avail_platforms()

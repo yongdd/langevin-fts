@@ -26,6 +26,7 @@
 
 #include <iostream>
 #include "CudaCommon.h"
+#include "CudaRAII.h"
 #include "CudaArray.h"
 
 /**
@@ -35,7 +36,7 @@
  */
 CudaArray::CudaArray(unsigned new_size)
 {
-    gpu_error_check(cudaMalloc((void**)&this->d_data, sizeof(double)*new_size));
+    cuda_malloc(&this->d_data, new_size);
     this->size = new_size;
     this->device="cuda";
 

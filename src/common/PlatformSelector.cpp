@@ -82,7 +82,7 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(std::string platf
         return new CudaFactory<double>(reduce_memory_usage);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -109,5 +109,5 @@ AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
         return new CudaFactory<std::complex<double>>(reduce_memory_usage);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
-    return NULL;
+    return nullptr;
 }

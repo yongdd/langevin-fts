@@ -107,7 +107,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(Computati
         return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     else if( chain_model == "discrete" && this->reduce_memory_usage == true)
         return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-    return NULL;
+    return nullptr;
 }
 template <typename T>
 PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
@@ -123,7 +123,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox
         {
             throw_with_line_number("The real-space solver does not support discrete chain model.");
         }
-        return NULL;
+        return nullptr;
     }
     catch(std::exception& exc)
     {
