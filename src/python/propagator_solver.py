@@ -280,15 +280,16 @@ class PropagatorSolver:
             self._molecules, True
         )
 
-        # Create computation box
-        if self.mask is not None:
-            self._computation_box = self._factory.create_computation_box(
-                nx=self.nx, lx=self.lx, bc=self.bc, mask=self.mask
-            )
-        else:
-            self._computation_box = self._factory.create_computation_box(
-                nx=self.nx, lx=self.lx, bc=self.bc
-            )
+        # Create computation box if not already set (e.g., by external code setting angles)
+        if self._computation_box is None:
+            if self.mask is not None:
+                self._computation_box = self._factory.create_computation_box(
+                    nx=self.nx, lx=self.lx, bc=self.bc, mask=self.mask
+                )
+            else:
+                self._computation_box = self._factory.create_computation_box(
+                    nx=self.nx, lx=self.lx, bc=self.bc
+                )
 
         # Create solver based on method
         if self.method == "pseudospectral":

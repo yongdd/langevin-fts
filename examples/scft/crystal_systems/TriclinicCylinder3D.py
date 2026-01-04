@@ -3,13 +3,16 @@ Triclinic crystal system example: AB diblock copolymer cylinder phase
 with full angle optimization.
 
 This demonstrates:
-1. Starting from a non-optimal tilted unit cell
+1. Starting from a non-optimal tilted unit cell (γ = 115°)
 2. Box relaxation optimizing all lengths (a,b,c) and all angles (α,β,γ)
 3. The system naturally finding the optimal hexagonal arrangement (γ → 120°)
 
 For cylinder phase with hexagonal packing:
 - Optimal γ = 120° in the plane perpendicular to cylinder axis
 - Optimal α = β = 90° (cylinders perpendicular to the tilted plane)
+
+Note: Starting angle should be close enough to 120° (e.g., > 105°) to avoid
+local minima near rectangular packing (γ = 90°).
 """
 
 import os
@@ -25,8 +28,8 @@ os.environ["OMP_NUM_THREADS"] = "2"
 # Major Simulation params
 f = 1.0/3.0  # A-fraction - minority forms cylinders
 
-# Start with deliberately non-optimal angles to demonstrate optimization
-initial_gamma = 100.0  # Will optimize toward 120° for hexagonal packing
+# Start with slightly non-optimal angle (close enough to find hexagonal minimum)
+initial_gamma = 115.0  # Will optimize toward 120° for hexagonal packing
 
 # Estimate optimal lattice constant for cylinder phase
 # For hexagonal cylinder at chi_n=18, L ~ 1.8 is reasonable
@@ -110,13 +113,19 @@ w_A = gaussian_filter(w_A, sigma=1.0, mode='wrap')
 # Normalize to have proper amplitude
 w_A = w_A / np.abs(w_A).max() * params["chi_n"]["A,B"] * 0.5
 
+# Add asymmetric perturbation to break symmetry and allow angle optimization
+np.random.seed(42)
+perturbation = np.random.randn(*w_A.shape) * 0.5
+perturbation = gaussian_filter(perturbation, sigma=2.0, mode='wrap')
+w_A = w_A + perturbation
+
 w_B = -w_A  # Complementary field for B
 
 # Initialize calculation
 print("\n" + "="*60)
 print("Triclinic Crystal System SCFT - Cylinder Phase")
 print("="*60)
-print(f"\nStarting with NON-OPTIMAL angles to test optimization:")
+print(f"\nStarting with non-optimal angles to test optimization:")
 print(f"  Initial α = {params['angles'][0]:.1f}° (expect → 90°)")
 print(f"  Initial β = {params['angles'][1]:.1f}° (expect → 90°)")
 print(f"  Initial γ = {params['angles'][2]:.1f}° (expect → 120° for hex)")

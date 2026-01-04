@@ -3,13 +3,16 @@ Oblique 2D crystal system example: AB diblock copolymer cylinder phase
 with angle optimization.
 
 This demonstrates:
-1. Starting from a non-optimal angle (γ = 100°)
+1. Starting from a non-optimal angle (γ = 115°)
 2. Box relaxation optimizing lengths (a, b) and angle (γ)
 3. The system naturally finding the optimal hexagonal arrangement (γ → 120°)
 
 For cylinder phase with hexagonal packing:
 - Optimal γ = 120° gives equidistant nearest-neighbor cylinders
 - Optimal a = b for hexagonal symmetry
+
+Note: Starting angle should be close enough to 120° (e.g., > 105°) to avoid
+local minima near rectangular packing (γ = 90°).
 """
 
 import os
@@ -26,8 +29,8 @@ os.environ["OMP_NUM_THREADS"] = "2"
 f = 1.0/3.0  # A-fraction - minority forms cylinders
 chi_n = 18   # Flory-Huggins parameter
 
-# Start with deliberately non-optimal angle
-initial_gamma = 100.0  # Will optimize toward 120° for hexagonal packing
+# Start with slightly non-optimal angle (close enough to find hexagonal minimum)
+initial_gamma = 115.0  # Will optimize toward 120° for hexagonal packing
 
 # Lattice constant
 L = 1.8
@@ -105,13 +108,21 @@ for i in range(nx):
 # Smooth and normalize
 w_A = gaussian_filter(w_A, sigma=1.0, mode='wrap')
 w_A = w_A / np.abs(w_A).max() * chi_n * 0.5
+
+# Add asymmetric perturbation to break symmetry and allow angle optimization
+# This creates a slight bias that helps the optimizer find the optimal angle
+np.random.seed(42)
+perturbation = np.random.randn(nx, ny) * 0.5
+perturbation = gaussian_filter(perturbation, sigma=2.0, mode='wrap')
+w_A = w_A + perturbation
+
 w_B = -w_A
 
 # Initialize
 print("\n" + "="*60)
 print("Oblique 2D Crystal System SCFT - Cylinder Phase")
 print("="*60)
-print(f"\nStarting with NON-OPTIMAL angle γ = {initial_gamma:.1f}°")
+print(f"\nStarting with non-optimal angle γ = {initial_gamma:.1f}°")
 print(f"Expected optimal angle: γ → 120° for hexagonal packing")
 print(f"\nInitial box: lx = {params['lx']}")
 print(f"Parameters: f = {f:.3f}, χN = {chi_n}")

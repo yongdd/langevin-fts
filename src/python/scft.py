@@ -740,11 +740,11 @@ class SCFT:
                 self.angles_reduced_indices = []  # γ fixed at 120°
                 self.angles_full_indices = []
             elif crystal_system == "Oblique2D":
-                # 2D oblique: γ ≠ 90°, a and b can vary independently, γ fixed
+                # 2D oblique: γ ≠ 90°, a and b can vary independently, γ is optimized
                 self.lx_reduced_indices = [0, 1]  # a and b
                 self.lx_full_indices = [0, 1]  # a, b
-                self.angles_reduced_indices = []  # γ fixed at initial value
-                self.angles_full_indices = []
+                self.angles_reduced_indices = [2]  # γ is at index 2 in full angles array
+                self.angles_full_indices = [2]  # Maps to γ (third angle)
             elif crystal_system == "Orthorhombic":
                 # α = β = γ = 90°, a, b, c can all vary
                 self.lx_reduced_indices = list(range(len(params["lx"])))
@@ -1389,18 +1389,27 @@ class SCFT:
                 # Calculate stress
                 self.prop_solver.compute_stress()
                 stress_array = np.array(self.prop_solver.get_stress())
+                dim = self.prop_solver.dim
 
                 # Only include stress components that are being optimized
-                # Diagonal stress [0:3] for box lengths, off-diagonal [3:6] for angles
-                dim = self.prop_solver.dim
+                # Stress array layout differs by dimension:
+                # 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+                # 2D: [σ_xx, σ_yy, σ_xy, 0, 0, 0]
                 # For 1D/2D, only include stress components for existing dimensions
                 diagonal_stress = stress_array[0:dim]
                 # For non-orthogonal systems, include off-diagonal stress if angles are being optimized
                 angle_stress_indices = []
                 if hasattr(self, 'angles_reduced_indices') and len(self.angles_reduced_indices) > 0:
-                    angle_stress_map = {0: 5, 1: 4, 2: 3}  # α→σ_yz, β→σ_xz, γ→σ_xy
+                    # Mapping from angle index to stress array index
+                    # 3D: α→σ_yz(5), β→σ_xz(4), γ→σ_xy(3)
+                    # 2D: γ→σ_xy(2) (only γ matters in 2D)
+                    if dim == 3:
+                        angle_stress_map = {0: 5, 1: 4, 2: 3}
+                    else:  # dim == 2
+                        angle_stress_map = {2: 2}  # γ→σ_xy at index 2 for 2D
                     for i in self.angles_reduced_indices:
-                        angle_stress_indices.append(angle_stress_map[i])
+                        if i in angle_stress_map:
+                            angle_stress_indices.append(angle_stress_map[i])
                 off_diagonal_stress = stress_array[angle_stress_indices] if angle_stress_indices else np.array([])
                 relevant_stress = np.concatenate([diagonal_stress, off_diagonal_stress])
                 error_level += np.sqrt(np.sum(relevant_stress**2))
@@ -1460,8 +1469,18 @@ class SCFT:
                 # Map off-diagonal stress to angle gradients
                 # For Monoclinic: σ_xz (index 4) drives β angle
                 # For Triclinic: σ_xy→γ, σ_xz→β, σ_yz→α
-                angle_stress_map = {0: 5, 1: 4, 2: 3}  # angle index → stress index (α→σ_yz, β→σ_xz, γ→σ_xy)
-                dangle = np.array([-stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices])
+                # Stress array layout differs by dimension:
+                # 3D: [σ_xx, σ_yy, σ_zz, σ_xy, σ_xz, σ_yz]
+                # 2D: [σ_xx, σ_yy, σ_xy, 0, 0, 0]
+                # Note: Sign is POSITIVE (not negative like for lengths) because:
+                # - Metric g_ij contains cos(γ) for off-diagonal terms
+                # - d(cos(γ))/dγ = -sin(γ), which flips the sign
+                # - So dγ = +σ_xy (not -σ_xy) for gradient descent
+                if dim == 3:
+                    angle_stress_map = {0: 5, 1: 4, 2: 3}
+                else:  # dim == 2
+                    angle_stress_map = {2: 2}  # γ→σ_xy at index 2 for 2D
+                dangle = np.array([stress_array[angle_stress_map[i]] for i in self.angles_reduced_indices if i in angle_stress_map])
 
                 # Current values
                 current_lx = np.array(self.prop_solver.get_lx())[self.lx_reduced_indices]
