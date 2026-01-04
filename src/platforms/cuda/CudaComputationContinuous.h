@@ -38,7 +38,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorComputation.h"
+#include "CudaComputationBase.h"
 #include "CudaCommon.h"
 #include "CudaSolver.h"
 #include "Scheduler.h"
@@ -70,42 +70,10 @@
  * per polymer for efficient Q calculation.
  */
 template <typename T>
-class CudaComputationContinuous : public PropagatorComputation<T>
+class CudaComputationContinuous : public CudaComputationBase<T>
 {
 private:
-    CudaSolver<T> *propagator_solver;  ///< PDE solver (pseudo-spectral or real-space)
     std::string method;                 ///< Solver method ("pseudo" or "real")
-
-    int n_streams;  ///< Number of parallel streams
-
-    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
-
-    CuDeviceData<T> *d_q_unity;  ///< Unity array for propagator initialization
-
-    double *d_q_mask;  ///< Mask for impenetrable regions (nanoparticles)
-
-    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  ///< Workspace [prev, next] per stream
-
-    Scheduler *sc;  ///< Execution scheduler for propagator dependencies
-
-    /// @name Propagator Storage
-    /// @{
-    /**
-     * @brief Propagator arrays on device.
-     *
-     * Key: dependency_code + monomer_type
-     * Value: Array of device pointers [n_segments+1]
-     */
-    std::map<std::string, CuDeviceData<T> **> d_propagator;
-
-    /** @brief Size of each propagator array for deallocation. */
-    std::map<std::string, int> propagator_size;
-
-    #ifndef NDEBUG
-    /** @brief Debug: track propagator computation completion. */
-    std::map<std::string, bool *> propagator_finished;
-    #endif
-    /// @}
 
     /**
      * @brief Single segment per polymer for partition function.
@@ -113,20 +81,6 @@ private:
      * Tuple: (polymer_id, q_forward, q_backward, n_repeated)
      */
     std::vector<std::tuple<int, CuDeviceData<T> *, CuDeviceData<T> *, int>> single_partition_segment;
-
-    /// @name Concentration Storage
-    /// @{
-    /**
-     * @brief Block concentrations on device.
-     *
-     * Key: (polymer_id, key_left, key_right) with key_left <= key_right
-     */
-    std::map<std::tuple<int, std::string, std::string>, CuDeviceData<T> *> d_phi_block;
-
-    CuDeviceData<T> *d_phi;  ///< Temporary for concentration computation
-    /// @}
-
-    std::vector<CuDeviceData<T> *> d_phi_solvent;  ///< Solvent concentrations
 
     /**
      * @brief Compute concentration for one polymer block.
@@ -157,9 +111,6 @@ public:
 
     /** @brief Destructor. Frees GPU resources. */
     ~CudaComputationContinuous();
-
-    /** @brief Update operators for new box dimensions. */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Compute all propagators on GPU.
@@ -199,13 +150,6 @@ public:
     void compute_stress() override;
 
     /**
-     * @brief Get total partition function for polymer.
-     * @param polymer Polymer index
-     * @return log(Q) normalized by volume
-     */
-    T get_total_partition(int polymer) override;
-
-    /**
      * @brief Extract chain propagator to host.
      *
      * @param q_out   Output array (host)
@@ -214,35 +158,6 @@ public:
      * @param n       Contour step
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
-
-    /// @name Canonical Ensemble Concentrations
-    /// @{
-    /** @brief Get total concentration by monomer type. */
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-
-    /** @brief Get concentration for specific polymer and monomer. */
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-
-    /** @brief Get block-by-block concentration. */
-    void get_block_concentration(int polymer, T *phi) override;
-    /// @}
-
-    /// @name Solvent Methods
-    /// @{
-    T get_solvent_partition(int s) override;
-    void get_solvent_concentration(int s, T *phi) override;
-    /// @}
-
-    /**
-     * @brief Grand canonical concentration.
-     *
-     * @param fugacity Polymer fugacity
-     * @param polymer  Polymer index
-     * @param monomer_type Monomer type
-     * @param phi      Output concentration (host)
-     */
-    void get_total_concentration_gce(double fugacity, int polymer,
-        std::string monomer_type, T *phi) override;
 
     /** @brief Verify partition function consistency. */
     bool check_total_partition() override;

@@ -40,7 +40,7 @@
 #include "ComputationBox.h"
 #include "Polymer.h"
 #include "Molecules.h"
-#include "PropagatorComputation.h"
+#include "CudaComputationBase.h"
 #include "CudaCommon.h"
 #include "CudaSolver.h"
 #include "Scheduler.h"
@@ -66,38 +66,13 @@
  * contribute half-bond vs full-bond stress terms.
  */
 template <typename T>
-class CudaComputationDiscrete : public PropagatorComputation<T>
+class CudaComputationDiscrete : public CudaComputationBase<T>
 {
 private:
-    CudaSolver<T> *propagator_solver;  ///< Pseudo-spectral PDE solver
-
-    int n_streams;  ///< Number of parallel streams
-
-    cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
-
-    CuDeviceData<T> *d_q_unity;  ///< Unity array for initialization
-
-    double *d_q_mask;  ///< Mask for impenetrable regions
-
-    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  ///< Workspace [prev, next]
-
-    Scheduler *sc;  ///< Propagator execution scheduler
-
-    /// @name Propagator Storage
-    /// @{
-    /** @brief Full-step propagators q(r,n). */
-    std::map<std::string, CuDeviceData<T> **> d_propagator;
-
     /** @brief Half-bond propagators q(r,n+1/2) at junctions. */
     std::map<std::string, CuDeviceData<T> **> d_propagator_half_steps;
 
-    /** @brief Propagator array sizes for deallocation. */
-    std::map<std::string, int> propagator_size;
-    /// @}
-
     #ifndef NDEBUG
-    /** @brief Debug: track full-step completion. */
-    std::map<std::string, bool *> propagator_finished;
     /** @brief Debug: track half-step completion. */
     std::map<std::string, std::map<int, bool>> propagator_half_steps_finished;
     #endif
@@ -110,14 +85,6 @@ private:
      */
     std::vector<std::tuple<int, CuDeviceData<T> *, CuDeviceData<T> *, std::string, int>> single_partition_segment;
 
-    /// @name Concentration Storage
-    /// @{
-    /** @brief Block concentrations on device. */
-    std::map<std::tuple<int, std::string, std::string>, CuDeviceData<T> *> d_phi_block;
-
-    CuDeviceData<T> *d_phi;  ///< Temporary for computation
-    /// @}
-
     /**
      * @brief Stress computation plan for discrete chains.
      *
@@ -126,8 +93,6 @@ private:
      */
     std::map<std::tuple<int, std::string, std::string>,
         std::vector<std::tuple<CuDeviceData<T> *, CuDeviceData<T> *, bool>>> block_stress_computation_plan;
-
-    std::vector<CuDeviceData<T> *> d_phi_solvent;  ///< Solvent concentrations
 
     /**
      * @brief Compute concentration for one block (discrete model).
@@ -158,9 +123,6 @@ public:
 
     /** @brief Destructor. Frees GPU resources. */
     ~CudaComputationDiscrete();
-
-    /** @brief Update half-bond diffusion operators. */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Compute all propagators including half-bond steps.
@@ -198,13 +160,6 @@ public:
     void compute_stress() override;
 
     /**
-     * @brief Get partition function with exp(-w) normalization.
-     * @param polymer Polymer index
-     * @return log(Q) normalized by volume
-     */
-    T get_total_partition(int polymer) override;
-
-    /**
      * @brief Extract chain propagator to host.
      *
      * @param q_out   Output array (host)
@@ -213,23 +168,6 @@ public:
      * @param n       Contour step
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
-
-    /// @name Canonical Ensemble Concentrations
-    /// @{
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-    void get_block_concentration(int polymer, T *phi) override;
-    /// @}
-
-    /// @name Solvent Methods
-    /// @{
-    T get_solvent_partition(int s) override;
-    void get_solvent_concentration(int s, T *phi) override;
-    /// @}
-
-    /** @brief Grand canonical concentration. */
-    void get_total_concentration_gce(double fugacity, int polymer,
-        std::string monomer_type, T *phi) override;
 
     /** @brief Verify partition function consistency. */
     bool check_total_partition() override;
