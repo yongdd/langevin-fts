@@ -1,6 +1,6 @@
 # Polymer Field Theory Simulations with Python
 
-This repository contains a library for polymer field theory simulations and their applications, such as SCFT and L-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers.
+This repository contains a library for polymer field theory simulations and their applications, such as Self-Consistent Field Theory (SCFT), Langevin Field-Theoretic Simulation (L-FTS), and Complex Langevin FTS (CL-FTS, experimental). The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers.
 
 This open-source code is distributed under the Apache License 2.0. This license is one of the permissive software licenses and has minimal restrictions.
 
@@ -32,13 +32,15 @@ This open-source code is distributed under the Apache License 2.0. This license 
   * Memory saving option
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
-### SCFT and L-FTS Modules
-On top of the above library, SCFT and L-FTS are implemented. They support the following features:
+### SCFT, L-FTS, and CL-FTS Modules
+On top of the above library, SCFT, L-FTS, and CL-FTS are implemented. They support the following features:
   * Polymer melts
   * Arbitrary mixtures of block copolymers, homopolymers, and random copolymers
   * Box size determination by stress calculation (for SCFT)
-  * Leimkuhler-Matthews method for updating exchange field (for L-FTS)
-  * Random Number Generator: PCG64 (for L-FTS)
+  * Leimkuhler-Matthews method for updating exchange field (for L-FTS and CL-FTS)
+  * Random Number Generator: PCG64 (for L-FTS and CL-FTS)
+  * Complex-valued auxiliary fields for handling the sign problem (for CL-FTS, **experimental**)
+  * Dynamical stabilization option (for CL-FTS, **experimental**)
 
 ## Installation
 
@@ -126,12 +128,13 @@ conda env remove -n polymerfts
 + The CUDA version also uses multiple CPUs. Each CPU is responsible for a CUDA computation stream. Allocate as many CPUs as `OMP_NUM_THREADS` when submitting a job.
 + To run a simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the Python script.
 
-### Using SCFT and L-FTS Modules
-+ The `scft.py` and `lfts.py` modules are implemented on top of the `_core` library and `polymer_field_theory.py`.
-  + There are examples in `examples/scft` and `examples/fts`, respectively.
+### Using SCFT, L-FTS, and CL-FTS Modules
++ The `scft.py`, `lfts.py`, and `clfts.py` modules are implemented on top of the `_core` library and `polymer_field_theory.py`.
+  + There are examples in `examples/scft`, `examples/lfts`, and `examples/clfts`, respectively.
   + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in the parameter set.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + In `lfts.py`, the structure function is computed under the assumption that $\left<w({\bf k})\right>\left<\phi(-{\bf k})\right>$ is zero.
+  + In `clfts.py` (**experimental**), the fields are complex-valued and the full FFT is used for structure function calculations.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts from the DL-FTS repository (https://github.com/yongdd/deep-langevin-fts). One can easily turn on/off deep learning from the scripts.
 
 ### Validation
@@ -157,6 +160,11 @@ D. Yong, and J. U. Kim, Dynamic Programming for Chain Propagator Computation of 
 
 #### Langevin FTS
 + M. W. Matsen, and T. M. Beardsley, Field-Theoretic Simulations for Block Copolymer Melts Using the Partial Saddle-Point Approximation. *Polymers* **2021**, 13, 2437
+
+#### Complex Langevin FTS
++ V. Ganesan, and G. H. Fredrickson, Field-theoretic polymer simulations. *Europhys. Lett.* **2001**, 55, 814
++ K. T. Delaney, and G. H. Fredrickson, Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions. *J. Phys. Chem. B* **2016**, 120, 7615
++ J. D. Willis, and M. W. Matsen, Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts. *J. Chem. Phys.* **2024**, 161, 244903
 
 #### Field Update Algorithm for L-FTS
 + B. Vorselaars, Efficient Langevin and Monte Carlo sampling algorithms: the case of field-theoretic simulations. *J. Chem. Phys.* **2023**, 158, 114117

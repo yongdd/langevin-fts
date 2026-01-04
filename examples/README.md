@@ -1,8 +1,12 @@
 # References
-#### Continuous Chain Model (fts/Lamellar.py, fts_single_file/Lamellar.py)
+#### Continuous Chain Model (lfts/Lamella.py)
 + T. M. Beardsley, R. K. W. Spencer, and M. W. Matsen, Computationally Efficient Field-Theoretic Simulations for Block Copolymer Melts, *Macromolecules* **2019**, 52, 8840
-#### Discrete Chain Model (fts/Gyroid.py)
+#### Discrete Chain Model (lfts/Gyroid.py)
 + T. M. Beardsley, and M. W. Matsen, Fluctuation correction for the order–disorder transition of diblock copolymer melts, *J. Chem. Phys.* **2021**, 154, 124902
+#### Complex Langevin FTS (clfts/Lamella.py)
++ V. Ganesan, and G. H. Fredrickson, Field-theoretic polymer simulations, *Europhys. Lett.* **2001**, 55, 814
++ K. T. Delaney, and G. H. Fredrickson, Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions, *J. Phys. Chem. B* **2016**, 120, 7615
++ J. D. Willis, and M. W. Matsen, Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts, *J. Chem. Phys.* **2024**, 161, 244903
 #### ABA Triblock (scft/ABA_Triblock1D.py)
 + M. W. Matsen, and R. B. Thompson, Equilibrium behavior of symmetric ABA triblock copolymer melts, *J. Chem. Phys* **1999**, 111, 7139  
 #### ABC Triblock (scft/ABC_Triblock_Sphere3D.py)
