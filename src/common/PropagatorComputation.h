@@ -75,6 +75,9 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Exception.h"
 
+/// Tolerance for partition function consistency check in check_total_partition()
+constexpr double PARTITION_TOLERANCE = 1e-7;
+
 /**
  * @class PropagatorComputation
  * @brief Abstract base class for chain propagator computation.

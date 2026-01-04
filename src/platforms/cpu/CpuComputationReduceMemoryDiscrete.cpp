@@ -1335,7 +1335,7 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
         double diff_partition = std::abs(max_partition - min_partition);
 
         std::cout<< "\t" << p << ": " << max_partition << ", " << min_partition << ", " << diff_partition << std::endl;
-        if (diff_partition > 1e-7)
+        if (diff_partition > PARTITION_TOLERANCE)
             return false;
     }
     return true;
