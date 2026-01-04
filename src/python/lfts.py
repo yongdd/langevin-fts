@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import logging
 import pathlib
 import copy
 import numpy as np
@@ -14,6 +15,18 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .compressor import LR, LRAM
 from .propagator_solver import PropagatorSolver
 from .validation import validate_lfts_params, ValidationError
+from .utils import (
+    create_monomer_color_dict,
+    draw_polymer_architecture,
+    parse_chi_n,
+    validate_polymers,
+    process_polymer_blocks,
+    process_random_copolymer,
+    DEFAULT_MONOMER_COLORS,
+)
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -359,26 +372,14 @@ class LFTS:
             bc = ["periodic"] * (2 * len(params["nx"]))
 
         # Flory-Huggins parameters, χN
-        self.chi_n = {}
-        for monomer_pair_str, chin_value in params["chi_n"].items():
-            monomer_pair = re.split(',| |_|/', monomer_pair_str)
-            assert(monomer_pair[0] in self.segment_lengths), \
-                f"Monomer type '{monomer_pair[0]}' is not in 'segment_lengths'."
-            assert(monomer_pair[1] in self.segment_lengths), \
-                f"Monomer type '{monomer_pair[1]}' is not in 'segment_lengths'."
-            assert(monomer_pair[0] != monomer_pair[1]), \
-                "Do not add self interaction parameter, " + monomer_pair_str + "."
-            monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
-            assert(not sorted_monomer_pair in self.chi_n), \
-                f"There are duplicated χN ({sorted_monomer_pair}) parameters."
-            self.chi_n[sorted_monomer_pair] = chin_value
+        self.chi_n = parse_chi_n(params["chi_n"], self.segment_lengths)
 
+        # Add missing monomer pair combinations with zero interaction
         for monomer_pair in itertools.combinations(self.monomer_types, 2):
             monomer_pair = list(monomer_pair)
             monomer_pair.sort()
-            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1] 
-            if not sorted_monomer_pair in self.chi_n:
+            sorted_monomer_pair = monomer_pair[0] + "," + monomer_pair[1]
+            if sorted_monomer_pair not in self.chi_n:
                 self.chi_n[sorted_monomer_pair] = 0.0
 
         # Multimonomer polymer field theory
@@ -389,113 +390,31 @@ class LFTS:
         R = len(self.mpt.aux_fields_real_idx)
         I = len(self.mpt.aux_fields_imag_idx)
 
-        # Total volume fraction
-        assert(len(self.distinct_polymers) >= 1), \
-            "There is no polymer chain."
+        # Validate polymer chain definitions
+        validate_polymers(self.distinct_polymers)
 
-        total_volume_fraction = 0.0
+        # Process polymer chain blocks
         for polymer in self.distinct_polymers:
-            total_volume_fraction += polymer["volume_fraction"]
-        assert(np.isclose(total_volume_fraction,1.0)), "The sum of volume fractions must be equal to 1."
+            blocks_input = process_polymer_blocks(polymer)
+            polymer["blocks_input"] = blocks_input
 
-        # Polymer chains
-        for polymer_counter, polymer in enumerate(self.distinct_polymers):
-            blocks_input = []
-            alpha = 0.0             # total_relative_contour_length
-            has_node_number = not "v" in polymer["blocks"][0]
-            for block in polymer["blocks"]:
-                alpha += block["length"]
-                if has_node_number:
-                    assert(not "v" in block), \
-                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
-                    assert(not "u" in block), \
-                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
-                    blocks_input.append([block["type"], block["length"], len(blocks_input), len(blocks_input)+1])
-                else:
-                    assert("v" in block), \
-                        "Index v should exist in all blocks, or it should not exist in all blocks for each polymer." 
-                    assert("u" in block), \
-                        "Index u should exist in all blocks, or it should not exist in all blocks for each polymer." 
-                    blocks_input.append([block["type"], block["length"], block["v"], block["u"]])
-            polymer.update({"blocks_input":blocks_input})
-
-        # Random copolymer chains
+        # Process random copolymer chains
         self.random_fraction = {}
         for polymer in self.distinct_polymers:
-
-            is_random = False
-            for block in polymer["blocks"]:
-                if "fraction" in block:
-                    is_random = True
-            if not is_random:
-                continue
-
-            assert(len(polymer["blocks"]) == 1), \
-                "Only single block random copolymer is allowed."
-
-            statistical_segment_length = 0
-            total_random_fraction = 0
-            for monomer_type in polymer["blocks"][0]["fraction"]:
-                statistical_segment_length += self.segment_lengths[monomer_type]**2 * polymer["blocks"][0]["fraction"][monomer_type]
-                total_random_fraction += polymer["blocks"][0]["fraction"][monomer_type]
-            statistical_segment_length = np.sqrt(statistical_segment_length)
-
-            assert(np.isclose(total_random_fraction, 1.0)), \
-                "The sum of volume fractions of random copolymer must be equal to 1."
-
-            random_type_string = polymer["blocks"][0]["type"]
-            assert(not random_type_string in self.segment_lengths), \
-                f"The name of random copolymer '{random_type_string}' is already used as a type in 'segment_lengths' or other random copolymer"
-
-            # Add random copolymers
-            polymer["block_monomer_types"] = [random_type_string]
-            self.segment_lengths.update({random_type_string:statistical_segment_length})
-            self.random_fraction[random_type_string] = polymer["blocks"][0]["fraction"]
+            result = process_random_copolymer(polymer, self.segment_lengths)
+            if result is not None:
+                random_type_string, statistical_segment_length, fraction_dict = result
+                polymer["block_monomer_types"] = [random_type_string]
+                self.segment_lengths[random_type_string] = statistical_segment_length
+                self.random_fraction[random_type_string] = fraction_dict
 
         # Make a monomer color dictionary
-        dict_color= {}
-        colors = ["red", "blue", "green", "cyan", "magenta", "yellow"]
-        for count, type in enumerate(self.segment_lengths.keys()):
-            if count < len(colors):
-                dict_color[type] = colors[count]
-            else:
-                dict_color[type] = np.random.rand(3,)
-        print("Monomer color: ", dict_color)
-            
+        dict_color = create_monomer_color_dict(self.segment_lengths)
+        logger.debug(f"Monomer color: {dict_color}")
+
         # Draw polymer chain architectures
         for idx, polymer in enumerate(self.distinct_polymers):
-        
-            # Make a graph
-            G = nx.Graph()
-            for block in polymer["blocks_input"]:
-                type = block[0]
-                length = round(block[1]/params["ds"])
-                v = block[2]
-                u = block[3]
-                G.add_edge(v, u, weight=length, monomer_type=type)
-
-            # Set node colors
-            color_map = []
-            for node in G:
-                if len(G.edges(node)) == 1:
-                    color_map.append('yellow')
-                else: 
-                    color_map.append('gray')
-
-            labels = nx.get_edge_attributes(G, 'weight')
-            pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='twopi')
-            colors = [dict_color[G[u][v]['monomer_type']] for u,v in G.edges()]
-
-            plt.figure(figsize=(20,20))
-            title = "Polymer ID: %2d," % (idx)
-            title += "\nColors of monomers: " + str(dict_color) + ","
-            title += "\nColor of chain ends: 'yellow',"
-            title += "\nColor of junctions: 'gray',"
-            title += "\nPlease note that the length of each edge is not proportional to the number of monomers in this image."
-            plt.title(title)
-            nx.draw(G, pos, node_color=color_map, edge_color=colors, width=4, with_labels=True) #, node_size=100, font_size=15)
-            nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
-            plt.savefig("polymer_%01d.png" % (idx))
+            draw_polymer_architecture(polymer, idx, params["ds"], dict_color)
 
         # Create PropagatorSolver instance
         self.prop_solver = PropagatorSolver(
@@ -547,8 +466,8 @@ class LFTS:
 
         # Fields Relaxation using Linear Response Method
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
-            assert(I == 1), \
-                f"Currently, LR methods are not working for imaginary-valued auxiliary fields."
+            if I != 1:
+                raise ValidationError("Currently, LR methods are not working for imaginary-valued auxiliary fields.")
 
             w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field

@@ -6,6 +6,7 @@ matrices to obtain auxiliary field representations.
 """
 
 import numpy as np
+from .validation import ValidationError
 
 class SymmetricPolymerTheory:
     """Symmetric polymer field theory for multi-monomer systems.
@@ -189,8 +190,8 @@ class SymmetricPolymerTheory:
 
         # Check the inverse matrix
         error = np.std(np.matmul(matrix_a, matrix_a_inv) - np.identity(M))
-        assert(np.isclose(error, 0.0)), \
-            "Invalid inverse of matrix A. Perhaps matrix O is not orthogonal."
+        if not np.isclose(error, 0.0):
+            raise ValidationError("Invalid inverse of matrix A. Perhaps matrix O is not orthogonal.")
         
         # Compute derivatives of Hamiltonian coefficients w.r.t. χN
         epsilon = 1e-5
