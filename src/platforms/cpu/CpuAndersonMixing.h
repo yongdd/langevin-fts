@@ -14,6 +14,9 @@
 #ifndef CPU_ANDERSON_MIXING_H_
 #define CPU_ANDERSON_MIXING_H_
 
+#include <memory>
+#include <vector>
+
 #include "ComputationBox.h"
 #include "CircularBuffer.h"
 #include "AndersonMixing.h"
@@ -40,14 +43,14 @@ template <typename T>
 class CpuAndersonMixing : public AndersonMixing<T>
 {
 private:
-    CircularBuffer<T> *cb_w_hist;        ///< History of field values
-    CircularBuffer<T> *cb_w_deriv_hist;  ///< History of residuals
-    CircularBuffer<T> *cb_w_deriv_dots;  ///< Cached dot products
-    T *w_deriv_dots;                     ///< Current residual dot products
+    std::unique_ptr<CircularBuffer<T>> cb_w_hist;        ///< History of field values
+    std::unique_ptr<CircularBuffer<T>> cb_w_deriv_hist;  ///< History of residuals
+    std::unique_ptr<CircularBuffer<T>> cb_w_deriv_dots;  ///< Cached dot products
+    std::vector<T> w_deriv_dots;                         ///< Current residual dot products
 
-    T **u_nm;  ///< Matrix for normal equations (max_hist x max_hist)
-    T *v_n;    ///< RHS vector for normal equations
-    T *a_n;    ///< Solution coefficients
+    std::vector<std::vector<T>> u_nm;  ///< Matrix for normal equations (max_hist x max_hist)
+    std::vector<T> v_n;                ///< RHS vector for normal equations
+    std::vector<T> a_n;                ///< Solution coefficients
 
     /**
      * @brief Compute dot product of two vectors.

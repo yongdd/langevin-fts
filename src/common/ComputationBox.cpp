@@ -88,11 +88,11 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             total_grid *= nx[d];
 
         // Mask
-        // Penetrable region == 1.0 
+        // Penetrable region == 1.0
         // Impenetrable region == 0.0
         if (mask != nullptr)
         {
-            this->mask = new double[total_grid];
+            this->mask.resize(total_grid);
             for(int i=0; i<total_grid; i++)
             {
                 if(std::abs(mask[i]) < 1e-7)
@@ -103,18 +103,17 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                     throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
             }
         }
-        else
-            this->mask = nullptr;
+        // else: mask remains empty (no mask)
 
         // Weight factor for integral
-        dv = new double[total_grid];
+        dv.resize(total_grid);
         for(int i=0; i<total_grid; i++)
         {
             dv[i] = 1.0;
             for(int d=0; d<DIM; d++)
                 dv[i] *= dx[d];
         }
-        if (this->mask != nullptr)
+        if (!this->mask.empty())
             for(int i=0; i<total_grid; i++)
                 dv[i] *= this->mask[i];
 
@@ -302,7 +301,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         // Mask
         if (mask != nullptr)
         {
-            this->mask = new double[total_grid];
+            this->mask.resize(total_grid);
             for(int i=0; i<total_grid; i++)
             {
                 if(std::abs(mask[i]) < 1e-7)
@@ -313,8 +312,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                     throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
             }
         }
-        else
-            this->mask = nullptr;
+        // else: mask remains empty (no mask)
 
         // Initialize lattice vectors and metric tensor
         lattice_vec_.fill(0.0);
@@ -327,11 +325,11 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         compute_recip_metric();
 
         // Weight factor for integral (using volume from lattice vectors)
-        dv = new double[total_grid];
+        dv.resize(total_grid);
         double dv_base = volume / total_grid;  // Volume element
         for(int i=0; i<total_grid; i++)
             dv[i] = dv_base;
-        if (this->mask != nullptr)
+        if (!this->mask.empty())
             for(int i=0; i<total_grid; i++)
                 dv[i] *= this->mask[i];
 
@@ -399,9 +397,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
 template <typename T>
 ComputationBox<T>::~ComputationBox()
 {
-    delete[] dv;
-    if (mask != nullptr)
-        delete[] mask;
+    // Vectors handle memory cleanup automatically
 }
 
 //----------------- Lattice computation methods -----------------------------
@@ -619,7 +615,7 @@ double ComputationBox<T>::get_accessible_volume()
 template <typename T>
 const double* ComputationBox<T>::get_mask()
 {
-    return mask;
+    return mask.empty() ? nullptr : mask.data();
 }
 template <typename T>
 const std::vector<BoundaryCondition> ComputationBox<T>::get_boundary_conditions()
@@ -695,7 +691,7 @@ void ComputationBox<T>::set_lx(std::vector<double> new_lx)
     double dv_base = volume / total_grid;
     for(int i=0; i<total_grid; i++)
         dv[i] = dv_base;
-    if (this->mask != nullptr)
+    if (!this->mask.empty())
         for(int i=0; i<total_grid; i++)
             dv[i] *= this->mask[i];
 }
@@ -758,7 +754,7 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     double dv_base = volume / total_grid;
     for(int i=0; i<total_grid; i++)
         dv[i] = dv_base;
-    if (this->mask != nullptr)
+    if (!this->mask.empty())
         for(int i=0; i<total_grid; i++)
             dv[i] *= this->mask[i];
 }

@@ -67,7 +67,7 @@ template <typename T>
 void CudaComputationBox<T>::initialize()
 {
     gpu_error_check(cudaMalloc((void**)&d_dv, sizeof(double)*this->total_grid));
-    gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, this->dv.data(), sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 
     // Temporal storage
     gpu_error_check(cudaMalloc((void**)&d_multiple, sizeof(T)*this->total_grid));
@@ -98,14 +98,14 @@ template <typename T>
 void CudaComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
     ComputationBox<T>::set_lx(new_lx);
-    gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, this->dv.data(), sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------
 template <typename T>
 void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::vector<double> new_angles)
 {
     ComputationBox<T>::set_lattice_parameters(new_lx, new_angles);
-    gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
+    gpu_error_check(cudaMemcpy(d_dv, this->dv.data(), sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------
 template <typename T>

@@ -115,8 +115,8 @@ protected:
     std::vector<double> lx;       ///< Box lengths in each direction [Lx, Ly, Lz] (units: a_Ref*N^0.5)
     std::vector<double> dx;       ///< Grid spacing in each direction [dx, dy, dz] = lx/nx
     int total_grid;               ///< Total number of grid points M = Nx*Ny*Nz
-    double *mask;                 ///< Mask array for impenetrable regions (0=blocked, 1=accessible)
-    double *dv;                   ///< Volume element weights for integration (includes mask)
+    std::vector<double> mask;     ///< Mask array for impenetrable regions (0=blocked, 1=accessible), empty if no mask
+    std::vector<double> dv;       ///< Volume element weights for integration (includes mask)
     double volume;                ///< Total system volume V = a·(b×c) for general lattice
     double accessible_volume;     ///< Accessible volume (excluding masked regions)
 
