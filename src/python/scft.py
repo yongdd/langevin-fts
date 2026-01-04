@@ -740,6 +740,9 @@ class SCFT:
         # Display factory info
         self.prop_solver._factory.display_info()
 
+        # Expose computation box as public attribute (documented in class docstring)
+        self.cb = self.prop_solver._computation_box
+
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
             self.scale_stress = params["scale_stress"]
