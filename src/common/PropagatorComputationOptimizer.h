@@ -12,6 +12,7 @@
 
 #include "Molecules.h"
 #include "Polymer.h"
+#include "PropagatorAggregator.h"
 
 struct ComputationEdge{
     int max_n_segment;                                    // The maximum segment number
@@ -79,10 +80,6 @@ public:
 
     // Add new polymers
     void add_polymer(Polymer& pc, int polymer_count);
-
-    // Aggregate propagators for given left key
-    static std::map<std::string, ComputationBlock> aggregate_propagator_continuous_chain(std::map<std::string, ComputationBlock> u_map);
-    static std::map<std::string, ComputationBlock> aggregate_propagator_discrete_chain  (std::map<std::string, ComputationBlock> u_map);
 
     // Get information of computation propagators and blocks
     bool use_aggregation() const;
