@@ -1,7 +1,7 @@
 # Polymer Field Theory Simulations with Python
 
 # Features
-This repository contains a library for polymer field theory simulations and its applications, such as SCFT and L-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
+This repository contains a library for polymer field theory simulations and their applications, such as SCFT and L-FTS. The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers. It supports the following features:
   * Any number of monomer types
   * Arbitrary acyclic branched polymers
   * Arbitrary mixtures of block copolymers and homopolymers
@@ -12,24 +12,24 @@ This repository contains a library for polymer field theory simulations and its 
   * Automatic optimization of chain propagator computations
   * Chain models: continuous, discrete
   * Pseudo-spectral method
-    * 4th-order Richardson extrapolation method for continuous chain
-    * Support continuous and discrete chains
+    * 4th-order Richardson extrapolation method for continuous chains
+    * Supports continuous and discrete chains
     * Periodic boundaries only
   * Real-space method (**beta**)
-    * 2th-order Crank-Nicolson method
-    * Support only continuous chain
-    * Support periodic, reflecting, absorbing boundaries
-  * Can set impenetrable region using a mask (**beta**)
-  * Can constraint space group symmetries during the SCFT iterations (orthorhombic, tetragonal, and cubic only) (**beta**)
+    * 2nd-order Crank-Nicolson method
+    * Supports only continuous chains
+    * Supports periodic, reflecting, and absorbing boundaries
+  * Can set an impenetrable region using a mask (**beta**)
+  * Can constrain space group symmetries during the SCFT iterations (orthorhombic, tetragonal, and cubic only) (**beta**)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
-  * Parallel computations of propagators with multi-core CPUs (up to 8), or multi CUDA streams (up to 4) to maximize GPU usage
+  * Parallel computations of propagators with multi-core CPUs (up to 8) or multiple CUDA streams (up to 4) to maximize GPU usage
   * Memory saving option
   * Common interfaces regardless of chain model, simulation box dimension, and platform
 
-On the top the above library, SCFT and L-FTS are implemented. They support following features:
+On top of the above library, SCFT and L-FTS are implemented. They support the following features:
   * Polymer melts
-  * Arbitrary mixtures of block copolymers, homopolymers, and random copolymer
+  * Arbitrary mixtures of block copolymers, homopolymers, and random copolymers
   * Box size determination by stress calculation (for SCFT)
   * Leimkuhler-Matthews method for updating exchange field (for L-FTS)
   * Random Number Generator: PCG64 (for L-FTS)
@@ -40,13 +40,13 @@ This open-source code is distributed under the Apache license 2.0. This license 
 #### Linux System
 
 #### C++ Compiler
-  Any C++ compiler that supports C++20 standard or higher. To use MKL, install Intel oneAPI toolkit (without Intel Distribution for Python).
+  Any C++ compiler that supports the C++20 standard or higher. To use MKL, install the Intel oneAPI toolkit (without Intel Distribution for Python).
 
 #### CUDA Toolkit
-  https://developer.nvidia.com/cuda-toolkit   
-  It requires CUDA toolkit version 11.8 or higher for the GPU computation. If it is not installed, ask admin for its installation.
+  https://developer.nvidia.com/cuda-toolkit
+  CUDA Toolkit version 11.8 or higher is required for GPU computation. If it is not installed, ask your system administrator for assistance.
 
-  You need to set `CUDA_ARCHITECTURES` in `CMakeLists.txt` depending on your GPU systems.  
+  You need to set `CUDA_ARCHITECTURES` in `CMakeLists.txt` depending on your GPU system.
   https://developer.nvidia.com/cuda-gpus
 
 #### Anaconda
@@ -85,47 +85,47 @@ make test
 # Install  
 make install   
 ```
-* **If you encounter `Unsupported gpu architecture 'compute_89'`, try one of the followings**     
-  * Remove `;89;90` in `CUDA_ARCHITECTURES` in `CMakeLists.txt`.
-  * Update CUDA Toolkit
-* **If you encounter `segmentation fault`, type following commands.**     
+* **If you encounter `Unsupported gpu architecture 'compute_89'`, try one of the following:**
+  * Remove `;89;90` from `CUDA_ARCHITECTURES` in `CMakeLists.txt`.
+  * Update CUDA Toolkit.
+* **If you encounter a `segmentation fault`, type the following commands:**
 ```Shell
-ulimit -s unlimited       # Add this command in ~/.bashrc
+ulimit -s unlimited       # Add this command to ~/.bashrc
 export OMP_STACKSIZE=1G   # Stack size for OpenMP
 ```
-*  If you want to remove all installations :cry:, type following commands.   
+* If you want to remove all installations :cry:, type the following commands:   
 ```Shell
 conda deactivate  
 conda env remove -n polymerfts  
 ```
 # User Guide
-+ To use this library, first activate virtual environment by typing `conda activate polymerfts` in command line. 
-+ To learn how to use it, please read files in `tutorials` folder.
-+ The unit of length in this library is ${bN^{1/2}}$ for both `Continuous` and `Discrete` chain models, where $b$ is a reference statistical segment length and $N$ is a reference polymerization index. The fields acting on chain are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the`per reference segment` potential, multiply $ds$ to each field.
-+ Set 'reduce_memory_usage=True' if memory space is insufficient to run your simulation. Instead, the execution time increases by several times. The method is based on the idea used in pscfplus (https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).
-+ Even CUDA version use multiple CPUs. Each of them is responsible for each CUDA computation stream. Allocate multiple CPUs as much as `OMP_NUM_THREADS` when submitting a job.
-+ To run simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the python script.
-+ The `scft.py` and `lfts.py` are implemented on the `_core` library and `polymer_field_theory.py`.
++ To use this library, first activate the virtual environment by typing `conda activate polymerfts` in the command line.
++ To learn how to use it, please read the files in the `tutorials` folder.
++ The unit of length in this library is ${bN^{1/2}}$ for both `Continuous` and `Discrete` chain models, where $b$ is a reference statistical segment length and $N$ is a reference polymerization index. The fields acting on chains are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the `per reference segment` potential, multiply $ds$ to each field.
++ Set 'reduce_memory_usage=True' if memory is insufficient to run your simulation. However, the execution time increases by several times. The method is based on the idea used in pscfplus (https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).
++ The CUDA version also uses multiple CPUs. Each CPU is responsible for a CUDA computation stream. Allocate as many CPUs as `OMP_NUM_THREADS` when submitting a job.
++ To run a simulation using only 1 CPU core, set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` in the Python script.
++ The `scft.py` and `lfts.py` modules are implemented on top of the `_core` library and `polymer_field_theory.py`.
   + There are examples in `examples/scft` and `examples/fts`, respectively.
-  + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in parameter set.
+  + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in the parameter set.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + In `lfts.py`, the structure function is computed under the assumption that $\left<w({\bf k})\right>\left<\phi(-{\bf k})\right>$ is zero.
-+ If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts of DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
-+ Open-source has no warranty. Make sure that this program reproduces the results of previous SCFT and FTS studies, and also produces reasonable results. For acyclic branched polymers adopting the `Continuous` model with an even number of contour steps, the results must be identical to those of PSCF (https://github.com/dmorse/pscfpp) within the machine precision. For AB diblock copolymers adopting the `Discrete` model, the results must be identical to those of code in [*Polymers* **2021**, 13, 2437].
-+ It must produce the same results within the machine precision regardless of platform (CUDA or MKL), use of superposition, and use of memory saving option. After changing 'platform' and 'aggregate_propagator_computation', run a few iterations with the same simulation parameters. And check if it outputs the same results.
++ If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts from the DL-FTS repository. (https://github.com/yongdd/deep-langevin-fts) (One can easily turn on/off deep learning from the scripts.)
++ Open-source software has no warranty. Make sure that this program reproduces the results of previous SCFT and FTS studies and also produces reasonable results. For acyclic branched polymers adopting the `Continuous` model with an even number of contour steps, the results must be identical to those of PSCF (https://github.com/dmorse/pscfpp) within machine precision. For AB diblock copolymers adopting the `Discrete` model, the results must be identical to those of the code in [*Polymers* **2021**, 13, 2437].
++ It must produce the same results within machine precision regardless of platform (CUDA or MKL), use of superposition, and use of the memory saving option. After changing 'platform' and 'aggregate_propagator_computation', run a few iterations with the same simulation parameters and check if it outputs the same results.
 
-+ Matlab and Python tools for visualization and renormalization are included in `tools` folder.
++ MATLAB and Python tools for visualization and renormalization are included in the `tools` folder.
 
 # Contribution
-+ Most of python scripts implemented with this library are welcome. They could be very simple scripts for specific polymer morphologies, or modified versions of `scft.py`, `lfts.py`, etc.
-+ Updating C++/CUDA codes by yourself is not recommended. If you want to add new features to C++ part but it is hard to modify it, please send me sample codes written in any programming languages.
-+ They should contain sample results, test codes, or desired outputs to check whether they work correctly.
-+ They do not have to be optimal or to be excellent.
-+ There should be relevant published literatures.
-+ Currently, this library is updated without considering compatibility with previous versions. We will keep managing the contributed codes so that they can be executed in the updated version.
-+ **Contributed codes must not contains GPL-licensed codes.**
-+ Please do not send me exclusive codes of your lab. Make sure that they are allowed as open-source.
-+ Any suggestions and advices are welcome, but they could not be reflected.
++ Most Python scripts implemented with this library are welcome. They could be very simple scripts for specific polymer morphologies or modified versions of `scft.py`, `lfts.py`, etc.
++ Updating the C++/CUDA code yourself is not recommended. If you want to add new features to the C++ code but find it difficult to modify, please send me sample code written in any programming language.
++ Contributions should contain sample results, test code, or desired outputs to check whether they work correctly.
++ They do not have to be optimal or excellent.
++ There should be relevant published literature.
++ Currently, this library is updated without considering compatibility with previous versions. We will keep managing the contributed code so that it can be executed in the updated version.
++ **Contributed code must not contain GPL-licensed code.**
++ Please do not send me exclusive code from your lab. Make sure that it is allowed as open-source.
++ Any suggestions and advice are welcome, but they may not be reflected.
 
 # Developer Guide
 
@@ -136,8 +136,8 @@ conda env remove -n polymerfts
   `streams` and `cuFFT` are utilized.  
   https://developer.download.nvidia.com/CUDA/training/StreamsAndConcurrencyWebinar.pdf
 
-#### Platforms  
-  This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for given platform, `abstract factory pattern` is adopted.   
+#### Platforms
+  This program is designed to run on different platforms such as MKL and CUDA, and there is a family of classes for each platform. To produce instances of these classes for a given platform, the `abstract factory pattern` is adopted.   
 
 #### Python Binding  
   `pybind11` is utilized to generate Python interfaces for the C++ classes.  
