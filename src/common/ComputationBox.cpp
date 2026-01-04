@@ -37,6 +37,15 @@
 
 #include "ComputationBox.h"
 
+namespace {
+    /// Tolerance for comparing mask values to 0.0 or 1.0
+    constexpr double MASK_TOLERANCE = 1e-7;
+    /// Tolerance for determining if lattice angles are orthogonal (90°)
+    constexpr double ANGLE_TOLERANCE = 1e-10;
+    /// Minimum sin(gamma) value to avoid division by zero in lattice calculations
+    constexpr double SIN_GAMMA_MIN = 1e-10;
+}
+
 /**
  * @brief Construct computation box with given grid and boundaries.
  *
@@ -95,9 +104,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             this->mask.resize(total_grid);
             for(int i=0; i<total_grid; i++)
             {
-                if(std::abs(mask[i]) < 1e-7)
+                if(std::abs(mask[i]) < MASK_TOLERANCE)
                     this->mask[i] = 0.0;
-                else if(std::abs(mask[i]-1.0) < 1e-7)
+                else if(std::abs(mask[i]-1.0) < MASK_TOLERANCE)
                     this->mask[i] = 1.0;
                 else
                     throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
@@ -271,7 +280,7 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             angles_[d] = angles[d] * deg_to_rad;
 
         // Check if orthogonal (all angles are 90 degrees within tolerance)
-        const double angle_tolerance = 1e-10;
+        const double angle_tolerance = ANGLE_TOLERANCE;
         is_orthogonal_ = (std::abs(angles_[0] - std::numbers::pi/2.0) < angle_tolerance &&
                           std::abs(angles_[1] - std::numbers::pi/2.0) < angle_tolerance &&
                           std::abs(angles_[2] - std::numbers::pi/2.0) < angle_tolerance);
@@ -304,9 +313,9 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
             this->mask.resize(total_grid);
             for(int i=0; i<total_grid; i++)
             {
-                if(std::abs(mask[i]) < 1e-7)
+                if(std::abs(mask[i]) < MASK_TOLERANCE)
                     this->mask[i] = 0.0;
-                else if(std::abs(mask[i]-1.0) < 1e-7)
+                else if(std::abs(mask[i]-1.0) < MASK_TOLERANCE)
                     this->mask[i] = 1.0;
                 else
                     throw_with_line_number("mask[" + std::to_string(i) + "] must be 0.0 or 1.0");
@@ -450,7 +459,7 @@ void ComputationBox<T>::compute_lattice_vectors()
 
     // Lattice vector c
     double c_x = c * cos_b;
-    double c_y = (sin_g > 1e-10) ? c * (cos_a - cos_b * cos_g) / sin_g : 0.0;
+    double c_y = (sin_g > SIN_GAMMA_MIN) ? c * (cos_a - cos_b * cos_g) / sin_g : 0.0;
     double c_z = volume / (a * b * sin_g);
 
     lattice_vec_[6] = c_x;
@@ -728,7 +737,7 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
         angles_[d] = new_angles[d] * deg_to_rad;
 
     // Check if orthogonal
-    const double angle_tolerance = 1e-10;
+    const double angle_tolerance = ANGLE_TOLERANCE;
     is_orthogonal_ = (std::abs(angles_[0] - std::numbers::pi/2.0) < angle_tolerance &&
                       std::abs(angles_[1] - std::numbers::pi/2.0) < angle_tolerance &&
                       std::abs(angles_[2] - std::numbers::pi/2.0) < angle_tolerance);
