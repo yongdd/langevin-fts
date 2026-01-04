@@ -115,8 +115,8 @@ protected:
     Molecules *molecules;                                       ///< Polymer and solvent definitions
     PropagatorComputationOptimizer *propagator_computation_optimizer;  ///< Computation schedule
 
-    T* single_polymer_partitions;  ///< Partition functions Q[p] for each polymer type p
-    T* single_solvent_partitions;  ///< Partition functions Q_s[s] for each solvent type s
+    std::vector<T> single_polymer_partitions;  ///< Partition functions Q[p] for each polymer type p
+    std::vector<T> single_solvent_partitions;  ///< Partition functions Q_s[s] for each solvent type s
 
     /**
      * @brief Stress contributions from each polymer.

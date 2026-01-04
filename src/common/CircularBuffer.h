@@ -47,6 +47,8 @@
 #ifndef CIRCULAR_BUFFER_H_
 #define CIRCULAR_BUFFER_H_
 
+#include <vector>
+
 /**
  * @class CircularBuffer
  * @brief Fixed-size circular buffer storing arrays of elements.
@@ -77,7 +79,7 @@ private:
     int width;     ///< Size of each array (number of elements)
     int start;     ///< Index of the oldest element in the buffer
     int n_items;   ///< Current number of items stored (0 to length)
-    T** elems;     ///< Array of pointers to stored arrays
+    std::vector<std::vector<T>> elems;  ///< Storage for arrays (length x width)
 
 public:
     /**

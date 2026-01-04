@@ -33,29 +33,16 @@
  */
 template <typename T>
 CircularBuffer<T>::CircularBuffer(int length, int width)
+    : length(length), width(width), start(0), n_items(0),
+      elems(length, std::vector<T>(width, T{0.0}))
 {
-    this->length = length;
-    this->width = width;
-    this->start = 0;
-    this->n_items = 0;
-
-    elems = new T*[length];
-    for(int i=0; i<length; i++)
-    {
-        elems[i] = new T[width];
-        for(int j=0; j<width; j++)
-            elems[i][j] = 0.0;
-    }
 }
 /**
- * @brief Destructor. Frees all allocated memory.
+ * @brief Destructor. Vector handles memory cleanup automatically.
  */
 template <typename T>
 CircularBuffer<T>::~CircularBuffer()
 {
-    for(int i=0; i<length; i++)
-        delete[] elems[i];
-    delete[] elems;
 }
 
 /**
@@ -103,7 +90,7 @@ template <typename T>
 T* CircularBuffer<T>::get_array(int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return elems[i];
+    return elems[i].data();
 }
 
 /**
@@ -116,7 +103,7 @@ template <typename T>
 T* CircularBuffer<T>::operator[] (int n)
 {
     int i = (start+n_items-n-1+length)%length;
-    return elems[i];
+    return elems[i].data();
 }
 
 /**

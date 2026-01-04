@@ -66,10 +66,10 @@ PropagatorComputation<T>::PropagatorComputation(
     this->propagator_computation_optimizer = propagator_computation_optimizer;
 
     // Total partition functions for each polymer
-    single_polymer_partitions = new T[molecules->get_n_polymer_types()];
+    single_polymer_partitions.resize(molecules->get_n_polymer_types());
 
     // Total partition functions for each solvent
-    single_solvent_partitions = new T[molecules->get_n_solvent_types()];
+    single_solvent_partitions.resize(molecules->get_n_solvent_types());
 
     // Allocate memory for dq_dl (6 components: xx, yy, zz, xy, xz, yz)
     for(int p=0; p<molecules->get_n_polymer_types(); p++){
@@ -79,8 +79,7 @@ PropagatorComputation<T>::PropagatorComputation(
 template <typename T>
 PropagatorComputation<T>::~PropagatorComputation()
 {
-    delete[] single_polymer_partitions;
-    delete[] single_solvent_partitions;
+    // Vectors handle memory cleanup automatically
 }
 
 /**

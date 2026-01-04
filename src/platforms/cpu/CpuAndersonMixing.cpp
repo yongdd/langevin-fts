@@ -50,19 +50,17 @@ CpuAndersonMixing<T>::CpuAndersonMixing(int n_var, int max_hist,
         // Number of anderson mixing steps, increases from 0 to max_hist
         this->n_anderson = -1;
         // Record history of w in memory
-        cb_w_hist = new CircularBuffer<T>(max_hist+1, n_var);
+        cb_w_hist = std::make_unique<CircularBuffer<T>>(max_hist+1, n_var);
         // Record history of w_deriv in memory
-        cb_w_deriv_hist = new CircularBuffer<T>(max_hist+1, n_var);
+        cb_w_deriv_hist = std::make_unique<CircularBuffer<T>>(max_hist+1, n_var);
         // Record history of (inner_product of w_deriv + inner_product of h_deriv) in memory
-        cb_w_deriv_dots = new CircularBuffer<T>(max_hist+1, max_hist+1);
+        cb_w_deriv_dots = std::make_unique<CircularBuffer<T>>(max_hist+1, max_hist+1);
 
-        // define arrays for anderson mixing
-        this->u_nm = new T*[max_hist];
-        for(int i=0; i<max_hist; i++)
-            this->u_nm[i] = new T[max_hist];
-        this->v_n = new T[max_hist];
-        this->a_n = new T[max_hist];
-        this->w_deriv_dots = new T[max_hist+1];
+        // Define arrays for anderson mixing
+        u_nm.resize(max_hist, std::vector<T>(max_hist));
+        v_n.resize(max_hist);
+        a_n.resize(max_hist);
+        w_deriv_dots.resize(max_hist+1);
 
         // Reset_count
         reset_count();
@@ -75,16 +73,7 @@ CpuAndersonMixing<T>::CpuAndersonMixing(int n_var, int max_hist,
 template <typename T>
 CpuAndersonMixing<T>::~CpuAndersonMixing()
 {
-    delete cb_w_hist;
-    delete cb_w_deriv_hist;
-    delete cb_w_deriv_dots;
-
-    for (int i=0; i<this->max_hist; i++)
-        delete[] u_nm[i];
-    delete[] u_nm;
-    delete[] v_n;
-    delete[] a_n;
-    delete[] w_deriv_dots;
+    // unique_ptr and vectors handle memory cleanup automatically
 }
 template <typename T>
 void CpuAndersonMixing<T>::reset_count()
@@ -144,7 +133,7 @@ void CpuAndersonMixing<T>::calculate_new_fields(
             {
                 w_deriv_dots[i] = dot_product(w_deriv, cb_w_deriv_hist->get_array(i));
             }
-            cb_w_deriv_dots->insert(w_deriv_dots);
+            cb_w_deriv_dots->insert(w_deriv_dots.data());
         }
         // Conditions to apply the simple mixing method
         if(this->n_anderson <= 0)
@@ -176,7 +165,11 @@ void CpuAndersonMixing<T>::calculate_new_fields(
                                                       std::abs(i-j));
                 }
             }
-            this->find_an(u_nm, v_n, a_n, this->n_anderson);
+            // Build pointer array for find_an (which takes T**)
+            std::vector<T*> u_nm_ptrs(this->n_anderson);
+            for(int i=0; i<this->n_anderson; i++)
+                u_nm_ptrs[i] = u_nm[i].data();
+            this->find_an(u_nm_ptrs.data(), v_n.data(), a_n.data(), this->n_anderson);
             //std::cout << "v_n2" << std::endl;
             //print_array(n_anderson+1, v_n);
             //exit(-1);
