@@ -124,10 +124,6 @@ int main()
                 {
                     for(bool reduce_memory_usage : reduce_memory_usages)
                     {
-                        // 'cpu-mkl' does not support reduce_memory_usage
-                        if(reduce_memory_usage == true && platform == "cpu-mkl" && chain_model == "Discrete")
-                                continue;
-                        
                         AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
                         // factory->display_info();
 
@@ -146,7 +142,7 @@ int main()
                         std::cout << std::endl << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
-                        std::cout << "Reducing GPU Memory Usage: " << reduce_memory_usage << std::endl;
+                        std::cout << "Reduce Memory Usage: " << reduce_memory_usage << std::endl;
 
                         // Display branches
                         #ifndef NDEBUG
