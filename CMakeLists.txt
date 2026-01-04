@@ -44,6 +44,7 @@ ADD_LIBRARY(common
     src/common/Polymer.cpp
     src/common/Molecules.cpp
     src/common/PropagatorComputationOptimizer.cpp
+    src/common/PropagatorAggregator.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
     src/common/FiniteDifference.cpp
