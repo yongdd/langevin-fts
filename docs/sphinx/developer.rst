@@ -1,7 +1,7 @@
 Dynamic programming for Chain Propagator Computation
 ====================================================
 
-.. Reducing GPU Memory Usage
+.. Reducing Memory Usage
 .. =========================
 
 .. Platforms

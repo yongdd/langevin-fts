@@ -165,7 +165,7 @@ class LFTS:
         - platform : {'cuda', 'cpu-mkl'}, optional
             Computational backend (auto-selected if not specified).
         - reduce_memory_usage : bool, optional
-            Enable memory-saving mode (CUDA only).
+            Enable memory-saving mode.
 
         **Advanced Options:**
 

@@ -96,7 +96,7 @@
  * **Memory Management:**
  *
  * The class allocates internal storage for propagators and concentrations.
- * Memory can be reduced using the reduce_memory_usage option (CUDA only),
+ * Memory can be reduced using the reduce_memory_usage option,
  * which stores only checkpoints and recomputes on demand.
  *
  * **Parallel Computation:**

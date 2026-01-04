@@ -84,9 +84,9 @@
  *
  * **Memory Usage:**
  *
- * The reduce_memory_usage flag (CUDA only) enables memory-saving mode
- * where only propagator checkpoints are stored. This increases computation
- * time 2-4x but significantly reduces GPU memory usage.
+ * The reduce_memory_usage flag enables memory-saving mode where only
+ * propagator checkpoints are stored. This increases computation time
+ * 2-4x but significantly reduces memory usage.
  *
  * @see PlatformSelector::create_factory_real for factory instantiation
  */
@@ -94,7 +94,7 @@ template <typename T>
 class AbstractFactory
 {
 protected:
-    bool reduce_memory_usage;  ///< Enable memory-saving mode (CUDA only)
+    bool reduce_memory_usage;  ///< Enable memory-saving mode
 
 public :
     /**

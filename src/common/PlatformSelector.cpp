@@ -66,7 +66,7 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  * real-valued fields (standard SCFT/L-FTS with periodic boundaries).
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
- * @param reduce_memory_usage Enable memory-saving mode (CUDA only)
+ * @param reduce_memory_usage Enable memory-saving mode
  *
  * @return Pointer to platform-specific AbstractFactory<double>
  * @throws Exception if platform not found or not compiled
@@ -93,7 +93,7 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(std::string platf
  * certain field transformations).
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
- * @param reduce_memory_usage Enable memory-saving mode (CUDA only)
+ * @param reduce_memory_usage Enable memory-saving mode
  *
  * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
  * @throws Exception if platform not found or not compiled

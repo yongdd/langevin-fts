@@ -139,7 +139,7 @@ CUDA code uses:
 - **Shared memory**: Tridiagonal solvers for real-space methods use shared memory for performance
 - **Pinned memory**: Host-device transfers use pinned circular buffers for efficiency
 
-The CUDA implementations are in `src/platforms/cuda/*.cu`. GPU memory-saving mode is available via `reduce_memory_usage=True` (stores only checkpoints, increases execution time 2-4x).
+The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory_usage=True` (stores only checkpoints, increases execution time 2-4x).
 
 ## Running Simulations
 
@@ -189,7 +189,7 @@ Simulations are configured via Python dictionaries with keys:
 
 **GPU architecture errors**: Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
 
-**Memory issues**: Set `"reduce_memory_usage": True` in parameters (CUDA only)
+**Memory issues**: Set `"reduce_memory_usage": True` in parameters
 
 **Single CPU core usage**: Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports
 
@@ -248,6 +248,10 @@ Solvers store `FFT<T>* fft_` and call `fft_->forward()` directly without dimensi
 ### When Modifying Python Code
 
 Changes to `src/python/*.py` take effect after `make install` from build directory. No recompilation needed.
+
+### Deprecated/Internal Methods
+
+**Never use `advance_propagator_single_segment`**: This is an internal low-level method that should never be used in any case. Always use `compute_propagators()` to compute all propagators at once, then access them via `get_chain_propagator(polymer, v, u, step)`. The `PropagatorSolver` class provides a clean interface: call `compute_propagators()` to compute all propagators, then use `get_propagator()`, `get_partition_function()`, and `get_concentration()` to access results.
 
 ### Adding New Monomer Types or Interactions
 

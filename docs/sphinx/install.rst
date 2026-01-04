@@ -32,7 +32,7 @@ It supports the following features:
 * Anderson mixing
 * Platforms: MKL (CPU) and CUDA (GPU)
 * Parallel computations of propagators with multi-core CPUs (up to 8), or multi CUDA streams (up to 4) to maximize GPU usage
-* GPU memory saving option
+* Memory saving option
 * Common interfaces regardless of chain model, simulation box dimension, and platform
 
 Dependencies
