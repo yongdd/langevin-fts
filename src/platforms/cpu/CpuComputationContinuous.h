@@ -43,7 +43,7 @@
 #include "Polymer.h"
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
-#include "PropagatorComputation.h"
+#include "CpuComputationBase.h"
 #include "CpuSolver.h"
 #include "Scheduler.h"
 
@@ -85,59 +85,18 @@
  * @endcode
  */
 template <typename T>
-class CpuComputationContinuous : public PropagatorComputation<T>
+class CpuComputationContinuous : public CpuComputationBase<T>
 {
 private:
-    CpuSolver<T> *propagator_solver;  ///< Solver for diffusion equation
     std::string method;                ///< Solver method ("pseudospectral" or "realspace")
-
-    Scheduler *sc;                     ///< Propagator computation scheduler
-    int n_streams;                     ///< Number of parallel computation streams
-
-    /**
-     * @brief Storage for computed propagators.
-     *
-     * Key: dependency code + monomer type (e.g., "v0u1_A")
-     * Value: 2D array [contour_step][grid_point]
-     */
-    std::map<std::string, T **> propagator;
-
-    /**
-     * @brief Size of each propagator (number of contour steps).
-     *
-     * Used for proper deallocation.
-     */
-    std::map<std::string, int> propagator_size;
-
-    #ifndef NDEBUG
-    /**
-     * @brief Debug: track which propagator steps are computed.
-     */
-    std::map<std::string, bool *> propagator_finished;
-    #endif
 
     /**
      * @brief Segment pairs for partition function calculation.
      *
      * Each tuple: (polymer_id, q_forward_ptr, q_backward_ptr, n_repeated)
-     * Stores one segment per chain for computing Q = ∫ q_f · q_b dr
+     * Stores one segment per chain for computing Q = integral q_f * q_b dr
      */
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
-
-    /**
-     * @brief Block concentration fields.
-     *
-     * Key: (polymer_id, key_left, key_right) with key_left <= key_right
-     * Value: Concentration array (size n_grid)
-     */
-    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
-
-    /**
-     * @brief Solvent concentration fields.
-     *
-     * One array per solvent species.
-     */
-    std::vector<T *> phi_solvent;
 
     /**
      * @brief Calculate concentration for one polymer block.
@@ -168,11 +127,6 @@ public:
      * @brief Destructor. Frees all propagator and concentration arrays.
      */
     ~CpuComputationContinuous();
-
-    /**
-     * @brief Update solver for new box dimensions.
-     */
-    void update_laplacian_operator() override;
 
     /**
      * @brief Compute all propagators from potential fields.
@@ -217,14 +171,6 @@ public:
     void compute_stress() override;
 
     /**
-     * @brief Get total partition function for a polymer.
-     *
-     * @param polymer Polymer index
-     * @return Q = V⁻¹ ∫ q_forward · q_backward dr
-     */
-    T get_total_partition(int polymer) override;
-
-    /**
      * @brief Get propagator values at a specific point.
      *
      * @param q_out   Output array (size n_grid)
@@ -234,67 +180,6 @@ public:
      * @param n       Contour step index
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
-
-    /// @name Canonical Ensemble Methods
-    /// @{
-
-    /**
-     * @brief Get total concentration of a monomer type.
-     *
-     * @param monomer_type Monomer type (e.g., "A")
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-
-    /**
-     * @brief Get concentration of monomer type from a specific polymer.
-     *
-     * @param polymer      Polymer index
-     * @param monomer_type Monomer type
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-
-    /**
-     * @brief Get block concentration for a polymer.
-     *
-     * @param polymer Polymer index
-     * @param phi     Output array (size n_grid * n_blocks)
-     */
-    void get_block_concentration(int polymer, T *phi) override;
-
-    /// @}
-
-    /**
-     * @brief Get solvent partition function.
-     *
-     * @param s Solvent index
-     * @return Solvent partition function
-     */
-    T get_solvent_partition(int s) override;
-
-    /**
-     * @brief Get solvent concentration field.
-     *
-     * @param s   Solvent index
-     * @param phi Output concentration array
-     */
-    void get_solvent_concentration(int s, T *phi) override;
-
-    /// @name Grand Canonical Ensemble Methods
-    /// @{
-
-    /**
-     * @brief Get concentration with fugacity weighting.
-     *
-     * @param fugacity     Chemical activity
-     * @param polymer      Polymer index
-     * @param monomer_type Monomer type
-     * @param phi          Output concentration array
-     */
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
-
-    /// @}
 
     /**
      * @brief Validate partition function calculation (for testing).
