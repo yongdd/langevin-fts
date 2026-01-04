@@ -12,6 +12,7 @@ from scipy.io import savemat, loadmat
 from . import _core
 from .polymer_field_theory import *
 from .compressor import *
+from .propagator_solver import PropagatorSolver
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -347,18 +348,14 @@ class LFTS:
         else:
             platform = avail_platforms[0]
 
-        # (C++ class) Create a factory for given platform and chain_model
-        if "reduce_memory_usage" in params and platform == "cuda":
-            factory = _core.PlatformSelector.create_factory(platform, params["reduce_memory_usage"], "real")
-        else:
-            factory = _core.PlatformSelector.create_factory(platform, False, "real")
-        factory.display_info()
+        # Get reduce_memory_usage option
+        reduce_memory_usage = params.get("reduce_memory_usage", False) if platform == "cuda" else False
 
-        # (C++ class) Computation box
-        if "angles" in params:
-            self.cb = factory.create_computation_box(params["nx"], params["lx"], angles=params["angles"])
-        else:
-            self.cb = factory.create_computation_box(params["nx"], params["lx"])
+        # Get boundary conditions
+        bc = params.get("bc", None)
+        if bc is None:
+            # Default to periodic boundaries
+            bc = ["periodic"] * (2 * len(params["nx"]))
 
         # Flory-Huggins parameters, χN
         self.chi_n = {}
@@ -499,48 +496,69 @@ class LFTS:
             nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, rotate=False, bbox=dict(boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0), alpha=0.5)) #, font_size=12)
             plt.savefig("polymer_%01d.png" % (idx))
 
-        # (C++ class) Molecules list
-        molecules = factory.create_molecules_information(params["chain_model"], params["ds"], self.segment_lengths)
+        # Create PropagatorSolver instance
+        self.prop_solver = PropagatorSolver(
+            nx=params["nx"],
+            lx=params["lx"],
+            ds=params["ds"],
+            bond_lengths=self.segment_lengths,
+            bc=bc,
+            chain_model=params["chain_model"],
+            method="pseudospectral",
+            platform=platform,
+            reduce_memory_usage=reduce_memory_usage,
+        )
+
+        # Set angles if provided
+        if "angles" in params:
+            self.prop_solver._computation_box = self.prop_solver._factory.create_computation_box(
+                params["nx"], params["lx"], angles=params["angles"], bc=bc
+            )
 
         # Add polymer chains
         for polymer in self.distinct_polymers:
-            molecules.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
+            self.prop_solver.add_polymer(polymer["volume_fraction"], polymer["blocks_input"])
 
-        # (C++ class) Propagator Computation Optimizer
+        # Initialize the solver (creates propagator optimizer and propagator computation)
+        self.prop_solver._initialize_solver()
+
+        # Set aggregate_propagator_computation option
         if "aggregate_propagator_computation" in params:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, params["aggregate_propagator_computation"])
-        else:
-            propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
+            aggregate = params["aggregate_propagator_computation"]
+            self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
+                self.prop_solver._molecules, aggregate
+            )
+            self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
+                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
+            )
 
-        # (C++ class) Solver using Pseudo-spectral method
-        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_computation_optimizer)
+        # Display factory info
+        self.prop_solver._factory.display_info()
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
-            am = factory.create_anderson_mixing(
+            am = self.prop_solver.create_anderson_mixing(
                 len(self.mpt.aux_fields_imag_idx)*np.prod(params["nx"]),   # the number of variables
                 params["compressor"]["max_hist"],                          # maximum number of history
                 params["compressor"]["start_error"],                       # when switch to AM from simple mixing
                 params["compressor"]["mix_min"],                           # minimum mixing rate of simple mixing
                 params["compressor"]["mix_init"])                          # initial mixing rate of simple mixing
 
-        # Fields Relaxation using Linear Reponse Method
+        # Fields Relaxation using Linear Response Method
         if params["compressor"]["name"] == "lr" or params["compressor"]["name"] == "lram":
             assert(I == 1), \
                 f"Currently, LR methods are not working for imaginary-valued auxiliary fields."
 
-            w_aux_perturbed = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
+            w_aux_perturbed = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
             w_aux_perturbed[M-1,0] = 1e-3 # add a small perturbation at the pressure field
-            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            w_aux_perturbed_k = np.fft.rfftn(np.reshape(w_aux_perturbed[M-1], self.prop_solver.nx))/np.prod(self.prop_solver.nx)
 
             phi_perturbed, _ = self.compute_concentrations(w_aux_perturbed)
             h_deriv_perturbed = self.mpt.compute_func_deriv(w_aux_perturbed, phi_perturbed, self.mpt.aux_fields_imag_idx)
-            h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.cb.get_nx()))/np.prod(self.cb.get_nx())
+            h_deriv_perturbed_k = np.fft.rfftn(np.reshape(h_deriv_perturbed, self.prop_solver.nx))/np.prod(self.prop_solver.nx)
             jk_numeric = np.real(h_deriv_perturbed_k/w_aux_perturbed_k)
-            # print(np.mean(jk_numeric), np.std(jk_numeric))
-            # print(np.mean(self.lr.jk), np.std(self.lr.jk))
 
-            lr = LR(self.cb.get_nx(), self.cb.get_lx(), jk_numeric)
+            lr = LR(self.prop_solver.nx, self.prop_solver.get_lx(), jk_numeric)
 
         if params["compressor"]["name"] == "am":
             self.compressor = am
@@ -566,11 +584,11 @@ class LFTS:
         
         print("---------- Simulation Parameters ----------")
         print("Platform :", platform)
-        print("Box Dimension: %d" % (self.cb.get_dim()))
-        print("Nx:", self.cb.get_nx())
-        print("Lx:", self.cb.get_lx())
-        print("dx:", self.cb.get_dx())
-        print("Volume: %f" % (self.cb.get_volume()))
+        print("Box Dimension: %d" % (self.prop_solver.dim))
+        print("Nx:", self.prop_solver.nx)
+        print("Lx:", self.prop_solver.get_lx())
+        print("dx:", self.prop_solver.get_dx())
+        print("Volume: %f" % (self.prop_solver.get_volume()))
 
         print("Chain model: %s" % (params["chain_model"]))
         print("Segment lengths:\n\t", list(self.segment_lengths.items()))
@@ -582,20 +600,20 @@ class LFTS:
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
-        for p in range(molecules.get_n_polymer_types()):
+        for p in range(self.prop_solver.get_n_polymer_types()):
             print("distinct_polymers[%d]:" % (p) )
             print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (molecules.get_polymer(p).get_volume_fraction(),
-                 molecules.get_polymer(p).get_alpha(),
-                 molecules.get_polymer(p).get_n_segment_total()))
+                (self.prop_solver.get_polymer(p).get_volume_fraction(),
+                 self.prop_solver.get_polymer(p).get_alpha(),
+                 self.prop_solver.get_polymer(p).get_n_segment_total()))
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        propagator_computation_optimizer.display_blocks()
-        propagator_computation_optimizer.display_propagators()
+        self.prop_solver._propagator_optimizer.display_blocks()
+        self.prop_solver._propagator_optimizer.display_propagators()
 
         #  Save internal variables
         self.params = params
@@ -607,9 +625,6 @@ class LFTS:
         self.verbose_level = params["verbose_level"]
         self.saddle = params["saddle"].copy()
         self.recording = params["recording"].copy()
-
-        self.molecules = molecules
-        self.propagator_computation_optimizer = propagator_computation_optimizer
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -665,30 +680,30 @@ class LFTS:
         # Convert auxiliary fields to monomer fields
         w = self.mpt.to_monomer_fields(w_aux)
 
-        # Make a dictionary for input fields 
+        # Make a dictionary for input fields
         w_input = {}
         for i in range(M):
             w_input[self.monomer_types[i]] = w[i]
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.float64)
+            w_input[random_polymer_name] = np.zeros(self.prop_solver.n_grid, dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
         # For the given fields, compute propagators
         time_solver_start = time.time()
-        self.solver.compute_propagators(w_input)
+        self.prop_solver.compute_propagators(w_input)
         elapsed_time["solver"] = time.time() - time_solver_start
 
         # Compute concentrations for each monomer type
         time_phi_start = time.time()
         phi = {}
-        self.solver.compute_concentrations()
+        self.prop_solver.compute_concentrations()
         for monomer_type in self.monomer_types:
-            phi[monomer_type] = self.solver.get_total_concentration(monomer_type)
+            phi[monomer_type] = self.prop_solver.get_concentration(monomer_type)
 
         # Add random copolymer concentration to each monomer type
         for random_polymer_name, random_fraction in self.random_fraction.items():
-            phi[random_polymer_name] = self.solver.get_total_concentration(random_polymer_name)
+            phi[random_polymer_name] = self.prop_solver.get_concentration(random_polymer_name)
             for monomer_type, fraction in random_fraction.items():
                 phi[monomer_type] += phi[random_polymer_name]*fraction
         elapsed_time["phi"] = time.time() - time_phi_start
@@ -770,13 +785,13 @@ class LFTS:
         # Make dictionary for data
         mdic = {
             "initial_params": self.params,
-            "dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+            "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
-            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], 
+            "dt":self.langevin["dt"], "nbar":self.langevin["nbar"],
             "eigenvalues": self.mpt.eigenvalues,
             "aux_fields_real": self.mpt.aux_fields_real_idx,
             "aux_fields_imag": self.mpt.aux_fields_imag_idx,
-            "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv, 
+            "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv,
             "langevin_step":langevin_step,
             "random_generator":self.random_bg.state["bit_generator"],
             "random_state_state":str(self.random_bg.state["state"]["state"]),
@@ -1049,9 +1064,9 @@ class LFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields
-        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.float64)
+        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
         for i in range(M):
-            w[i] = np.reshape(initial_fields[self.monomer_types[i]],  self.cb.get_total_grid())
+            w[i] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
             
         # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
@@ -1071,11 +1086,11 @@ class LFTS:
         for monomer_id_pair in itertools.combinations_with_replacement(list(range(M)),2):
             sorted_pair = sorted(monomer_id_pair)
             type_pair = self.monomer_types[sorted_pair[0]] + "," + self.monomer_types[sorted_pair[1]]
-            sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.cb.get_nx())), np.complex128)
+            sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128)
 
         # Create an empty array for field update algorithm
         if normal_noise_prev is None :
-            normal_noise_prev = np.zeros([R, self.cb.get_total_grid()], dtype=np.float64)
+            normal_noise_prev = np.zeros([R, self.prop_solver.n_grid], dtype=np.float64)
         else:
             normal_noise_prev = normal_noise_prev
 
@@ -1103,7 +1118,7 @@ class LFTS:
             w_lambda = self.mpt.compute_func_deriv(w_aux, phi, self.mpt.aux_fields_real_idx)
 
             # Update w_aux using Leimkuhler-Matthews method
-            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.cb.get_total_grid()])
+            normal_noise_current = self.random.normal(0.0, self.langevin["sigma"], [R, self.prop_solver.n_grid])
             for count, i in enumerate(self.mpt.aux_fields_real_idx):
                 scaling = self.dt_scaling[i]
                 w_aux[i] += -w_lambda[count]*self.langevin["dt"]*scaling + 0.5*(normal_noise_prev[count] + normal_noise_current[count])*np.sqrt(scaling)
@@ -1163,10 +1178,10 @@ class LFTS:
                 phi_fourier = {}
                 for i in range(M):
                     key = self.monomer_types[i]
-                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.cb.get_nx()))/self.cb.get_total_grid()
+                    phi_fourier[key] = np.fft.rfftn(np.reshape(phi[self.monomer_types[i]], self.prop_solver.nx))/self.prop_solver.n_grid
                     mu_fourier[key] = np.zeros_like(phi_fourier[key], np.complex128)
                     for k in range(M-1) :
-                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.cb.get_nx()))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.cb.get_total_grid()
+                        mu_fourier[key] += np.fft.rfftn(np.reshape(w_aux[k], self.prop_solver.nx))*self.mpt.matrix_a_inv[k,i]/self.mpt.eigenvalues[k]/self.prop_solver.n_grid
                 # Accumulate S_ij(K), assuming that <mu(k)>*<phi(-k)> is zero
                 for key in sf_average:
                     monomer_pair = sorted(key.split(","))
@@ -1179,13 +1194,13 @@ class LFTS:
                 for key in self.chi_n:
                     monomer_pair = sorted(key.split(","))
                     chi_n_mat[monomer_pair[0] + "," + monomer_pair[1]] = self.chi_n[key]
-                mdic = {"dim":self.cb.get_dim(), "nx":self.cb.get_nx(), "lx":self.cb.get_lx(),
+                mdic = {"dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
                         "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
                         "dt":self.langevin["dt"], "nbar":self.langevin["nbar"], "initial_params":self.params}
                 # Add structure functions to the dictionary
                 for key in sf_average:
                     sf_average[key] *= self.recording["sf_computing_period"]/self.recording["sf_recording_period"]* \
-                            self.cb.get_volume()*np.sqrt(self.langevin["nbar"])
+                            self.prop_solver.get_volume()*np.sqrt(self.langevin["nbar"])
                     monomer_pair = sorted(key.split(","))
                     mdic["structure_function_" + monomer_pair[0] + "_" + monomer_pair[1]] = sf_average[key]
                 savemat(os.path.join(self.recording["dir"], "structure_function_%06d.mat" % (langevin_step)), mdic, long_field_names=True, do_compression=True)
@@ -1336,10 +1351,10 @@ class LFTS:
             # Print iteration # and error levels
             if(self.verbose_level == 2 or self.verbose_level == 1 and
             (error_level < self.saddle["tolerance"] or saddle_iter == self.saddle["max_iter"])):
-            
+
                 # Calculate Hamiltonian
-                total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-                hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, include_const_term=True)
+                total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
+                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, include_const_term=True)
 
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])
@@ -1360,7 +1375,7 @@ class LFTS:
                 h_deriv[count] *= self.dt_scaling[i]
 
             # Calculate new fields using compressor (AM, LR, LRAM)
-            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.cb.get_total_grid()])
+            w_aux[self.mpt.aux_fields_imag_idx] = np.reshape(self.compressor.calculate_new_fields(w_aux[self.mpt.aux_fields_imag_idx], -h_deriv, old_error_level, error_level), [I, self.prop_solver.n_grid])
 
         # Set mean of pressure field to zero
         w_aux[M-1] -= np.mean(w_aux[M-1])

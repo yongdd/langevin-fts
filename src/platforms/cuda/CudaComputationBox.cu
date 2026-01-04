@@ -95,9 +95,9 @@ CudaComputationBox<T>::~CudaComputationBox()
 }
 //-----------------------------------------------------------
 template <typename T>
-void CudaComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx)
+void CudaComputationBox<T>::set_lx(std::vector<double> new_lx)
 {
-    ComputationBox<T>::set_lattice_parameters(new_lx);
+    ComputationBox<T>::set_lx(new_lx);
     gpu_error_check(cudaMemcpy(d_dv, this->dv, sizeof(double)*this->total_grid, cudaMemcpyHostToDevice));
 }
 //-----------------------------------------------------------

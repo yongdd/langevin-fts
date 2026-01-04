@@ -469,17 +469,17 @@ public:
     void zero_mean(T *g);
 
     /**
-     * @brief Update lattice parameters - box lengths only (for box relaxation in SCFT).
+     * @brief Update box lengths only (for box relaxation in SCFT).
      *
      * Updates lx, dx, dv, volume, and recomputes lattice/reciprocal vectors.
      * Used when optimizing box dimensions to minimize free energy.
      *
      * @param new_lx New box lengths [Lx, Ly, Lz]
      *
-     * @note After calling set_lattice_parameters(), you should also update the Laplacian
+     * @note After calling set_lx(), you should also update the Laplacian
      *       operator in the propagator solver.
      */
-    virtual void set_lattice_parameters(std::vector<double> new_lx);
+    virtual void set_lx(std::vector<double> new_lx);
 
     /**
      * @brief Update lattice parameters - box lengths and angles (for box relaxation in SCFT).

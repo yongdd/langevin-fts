@@ -111,10 +111,10 @@ public:
     ~CudaComputationBox() override;
 
     /**
-     * @brief Update lattice parameters (box lengths) and recompute grid spacing.
+     * @brief Update box lengths and recompute grid spacing.
      * @param new_lx New box lengths [Lx, Ly, Lz]
      */
-    void set_lattice_parameters(std::vector<double> new_lx) override;
+    void set_lx(std::vector<double> new_lx) override;
 
     /**
      * @brief Update lattice parameters (box lengths and angles), recompute lattice vectors.

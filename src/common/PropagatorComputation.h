@@ -158,8 +158,8 @@ public:
     /**
      * @brief Update Laplacian operator after box size change.
      *
-     * Must be called after ComputationBox::set_lattice_parameters() to update the
-     * Fourier-space Laplacian for the new box dimensions.
+     * Must be called after ComputationBox::set_lx() or set_lattice_parameters()
+     * to update the Fourier-space Laplacian for the new box dimensions.
      */
     virtual void update_laplacian_operator() = 0;
 

@@ -274,7 +274,7 @@ int main()
                             for(int d=0; d<cb->get_dim(); d++)
                                 lx[d] = w[2*M+d];
                             
-                            cb->set_lattice_parameters(lx);
+                            cb->set_lx(lx);
                             solver->update_laplacian_operator();
                         }
                         energy_total_list.push_back(energy_total);

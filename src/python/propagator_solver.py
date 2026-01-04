@@ -212,9 +212,9 @@ class PropagatorSolver:
         self._polymers_added = False
 
         # Solver will be created after polymers are added
-        self._solver = None
-        self._cb = None
-        self._prop_opt = None
+        self._propagator_computation = None
+        self._computation_box = None
+        self._propagator_optimizer = None
         self._fields_set = False
 
     def add_polymer(self, volume_fraction, blocks, grafting_points=None):
@@ -253,7 +253,7 @@ class PropagatorSolver:
 
         >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]], grafting_points={0: "G"})
         """
-        if self._solver is not None:
+        if self._propagator_computation is not None:
             raise RuntimeError(
                 "Cannot add polymers after solver has been initialized. "
                 "Add all polymers before calling compute_propagators()."
@@ -267,7 +267,7 @@ class PropagatorSolver:
 
     def _initialize_solver(self):
         """Initialize the solver (called lazily when needed)."""
-        if self._solver is not None:
+        if self._propagator_computation is not None:
             return
 
         if not self._polymers_added:
@@ -276,28 +276,28 @@ class PropagatorSolver:
             )
 
         # Create propagator computation optimizer
-        self._prop_opt = self._factory.create_propagator_computation_optimizer(
+        self._propagator_optimizer = self._factory.create_propagator_computation_optimizer(
             self._molecules, True
         )
 
         # Create computation box
         if self.mask is not None:
-            self._cb = self._factory.create_computation_box(
+            self._computation_box = self._factory.create_computation_box(
                 nx=self.nx, lx=self.lx, bc=self.bc, mask=self.mask
             )
         else:
-            self._cb = self._factory.create_computation_box(
+            self._computation_box = self._factory.create_computation_box(
                 nx=self.nx, lx=self.lx, bc=self.bc
             )
 
         # Create solver based on method
         if self.method == "pseudospectral":
-            self._solver = self._factory.create_pseudospectral_solver(
-                self._cb, self._molecules, self._prop_opt
+            self._propagator_computation = self._factory.create_pseudospectral_solver(
+                self._computation_box, self._molecules, self._propagator_optimizer
             )
         elif self.method == "realspace":
-            self._solver = self._factory.create_realspace_solver(
-                self._cb, self._molecules, self._prop_opt
+            self._propagator_computation = self._factory.create_realspace_solver(
+                self._computation_box, self._molecules, self._propagator_optimizer
             )
         else:
             raise ValueError(f"Unknown method: {self.method}")
@@ -351,9 +351,9 @@ class PropagatorSolver:
                     raise ValueError(
                         f"q_init '{key}' has wrong size: {np.size(field)} != {self.n_grid}"
                     )
-            self._solver.compute_propagators(w_fields, q_init=q_init)
+            self._propagator_computation.compute_propagators(w_fields, q_init=q_init)
         else:
-            self._solver.compute_propagators(w_fields)
+            self._propagator_computation.compute_propagators(w_fields)
         self._fields_set = True
 
     def get_propagator(self, polymer, v, u, step):
@@ -387,7 +387,7 @@ class PropagatorSolver:
                 "Propagators not computed. Call compute_propagators() first."
             )
 
-        return self._solver.get_chain_propagator(polymer, v, u, step)
+        return self._propagator_computation.get_chain_propagator(polymer, v, u, step)
 
     def get_partition_function(self, polymer):
         """
@@ -412,7 +412,7 @@ class PropagatorSolver:
                 "Propagators not computed. Call compute_propagators() first."
             )
 
-        return self._solver.get_total_partition(polymer)
+        return self._propagator_computation.get_total_partition(polymer)
 
     def compute_concentrations(self):
         """
@@ -432,7 +432,7 @@ class PropagatorSolver:
                 "Propagators not computed. Call compute_propagators() first."
             )
 
-        self._solver.compute_concentrations()
+        self._propagator_computation.compute_concentrations()
 
     def get_concentration(self, monomer_type):
         """
@@ -460,7 +460,7 @@ class PropagatorSolver:
                 "Propagators not computed. Call compute_propagators() first."
             )
 
-        return self._solver.get_total_concentration(monomer_type)
+        return self._propagator_computation.get_total_concentration(monomer_type)
 
     def get_grid_points(self):
         """
@@ -586,4 +586,238 @@ class PropagatorSolver:
         return (
             f"PropagatorSolver(nx={self.nx}, lx={self.lx}, "
             f"method='{self.method}', platform='{self.platform}')"
+        )
+
+    # -------------------- Box operations --------------------
+
+    def get_volume(self):
+        """
+        Get the total volume of the simulation box.
+
+        Returns
+        -------
+        float
+            Volume of the simulation box.
+        """
+        self._initialize_solver()
+        return self._computation_box.get_volume()
+
+    def integral(self, field):
+        """
+        Compute the volume integral of a field.
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Field to integrate.
+
+        Returns
+        -------
+        float
+            Integral of the field over the box volume.
+        """
+        self._initialize_solver()
+        return self._computation_box.integral(field)
+
+    def inner_product(self, field1, field2):
+        """
+        Compute the inner product of two fields.
+
+        Parameters
+        ----------
+        field1 : numpy.ndarray
+            First field.
+        field2 : numpy.ndarray
+            Second field.
+
+        Returns
+        -------
+        float
+            Inner product of the two fields.
+        """
+        self._initialize_solver()
+        return self._computation_box.inner_product(field1, field2)
+
+    def multi_inner_product(self, n_fields, fields1, fields2):
+        """
+        Compute the inner product of multiple field pairs.
+
+        Parameters
+        ----------
+        n_fields : int
+            Number of field pairs.
+        fields1 : numpy.ndarray
+            First set of fields (n_fields * n_grid).
+        fields2 : numpy.ndarray
+            Second set of fields (n_fields * n_grid).
+
+        Returns
+        -------
+        float
+            Sum of inner products.
+        """
+        self._initialize_solver()
+        return self._computation_box.multi_inner_product(n_fields, fields1, fields2)
+
+    def zero_mean(self, field):
+        """
+        Subtract the spatial mean from a field in-place.
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Field to modify.
+        """
+        self._initialize_solver()
+        self._computation_box.zero_mean(field)
+
+    def set_lx(self, lx):
+        """
+        Update the box dimensions.
+
+        Parameters
+        ----------
+        lx : list of float
+            New box dimensions.
+        """
+        self._initialize_solver()
+        self._computation_box.set_lx(lx)
+        self.lx = list(lx)
+
+    def set_lattice_parameters(self, lx, angles):
+        """
+        Update the lattice parameters (box dimensions and angles).
+
+        Parameters
+        ----------
+        lx : list of float
+            New box dimensions.
+        angles : list of float
+            New lattice angles in degrees [alpha, beta, gamma].
+        """
+        self._initialize_solver()
+        self._computation_box.set_lattice_parameters(lx, angles)
+        self.lx = list(lx)
+
+    def get_lx(self):
+        """Get current box dimensions."""
+        self._initialize_solver()
+        return self._computation_box.get_lx()
+
+    def get_dx(self):
+        """Get grid spacing in each dimension."""
+        self._initialize_solver()
+        return self._computation_box.get_dx()
+
+    def get_angles_degrees(self):
+        """Get lattice angles in degrees."""
+        self._initialize_solver()
+        return self._computation_box.get_angles_degrees()
+
+    # -------------------- Stress computation --------------------
+
+    def compute_stress(self):
+        """
+        Compute the stress tensor for box relaxation.
+
+        Must be called after compute_propagators().
+        """
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+        self._propagator_computation.compute_stress()
+
+    def get_stress(self):
+        """
+        Get the computed stress tensor.
+
+        Must be called after compute_stress().
+
+        Returns
+        -------
+        list of float
+            Stress components [sigma_xx, sigma_yy, sigma_zz, sigma_xy, sigma_xz, sigma_yz].
+        """
+        if not self._fields_set:
+            raise RuntimeError(
+                "Propagators not computed. Call compute_propagators() first."
+            )
+        return self._propagator_computation.get_stress()
+
+    def update_laplacian_operator(self):
+        """
+        Update the Laplacian operator after changing box dimensions.
+
+        Must be called after set_lattice_parameters() when using pseudospectral method.
+        """
+        self._initialize_solver()
+        self._propagator_computation.update_laplacian_operator()
+
+    # -------------------- Molecule information --------------------
+
+    def get_n_polymer_types(self):
+        """
+        Get the number of polymer types.
+
+        Returns
+        -------
+        int
+            Number of distinct polymer species.
+        """
+        return self._molecules.get_n_polymer_types()
+
+    def get_polymer(self, polymer_id):
+        """
+        Get polymer object for a specific polymer type.
+
+        Parameters
+        ----------
+        polymer_id : int
+            Polymer index (0-based).
+
+        Returns
+        -------
+        Polymer
+            Polymer object with methods like get_volume_fraction(), get_alpha(), etc.
+        """
+        return self._molecules.get_polymer(polymer_id)
+
+    def get_model_name(self):
+        """
+        Get the chain model name.
+
+        Returns
+        -------
+        str
+            Chain model ("Continuous" or "Discrete").
+        """
+        return self._molecules.get_model_name()
+
+    # -------------------- Anderson Mixing factory --------------------
+
+    def create_anderson_mixing(self, n_var, max_hist, start_error, mix_min, mix_init):
+        """
+        Create an Anderson Mixing optimizer.
+
+        Parameters
+        ----------
+        n_var : int
+            Number of variables to optimize.
+        max_hist : int
+            Maximum number of history vectors.
+        start_error : float
+            Error threshold to switch from simple mixing to AM.
+        mix_min : float
+            Minimum mixing parameter.
+        mix_init : float
+            Initial mixing parameter.
+
+        Returns
+        -------
+        AndersonMixing
+            Anderson Mixing optimizer instance.
+        """
+        return self._factory.create_anderson_mixing(
+            n_var, max_hist, start_error, mix_min, mix_init
         )
