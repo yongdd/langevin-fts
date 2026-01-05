@@ -61,6 +61,9 @@ Molecules::Molecules(
     this->ds = ds;
     this->bond_lengths = bond_lengths;
     this->model_name = model_lower;
+
+    // Initialize contour length mapping with global ds
+    this->contour_length_mapping = ContourLengthMapping(ds);
 }
 
 /**
@@ -80,6 +83,12 @@ void Molecules::add_polymer(
     std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
+    // Register block contour lengths in the mapping
+    for (const auto& block : block_inputs)
+    {
+        contour_length_mapping.add_block(block.contour_length);
+    }
+
     // Add new polymer type
     polymer_types.push_back(Polymer(ds, bond_lengths,
         volume_fraction, block_inputs, chain_end_to_q_init));
@@ -127,4 +136,34 @@ int Molecules::get_n_solvent_types() const
 std::tuple<double, std::string> Molecules::get_solvent(const int s) const
 {
     return solvent_types[s];
+}
+
+/**
+ * @brief Finalize the contour length mapping.
+ *
+ * Builds the integer index mappings for all unique contour lengths
+ * and local Δs values collected from the added polymers.
+ */
+void Molecules::finalize_contour_length_mapping()
+{
+    if (!contour_length_mapping.finalized())
+    {
+        contour_length_mapping.finalize();
+    }
+}
+
+/**
+ * @brief Get the contour length mapping.
+ */
+ContourLengthMapping& Molecules::get_contour_length_mapping()
+{
+    return contour_length_mapping;
+}
+
+/**
+ * @brief Get the contour length mapping (const version).
+ */
+const ContourLengthMapping& Molecules::get_contour_length_mapping() const
+{
+    return contour_length_mapping;
 }

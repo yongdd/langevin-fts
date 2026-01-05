@@ -51,6 +51,7 @@
 
 #include "PropagatorCode.h"
 #include "Polymer.h"
+#include "ContourLengthMapping.h"
 
 /**
  * @class Molecules
@@ -131,6 +132,15 @@ private:
      * monomer type (for interactions) and volume fraction.
      */
     std::vector<std::tuple<double, std::string>> solvent_types;
+
+    /**
+     * @brief Mapping from floating-point contour lengths and local Δs to integers.
+     *
+     * This mapping enables reliable comparison of propagator keys when block
+     * lengths are arbitrary floating-point numbers. It assigns unique integer
+     * indices to each distinct contour_length and local_ds value.
+     */
+    ContourLengthMapping contour_length_mapping;
 
 public:
     /**
@@ -260,5 +270,29 @@ public:
      * @return Tuple of (volume_fraction, monomer_type)
      */
     std::tuple<double, std::string> get_solvent(const int s) const;
+
+    /**
+     * @brief Finalize the contour length mapping.
+     *
+     * Must be called after all polymers have been added and before
+     * using the mapping. Collects all unique contour lengths from
+     * all polymers and builds the integer index mappings.
+     *
+     * @note This is called automatically by PropagatorComputationOptimizer,
+     *       but can be called explicitly if mapping is needed earlier.
+     */
+    void finalize_contour_length_mapping();
+
+    /**
+     * @brief Get the contour length mapping.
+     * @return Reference to ContourLengthMapping object
+     */
+    ContourLengthMapping& get_contour_length_mapping();
+
+    /**
+     * @brief Get the contour length mapping (const version).
+     * @return Const reference to ContourLengthMapping object
+     */
+    const ContourLengthMapping& get_contour_length_mapping() const;
 };
 #endif
