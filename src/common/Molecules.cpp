@@ -143,12 +143,19 @@ std::tuple<double, std::string> Molecules::get_solvent(const int s) const
  *
  * Builds the integer index mappings for all unique contour lengths
  * and local Δs values collected from the added polymers.
+ * Also regenerates propagator keys for all polymers using the length indices.
  */
 void Molecules::finalize_contour_length_mapping()
 {
     if (!contour_length_mapping.finalized())
     {
         contour_length_mapping.finalize();
+
+        // Regenerate propagator keys for all polymers using length indices
+        for (auto& polymer : polymer_types)
+        {
+            polymer.regenerate_propagator_keys(contour_length_mapping);
+        }
     }
 }
 

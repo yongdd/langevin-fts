@@ -50,6 +50,9 @@ private:
                             // "discrete": discrete bead-spring model
     bool aggregate_propagator_computation; // compute multiple propagators using property of linearity of the diffusion equation.
 
+    // Pointer to contour length mapping for converting length_index to n_segment
+    const ContourLengthMapping* contour_length_mapping;
+
     // set{key: (polymer id, key_left, key_right) (assert(key_left <= key_right))}
     std::map<std::tuple<int, std::string, std::string>, ComputationBlock> computation_blocks;
 
@@ -73,6 +76,10 @@ private:
         std::string new_key, int new_n_segment, bool is_junction_end);
 
     bool is_junction(Polymer& pc, int node);
+
+    // Convert length_index to n_segment in deps using contour_length_mapping
+    std::vector<std::tuple<std::string, int, int>> convert_deps_to_n_segment(
+        const std::vector<std::tuple<std::string, int, int>>& deps) const;
 
 public:
     PropagatorComputationOptimizer(Molecules* molecules, bool aggregate_propagator_computation);

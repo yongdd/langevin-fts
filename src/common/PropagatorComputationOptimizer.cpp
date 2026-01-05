@@ -86,6 +86,12 @@ PropagatorComputationOptimizer::PropagatorComputationOptimizer(Molecules* molecu
     if(molecules->get_n_polymer_types() == 0)
         throw_with_line_number("There is no chain. Add polymers first.");
 
+    // Finalize the contour length mapping (regenerates propagator keys using length indices)
+    molecules->finalize_contour_length_mapping();
+
+    // Store pointer to the mapping for converting length_index to n_segment
+    this->contour_length_mapping = &molecules->get_contour_length_mapping();
+
     this->aggregate_propagator_computation = aggregate_propagator_computation;
     this->model_name = molecules->get_model_name();
     for(int p=0; p<molecules->get_n_polymer_types();p++)
@@ -355,7 +361,28 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
 {
     if (computation_propagators.find(new_key) == computation_propagators.end())
     {
-        computation_propagators[new_key].deps = PropagatorCode::get_deps_from_key(new_key);
+        // Parse deps from key
+        auto parsed_deps = PropagatorCode::get_deps_from_key(new_key);
+
+        // For non-aggregated keys, the segment values in deps are length_index
+        // and need to be converted to n_segment.
+        // For aggregated keys (containing '[' anywhere), the segment values are already
+        // n_segment from the slicing process, so no conversion is needed.
+        // Keys containing '[' include:
+        // - Direct aggregated keys like "[A:0,3]B"
+        // - Mixed keys from substitute_right_keys like "([A:0,3]B5)C"
+        if (new_key.find('[') != std::string::npos)
+        {
+            // Aggregated key or key containing aggregated sub-keys:
+            // deps already contain n_segment values
+            computation_propagators[new_key].deps = parsed_deps;
+        }
+        else
+        {
+            // Non-aggregated key: convert length_index to n_segment
+            computation_propagators[new_key].deps = convert_deps_to_n_segment(parsed_deps);
+        }
+
         computation_propagators[new_key].monomer_type = PropagatorCode::get_monomer_type_from_key(new_key);
         computation_propagators[new_key].max_n_segment = new_n_segment;
         computation_propagators[new_key].height = PropagatorCode::get_height_from_key(new_key);
@@ -385,6 +412,39 @@ bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
         return false;
     else
         return true;
+}
+
+/**
+ * @brief Convert length_index to n_segment in deps tuple.
+ *
+ * The propagator keys use length_index instead of n_segment.
+ * This method converts the parsed length_index back to n_segment
+ * using the ContourLengthMapping.
+ *
+ * @param deps Parsed dependencies with length_index
+ * @return Dependencies with n_segment
+ */
+std::vector<std::tuple<std::string, int, int>> PropagatorComputationOptimizer::convert_deps_to_n_segment(
+    const std::vector<std::tuple<std::string, int, int>>& deps) const
+{
+    std::vector<std::tuple<std::string, int, int>> converted_deps;
+    converted_deps.reserve(deps.size());
+
+    for (const auto& dep : deps)
+    {
+        std::string sub_key = std::get<0>(dep);
+        int length_index = std::get<1>(dep);
+        int n_repeated = std::get<2>(dep);
+
+        // Convert length_index to n_segment using the mapping
+        // The length_index is 1-based, get the contour_length and then n_segment
+        double contour_length = contour_length_mapping->get_length_from_index(length_index);
+        int n_segment = contour_length_mapping->get_n_segment(contour_length);
+
+        converted_deps.push_back(std::make_tuple(sub_key, n_segment, n_repeated));
+    }
+
+    return converted_deps;
 }
 
 /** @brief Get number of unique propagator computations. */
@@ -579,7 +639,6 @@ void PropagatorComputationOptimizer::display_propagators() const
 void PropagatorComputationOptimizer::display_sub_propagators() const
 {
     // Print sub propagators
-    std::vector<std::tuple<std::string, int, int>> sub_deps;
     int total_segments = 0;
     std::cout << "--------- Propagators ---------" << std::endl;
     std::cout << "Key:\n\taggregated, max_n_segment, height, deps," << std::endl;
@@ -596,10 +655,11 @@ void PropagatorComputationOptimizer::display_sub_propagators() const
             std::cout << "O, ";
         std::cout << item.second.max_n_segment << ", " << item.second.height;
 
-        sub_deps = PropagatorCode::get_deps_from_key(item.first);
-        for(size_t i=0; i<sub_deps.size(); i++)
+        // Use already-converted deps (n_segment) from computation_propagators
+        // rather than parsing from key (which contains length_index)
+        for(size_t i=0; i<item.second.deps.size(); i++)
         {
-            std::cout << ", "  << std::get<0>(sub_deps[i]) << ":" << std::get<1>(sub_deps[i]);
+            std::cout << ", "  << std::get<0>(item.second.deps[i]) << ":" << std::get<1>(item.second.deps[i]);
         }
         std::cout << std::endl;
     }
