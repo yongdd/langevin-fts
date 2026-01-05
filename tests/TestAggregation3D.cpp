@@ -147,8 +147,8 @@ int main()
                         // Display branches
                         #ifndef NDEBUG
                         propagator_computation_optimizer->display_blocks();
-                        propagator_computation_optimizer->display_propagators();
                         #endif
+                        propagator_computation_optimizer->display_propagators();
 
                         // std::cout<< "w_a and w_b are initialized to a gyroid." << std::endl;
                         double xx, yy, zz, c1, c2;

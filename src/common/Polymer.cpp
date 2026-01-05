@@ -35,6 +35,7 @@
 
 #include "Polymer.h"
 #include "PropagatorCode.h"
+#include "ContourLengthMapping.h"
 #include "Exception.h"
 #include "ValidationUtils.h"
 
@@ -281,4 +282,32 @@ std::string Polymer::get_propagator_key(const int v, const int u) const {
     validation::require_key(edge_to_propagator_key, std::make_pair(v,u),
         "edge_to_propagator_key for (" + std::to_string(v) + ", " + std::to_string(u) + ")");
     return edge_to_propagator_key.at(std::make_pair(v,u));
+}
+
+std::map<int, std::string>& Polymer::get_chain_end_to_q_init()
+{
+    return chain_end_to_q_init;
+}
+
+/**
+ * @brief Regenerate propagator keys using contour length mapping.
+ *
+ * Replaces existing keys with new ones that use length indices.
+ *
+ * @param mapping Contour length mapping (must be finalized)
+ */
+void Polymer::regenerate_propagator_keys(const ContourLengthMapping& mapping)
+{
+    // Clear existing keys
+    edge_to_propagator_key.clear();
+
+    // Generate new keys using the mapping
+    auto propagator_codes = PropagatorCode::generate_codes_with_mapping(*this, chain_end_to_q_init, mapping);
+    for(size_t i=0; i<propagator_codes.size(); i++)
+    {
+        int v = std::get<0>(propagator_codes[i]);
+        int u = std::get<1>(propagator_codes[i]);
+        std::string propagator_key = PropagatorCode::get_key_from_code(std::get<2>(propagator_codes[i]));
+        this->set_propagator_key(propagator_key, v, u);
+    }
 }

@@ -40,6 +40,7 @@
 
 #include "Molecules.h"
 #include "PropagatorCode.h"
+#include "ContourLengthMapping.h"
 #include "Exception.h"
 #include "ValidationUtils.h"
 
@@ -201,6 +202,162 @@ std::string PropagatorCode::generate_edge_code(
     // Add monomer_type at the end of code
     code += blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].monomer_type;
     code += std::to_string(blocks[edge_to_block_index[std::make_pair(in_node, out_node)]].n_segment);
+
+    // Save the result in memory
+    memory[std::make_pair(in_node, out_node)] = code;
+
+    return code;
+}
+
+/**
+ * @brief Generate propagator codes using length index mapping.
+ *
+ * Traverses the polymer graph and generates unique string codes for
+ * each directed edge (v→u), using ContourLengthMapping to convert
+ * contour_length to integer indices.
+ *
+ * @param pc                  Polymer graph to process
+ * @param chain_end_to_q_init Map of chain ends to custom initial conditions
+ * @param mapping             Contour length mapping (must be finalized)
+ *
+ * @return Vector of (v, u, code) tuples for each directed edge
+ */
+std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes_with_mapping(
+    Polymer& pc, std::map<int, std::string>& chain_end_to_q_init,
+    const ContourLengthMapping& mapping)
+{
+    std::vector<std::tuple<int, int, std::string>> propagator_codes;
+    std::string propagator_code;
+
+    // Generate propagator code for each block and each direction
+    std::map<std::pair<int, int>, std::string> memory;
+    for (size_t b=0; b<pc.get_blocks().size(); b++)
+    {
+        int v = pc.get_blocks()[b].v;
+        int u = pc.get_blocks()[b].u;
+        propagator_code = PropagatorCode::generate_edge_code_with_mapping(
+            memory,
+            pc.get_blocks(),
+            pc.get_adjacent_nodes(),
+            pc.get_block_indexes(),
+            chain_end_to_q_init,
+            mapping,
+            v, u);
+
+        propagator_codes.push_back(std::make_tuple(v, u, propagator_code));
+
+        propagator_code = PropagatorCode::generate_edge_code_with_mapping(
+            memory,
+            pc.get_blocks(),
+            pc.get_adjacent_nodes(),
+            pc.get_block_indexes(),
+            chain_end_to_q_init,
+            mapping,
+            u, v);
+
+        propagator_codes.push_back(std::make_tuple(u, v, propagator_code));
+    }
+    return propagator_codes;
+}
+
+/**
+ * @brief Recursively generate code using length index.
+ *
+ * Similar to generate_edge_code but uses ContourLengthMapping
+ * to convert contour_length to integer index.
+ *
+ * @param memory             Memoization cache
+ * @param blocks             Polymer blocks
+ * @param adjacent_nodes     Adjacency list
+ * @param edge_to_block_index Edge to block index mapping
+ * @param chain_end_to_q_init Custom initial conditions
+ * @param mapping            Contour length mapping
+ * @param in_node            Source node
+ * @param out_node           Target node
+ *
+ * @return String code using length index
+ */
+std::string PropagatorCode::generate_edge_code_with_mapping(
+    std::map<std::pair<int, int>, std::string>& memory,
+    std::vector<Block>& blocks,
+    std::map<int, std::vector<int>>& adjacent_nodes,
+    std::map<std::pair<int, int>, int>& edge_to_block_index,
+    std::map<int, std::string>& chain_end_to_q_init,
+    const ContourLengthMapping& mapping,
+    int in_node, int out_node)
+{
+    std::vector<std::string> queue_sub_codes;
+    std::string sub_code;
+
+    // If it is already computed
+    if (validation::contains(memory, std::make_pair(in_node, out_node)))
+        return memory[std::make_pair(in_node, out_node)];
+
+    // Explore neighbor nodes
+    for(size_t i=0; i<adjacent_nodes[in_node].size(); i++)
+    {
+        if (adjacent_nodes[in_node][i] != out_node)
+        {
+            auto v_u_pair = std::make_pair(adjacent_nodes[in_node][i], in_node);
+            if (validation::contains(memory, v_u_pair))
+                sub_code = memory[v_u_pair];
+            else
+            {
+                sub_code = generate_edge_code_with_mapping(
+                    memory, blocks, adjacent_nodes,
+                    edge_to_block_index, chain_end_to_q_init,
+                    mapping,
+                    adjacent_nodes[in_node][i], in_node);
+                memory[v_u_pair] = sub_code;
+            }
+            queue_sub_codes.push_back(sub_code);
+        }
+    }
+
+    // Merge code of child propagators
+    std::string code = "";
+    if(queue_sub_codes.size() != 0)
+    {
+        std::sort(queue_sub_codes.begin(), queue_sub_codes.end());
+        // Count each sub_code
+        std::vector<std::string> unique_sub_codes;
+        std::vector<int> counts;
+        for(size_t i=0; i<queue_sub_codes.size(); i++)
+        {
+            if (i==0 || queue_sub_codes[i] != queue_sub_codes[i-1])
+            {
+                unique_sub_codes.push_back(queue_sub_codes[i]);
+                counts.push_back(1);
+            }
+            else
+            {
+                counts[counts.size()-1] += 1;
+            }
+        }
+        // Merge codes
+        code += "(";
+        for(size_t i=0; i<unique_sub_codes.size(); i++)
+        {
+            code += unique_sub_codes[i];
+            if (counts[i] > 1)
+            {
+                code += ":" + std::to_string(counts[i]);
+            }
+        }
+        code += ")";
+    }
+    // If in_node exists in chain_end_to_q_init
+    else if (validation::contains(chain_end_to_q_init, in_node))
+    {
+        code = "{" + chain_end_to_q_init[in_node] + "}";
+    }
+
+    // Add monomer_type and length_index at the end of code
+    int block_idx = edge_to_block_index[std::make_pair(in_node, out_node)];
+    code += blocks[block_idx].monomer_type;
+    // Use length index instead of n_segment
+    int length_index = mapping.get_length_index(blocks[block_idx].contour_length);
+    code += std::to_string(length_index);
 
     // Save the result in memory
     memory[std::make_pair(in_node, out_node)] = code;

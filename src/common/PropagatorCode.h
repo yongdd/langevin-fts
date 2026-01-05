@@ -55,6 +55,9 @@
 #include <map>
 #include "Polymer.h"
 
+// Forward declaration
+class ContourLengthMapping;
+
 /**
  * @class PropagatorCode
  * @brief Static utility class for generating and parsing propagator codes.
@@ -106,6 +109,31 @@ private:
         std::map<int, std::string>& chain_end_to_q_init,
         int in_node, int out_node);
 
+    /**
+     * @brief Recursively generate code using length index instead of n_segment.
+     *
+     * This version uses ContourLengthMapping to convert contour_length to
+     * an integer index, enabling support for floating-point block lengths.
+     *
+     * @param memory            Cache of already-computed edge codes
+     * @param blocks            Block information vector
+     * @param adjacent_nodes    Adjacency list of polymer graph
+     * @param edge_to_block_index Edge to block index mapping
+     * @param chain_end_to_q_init Initial condition labels for grafted ends
+     * @param mapping           Contour length to index mapping
+     * @param in_node           Source vertex
+     * @param out_node          Target vertex
+     * @return Code string using length index
+     */
+    static std::string generate_edge_code_with_mapping(
+        std::map<std::pair<int, int>, std::string>& memory,
+        std::vector<Block>& blocks,
+        std::map<int, std::vector<int>>& adjacent_nodes,
+        std::map<std::pair<int, int>, int>& edge_to_block_index,
+        std::map<int, std::string>& chain_end_to_q_init,
+        const ContourLengthMapping& mapping,
+        int in_node, int out_node);
+
 public:
     /**
      * @brief Generate all propagator codes for a polymer.
@@ -128,6 +156,22 @@ public:
      * @endcode
      */
     static std::vector<std::tuple<int, int, std::string>> generate_codes(Polymer& pc, std::map<int, std::string>& chain_end_to_q_init);
+
+    /**
+     * @brief Generate propagator codes using length index mapping.
+     *
+     * This version uses ContourLengthMapping to generate codes with integer
+     * indices representing block lengths, rather than segment counts.
+     *
+     * @param pc                  Polymer to generate codes for
+     * @param chain_end_to_q_init Map of chain end vertices to initial condition labels
+     * @param mapping             Contour length to index mapping (must be finalized)
+     * @return Vector of (from_vertex, to_vertex, code) tuples
+     */
+    static std::vector<std::tuple<int, int, std::string>> generate_codes_with_mapping(
+        Polymer& pc,
+        std::map<int, std::string>& chain_end_to_q_init,
+        const ContourLengthMapping& mapping);
 
     /**
      * @brief Extract the key (unique identifier) from a full code.

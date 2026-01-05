@@ -62,6 +62,9 @@
 #include <vector>
 #include <map>
 
+// Forward declaration
+class ContourLengthMapping;
+
 /**
  * @struct BlockInput
  * @brief Input specification for a polymer block (user-facing structure).
@@ -305,5 +308,22 @@ public:
      * @return Propagator code string encoding dependencies
      */
     std::string get_propagator_key(const int v, const int u) const;
+
+    /**
+     * @brief Get the chain_end_to_q_init mapping.
+     * @return Reference to the chain end to q_init mapping
+     */
+    std::map<int, std::string>& get_chain_end_to_q_init();
+
+    /**
+     * @brief Regenerate propagator keys using contour length mapping.
+     *
+     * Replaces the propagator keys with new ones that use length indices
+     * instead of segment counts. This enables support for floating-point
+     * block lengths.
+     *
+     * @param mapping Contour length mapping (must be finalized)
+     */
+    void regenerate_propagator_keys(const ContourLengthMapping& mapping);
 };
 #endif
