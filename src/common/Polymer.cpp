@@ -73,10 +73,9 @@ Polymer::Polymer(
     {
         validation::require_positive(block_inputs[i].contour_length,
             "block_inputs[" + std::to_string(i) + "].contour_length");
-        if( std::abs(std::lround(block_inputs[i].contour_length/ds)-block_inputs[i].contour_length/ds) > 1.e-6)
-        {
-            throw_with_line_number("block_inputs[" + std::to_string(i) + "].contour_lengths/ds (" + std::to_string(block_inputs[i].contour_length) + "/" + std::to_string(ds) + ") is not an integer.")
-        }
+        // Note: contour_length/ds no longer needs to be exactly an integer.
+        // The ContourLengthMapping class handles computing n_segment = round(contour_length/ds)
+        // and the corresponding local ds = contour_length / n_segment.
         validation::require_string_key(bond_lengths, block_inputs[i].monomer_type, "bond_lengths");
     }
 

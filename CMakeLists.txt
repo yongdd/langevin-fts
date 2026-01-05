@@ -43,6 +43,7 @@ ADD_LIBRARY(common
     src/common/PropagatorCode.cpp
     src/common/Polymer.cpp
     src/common/Molecules.cpp
+    src/common/ContourLengthMapping.cpp
     src/common/PropagatorComputationOptimizer.cpp
     src/common/PropagatorAggregator.cpp
     src/common/CircularBuffer.cpp
