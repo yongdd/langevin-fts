@@ -10,6 +10,42 @@ Propagators are identified using two related string formats:
 
 Both formats encode the same information but serve different purposes in the computation pipeline.
 
+## ContourLengthMapping
+
+The `ContourLengthMapping` class manages the relationship between contour lengths and their indices. This mapping is fundamental to understanding the code and key formats.
+
+| Property | Description |
+|----------|-------------|
+| `length_index` | 1-based index for unique contour lengths |
+| `ds_index` | 0-based index for unique ds values |
+| `n_segment` | Number of segments = round(contour_length / ds) |
+
+### Lookup Functions
+
+```cpp
+// Get length_index from contour_length
+int length_index = mapping.get_length_index(contour_length);
+
+// Get contour_length from length_index
+double contour_length = mapping.get_length_from_index(length_index);
+
+// Get ds_index from contour_length
+int ds_index = mapping.get_ds_index(contour_length);
+
+// Get n_segment from contour_length
+int n_segment = mapping.get_n_segment(contour_length);
+```
+
+### Example Mapping
+
+For a system with blocks of contour lengths 0.4, 0.9, and 1.2 with ds=0.1:
+
+| contour_length | length_index | n_segment | ds_index |
+|----------------|--------------|-----------|----------|
+| 0.4 | 1 | 4 | 0 |
+| 0.9 | 2 | 9 | 0 |
+| 1.2 | 3 | 12 | 0 |
+
 ## Components
 
 | Symbol | Name | Description |
@@ -107,32 +143,6 @@ For example, parsing `[(A)B3,(C)D2]E+1`:
 - Dependency 1: key=`(A)B+1`, n_segment=3
 - Dependency 2: key=`(C)D+1`, n_segment=2
 - The ds_index=1 is inherited from the outer `+1`
-
-## ContourLengthMapping
-
-The `ContourLengthMapping` class manages the relationship between contour lengths and their indices:
-
-| Property | Description |
-|----------|-------------|
-| `length_index` | 1-based index for unique contour lengths |
-| `ds_index` | 0-based index for unique ds values |
-| `n_segment` | Number of segments = round(contour_length / ds) |
-
-### Lookup Functions
-
-```cpp
-// Get length_index from contour_length
-int length_index = mapping.get_length_index(contour_length);
-
-// Get contour_length from length_index
-double contour_length = mapping.get_length_from_index(length_index);
-
-// Get ds_index from contour_length
-int ds_index = mapping.get_ds_index(contour_length);
-
-// Get n_segment from contour_length
-int n_segment = mapping.get_n_segment(contour_length);
-```
 
 ## Usage in Computation
 
