@@ -17,7 +17,7 @@ The `ContourLengthMapping` class manages the relationship between contour length
 | Property | Description |
 |----------|-------------|
 | `length_index` | 1-based index for unique contour lengths |
-| `ds_index` | 0-based index for unique ds values |
+| `ds_index` | 1-based index for unique ds values |
 | `n_segment` | Number of segments = round(contour_length / ds) |
 
 ### Lookup Functions
@@ -42,9 +42,9 @@ For a system with blocks of contour lengths 0.4, 0.9, and 1.2 with ds=0.1:
 
 | contour_length | length_index | n_segment | ds_index |
 |----------------|--------------|-----------|----------|
-| 0.4 | 1 | 4 | 0 |
-| 0.9 | 2 | 9 | 0 |
-| 1.2 | 3 | 12 | 0 |
+| 0.4 | 1 | 4 | 1 |
+| 0.9 | 2 | 9 | 1 |
+| 1.2 | 3 | 12 | 1 |
 
 ## Components
 
@@ -102,8 +102,8 @@ The `get_key_from_code(code, mapping)` function converts DKN to DK+M:
 | Code (DKN) | Key (DK+M) | Notes |
 |------------|------------|-------|
 | `A3` | `A+1` | ds_index=1 for length_index=3 |
-| `B2` | `B+0` | ds_index=0 for length_index=2 |
-| `(A3)B2` | `(A3)B+0` | Only outer level has +M |
+| `B2` | `B+1` | ds_index=1 for length_index=2 |
+| `(A3)B2` | `(A3)B+1` | Only outer level has +M |
 | `(A3B2)C4` | `(A3B2)C+1` | Inner deps keep N format |
 
 **Important**: Only the outermost level has the `+M` suffix. Inner dependencies retain the DKN format.
@@ -130,7 +130,7 @@ When identical propagator branches are detected, they are merged into aggregated
 |----------------|-------------|
 | `[(A)B3,(C)D2]E+1` | E-type propagator aggregating (A)B with 3 segments and (C)D with 2 segments |
 | `[(A)B3:2,(C)D2]E+1` | Same, but (A)B appears twice |
-| `[A0,B0]C+0` | C-type aggregating two free-end propagators |
+| `[A0,B0]C+1` | C-type aggregating two free-end propagators |
 
 ### Parsing Aggregated Keys
 
