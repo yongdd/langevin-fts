@@ -325,5 +325,33 @@ public:
      * @param mapping Contour length mapping (must be finalized)
      */
     void regenerate_propagator_keys(const ContourLengthMapping& mapping);
+
+    /**
+     * @brief Display polymer architecture as ASCII art diagram.
+     *
+     * Prints a visual representation of the polymer topology showing
+     * vertices (junction points and chain ends) connected by blocks
+     * with their monomer types and contour lengths.
+     *
+     * @param polymer_id Optional polymer index to include in the title.
+     *                   If >= 0, displays "=== Polymer N ==="
+     *                   If < 0 (default), displays "=== Polymer ==="
+     * @param show_legend If true, prints the legend explaining symbols (default: false).
+     * @param show_title If true (default), prints the title header.
+     *
+     * For linear chains, outputs a single-line format:
+     * ```
+     * (0)--A[0.30]--(1)--B[0.70]--(2)
+     * ```
+     *
+     * For branched polymers, uses tree format:
+     * ```
+     * (0)
+     *  +--A[0.33]--(1)
+     *  +--B[0.33]--(2)
+     *  +--C[0.34]--(3)
+     * ```
+     */
+    void display_architecture(int polymer_id = -1, bool show_legend = false, bool show_title = true) const;
 };
 #endif

@@ -86,6 +86,14 @@ int main()
                     PropagatorComputation<T>* solver =
                         factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
 
+                    // Display polymer architecture and propagator info (only on first aggregate iteration)
+                    if (!aggregate_propagator_computation)
+                    {
+                        molecules->display_architectures();
+                        propagator_computation_optimizer->display_blocks();
+                        propagator_computation_optimizer->display_propagators();
+                    }
+
                     std::cout << "  Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
 
                     // Compute propagators with fixed fields

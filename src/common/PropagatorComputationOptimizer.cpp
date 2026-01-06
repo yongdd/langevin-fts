@@ -513,11 +513,17 @@ ComputationBlock& PropagatorComputationOptimizer::get_computation_block(std::tup
 /**
  * @brief Print computation blocks for debugging.
  *
- * Displays all blocks with their aggregation status, junction flags,
- * segment counts, and (v,u) node pairs.
+ * Displays contour length mapping followed by all blocks with their
+ * aggregation status, junction flags, segment counts, and (v,u) node pairs.
  */
 void PropagatorComputationOptimizer::display_blocks() const
 {
+    // Print contour length mapping
+    if (contour_length_mapping != nullptr && contour_length_mapping->finalized())
+    {
+        contour_length_mapping->print_mapping();
+    }
+
     // Print blocks
     std::cout << "--------------- Blocks ---------------" << std::endl;
     std::cout << "Polymer id, left key:\n\taggregated, (left, right) is_junction, (left, right) n_segment, right key, n_repeat, {v, u} list" << std::endl;

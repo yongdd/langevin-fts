@@ -259,6 +259,25 @@ public:
     Polymer& get_polymer(const int p);
 
     /**
+     * @brief Display ASCII art architecture diagrams for all polymers.
+     *
+     * Iterates through all polymer types and displays their topology
+     * using the Polymer::display_architecture() method. Each polymer
+     * is labeled with its index.
+     *
+     * Example output:
+     * ```
+     * === Polymer 0 Architecture ===
+     * (0)--A[0.30]--(1)--B[0.70]--(2)
+     * Legend: (n)=vertex index, X=monomer type, [L]=contour length
+     * === Polymer 1 Architecture ===
+     * (0)--A[0.50]--(1)--B[0.50]--(2)
+     * Legend: (n)=vertex index, X=monomer type, [L]=contour length
+     * ```
+     */
+    void display_architectures() const;
+
+    /**
      * @brief Get number of solvent types.
      * @return Count of distinct solvent species
      */

@@ -201,6 +201,10 @@ Simulations are configured via Python dictionaries with keys:
 
 ## Development Notes
 
+### Workflow Rules
+
+- **Never commit without permission**: Always wait for explicit user approval before running `git commit`.
+
 ### When Modifying C++ Code
 
 1. Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:

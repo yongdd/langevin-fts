@@ -25,8 +25,11 @@
  */
 
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <cctype>
 #include <cmath>
+#include <climits>
 #include <numbers>
 #include <cassert>
 #include <algorithm>
@@ -310,5 +313,188 @@ void Polymer::regenerate_propagator_keys(const ContourLengthMapping& mapping)
         int u = std::get<1>(propagator_codes[i]);
         std::string propagator_key = PropagatorCode::get_key_from_code(std::get<2>(propagator_codes[i]), mapping);
         this->set_propagator_key(propagator_key, v, u);
+    }
+}
+
+/**
+ * @brief Helper function to format edge label with monomer type and contour length.
+ */
+static std::string format_edge(const Block& block)
+{
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    oss << block.monomer_type << "[" << block.contour_length << "]";
+    return oss.str();
+}
+
+/**
+ * @brief Recursive helper to print tree structure.
+ *
+ * @param node Current node
+ * @param parent Parent node (-1 for root)
+ * @param prefix Current indentation prefix
+ * @param is_last Whether this is the last child of parent
+ */
+void print_tree_recursive(
+    int node,
+    int parent,
+    const std::string& prefix,
+    bool is_last,
+    const std::map<int, std::vector<int>>& adj_nodes,
+    const std::map<std::pair<int, int>, int>& edge_to_idx,
+    const std::vector<Block>& all_blocks)
+{
+    // Get children (neighbors except parent)
+    std::vector<int> children;
+    auto it = adj_nodes.find(node);
+    if (it != adj_nodes.end())
+    {
+        for (int neighbor : it->second)
+        {
+            if (neighbor != parent)
+            {
+                children.push_back(neighbor);
+            }
+        }
+    }
+    std::sort(children.begin(), children.end());
+
+    // Print each child
+    for (size_t i = 0; i < children.size(); i++)
+    {
+        int child = children[i];
+        bool child_is_last = (i == children.size() - 1);
+
+        // Get block info for this edge
+        auto edge_it = edge_to_idx.find(std::make_pair(node, child));
+        if (edge_it == edge_to_idx.end())
+        {
+            edge_it = edge_to_idx.find(std::make_pair(child, node));
+        }
+        const Block& block = all_blocks[edge_it->second];
+        std::string edge_label = format_edge(block);
+
+        // Print edge and child node
+        std::cout << prefix;
+        std::cout << (child_is_last ? " \\--" : " +--");
+        std::cout << edge_label << "--(" << child << ")" << std::endl;
+
+        // Recurse with updated prefix
+        std::string new_prefix = prefix + (child_is_last ? "    " : " |  ");
+        // Add spacing for edge label width
+        new_prefix += std::string(edge_label.length(), ' ');
+
+        print_tree_recursive(child, node, new_prefix, child_is_last,
+                            adj_nodes, edge_to_idx, all_blocks);
+    }
+}
+
+void Polymer::display_architecture(int polymer_id, bool show_legend, bool show_title) const
+{
+    if (show_title)
+    {
+        if (polymer_id >= 0)
+        {
+            std::cout << "=== Polymer " << polymer_id << " ===" << std::endl;
+        }
+        else
+        {
+            std::cout << "=== Polymer ===" << std::endl;
+        }
+    }
+
+    if (blocks.empty())
+    {
+        std::cout << "(empty polymer)" << std::endl;
+        return;
+    }
+
+    // Find root: first vertex with degree 1, or smallest vertex if all have degree > 1
+    int root = -1;
+    int min_vertex = INT_MAX;
+
+    for (const auto& pair : adjacent_nodes)
+    {
+        int v = pair.first;
+        min_vertex = std::min(min_vertex, v);
+
+        if (pair.second.size() == 1 && root == -1)
+        {
+            root = v;
+        }
+    }
+    if (root == -1)
+    {
+        root = min_vertex;
+    }
+
+    // Check if linear chain (all vertices have degree <= 2)
+    bool is_linear = true;
+    for (const auto& pair : adjacent_nodes)
+    {
+        if (pair.second.size() > 2)
+        {
+            is_linear = false;
+            break;
+        }
+    }
+
+    if (is_linear && blocks.size() <= 10)
+    {
+        // Print linear chain in single line
+        // Traverse from root following the chain
+        std::set<int> visited;
+        int current = root;
+        std::cout << "(" << current << ")";
+        visited.insert(current);
+
+        while (true)
+        {
+            // Find unvisited neighbor
+            int next = -1;
+            auto it = adjacent_nodes.find(current);
+            if (it != adjacent_nodes.end())
+            {
+                for (int neighbor : it->second)
+                {
+                    if (visited.find(neighbor) == visited.end())
+                    {
+                        next = neighbor;
+                        break;
+                    }
+                }
+            }
+
+            if (next == -1)
+            {
+                break;
+            }
+
+            // Get block info
+            auto edge_it = edge_to_block_index.find(std::make_pair(current, next));
+            if (edge_it == edge_to_block_index.end())
+            {
+                edge_it = edge_to_block_index.find(std::make_pair(next, current));
+            }
+            const Block& block = blocks[edge_it->second];
+
+            std::cout << "--" << format_edge(block) << "--(" << next << ")";
+            visited.insert(next);
+            current = next;
+        }
+        std::cout << std::endl;
+    }
+    else
+    {
+        // Print as tree
+        std::cout << "(" << root << ")" << std::endl;
+        print_tree_recursive(root, -1, "", true,
+                            adjacent_nodes, edge_to_block_index, blocks);
+    }
+
+    // Print legend if requested
+    if (show_legend)
+    {
+        std::cout << "Legend: (n)=vertex index, X=monomer type, [L]=contour length" << std::endl;
     }
 }

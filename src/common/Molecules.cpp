@@ -174,3 +174,25 @@ const ContourLengthMapping& Molecules::get_contour_length_mapping() const
 {
     return contour_length_mapping;
 }
+
+/**
+ * @brief Display ASCII art architecture diagrams for all polymers.
+ *
+ * Prints a single title, then each polymer's diagram with its index,
+ * followed by a legend explaining the notation.
+ */
+void Molecules::display_architectures() const
+{
+    if (polymer_types.empty())
+    {
+        return;
+    }
+
+    std::cout << "=== Polymer Architectures ===" << std::endl;
+    for (size_t p = 0; p < polymer_types.size(); p++)
+    {
+        std::cout << "[" << p << "]" << std::endl;
+        polymer_types[p].display_architecture(-1, false, false);
+    }
+    std::cout << "Legend: (n)=vertex, Type[length]=block" << std::endl;
+}

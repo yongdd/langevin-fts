@@ -35,7 +35,7 @@ int main()
         molecules.add_polymer(1.0, blocks, {});
         PropagatorComputationOptimizer propagator_computation_optimizer(&molecules, false);
 
-        // Display all blocks and branches
+        // Display contour length mapping, blocks, and propagators
         propagator_computation_optimizer.display_blocks();
         propagator_computation_optimizer.display_propagators();
 
