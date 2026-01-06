@@ -16,8 +16,8 @@ The `ContourLengthMapping` class manages the relationship between contour length
 
 | Property | Description |
 |----------|-------------|
-| `length_index` | 1-based index for unique contour lengths |
-| `ds_index` | 1-based index for unique ds values |
+| `length_index` | Index for unique contour lengths (starting from 1) |
+| `ds_index` | Index for unique ds values (starting from 1) |
 | `n_segment` | Number of segments = round(contour_length / ds) |
 
 ### Lookup Functions
