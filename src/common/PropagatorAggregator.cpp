@@ -90,18 +90,26 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuo
         std::string propagator_code = "[";
         bool is_first_sub_propagator = true;
         std::string dep_key;
+        int ds_index = -1;  // Will extract ds_index from dep_keys
         for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
         {
             dep_key = it->first;
 
+            // Extract ds_index from dep_key for outer level
+            int dep_ds_index = PropagatorCode::get_ds_index_from_key(dep_key);
+            if (ds_index == -1)
+                ds_index = dep_ds_index;
+
             // Update propagator key
+            // Keep the full dep_key (with ds_index) and use ";" to separate n_segment
+            // Format: dep_key;n_segment (e.g., "(D)B1;3")
             if(!is_first_sub_propagator)
                 propagator_code += ",";
             else
                 is_first_sub_propagator = false;
-            propagator_code += dep_key + std::to_string(set_I[dep_key].n_segment_right);
+            propagator_code += dep_key + ";" + std::to_string(set_I[dep_key].n_segment_right);
 
-            // The number of repeats
+            // The number of repeats (use : as before)
             if (set_I[dep_key].n_repeated > 1)
                 propagator_code += ":" + std::to_string(set_I[dep_key].n_repeated);
 
@@ -110,6 +118,9 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuo
             v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
         }
         propagator_code += "]" + monomer_type;
+        // Append ds_index to aggregated key (format: DK+M)
+        if (ds_index >= 0)
+            propagator_code += "+" + std::to_string(ds_index);
 
         // Add new aggregated key to set_I
         set_I[propagator_code].monomer_type = monomer_type;
@@ -225,18 +236,26 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_discrete
         std::string propagator_code = "[";
         bool is_first_sub_propagator = true;
         std::string dep_key;
+        int ds_index = -1;  // Will extract ds_index from dep_keys
         for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
         {
             dep_key = it->first;
 
+            // Extract ds_index from dep_key for outer level
+            int dep_ds_index = PropagatorCode::get_ds_index_from_key(dep_key);
+            if (ds_index == -1)
+                ds_index = dep_ds_index;
+
             // Update propagator key
+            // Keep the full dep_key (with ds_index) and use ";" to separate n_segment
+            // Format: dep_key;n_segment (e.g., "(D)B1;3")
             if(!is_first_sub_propagator)
                 propagator_code += ",";
             else
                 is_first_sub_propagator = false;
-            propagator_code += dep_key + std::to_string(set_F[dep_key].n_segment_right);
+            propagator_code += dep_key + ";" + std::to_string(set_F[dep_key].n_segment_right);
 
-            // The number of repeats
+            // The number of repeats (use : as before)
             if (set_F[dep_key].n_repeated > 1)
                 propagator_code += ":" + std::to_string(set_F[dep_key].n_repeated);
 
@@ -245,6 +264,9 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_discrete
             v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
         }
         propagator_code += "]" + monomer_type;
+        // Append ds_index to aggregated key (format: DK+M)
+        if (ds_index >= 0)
+            propagator_code += "+" + std::to_string(ds_index);
 
         // Add new aggregated key to set_F
         set_F[propagator_code].monomer_type = monomer_type;

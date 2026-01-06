@@ -244,6 +244,7 @@ std::vector<std::tuple<int, int, std::string>> PropagatorCode::generate_codes_wi
             mapping,
             v, u);
 
+        // Code format is DKN (no ds_index in code)
         propagator_codes.push_back(std::make_tuple(v, u, propagator_code));
 
         propagator_code = PropagatorCode::generate_edge_code_with_mapping(
@@ -366,27 +367,68 @@ std::string PropagatorCode::generate_edge_code_with_mapping(
 }
 
 /**
- * @brief Extract propagator key by removing trailing segment count.
+ * @brief Extract propagator key from full code (legacy version without ds_index).
  *
- * Given a full code like "A10", returns "A" (the key without segment count).
- * For complex codes like "(A10B5)C8", returns "(A10B5)C".
+ * Strips trailing length_index digits to get DK format.
+ * For codes like "A3", returns "A".
+ * For complex codes like "(A1B2)C3", returns "(A1B2)C".
  *
- * @param code Full propagator code with segment count
- * @return Key portion (code without trailing digits)
+ * @param code Full propagator code (format: DKN)
+ * @return Key in DK format (without ds_index)
  */
 std::string PropagatorCode::get_key_from_code(std::string code)
 {
-    int pos;
-    for(int i=code.size()-1; i>=0;i--)
+    // Strip trailing digits (length_index) to get DK
+    int pos = 0;
+    for (int i = code.size() - 1; i >= 0; i--)
     {
-        if(isalpha(code[i]))
+        if (isalpha(code[i]))
         {
-            pos = i+1;
+            pos = i + 1;
             break;
         }
     }
-    //std::cout<<"code.substr(0, pos); " << code << "  " << pos << " " << code.substr(0, pos) << std::endl;
     return code.substr(0, pos);
+}
+
+/**
+ * @brief Extract propagator key from full code with ds_index computation.
+ *
+ * Converts code format DKN to key format DK+M by:
+ * 1. Extracting length_index N from the code
+ * 2. Looking up ds_index M from the mapping
+ * 3. Returning DK+M format
+ *
+ * For code "A3", returns "A+1" (if length_index 3 maps to ds_index 1).
+ * For complex code "(A1B2)C3", returns "(A1B2)C+1".
+ *
+ * @param code Full propagator code (format: DKN)
+ * @param mapping ContourLengthMapping for ds_index lookup
+ * @return Key in DK+M format
+ */
+std::string PropagatorCode::get_key_from_code(std::string code, const ContourLengthMapping& mapping)
+{
+    // Find the position after the last alpha character (end of DK)
+    int pos = 0;
+    for (int i = code.size() - 1; i >= 0; i--)
+    {
+        if (isalpha(code[i]))
+        {
+            pos = i + 1;
+            break;
+        }
+    }
+
+    // Extract DK part and length_index
+    std::string dk_part = code.substr(0, pos);
+    int length_index = std::stoi(code.substr(pos));
+
+    // Look up ds_index from length_index via mapping
+    double contour_length = mapping.get_length_from_index(length_index);
+    int ds_index = mapping.get_ds_index(contour_length);
+
+    // Return DK+M format
+    return dk_part + "+" + std::to_string(ds_index);
 }
 
 /**
@@ -400,6 +442,11 @@ std::string PropagatorCode::get_key_from_code(std::string code)
  * Key "(A10B5:2)C" has dependencies:
  * - ("A", 10, 1) - one A propagator with 10 segments
  * - ("B", 5, 2) - two identical B propagators with 5 segments
+ *
+ * For aggregated keys, uses ";" separator:
+ * Key "[(A)B1;3,(C)D1;2]E" has dependencies:
+ * - ("(A)B1", 3, 1) - propagator with key (A)B1 up to 3 segments
+ * - ("(C)D1", 2, 1) - propagator with key (C)D1 up to 2 segments
  *
  * @param key Propagator key to parse
  * @return Vector of (sub_key, n_segment, n_repeated) tuples
@@ -415,41 +462,67 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
     int pos_start = 1; // start from 1 to remove open parenthesis
     std::stack<char> stack_brace;
     int state = 1;
+    // States: 1 = reading key, 2 = reading n_segment, 3 = reading n_repeated
+
+    // First pass: check if key uses ; separator format (has ; at depth 1)
+    // If so, use ; for ALL deps; otherwise use digit-based parsing
+    bool use_semicolon_format = false;
+    {
+        std::stack<char> temp_stack;
+        for(size_t i=0; i<key.size(); i++)
+        {
+            if(key[i] == '(' || key[i] == '[')
+                temp_stack.push(key[i]);
+            else if(key[i] == ')' || key[i] == ']')
+                temp_stack.pop();
+            else if(key[i] == ';' && temp_stack.size() == 1)
+            {
+                use_semicolon_format = true;
+                break;
+            }
+        }
+    }
 
     for(size_t i=0; i<key.size();i++)
     {
         if(stack_brace.size() == 1)
         {
-            // It was reading key and have found a digit
-            if(state==1 && isdigit(key[i]))
+            // For keys using ; separator format: look for ';' to find end of key
+            if(state==1 && key[i]==';')
+            {
+                // Remove a comma at start
+                if (key[pos_start] == ',')
+                    pos_start += 1;
+
+                sub_key = key.substr(pos_start, i-pos_start);
+                state = 2;
+                pos_start = i+1; // skip the ';'
+            }
+            // For non-aggregated keys: look for first digit after alpha (length_index)
+            // Only use digit-based parsing if the key doesn't use ; format
+            else if(state==1 && isdigit(key[i]) && !use_semicolon_format)
             {
                 // Remove a comma
                 if (key[pos_start] == ',')
                     pos_start += 1;
 
                 sub_key = key.substr(pos_start, i-pos_start);
-                // printf("%5d,%5d\n", pos_start, i);
-                // std::cout << key << "," << key.substr(pos_start, i-pos_start) << std::endl;
 
                 state = 2;
                 pos_start = i;
             }
-            // It was reading n_segment and have found a ':'
+            // It was reading n_segment (or length_index) and have found a ':'
             else if(state==2 && key[i]==':')
             {
                 sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
-                // printf("%5d,%5d=", pos_start, i);
-                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
 
                 state = 3;
                 pos_start = i+1;
             }
-            // It was reading n_segment and have found a non-digit
+            // It was reading n_segment (or length_index) and have found a non-digit
             else if(state==2 && !isdigit(key[i]))
             {
                 sub_n_segment = std::stoi(key.substr(pos_start, i-pos_start));
-                // printf("%5d,%5d=", pos_start, i);
-                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
 
                 sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, 1));
 
@@ -460,9 +533,7 @@ std::vector<std::tuple<std::string, int, int>> PropagatorCode::get_deps_from_key
             else if(state==3 && !isdigit(key[i]))
             {
                 sub_n_repeated = std::stoi(key.substr(pos_start, i-pos_start));
-                // printf("%5d,%5d=", pos_start, i);
-                // std::cout << key.substr(pos_start, i-pos_start) << std::endl;
-                
+
                 sub_deps.push_back(std::make_tuple(sub_key, sub_n_segment, sub_n_repeated));
                 state = 1;
                 pos_start = i;
@@ -532,13 +603,20 @@ std::string PropagatorCode::remove_monomer_type_from_key(std::string key)
  * @brief Extract monomer type from the end of a propagator key.
  *
  * Returns the monomer type string at the outermost level of the key.
- * For "(A10B5)C", returns "C". For "A", returns "A".
+ * For key in DKM format "(A1B2)C0", returns "C".
+ * For simple key "A0", returns "A".
  *
- * @param key Propagator key
+ * @param key Propagator key in DKM format
  * @return Monomer type string
  */
 std::string PropagatorCode::get_monomer_type_from_key(std::string key)
 {
+    // First, strip the +M suffix if present (new format: DK+M)
+    size_t plus_pos = key.rfind('+');
+    if (plus_pos != std::string::npos)
+        key = key.substr(0, plus_pos);
+
+    // Find position after last closing bracket
     int pos_start = 0;
     for(int i=key.size()-1; i>=0;i--)
     {
@@ -549,8 +627,30 @@ std::string PropagatorCode::get_monomer_type_from_key(std::string key)
             break;
         }
     }
-    //std::cout << key.substr(pos_start, key.size()-pos_start) << std::endl;
+    // Return the monomer type (everything after last closing bracket, or entire key)
     return key.substr(pos_start, key.size()-pos_start);
+}
+
+/**
+ * @brief Extract ds_index from the end of a propagator key.
+ *
+ * For key in DK+M format "(A1B2)C+0", returns 0.
+ * For simple key "A+1", returns 1.
+ * Returns -1 if no ds_index is found (no '+' separator).
+ *
+ * @param key Propagator key in DK+M format
+ * @return ds_index value, or -1 if not present
+ */
+int PropagatorCode::get_ds_index_from_key(std::string key)
+{
+    // Find the plus sign that separates DK from M
+    size_t plus_pos = key.rfind('+');
+    if (plus_pos == std::string::npos || plus_pos >= key.size() - 1)
+        return -1;
+
+    // Extract and parse the ds_index after '+'
+    std::string ds_index_str = key.substr(plus_pos + 1);
+    return std::stoi(ds_index_str);
 }
 
 /**
