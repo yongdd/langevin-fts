@@ -134,6 +134,14 @@ int main()
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                     std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
+
+                    // Display polymer architecture and propagator info (only on first aggregate iteration)
+                    if (!aggregate_propagator_computation)
+                    {
+                        molecules->display_architectures();
+                        propagator_computation_optimizer->display_blocks();
+                        propagator_computation_optimizer->display_propagators();
+                    }
                     // std::cout << "chi_n, f: " << chi_n << " " << f << " "  << std::endl;
                     // std::cout << "Nx: " << cb->get_nx(0) << " " << cb->get_nx(1) << " " << cb->get_nx(2) << std::endl;
                     // std::cout << "Lx: " << cb->get_lx(0) << " " << cb->get_lx(1) << " " << cb->get_lx(2) << std::endl;

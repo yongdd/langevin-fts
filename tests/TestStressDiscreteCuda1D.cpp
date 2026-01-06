@@ -106,7 +106,11 @@ int main()
                 std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                 std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
-                // Display propagator computation optimizer info
+                // Display polymer architecture and propagator info
+                for (int p = 0; p < molecules->get_n_polymer_types(); p++)
+                {
+                    molecules->get_polymer(p).display_architecture(p);
+                }
                 propagator_computation_optimizer->display_blocks();
                 propagator_computation_optimizer->display_propagators();
 

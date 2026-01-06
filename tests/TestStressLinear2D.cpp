@@ -102,6 +102,14 @@ int main()
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
                     std::cout << "Using Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
 
+                    // Display polymer architecture and propagator info (only on first aggregate iteration)
+                    if (!aggregate_propagator_computation)
+                    {
+                        molecules->display_architectures();
+                        propagator_computation_optimizer->display_blocks();
+                        propagator_computation_optimizer->display_propagators();
+                    }
+
                     // Load pre-converged fields from file
                     std::string line;
                     std::ifstream input_field_file;
