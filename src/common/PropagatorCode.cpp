@@ -634,12 +634,13 @@ std::string PropagatorCode::get_monomer_type_from_key(std::string key)
 /**
  * @brief Extract ds_index from the end of a propagator key.
  *
- * For key in DK+M format "(A1B2)C+0", returns 0.
- * For simple key "A+1", returns 1.
+ * For key in DK+M format "(A1B2)C+1", returns 1.
+ * For simple key "A+2", returns 2.
  * Returns -1 if no ds_index is found (no '+' separator).
+ * Note: ds_index uses 1-based indexing.
  *
  * @param key Propagator key in DK+M format
- * @return ds_index value, or -1 if not present
+ * @return ds_index value (1-based), or -1 if not present
  */
 int PropagatorCode::get_ds_index_from_key(std::string key)
 {
