@@ -48,6 +48,7 @@ For a system with blocks of contour lengths 0.3, 0.35, and 0.5 with ds=0.1:
 
 Note: `n_segment = round(contour_length / ds)` and `local_ds = contour_length / n_segment`.
 The block with contour_length=0.35 has a different local_ds, resulting in a different ds_index.
+A similar approach for local_ds is used in PSCF (https://github.com/dmorse/pscfpp).
 
 ## Components
 
