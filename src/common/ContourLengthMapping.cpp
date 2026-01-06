@@ -159,7 +159,17 @@ void ContourLengthMapping::finalize()
     for (size_t i = 0; i < unique_lengths.size(); ++i)
     {
         double len = unique_lengths[i];
-        int n_seg = static_cast<int>(std::lround(len / global_ds));
+
+        // Robust rounding that handles floating-point errors near 0.5 boundaries.
+        // If the ratio is very close to a half-integer (e.g., 3.4999999999 or 3.5000000001),
+        // snap it to the nearest 0.5 before rounding to ensure consistent results.
+        double ratio = len / global_ds;
+        double rounded_to_half = std::round(ratio * 2.0) / 2.0;
+        if (std::abs(ratio - rounded_to_half) < 1e-9)
+        {
+            ratio = rounded_to_half;
+        }
+        int n_seg = static_cast<int>(std::lround(ratio));
 
         // Ensure at least 1 segment
         if (n_seg < 1)

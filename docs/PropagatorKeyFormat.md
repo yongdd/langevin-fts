@@ -148,6 +148,48 @@ For example, parsing `[(A)B3,(C)D2]E+1`:
 - Dependency 2: key=`(C)D+1`, n_segment=2
 - The ds_index=1 is inherited from the outer `+1`
 
+## Initial Condition from Dependency (Continuous Chains)
+
+For continuous Gaussian chains, the propagator $q(\mathbf{r}, s)$ satisfies the modified diffusion equation:
+
+$$\frac{\partial q}{\partial s} = \frac{b^2}{6} \nabla^2 q - w(\mathbf{r}) q$$
+
+where $b$ is the statistical segment length and $w(\mathbf{r})$ is the potential field.
+
+The **dependency part D** of the propagator code determines the initial condition $q(\mathbf{r}, 0)$:
+
+### Free End (Empty D)
+
+For a propagator starting from a free chain end (e.g., `A+1`):
+
+$$q(\mathbf{r}, 0) = 1$$
+
+### Junction Point (D with Parentheses)
+
+For a propagator at a junction point where multiple branches meet (e.g., `(A3B2)C+1`):
+
+$$q(\mathbf{r}, 0) = \prod_{i} \left[ q_i(\mathbf{r}, N_i) \right]^{n_i}$$
+
+where:
+- $q_i(\mathbf{r}, N_i)$ is the propagator of dependency $i$ evaluated at its final segment $N_i$
+- $n_i$ is the repetition count (from `:n` notation, default 1)
+
+### Aggregated Computation (D with Square Brackets)
+
+For aggregated propagators that combine multiple independent branches (e.g., `[(A)B3,(C)D2]E+1`):
+
+$$q(\mathbf{r}, 0) = \sum_{i} n_i \cdot q_i(\mathbf{r}, N_i)$$
+
+where the sum replaces the product to enable efficient parallel computation of similar branches.
+
+### Custom Initial Condition (D with Curly Braces)
+
+For propagators with user-specified initial conditions (e.g., `{wall}A+1`):
+
+$$q(\mathbf{r}, 0) = q_{\text{init}}[\text{name}](\mathbf{r})$$
+
+where `name` is the identifier inside the curly braces (e.g., "wall").
+
 ## Usage in Computation
 
 ### PropagatorComputationOptimizer
