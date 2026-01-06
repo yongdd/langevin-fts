@@ -591,6 +591,47 @@ void PropagatorComputationOptimizer::display_blocks() const
 }
 
 /**
+ * @brief Print only the summary statistics (no detailed propagator/block info).
+ *
+ * Shows total computational steps before and after optimization,
+ * and the efficiency gain percentage.
+ */
+void PropagatorComputationOptimizer::display_statistics() const
+{
+    int total_mde_steps_without_reduction = 0;
+    int reduced_mde_steps = 0;
+
+    for(const auto& n_segment : total_segment_numbers)
+    {
+        total_mde_steps_without_reduction += 2*n_segment;
+    }
+
+    for(const auto& item : computation_propagators)
+    {
+        if (this->model_name == "continuous")
+            reduced_mde_steps += item.second.max_n_segment;
+        else if (this->model_name == "discrete")
+        {
+            reduced_mde_steps += item.second.max_n_segment-1;
+            reduced_mde_steps += item.second.junction_ends.size();
+            if (item.second.deps.size() > 0)
+                reduced_mde_steps++;
+        }
+    }
+
+    if (this->model_name == "continuous")
+        std::cout << "Propagator solver: total MDE steps = " << total_mde_steps_without_reduction;
+    else if (this->model_name == "discrete")
+        std::cout << "Propagator solver: total integral equation steps = " << total_mde_steps_without_reduction;
+
+    std::cout << ", after optimization = " << reduced_mde_steps;
+
+    double percent = 100*(1.0 - static_cast<double>(reduced_mde_steps)/static_cast<double>(total_mde_steps_without_reduction));
+    percent = std::round(percent*100)/100;
+    std::cout << ", reduction = " << percent << " %" << std::endl;
+}
+
+/**
  * @brief Print propagator list with optimization statistics.
  *
  * Shows each propagator's height, aggregation status, max segment count,

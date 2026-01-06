@@ -333,25 +333,31 @@ public:
      * vertices (junction points and chain ends) connected by blocks
      * with their monomer types and contour lengths.
      *
-     * @param polymer_id Optional polymer index to include in the title.
-     *                   If >= 0, displays "=== Polymer N ==="
-     *                   If < 0 (default), displays "=== Polymer ==="
-     * @param show_legend If true, prints the legend explaining symbols (default: false).
-     * @param show_title If true (default), prints the title header.
-     *
      * For linear chains, outputs a single-line format:
      * ```
+     * === Polymer ===
      * (0)--A[0.30]--(1)--B[0.70]--(2)
+     * Legend: (n)=vertex, Type[length]=block
      * ```
      *
      * For branched polymers, uses tree format:
      * ```
+     * === Polymer ===
      * (0)
      *  +--A[0.33]--(1)
      *  +--B[0.33]--(2)
      *  +--C[0.34]--(3)
+     * Legend: (n)=vertex, Type[length]=block
      * ```
      */
-    void display_architecture(int polymer_id = -1, bool show_legend = false, bool show_title = true) const;
+    void display_architecture() const;
+
+    /**
+     * @brief Print only the architecture diagram (no title or legend).
+     *
+     * Used internally by Molecules::display_architectures() to print
+     * multiple polymers with a single shared title and legend.
+     */
+    void print_architecture_diagram() const;
 };
 #endif

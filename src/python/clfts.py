@@ -358,12 +358,7 @@ class CLFTS:
 
         print("zeta_n: %f" % (self.zeta_n))
 
-        for p in range(molecules.get_n_polymer_types()):
-            print("distinct_polymers[%d]:" % (p))
-            print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                  (molecules.get_polymer(p).get_volume_fraction(),
-                   molecules.get_polymer(p).get_alpha(),
-                   molecules.get_polymer(p).get_n_segment_total()))
+        molecules.display_architectures()
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
@@ -371,8 +366,7 @@ class CLFTS:
         print("Dynamical stabilization constant: %f" % (self.alpha_ds))
         print("Random Number Generator:", self.random_bg.state)
 
-        propagator_computation_optimizer.display_blocks()
-        propagator_computation_optimizer.display_propagators()
+        propagator_computation_optimizer.display_statistics()
 
         # Save internal variables
         self.params = params
