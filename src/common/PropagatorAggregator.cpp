@@ -86,6 +86,8 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuo
         int n_segment_left  = n_segment_current - minimum_n_segment;
 
         // New 'v_u' and propagator key
+        // Aggregated key format: [dep_code1,dep_code2]monomer+ds_index
+        // where dep_code is DKN format (with n_segment as length_index)
         std::vector<std::tuple<int ,int>> v_u;
         std::string propagator_code = "[";
         bool is_first_sub_propagator = true;
@@ -100,14 +102,18 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuo
             if (ds_index == -1)
                 ds_index = dep_ds_index;
 
-            // Update propagator key
-            // Keep the full dep_key (with ds_index) and use ";" to separate n_segment
-            // Format: dep_key;n_segment (e.g., "(D)B1;3")
+            // Convert dep_key (DK+M) to dep_code (DKN) by stripping +ds_index and adding n_segment
+            // Strip +ds_index from dep_key to get DK part
+            size_t plus_pos = dep_key.rfind('+');
+            std::string dk_part = (plus_pos != std::string::npos) ? dep_key.substr(0, plus_pos) : dep_key;
+            // Build dep_code as DK + n_segment
+            std::string dep_code = dk_part + std::to_string(set_I[dep_key].n_segment_right);
+
             if(!is_first_sub_propagator)
                 propagator_code += ",";
             else
                 is_first_sub_propagator = false;
-            propagator_code += dep_key + ";" + std::to_string(set_I[dep_key].n_segment_right);
+            propagator_code += dep_code;
 
             // The number of repeats (use : as before)
             if (set_I[dep_key].n_repeated > 1)
@@ -246,14 +252,18 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_discrete
             if (ds_index == -1)
                 ds_index = dep_ds_index;
 
-            // Update propagator key
-            // Keep the full dep_key (with ds_index) and use ";" to separate n_segment
-            // Format: dep_key;n_segment (e.g., "(D)B1;3")
+            // Convert dep_key (DK+M) to dep_code (DKN) by stripping +ds_index and adding n_segment
+            // Strip +ds_index from dep_key to get DK part
+            size_t plus_pos = dep_key.rfind('+');
+            std::string dk_part = (plus_pos != std::string::npos) ? dep_key.substr(0, plus_pos) : dep_key;
+            // Build dep_code as DK + n_segment
+            std::string dep_code = dk_part + std::to_string(set_F[dep_key].n_segment_right);
+
             if(!is_first_sub_propagator)
                 propagator_code += ",";
             else
                 is_first_sub_propagator = false;
-            propagator_code += dep_key + ";" + std::to_string(set_F[dep_key].n_segment_right);
+            propagator_code += dep_code;
 
             // The number of repeats (use : as before)
             if (set_F[dep_key].n_repeated > 1)

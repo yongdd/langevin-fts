@@ -297,18 +297,30 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 std::string dep_j = pc.get_propagator_key(j, v);
                 // std::cout << dep_j << ", " << pc.get_block(j,v).n_segment << std::endl;
 
-                // Make new key using ; separator for n_segment and appending ds_index
-                std::string new_u_key = "(" + aggregated_key
-                    + ";" + std::to_string(computation_block.n_segment_right);
-                std::vector<std::string> sub_keys;
+                // Make new key using DKN format for dep_codes (no semicolons)
+                // Convert aggregated_key (DK+M format) to code format (DKN)
+                // Strip +ds_index from aggregated_key and add n_segment_right
+                size_t plus_pos = aggregated_key.rfind('+');
+                std::string agg_dk_part = (plus_pos != std::string::npos) ? aggregated_key.substr(0, plus_pos) : aggregated_key;
+                std::string agg_code = agg_dk_part + std::to_string(computation_block.n_segment_right);
+
+                std::string new_u_key = "(" + agg_code;
+                std::vector<std::string> sub_codes;
 
                 for(auto& k : neighbor_nodes_v)
                 {
                     if (k != j)
-                        sub_keys.push_back(pc.get_propagator_key(k,v) + ";" + std::to_string(pc.get_block(k,v).n_segment));
+                    {
+                        // Convert propagator key (DK+M) to code format (DKN)
+                        std::string prop_key = pc.get_propagator_key(k,v);
+                        size_t prop_plus_pos = prop_key.rfind('+');
+                        std::string prop_dk_part = (prop_plus_pos != std::string::npos) ? prop_key.substr(0, prop_plus_pos) : prop_key;
+                        std::string prop_code = prop_dk_part + std::to_string(pc.get_block(k,v).n_segment);
+                        sub_codes.push_back(prop_code);
+                    }
                 }
-                std::sort(sub_keys.begin(),sub_keys.end());
-                for(auto& item : sub_keys)
+                std::sort(sub_codes.begin(),sub_codes.end());
+                for(auto& item : sub_codes)
                     new_u_key += item;
 
                 // Get ds_index for the new key (format: DK+M)
@@ -372,13 +384,22 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
         // For aggregated keys (containing '[' anywhere), the segment values are already
         // n_segment from the slicing process, so no conversion is needed.
         // Keys containing '[' include:
-        // - Direct aggregated keys like "[A:0,3]B"
-        // - Mixed keys from substitute_right_keys like "([A:0,3]B5)C"
+        // - Direct aggregated keys like "[A3,B2]C+1"
+        // - Mixed keys from substitute_right_keys like "([A3,B2]C5)D+1"
         if (new_key.find('[') != std::string::npos)
         {
             // Aggregated key or key containing aggregated sub-keys:
-            // deps already contain n_segment values
-            computation_propagators[new_key].deps = parsed_deps;
+            // deps already contain n_segment values, but sub_keys need ds_index appended
+            // All deps in an aggregated key share the same ds_index as the outer key
+            int ds_index = PropagatorCode::get_ds_index_from_key(new_key);
+            std::vector<std::tuple<std::string, int, int>> deps_with_ds_index;
+            deps_with_ds_index.reserve(parsed_deps.size());
+            for (const auto& dep : parsed_deps)
+            {
+                std::string sub_key = std::get<0>(dep) + "+" + std::to_string(ds_index);
+                deps_with_ds_index.push_back(std::make_tuple(sub_key, std::get<1>(dep), std::get<2>(dep)));
+            }
+            computation_propagators[new_key].deps = deps_with_ds_index;
         }
         else
         {
