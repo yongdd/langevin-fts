@@ -236,6 +236,64 @@ int main()
         std::cout << "Test 4 PASSED" << std::endl << std::endl;
 
         // =====================================================
+        std::cout << "=== Test 5: Half-integer boundary robustness ===" << std::endl;
+
+        // Test case: contour_length/ds close to 3.5 (mentioned in issue)
+        // Values like 3.4999999999 and 3.5000000001 should both round to 4
+        double ds5 = 1.0;
+        ContourLengthMapping mapping5(ds5);
+
+        // Add values that are very close to 3.5*ds but on different sides
+        double len_below = 3.5 * ds5 - 1e-12;  // Just below 3.5
+        double len_above = 3.5 * ds5 + 1e-12;  // Just above 3.5
+        double len_exact = 3.5 * ds5;          // Exactly 3.5
+
+        mapping5.add_block(len_below);
+        mapping5.add_block(len_above);
+        mapping5.add_block(len_exact);
+
+        mapping5.finalize();
+        mapping5.print_mapping();
+
+        // All three should have the same n_segment (4, since 3.5 rounds away from zero)
+        int n_seg_below = mapping5.get_n_segment(len_below);
+        int n_seg_above = mapping5.get_n_segment(len_above);
+        int n_seg_exact = mapping5.get_n_segment(len_exact);
+
+        std::cout << "n_segment for len_below (3.5-1e-12): " << n_seg_below << std::endl;
+        std::cout << "n_segment for len_above (3.5+1e-12): " << n_seg_above << std::endl;
+        std::cout << "n_segment for len_exact (3.5): " << n_seg_exact << std::endl;
+
+        // Verify all are 4 (std::lround(3.5) = 4)
+        if (n_seg_below != 4 || n_seg_above != 4 || n_seg_exact != 4)
+        {
+            std::cout << "FAILED: Values near 3.5 should all round to 4" << std::endl;
+            return -1;
+        }
+
+        // Test another boundary: values near 2.5*ds
+        ContourLengthMapping mapping5b(ds5);
+        double len_2_5_below = 2.5 * ds5 - 1e-12;
+        double len_2_5_above = 2.5 * ds5 + 1e-12;
+        mapping5b.add_block(len_2_5_below);
+        mapping5b.add_block(len_2_5_above);
+        mapping5b.finalize();
+
+        int n_seg_2_5_below = mapping5b.get_n_segment(len_2_5_below);
+        int n_seg_2_5_above = mapping5b.get_n_segment(len_2_5_above);
+
+        std::cout << "n_segment for 2.5-1e-12: " << n_seg_2_5_below << std::endl;
+        std::cout << "n_segment for 2.5+1e-12: " << n_seg_2_5_above << std::endl;
+
+        if (n_seg_2_5_below != 3 || n_seg_2_5_above != 3)
+        {
+            std::cout << "FAILED: Values near 2.5 should all round to 3" << std::endl;
+            return -1;
+        }
+
+        std::cout << "Test 5 PASSED" << std::endl << std::endl;
+
+        // =====================================================
         std::cout << "=== All tests PASSED ===" << std::endl;
         return 0;
     }

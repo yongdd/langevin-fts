@@ -91,9 +91,24 @@ Polymer::Polymer(
     {
         this->volume_fraction = volume_fraction;
         for(size_t i=0; i<block_inputs.size(); i++){
+            // Robust rounding that handles floating-point errors near 0.5 boundaries.
+            // If the ratio is very close to a half-integer (e.g., 3.4999999999 or 3.5000000001),
+            // snap it to the nearest 0.5 before rounding to ensure consistent results.
+            double ratio = block_inputs[i].contour_length / ds;
+            double rounded_to_half = std::round(ratio * 2.0) / 2.0;
+            if (std::abs(ratio - rounded_to_half) < 1e-9)
+            {
+                ratio = rounded_to_half;
+            }
+            int n_segment = static_cast<int>(std::lround(ratio));
+            if (n_segment < 1)
+            {
+                n_segment = 1;
+            }
+
             blocks.push_back({
                 block_inputs[i].monomer_type,                           // monomer_type
-                (int) std::lround(block_inputs[i].contour_length/ds),   // n_segment
+                n_segment,                                              // n_segment
                 block_inputs[i].contour_length,                         // contour_length
                 block_inputs[i].v,                                      // starting node
                 block_inputs[i].u});                                    // ending node
