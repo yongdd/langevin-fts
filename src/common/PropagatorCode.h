@@ -175,10 +175,18 @@ public:
 
     /**
      * @brief Extract the key (unique identifier) from a full code.
-     * @param code Full propagator code string
-     * @return Key string (may be same as code or processed form)
+     * @param code Full propagator code string (format: DKN)
+     * @return Key string in DK format (without ds_index)
      */
     static std::string get_key_from_code(std::string code);
+
+    /**
+     * @brief Extract key from code with ds_index computation.
+     * @param code Full propagator code string (format: DKN)
+     * @param mapping ContourLengthMapping for ds_index lookup
+     * @return Key string in DK+M format (with ds_index)
+     */
+    static std::string get_key_from_code(std::string code, const ContourLengthMapping& mapping);
 
     /**
      * @brief Parse dependencies from a propagator key.
@@ -204,10 +212,17 @@ public:
 
     /**
      * @brief Extract monomer type from key.
-     * @param key Propagator key
-     * @return Monomer type string (e.g., "A", "B")
+     * @param key Propagator key in DK+M format (e.g., "(A3B3)C+1")
+     * @return Monomer type string (e.g., "A", "B", "C")
      */
     static std::string get_monomer_type_from_key(std::string key);
+
+    /**
+     * @brief Extract ds_index from key.
+     * @param key Propagator key in DK+M format (e.g., "(A3B3)C+1")
+     * @return ds_index value (e.g., 1), or -1 if not present
+     */
+    static int get_ds_index_from_key(std::string key);
 
     /**
      * @brief Extract initial condition label from key.

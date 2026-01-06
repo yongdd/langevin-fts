@@ -297,20 +297,23 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 std::string dep_j = pc.get_propagator_key(j, v);
                 // std::cout << dep_j << ", " << pc.get_block(j,v).n_segment << std::endl;
 
-                // Make new key
+                // Make new key using ; separator for n_segment and appending ds_index
                 std::string new_u_key = "(" + aggregated_key
-                    + std::to_string(computation_block.n_segment_right);
+                    + ";" + std::to_string(computation_block.n_segment_right);
                 std::vector<std::string> sub_keys;
 
                 for(auto& k : neighbor_nodes_v)
                 {
                     if (k != j)
-                        sub_keys.push_back(pc.get_propagator_key(k,v) + std::to_string(pc.get_block(k,v).n_segment));
+                        sub_keys.push_back(pc.get_propagator_key(k,v) + ";" + std::to_string(pc.get_block(k,v).n_segment));
                 }
                 std::sort(sub_keys.begin(),sub_keys.end());
                 for(auto& item : sub_keys)
                     new_u_key += item;
-                new_u_key += ")" + pc.get_block(j,v).monomer_type;
+
+                // Get ds_index for the new key (format: DK+M)
+                int ds_index = contour_length_mapping->get_ds_index(pc.get_block(j,v).contour_length);
+                new_u_key += ")" + pc.get_block(j,v).monomer_type + "+" + std::to_string(ds_index);
 
                 // Remove 'v_u' from 'computation_blocks_new_polymer'
                 // std::cout << "v_u_to_right_key[std::make_tuple(j,v)]: " << v_u_to_right_key[std::make_tuple(j,v)] << std::endl; 
@@ -415,14 +418,15 @@ bool PropagatorComputationOptimizer::is_junction(Polymer& pc, int node)
 }
 
 /**
- * @brief Convert length_index to n_segment in deps tuple.
+ * @brief Convert length_index to n_segment in deps tuple and add ds_index to sub_key.
  *
  * The propagator keys use length_index instead of n_segment.
  * This method converts the parsed length_index back to n_segment
- * using the ContourLengthMapping.
+ * using the ContourLengthMapping, and also appends ds_index to the sub_key
+ * so it matches the format used in computation_propagators.
  *
- * @param deps Parsed dependencies with length_index
- * @return Dependencies with n_segment
+ * @param deps Parsed dependencies with length_index (sub_key without ds_index)
+ * @return Dependencies with n_segment and sub_key including ds_index
  */
 std::vector<std::tuple<std::string, int, int>> PropagatorComputationOptimizer::convert_deps_to_n_segment(
     const std::vector<std::tuple<std::string, int, int>>& deps) const
@@ -440,6 +444,10 @@ std::vector<std::tuple<std::string, int, int>> PropagatorComputationOptimizer::c
         // The length_index is 1-based, get the contour_length and then n_segment
         double contour_length = contour_length_mapping->get_length_from_index(length_index);
         int n_segment = contour_length_mapping->get_n_segment(contour_length);
+
+        // Append ds_index to sub_key to match DK+M format
+        int ds_index = contour_length_mapping->get_ds_index(contour_length);
+        sub_key += "+" + std::to_string(ds_index);
 
         converted_deps.push_back(std::make_tuple(sub_key, n_segment, n_repeated));
     }

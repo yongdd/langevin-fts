@@ -302,12 +302,13 @@ void Polymer::regenerate_propagator_keys(const ContourLengthMapping& mapping)
     edge_to_propagator_key.clear();
 
     // Generate new keys using the mapping
+    // Code format: DKN, Key format: DK+M
     auto propagator_codes = PropagatorCode::generate_codes_with_mapping(*this, chain_end_to_q_init, mapping);
     for(size_t i=0; i<propagator_codes.size(); i++)
     {
         int v = std::get<0>(propagator_codes[i]);
         int u = std::get<1>(propagator_codes[i]);
-        std::string propagator_key = PropagatorCode::get_key_from_code(std::get<2>(propagator_codes[i]));
+        std::string propagator_key = PropagatorCode::get_key_from_code(std::get<2>(propagator_codes[i]), mapping);
         this->set_propagator_key(propagator_key, v, u);
     }
 }
