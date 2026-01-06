@@ -38,13 +38,16 @@ int n_segment = mapping.get_n_segment(contour_length);
 
 ### Example Mapping
 
-For a system with blocks of contour lengths 0.4, 0.9, and 1.2 with ds=0.1:
+For a system with blocks of contour lengths 0.3, 0.35, and 0.5 with ds=0.1:
 
-| contour_length | length_index | n_segment | ds_index |
-|----------------|--------------|-----------|----------|
-| 0.4 | 1 | 4 | 1 |
-| 0.9 | 2 | 9 | 1 |
-| 1.2 | 3 | 12 | 1 |
+| contour_length | length_index | n_segment | local_ds | ds_index |
+|----------------|--------------|-----------|----------|----------|
+| 0.3 | 1 | 3 | 0.1 | 2 |
+| 0.35 | 2 | 4 | 0.0875 | 1 |
+| 0.5 | 3 | 5 | 0.1 | 2 |
+
+Note: `n_segment = round(contour_length / ds)` and `local_ds = contour_length / n_segment`.
+The block with contour_length=0.35 has a different local_ds, resulting in a different ds_index.
 
 ## Components
 
