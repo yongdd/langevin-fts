@@ -92,10 +92,7 @@ int main()
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
                     if (!aggregate_propagator_computation)
                     {
-                        for (int p = 0; p < molecules->get_n_polymer_types(); p++)
-                        {
-                            molecules->get_polymer(p).display_architecture(p);
-                        }
+                        molecules->display_architectures();
                         propagator_computation_optimizer->display_blocks();
                         propagator_computation_optimizer->display_propagators();
                     }

@@ -192,7 +192,7 @@ void Molecules::display_architectures() const
     for (size_t p = 0; p < polymer_types.size(); p++)
     {
         std::cout << "[" << p << "]" << std::endl;
-        polymer_types[p].display_architecture(-1, false, false);
+        polymer_types[p].print_architecture_diagram();
     }
     std::cout << "Legend: (n)=vertex, Type[length]=block" << std::endl;
 }

@@ -645,7 +645,7 @@ PYBIND11_MODULE(_core, m)
         .def("get_block_indexes", &Polymer::get_block_indexes)
         //.def("set_propagator_key", &Polymer::set_propagator_key)
         .def("get_propagator_key", &Polymer::get_propagator_key)
-        .def("display_architecture", &Polymer::display_architecture, py::arg("polymer_id") = -1, py::arg("show_legend") = false, py::arg("show_title") = true);
+        .def("display_architecture", &Polymer::display_architecture);
 
     py::class_<Molecules>(m, "Molecules")
         .def(py::init<std::string, double, std::map<std::string, double>>())
@@ -689,6 +689,7 @@ PYBIND11_MODULE(_core, m)
         .def("get_computation_propagator", &PropagatorComputationOptimizer::get_computation_propagator)
         .def("get_computation_blocks", &PropagatorComputationOptimizer::get_computation_blocks)
         .def("get_computation_block", &PropagatorComputationOptimizer::get_computation_block)
+        .def("display_statistics", &PropagatorComputationOptimizer::display_statistics)
         .def("display_propagators", &PropagatorComputationOptimizer::display_propagators)
         .def("display_blocks", &PropagatorComputationOptimizer::display_blocks)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)

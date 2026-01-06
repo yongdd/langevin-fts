@@ -107,10 +107,7 @@ int main()
                 std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
                 // Display polymer architecture and propagator info
-                for (int p = 0; p < molecules->get_n_polymer_types(); p++)
-                {
-                    molecules->get_polymer(p).display_architecture(p);
-                }
+                molecules->display_architectures();
                 propagator_computation_optimizer->display_blocks();
                 propagator_computation_optimizer->display_propagators();
 

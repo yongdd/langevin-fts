@@ -389,20 +389,8 @@ void print_tree_recursive(
     }
 }
 
-void Polymer::display_architecture(int polymer_id, bool show_legend, bool show_title) const
+void Polymer::print_architecture_diagram() const
 {
-    if (show_title)
-    {
-        if (polymer_id >= 0)
-        {
-            std::cout << "=== Polymer " << polymer_id << " ===" << std::endl;
-        }
-        else
-        {
-            std::cout << "=== Polymer ===" << std::endl;
-        }
-    }
-
     if (blocks.empty())
     {
         std::cout << "(empty polymer)" << std::endl;
@@ -491,10 +479,11 @@ void Polymer::display_architecture(int polymer_id, bool show_legend, bool show_t
         print_tree_recursive(root, -1, "", true,
                             adjacent_nodes, edge_to_block_index, blocks);
     }
+}
 
-    // Print legend if requested
-    if (show_legend)
-    {
-        std::cout << "Legend: (n)=vertex index, X=monomer type, [L]=contour length" << std::endl;
-    }
+void Polymer::display_architecture() const
+{
+    std::cout << "=== Polymer ===" << std::endl;
+    print_architecture_diagram();
+    std::cout << "Legend: (n)=vertex, Type[length]=block" << std::endl;
 }

@@ -847,15 +847,8 @@ class SCFT:
 
         print("P matrix for field residuals:\n\t", str(self.matrix_p).replace("\n", "\n\t"))
 
-        for p in range(self.prop_solver.get_n_polymer_types()):
-            print("distinct_polymers[%d]:" % (p) )
-            print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (self.prop_solver.get_polymer(p).get_volume_fraction(),
-                 self.prop_solver.get_polymer(p).get_alpha(),
-                 self.prop_solver.get_polymer(p).get_n_segment_total()))
-
-        self.prop_solver._propagator_optimizer.display_blocks()
-        self.prop_solver._propagator_optimizer.display_propagators()
+        self.prop_solver._molecules.display_architectures()
+        self.prop_solver._propagator_optimizer.display_statistics()
 
         #  Save internal variables
         self.params = params

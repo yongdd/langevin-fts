@@ -520,20 +520,14 @@ class LFTS:
         for key in self.chi_n:
             print("\t%s: %f" % (key, self.chi_n[key]))
 
-        for p in range(self.prop_solver.get_n_polymer_types()):
-            print("distinct_polymers[%d]:" % (p) )
-            print("\tvolume fraction: %f, alpha: %f, N: %d" %
-                (self.prop_solver.get_polymer(p).get_volume_fraction(),
-                 self.prop_solver.get_polymer(p).get_alpha(),
-                 self.prop_solver.get_polymer(p).get_n_segment_total()))
+        self.prop_solver._molecules.display_architectures()
 
         print("Invariant Polymerization Index (N_Ref): %d" % (params["langevin"]["nbar"]))
         print("Langevin Sigma: %f" % (langevin_sigma))
         print("Scaling factor of delta tau N for each field: ", self.dt_scaling)
         print("Random Number Generator: ", self.random_bg.state)
 
-        self.prop_solver._propagator_optimizer.display_blocks()
-        self.prop_solver._propagator_optimizer.display_propagators()
+        self.prop_solver._propagator_optimizer.display_statistics()
 
         #  Save internal variables
         self.params = params

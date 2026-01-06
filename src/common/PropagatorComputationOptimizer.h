@@ -97,6 +97,7 @@ public:
     ComputationBlock& get_computation_block(std::tuple<int, std::string, std::string> key);
 
     // Display
+    void display_statistics() const;
     void display_propagators() const;
     void display_blocks() const;
     void display_sub_propagators() const;
