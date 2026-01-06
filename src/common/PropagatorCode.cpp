@@ -443,10 +443,10 @@ std::string PropagatorCode::get_key_from_code(std::string code, const ContourLen
  * - ("A", 10, 1) - one A propagator with 10 segments
  * - ("B", 5, 2) - two identical B propagators with 5 segments
  *
- * For aggregated keys, uses ";" separator:
- * Key "[(A)B1;3,(C)D1;2]E" has dependencies:
- * - ("(A)B1", 3, 1) - propagator with key (A)B1 up to 3 segments
- * - ("(C)D1", 2, 1) - propagator with key (C)D1 up to 2 segments
+ * For aggregated keys (DKN format inside brackets):
+ * Key "[(A)B3,(C)D2]E+1" has dependencies:
+ * - ("(A)B", 3, 1) - propagator (A)B up to 3 segments
+ * - ("(C)D", 2, 1) - propagator (C)D up to 2 segments
  *
  * @param key Propagator key to parse
  * @return Vector of (sub_key, n_segment, n_repeated) tuples
