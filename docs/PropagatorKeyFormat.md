@@ -151,11 +151,11 @@ For example, parsing `[(A)B3,(C)D2]E+1`:
 The optimizer uses keys (DK+M format) to:
 1. Identify unique propagator computations
 2. Track dependencies between propagators
-3. Schedule parallel computations
 
 ### Scheduler
 
-The scheduler uses the height (nesting depth) of keys to determine computation order:
+The scheduler uses keys to schedule parallel computations.
+It uses the height (nesting depth) of keys to determine computation order:
 - Height 0: Free-end propagators (no dependencies)
 - Height 1+: Junction propagators (depend on lower-height propagators)
 
@@ -178,4 +178,5 @@ Keys are compared using `ComparePropagatorKey`:
 - `PropagatorCode.h/cpp`: Code generation and parsing
 - `PropagatorComputationOptimizer.h/cpp`: Optimization using keys
 - `PropagatorAggregator.h/cpp`: Aggregated key generation
+- `Scheduler.h/cpp`: Parallel computation scheduling
 - `ContourLengthMapping.h/cpp`: Index mapping utilities
