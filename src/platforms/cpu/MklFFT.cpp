@@ -405,7 +405,9 @@ void MklFFT<T, DIM>::applyDST3Backward(double* data, int dim)
     int stride, num_transforms;
     getStrides(dim, stride, num_transforms);
 
-    const double PI = std::numbers::pi;
+    // Use precomputed sin table for thread safety
+    // sin_table[k * n + j] = sin(π*(k+1)*(j+0.5)/n)
+    const double* sin_table = sin_tables_[dim].data();
 
     for (int batch = 0; batch < num_transforms; ++batch)
     {
@@ -423,7 +425,7 @@ void MklFFT<T, DIM>::applyDST3Backward(double* data, int dim)
                 double sum = sign * slice[n - 1];
 
                 for (int k = 0; k < n - 1; ++k)
-                    sum += 2.0 * slice[k] * std::sin(PI * (2 * j + 1) * (k + 1) / (2.0 * n));
+                    sum += 2.0 * slice[k] * sin_table[k * n + j];
 
                 temp_buffer_[offset + j * stride] = sum / n;
             }
