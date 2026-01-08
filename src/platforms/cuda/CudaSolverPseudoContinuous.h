@@ -44,6 +44,8 @@
 #include "Pseudo.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
+#include "CudaFFT.h"
+#include "FFT.h"
 
 /**
  * @class CudaSolverPseudoContinuous
@@ -77,16 +79,19 @@ private:
     std::string chain_model;      ///< Chain model ("continuous")
 
     int n_streams;                ///< Number of parallel streams
+    int dim_;                     ///< Number of dimensions (1, 2, or 3)
+    bool is_periodic_;            ///< True if all BCs are periodic
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy] per index
 
-    /// @name cuFFT Resources
+    /// @name Spectral Transform Resources
     /// @{
     CuDeviceData<T> *d_q_unity;                        ///< Unity array for initialization
-    cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT plans
-    cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT plans
-    cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT plans
-    cufftHandle plan_bak_two[MAX_STREAMS];             ///< Batched backward FFT plans
+    FFT<T>* fft_[MAX_STREAMS];                         ///< Spectral transform objects (per-stream, for non-periodic BC)
+    cufftHandle plan_for_one[MAX_STREAMS];             ///< Single forward FFT plans (periodic BC)
+    cufftHandle plan_bak_one[MAX_STREAMS];             ///< Single backward FFT plans (periodic BC)
+    cufftHandle plan_for_two[MAX_STREAMS];             ///< Batched forward FFT plans (periodic BC)
+    cufftHandle plan_bak_two[MAX_STREAMS];             ///< Batched backward FFT plans (periodic BC)
     /// @}
 
     /// @name Workspace Arrays (per stream)
@@ -97,12 +102,18 @@ private:
     CuDeviceData<T> *d_q_step_2_two[MAX_STREAMS];      ///< Half step workspace 2
     /// @}
 
-    /// @name Fourier Space Buffers
+    /// @name Fourier Space Buffers (periodic BC - complex coefficients)
     /// @{
     cuDoubleComplex *d_qk_in_1_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
+    /// @}
+
+    /// @name Spectral Space Buffers (non-periodic BC - real coefficients)
+    /// @{
+    double *d_rk_in_1_one[MAX_STREAMS];    ///< Real coefficients buffer 1
+    double *d_rk_in_2_one[MAX_STREAMS];    ///< Real coefficients buffer 2
     /// @}
 
     /// @name CUB Reduction Storage (per stream)

@@ -106,9 +106,12 @@ __global__ void ker_dst2_forward(
 
 /**
  * @brief DST-III backward transform kernel.
+ *
+ * Uses precomputed sin table for consistency and thread safety.
+ * sin_table[k * n + j] = sin(π*(k+1)*(j+0.5)/n)
  */
 __global__ void ker_dst3_backward(
-    double* dst, const double* src,
+    double* dst, const double* src, const double* sin_table,
     int n, int stride, int num_transforms, int total_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -121,14 +124,12 @@ __global__ void ker_dst3_backward(
 
     int offset = batch * n * stride + s;
 
-    const double PI = 3.14159265358979323846;
-
     double sign = (j % 2 == 0) ? 1.0 : -1.0;
     double sum = sign * src[offset + (n - 1) * stride];
 
     for (int k = 0; k < n - 1; ++k)
     {
-        sum += 2.0 * src[offset + k * stride] * sin(PI * (2 * j + 1) * (k + 1) / (2.0 * n));
+        sum += 2.0 * src[offset + k * stride] * sin_table[k * n + j];
     }
 
     dst[offset + j * stride] = sum / n;
@@ -517,7 +518,7 @@ void CudaFFT<T, DIM>::applyDST3Backward(double* d_data, int dim, cudaStream_t st
     getStrides(dim, stride, num_transforms);
 
     ker_dst3_backward<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-        d_temp_buffer_, d_data,
+        d_temp_buffer_, d_data, d_sin_tables_[dim],
         n, stride, num_transforms, total_grid_);
     gpu_error_check(cudaPeekAtLastError());
 
