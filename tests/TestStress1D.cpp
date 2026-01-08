@@ -27,12 +27,12 @@ int main()
         // Math constants
         const double PI = std::numbers::pi;
 
-        // Input fields
+        double energy_total;
+        double error_level, old_error_level;
         double *w, *w_out, *w_diff;
         double *xi, *w_plus, *w_minus;
         double *phi_a, *phi_b;
 
-        // String to output file and print stream
         std::streamsize default_precision = std::cout.precision();
 
         // -------------- Initialize ------------
@@ -51,16 +51,15 @@ int main()
         double am_mix_min = 0.1;
         double am_mix_init = 0.1;
 
-        std::map<std::string, double> bond_lengths = {{"A",1.0}, {"B",1.0}};
+        const int M = nx[0];
 
-        // Simple diblock
         std::vector<BlockInput> blocks =
         {
             {"A", f, 0, 1},
             {"B", 1.0-f, 1, 2},
         };
 
-        const int M = nx[0];
+        //-------------- Allocate array ------------
         w       = new double[2*M];
         w_out   = new double[2*M];
         w_diff  = new double[2*M];
@@ -70,9 +69,11 @@ int main()
         w_plus  = new double[M];
         w_minus = new double[M];
 
-        // Choose platform
+        bool reduce_memory_usage = false;
+
+        // Choose platform (cpu-mkl only for 1D)
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
-        std::vector<std::string> chain_models = {"Continuous", "Discrete"};
+        std::vector<std::string> chain_models = {"Discrete", "Continuous"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
 
         for(std::string platform : avail_platforms)
@@ -83,55 +84,91 @@ int main()
             for(std::string chain_model : chain_models)
             {
                 std::cout << "Testing: " << platform << ", " << chain_model << std::endl;
+                std::vector<double> model_stress_list;
 
-                for(bool aggregate : aggregate_propagator_computations)
+                for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    // Re-initialize fields with lamellar pattern
-                    for(int i=0; i<nx[0]; i++)
-                    {
-                        double xx = (i+1)*2*PI/nx[0];
-                        w[i] = std::cos(xx);
-                        w[i+M] = -std::cos(xx);
-                    }
-
-                    bool reduce_memory_usage = false;
                     AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+                    factory->display_info();
 
                     // Create instances
                     ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
-                    Molecules* molecules = factory->create_molecules_information(chain_model, ds, bond_lengths);
+                    Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
-                        new PropagatorComputationOptimizer(molecules, aggregate);
+                        new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
                     PropagatorComputation<double>* solver =
                         factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
                     AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
+                    std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                    std::cout << "Using Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
+
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
-                    if (!aggregate)
+                    if (!aggregate_propagator_computation)
                     {
                         molecules->display_architectures();
                         propagator_computation_optimizer->display_blocks();
                         propagator_computation_optimizer->display_propagators();
                     }
 
-                    std::cout << "  Aggregation=" << std::boolalpha << aggregate << std::endl;
+                    // Load pre-converged fields from file
+                    std::string line;
+                    std::ifstream input_field_file;
+                    if(molecules->get_model_name() == "continuous")
+                        input_field_file.open("Stress1D_ContinuousInput.txt");
+                    else if(molecules->get_model_name() == "discrete")
+                        input_field_file.open("Stress1D_DiscreteInput.txt");
 
-                    // -------------- SCFT iteration to find saddle point ------------
-                    double error_level = 1.0e20;
-                    double old_error_level = 1.0e20;
+                    if (input_field_file.is_open())
+                    {
+                        for(int i=0; i<2*M ; i++)
+                        {
+                            std::getline(input_field_file, line);
+                            w[i] = std::stod(line);
+                        }
+                        input_field_file.close();
+                    }
+                    else
+                    {
+                        // Initialize to lamellar-like pattern if no input file
+                        for(int i=0; i<nx[0]; i++)
+                        {
+                            double xx = (i+1)*2*PI/nx[0];
+                            w[i] = std::cos(xx);
+                            w[i+M] = -std::cos(xx);
+                        }
+                    }
 
                     // Keep the level of field value
                     cb->zero_mean(&w[0]);
                     cb->zero_mean(&w[M]);
 
+                    // Assign large initial value for the energy and error
+                    energy_total = 1.0e20;
+                    error_level = 1.0e20;
+
+                    // SCFT Iteration
                     for(int iter=0; iter<max_scft_iter; iter++)
                     {
                         solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
                         solver->compute_concentrations();
                         solver->get_total_concentration("A", phi_a);
                         solver->get_total_concentration("B", phi_b);
+
+                        for(int i=0; i<M; i++)
+                        {
+                            w_minus[i] = (w[i]-w[i+M])/2;
+                            w_plus[i]  = (w[i]+w[i+M])/2;
+                        }
+
+                        energy_total = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                        energy_total -= cb->integral(w_plus)/cb->get_volume();
+                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                            Polymer& pc = molecules->get_polymer(p);
+                            energy_total -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                        }
 
                         for(int i=0; i<M; i++)
                         {
@@ -152,9 +189,11 @@ int main()
                         am->calculate_new_fields(w, w, w_diff, old_error_level, error_level);
                     }
 
-                    std::cout << "  SCFT error=" << std::scientific << std::setprecision(2) << error_level << std::endl;
+                    // Compute stress at saddle point
+                    solver->compute_stress();
+                    auto stress = solver->get_stress();
 
-                    // -------------- Numerical derivative test ------------
+                    // -------------- Numerical derivative test (dH/dL) ------------
                     double dL = 0.0000001;
                     double old_lx0 = lx[0];
 
@@ -193,20 +232,22 @@ int main()
                     solver->update_laplacian_operator();
 
                     double dh_dl = (energy_total_1 - energy_total_2) / dL;
-                    solver->compute_stress();
-                    auto stress = solver->get_stress();
 
-                    std::cout << std::setprecision(6);
-                    std::cout << "  dH/dL : " << dh_dl << std::endl;
-                    std::cout << "  Stress : " << stress[0] << std::endl;
+                    std::cout << "  Aggregation=" << std::boolalpha << aggregate_propagator_computation;
+                    std::cout << ", SCFT error=" << std::scientific << std::setprecision(2) << error_level;
+                    std::cout << ", Stress=" << std::setprecision(6) << stress[0];
+                    std::cout << ", dH/dL=" << std::setprecision(6) << dh_dl << std::endl;
 
+                    // Check numerical derivative matches analytical stress
                     double relative_stress_error = std::abs(dh_dl - stress[0]) / std::abs(stress[0]);
-                    std::cout << "  Relative stress error : " << relative_stress_error << std::endl;
+                    std::cout << "  Relative stress error (dH/dL vs stress): " << relative_stress_error << std::endl;
 
                     if (!std::isfinite(relative_stress_error) || relative_stress_error > 1e-3) {
                         std::cout << "ERROR: Numerical derivative does not match stress!" << std::endl;
                         return -1;
                     }
+
+                    model_stress_list.push_back(stress[0]);
 
                     delete molecules;
                     delete propagator_computation_optimizer;
@@ -215,9 +256,22 @@ int main()
                     delete am;
                     delete factory;
                 }
+
+                // Check consistency between aggregated and non-aggregated
+                if (model_stress_list.size() >= 2) {
+                    double diff = std::abs(model_stress_list[0] - model_stress_list[1]);
+                    double max_val = std::max(std::abs(model_stress_list[0]), std::abs(model_stress_list[1]));
+                    double rel_diff = diff / (max_val + 1e-10);
+                    std::cout << "  Relative difference (stress, aggregation): " << rel_diff << std::endl;
+                    if (rel_diff > 1e-7) {
+                        std::cout << "ERROR: Stress values differ too much between aggregated and non-aggregated!" << std::endl;
+                        return -1;
+                    }
+                }
             }
         }
 
+        //------------- Finalize -------------
         delete[] w;
         delete[] w_out;
         delete[] w_diff;
