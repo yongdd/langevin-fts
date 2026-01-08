@@ -54,13 +54,30 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
-        
+        this->dim_ = cb->get_dim();
+
+        // Initialize fft_ pointers to nullptr
+        for(int i=0; i<MAX_STREAMS; i++)
+            this->fft_[i] = nullptr;
+
+        // Check if all BCs are periodic
+        auto bc_vec = cb->get_boundary_conditions();
+        is_periodic_ = true;
+        for (const auto& b : bc_vec)
+        {
+            if (b != BoundaryCondition::PERIODIC)
+            {
+                is_periodic_ = false;
+                break;
+            }
+        }
+
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
             cb->get_nx(), cb->get_dx(), molecules->get_ds(),
             cb->get_recip_metric());
-            
+
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
@@ -81,63 +98,111 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
             gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(T)*M));
         }
 
-        // Create FFT plan
-        const int NRANK{cb->get_dim()};
-        int total_grid[NRANK];
-
-        if(cb->get_dim() == 3)
+        // Initialize cuFFT plans to 0
+        for(int i=0; i<n_streams; i++)
         {
-            total_grid[0] = cb->get_nx(0);
-            total_grid[1] = cb->get_nx(1);
-            total_grid[2] = cb->get_nx(2);
-        }
-        else if(cb->get_dim() == 2)
-        {
-            total_grid[0] = cb->get_nx(0);
-            total_grid[1] = cb->get_nx(1);
-        }
-        else if(cb->get_dim() == 1)
-        {
-            total_grid[0] = cb->get_nx(0);
+            plan_for_one[i] = 0;
+            plan_for_two[i] = 0;
+            plan_bak_one[i] = 0;
+            plan_bak_two[i] = 0;
+            d_rk_in_1_one[i] = nullptr;
+            d_rk_in_2_one[i] = nullptr;
         }
 
-        cufftType cufft_forward;
-        cufftType cufft_backward;
-        if constexpr (std::is_same<T, double>::value)
+        if (is_periodic_)
         {
-            cufft_forward = CUFFT_D2Z;
-            cufft_backward = CUFFT_Z2D;
+            // Create cuFFT plans for periodic BC
+            const int NRANK{cb->get_dim()};
+            int total_grid[NRANK];
+
+            if(cb->get_dim() == 3)
+            {
+                total_grid[0] = cb->get_nx(0);
+                total_grid[1] = cb->get_nx(1);
+                total_grid[2] = cb->get_nx(2);
+            }
+            else if(cb->get_dim() == 2)
+            {
+                total_grid[0] = cb->get_nx(0);
+                total_grid[1] = cb->get_nx(1);
+            }
+            else if(cb->get_dim() == 1)
+            {
+                total_grid[0] = cb->get_nx(0);
+            }
+
+            cufftType cufft_forward;
+            cufftType cufft_backward;
+            if constexpr (std::is_same<T, double>::value)
+            {
+                cufft_forward = CUFFT_D2Z;
+                cufft_backward = CUFFT_Z2D;
+            }
+            else
+            {
+                cufft_forward = CUFFT_Z2Z;
+                cufft_backward = CUFFT_Z2Z;
+            }
+
+            for(int i=0; i<n_streams; i++)
+            {
+                cufftPlanMany(&plan_for_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
+                cufftPlanMany(&plan_for_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 2);
+                cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
+                cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 2);
+                cufftSetStream(plan_for_one[i], streams[i][0]);
+                cufftSetStream(plan_for_two[i], streams[i][0]);
+                cufftSetStream(plan_bak_one[i], streams[i][0]);
+                cufftSetStream(plan_bak_two[i], streams[i][0]);
+            }
         }
         else
         {
-            cufft_forward = CUFFT_Z2Z;
-            cufft_backward = CUFFT_Z2Z;
-        }
+            // Create per-stream CudaFFT objects for non-periodic BC (DCT/DST)
+            // Each stream gets its own CudaFFT to avoid race conditions on work buffers
+            // Extract one BC per dimension
+            for(int i=0; i<n_streams; i++)
+            {
+                if (dim_ == 3)
+                {
+                    std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
+                    std::array<BoundaryCondition, 3> bc_arr = {bc_vec[0], bc_vec[2], bc_vec[4]};
+                    fft_[i] = new CudaFFT<T, 3>(nx_arr, bc_arr);
+                }
+                else if (dim_ == 2)
+                {
+                    std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
+                    std::array<BoundaryCondition, 2> bc_arr = {bc_vec[0], bc_vec[2]};
+                    fft_[i] = new CudaFFT<T, 2>(nx_arr, bc_arr);
+                }
+                else if (dim_ == 1)
+                {
+                    std::array<int, 1> nx_arr = {cb->get_nx(0)};
+                    std::array<BoundaryCondition, 1> bc_arr = {bc_vec[0]};
+                    fft_[i] = new CudaFFT<T, 1>(nx_arr, bc_arr);
+                }
+            }
 
-        for(int i=0; i<n_streams; i++)
-        {
-            cufftPlanMany(&plan_for_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
-            cufftPlanMany(&plan_for_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 2);
-            cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
-            cufftPlanMany(&plan_bak_two[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 2);
-            cufftSetStream(plan_for_one[i], streams[i][0]);
-            cufftSetStream(plan_for_two[i], streams[i][0]);
-            cufftSetStream(plan_bak_one[i], streams[i][0]);
-            cufftSetStream(plan_bak_two[i], streams[i][0]);
+            // Allocate real coefficient buffers for non-periodic BC
+            for(int i=0; i<n_streams; i++)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*M_COMPLEX));
+                gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*M_COMPLEX));
+            }
         }
 
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
-        {  
+        {
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_one[i], sizeof(T)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_step_2_one[i], sizeof(T)*M));
             gpu_error_check(cudaMalloc((void**)&d_q_step_1_two[i], sizeof(T)*2*M));
-            
+
             gpu_error_check(cudaMalloc((void**)&d_qk_in_2_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
         }
         for(int i=0; i<n_streams; i++)
-        {  
+        {
             gpu_error_check(cudaMalloc((void**)&d_stress_sum[i],      sizeof(T)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_stress_sum_out[i],  sizeof(T)*1));
             gpu_error_check(cudaMalloc((void**)&d_q_multi[i],         sizeof(T)*M_COMPLEX));
@@ -145,7 +210,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
 
         // Allocate memory for cub reduction sum
         for(int i=0; i<n_streams; i++)
-        {  
+        {
             d_temp_storage[i] = nullptr;
             temp_storage_bytes[i] = 0;
             if constexpr (std::is_same<T, double>::value)
@@ -166,12 +231,35 @@ CudaSolverPseudoContinuous<T>::~CudaSolverPseudoContinuous()
 {
     delete pseudo;
 
-    for(int i=0; i<n_streams; i++)
+    // Clean up FFT resources
+    if (is_periodic_)
     {
-        cufftDestroy(plan_for_one[i]);
-        cufftDestroy(plan_for_two[i]);
-        cufftDestroy(plan_bak_one[i]);
-        cufftDestroy(plan_bak_two[i]);
+        for(int i=0; i<n_streams; i++)
+        {
+            if (plan_for_one[i] != 0) cufftDestroy(plan_for_one[i]);
+            if (plan_for_two[i] != 0) cufftDestroy(plan_for_two[i]);
+            if (plan_bak_one[i] != 0) cufftDestroy(plan_bak_one[i]);
+            if (plan_bak_two[i] != 0) cufftDestroy(plan_bak_two[i]);
+        }
+    }
+    else
+    {
+        // Delete per-stream CudaFFT objects
+        for(int i=0; i<n_streams; i++)
+        {
+            if (fft_[i] != nullptr)
+            {
+                delete fft_[i];
+                fft_[i] = nullptr;
+            }
+        }
+
+        // Free real coefficient buffers
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_rk_in_1_one[i] != nullptr) cudaFree(d_rk_in_1_one[i]);
+            if (d_rk_in_2_one[i] != nullptr) cudaFree(d_rk_in_2_one[i]);
+        }
     }
 
     for(const auto& item: this->d_exp_dw)
@@ -286,65 +374,130 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
         const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type);
         const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
 
-        // step 1/2: Evaluate exp(-w*ds/2) in real space
-        // step 1/4: Evaluate exp(-w*ds/4) in real space
-        ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
-            &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+        if (is_periodic_)
+        {
+            // ============================================================
+            // Periodic BC: Use batched cuFFT with complex coefficients
+            // ============================================================
 
-        // step 1/2: Execute a forward FFT
-        // step 1/4: Execute a forward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
+            // step 1/2: Evaluate exp(-w*ds/2) in real space
+            // step 1/4: Evaluate exp(-w*ds/4) in real space
+            ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                &d_q_step_1_two[STREAM][0], d_q_in, _d_exp_dw,
+                &d_q_step_1_two[STREAM][M], d_q_in, _d_exp_dw_half, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/2: Execute a forward FFT
+            // step 1/4: Execute a forward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
+            // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
+            ker_complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                &d_qk_in_1_two[STREAM][0],         _d_boltz_bond,
+                &d_qk_in_1_two[STREAM][M_COMPLEX], _d_boltz_bond_half, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/2: Execute a backward FFT
+            // step 1/4: Execute a backward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
+            else
+                cufftExecZ2Z(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM], CUFFT_INVERSE);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/2: Evaluate exp(-w*ds/2) in real space
+            // step 1/4: Evaluate exp(-w*ds/2) in real space
+            ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_step_1_one[STREAM], &d_q_step_1_two[STREAM][0], _d_exp_dw,
+                d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/static_cast<double>(M), M);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/4: Execute a forward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
+            ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/4: Execute a backward FFT
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
+            else
+                cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], CUFFT_INVERSE);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // step 1/4: Evaluate exp(-w*ds/4) in real space.
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/static_cast<double>(M), M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
         else
-            cufftExecZ2Z(plan_for_two[STREAM], d_q_step_1_two[STREAM], d_qk_in_1_two[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+        {
+            // ============================================================
+            // Non-periodic BC: Use CudaFFT (DCT/DST) with real coefficients
+            // ============================================================
+            // Each stream has its own CudaFFT object with independent work buffers.
+            // All operations use the default stream for proper ordering.
 
-        // step 1/2: Multiply exp(-k^2 ds/6)  in fourier space
-        // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
-        ker_complex_real_multi_bond_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            &d_qk_in_1_two[STREAM][0],         _d_boltz_bond,
-            &d_qk_in_1_two[STREAM][M_COMPLEX], _d_boltz_bond_half, M_COMPLEX);
-        gpu_error_check(cudaPeekAtLastError());
+            // Cast device pointers for FFT interface
+            T* d_q_step_1 = reinterpret_cast<T*>(d_q_step_1_one[STREAM]);
+            T* d_q_step_2 = reinterpret_cast<T*>(d_q_step_2_one[STREAM]);
 
-        // step 1/2: Execute a backward FFT
-        // step 1/4: Execute a backward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM]);
-        else
-            cufftExecZ2Z(plan_bak_two[STREAM], d_qk_in_1_two[STREAM], d_q_step_1_two[STREAM], CUFFT_INVERSE);
-        gpu_error_check(cudaPeekAtLastError());
+            // ===== Step 1: Full step =====
+            // Evaluate exp(-w*ds/2) in real space
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_1_one[STREAM], d_q_in, _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // step 1/2: Evaluate exp(-w*ds/2) in real space
-        // step 1/4: Evaluate exp(-w*ds/2) in real space
-        ker_multi_exp_dw_two<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q_step_1_one[STREAM], &d_q_step_1_two[STREAM][0], _d_exp_dw,
-            d_q_step_2_one[STREAM], &d_q_step_1_two[STREAM][M], _d_exp_dw, 1.0/static_cast<double>(M), M);
-        gpu_error_check(cudaPeekAtLastError());
+            // Forward transform (DCT/DST)
+            fft_[STREAM]->forward(d_q_step_1, d_rk_in_1_one[STREAM]);
 
-        // step 1/4: Execute a forward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM]);
-        else
-            cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2_one[STREAM], d_qk_in_2_one[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+            // Multiply by Boltzmann factor (real coefficients)
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_1_one[STREAM], d_rk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // step 1/4: Multiply exp(-k^2 ds/12) in fourier space
-        ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
-        gpu_error_check(cudaPeekAtLastError());
+            // Backward transform (inverse DCT/DST) - normalization included
+            fft_[STREAM]->backward(d_rk_in_1_one[STREAM], d_q_step_1);
 
-        // step 1/4: Execute a backward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM]);
-        else
-            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_2_one[STREAM], d_q_step_2_one[STREAM], CUFFT_INVERSE);
-        gpu_error_check(cudaPeekAtLastError());
+            // Evaluate exp(-w*ds/2) in real space
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_1_one[STREAM], d_q_step_1_one[STREAM], _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // step 1/4: Evaluate exp(-w*ds/4) in real space.
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0/static_cast<double>(M), M);
-        gpu_error_check(cudaPeekAtLastError());
+            // ===== Step 2: Two half steps =====
+            // First half step
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_2_one[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
+            fft_[STREAM]->forward(d_q_step_2, d_rk_in_2_one[STREAM]);
+
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_2_one[STREAM], d_rk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+
+            fft_[STREAM]->backward(d_rk_in_2_one[STREAM], d_q_step_2);
+
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // Second half step
+            fft_[STREAM]->forward(d_q_step_2, d_rk_in_2_one[STREAM]);
+
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_rk_in_2_one[STREAM], d_rk_in_2_one[STREAM], _d_boltz_bond_half, 1.0, M_COMPLEX);
+            gpu_error_check(cudaPeekAtLastError());
+
+            fft_[STREAM]->backward(d_rk_in_2_one[STREAM], d_q_step_2);
+
+            ker_multi<<<N_BLOCKS, N_THREADS>>>(d_q_step_2_one[STREAM], d_q_step_2_one[STREAM], _d_exp_dw_half, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+
+        // ===== Richardson extrapolation =====
         // Compute linear combination with 4/3 and -1/3 ratio
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
         gpu_error_check(cudaPeekAtLastError());

@@ -272,17 +272,6 @@ int main()
         // Run tests on each platform with both memory modes
         for (const std::string& platform : platforms)
         {
-            // Skip CUDA for now as DST may not be supported
-            // (CUDA pseudo-spectral typically only supports periodic BC)
-            if (platform == "cuda")
-            {
-                std::cout << "\n============================================================" << std::endl;
-                std::cout << "Skipping CUDA: DST-based absorbing BC requires real-space" << std::endl;
-                std::cout << "method on CUDA (pseudo-spectral only supports periodic BC)" << std::endl;
-                std::cout << "============================================================" << std::endl;
-                continue;
-            }
-
             // Test with standard memory mode
             test_count++;
             if (run_tests(platform, false) == 0)
