@@ -1,38 +1,35 @@
 /**
- * @file TestCpuDST2Propagator.cpp
- * @brief Test DST-2 based pseudo-spectral propagator with absorbing boundaries.
+ * @file TestDCT2Propagator.cpp
+ * @brief Test DCT-2 based pseudo-spectral propagator with reflecting boundaries.
  *
  * This test verifies that the propagator solver produces results matching
- * the analytical DST-2 diffusion calculation from devel/DFT/diffusion_pseudo_dst.ipynb.
+ * the analytical DCT-2 diffusion calculation from devel/DFT/diffusion_pseudo_dct.ipynb.
  *
  * The test uses:
  * - 1D domain with L=4.0, N=12 grid points
- * - Absorbing boundary conditions (Dirichlet BC, u=0 at boundaries)
+ * - Reflecting boundary conditions (Neumann BC)
  * - Zero potential field (w=0)
- * - Homopolymer (A block)
+ * - Single homopolymer block
  * - Gaussian initial condition centered at L/2
  *
  * Tests are run on all available platforms (CPU-MKL, CUDA) with both
  * standard and memory-saving modes.
  *
- * The DST-2 pseudo-spectral method for the diffusion equation:
+ * The DCT-2 pseudo-spectral method for the diffusion equation:
  *     dq/ds = (b^2/6) nabla^2 q - w*q
  *
- * With w=0 and absorbing BC, the solution is:
+ * With w=0 and reflecting BC, the solution is:
  *     q_hat(k, s+ds) = q_hat(k, s) * exp(-b^2/6 * k^2 * ds)
  *
- * where k = n*pi/L for the DST-2 transform.
+ * where k = n*pi/L for the DCT-2 transform.
  *
- * NOTE: Unlike reflecting BC (DCT-2), absorbing BC (DST-2) does NOT conserve
- * mass. The field "leaks out" at the boundaries where u=0 is enforced.
- *
- * Expected values from notebook (devel/DFT/diffusion_pseudo_dst.ipynb):
+ * Expected values from notebook (devel/DFT/diffusion_pseudo_dct.ipynb):
  *
  * Initial condition (Gaussian, sigma=0.5, centered at L/2):
  * q_init = [0.0012038599948282, 0.01110899653824231, 0.06572852861653045, ...]
  *
  * After one step (ds=0.1, b=1.0):
- * q_out = [0.00229854560729656, 0.01772114433056498, 0.08504620746747918, ...]
+ * q_out = [0.00265976695175955, 0.01771721116200349, 0.0850483724745189, ...]
  */
 
 #include <cstdlib>
@@ -68,17 +65,15 @@ const std::vector<double> expected_q_init = {
     0.06572852861653053, 0.01110899653824231, 0.00120385999482821
 };
 
-// After one step with DST-2 (absorbing BC)
-// Note: Mass decreases slightly due to absorption at boundaries
 const std::vector<double> expected_q_out = {
-    0.00229854560729656, 0.01772114433056498, 0.08504620746747918,
-    0.27580273305699987, 0.6042552886190555,  0.8944009714708175,
-    0.8944009714708175,  0.6042552886190556,  0.2758027330570002,
-    0.08504620746747932, 0.01772114433056499, 0.00229854560729657
+    0.00265976695175955, 0.01771721116200349, 0.0850483724745189,
+    0.27580183068075836, 0.6042556834496476,  0.894400857827608,
+    0.894400857827608,   0.6042556834496476,  0.2758018306807586,
+    0.085048372474519,   0.01771721116200349, 0.00265976695175955
 };
 
 /**
- * Run DST-2 propagator tests for a specific platform and memory mode.
+ * Run DCT-2 propagator tests for a specific platform and memory mode.
  *
  * @param platform Platform name ("cuda" or "cpu-mkl")
  * @param reduce_memory_usage Enable memory-saving mode
@@ -140,10 +135,10 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
     std::vector<double> w_zero(N, 0.0);
 
     //=======================================================================
-    // Test: Homopolymer with DST-2 Absorbing BC
+    // Test 1: Homopolymer with DCT-2 Reflecting BC and Custom Initial Condition
     //=======================================================================
     std::cout << "\n------------------------------------------------------------" << std::endl;
-    std::cout << "Test: Homopolymer Propagator with Absorbing BC" << std::endl;
+    std::cout << "Test 1: Homopolymer Propagator with Reflecting BC" << std::endl;
     std::cout << "------------------------------------------------------------" << std::endl;
 
     // Create molecules for homopolymer
@@ -162,9 +157,9 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
     std::cout << "  A block length: " << ds << " (1 step)" << std::endl;
     std::cout << "  Initial condition: Gaussian at vertex 0" << std::endl;
 
-    // Create computation box with absorbing BC
+    // Create computation box with reflecting BC
     ComputationBox<double>* cb = factory->create_computation_box(
-        {N}, {L}, {"absorbing", "absorbing"});
+        {N}, {L}, {"reflecting", "reflecting"});
 
     // Create propagator optimizer and solver
     PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, false);
@@ -207,7 +202,7 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
     }
     std::cout << "Symmetry error: " << std::scientific << sym_error << std::fixed << std::endl;
 
-    // Check mass (NOT conserved for absorbing BC)
+    // Verify mass conservation
     double initial_mass = 0.0;
     for (int i = 0; i < N; ++i)
         initial_mass += q_init[i] * dx;
@@ -216,22 +211,21 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
     for (int i = 0; i < N; ++i)
         final_mass += q_out[i] * dx;
 
-    double mass_ratio = final_mass / initial_mass;
-    std::cout << "\nMass (NOT conserved for absorbing BC):" << std::endl;
+    double mass_error = std::abs(final_mass - initial_mass) / initial_mass;
+    std::cout << "\nMass conservation:" << std::endl;
     std::cout << "  Initial mass: " << initial_mass << std::endl;
     std::cout << "  Final mass:   " << final_mass << std::endl;
-    std::cout << "  Mass ratio: " << mass_ratio << " (expected ~0.9998)" << std::endl;
+    std::cout << "  Relative error: " << std::scientific << mass_error << std::fixed << std::endl;
 
-    // Test passes if error is small and mass ratio is reasonable
-    // For absorbing BC, mass should decrease slightly
-    bool test_passed = (max_error < 1e-6) && (mass_ratio > 0.99) && (mass_ratio < 1.0);
-    std::cout << "\nTest: " << (test_passed ? "PASSED" : "FAILED") << std::endl;
+    bool test1_passed = (mass_error < 1e-6) && (max_error < 1e-6);
+    std::cout << "\nTest 1: " << (test1_passed ? "PASSED" : "FAILED") << std::endl;
 
-    // Cleanup
+    // Cleanup first test
     delete solver;
     delete optimizer;
     delete molecules;
     delete cb;
+
     delete factory;
 
     //=======================================================================
@@ -242,9 +236,9 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
     if (reduce_memory_usage) std::cout << " (memory-saving)";
     std::cout << std::endl;
     std::cout << "------------------------------------------------------------" << std::endl;
-    std::cout << "  Test (Homopolymer DST-2): " << (test_passed ? "PASSED" : "FAILED") << std::endl;
+    std::cout << "  Test (Homopolymer DCT-2): " << (test1_passed ? "PASSED" : "FAILED") << std::endl;
 
-    return test_passed ? 0 : -1;
+    return test1_passed ? 0 : -1;
 }
 
 int main()
@@ -252,7 +246,7 @@ int main()
     try
     {
         std::cout << "============================================================" << std::endl;
-        std::cout << "Test: DST-2 Propagator with Absorbing Boundaries" << std::endl;
+        std::cout << "Test: DCT-2 Propagator with Reflecting Boundaries" << std::endl;
         std::cout << "============================================================" << std::endl;
         std::cout << "Testing on all available platforms with standard and" << std::endl;
         std::cout << "memory-saving modes." << std::endl;
