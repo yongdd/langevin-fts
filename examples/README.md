@@ -112,6 +112,7 @@ python Gyroid.py
 + V. Ganesan, and G. H. Fredrickson, Field-theoretic polymer simulations, *Europhys. Lett.* **2001**, 55, 814
 + K. T. Delaney, and G. H. Fredrickson, Recent Developments in Fully Fluctuating Field-Theoretic Simulations of Polymer Melts and Solutions, *J. Phys. Chem. B* **2016**, 120, 7615
 + J. D. Willis, and M. W. Matsen, Stabilizing complex-Langevin field-theoretic simulations for block copolymer melts, *J. Chem. Phys.* **2024**, 161, 244903
++ M. W. Matsen, T. M. Beardsley, and B. Vorselaars, Field-theoretic simulations for block copolymer melts using the partial saddle-point approximation, *J. Chem. Phys.* **2026**, 164, 014905
 
 #### ABA Triblock (scft/ABA_Triblock1D.py)
 + M. W. Matsen, and R. B. Thompson, Equilibrium behavior of symmetric ABA triblock copolymer melts, *J. Chem. Phys* **1999**, 111, 7139
