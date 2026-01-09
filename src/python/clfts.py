@@ -180,7 +180,7 @@ class CLFTS:
             platform = avail_platforms[0]
 
         # Get reduce_memory_usage option
-        reduce_memory_usage = params.get("reduce_memory_usage", False) if platform == "cuda" else False
+        reduce_memory_usage = params.get("reduce_memory_usage", False)
 
         # (C++ class) Create a factory for given platform and chain_model
         # Use "complex" type for complex Langevin

@@ -363,7 +363,7 @@ class LFTS:
             platform = avail_platforms[0]
 
         # Get reduce_memory_usage option
-        reduce_memory_usage = params.get("reduce_memory_usage", False) if platform == "cuda" else False
+        reduce_memory_usage = params.get("reduce_memory_usage", False)
 
         # Get boundary conditions
         bc = params.get("bc", None)
