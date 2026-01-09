@@ -1,0 +1,117 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.11",
+    "pybind11>=2.13",
+    "numpy>=2.0",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "polymerfts"
+version = "1.0.0"
+description = "Polymer field theory simulation library for SCFT and L-FTS"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Daeseong Yong"},
+]
+keywords = [
+    "polymer",
+    "field-theory",
+    "SCFT",
+    "FTS",
+    "simulation",
+    "block-copolymer",
+    "self-consistent-field",
+    "Langevin-dynamics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "matplotlib>=3.10",
+    "networkx>=3.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "flake8>=6.0",
+]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-rtd-theme",
+]
+jupyter = [
+    "jupyter>=1.0",
+    "nbformat>=5.0",
+    "plotly>=5.0",
+]
+full = [
+    "pandas>=2.0",
+    "spglib>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yongdd/langevin-fts"
+Documentation = "https://github.com/yongdd/langevin-fts#readme"
+Repository = "https://github.com/yongdd/langevin-fts.git"
+Issues = "https://github.com/yongdd/langevin-fts/issues"
+
+[tool.scikit-build]
+# CMake configuration
+cmake.version = ">=3.17"
+cmake.build-type = "Release"
+
+# Wheel configuration - install Python files from src/python
+wheel.packages = ["src/python"]
+
+# Build directory
+build-dir = "build/{wheel_tag}"
+
+# Minimum version for build-system.requires
+minimum-version = "build-system.requires"
+
+# Logging
+logging.level = "INFO"
+
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE = "Release"
+POLYMERFTS_BUILD_TESTS = "OFF"
+
+[tool.cibuildwheel]
+# Build for Linux only initially
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64"
+skip = "*-musllinux*"
+
+# Test configuration
+test-requires = ["pytest", "numpy", "scipy"]
+test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector().avail_platforms())\""
+
+[tool.cibuildwheel.linux]
+environment = { MKL_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
+
+[tool.flake8]
+max-line-length = 120
+max-complexity = 15
+select = ["E9", "F63", "F7", "F82"]
+per-file-ignores = [
+    "__init__.py:F401",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["Test*.py"]

@@ -1,0 +1,81 @@
+{% set name = "polymerfts" %}
+{% set version = "1.0.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  git_url: https://github.com/yongdd/langevin-fts.git
+  git_rev: v{{ version }}
+  # For releases, use tarball instead:
+  # url: https://github.com/yongdd/langevin-fts/archive/refs/tags/v{{ version }}.tar.gz
+  # sha256: <sha256_hash_here>
+
+build:
+  number: 0
+  skip: true  # [win]
+  skip: true  # [py<311]
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  build:
+    - {{ compiler('cxx') }}
+    - {{ stdlib("c") }}
+    - cmake >=3.17
+    - make  # [unix]
+    - ninja  # [win]
+  host:
+    - python
+    - pip
+    - scikit-build-core >=0.11
+    - pybind11 >=2.13
+    - pybind11-abi
+    - numpy
+    - mkl-devel
+    - mkl-include
+    - libblas =*=*mkl
+  run:
+    - python
+    - {{ pin_compatible('numpy') }}
+    - scipy >=1.14
+    - matplotlib-base >=3.10
+    - networkx >=3.0
+    - pyyaml >=6.0
+    - libblas =*=*mkl
+    - mkl
+
+test:
+  imports:
+    - polymerfts
+    - polymerfts._core
+  requires:
+    - pip
+  commands:
+    - pip check
+    - python -c "from polymerfts import PlatformSelector; ps = PlatformSelector(); print('Platforms:', ps.avail_platforms())"
+
+about:
+  home: https://github.com/yongdd/langevin-fts
+  summary: Polymer field theory simulation library for SCFT and L-FTS
+  description: |
+    PolymerFTS is a high-performance library for polymer field theory simulations.
+    It implements Self-Consistent Field Theory (SCFT) and Langevin Field-Theoretic
+    Simulations (L-FTS) for polymer systems. Key features include:
+
+    - Support for arbitrary acyclic branched polymers (linear, star, comb, dendritic)
+    - Multi-monomer systems with arbitrary interaction parameters
+    - Both continuous and discrete Gaussian chain models
+    - Pseudo-spectral and real-space solvers
+    - CPU (Intel MKL) and GPU (NVIDIA CUDA) backends
+    - Python interface with NumPy integration
+
+  license: Apache-2.0
+  license_family: Apache
+  license_file: LICENSE
+  doc_url: https://github.com/yongdd/langevin-fts#readme
+  dev_url: https://github.com/yongdd/langevin-fts
+
+extra:
+  recipe-maintainers:
+    - yongdd

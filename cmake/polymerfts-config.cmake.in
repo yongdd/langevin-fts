@@ -1,0 +1,43 @@
+@PACKAGE_INIT@
+
+# polymerfts CMake configuration file
+#
+# This file is used by find_package(polymerfts) to set up the targets
+# and variables needed to use polymerfts in downstream projects.
+
+include(CMakeFindDependencyMacro)
+
+# Required dependencies
+find_dependency(OpenMP REQUIRED)
+
+# Report what was found during the original build
+set(POLYMERFTS_VERSION "@PROJECT_VERSION@")
+set(POLYMERFTS_HAS_MKL @BUILD_CPU_MKL_LIB@)
+set(POLYMERFTS_HAS_CUDA @CUDAToolkit_FOUND@)
+
+# Optional dependencies based on build configuration
+if(POLYMERFTS_HAS_MKL)
+    # Try to find MKL - use CONFIG mode first, then fallback
+    find_package(MKL CONFIG QUIET)
+    if(NOT MKL_FOUND)
+        list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+        find_dependency(MKL)
+    endif()
+endif()
+
+if(POLYMERFTS_HAS_CUDA)
+    find_dependency(CUDAToolkit)
+endif()
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/polymerfts-targets.cmake")
+
+# Provide useful variables
+get_target_property(_POLYMERFTS_INCLUDE_DIRS polymerfts::common INTERFACE_INCLUDE_DIRECTORIES)
+set(POLYMERFTS_INCLUDE_DIRS ${_POLYMERFTS_INCLUDE_DIRS})
+
+check_required_components(polymerfts)
+
+message(STATUS "Found polymerfts ${POLYMERFTS_VERSION}")
+message(STATUS "  MKL backend: ${POLYMERFTS_HAS_MKL}")
+message(STATUS "  CUDA backend: ${POLYMERFTS_HAS_CUDA}")
