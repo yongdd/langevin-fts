@@ -21,6 +21,7 @@ OPTION(POLYMERFTS_USE_MKL "Enable Intel MKL backend" ON)
 OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
 OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
+OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
 
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -231,10 +232,12 @@ IF(POLYMERFTS_INSTALL_PYTHON)
 ENDIF()
 
 # Install headers for downstream C++ projects
-install(DIRECTORY src/common/
-        DESTINATION include/polymerfts
-        COMPONENT development
-        FILES_MATCHING PATTERN "*.h")
+IF(POLYMERFTS_INSTALL_HEADERS)
+    install(DIRECTORY src/common/
+            DESTINATION include/polymerfts
+            COMPONENT development
+            FILES_MATCHING PATTERN "*.h")
+ENDIF()
 
 #---------- Test -----------
 IF(POLYMERFTS_BUILD_TESTS)
@@ -243,26 +246,28 @@ IF(POLYMERFTS_BUILD_TESTS)
 ENDIF()
 
 #---------- CMake Config Export -----------
-INCLUDE(CMakePackageConfigHelpers)
+IF(POLYMERFTS_INSTALL_HEADERS)
+    INCLUDE(CMakePackageConfigHelpers)
 
-# Generate version file
-WRITE_BASIC_PACKAGE_VERSION_FILE(
-    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
+    # Generate version file
+    WRITE_BASIC_PACKAGE_VERSION_FILE(
+        "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
 
-# Generate config file
-CONFIGURE_PACKAGE_CONFIG_FILE(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/polymerfts-config.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
-    INSTALL_DESTINATION lib/cmake/polymerfts
-)
+    # Generate config file
+    CONFIGURE_PACKAGE_CONFIG_FILE(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/polymerfts-config.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
+        INSTALL_DESTINATION lib/cmake/polymerfts
+    )
 
-# Install CMake config files
-INSTALL(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
-    DESTINATION lib/cmake/polymerfts
-    COMPONENT development
-)
+    # Install CMake config files
+    INSTALL(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
+        DESTINATION lib/cmake/polymerfts
+        COMPONENT development
+    )
+ENDIF()
