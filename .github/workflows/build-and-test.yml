@@ -1,0 +1,140 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, devel ]
+  pull_request:
+    branches: [ main, devel ]
+
+env:
+  OMP_STACKSIZE: 1G
+  MKL_NUM_THREADS: 1
+
+jobs:
+  build-cpu:
+    name: Build (CPU-MKL, ${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: polymerfts
+        auto-activate-base: false
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        conda install -y -c conda-forge \
+          python=3.12 cmake pybind11 \
+          numpy scipy pandas matplotlib spglib \
+          make git pip pyyaml \
+          jupyter networkx pygments plotly nbformat \
+          mkl mkl-devel mkl-include
+
+    - name: Configure CMake
+      shell: bash -l {0}
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+    - name: Build
+      shell: bash -l {0}
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Install Python module
+      shell: bash -l {0}
+      run: |
+        cd build
+        make install
+
+    - name: Run C++ Tests
+      shell: bash -l {0}
+      run: |
+        cd build
+        ulimit -s unlimited
+        ctest --output-on-failure -j$(nproc)
+
+    - name: Run Python Tests
+      shell: bash -l {0}
+      run: |
+        ulimit -s unlimited
+        python tests/TestNumPyFFT1D.py
+        python tests/TestNumPyFFT2D.py
+        python tests/TestNumPyFFT3D.py
+
+  # CUDA build job - disabled by default as it requires self-hosted GPU runner
+  # Uncomment and configure when GPU runners are available
+  # build-cuda:
+  #   name: Build (CUDA)
+  #   runs-on: [self-hosted, gpu]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build with CUDA
+  #       run: |
+  #         mkdir -p build && cd build
+  #         cmake .. -DCMAKE_BUILD_TYPE=Release
+  #         make -j$(nproc)
+
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install linting tools
+      run: |
+        pip install flake8
+
+    - name: Run flake8 (critical errors only)
+      run: |
+        flake8 src/python --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Run flake8 (style warnings)
+      run: |
+        flake8 src/python --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
+
+  check-platform-consistency:
+    name: Platform Consistency Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Check CPU and CUDA implementations match
+      run: |
+        echo "Checking that CPU and CUDA implementations have matching interfaces..."
+
+        # Count template instantiations in CPU vs CUDA
+        CPU_COUNT=$(grep -r "template class" src/platforms/cpu/ --include="*.cpp" | wc -l)
+        CUDA_COUNT=$(grep -r "template class" src/platforms/cuda/ --include="*.cu" | wc -l)
+
+        echo "CPU template instantiations: $CPU_COUNT"
+        echo "CUDA template instantiations: $CUDA_COUNT"
+
+        # Check for matching class names
+        echo ""
+        echo "CPU classes:"
+        grep -roh "template class [A-Za-z]*<" src/platforms/cpu/ --include="*.cpp" | sort -u
+        echo ""
+        echo "CUDA classes:"
+        grep -roh "template class [A-Za-z]*<" src/platforms/cuda/ --include="*.cu" | sort -u

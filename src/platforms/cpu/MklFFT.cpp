@@ -565,9 +565,5 @@ void MklFFT<T, DIM>::backward(double *cdata, T *rdata)
 }
 
 // Explicit template instantiations
-template class MklFFT<double, 1>;
-template class MklFFT<double, 2>;
-template class MklFFT<double, 3>;
-template class MklFFT<std::complex<double>, 1>;
-template class MklFFT<std::complex<double>, 2>;
-template class MklFFT<std::complex<double>, 3>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_FFT_CLASS(MklFFT);

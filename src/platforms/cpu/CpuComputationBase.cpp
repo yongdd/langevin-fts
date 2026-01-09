@@ -236,5 +236,5 @@ void CpuComputationBase<T>::get_solvent_concentration(int s, T *phi)
 }
 
 // Explicit template instantiation
-template class CpuComputationBase<double>;
-template class CpuComputationBase<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuComputationBase);

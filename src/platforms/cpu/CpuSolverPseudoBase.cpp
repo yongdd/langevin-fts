@@ -267,5 +267,5 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
 }
 
 // Explicit template instantiation
-template class CpuSolverPseudoBase<double>;
-template class CpuSolverPseudoBase<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuSolverPseudoBase);
