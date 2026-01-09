@@ -84,6 +84,7 @@ jobs:
       run: |
         cd build
         ulimit -s unlimited
+        export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
         ctest --output-on-failure -j$(nproc)
 
     - name: Run Python Tests
