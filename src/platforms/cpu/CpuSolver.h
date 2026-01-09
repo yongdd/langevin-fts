@@ -75,21 +75,21 @@ public:
      * @brief Boltzmann factor for full segment: exp(-w(r)·ds).
      *
      * Key: monomer type (e.g., "A", "B")
-     * Value: Array of size n_grid containing exp(-w[i]*ds)
+     * Value: Vector of size n_grid containing exp(-w[i]*ds)
      *
      * Used in the real-space method and discrete chain pseudo-spectral.
      */
-    std::map<std::string, T*> exp_dw;
+    std::map<std::string, std::vector<T>> exp_dw;
 
     /**
      * @brief Boltzmann factor for half segment: exp(-w(r)·ds/2).
      *
      * Key: monomer type (e.g., "A", "B")
-     * Value: Array of size n_grid containing exp(-w[i]*ds/2)
+     * Value: Vector of size n_grid containing exp(-w[i]*ds/2)
      *
      * Used in operator splitting schemes for symmetric time stepping.
      */
-    std::map<std::string, T*> exp_dw_half;
+    std::map<std::string, std::vector<T>> exp_dw_half;
 
     /**
      * @brief Virtual destructor.
