@@ -51,10 +51,27 @@ params = {
     # Lower values make the system more compressible
     "zeta_n": 100.0,
 
-    # Dynamical stabilization constant for complex Langevin
-    # Set to 0 for standard CL dynamics
-    # Set to small positive value (e.g., 0.01-0.1) if fields develop large imaginary parts
-    "dynamic_stabilization": 0.0,
+    # Dynamical stabilization for complex Langevin (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024))
+    # Adds iαds·N·Im[W-] to exchange field forces to prevent hot spots.
+    # Recommended values based on N̄:
+    #   N̄ >= 10^7: αds = 0.001 or less
+    #   N̄ ~  10^5: αds = 0.01 - 0.02
+    #   N̄ ~  10^4: αds = 0.1 or higher (may bias statistics)
+    # Set to 0.0 to disable stabilization.
+    "dynamic_stabilization": 0.01,
+
+    # Smearing for finite-range interactions (Matsen et al., J. Chem. Phys. 164, 014905 (2026))
+    # Smearing can stabilize CL-FTS at lower N̄ by using finite-range interactions.
+    # Two types available:
+    #   1. Gaussian: {"type": "gaussian", "a_int": float}
+    #      Γ(k) = exp(-a_int² · k² / 2)
+    #      Universality requires a_int ≲ 0.02 (in R₀ units)
+    #   2. Sigmoidal: {"type": "sigmoidal", "k_int": float, "dk_int": float}
+    #      Γ(k) = C₀[1 - tanh((k - k_int) / Δk_int)]
+    #      Universality requires k_int ≳ 20 (in 1/R₀ units)
+    # Uncomment one of the following to enable smearing:
+    # "smearing": {"type": "gaussian", "a_int": 0.02},
+    # "smearing": {"type": "sigmoidal", "k_int": 20.0, "dk_int": 5.0},
 
     "verbose_level":1,      # 1 : Print at each langevin step.
                             # 2 : Print at each iteration (not used in CL-FTS).

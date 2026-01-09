@@ -14,6 +14,7 @@ Gaussian white noise applied only to the real part of the field evolution.
 Key features:
 - Complex-valued auxiliary fields
 - Dynamical stabilization for numerical stability
+- Smearing interactions for improved stability (finite-range interactions)
 - Support for multi-component polymer systems
 - Structure function calculations
 
@@ -48,6 +49,8 @@ Example usage:
             "sf_recording_period": 1000,
         },
         "verbose_level": 1,
+        # Optional: Smearing for finite-range interactions
+        # "smearing": {"type": "gaussian", "a_int": 0.02},
     }
 
     simulation = clfts.CLFTS(params)
@@ -56,6 +59,9 @@ Example usage:
 References:
 - Ganesan & Fredrickson, Europhys. Lett. 55, 814 (2001)
 - Lennon et al., Phys. Rev. Lett. 101, 138302 (2008)
+- Willis & Matsen, J. Chem. Phys. 161, 244903 (2024) - Dynamical stabilization
+- Matsen et al., J. Chem. Phys. 164, 014905 (2026) - Universal phase behavior with CL-FTS
+- Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016) - Smearing interactions
 """
 
 import os
@@ -120,7 +126,25 @@ class CLFTS:
         - langevin : dict - Langevin dynamics parameters
         - recording : dict - Data recording parameters
         - verbose_level : int - Output verbosity (1 or 2)
-        - dynamic_stabilization : float, optional - Stabilization constant
+        - dynamic_stabilization : float, optional - Stabilization coefficient αds
+          to prevent hot spots by adding iαds·Im[W] to exchange field forces.
+          Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
+        - alpha_ds : float, optional - Alias for dynamic_stabilization parameter
+        - smearing : dict, optional - Finite-range interaction parameters.
+          Smearing helps stabilize CL-FTS by using finite-range interactions
+          instead of contact forces. Supported types:
+
+          * Gaussian: {"type": "gaussian", "a_int": float}
+            Γ(k) = exp(-a_int² · k² / 2)
+            a_int is the smearing length in units of R₀ (unperturbed chain size).
+            Universality requires a_int ≲ 0.02·R₀.
+
+          * Sigmoidal: {"type": "sigmoidal", "k_int": float, "dk_int": float}
+            Γ(k) = C₀[1 - tanh((k - k_int) / Δk_int)]
+            k_int is the cutoff wavenumber, dk_int controls transition width.
+            Universality requires k_int ≳ 20/R₀. Default dk_int = 5.0.
+
+          Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
         - platform : str, optional - "cuda" or "cpu-mkl"
         - reduce_memory_usage : bool, optional - Memory optimization flag
     random_seed : int, optional
@@ -320,8 +344,15 @@ class CLFTS:
         )
 
         # Dynamical stabilization constant for complex Langevin simulations
+        # This prevents runaway solutions ("hot spots") by adding iαds·Im[W-] to exchange field forces.
+        # The parameter can be specified as either:
+        #   - "dynamic_stabilization": the combined coefficient αds (as in Willis & Matsen 2024)
+        #   - "alpha_ds": alias for compatibility with reference codes
+        # Typical values: 0.01-0.1 for N̄ ≥ 10^5 (Willis & Matsen 2024)
         if "dynamic_stabilization" in params:
             self.alpha_ds = params["dynamic_stabilization"]
+        elif "alpha_ds" in params:
+            self.alpha_ds = params["alpha_ds"]
         else:
             self.alpha_ds = 0.0
 
@@ -381,6 +412,211 @@ class CLFTS:
         self.molecules = molecules
         self.propagator_computation_optimizer = propagator_computation_optimizer
 
+        # Initialize smearing (must be after self.cb is set)
+        self._init_smearing(params)
+
+    def _init_smearing(self, params):
+        """Initialize smearing function in Fourier space.
+
+        The smearing function Γ(r) defines finite-range interactions by convolving
+        concentration fields: φ_Γ(r) = ∫ φ(r')Γ(r-r')dr'.
+        In Fourier space: φ_Γ(k) = φ(k)·Γ(k).
+
+        Smearing helps stabilize CL-FTS simulations by damping high-frequency
+        fluctuations that can cause hot spot formation.
+
+        Supported smearing types:
+
+        - Gaussian: Γ(k) = exp(-a_int²·k²/2)
+          Parameters: {"type": "gaussian", "a_int": float}
+
+        - Sigmoidal: Γ(k) = C₀[1 - tanh((k - k_int)/Δk_int)]
+          Parameters: {"type": "sigmoidal", "k_int": float, "dk_int": float}
+
+        Parameters
+        ----------
+        params : dict
+            Simulation parameters containing optional "smearing" key.
+
+        Notes
+        -----
+        References:
+        - Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016)
+        - Matsen et al., J. Chem. Phys. 164, 014905 (2026)
+        """
+        if "smearing" not in params:
+            self.smearing_enabled = False
+            self.smearing_fourier = None
+            self.smearing_type = None
+            return
+
+        smearing = params["smearing"]
+        self.smearing_enabled = True
+        self.smearing_type = smearing.get("type", "gaussian")
+
+        # Get grid dimensions
+        nx = self.cb.get_nx()
+        lx = self.cb.get_lx()
+        dim = len(nx)
+
+        # Compute k vectors for each dimension
+        # k = 2π·n/L where n is the frequency index from fftfreq
+        k_vectors = []
+        for i in range(dim):
+            freq = np.fft.fftfreq(nx[i], d=lx[i] / nx[i])  # cycles per unit length
+            k = 2 * np.pi * freq  # angular wavenumber
+            k_vectors.append(k)
+
+        # Create k² grid using meshgrid with proper indexing
+        if dim == 1:
+            k_sq = k_vectors[0] ** 2
+            k_mag = np.abs(k_vectors[0])
+        elif dim == 2:
+            kx, ky = np.meshgrid(k_vectors[0], k_vectors[1], indexing='ij')
+            k_sq = kx ** 2 + ky ** 2
+            k_mag = np.sqrt(k_sq)
+        else:  # 3D
+            kx, ky, kz = np.meshgrid(k_vectors[0], k_vectors[1], k_vectors[2], indexing='ij')
+            k_sq = kx ** 2 + ky ** 2 + kz ** 2
+            k_mag = np.sqrt(k_sq)
+
+        # Store k magnitude for structure function calculation
+        self.k_mag = k_mag
+        self.k_sq = k_sq
+
+        if self.smearing_type == "gaussian":
+            # Gaussian smearing: Γ(k) = exp(-a_int²·k²/2)
+            # a_int is the smearing length scale
+            if "a_int" not in smearing:
+                raise ValueError("Gaussian smearing requires 'a_int' parameter.")
+            a_int = smearing["a_int"]
+            self.smearing_fourier = np.exp(-a_int ** 2 * k_sq / 2)
+            self.smearing_params = {"a_int": a_int}
+            print(f"Smearing: Gaussian, a_int = {a_int}")
+
+        elif self.smearing_type == "sigmoidal":
+            # Sigmoidal smearing: Γ(k) = C₀[1 - tanh((k - k_int)/Δk_int)]
+            # k_int is the cutoff wavenumber, Δk_int controls the transition width
+            if "k_int" not in smearing:
+                raise ValueError("Sigmoidal smearing requires 'k_int' parameter.")
+            k_int = smearing["k_int"]
+            dk_int = smearing.get("dk_int", 5.0)  # default from Matsen et al. 2026
+
+            gamma_unnorm = 1 - np.tanh((k_mag - k_int) / dk_int)
+            # Normalize so Γ(0) = 1
+            c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
+            self.smearing_fourier = c0 * gamma_unnorm
+            self.smearing_params = {"k_int": k_int, "dk_int": dk_int}
+            print(f"Smearing: Sigmoidal, k_int = {k_int}, dk_int = {dk_int}")
+
+        else:
+            raise ValueError(f"Unknown smearing type: {self.smearing_type}. "
+                           f"Supported types: 'gaussian', 'sigmoidal'")
+
+    def _smear_field(self, field):
+        """Apply smearing to a single field array.
+
+        Computes smeared field: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Field array of length total_grid (can be complex).
+
+        Returns
+        -------
+        numpy.ndarray
+            Smeared field array of same shape.
+            Returns the original field unchanged if smearing is disabled.
+        """
+        if not self.smearing_enabled:
+            return field
+
+        nx = self.cb.get_nx()
+        n_grid = self.cb.get_total_grid()
+
+        # Reshape to grid dimensions
+        field_grid = np.reshape(field, nx)
+
+        # FFT -> multiply by Γ(k) -> IFFT
+        field_fourier = np.fft.fftn(field_grid)
+        field_smeared_fourier = field_fourier * self.smearing_fourier
+        field_smeared = np.fft.ifftn(field_smeared_fourier)
+
+        # Reshape back to flat array
+        return np.reshape(field_smeared, n_grid)
+
+    def _smear_fields(self, w_input):
+        """Apply smearing to monomer potential fields.
+
+        Computes smeared fields: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
+
+        This applies finite-range interactions by convolving potential
+        fields with the smearing function before computing propagators.
+        Following Matsen et al., J. Chem. Phys. 164, 014905 (2026), the
+        fields are smeared before computing the Boltzmann weights in the
+        propagator calculation.
+
+        Parameters
+        ----------
+        w_input : dict
+            Dictionary of potential fields for each monomer type.
+            Each field is a complex numpy array of length total_grid.
+
+        Returns
+        -------
+        dict
+            Dictionary of smeared potential fields with same structure.
+            Returns the original w_input unchanged if smearing is disabled.
+        """
+        if not self.smearing_enabled:
+            return w_input
+
+        w_smeared = {}
+        for key, field in w_input.items():
+            w_smeared[key] = self._smear_field(field)
+
+        return w_smeared
+
+    def _smear_phi(self, phi):
+        """Apply smearing to concentration fields.
+
+        Computes smeared concentration: φ_Γ(r) = FFT⁻¹[FFT[φ(r)]·Γ(k)]
+
+        This applies finite-range interactions by convolving concentration
+        fields with the smearing function. The smearing is performed in
+        Fourier space for efficiency.
+
+        Parameters
+        ----------
+        phi : dict
+            Dictionary of concentration fields for each monomer type.
+            Each field is a complex numpy array of length total_grid.
+
+        Returns
+        -------
+        dict
+            Dictionary of smeared concentration fields with same structure.
+            Returns the original phi unchanged if smearing is disabled.
+
+        Notes
+        -----
+        The smeared concentrations are used in the force calculation
+        (functional derivatives of the Hamiltonian) to implement
+        finite-range interactions as described in:
+
+        - Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016)
+        - Matsen et al., J. Chem. Phys. 164, 014905 (2026)
+        """
+        if not self.smearing_enabled:
+            return phi
+
+        phi_smeared = {}
+        for key, field in phi.items():
+            phi_smeared[key] = self._smear_field(field)
+
+        return phi_smeared
+
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
 
@@ -411,9 +647,14 @@ class CLFTS:
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type] * fraction
 
+        # Apply smearing to fields before computing propagators
+        # Following Matsen et al., J. Chem. Phys. 164, 014905 (2026), the fields
+        # are smeared before computing the Boltzmann weights in the propagator.
+        w_input_for_propagator = self._smear_fields(w_input)
+
         # For the given fields, compute propagators
         time_solver_start = time.time()
-        self.solver.compute_propagators(w_input)
+        self.solver.compute_propagators(w_input_for_propagator)
         elapsed_time["solver"] = time.time() - time_solver_start
 
         # Compute concentrations for each monomer type
@@ -549,16 +790,19 @@ class CLFTS:
 
         Notes
         -----
-        The Complex Langevin dynamics evolves fields according to:
+        The Complex Langevin dynamics evolves fields according to
+        (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024), Eqs. 8-10):
 
-            w_i(t+dt) = w_i(t) - dH/dw_i * dt + sqrt(2*dt) * eta_i
+            W-(t+dt) = W-(t) - Λ-*dt + N(0,σ)      [real noise]
+            W+(t+dt) = W+(t) + Λ+*dt + i*N(0,σ)    [imaginary noise]
 
         where:
-        - For exchange fields (real-valued in standard theory): noise is real
-        - For pressure field (imaginary in standard theory): noise is imaginary
+        - W- is the exchange/composition field (real-type auxiliary field)
+        - W+ is the pressure field (imaginary-type auxiliary field)
+        - Λ± are the deterministic forces including functional derivatives
 
-        Dynamical stabilization adds a term proportional to Im(dH/dw) to
-        prevent runaway solutions in the imaginary direction.
+        Dynamical stabilization adds iαds·N·Im[W-] to Λ- to prevent
+        runaway solutions in the imaginary direction (hot spots).
         """
         print("---------- Run ----------")
 
@@ -612,15 +856,27 @@ class CLFTS:
             # Compute total concentrations
             phi, _ = self.compute_concentrations(w_aux=w_aux)
 
-            # Compute functional derivatives of Hamiltonian w.r.t. all fields
-            w_lambda = self.mpt.compute_func_deriv(w_aux, phi, range(M))
+            # Apply smearing to concentrations for force calculation
+            # Smearing implements finite-range interactions: φ_Γ = FFT⁻¹[FFT[φ]·Γ(k)]
+            # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
+            phi_for_force = self._smear_phi(phi)
 
-            # Add dynamical stabilization
-            # This helps prevent runaway solutions in the imaginary direction
+            # Compute functional derivatives of Hamiltonian w.r.t. all fields
+            # For an AB diblock, compute_func_deriv transforms per-monomer concentrations as:
+            #   - Exchange field (w-): uses phi_A - phi_B (composition difference)
+            #   - Pressure field (w+): uses phi_A + phi_B (total concentration)
+            # This is handled automatically through the transformation matrix A.
+            # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
+            w_lambda = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
+
+            # Add dynamical stabilization (Willis & Matsen, J. Chem. Phys. 161, 244903 (2024))
+            # Adds iαds·N·Im[W] to the exchange field forces to prevent runaway solutions
+            # in the imaginary direction. Applied to exchange fields (real-type auxiliary fields).
+            # Note: self.alpha_ds should be the combined coefficient αds·N.
             if self.alpha_ds > 0:
                 for i in range(M):
-                    if i in self.mpt.aux_fields_imag_idx:
-                        w_lambda[i] += 1j * self.alpha_ds * np.imag(w_lambda[i])
+                    if i in self.mpt.aux_fields_real_idx:
+                        w_lambda[i] += 1j * self.alpha_ds * np.imag(w_aux[i])
 
             # Update w_aux using Leimkuhler-Matthews method
             normal_noise_current = self.random.normal(
@@ -639,8 +895,8 @@ class CLFTS:
             # Swap two noise arrays
             normal_noise_prev, normal_noise_current = normal_noise_current, normal_noise_prev
 
-            # Compute functional derivatives for error monitoring
-            h_deriv = self.mpt.compute_func_deriv(w_aux, phi, range(M))
+            # Compute functional derivatives for error monitoring (use smeared phi for consistency)
+            h_deriv = self.mpt.compute_func_deriv(w_aux, phi_for_force, range(M))
 
             # Compute error levels
             error_level_array = np.std(h_deriv, axis=1)
