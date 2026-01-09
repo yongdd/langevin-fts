@@ -191,26 +191,25 @@ This is solved using 4th-order Richardson extrapolation with the operator splitt
 
 #### Discrete Chain Model Details
 
-This library implements the **N-1 bond model** for discrete chains, as described in Park et al. (2019). Unlike continuous chains that solve a differential equation, discrete chains use **recursive integral equations** based on the Chapman-Kolmogorov equation.
+This library implements the discrete chain model as described in Park et al. (2019). Unlike continuous chains that solve a differential equation, discrete chains use **recursive integral equations** based on the Chapman-Kolmogorov equation.
 
-**Model Structure:**
-- A polymer chain consists of **N segments** connected by **N-1 bonds**
-- The natural end-to-end distance is R₀ = a√(N-1), not aN^(1/2)
-- Each segment is a full segment (no half-segments at chain ends)
-- The contour step size is Δs = 1/(N-1)
+**Units and Conventions:**
+- **Unit length**: R₀ = aN^(1/2), where a is the statistical segment length and N is the polymerization index
+- **Contour step size**: Δs = 1/N
+- **Segment positions**: s = Δs, 2Δs, ..., 1 (N segments total)
 
 ```
-N-1 Bond Model (this implementation):
+Discrete Chain Model:
 
-    1 ----bond---- 2 ----bond---- 3 ----bond---- ... ----bond---- N
-         (1)            (2)            (3)              (N-1)
+    segment    segment    segment              segment
+       1          2          3        ...         N
+       |          |          |                    |
+       s=Δs      s=2Δs     s=3Δs               s=1
 
-    - N segments (full segments)
-    - N-1 bonds connecting them
-    - Segment positions: s = 0, Δs, 2Δs, ..., 1  where Δs = 1/(N-1)
+    - N segments connected by N-1 bonds
+    - Contour step: Δs = 1/N
+    - Segment positions: s = Δs, 2Δs, 3Δs, ..., 1
 ```
-
-The alternative N bond model (not used here) has half-segments at chain ends with N bonds, giving R₀ = aN^(1/2).
 
 **Propagator Evolution (segment-to-segment):**
 
