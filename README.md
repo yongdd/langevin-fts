@@ -20,11 +20,11 @@ This open-source code is distributed under the Apache License 2.0. This license 
     * 4th-order Richardson extrapolation method for continuous chains
     * Supports continuous and discrete chains
     * Periodic boundaries only
-  * Real-space method (**beta**)
+  * Real-space method
     * 2nd-order Crank-Nicolson method
     * Supports only continuous chains
     * Supports periodic, reflecting, and absorbing boundaries
-  * Can set an impenetrable region using a mask (**beta**)
+  * Can set an impenetrable region using a mask
   * Can constrain space group symmetries during the SCFT iterations (orthorhombic, tetragonal, and cubic only) (**beta**)
   * Anderson mixing
   * Platforms: MKL (CPU) and CUDA (GPU)
