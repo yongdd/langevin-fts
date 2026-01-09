@@ -514,9 +514,9 @@ void CudaComputationDiscrete<T>::compute_propagators(
                             {
                                 // Check sub key
                                 #ifndef NDEBUG
-                                if (d_propagator.find(sub_dep) == d_propagator.end())
+                                if (this->d_propagator.find(sub_dep) == this->d_propagator.end())
                                     std::cout<< "Could not find sub key '" + sub_dep + "'. " << std::endl;
-                                if (!propagator_finished[sub_dep][sub_n_segment])
+                                if (!this->propagator_finished[sub_dep][sub_n_segment])
                                     std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                                 #endif
 
@@ -674,9 +674,9 @@ void CudaComputationDiscrete<T>::compute_propagators(
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
-                    if (!propagator_finished[key][n])
+                    if (!this->propagator_finished[key][n])
                         std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                    if (propagator_finished[key][n+1])
+                    if (this->propagator_finished[key][n+1])
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
@@ -815,9 +815,9 @@ void CudaComputationDiscrete<T>::compute_concentrations()
 
             // Check keys
             #ifndef NDEBUG
-            if (d_propagator.find(key_left) == d_propagator.end())
+            if (this->d_propagator.find(key_left) == this->d_propagator.end())
                 throw_with_line_number("Could not find key_left key'" + key_left + "'. ");
-            if (d_propagator.find(key_right) == d_propagator.end())
+            if (this->d_propagator.find(key_right) == this->d_propagator.end())
                 throw_with_line_number("Could not find key_right key'" + key_right + "'. ");
             #endif
 
