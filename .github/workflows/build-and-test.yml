@@ -45,13 +45,16 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        # Set MKL environment for conda-forge MKL
+        export MKLROOT=$CONDA_PREFIX
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DMKL_ROOT=$CONDA_PREFIX
 
     - name: Build
       shell: bash -l {0}
       run: |
         cd build
-        make -j$(nproc)
+        make -j$(nproc) VERBOSE=1 2>&1 | head -500 || (make -j1 2>&1 | tail -100 && exit 1)
 
     - name: Install Python module
       shell: bash -l {0}
