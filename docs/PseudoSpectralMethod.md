@@ -54,12 +54,13 @@ $$q^{n+1} = \frac{4 q(\Delta s/2, \Delta s/2) - q(\Delta s)}{3}$$
 
 ### 2.2 Discrete Chain Model
 
-For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation. This library implements the **N-1 bond model** from Park et al. (2019).
+For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation. This library implements the discrete chain model from Park et al. (2019).
 
-In this model:
+**Units and Conventions:**
+- **Unit length**: $R_0 = aN^{1/2}$, where $a$ is the statistical segment length and $N$ is the polymerization index
+- **Contour step size**: $\Delta s = 1/N$
+- **Segment positions**: $s = \Delta s, 2\Delta s, \ldots, 1$ (N segments total)
 - A polymer chain has **N segments** connected by **N-1 bonds**
-- The contour step size is $\Delta s = 1/(N-1)$
-- The natural end-to-end distance is $R_0 = a\sqrt{N-1}$
 
 The propagator evolution from segment $s$ to $s + \Delta s$ follows:
 
@@ -116,7 +117,7 @@ where $\mathbf{e}_1 = \mathbf{a}$, $\mathbf{e}_2 = \mathbf{b}$, $\mathbf{e}_3 = 
 
 Explicitly:
 
-$$G = \begin{pmatrix} L_a^2 & L_a L_b \cos\gamma & L_a L_c \cos\beta \\ L_a L_b \cos\gamma & L_b^2 & L_b L_c \cos\alpha \\ L_a L_c \cos\beta & L_b L_c \cos\alpha & L_c^2 \end{pmatrix}$$
+$$G = \begin{pmatrix} L_{a}^{2} & L_a L_b \cos\gamma & L_a L_c \cos\beta \\ L_a L_b \cos\gamma & L_{b}^{2} & L_b L_c \cos\alpha \\ L_a L_c \cos\beta & L_b L_c \cos\alpha & L_{c}^{2} \end{pmatrix}$$
 
 ### 3.3 Unit Cell Volume
 
@@ -132,17 +133,17 @@ $$\mathbf{a}^* = \frac{2\pi}{V}(\mathbf{b} \times \mathbf{c}), \quad \mathbf{b}^
 
 These satisfy the orthonormality relation:
 
-$$\mathbf{e}_i \cdot \mathbf{e}^*_j = 2\pi \delta_{ij}$$
+$$\mathbf{e}_i \cdot \mathbf{e}^{*}_j = 2\pi \delta_{ij}$$
 
 ### 3.5 Reciprocal Metric Tensor
 
-The reciprocal metric tensor $G^*_{ij}$ is computed from the reciprocal lattice vectors:
+The reciprocal metric tensor $G^{*}_{ij}$ is computed from the reciprocal lattice vectors:
 
-$$G^*_{ij} = \mathbf{e}^*_i \cdot \mathbf{e}^*_j$$
+$$G^{*}_{ij} = \mathbf{e}^{*}_i \cdot \mathbf{e}^{*}_j$$
 
 For practical computation, we use the symmetric storage:
 
-$$G^* = \begin{pmatrix} G^*_{00} & G^*_{01} & G^*_{02} \\ G^*_{01} & G^*_{11} & G^*_{12} \\ G^*_{02} & G^*_{12} & G^*_{22} \end{pmatrix}$$
+$$G^* = \begin{pmatrix} G^{*}_{00} & G^{*}_{01} & G^{*}_{02} \\ G^{*}_{01} & G^{*}_{11} & G^{*}_{12} \\ G^{*}_{02} & G^{*}_{12} & G^{*}_{22} \end{pmatrix}$$
 
 The reciprocal metric is related to the inverse of the real-space metric:
 
@@ -164,7 +165,7 @@ where $n_i$ are integers in the range $[-N_i/2, N_i/2)$.
 
 The squared magnitude of the wavevector is computed using the reciprocal metric tensor:
 
-$$|\mathbf{k}|^2 = G^*_{ij} n_i n_j = G^*_{00} n_1^2 + G^*_{11} n_2^2 + G^*_{22} n_3^2 + 2G^*_{01} n_1 n_2 + 2G^*_{02} n_1 n_3 + 2G^*_{12} n_2 n_3$$
+$$|\mathbf{k}|^2 = G^{*}_{ij} n_i n_j = G^{*}_{00} n_1^2 + G^{*}_{11} n_2^2 + G^{*}_{22} n_3^2 + 2G^{*}_{01} n_1 n_2 + 2G^{*}_{02} n_1 n_3 + 2G^{*}_{12} n_2 n_3$$
 
 For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), the cross-terms vanish:
 
@@ -337,14 +338,14 @@ where:
 The Fourier basis arrays encode the derivative of $|\mathbf{k}|^2$ with respect to strain:
 
 **Diagonal components:**
-$$\mathcal{F}_{xx} = k_x^2, \quad \mathcal{F}_{yy} = k_y^2, \quad \mathcal{F}_{zz} = k_z^2$$
+$$\mathcal{F}_{xx} = k_{x}^{2}, \quad \mathcal{F}_{yy} = k_{y}^{2}, \quad \mathcal{F}_{zz} = k_{z}^{2}$$
 
 **Off-diagonal components (cross-terms):**
 $$\mathcal{F}_{xy} = 2 k_x k_y, \quad \mathcal{F}_{xz} = 2 k_x k_z, \quad \mathcal{F}_{yz} = 2 k_y k_z$$
 
 Here, $k_x$, $k_y$, $k_z$ are the Cartesian components of the wavevector:
 
-$$k_x = n_1 a^*_x + n_2 b^*_x + n_3 c^*_x$$
+$$k_x = n_1 a^{*}_x + n_2 b^{*}_x + n_3 c^{*}_x$$
 
 and similarly for $k_y$, $k_z$.
 
@@ -382,7 +383,7 @@ Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero 
 
 $$\alpha = \beta = 90°, \quad \gamma = 120°$$
 
-Cross-term $G^*_{01}$ is non-zero.
+Cross-term $G^{*}_{01}$ is non-zero.
 
 **Constraints:**
 - $L_a = L_b \neq L_c$ (2 independent lengths)
@@ -392,7 +393,7 @@ Cross-term $G^*_{01}$ is non-zero.
 
 $$\alpha = \gamma = 90°, \quad \beta \neq 90°$$
 
-Cross-term $G^*_{02}$ is non-zero.
+Cross-term $G^{*}_{02}$ is non-zero.
 
 **Constraints:**
 - $L_a$, $L_b$, $L_c$ all independent (3 lengths)
