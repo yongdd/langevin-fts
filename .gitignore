@@ -26,4 +26,4 @@ examples/temp*
 examples/test*
 devel/test*
 devel/*.m
-references
+referencesTesting/

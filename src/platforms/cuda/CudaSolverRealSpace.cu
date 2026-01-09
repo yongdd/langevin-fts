@@ -642,9 +642,9 @@ void CudaSolverRealSpace::advance_propagator_1d(
     }
 }
 void CudaSolverRealSpace::compute_single_segment_stress(
-    const int STREAM,
-    double *d_q_pair, double *d_segment_stress,
-    std::string monomer_type, bool is_half_bond_length)
+    [[maybe_unused]] const int STREAM,
+    [[maybe_unused]] double *d_q_pair, [[maybe_unused]] double *d_segment_stress,
+    [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try
     {

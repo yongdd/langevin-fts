@@ -46,7 +46,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_memory_usage)
+    [[maybe_unused]] bool reduce_memory_usage)
 {
     try{
         this->cb = cb;
