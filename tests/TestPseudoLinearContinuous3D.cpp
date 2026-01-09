@@ -191,7 +191,7 @@ int main()
         solver_name_list.push_back("pseudo, cpu-mkl");
         solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory_usage");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
-        cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
+        cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous            <double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(cb_list.end()[-1], molecules, propagator_computation_optimizer, "pseudospectral"));
         #endif
