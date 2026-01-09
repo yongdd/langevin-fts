@@ -68,7 +68,10 @@ jobs:
       shell: bash -l {0}
       run: |
         cd build
-        make -j$(nproc) VERBOSE=1 2>&1 | head -500 || (make -j1 2>&1 | tail -100 && exit 1)
+        # Add conda MKL library path for linking
+        export LIBRARY_PATH=$CONDA_PREFIX/lib:$LIBRARY_PATH
+        export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+        make -j$(nproc)
 
     - name: Install Python module
       shell: bash -l {0}
