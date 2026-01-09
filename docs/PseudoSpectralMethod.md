@@ -46,7 +46,7 @@ The pseudo-spectral method solves the modified diffusion equation by operator sp
 3. **Potential half-step** (real space):
    $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
 
-where $\hat{q}$ denotes the Fourier transform of $q$, and $k^2 = |\mathbf{k}|^2$ is the squared magnitude of the wavevector.
+where $\hat{q}$ denotes the Fourier transform of $q$, and $k^2 = |\mathbf{k}|^{2}$ is the squared magnitude of the wavevector.
 
 This symmetric splitting yields **$O(\Delta s^2)$ global accuracy**. For higher accuracy, this library applies **Richardson extrapolation** (see [Section 6](#6-richardson-extrapolation-for-4th-order-accuracy)) to achieve **$O(\Delta s^4)$ accuracy** by combining full and half steps:
 
@@ -75,11 +75,11 @@ The propagator evolution from segment $s$ to $s + \Delta s$ follows:
 
 where $g(\mathbf{R})$ is the bond function. For the bead-spring model:
 
-$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
+$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^{2}}{2a^2}\right)$$
 
 Its Fourier transform is:
 
-$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^2}{6}\right)$$
+$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^{2}}{6}\right)$$
 
 This formulation makes the discrete chain computation as fast as the continuous chain with $O(M \log M)$ complexity per step.
 
@@ -133,13 +133,13 @@ $$\mathbf{a}^* = \frac{2\pi}{V}(\mathbf{b} \times \mathbf{c}), \quad \mathbf{b}^
 
 These satisfy the orthonormality relation:
 
-$$\mathbf{e}_i \cdot \mathbf{e}^{*}_j = 2\pi \delta_{ij}$$
+$$\mathbf{e}_{i} \cdot \mathbf{e}^{*}_{j} = 2\pi \delta_{ij}$$
 
 ### 3.5 Reciprocal Metric Tensor
 
 The reciprocal metric tensor $G^{*}_{ij}$ is computed from the reciprocal lattice vectors:
 
-$$G^{*}_{ij} = \mathbf{e}^{*}_i \cdot \mathbf{e}^{*}_j$$
+$$G^{*}_{ij} = \mathbf{e}^{*}_{i} \cdot \mathbf{e}^{*}_{j}$$
 
 For practical computation, we use the symmetric storage:
 
@@ -165,11 +165,11 @@ where $n_i$ are integers in the range $[-N_i/2, N_i/2)$.
 
 The squared magnitude of the wavevector is computed using the reciprocal metric tensor:
 
-$$|\mathbf{k}|^2 = G^{*}_{ij} n_i n_j = G^{*}_{00} n_1^2 + G^{*}_{11} n_2^2 + G^{*}_{22} n_3^2 + 2G^{*}_{01} n_1 n_2 + 2G^{*}_{02} n_1 n_3 + 2G^{*}_{12} n_2 n_3$$
+$$|\mathbf{k}|^{2} = G^{*}_{ij} n_{i} n_{j} = G^{*}_{00} n_{1}^{2} + G^{*}_{11} n_{2}^{2} + G^{*}_{22} n_{3}^{2} + 2G^{*}_{01} n_{1} n_{2} + 2G^{*}_{02} n_{1} n_{3} + 2G^{*}_{12} n_{2} n_{3}$$
 
 For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), the cross-terms vanish:
 
-$$|\mathbf{k}|^2 = \left(\frac{2\pi n_1}{L_a}\right)^2 + \left(\frac{2\pi n_2}{L_b}\right)^2 + \left(\frac{2\pi n_3}{L_c}\right)^2$$
+$$|\mathbf{k}|^{2} = \left(\frac{2\pi n_{1}}{L_{a}}\right)^{2} + \left(\frac{2\pi n_{2}}{L_{b}}\right)^{2} + \left(\frac{2\pi n_{3}}{L_{c}}\right)^{2}$$
 
 For **non-orthogonal systems**, the cross-terms contribute and must be included.
 
@@ -179,7 +179,7 @@ The standard FFT computes:
 
 $$\hat{q}(\mathbf{n}) = \sum_{\mathbf{m}} q(\mathbf{m}) e^{-2\pi i \mathbf{n} \cdot \mathbf{m} / \mathbf{N}}$$
 
-This remains unchanged for non-orthogonal systems. The non-orthogonality enters only through the Boltzmann weight calculation via $|\mathbf{k}|^2$.
+This remains unchanged for non-orthogonal systems. The non-orthogonality enters only through the Boltzmann weight calculation via $|\mathbf{k}|^{2}$.
 
 ---
 
@@ -189,9 +189,9 @@ This remains unchanged for non-orthogonal systems. The non-orthogonality enters 
 
 The Boltzmann factor for the diffusion step is:
 
-$$B(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$$
+$$B(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^{2} \Delta s}{6}\right)$$
 
-where $|\mathbf{k}|^2$ is computed using the reciprocal metric tensor as shown above.
+where $|\mathbf{k}|^{2}$ is computed using the reciprocal metric tensor as shown above.
 
 ### 5.2 Implementation
 
@@ -335,7 +335,7 @@ where:
 
 ### 7.4 Fourier Basis Arrays
 
-The Fourier basis arrays encode the derivative of $|\mathbf{k}|^2$ with respect to strain:
+The Fourier basis arrays encode the derivative of $|\mathbf{k}|^{2}$ with respect to strain:
 
 **Diagonal components:**
 $$\mathcal{F}_{xx} = k_{x}^{2}, \quad \mathcal{F}_{yy} = k_{y}^{2}, \quad \mathcal{F}_{zz} = k_{z}^{2}$$
@@ -345,7 +345,7 @@ $$\mathcal{F}_{xy} = 2 k_x k_y, \quad \mathcal{F}_{xz} = 2 k_x k_z, \quad \mathc
 
 Here, $k_x$, $k_y$, $k_z$ are the Cartesian components of the wavevector:
 
-$$k_x = n_1 a^{*}_x + n_2 b^{*}_x + n_3 c^{*}_x$$
+$$k_{x} = n_{1} a^{*}_{x} + n_{2} b^{*}_{x} + n_{3} c^{*}_{x}$$
 
 and similarly for $k_y$, $k_z$.
 
@@ -372,7 +372,7 @@ Different crystal systems impose constraints on the lattice parameters:
 
 $$\alpha = \beta = \gamma = 90°$$
 
-Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero at equilibrium.
+Cross-terms in $|\mathbf{k}|^{2}$ vanish. Off-diagonal stress components are zero at equilibrium.
 
 **Constraints:**
 - Orthorhombic: $L_a \neq L_b \neq L_c$ (3 independent lengths)
