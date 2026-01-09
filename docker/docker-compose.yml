@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # CPU-only service (MKL backend)
+  polymerfts-cpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cpu
+    image: polymerfts:cpu
+    container_name: polymerfts-cpu
+    volumes:
+      - ./workspace:/home/polymerfts/workspace
+    environment:
+      - OMP_STACKSIZE=1G
+      - MKL_NUM_THREADS=1
+      - OMP_NUM_THREADS=4
+    stdin_open: true
+    tty: true
+
+  # CUDA GPU service
+  polymerfts-cuda:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cuda
+    image: polymerfts:cuda
+    container_name: polymerfts-cuda
+    volumes:
+      - ./workspace:/home/polymerfts/workspace
+    environment:
+      - OMP_STACKSIZE=1G
+      - MKL_NUM_THREADS=1
+      - OMP_NUM_THREADS=4
+      - NVIDIA_VISIBLE_DEVICES=all
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Development service with source code mounted
+  polymerfts-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cpu
+      target: builder
+    image: polymerfts:dev
+    container_name: polymerfts-dev
+    volumes:
+      - ..:/app
+      - ./workspace:/home/polymerfts/workspace
+    environment:
+      - OMP_STACKSIZE=1G
+      - MKL_NUM_THREADS=1
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+# Named volumes for persistence
+volumes:
+  workspace:
+
+# Network configuration
+networks:
+  default:
+    name: polymerfts-network

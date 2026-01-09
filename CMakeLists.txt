@@ -1,7 +1,26 @@
 # CMake
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-PROJECT(LANGEVIN_FTS CXX)
+# Project version
+SET(POLYMERFTS_VERSION_MAJOR 1)
+SET(POLYMERFTS_VERSION_MINOR 0)
+SET(POLYMERFTS_VERSION_PATCH 0)
+SET(POLYMERFTS_VERSION "${POLYMERFTS_VERSION_MAJOR}.${POLYMERFTS_VERSION_MINOR}.${POLYMERFTS_VERSION_PATCH}")
+
+PROJECT(LANGEVIN_FTS
+    VERSION ${POLYMERFTS_VERSION}
+    DESCRIPTION "Polymer Field Theory Simulation Library for SCFT and L-FTS"
+    LANGUAGES CXX
+)
+
+# Add cmake modules path for custom finders
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Build options
+OPTION(POLYMERFTS_USE_MKL "Enable Intel MKL backend" ON)
+OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
+OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
+OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
 
 SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -55,9 +74,22 @@ ADD_LIBRARY(common
 )
 
 # Intel MKL
-SET(ENV{MKL_ROOT} "$ENV{MKLROOT}")
-FIND_PACKAGE(MKL)
-IF(MKL_FOUND)
+IF(POLYMERFTS_USE_MKL)
+    # Check multiple locations for MKL
+    IF(DEFINED ENV{MKLROOT})
+        SET(MKL_ROOT "$ENV{MKLROOT}" CACHE PATH "MKL installation root")
+    ELSEIF(DEFINED ENV{CONDA_PREFIX})
+        SET(MKL_ROOT "$ENV{CONDA_PREFIX}" CACHE PATH "MKL from conda")
+    ENDIF()
+
+    # Try CMake config first, then fallback to our finder
+    FIND_PACKAGE(MKL CONFIG QUIET)
+    IF(NOT MKL_FOUND)
+        FIND_PACKAGE(MKL)
+    ENDIF()
+ENDIF()
+
+IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
     SET(BUILD_CPU_MKL_LIB TRUE)
     ADD_DEFINITIONS(-DUSE_CPU_MKL)
     ADD_LIBRARY(cpu-mkl
@@ -81,8 +113,11 @@ ELSE()
 ENDIF()
 
 # NVIDIA CUDA
-FIND_PACKAGE(CUDAToolkit)
-IF(CUDAToolkit_FOUND)
+IF(POLYMERFTS_USE_CUDA)
+    FIND_PACKAGE(CUDAToolkit QUIET)
+ENDIF()
+
+IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
     ENABLE_LANGUAGE(CUDA)
     INCLUDE_DIRECTORIES("${CUDAToolkit_INCLUDE_DIRS}")
     ADD_DEFINITIONS(-DUSE_CUDA)
@@ -181,15 +216,53 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
 # endif()
 
 # ----------------  Install rules  ----------------
-# 1. compiled extension  → platform‑dependent site‑packages dir
-install(TARGETS  _core
-        LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux/macOS
-        ARCHIVE  DESTINATION ${Python3_SITEARCH}/polymerfts)
+IF(POLYMERFTS_INSTALL_PYTHON)
+    # 1. compiled extension  → platform‑dependent site‑packages dir
+    install(TARGETS  _core
+            LIBRARY  DESTINATION ${Python3_SITEARCH}/polymerfts      # Linux/macOS
+            ARCHIVE  DESTINATION ${Python3_SITEARCH}/polymerfts
+            COMPONENT python)
 
-# 2. pure‑Python files   → platform‑independent site‑packages dir
-install(DIRECTORY  src/python/                         # contains __init__.py scfy.py lfts.py …
-        DESTINATION ${Python3_SITELIB}/polymerfts)     # keeps sub‑dir structure intact
+    # 2. pure‑Python files   → platform‑independent site‑packages dir
+    install(DIRECTORY  src/python/                         # contains __init__.py scfy.py lfts.py …
+            DESTINATION ${Python3_SITELIB}/polymerfts      # keeps sub‑dir structure intact
+            COMPONENT python
+            FILES_MATCHING PATTERN "*.py")
+ENDIF()
+
+# Install headers for downstream C++ projects
+install(DIRECTORY src/common/
+        DESTINATION include/polymerfts
+        COMPONENT development
+        FILES_MATCHING PATTERN "*.h")
 
 #---------- Test -----------
-ENABLE_TESTING()
-ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)
+IF(POLYMERFTS_BUILD_TESTS)
+    ENABLE_TESTING()
+    ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/tests)
+ENDIF()
+
+#---------- CMake Config Export -----------
+INCLUDE(CMakePackageConfigHelpers)
+
+# Generate version file
+WRITE_BASIC_PACKAGE_VERSION_FILE(
+    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Generate config file
+CONFIGURE_PACKAGE_CONFIG_FILE(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/polymerfts-config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
+    INSTALL_DESTINATION lib/cmake/polymerfts
+)
+
+# Install CMake config files
+INSTALL(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/polymerfts-config-version.cmake"
+    DESTINATION lib/cmake/polymerfts
+    COMPONENT development
+)

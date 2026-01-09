@@ -1,0 +1,84 @@
+# =============================================================================
+# PolymerFTS CPU-only Docker Image
+# Multi-stage build for optimized image size
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Build stage with full conda environment
+# -----------------------------------------------------------------------------
+FROM continuumio/miniconda3:latest AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create conda environment from environment.yml
+COPY environment.yml /tmp/environment.yml
+RUN conda env create -f /tmp/environment.yml && \
+    conda clean -afy
+
+# Activate environment
+ENV PATH="/opt/conda/envs/polymerfts/bin:$PATH"
+ENV CONDA_DEFAULT_ENV=polymerfts
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Build the project
+RUN mkdir -p build && cd build && \
+    export MKLROOT=/opt/conda/envs/polymerfts && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DMKL_ROOT=/opt/conda/envs/polymerfts \
+             -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
+             -DPOLYMERFTS_USE_CUDA=OFF \
+             -DPOLYMERFTS_BUILD_TESTS=OFF && \
+    make -j$(nproc) && \
+    make install
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime stage (smaller image)
+# -----------------------------------------------------------------------------
+FROM debian:bookworm-slim AS runtime
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy conda environment from builder
+COPY --from=builder /opt/conda/envs/polymerfts /opt/conda/envs/polymerfts
+
+# Set up environment variables
+ENV PATH="/opt/conda/envs/polymerfts/bin:$PATH"
+ENV LD_LIBRARY_PATH="/opt/conda/envs/polymerfts/lib:$LD_LIBRARY_PATH"
+ENV OMP_STACKSIZE=1G
+ENV MKL_NUM_THREADS=1
+ENV OMP_NUM_THREADS=4
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash polymerfts
+USER polymerfts
+WORKDIR /home/polymerfts
+
+# Copy examples for users
+COPY --chown=polymerfts:polymerfts examples /home/polymerfts/examples
+COPY --chown=polymerfts:polymerfts tutorials /home/polymerfts/tutorials
+
+# Create workspace directory
+RUN mkdir -p /home/polymerfts/workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import polymerfts" || exit 1
+
+# Default command - show available platforms
+CMD ["python", "-c", "import polymerfts; print('PolymerFTS loaded successfully'); print('Available platforms:', polymerfts.PlatformSelector().avail_platforms())"]
+
+# Labels for metadata
+LABEL maintainer="Daeseong Yong"
+LABEL version="1.0.0"
+LABEL description="PolymerFTS - Polymer Field Theory Simulation Library (CPU-only)"
+LABEL org.opencontainers.image.source="https://github.com/yongdd/langevin-fts"

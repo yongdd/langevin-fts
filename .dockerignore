@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Compiled files
+*.o
+*.so
+*.a
+*.pyc
+*.pyo
+__pycache__/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing artifacts
+Testing/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Development files
+*.mat
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Documentation build
+docs/_build/
+docs/sphinx/_build/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker workspace (avoid recursive copy)
+docker/workspace/
+
+# Large data files
+*.h5
+*.hdf5
+*.npy
+*.npz

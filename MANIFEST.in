@@ -1,0 +1,39 @@
+# Include essential files
+include README.md
+include LICENSE
+include CLAUDE.md
+include CMakeLists.txt
+include environment.yml
+include pyproject.toml
+
+# Include CMake modules
+recursive-include cmake *.cmake *.cmake.in
+
+# Include source files
+recursive-include src *.cpp *.cu *.h *.py
+
+# Include test files
+include tests/CMakeLists.txt
+recursive-include tests *.cpp *.cu *.py
+
+# Exclude build artifacts
+prune build
+prune dist
+prune .git
+prune Testing
+prune __pycache__
+prune *.egg-info
+
+# Exclude IDE and editor files
+prune .vscode
+prune .idea
+
+# Exclude common artifacts
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.so
+global-exclude *.o
+global-exclude *.a
+global-exclude .DS_Store
+global-exclude *.mat

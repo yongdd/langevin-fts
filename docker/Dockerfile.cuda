@@ -1,0 +1,103 @@
+# =============================================================================
+# PolymerFTS CUDA Docker Image
+# Multi-stage build with NVIDIA CUDA support
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: CUDA Build stage
+# -----------------------------------------------------------------------------
+FROM nvidia/cuda:12.4-devel-ubuntu22.04 AS builder
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh
+
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Create conda environment with MKL (for CPU fallback)
+COPY environment.yml /tmp/environment.yml
+RUN conda env create -f /tmp/environment.yml && \
+    conda clean -afy
+
+# Activate environment
+ENV PATH="/opt/conda/envs/polymerfts/bin:$PATH"
+ENV CONDA_DEFAULT_ENV=polymerfts
+
+# Copy source code
+WORKDIR /app
+COPY . .
+
+# Build with CUDA and MKL support
+RUN mkdir -p build && cd build && \
+    export MKLROOT=/opt/conda/envs/polymerfts && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DMKL_ROOT=/opt/conda/envs/polymerfts \
+             -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
+             -DPOLYMERFTS_USE_CUDA=ON \
+             -DPOLYMERFTS_USE_MKL=ON \
+             -DCMAKE_CUDA_ARCHITECTURES="60;70;80;86;89;90" \
+             -DPOLYMERFTS_BUILD_TESTS=OFF && \
+    make -j$(nproc) && \
+    make install
+
+# -----------------------------------------------------------------------------
+# Stage 2: CUDA Runtime stage
+# -----------------------------------------------------------------------------
+FROM nvidia/cuda:12.4-runtime-ubuntu22.04 AS runtime
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy conda environment from builder
+COPY --from=builder /opt/conda/envs/polymerfts /opt/conda/envs/polymerfts
+
+# Set up environment variables
+ENV PATH="/opt/conda/envs/polymerfts/bin:$PATH"
+ENV LD_LIBRARY_PATH="/opt/conda/envs/polymerfts/lib:$LD_LIBRARY_PATH"
+ENV OMP_STACKSIZE=1G
+ENV MKL_NUM_THREADS=1
+ENV OMP_NUM_THREADS=4
+
+# CUDA environment
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash polymerfts
+USER polymerfts
+WORKDIR /home/polymerfts
+
+# Copy examples for users
+COPY --chown=polymerfts:polymerfts examples /home/polymerfts/examples
+COPY --chown=polymerfts:polymerfts tutorials /home/polymerfts/tutorials
+
+# Create workspace directory
+RUN mkdir -p /home/polymerfts/workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import polymerfts" || exit 1
+
+# Default command - show available platforms
+CMD ["python", "-c", "import polymerfts; print('PolymerFTS loaded successfully'); print('Available platforms:', polymerfts.PlatformSelector().avail_platforms())"]
+
+# Labels for metadata
+LABEL maintainer="Daeseong Yong"
+LABEL version="1.0.0"
+LABEL description="PolymerFTS - Polymer Field Theory Simulation Library (CUDA + MKL)"
+LABEL org.opencontainers.image.source="https://github.com/yongdd/langevin-fts"

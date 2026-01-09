@@ -1,0 +1,28 @@
+# Conda build configuration for polymerfts
+# This file defines the build matrix for different Python versions
+
+# Python versions to build for
+python:
+  - "3.11"
+  - "3.12"
+
+# Use conda-forge's global pybind11 ABI pin
+pybind11_abi:
+  - 4
+
+# NumPy version compatibility
+numpy:
+  - "2.0"
+
+# Pin channels
+channel_sources:
+  - conda-forge
+
+# Pin targets (for cross-compilation, if needed)
+# target_platform:
+#   - linux-64
+
+# MKL variant
+# Future: could add openblas variant
+# blas_impl:
+#   - mkl
