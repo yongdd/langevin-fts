@@ -1,6 +1,6 @@
 # Polymer Field Theory Simulations with Python
 
-This repository contains a library for polymer field theory simulations and their applications, such as Self-Consistent Field Theory (SCFT), Langevin Field-Theoretic Simulation (L-FTS), and Complex Langevin FTS (CL-FTS, experimental). The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers.
+This repository contains a library for polymer field theory simulations and their applications, such as Self-Consistent Field Theory (SCFT), Langevin Field-Theoretic Simulation (L-FTS), and Complex Langevin FTS (CL-FTS). The most time-consuming and common tasks in polymer field theory simulations are the computation of chain propagators, stresses, partition functions, and polymer concentrations in external fields. These routines are implemented in C++/CUDA and provided as Python classes, enabling you to write programs using Python with numerous useful libraries. This library automatically avoids redundant computations in the chain propagator calculations for branched polymers.
 
 This open-source code is distributed under the Apache License 2.0. This license is one of the permissive software licenses and has minimal restrictions.
 
@@ -39,8 +39,9 @@ On top of the above library, SCFT, L-FTS, and CL-FTS are implemented. They suppo
   * Box size determination by stress calculation (for SCFT)
   * Leimkuhler-Matthews method for updating exchange field (for L-FTS and CL-FTS)
   * Random Number Generator: PCG64 (for L-FTS and CL-FTS)
-  * Complex-valued auxiliary fields for handling the sign problem (for CL-FTS, **experimental**)
-  * Dynamical stabilization option (for CL-FTS, **experimental**)
+  * Complex-valued auxiliary fields for handling the sign problem (for CL-FTS)
+  * Dynamical stabilization option (for CL-FTS)
+  * Smearing for finite-range interactions (for CL-FTS)
 
 ## Installation
 
@@ -204,7 +205,7 @@ docker rmi polymerfts:cpu polymerfts:cuda
   + If your SCFT calculation does not converge, set "am.mix_min"=0.01 and "am.mix_init"=0.01, and reduce "am.start_error" in the parameter set.
   + The default platform is cuda for 2D and 3D, and cpu-mkl for 1D.
   + In `lfts.py`, the structure function is computed under the assumption that $\left<w({\bf k})\right>\left<\phi(-{\bf k})\right>$ is zero.
-  + In `clfts.py` (**experimental**), the fields are complex-valued and the full FFT is used for structure function calculations.
+  + In `clfts.py`, the fields are complex-valued and the full FFT is used for structure function calculations.
 + If your ultimate goal is to use deep learning boosted L-FTS, you may use the sample scripts from the DL-FTS repository (https://github.com/yongdd/deep-langevin-fts). One can easily turn on/off deep learning from the scripts.
 
 ### Validation
