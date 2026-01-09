@@ -9,7 +9,7 @@ This document provides the mathematical derivation of the pseudo-spectral method
 3. [Lattice Vectors and Metric Tensors](#3-lattice-vectors-and-metric-tensors)
 4. [Fourier Transform in Non-Orthogonal Systems](#4-fourier-transform-in-non-orthogonal-systems)
 5. [Boltzmann Weight Calculation](#5-boltzmann-weight-calculation)
-6. [Richardson Extrapolation](#6-richardson-extrapolation)
+6. [Richardson Extrapolation for 4th-Order Accuracy](#6-richardson-extrapolation-for-4th-order-accuracy)
 7. [Stress Tensor Calculation](#7-stress-tensor-calculation)
 8. [Crystal System Constraints](#8-crystal-system-constraints)
 
@@ -35,7 +35,7 @@ The initial condition is typically $q(\mathbf{r}, 0) = 1$ for a free chain end.
 
 ### 2.1 Continuous Chain Model
 
-The pseudo-spectral method solves the modified diffusion equation by operator splitting. For a small contour step $\Delta s$, we split the evolution into:
+The pseudo-spectral method solves the modified diffusion equation by operator splitting. The basic **Rasmussen-Kalosakas (RK) step** [2] for a contour step $\Delta s$ consists of:
 
 1. **Potential half-step** (real space):
    $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
@@ -47,6 +47,10 @@ The pseudo-spectral method solves the modified diffusion equation by operator sp
    $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
 
 where $\hat{q}$ denotes the Fourier transform of $q$, and $k^2 = |\mathbf{k}|^2$ is the squared magnitude of the wavevector.
+
+This symmetric splitting yields **$O(\Delta s^2)$ global accuracy**. For higher accuracy, this library applies **Richardson extrapolation** (see [Section 6](#6-richardson-extrapolation-for-4th-order-accuracy)) to achieve **$O(\Delta s^4)$ accuracy** by combining full and half steps:
+
+$$q^{n+1} = \frac{4 q(\Delta s/2, \Delta s/2) - q(\Delta s)}{3}$$
 
 ### 2.2 Discrete Chain Model
 
@@ -203,21 +207,102 @@ boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 
 ---
 
-## 6. Richardson Extrapolation
+## 6. Richardson Extrapolation for 4th-Order Accuracy
 
-To achieve higher accuracy, we use 4th-order Richardson extrapolation. This combines:
-- One full step with $\Delta s$
-- Two half-steps with $\Delta s/2$ each
+### 6.1 Rasmussen-Kalosakas (RK) Algorithm
+
+The pseudo-spectral method described in Section 2.1 is known as the **Rasmussen-Kalosakas (RK) algorithm** [2]. For the modified diffusion equation with Hamiltonian operator:
+
+$$\hat{H} = -\frac{b^2}{6}\nabla^2 + w(\mathbf{r})$$
+
+the formal solution for one step is:
+
+$$q(\mathbf{r}, s_{n+1}) = e^{-\hat{H}\Delta s} q(\mathbf{r}, s_n)$$
+
+The RK algorithm approximates this using symmetric operator splitting:
+
+$$e^{-\hat{H}\Delta s} \approx e^{-\frac{1}{2}w\Delta s} \cdot e^{\frac{b^2}{6}\nabla^2 \Delta s} \cdot e^{-\frac{1}{2}w\Delta s}$$
+
+This **symmetric Strang splitting** has several important properties:
+- The diffusion operator is applied in Fourier space (diagonal)
+- The potential operators are applied in real space (diagonal)
+- The symmetry makes the algorithm **time-reversible**
+
+### 6.2 Error Analysis of the RK Algorithm
+
+For symmetric operator splitting, the local truncation error per step is $O(\Delta s^3)$, leading to a **global error of $O(\Delta s^2)$** after $1/\Delta s$ steps.
+
+The exact propagator can be expanded as:
+
+$$q(s + \Delta s) = q(s) + \Delta s \cdot f_1 + \Delta s^2 \cdot f_2 + \Delta s^3 \cdot f_3 + O(\Delta s^4)$$
+
+The RK algorithm gives:
+
+$$q_{RK}(s + \Delta s; \Delta s) = q(s) + \Delta s \cdot f_1 + \Delta s^2 \cdot f_2 + \Delta s^3 \cdot g_3 + O(\Delta s^4)$$
+
+where $g_3 \neq f_3$ represents the leading-order error.
+
+### 6.3 Richardson Extrapolation
+
+**Richardson extrapolation** eliminates the leading-order error by combining results from different step sizes. For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:
+
+1. **Full step**: Apply RK once with step size $\Delta s$:
+   $$q_{full} = q_{RK}(s_{n+1}; \Delta s)$$
+
+2. **Half steps**: Apply RK twice with step size $\Delta s/2$:
+   $$q_{half} = q_{RK}(s_{n+1}; \Delta s/2)$$
 
 The extrapolated result is:
 
 $$q^{n+1} = \frac{4 q_{half} - q_{full}}{3}$$
 
-where:
-- $q_{full}$: result from one step with $\Delta s$
-- $q_{half}$: result from two steps with $\Delta s/2$
+### 6.4 Why 4th-Order Accuracy?
 
-This eliminates the leading-order error term, improving accuracy from $O(\Delta s^2)$ to $O(\Delta s^4)$.
+For a generic $O(\Delta s^2)$ integrator, Richardson extrapolation would yield only $O(\Delta s^3)$ accuracy. However, the RK algorithm achieves **$O(\Delta s^4)$ accuracy** due to its **time-reversibility** [6].
+
+For reversible integrators, the error expansion contains only **even powers** of $\Delta s$:
+
+$$q_{RK}(s + \Delta s; \Delta s) = q_{exact}(s + \Delta s) + c_2 \Delta s^2 + c_4 \Delta s^4 + O(\Delta s^6)$$
+
+The $O(\Delta s^3)$ term vanishes identically due to time-reversal symmetry.
+
+Applying Richardson extrapolation:
+- $q_{full}$ has error $c_2 \Delta s^2 + c_4 \Delta s^4 + O(\Delta s^6)$
+- $q_{half}$ has error $c_2 (\Delta s/2)^2 + c_4 (\Delta s/2)^4 + O(\Delta s^6) = \frac{c_2}{4}\Delta s^2 + \frac{c_4}{16}\Delta s^4 + O(\Delta s^6)$
+
+The extrapolation:
+
+$$\frac{4 q_{half} - q_{full}}{3} = q_{exact} + \frac{4 \cdot \frac{c_2}{4} - c_2}{3}\Delta s^2 + \frac{4 \cdot \frac{c_4}{16} - c_4}{3}\Delta s^4 + O(\Delta s^6)$$
+
+$$= q_{exact} + 0 \cdot \Delta s^2 - \frac{3c_4}{16}\Delta s^4 + O(\Delta s^6)$$
+
+The $O(\Delta s^2)$ error is eliminated, and because the $O(\Delta s^3)$ term was already zero, the result has **$O(\Delta s^4)$ global accuracy**.
+
+### 6.5 Computational Cost
+
+Richardson extrapolation requires **3 RK applications** per effective step:
+- 1 full step
+- 2 half steps
+
+This triples the computational cost but provides two orders of magnitude better accuracy, which is typically more efficient than reducing $\Delta s$ by a factor of 10.
+
+### 6.6 Implementation Summary
+
+For each contour step in continuous chain propagation:
+
+```
+# Full step with Δs
+q_full = RK_step(q_n, Δs)
+
+# Two half steps with Δs/2
+q_temp = RK_step(q_n, Δs/2)
+q_half = RK_step(q_temp, Δs/2)
+
+# Richardson extrapolation
+q_{n+1} = (4 * q_half - q_full) / 3
+```
+
+where `RK_step(q, ds)` implements the symmetric operator splitting from Section 2.1.
 
 ---
 
@@ -337,3 +422,5 @@ All cross-terms may be non-zero.
 4. Arora, A., Morse, D. C., Bates, F. S. & Dorfman, K. D. "Accelerating self-consistent field theory of block polymers in a variable unit cell." *J. Chem. Phys.* **146**, 244902 (2017).
 
 5. Park, S. J., Yong, D., Kim, Y. & Kim, J. U. "Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains." *J. Chem. Phys.* **150**, 234901 (2019).
+
+6. Ranjan, A., Qin, J. & Morse, D. C. "Linear response and stability of ordered phases of block copolymer melts." *Macromolecules* **41**, 942-954 (2008).
