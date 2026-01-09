@@ -106,11 +106,12 @@
     template class ClassName<double, 2>; \
     template class ClassName<double, 3>;
 
-// Future: Add float support when needed
-// #define INSTANTIATE_CLASS_ALL(ClassName) \
-//     template class ClassName<float>; \
-//     template class ClassName<double>; \
-//     template class ClassName<std::complex<float>>; \
-//     template class ClassName<std::complex<double>>;
+/* Future: Add float support when needed
+#define INSTANTIATE_CLASS_ALL(ClassName) \
+    template class ClassName<float>; \
+    template class ClassName<double>; \
+    template class ClassName<std::complex<float>>; \
+    template class ClassName<std::complex<double>>;
+*/
 
 #endif // TEMPLATE_INSTANTIATIONS_H

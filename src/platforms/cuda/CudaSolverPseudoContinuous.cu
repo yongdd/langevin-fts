@@ -47,7 +47,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_memory_usage)
+    [[maybe_unused]] bool reduce_memory_usage)
 {
     try{
         this->cb = cb;
@@ -518,7 +518,7 @@ template <typename T>
 void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
     const int STREAM,
     CuDeviceData<T> *d_q_pair, CuDeviceData<T>  *d_segment_stress,
-    std::string monomer_type, bool is_half_bond_length)
+    std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();

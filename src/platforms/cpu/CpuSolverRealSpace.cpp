@@ -505,7 +505,8 @@ void CpuSolverRealSpace::advance_propagator_1d(
     }
 }
 std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
-    double *q_1, double *q_2, std::string monomer_type, bool is_half_bond_length)
+    [[maybe_unused]] double *q_1, [[maybe_unused]] double *q_2,
+    [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try
     {

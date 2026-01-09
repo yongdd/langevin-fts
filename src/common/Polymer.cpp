@@ -354,7 +354,7 @@ void print_tree_recursive(
     int node,
     int parent,
     const std::string& prefix,
-    bool is_last,
+    [[maybe_unused]] bool is_last,
     const std::map<int, std::vector<int>>& adj_nodes,
     const std::map<std::pair<int, int>, int>& edge_to_idx,
     const std::vector<Block>& all_blocks)

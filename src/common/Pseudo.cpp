@@ -221,9 +221,6 @@ void Pseudo<T>::update_boltz_bond()
 {
     try
     {
-        const double PI = std::numbers::pi;
-        const int DIM = nx.size();
-
         if (is_all_periodic())
         {
             // Periodic BC: use recip_metric for non-orthogonal systems
@@ -246,7 +243,6 @@ void Pseudo<T>::update_boltz_bond()
 //------------------------------------------------------------------------------
 template <typename T>
 void update_boltz_bond_periodic_impl(
-    Pseudo<T>* self,
     std::map<std::string, double>& bond_lengths,
     std::map<std::string, double*>& boltz_bond,
     std::map<std::string, double*>& boltz_bond_half,
@@ -343,8 +339,8 @@ void update_boltz_bond_periodic_impl(
 template <typename T>
 void Pseudo<T>::update_boltz_bond_periodic()
 {
-    update_boltz_bond_periodic_impl(this, bond_lengths, boltz_bond, boltz_bond_half,
-                                     nx, ds, recip_metric_);
+    update_boltz_bond_periodic_impl<T>(bond_lengths, boltz_bond, boltz_bond_half,
+                                        nx, ds, recip_metric_);
 }
 
 //------------------------------------------------------------------------------
