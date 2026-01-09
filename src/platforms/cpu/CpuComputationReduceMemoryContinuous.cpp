@@ -578,7 +578,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             
             T *_phi = phi_solvent[s];
-            T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -1140,8 +1140,5 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
 }
 
 // Explicit template instantiation
-
-// template class CpuComputationReduceMemoryContinuous<float>;
-// template class CpuComputationReduceMemoryContinuous<std::complex<float>>;
-template class CpuComputationReduceMemoryContinuous<double>;
-template class CpuComputationReduceMemoryContinuous<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuComputationReduceMemoryContinuous);

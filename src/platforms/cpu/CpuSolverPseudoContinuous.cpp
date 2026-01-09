@@ -46,13 +46,13 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
         // Initialize shared components (FFT, Pseudo, etc.)
         this->init_shared(cb, molecules);
 
-        // Create exp_dw arrays for continuous chains
+        // Create exp_dw vectors for continuous chains
         const int M = cb->get_total_grid();
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw[monomer_type] = new T[M];
-            this->exp_dw_half[monomer_type] = new T[M];
+            this->exp_dw[monomer_type].resize(M);
+            this->exp_dw_half[monomer_type].resize(M);
         }
 
         this->update_laplacian_operator();
@@ -69,11 +69,7 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
 template <typename T>
 CpuSolverPseudoContinuous<T>::~CpuSolverPseudoContinuous()
 {
-    // Clean up exp_dw arrays
-    for (const auto& item : this->exp_dw)
-        delete[] item.second;
-    for (const auto& item : this->exp_dw_half)
-        delete[] item.second;
+    // exp_dw and exp_dw_half vectors are automatically cleaned up
 
     // Clean up shared components (FFT, Pseudo)
     this->cleanup_shared();
@@ -101,19 +97,21 @@ void CpuSolverPseudoContinuous<T>::update_dw(std::map<std::string, const T*> w_i
 
     for (const auto& item : w_input)
     {
-        if (this->exp_dw.find(item.first) == this->exp_dw.end())
+        if (!this->exp_dw.contains(item.first))
             throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
     }
 
     for (const auto& item : w_input)
     {
-        std::string monomer_type = item.first;
+        const std::string& monomer_type = item.first;
         const T* w = item.second;
+        std::vector<T>& exp_dw_vec = this->exp_dw[monomer_type];
+        std::vector<T>& exp_dw_half_vec = this->exp_dw_half[monomer_type];
 
         for (int i = 0; i < M; ++i)
         {
-            this->exp_dw[monomer_type][i] = std::exp(-w[i] * ds * 0.5);
-            this->exp_dw_half[monomer_type][i] = std::exp(-w[i] * ds * 0.25);
+            exp_dw_vec[i] = std::exp(-w[i] * ds * 0.5);
+            exp_dw_half_vec[i] = std::exp(-w[i] * ds * 0.25);
         }
     }
 }
@@ -139,8 +137,8 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
         std::vector<double> k_q_in1(coeff_size);
         std::vector<double> k_q_in2(coeff_size);
 
-        T* _exp_dw = this->exp_dw[monomer_type];
-        T* _exp_dw_half = this->exp_dw_half[monomer_type];
+        const T* _exp_dw = this->exp_dw[monomer_type].data();
+        const T* _exp_dw_half = this->exp_dw_half[monomer_type].data();
 
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type);
         const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type);
@@ -231,5 +229,5 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
 }
 
 // Explicit template instantiation
-template class CpuSolverPseudoContinuous<double>;
-template class CpuSolverPseudoContinuous<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuSolverPseudoContinuous);

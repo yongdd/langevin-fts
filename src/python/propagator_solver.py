@@ -38,7 +38,12 @@ Example usage:
     phi_A = solver.get_concentration("A")
 """
 
+from __future__ import annotations
+from typing import Dict, List, Optional, Tuple, Union, Any
+
 import numpy as np
+from numpy.typing import NDArray
+
 from . import _core
 
 
@@ -127,17 +132,17 @@ class PropagatorSolver:
 
     def __init__(
         self,
-        nx,
-        lx,
-        ds,
-        bond_lengths,
-        bc,
-        chain_model,
-        method,
-        platform,
-        reduce_memory_usage,
-        mask=None
-    ):
+        nx: List[int],
+        lx: List[float],
+        ds: float,
+        bond_lengths: Dict[str, float],
+        bc: List[str],
+        chain_model: str,
+        method: str,
+        platform: str,
+        reduce_memory_usage: bool,
+        mask: Optional[NDArray[np.floating]] = None
+    ) -> None:
         """Initialize the propagator solver."""
 
         # Store grid parameters
@@ -217,7 +222,12 @@ class PropagatorSolver:
         self._propagator_optimizer = None
         self._fields_set = False
 
-    def add_polymer(self, volume_fraction, blocks, grafting_points=None):
+    def add_polymer(
+        self,
+        volume_fraction: float,
+        blocks: List[List[Union[str, float, int]]],
+        grafting_points: Optional[Dict[int, str]] = None
+    ) -> None:
         """
         Add a polymer species to the system.
 
@@ -265,7 +275,7 @@ class PropagatorSolver:
             self._molecules.add_polymer(volume_fraction, blocks, grafting_points)
         self._polymers_added = True
 
-    def _initialize_solver(self):
+    def _initialize_solver(self) -> None:
         """Initialize the solver (called lazily when needed)."""
         if self._propagator_computation is not None:
             return
@@ -303,7 +313,11 @@ class PropagatorSolver:
         else:
             raise ValueError(f"Unknown method: {self.method}")
 
-    def compute_propagators(self, w_fields, q_init=None):
+    def compute_propagators(
+        self,
+        w_fields: Dict[str, NDArray[np.floating]],
+        q_init: Optional[Dict[str, NDArray[np.floating]]] = None
+    ) -> None:
         """
         Compute all chain propagators for the given potential fields.
 
@@ -357,7 +371,7 @@ class PropagatorSolver:
             self._propagator_computation.compute_propagators(w_fields)
         self._fields_set = True
 
-    def get_propagator(self, polymer, v, u, step):
+    def get_propagator(self, polymer: int, v: int, u: int, step: int) -> NDArray[np.floating]:
         """
         Get the chain propagator at a specific contour position.
 
@@ -390,7 +404,7 @@ class PropagatorSolver:
 
         return self._propagator_computation.get_chain_propagator(polymer, v, u, step)
 
-    def get_partition_function(self, polymer):
+    def get_partition_function(self, polymer: int) -> float:
         """
         Get the single-chain partition function.
 
@@ -415,7 +429,7 @@ class PropagatorSolver:
 
         return self._propagator_computation.get_total_partition(polymer)
 
-    def compute_concentrations(self):
+    def compute_concentrations(self) -> None:
         """
         Compute ensemble-averaged concentrations.
 
@@ -435,7 +449,7 @@ class PropagatorSolver:
 
         self._propagator_computation.compute_concentrations()
 
-    def get_concentration(self, monomer_type):
+    def get_concentration(self, monomer_type: str) -> NDArray[np.floating]:
         """
         Get the total concentration for a monomer type.
 
@@ -463,7 +477,7 @@ class PropagatorSolver:
 
         return self._propagator_computation.get_total_concentration(monomer_type)
 
-    def get_grid_points(self):
+    def get_grid_points(self) -> Tuple[NDArray[np.floating], ...]:
         """
         Get the coordinates of grid points.
 
@@ -498,7 +512,11 @@ class PropagatorSolver:
 
         return tuple(coords)
 
-    def gaussian_initial_condition(self, center=None, sigma=0.4):
+    def gaussian_initial_condition(
+        self,
+        center: Optional[List[float]] = None,
+        sigma: float = 0.4
+    ) -> NDArray[np.floating]:
         """
         Create a Gaussian initial condition for the propagator.
 
@@ -535,7 +553,7 @@ class PropagatorSolver:
 
         return np.exp(-r_squared / (2 * sigma**2))
 
-    def get_dv(self):
+    def get_dv(self) -> float:
         """
         Get the volume element (grid cell volume).
 
@@ -591,7 +609,7 @@ class PropagatorSolver:
 
     # -------------------- Box operations --------------------
 
-    def get_volume(self):
+    def get_volume(self) -> float:
         """
         Get the total volume of the simulation box.
 
@@ -603,7 +621,7 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.get_volume()
 
-    def integral(self, field):
+    def integral(self, field: NDArray[np.floating]) -> float:
         """
         Compute the volume integral of a field.
 
@@ -620,7 +638,11 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.integral(field)
 
-    def inner_product(self, field1, field2):
+    def inner_product(
+        self,
+        field1: NDArray[np.floating],
+        field2: NDArray[np.floating]
+    ) -> float:
         """
         Compute the inner product of two fields.
 
@@ -639,7 +661,12 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.inner_product(field1, field2)
 
-    def multi_inner_product(self, n_fields, fields1, fields2):
+    def multi_inner_product(
+        self,
+        n_fields: int,
+        fields1: NDArray[np.floating],
+        fields2: NDArray[np.floating]
+    ) -> float:
         """
         Compute the inner product of multiple field pairs.
 
@@ -660,7 +687,7 @@ class PropagatorSolver:
         self._initialize_solver()
         return self._computation_box.multi_inner_product(n_fields, fields1, fields2)
 
-    def zero_mean(self, field):
+    def zero_mean(self, field: NDArray[np.floating]) -> None:
         """
         Subtract the spatial mean from a field in-place.
 
@@ -672,7 +699,7 @@ class PropagatorSolver:
         self._initialize_solver()
         self._computation_box.zero_mean(field)
 
-    def set_lx(self, lx):
+    def set_lx(self, lx: List[float]) -> None:
         """
         Update the box dimensions.
 
@@ -685,7 +712,7 @@ class PropagatorSolver:
         self._computation_box.set_lx(lx)
         self.lx = list(lx)
 
-    def set_lattice_parameters(self, lx, angles):
+    def set_lattice_parameters(self, lx: List[float], angles: List[float]) -> None:
         """
         Update the lattice parameters (box dimensions and angles).
 
@@ -700,24 +727,24 @@ class PropagatorSolver:
         self._computation_box.set_lattice_parameters(lx, angles)
         self.lx = list(lx)
 
-    def get_lx(self):
+    def get_lx(self) -> List[float]:
         """Get current box dimensions."""
         self._initialize_solver()
         return self._computation_box.get_lx()
 
-    def get_dx(self):
+    def get_dx(self) -> List[float]:
         """Get grid spacing in each dimension."""
         self._initialize_solver()
         return self._computation_box.get_dx()
 
-    def get_angles_degrees(self):
+    def get_angles_degrees(self) -> List[float]:
         """Get lattice angles in degrees."""
         self._initialize_solver()
         return self._computation_box.get_angles_degrees()
 
     # -------------------- Stress computation --------------------
 
-    def compute_stress(self):
+    def compute_stress(self) -> None:
         """
         Compute the stress tensor for box relaxation.
 
@@ -729,7 +756,7 @@ class PropagatorSolver:
             )
         self._propagator_computation.compute_stress()
 
-    def get_stress(self):
+    def get_stress(self) -> List[float]:
         """
         Get the computed stress tensor.
 
@@ -746,7 +773,7 @@ class PropagatorSolver:
             )
         return self._propagator_computation.get_stress()
 
-    def update_laplacian_operator(self):
+    def update_laplacian_operator(self) -> None:
         """
         Update the Laplacian operator after changing box dimensions.
 
@@ -757,7 +784,7 @@ class PropagatorSolver:
 
     # -------------------- Molecule information --------------------
 
-    def get_n_polymer_types(self):
+    def get_n_polymer_types(self) -> int:
         """
         Get the number of polymer types.
 
@@ -768,7 +795,7 @@ class PropagatorSolver:
         """
         return self._molecules.get_n_polymer_types()
 
-    def get_polymer(self, polymer_id):
+    def get_polymer(self, polymer_id: int) -> Any:
         """
         Get polymer object for a specific polymer type.
 
@@ -784,7 +811,7 @@ class PropagatorSolver:
         """
         return self._molecules.get_polymer(polymer_id)
 
-    def get_model_name(self):
+    def get_model_name(self) -> str:
         """
         Get the chain model name.
 
@@ -797,7 +824,14 @@ class PropagatorSolver:
 
     # -------------------- Anderson Mixing factory --------------------
 
-    def create_anderson_mixing(self, n_var, max_hist, start_error, mix_min, mix_init):
+    def create_anderson_mixing(
+        self,
+        n_var: int,
+        max_hist: int,
+        start_error: float,
+        mix_min: float,
+        mix_init: float
+    ) -> Any:
         """
         Create an Anderson Mixing optimizer.
 

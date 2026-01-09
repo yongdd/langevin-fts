@@ -45,12 +45,12 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
         // Initialize shared components (FFT, Pseudo, etc.)
         this->init_shared(cb, molecules);
 
-        // Create exp_dw arrays for discrete chains (no exp_dw_half needed)
+        // Create exp_dw vectors for discrete chains (no exp_dw_half needed)
         const int M = cb->get_total_grid();
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw[monomer_type] = new T[M];
+            this->exp_dw[monomer_type].resize(M);
         }
 
         this->update_laplacian_operator();
@@ -67,9 +67,7 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
 template <typename T>
 CpuSolverPseudoDiscrete<T>::~CpuSolverPseudoDiscrete()
 {
-    // Clean up exp_dw arrays
-    for (const auto& item : this->exp_dw)
-        delete[] item.second;
+    // exp_dw vectors are automatically cleaned up
 
     // Clean up shared components (FFT, Pseudo)
     this->cleanup_shared();
@@ -100,17 +98,18 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
 
     for (const auto& item : w_input)
     {
-        if (this->exp_dw.find(item.first) == this->exp_dw.end())
+        if (!this->exp_dw.contains(item.first))
             throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
     }
 
     for (const auto& item : w_input)
     {
-        std::string monomer_type = item.first;
+        const std::string& monomer_type = item.first;
         const T* w = item.second;
+        std::vector<T>& exp_dw_vec = this->exp_dw[monomer_type];
 
         for (int i = 0; i < M; ++i)
-            this->exp_dw[monomer_type][i] = std::exp(-w[i] * ds);
+            exp_dw_vec[i] = std::exp(-w[i] * ds);
     }
 }
 
@@ -126,11 +125,11 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         const int M = this->cb->get_total_grid();
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
-        // For periodic BC, coefficient array is actually complex (interleaved real/imag)
+        // Use local buffer for thread safety (called from OpenMP parallel regions)
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
-        T* _exp_dw = this->exp_dw[monomer_type];
+        const T* _exp_dw = this->exp_dw[monomer_type].data();
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type);
 
         // Forward transform
@@ -152,15 +151,17 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         // Backward transform
         this->transform_backward(k_q_in.data(), q_out);
 
-        // Evaluate exp(-w*ds) in real space
-        for (int i = 0; i < M; ++i)
-            q_out[i] *= _exp_dw[i];
-
-        // Apply mask if provided
+        // Evaluate exp(-w*ds) in real space and apply mask if provided
+        // Combined into single loop to reduce memory traffic
         if (q_mask != nullptr)
         {
             for (int i = 0; i < M; ++i)
-                q_out[i] *= q_mask[i];
+                q_out[i] *= _exp_dw[i] * q_mask[i];
+        }
+        else
+        {
+            for (int i = 0; i < M; ++i)
+                q_out[i] *= _exp_dw[i];
         }
     }
     catch (std::exception& exc)
@@ -180,7 +181,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
     {
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
-        // For periodic BC, coefficient array is actually complex (interleaved real/imag)
+        // Use local buffer for thread safety (called from OpenMP parallel regions)
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
@@ -212,5 +213,5 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 }
 
 // Explicit template instantiation
-template class CpuSolverPseudoDiscrete<double>;
-template class CpuSolverPseudoDiscrete<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuSolverPseudoDiscrete);

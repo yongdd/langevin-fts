@@ -71,12 +71,12 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
 
         const int M = cb->get_total_grid();
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // Create exp_dw vectors and tridiagonal matrix coefficient arrays
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            exp_dw     [monomer_type] = new double[M];
-            exp_dw_half[monomer_type] = new double[M];
+            exp_dw     [monomer_type].resize(M);
+            exp_dw_half[monomer_type].resize(M);
 
             xl[monomer_type] = new double[M];
             xd[monomer_type] = new double[M];
@@ -100,10 +100,7 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
 }
 CpuSolverRealSpace::~CpuSolverRealSpace()
 {
-    for(const auto& item: exp_dw)
-        delete[] item.second;
-    for(const auto& item: exp_dw_half)
-        delete[] item.second;
+    // exp_dw and exp_dw_half vectors are automatically cleaned up
 
     for(const auto& item: xl)
         delete[] item.second;
@@ -164,19 +161,21 @@ void CpuSolverRealSpace::update_dw(std::map<std::string, const double*> w_input)
 
     for(const auto& item: w_input)
     {
-        if( exp_dw.find(item.first) == exp_dw.end())
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");     
+        if( !exp_dw.contains(item.first))
+            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
     }
 
     for(const auto& item: w_input)
     {
-        std::string monomer_type = item.first;
+        const std::string& monomer_type = item.first;
         const double *w = item.second;
+        std::vector<double>& exp_dw_vec = exp_dw[monomer_type];
+        std::vector<double>& exp_dw_half_vec = exp_dw_half[monomer_type];
 
         for(int i=0; i<M; i++)
-        { 
-            exp_dw     [monomer_type][i] = exp(-w[i]*ds*0.5);
-            exp_dw_half[monomer_type][i] = exp(-w[i]*ds*0.25);
+        {
+            exp_dw_vec[i] = exp(-w[i]*ds*0.5);
+            exp_dw_half_vec[i] = exp(-w[i]*ds*0.25);
         }
     }
 }
@@ -188,7 +187,7 @@ void CpuSolverRealSpace::advance_propagator(
         const int M = this->cb->get_total_grid();
         const int DIM = this->cb->get_dim();
 
-        double *_exp_dw = exp_dw[monomer_type];
+        const double *_exp_dw = exp_dw[monomer_type].data();
         double q_exp[M];
 
         // Evaluate exp(-w*ds/2) in real space

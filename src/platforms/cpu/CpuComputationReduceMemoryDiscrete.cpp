@@ -339,7 +339,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                 int n_segment_to   = std::get<2>((*parallel_job)[job]);
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
-                const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+                const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
 
                 // Display job info
                 #ifndef NDEBUG
@@ -596,7 +596,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            const T *_exp_dw         = propagator_solver->exp_dw[monomer_type];
+            const T *_exp_dw         = propagator_solver->exp_dw[monomer_type].data();
 
             this->single_polymer_partitions[p]= this->cb->inner_product_inverse_weight(
                 propagator_left, propagator_right, _exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -690,7 +690,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = phi_solvent[s];
-            T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+            T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -761,7 +761,7 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         // In this method, propagators are recalculated from the check points.
         // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
         const int M = this->cb->get_total_grid();
-        const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+        const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -1052,7 +1052,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
             {
                 // Position 0 is exp_dw for leaf propagators
                 const double *q_mask = this->cb->get_mask();
-                const T *_exp_dw = propagator_solver->exp_dw[monomer_type_left];
+                const T *_exp_dw = propagator_solver->exp_dw[monomer_type_left].data();
 
                 // Compute position 1 = advance(position 0)
                 // Use q_recal[0] for temporary storage of position 0
@@ -1268,7 +1268,7 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
         int n_propagators        = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
-        const T *_exp_dw = propagator_solver->exp_dw[monomer_type];
+        const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;
@@ -1342,8 +1342,5 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
 }
 
 // Explicit template instantiation
-
-// template class CpuComputationReduceMemoryDiscrete<float>;
-// template class CpuComputationReduceMemoryDiscrete<std::complex<float>>;
-template class CpuComputationReduceMemoryDiscrete<double>;
-template class CpuComputationReduceMemoryDiscrete<std::complex<double>>;
+#include "TemplateInstantiations.h"
+INSTANTIATE_CLASS(CpuComputationReduceMemoryDiscrete);
