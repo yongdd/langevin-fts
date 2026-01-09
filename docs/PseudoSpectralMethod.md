@@ -133,17 +133,17 @@ $$\mathbf{a}^* = \frac{2\pi}{V}(\mathbf{b} \times \mathbf{c}), \quad \mathbf{b}^
 
 These satisfy the orthonormality relation:
 
-$$\mathbf{e}_i \cdot \mathbf{e}^*_j = 2\pi \delta_{ij}$$
+$$\mathbf{e}_i \cdot \mathbf{e}_j^* = 2\pi \delta_{ij}$$
 
 ### 3.5 Reciprocal Metric Tensor
 
-The reciprocal metric tensor $G^*_{ij}$ is computed from the reciprocal lattice vectors:
+The reciprocal metric tensor $G_{ij}^*$ is computed from the reciprocal lattice vectors:
 
-$$G^*_{ij} = \mathbf{e}^*_i \cdot \mathbf{e}^*_j$$
+$$G_{ij}^* = \mathbf{e}_i^* \cdot \mathbf{e}_j^*$$
 
 For practical computation, we use the symmetric storage:
 
-$$G^* = \begin{pmatrix} G^*_{00} & G^*_{01} & G^*_{02} \\ G^*_{01} & G^*_{11} & G^*_{12} \\ G^*_{02} & G^*_{12} & G^*_{22} \end{pmatrix}$$
+$$G^* = \begin{pmatrix} G_{00}^* & G_{01}^* & G_{02}^* \\ G_{01}^* & G_{11}^* & G_{12}^* \\ G_{02}^* & G_{12}^* & G_{22}^* \end{pmatrix}$$
 
 The reciprocal metric is related to the inverse of the real-space metric:
 
@@ -165,7 +165,7 @@ where $n_i$ are integers in the range $[-N_i/2, N_i/2)$.
 
 The squared magnitude of the wavevector is computed using the reciprocal metric tensor:
 
-$$|\mathbf{k}|^2 = G^*_{ij} n_i n_j = G^*_{00} n_1^2 + G^*_{11} n_2^2 + G^*_{22} n_3^2 + 2G^*_{01} n_1 n_2 + 2G^*_{02} n_1 n_3 + 2G^*_{12} n_2 n_3$$
+$$|\mathbf{k}|^2 = G_{ij}^* n_i n_j = G_{00}^* n_1^2 + G_{11}^* n_2^2 + G_{22}^* n_3^2 + 2G_{01}^* n_1 n_2 + 2G_{02}^* n_1 n_3 + 2G_{12}^* n_2 n_3$$
 
 For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), the cross-terms vanish:
 
@@ -345,7 +345,7 @@ $$\mathcal{F}_{xy} = 2 k_x k_y, \quad \mathcal{F}_{xz} = 2 k_x k_z, \quad \mathc
 
 Here, $k_x$, $k_y$, $k_z$ are the Cartesian components of the wavevector:
 
-$$k_x = n_1 a^*_x + n_2 b^*_x + n_3 c^*_x$$
+$$k_x = n_1 a_x^* + n_2 b_x^* + n_3 c_x^*$$
 
 and similarly for $k_y$, $k_z$.
 
@@ -383,7 +383,7 @@ Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero 
 
 $$\alpha = \beta = 90°, \quad \gamma = 120°$$
 
-Cross-term $G^*_{01}$ is non-zero.
+Cross-term $G_{01}^*$ is non-zero.
 
 **Constraints:**
 - $L_a = L_b \neq L_c$ (2 independent lengths)
@@ -393,7 +393,7 @@ Cross-term $G^*_{01}$ is non-zero.
 
 $$\alpha = \gamma = 90°, \quad \beta \neq 90°$$
 
-Cross-term $G^*_{02}$ is non-zero.
+Cross-term $G_{02}^*$ is non-zero.
 
 **Constraints:**
 - $L_a$, $L_b$, $L_c$ all independent (3 lengths)
