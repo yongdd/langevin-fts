@@ -33,7 +33,9 @@ The initial condition is typically $q(\mathbf{r}, 0) = 1$ for a free chain end.
 
 ## 2. Pseudo-Spectral Method
 
-The pseudo-spectral method solves this equation by operator splitting. For a small contour step $\Delta s$, we split the evolution into:
+### 2.1 Continuous Chain Model
+
+The pseudo-spectral method solves the modified diffusion equation by operator splitting. For a small contour step $\Delta s$, we split the evolution into:
 
 1. **Potential half-step** (real space):
    $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
@@ -45,6 +47,36 @@ The pseudo-spectral method solves this equation by operator splitting. For a sma
    $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
 
 where $\hat{q}$ denotes the Fourier transform of $q$, and $k^2 = |\mathbf{k}|^2$ is the squared magnitude of the wavevector.
+
+### 2.2 Discrete Chain Model
+
+For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation. This library implements the **N-1 bond model** from Park et al. (2019).
+
+In this model:
+- A polymer chain has **N segments** connected by **N-1 bonds**
+- The contour step size is $\Delta s = 1/(N-1)$
+- The natural end-to-end distance is $R_0 = a\sqrt{N-1}$
+
+The propagator evolution from segment $s$ to $s + \Delta s$ follows:
+
+1. **Half-segment Boltzmann weight** (real space):
+   $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
+
+2. **Bond convolution** (Fourier space):
+   $$\hat{q}^{**} = \hat{g}(\mathbf{k}) \cdot \hat{q}^*$$
+
+3. **Half-segment Boltzmann weight** (real space):
+   $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
+
+where $g(\mathbf{R})$ is the bond function. For the bead-spring model:
+
+$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
+
+Its Fourier transform is:
+
+$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^2}{6}\right)$$
+
+This formulation makes the discrete chain computation as fast as the continuous chain with $O(M \log M)$ complexity per step.
 
 ---
 
@@ -303,3 +335,5 @@ All cross-terms may be non-zero.
 3. Tzeremes, G., Rasmussen, K. O., Lookman, T. & Saxena, A. "Efficient computation of the structural phase behavior of block copolymers." *Phys. Rev. E* **65**, 041806 (2002).
 
 4. Arora, A., Morse, D. C., Bates, F. S. & Dorfman, K. D. "Accelerating self-consistent field theory of block polymers in a variable unit cell." *J. Chem. Phys.* **146**, 244902 (2017).
+
+5. Park, S. J., Yong, D., Kim, Y. & Kim, J. U. "Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains." *J. Chem. Phys.* **150**, 234901 (2019).

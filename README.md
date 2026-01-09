@@ -151,6 +151,9 @@ D. Yong, and J. U. Kim, Dynamic Programming for Chain Propagator Computation of 
 
 ## References
 
+#### Discrete Chain Model
++ S. J. Park, D. Yong, Y. Kim, and J. U. Kim, Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains. *J. Chem. Phys.* **2019**, 150, 234901
+
 #### Multi-Monomer Polymer Field Theory
 + D. Morse, D. Yong, and K. Chen, Polymer Field Theory for Multimonomer Incompressible Models: Symmetric Formulation and ABC Systems. *Macromolecules* **2025**, 58, 816
 

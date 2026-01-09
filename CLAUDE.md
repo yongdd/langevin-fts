@@ -91,9 +91,10 @@ When adding new computational features, you must implement them for both platfor
 The central computational engine. Computes chain propagators using dynamic programming to avoid redundant calculations for branched polymers. The optimization strategy is described in *J. Chem. Theory Comput.* **2025**, 21, 3676.
 
 Key concepts:
-- **Chain propagators**: Solutions to modified diffusion equations representing polymer chain statistics
-- **Pseudo-spectral method**: FFT-based solver for continuous chains (4th-order Richardson extrapolation)
-- **Real-space method**: Crank-Nicolson finite difference solver (beta feature)
+- **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
+- **Continuous chains**: Pseudo-spectral method with 4th-order Richardson extrapolation solving the modified diffusion equation
+- **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
+- **Real-space method**: Crank-Nicolson finite difference solver (beta feature, continuous chains only)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -279,6 +280,7 @@ Results must match:
 
 The implementation is based on these publications:
 - Chain propagator optimization: *J. Chem. Theory Comput.* **2025**, 21, 3676
+- Discrete chain model: *J. Chem. Phys.* **2019**, 150, 234901 (Park et al.)
 - Multi-monomer theory: *Macromolecules* **2025**, 58, 816
 - L-FTS algorithm: *Polymers* **2021**, 13, 2437
 - Field update methods: *J. Chem. Phys.* **2023**, 158, 114117
