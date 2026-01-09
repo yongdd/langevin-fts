@@ -40,6 +40,17 @@ jobs:
           jupyter networkx pygments plotly nbformat \
           mkl mkl-devel mkl-include
 
+    - name: Debug MKL installation
+      shell: bash -l {0}
+      run: |
+        echo "=== CONDA_PREFIX: $CONDA_PREFIX ==="
+        echo "=== MKL files in conda environment ==="
+        ls -la $CONDA_PREFIX/lib/libmkl* 2>/dev/null | head -20 || echo "No libmkl files found"
+        echo "=== MKL include files ==="
+        ls -la $CONDA_PREFIX/include/mkl*.h 2>/dev/null | head -10 || echo "No mkl headers found"
+        echo "=== CMake MKL config ==="
+        find $CONDA_PREFIX -name "*MKL*.cmake" -o -name "*mkl*.cmake" 2>/dev/null | head -10 || echo "No MKL cmake files"
+
     - name: Configure CMake
       shell: bash -l {0}
       run: |
@@ -47,8 +58,11 @@ jobs:
         cd build
         # Set MKL environment for conda-forge MKL
         export MKLROOT=$CONDA_PREFIX
+        export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
         cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DMKL_ROOT=$CONDA_PREFIX
+          -DMKL_ROOT=$CONDA_PREFIX \
+          -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          --debug-find 2>&1 | tee cmake_output.txt | tail -100
 
     - name: Build
       shell: bash -l {0}
