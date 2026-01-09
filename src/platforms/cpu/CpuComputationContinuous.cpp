@@ -252,7 +252,7 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                 // Check key
                 #ifndef NDEBUG
-                if (!propagator.contains(key))
+                if (!this->propagator.contains(key))
                     std::cout << "Could not find key '" + key + "'. " << std::endl;
                 #endif
 
@@ -298,7 +298,7 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (!propagator.contains(sub_dep))
+                            if (!this->propagator.contains(sub_dep))
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!this->propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
@@ -327,7 +327,7 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                             // Check sub key
                             #ifndef NDEBUG
-                            if (!propagator.contains(sub_dep))
+                            if (!this->propagator.contains(sub_dep))
                                 std::cout << "Could not find sub key '" + sub_dep + "'. " << std::endl;
                             if (!this->propagator_finished[sub_dep][sub_n_segment])
                                 std::cout << "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
@@ -386,9 +386,9 @@ void CpuComputationContinuous<T>::compute_propagators(
         //     int n_segment        = std::get<3>(block.first);
 
         //     // Check keys
-        //     if (!propagator.contains(key_left))
+        //     if (!this->propagator.contains(key_left))
         //         throw_with_line_number("Could not find key_left key'" + key_left + "'. ");
-        //     if (!propagator.contains(key_right))
+        //     if (!this->propagator.contains(key_right))
         //         throw_with_line_number("Could not find key_right key'" + key_right + "'. ");
 
         //     for(int i=0; i<=n_segment; i++)
@@ -472,9 +472,9 @@ void CpuComputationContinuous<T>::compute_concentrations()
 
             // Check keys
             #ifndef NDEBUG
-            if (!propagator.contains(key_left))
+            if (!this->propagator.contains(key_left))
                 std::cout << "Could not find key_left key'" + key_left + "'. " << std::endl;
-            if (!propagator.contains(key_right))
+            if (!this->propagator.contains(key_right))
                 std::cout << "Could not find key_right key'" + key_right + "'. " << std::endl;
             #endif
 
