@@ -427,7 +427,37 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("compute_stress", &PropagatorComputation<T>::compute_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
+        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition)
+        .def("add_checkpoint", &PropagatorComputation<T>::add_checkpoint,
+            py::arg("polymer"), py::arg("v"), py::arg("u"), py::arg("n"),
+            R"doc(
+            Add a checkpoint at a specific position (memory-saving mode only).
+
+            In memory-saving mode, this method allocates storage for a propagator
+            checkpoint at the specified position. The checkpoint will be populated
+            during the next compute_propagators() call.
+
+            Parameters
+            ----------
+            polymer : int
+                Polymer index
+            v : int
+                Starting vertex of the propagator direction
+            u : int
+                Ending vertex of the propagator direction
+            n : int
+                Contour step index
+
+            Returns
+            -------
+            bool
+                True if checkpoint was added, False if it already exists
+
+            Notes
+            -----
+            In standard mode (reduce_memory_usage=False), this method has no
+            effect since all propagators are already stored.
+            )doc");
 }
 
 /**

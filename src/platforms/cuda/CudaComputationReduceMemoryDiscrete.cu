@@ -1376,6 +1376,40 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
     }
     return true;
 }
+template <typename T>
+bool CudaComputationReduceMemoryDiscrete<T>::add_checkpoint(int polymer, int v, int u, int n)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        Polymer& pc = this->molecules->get_polymer(polymer);
+        std::string key = pc.get_propagator_key(v, u);
+
+        // Validate the propagator key exists
+        if (this->propagator_computation_optimizer->get_computation_propagators().find(key) ==
+            this->propagator_computation_optimizer->get_computation_propagators().end())
+            throw_with_line_number("Could not find the propagator code '" + key + "'.");
+
+        // Validate n is within range (discrete chains use 1-indexed segments)
+        const int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
+        if (n < 1 || n > max_n_segment)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(max_n_segment) + "]");
+
+        // Check if checkpoint already exists
+        if (propagator_at_check_point.find(std::make_tuple(key, n)) != propagator_at_check_point.end())
+            return false;  // Checkpoint already exists
+
+        // Allocate pinned memory for the new checkpoint
+        propagator_at_check_point[std::make_tuple(key, n)] = nullptr;
+        gpu_error_check(cudaMallocHost((void**)&propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
+
+        return true;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
 
 // Explicit template instantiation
 template class CudaComputationReduceMemoryDiscrete<double>;

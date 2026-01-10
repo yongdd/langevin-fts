@@ -113,40 +113,62 @@ System RAM (Reduced):
 
 ### CPU-MKL Benchmark Results
 
-**Test Configuration**: Various polymer architectures, $32^3$ grid
+**Test Configuration**: Various polymer architectures, $32^3$ grid, single thread
 
-| Architecture | Blocks | Std Time | Red Time | Slowdown |
-|-------------|--------|----------|----------|----------|
-| Diblock (AB) | 2 | 1.51s | 4.71s | 3.1x |
-| Triblock (ABA) | 3 | 1.37s | 3.09s | 2.3x |
-| 3-arm Star | 6 | 0.98s | 1.74s | 1.8x |
-| 9-arm Star | 18 | 0.48s | 0.73s | 1.5x |
-| Bottle Brush (10 SC) | 22 | 3.43s | 8.65s | 2.5x |
-| Bottle Brush (20 SC) | 42 | 5.09s | 10.95s | 2.2x |
+**Continuous Chain Model**:
 
-**Larger grid (Bottle Brush 20 SC)**:
+| Architecture | Std Time | Red Time | Slowdown |
+|-------------|----------|----------|----------|
+| Diblock (N=40) | 0.087s | 0.155s | 1.79x |
+| Diblock (N=100) | 0.214s | 0.414s | 1.93x |
+| Triblock (ABA) | 0.065s | 0.148s | 2.28x |
+| 9-arm Star | 0.213s | 0.412s | 1.93x |
+| Bottle Brush (10 SC) | 0.364s | 0.663s | 1.82x |
+| Bottle Brush (20 SC) | 0.414s | 0.686s | 1.66x |
 
-| Grid | Std RAM | Red RAM | RAM Saved | Slowdown |
-|------|---------|---------|-----------|----------|
-| $48^3$ | 106 MB  | 75 MB   | 31 MB     | 1.9x     |
+**Discrete Chain Model**:
+
+| Architecture | Std Time | Red Time | Slowdown |
+|-------------|----------|----------|----------|
+| Diblock (N=40) | 0.028s | 0.049s | 1.72x |
+| Diblock (N=100) | 0.071s | 0.130s | 1.84x |
+| Triblock (ABA) | 0.023s | 0.047s | 2.10x |
+| 9-arm Star | 0.072s | 0.131s | 1.82x |
+| Bottle Brush (10 SC) | 0.156s | 0.231s | 1.48x |
+| Bottle Brush (20 SC) | 0.204s | 0.271s | 1.33x |
 
 **Key observations**:
-- Memory savings visible for larger grids
-- Slowdown varies by architecture (1.5x - 3.1x)
-- Star polymers benefit from propagator aggregation optimization
+- Slowdown varies by architecture (1.33x - 2.3x)
+- Bottle brush polymers show lower slowdown (1.33-1.82x) due to block-based computation
+- Discrete chains are generally faster than continuous chains
+
+### CPU-MKL Memory Usage
+
+**Test Configuration**: Bottle Brush polymer (20 side chains, 42 blocks), discrete chain model
+
+| Grid | Standard | Reduced | Saved |
+|------|----------|---------|-------|
+| $32^3$ | 127 MB | 75 MB | 52 MB (41%) |
+| $48^3$ | 427 MB | 252 MB | 175 MB (41%) |
+| $64^3$ | 1011 MB | 598 MB | 413 MB (41%) |
+
+**Key observations**:
+- Memory reduced by **~40%** in memory-saving mode
+- Memory scales linearly with grid size ($M$)
+- Checkpoints stored at $\sqrt{N}$ intervals reduce propagator storage
 
 ## Performance by Polymer Architecture
 
 The slowdown in memory-saving mode varies with polymer architecture:
 
-| Architecture Type | Typical Slowdown | Notes |
-|-------------------|------------------|-------|
-| Linear chains | 3-4x | No propagator reuse |
-| Star polymers | 1.5-2x | Propagator aggregation reduces recomputation |
-| Bottle brush | 2-3x | Mixed linear and branched characteristics |
-| Dendritic | 1.5-2.5x | High propagator reuse at junctions |
+| Architecture Type | Continuous | Discrete | Notes |
+|-------------------|------------|----------|-------|
+| Linear chains (diblock) | 1.8-1.9x | 1.7-1.8x | Block-based recomputation |
+| Triblock | 2.3x | 2.1x | Multiple blocks increase recomputation |
+| Star polymers | 1.9x | 1.8x | Symmetric architecture |
+| Bottle brush | 1.7-1.8x | 1.3-1.5x | Many junctions with shared checkpoints |
 
-**Why star polymers are faster**: The propagator computation optimizer detects equivalent propagator calculations in symmetric architectures and computes them only once. In memory-saving mode, this means fewer checkpoints and less recomputation.
+**Why bottle brush polymers show lower slowdown**: Bottle brush polymers have many junction points that share checkpoints. The block-based computation algorithm efficiently reuses these checkpoints, minimizing redundant recomputation.
 
 ## Choosing the Right Mode
 
@@ -186,6 +208,54 @@ $$\text{Host Memory} \approx N_{\text{checkpoints}} \times M_{\text{grid}} \time
 
 where $N_{\text{checkpoints}} \approx 2\text{-}5$ per propagator (endpoints + junctions).
 
+## Manual Checkpoint Management
+
+In memory-saving mode, you can manually add checkpoints at specific propagator positions using the `add_checkpoint()` method. This is useful when you need to access propagator values at specific contour positions using `get_chain_propagator()`.
+
+### API Usage
+
+```python
+from polymerfts.propagator_solver import PropagatorSolver
+
+# Create solver with memory-saving mode
+solver = PropagatorSolver(
+    nx=[64, 64, 64], lx=[4.0, 4.0, 4.0],
+    ds=0.01, bond_lengths={'A': 1.0, 'B': 1.0},
+    bc=['periodic']*6,
+    chain_model='continuous', method='pseudospectral',
+    platform='cpu-mkl', reduce_memory_usage=True
+)
+
+solver.add_polymer(1.0, [['A', 0.5, 0, 1], ['B', 0.5, 1, 2]])
+
+# Add a checkpoint at step 30 for the first block's propagator
+# This must be called BEFORE compute_propagators()
+success = solver.add_checkpoint(polymer=0, v=0, u=1, n=30)
+# Returns True if checkpoint was added, False if it already exists
+
+# Now compute propagators - checkpoint at n=30 will be stored
+solver.compute_propagators({'A': w_A, 'B': w_B})
+
+# Access the propagator at checkpoint position
+q_30 = solver.get_propagator(polymer=0, v=0, u=1, step=30)
+```
+
+### Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `polymer` | Polymer index (0-based) |
+| `v` | Starting vertex of the propagator direction |
+| `u` | Ending vertex of the propagator direction |
+| `n` | Contour step index (0 to n_segment for continuous, 1 to n_segment for discrete) |
+
+### Notes
+
+- **Call before `compute_propagators()`**: Checkpoints must be added before computing propagators
+- **Standard mode**: Returns `False` in standard mode (checkpoints not needed)
+- **Duplicate checkpoints**: Returns `False` if checkpoint already exists at that position
+- **Memory cost**: Each checkpoint uses $M \times 8$ bytes (one grid array)
+
 ## Technical Implementation Details
 
 ### Checkpointing Algorithm
@@ -194,14 +264,30 @@ The checkpointing algorithm stores propagators only at strategic positions and r
 
 1. **During propagator computation**:
    - Compute propagator step by step: $q(\mathbf{r}, s+\Delta s) = \Gamma[q(\mathbf{r}, s)]$
-   - Store only at checkpoint positions (segment 1, $N$, and junctions)
+   - Store at checkpoint positions: segment 1, $N$, junctions, and every $\sqrt{N}$ steps
    - Discard intermediate values
 
-2. **During concentration calculation**:
-   - Load propagator from nearest checkpoint
-   - Recompute forward to required position
-   - Compute concentration contribution: $\phi(\mathbf{r}) \propto q(\mathbf{r}, s) \cdot q^\dagger(\mathbf{r}, N-s)$
-   - Repeat for each segment
+2. **During concentration calculation** (block-based algorithm):
+   - Divide the computation into blocks of size $k = \lceil\sqrt{N}\rceil$
+   - For each block:
+     - Load the left propagator from the nearest checkpoint
+     - Recompute forward to required positions within the block
+     - Advance the right propagator step by step
+     - Accumulate concentration contributions: $\phi(\mathbf{r}) \propto q(\mathbf{r}, s) \cdot q^\dagger(\mathbf{r}, N-s)$
+   - This reduces redundant recomputation by processing contiguous ranges
+
+### Block-Based Computation
+
+The concentration calculation requires products of forward and backward propagators:
+$$\phi(\mathbf{r}) = \sum_{n=0}^{N} c_n \cdot q(\mathbf{r}, n) \cdot q^\dagger(\mathbf{r}, N-n)$$
+
+Instead of recomputing all $q$ values at once, the block-based algorithm:
+1. Divides $n$ into blocks of size $\sqrt{N}$
+2. For each block, loads the nearest checkpoint for $q$
+3. Recomputes only the positions needed for that block
+4. Advances $q^\dagger$ continuously using ping-pong buffers
+
+This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing redundant computation.
 
 ### CUDA-Specific Optimizations
 
@@ -211,8 +297,9 @@ The checkpointing algorithm stores propagators only at strategic positions and r
 
 ### CPU-MKL-Specific Details
 
+- **Block-based computation**: Processes concentration in blocks of $\sqrt{N}$ for efficient checkpoint reuse
+- **$\sqrt{N}$ checkpoints**: Stores checkpoints at every $\sqrt{N}$ steps in addition to junctions
 - **Single-threaded recomputation**: Minimizes memory during checkpoint reconstruction
-- **Same algorithm**: Identical checkpointing strategy as CUDA version
 - **MKL FFT**: Intel-optimized FFT for spectral operations
 
 ## Troubleshooting
@@ -241,14 +328,8 @@ In debug builds, look for these messages:
 
 ## References
 
-1. G. H. Fredrickson, **"Equilibrium Theory of Inhomogeneous Polymers"**, Oxford University Press, 2006.
+1. J. He and Q. Wang, **"PSCF+: An Extended and Improved Open-Source Software Package for Polymer Self-Consistent Field Calculations"**, *Journal of Chemical Theory and Computation*, **2025**, 21, 9879-9889.
    - [SavMem.pdf](https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf): Detailed mathematical derivation of optimal checkpoint placement for memory-saving algorithm.
 
-2. D. Yong and J. U. Kim, **"Accelerating Langevin Field-Theoretic Simulation of Polymers with Deep Learning"**, *Journal of Chemical Theory and Computation*, **2025**, 21, 3676-3689.
-   - Propagator computation optimization for branched polymers.
-
-3. S. M. Park, Y. O. Lee, and G. H. Fredrickson, **"Parallel Algorithm for Numerical Self-Consistent Field Theory Simulations of Block Copolymer Structure"**, *Journal of Chemical Physics*, **2019**, 150, 234901.
-   - Discrete chain model (N-1 bond model) implementation.
-
-4. D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, **"Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces"**, *Macromolecules*, **2021**, 54, 11304-11317.
+2. D. Yong, Y. Kim, S. Jo, D. Y. Ryu, and J. U. Kim, **"Order-to-Disorder Transition of Cylinder-Forming Block Copolymer Films Confined within Neutral Interfaces"**, *Macromolecules*, **2021**, 54, 11304-11317.
    - CUDA implementation with memory optimization techniques.

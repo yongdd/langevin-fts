@@ -142,6 +142,28 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
     return stress;
 }
 
+/**
+ * @brief Default implementation of add_checkpoint (no-op).
+ *
+ * In standard mode, all propagators are stored, so manual checkpoints
+ * are not needed. This default implementation returns false.
+ *
+ * Memory-saving implementations override this to allocate checkpoint storage.
+ *
+ * @param polymer Polymer index
+ * @param v       Starting vertex
+ * @param u       Ending vertex
+ * @param n       Contour step index
+ * @return false (default: no checkpoint added)
+ */
+template <typename T>
+bool PropagatorComputation<T>::add_checkpoint(int polymer, int v, int u, int n)
+{
+    // Default implementation: no-op for standard mode
+    // Memory-saving implementations override this method
+    return false;
+}
+
 // Explicit template instantiation
 template class PropagatorComputation<double>;
 template class PropagatorComputation<std::complex<double>>;

@@ -350,5 +350,37 @@ public:
      */
     virtual bool check_total_partition() = 0;
 
+    /**
+     * @brief Add a checkpoint at a specific position (memory-saving mode only).
+     *
+     * In memory-saving mode, this method allocates storage for a propagator
+     * checkpoint at the specified position. The checkpoint will be populated
+     * during the next compute_propagators() call.
+     *
+     * @param polymer Polymer index
+     * @param v       Starting vertex of the propagator direction
+     * @param u       Ending vertex of the propagator direction
+     * @param n       Contour step index (1 to n_segment)
+     *
+     * @return true if checkpoint was added, false if it already exists or
+     *         if the implementation doesn't support manual checkpoints
+     *
+     * @note In standard mode (reduce_memory_usage=false), this method has no
+     *       effect since all propagators are already stored.
+     *
+     * @example
+     * @code
+     * // Add checkpoint at step 50 for propagator from vertex 0 to vertex 1
+     * solver->add_checkpoint(0, 0, 1, 50);
+     *
+     * // Compute propagators - checkpoint will be populated
+     * solver->compute_propagators(w_fields);
+     *
+     * // Now get_chain_propagator can retrieve step 50
+     * solver->get_chain_propagator(q_out, 0, 0, 1, 50);
+     * @endcode
+     */
+    virtual bool add_checkpoint(int polymer, int v, int u, int n);
+
 };
 #endif

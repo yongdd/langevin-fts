@@ -103,10 +103,6 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             if(propagator_at_check_point.find(std::make_tuple(key, 0)) == propagator_at_check_point.end())
                 propagator_at_check_point[std::make_tuple(key, 0)] = new T[M];
 
-            // Add 'max_n_segment' to pass the tests
-            if(propagator_at_check_point.find(std::make_tuple(key, max_n_segment)) == propagator_at_check_point.end())
-                propagator_at_check_point[std::make_tuple(key, max_n_segment)] = new T[M];
-
             for(size_t d=0; d<deps.size(); d++)
             {
                 std::string sub_dep = std::get<0>(deps[d]);
@@ -138,11 +134,48 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
             total_max_n_segment = std::max(total_max_n_segment, n_segment_right);
         }
-        this->q_recal.resize(total_max_n_segment+1);
-        for(int n=0; n<=total_max_n_segment; n++)
+
+        // Calculate checkpoint interval as sqrt(N) for optimal memory-computation tradeoff
+        checkpoint_interval = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(total_max_n_segment))));
+        if (checkpoint_interval < 1)
+            checkpoint_interval = 1;
+
+        #ifndef NDEBUG
+        std::cout << "total_max_n_segment: " << total_max_n_segment << std::endl;
+        std::cout << "checkpoint_interval: " << checkpoint_interval << std::endl;
+        #endif
+
+        // Allocate workspace for propagator recomputation
+        // For calculate_phi_one_block(): we use block-based computation needing only O(sqrt(N)) workspace
+        // For recalcaulte_propagator() used by compute_stress() and check_total_partition():
+        //   These need to access all positions simultaneously, requiring O(N) workspace
+        // We allocate total_max_n_segment + 3 to handle all cases
+        // Layout: [0-1] ping-pong buffers for calculate_phi_one_block, [2..] storage
+        const int workspace_size = total_max_n_segment + 3;
+        this->q_recal.resize(workspace_size);
+        for(int n=0; n<workspace_size; n++)
             this->q_recal[n] = new T[M];
         this->q_pair[0] = new T[M];
         this->q_pair[1] = new T[M];
+
+        // Allocate checkpoints at sqrt(N) intervals for each propagator
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
+        {
+            std::string key = item.first;
+            int max_n_segment = item.second.max_n_segment;
+
+            // Add checkpoints at sqrt(N) intervals
+            for(int n=checkpoint_interval; n<max_n_segment; n+=checkpoint_interval)
+            {
+                if(propagator_at_check_point.find(std::make_tuple(key, n)) == propagator_at_check_point.end())
+                {
+                    propagator_at_check_point[std::make_tuple(key, n)] = new T[M];
+                    #ifndef NDEBUG
+                    std::cout << "Allocated checkpoint, " + key + ", " << n << std::endl;
+                    #endif
+                }
+            }
+        }
 
         // Remember one segment for each polymer chain to compute total partition function
         int current_p = 0;
@@ -206,7 +239,9 @@ CpuComputationReduceMemoryContinuous<T>::~CpuComputationReduceMemoryContinuous()
     delete propagator_solver;
     delete sc;
 
-    for(int n=0; n<=total_max_n_segment; n++)
+    // Free workspace (total_max_n_segment + 3)
+    const int workspace_size = total_max_n_segment + 3;
+    for(int n=0; n<workspace_size; n++)
         delete[] this->q_recal[n];
 
     delete[] this->q_pair[0];
@@ -217,7 +252,7 @@ CpuComputationReduceMemoryContinuous<T>::~CpuComputationReduceMemoryContinuous()
     for(const auto& item: phi_block)
         delete[] item.second;
     for(const auto& item: phi_solvent)
-        delete[] item; 
+        delete[] item;
 
     #ifndef NDEBUG
     for(const auto& item: propagator_finished)
@@ -594,34 +629,86 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
 template <typename T>
 std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type)
 {
-    // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
+    // Recompute propagators from checkpoints for positions [N_START, N_START+N_RIGHT].
+    // This function returns pointers where:
+    //   - Checkpoint positions point to stored checkpoint arrays
+    //   - Non-checkpoint positions point to q_recal workspace
+    // Note: This function stores all values in q_recal sequentially without resetting,
+    // so callers can access all positions simultaneously.
+    // IMPORTANT: q_recal must be large enough to hold all non-checkpoint positions
+    // between N_START and N_START+N_RIGHT. With checkpoints at sqrt(N) intervals,
+    // there are at most sqrt(N) non-checkpoint positions per interval.
     try
     {
-        // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
 
-        // An array of pointers for q_out (use dynamic container to avoid VLA/stack overflow)
-        std::vector<T*> q_out(total_max_n_segment + 1);
+        // Output array of pointers (will contain mix of checkpoint pointers and q_recal pointers)
+        std::vector<T*> q_out(N_RIGHT + 1, nullptr);
 
-        // Compute the q_out
+        // First pass: link all checkpoint positions
         for(int n=0; n<=N_RIGHT; n++)
         {
-            // Use propagator_at_check_point if exists
             auto it = propagator_at_check_point.find(std::make_tuple(key, N_START+n));
             if(it != propagator_at_check_point.end())
             {
                 q_out[n] = it->second;
                 #ifndef NDEBUG
-                std::cout << "Use propagator_at_check_point if exists: (phi, left) " << key << ", " << N_START+n << std::endl;
+                std::cout << "recalculate_propagator: checkpoint at " << key << "[" << N_START+n << "]" << std::endl;
                 #endif
             }
-            // Assign q_recal memory space, and compute the next propagator from the check point
-            else if (n > 0)
+        }
+
+        // Find the first checkpoint
+        int prev_checkpoint = -1;
+        for(int n=0; n<=N_RIGHT; n++)
+        {
+            if(q_out[n] != nullptr)
             {
-                q_out[n] = this->q_recal[n];
-                propagator_solver->advance_propagator(q_out[n-1], q_out[n], monomer_type, q_mask);
+                prev_checkpoint = n;
+                break;
             }
         }
+
+        if(prev_checkpoint < 0)
+        {
+            throw_with_line_number("No checkpoint found for key " + key);
+        }
+
+        // Second pass: compute non-checkpoint positions sequentially
+        // Use indices 2 onwards for storage (0-1 reserved for calculate_phi_one_block)
+        // DO NOT reset ws_idx at checkpoints to avoid aliasing issues
+        T* q_prev = q_out[prev_checkpoint];
+        int ws_idx = 2;
+
+        for(int n = prev_checkpoint + 1; n <= N_RIGHT; n++)
+        {
+            if(q_out[n] != nullptr)
+            {
+                // This is a checkpoint, use it as new starting point
+                q_prev = q_out[n];
+                // DO NOT reset ws_idx - continue using new workspace slots
+            }
+            else
+            {
+                // Compute and store in workspace
+                if(ws_idx >= static_cast<int>(q_recal.size()))
+                {
+                    // Workspace full - this shouldn't happen if checkpoints are at sqrt(N) intervals
+                    // With checkpoints every k steps, we have at most k-1 non-checkpoint positions
+                    // per interval. Over N steps, we have at most N non-checkpoint positions total.
+                    // But with sqrt(N) checkpoints, we only have ~sqrt(N) non-checkpoint positions
+                    // between consecutive checkpoints.
+                    throw_with_line_number("Workspace overflow in recalcaulte_propagator at ws_idx=" +
+                        std::to_string(ws_idx) + " (size=" + std::to_string(q_recal.size()) + "). " +
+                        "N_RIGHT=" + std::to_string(N_RIGHT) + ", n=" + std::to_string(n) + ".");
+                }
+                propagator_solver->advance_propagator(q_prev, q_recal[ws_idx], monomer_type, q_mask);
+                q_out[n] = q_recal[ws_idx];
+                q_prev = q_recal[ws_idx];
+                ws_idx++;
+            }
+        }
+
         return q_out;
     }
     catch(std::exception& exc)
@@ -631,56 +718,182 @@ std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(
 }
 template <typename T>
 void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
-    T *phi, 
+    T *phi,
     std::string key_left, std::string key_right,
-    const int N_LEFT, const int N_RIGHT, 
+    const int N_LEFT, const int N_RIGHT,
     std::string monomer_type)
 {
     try
     {
-        // In this method, propagators are recalculcated from the check points.
-        // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
+        // Block-based computation to minimize memory usage.
+        // For n in [n_start, n_end], q_left positions [N_LEFT - n_end, N_LEFT - n_start] form a forward range.
+        // We process in blocks of size checkpoint_interval, recomputing q_left from nearest checkpoint.
+        //
+        // q_recal layout: [0-1] ping-pong buffers for intermediate steps, [2..] storage for needed positions
+
         const int M = this->cb->get_total_grid();
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
 
-        // Recalcaulte q_left from the check point
-        std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
-
-        // Pointers for q_right
-        T *q_prev = nullptr;
-        T *q_next = nullptr;
-        int prev = 0;
-        int next = 1;
-
-        // Compute the q_right and segment concentration
+        // Initialize phi to zero
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
-        for(int n=0; n<=N_RIGHT; n++)
+
+        // Number of blocks
+        const int k = checkpoint_interval;
+        const int num_blocks = (N_RIGHT + k) / k;
+
+        // Pointers for q_right (ping-pong)
+        T *q_right_prev = nullptr;
+        T *q_right_curr = nullptr;
+        int right_prev_idx = 0;
+        int right_next_idx = 1;
+
+        // Current position of q_right
+        int current_n_right = -1;
+
+        // Process each block
+        for(int block = 0; block < num_blocks; block++)
         {
-            // Use propagator_at_check_point if exists
-            auto it = propagator_at_check_point.find(std::make_tuple(key_right, n));
-            if(it != propagator_at_check_point.end())
+            const int n_start = block * k;
+            const int n_end = std::min((block + 1) * k, N_RIGHT + 1) - 1;  // inclusive
+
+            // q_left positions needed: [N_LEFT - n_end, N_LEFT - n_start] (forward range)
+            const int left_start = N_LEFT - n_end;    // First position needed
+            const int left_end = N_LEFT - n_start;    // Last position needed
+
+            // Find checkpoint at or before left_start
+            int check_pos = 0;  // Start with 0 (always exists)
+            for(int cp = checkpoint_interval; cp <= left_start; cp += checkpoint_interval)
             {
-                q_next = it->second;
-                #ifndef NDEBUG
-                std::cout << "Use propagator_at_check_point if exists: (phi, right) " << key_right << ", " <<  n << std::endl;
-                #endif
+                if(propagator_at_check_point.find(std::make_tuple(key_left, cp)) != propagator_at_check_point.end())
+                    check_pos = cp;
             }
-            // Assign this->q_pair memory space, and compute the next propagator from the check point
-            else if (n > 0)
+
+            #ifndef NDEBUG
+            std::cout << "Block " << block << ": n=[" << n_start << "," << n_end << "], "
+                      << "left=[" << left_start << "," << left_end << "], check_pos=" << check_pos << std::endl;
+            #endif
+
+            // Recompute q_left from check_pos to left_end using q_recal workspace
+            // Steps before left_start use ping-pong [0-1], steps at/after left_start use storage [2+]
+            const int steps_before = left_start - check_pos;  // Steps before we start storing
+            const int storage_count = left_end - left_start + 1;  // Number of values to store
+
+            // Load checkpoint
+            T* q_checkpoint = propagator_at_check_point[std::make_tuple(key_left, check_pos)];
+            T* q_prev;
+            T* q_curr;
+
+            if(steps_before == 0)
             {
-                q_next = this->q_pair[prev];
-                propagator_solver->advance_propagator(q_prev, q_next, monomer_type, q_mask);
-                std::swap(prev, next);
+                // Checkpoint is exactly at left_start, store directly
+                for(int i=0; i<M; i++)
+                    q_recal[2][i] = q_checkpoint[i];
+                q_prev = q_recal[2];
             }
-            for(int i=0; i<M; i++)
-                phi[i] += simpson_rule_coeff[n]*q_left[N_RIGHT-n][i]*q_next[i];
-            
-            q_prev = q_next;
-            q_next = nullptr;
+            else
+            {
+                // Start ping-pong from checkpoint
+                for(int i=0; i<M; i++)
+                    q_recal[0][i] = q_checkpoint[i];
+                q_prev = q_recal[0];
+                int ping_pong = 1;
+
+                // Compute steps before left_start using ping-pong
+                for(int step = 1; step < steps_before; step++)
+                {
+                    int actual_pos = check_pos + step;
+                    q_curr = q_recal[ping_pong];
+
+                    auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                    if(it != propagator_at_check_point.end())
+                    {
+                        for(int i=0; i<M; i++)
+                            q_curr[i] = it->second[i];
+                    }
+                    else
+                    {
+                        propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                    }
+                    q_prev = q_curr;
+                    ping_pong = 1 - ping_pong;
+                }
+
+                // Compute the step that reaches left_start, store in q_recal[2]
+                int actual_pos = check_pos + steps_before;
+                auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                if(it != propagator_at_check_point.end())
+                {
+                    for(int i=0; i<M; i++)
+                        q_recal[2][i] = it->second[i];
+                }
+                else
+                {
+                    propagator_solver->advance_propagator(q_prev, q_recal[2], monomer_type, q_mask);
+                }
+                q_prev = q_recal[2];
+            }
+
+            // Compute remaining positions [left_start+1, left_end] and store in q_recal[3+]
+            for(int idx = 1; idx < storage_count; idx++)
+            {
+                int actual_pos = left_start + idx;
+                q_curr = q_recal[2 + idx];
+
+                auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                if(it != propagator_at_check_point.end())
+                {
+                    for(int i=0; i<M; i++)
+                        q_curr[i] = it->second[i];
+                }
+                else
+                {
+                    propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                }
+                q_prev = q_curr;
+            }
+
+            // Now q_recal[2 + idx] contains q_left[left_start + idx] for idx in [0, storage_count-1]
+            // So q_recal[2 + (pos - left_start)] = q_left[pos] for pos in [left_start, left_end]
+
+            // Process each n in [n_start, n_end]
+            for(int n = n_start; n <= n_end; n++)
+            {
+                // Get q_right[n]
+                auto it_right = propagator_at_check_point.find(std::make_tuple(key_right, n));
+                if(it_right != propagator_at_check_point.end())
+                {
+                    q_right_curr = it_right->second;
+                    q_right_prev = q_right_curr;
+                    current_n_right = n;
+                }
+                else
+                {
+                    // Advance from current position to n
+                    while(current_n_right < n)
+                    {
+                        T* q_out = this->q_pair[right_next_idx];
+                        propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                        q_right_prev = q_out;
+                        q_right_curr = q_out;
+                        std::swap(right_prev_idx, right_next_idx);
+                        current_n_right++;
+                    }
+                }
+
+                // Get q_left[N_LEFT - n]
+                // Position: N_LEFT - n, which is in range [left_start, left_end]
+                int left_pos = N_LEFT - n;
+                int storage_idx = 2 + (left_pos - left_start);
+                T* q_left_n = q_recal[storage_idx];
+
+                // Accumulate phi
+                for(int i=0; i<M; i++)
+                    phi[i] += simpson_rule_coeff[n] * q_left_n[i] * q_right_curr[i];
+            }
         }
     }
     catch(std::exception& exc)
@@ -1027,12 +1240,26 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
-        if (propagator_at_check_point.find(std::make_tuple(dep, n)) == propagator_at_check_point.end())
-            throw_with_line_number("The propagator " + dep + "[" + std::to_string(n) + "] is not stored'. Disable 'reduce_memory_usage' option to obtain propagator_computation_optimizer.");
+        // Check if the requested segment is at a checkpoint
+        auto checkpoint_key = std::make_tuple(dep, n);
+        if (propagator_at_check_point.find(checkpoint_key) != propagator_at_check_point.end())
+        {
+            // Directly copy from checkpoint
+            T *_q_from = propagator_at_check_point[checkpoint_key];
+            for(int i=0; i<M; i++)
+                q_out[i] = _q_from[i];
+        }
+        else
+        {
+            // Need to recalculate from nearest checkpoint
+            std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
+            std::vector<T*> q_recalc = recalcaulte_propagator(dep, 0, n, monomer_type);
 
-        T *_q_from = propagator_at_check_point[std::make_tuple(dep, n)];
-        for(int i=0; i<M; i++)
-            q_out[i] = _q_from[i];
+            // q_recalc[n] corresponds to segment n
+            T* _propagator = q_recalc[n];
+            for(int i=0; i<M; i++)
+                q_out[i] = _propagator[i];
+        }
     }
     catch(std::exception& exc)
     {
@@ -1137,6 +1364,49 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
             return false;
     }
     return true;
+}
+template <typename T>
+bool CpuComputationReduceMemoryContinuous<T>::add_checkpoint(int polymer, int v, int u, int n)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        Polymer& pc = this->molecules->get_polymer(polymer);
+        std::string key = pc.get_propagator_key(v, u);
+
+        // Check if the propagator key exists
+        if (this->propagator_computation_optimizer->get_computation_propagators().find(key) ==
+            this->propagator_computation_optimizer->get_computation_propagators().end())
+        {
+            throw_with_line_number("Could not find the propagator code '" + key + "'.");
+        }
+
+        // Check if n is in valid range
+        const int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
+        if (n < 0 || n > max_n_segment)
+        {
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(max_n_segment) + "]");
+        }
+
+        // Check if checkpoint already exists
+        if (propagator_at_check_point.find(std::make_tuple(key, n)) != propagator_at_check_point.end())
+        {
+            return false;  // Checkpoint already exists
+        }
+
+        // Allocate new checkpoint
+        propagator_at_check_point[std::make_tuple(key, n)] = new T[M];
+
+        #ifndef NDEBUG
+        std::cout << "Added checkpoint: " << key << "[" << n << "]" << std::endl;
+        #endif
+
+        return true;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }
 
 // Explicit template instantiation

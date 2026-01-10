@@ -429,6 +429,60 @@ class PropagatorSolver:
 
         return self._propagator_computation.get_total_partition(polymer)
 
+    def add_checkpoint(self, polymer: int, v: int, u: int, n: int) -> bool:
+        """
+        Add a checkpoint at a specific propagator position (memory-saving mode only).
+
+        In memory-saving mode, propagators are not stored at every contour step.
+        Instead, only checkpoints (at sqrt(N) intervals) are stored, and intermediate
+        values are recomputed when needed. This method allows manually adding
+        additional checkpoints to reduce recomputation cost for frequently accessed
+        propagator positions.
+
+        Parameters
+        ----------
+        polymer : int
+            Polymer index (0-based).
+        v : int
+            Starting vertex of the propagator direction.
+        u : int
+            Ending vertex of the propagator direction.
+        n : int
+            Contour step index. Valid range depends on chain model:
+            - Continuous: 0 to n_segment
+            - Discrete: 1 to n_segment
+
+        Returns
+        -------
+        bool
+            True if checkpoint was added, False if it already exists or if
+            not in memory-saving mode.
+
+        Examples
+        --------
+        Add a checkpoint at step 30 for the first block's propagator:
+
+        >>> solver.add_checkpoint(polymer=0, v=0, u=1, n=30)
+        True
+
+        Attempting to add the same checkpoint again:
+
+        >>> solver.add_checkpoint(polymer=0, v=0, u=1, n=30)
+        False
+
+        Notes
+        -----
+        - This method only has effect in memory-saving mode
+          (reduce_memory_usage=True). In standard mode, all propagators are
+          stored and this method returns False.
+        - The checkpoint must be within the valid contour range for the
+          specified propagator direction.
+        - Checkpoints added after compute_propagators() will be populated
+          in the next compute_propagators() call.
+        """
+        self._initialize_solver()
+        return self._propagator_computation.add_checkpoint(polymer, v, u, n)
+
     def compute_concentrations(self) -> None:
         """
         Compute ensemble-averaged concentrations.

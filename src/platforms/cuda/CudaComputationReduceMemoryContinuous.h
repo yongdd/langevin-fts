@@ -259,6 +259,21 @@ public:
 
     /** @brief Verify partition function consistency. */
     bool check_total_partition() override;
+
+    /**
+     * @brief Add a checkpoint at a specific position.
+     *
+     * Allocates pinned host storage for a propagator checkpoint at the specified position.
+     * The checkpoint will be populated during the next compute_propagators() call.
+     *
+     * @param polymer Polymer index
+     * @param v       Starting vertex of the propagator direction
+     * @param u       Ending vertex of the propagator direction
+     * @param n       Contour step index (0 to n_segment)
+     *
+     * @return true if checkpoint was added, false if it already exists
+     */
+    bool add_checkpoint(int polymer, int v, int u, int n) override;
 };
 
 #endif
