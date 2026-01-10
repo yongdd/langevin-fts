@@ -91,8 +91,9 @@ private:
 
     /// @name Recalculation Workspace
     /// @{
-    int total_max_n_segment;    ///< Maximum segments for allocation
-    std::vector<T*> q_recal;    ///< Recalculation temporary (size: max_segments+1)
+    int total_max_n_segment;    ///< Total sum of segments across all propagators
+    int checkpoint_interval;    ///< Checkpoint interval (sqrt(total_N) for optimal memory-computation tradeoff)
+    std::vector<T*> q_recal;    ///< Recalculation temporary (size: checkpoint_interval+3 for block-based computation)
     /// @}
 
     /**

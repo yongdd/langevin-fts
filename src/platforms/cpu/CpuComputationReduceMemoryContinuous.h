@@ -98,7 +98,7 @@ private:
     int n_streams;                     ///< Parallel streams
 
     /**
-     * @brief Maximum segment count across all propagators.
+     * @brief Total sum of segments across all propagators.
      *
      * Used to determine checkpoint_interval = ceil(sqrt(total_max_n_segment)).
      */
@@ -115,18 +115,24 @@ private:
     /**
      * @brief Workspace for propagator recomputation.
      *
-     * Size: total_max_n_segment + 3
-     * Layout: [0-1] ping-pong buffers for calculate_phi_one_block, [2..] storage.
-     * Used by recalcaulte_propagator() for stress and partition computation.
+     * Size: checkpoint_interval = O(sqrt(N))
+     * Storage for block values in calculate_phi_one_block().
      */
     std::vector<T*> q_recal;
 
     /**
-     * @brief Ping-pong buffers for propagator advancement.
+     * @brief Ping-pong buffers for q_right propagator advancement.
      *
      * Two buffers alternated during sequential propagator computation.
      */
     std::array<T*,2> q_pair;
+
+    /**
+     * @brief Ping-pong buffers for skip phase in calculate_phi_one_block().
+     *
+     * Used to advance q_left from checkpoint to block start without storing.
+     */
+    std::array<T*,2> q_skip;
 
     /**
      * @brief Checkpointed propagator values.

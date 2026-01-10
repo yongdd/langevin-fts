@@ -60,9 +60,9 @@ GPU Device Memory (Fixed ~10-20 arrays):
 └── Solver workspace     # FFT, Boltzmann factors
 
 Pinned Host Memory (Checkpoints):
-├── propagator_at_check_point[(key, n)]      # Segment checkpoints
+├── propagator_at_check_point[(key, n)]      # Segment checkpoints at √N intervals
 ├── propagator_half_steps_at_check_point     # Junction checkpoints
-├── q_recal[0..max_segment]                  # Recomputation workspace
+├── q_recal[0..√N]                           # Recomputation workspace (O(√N) size)
 ├── phi_block[key]                           # Block concentrations
 └── q_pair[2]                                # Ping-pong buffers
 ```
@@ -71,18 +71,48 @@ Pinned Host Memory (Checkpoints):
 
 ### CUDA Benchmark Results
 
-**Test Configuration**: Bottle Brush polymer (20 side chains, 42 blocks)
+#### Bottle Brush Polymer
 
-| Grid | Std GPU | Red GPU | GPU Saved | Std RAM | Red RAM | Slowdown |
-|------|---------|---------|-----------|---------|---------|----------|
-| $32^3$ | ~144 MB | 12 MB   | 132 MB    | ~2 MB   | ~84 MB  | 2.2x     |
-| $48^3$ | 572 MB  | 48 MB   | 524 MB    | ~0 MB   | 380 MB  | 3.4x     |
-| $64^3$ | 1182 MB | 120 MB  | 1062 MB   | ~0 MB   | 794 MB  | 3.3x     |
+**Test Configuration**: Bottle Brush polymer (20 side chains, 42 blocks), discrete chain model, ds=0.01, total N=698, checkpoint_interval=27
+
+| Grid | Std GPU | Red GPU | GPU Saved | Slowdown |
+|------|---------|---------|-----------|----------|
+| $32^3$ | 392 MB  | 250 MB  | 142 MB    | 3.1x     |
+| $48^3$ | 856 MB  | 292 MB  | 564 MB    | 3.4x     |
+| $64^3$ | 1490 MB | 362 MB  | 1128 MB   | 3.7x     |
+
+#### AB Diblock Copolymer
+
+**Test Configuration**: AB diblock copolymer (f=0.5), discrete chain model, varying N
+
+**N = 40 segments** (checkpoint_interval = 7):
+
+| Grid | Std GPU | Red GPU | GPU Saved | Slowdown |
+|------|---------|---------|-----------|----------|
+| $48^3$ | 206 MB  | 50 MB   | 156 MB (76%) | 2.4x  |
+| $64^3$ | 434 MB  | 120 MB  | 314 MB (72%) | 2.3x  |
+
+**N = 80 segments** (checkpoint_interval = 9):
+
+| Grid | Std GPU | Red GPU | GPU Saved | Slowdown |
+|------|---------|---------|-----------|----------|
+| $32^3$ | 72 MB   | 14 MB   | 58 MB (81%)  | 2.7x  |
+| $48^3$ | 286 MB  | 50 MB   | 236 MB (83%) | 2.6x  |
+| $64^3$ | 592 MB  | 124 MB  | 468 MB (79%) | 2.8x  |
+
+**N = 160 segments** (checkpoint_interval = 13):
+
+| Grid | Std GPU | Red GPU | GPU Saved | Slowdown |
+|------|---------|---------|-----------|----------|
+| $32^3$ | 112 MB  | 14 MB   | 98 MB (88%)  | 3.0x  |
+| $48^3$ | 446 MB  | 50 MB   | 396 MB (89%) | 3.2x  |
+| $64^3$ | 912 MB  | 122 MB  | 790 MB (87%) | 3.5x  |
 
 **Key observations**:
-- GPU memory reduced by **~90%**
-- Checkpoints moved to host RAM (pinned memory for async transfers)
-- Computation **2-4x slower** due to recomputation
+- GPU memory reduced by **~75-90%** depending on chain length and grid size
+- Checkpoints stored in pinned host RAM for async transfers
+- Computation **2.3-3.5x slower** due to recomputation from checkpoints
+- Slowdown increases with chain length N (more recomputation needed)
 
 ## CPU-MKL Platform
 
@@ -104,9 +134,9 @@ Same checkpointing strategy as CUDA, but all in system RAM:
 
 ```
 System RAM (Reduced):
-├── propagator_at_check_point[(key, n)]      # Segment checkpoints only
+├── propagator_at_check_point[(key, n)]      # Segment checkpoints at √N intervals
 ├── propagator_half_steps_at_check_point     # Junction checkpoints
-├── q_recal[0..max_segment]                  # Recomputation workspace
+├── q_recal[0..√N]                           # Recomputation workspace (O(√N) size)
 ├── phi_block[key]                           # Block concentrations
 └── q_pair[2]                                # Ping-pong buffers
 ```
@@ -144,31 +174,74 @@ System RAM (Reduced):
 
 ### CPU-MKL Memory Usage
 
-**Test Configuration**: Bottle Brush polymer (20 side chains, 42 blocks), discrete chain model
+#### Bottle Brush Polymer
 
-| Grid | Standard | Reduced | Saved |
-|------|----------|---------|-------|
-| $32^3$ | 127 MB | 75 MB | 52 MB (41%) |
-| $48^3$ | 427 MB | 252 MB | 175 MB (41%) |
-| $64^3$ | 1011 MB | 598 MB | 413 MB (41%) |
+**Test Configuration**: Bottle Brush polymer (20 side chains, 42 blocks), discrete chain model, ds=0.01, total N=698, checkpoint_interval=27
+
+| Grid | Standard | Reduced | Saved | Slowdown |
+|------|----------|---------|-------|----------|
+| $32^3$ | 272 MB | 223 MB | 49 MB (18%) | 1.33x |
+| $48^3$ | 634 MB | 468 MB | 165 MB (26%) | 1.41x |
+| $64^3$ | 1336 MB | 946 MB | 390 MB (29%) | 1.39x |
+
+#### AB Diblock Copolymer
+
+**Test Configuration**: AB diblock copolymer (f=0.5), discrete chain model, varying N
+
+**N = 40 segments** (checkpoint_interval = 7):
+
+| Grid | Standard | Reduced | Saved | Slowdown |
+|------|----------|---------|-------|----------|
+| $32^3$ | 168 MB | 154 MB | 14 MB (8%)   | 1.60x |
+| $48^3$ | 286 MB | 239 MB | 47 MB (16%)  | 1.51x |
+| $64^3$ | 518 MB | 404 MB | 114 MB (22%) | 1.63x |
+
+**N = 80 segments** (checkpoint_interval = 9):
+
+| Grid | Standard | Reduced | Saved | Slowdown |
+|------|----------|---------|-------|----------|
+| $32^3$ | 187 MB | 156 MB | 30 MB (16%)  | 1.79x |
+| $48^3$ | 354 MB | 252 MB | 102 MB (29%) | 1.85x |
+| $64^3$ | 678 MB | 434 MB | 244 MB (36%) | 1.82x |
+
+**N = 160 segments** (checkpoint_interval = 13):
+
+| Grid | Standard | Reduced | Saved | Slowdown |
+|------|----------|---------|-------|----------|
+| $32^3$ | 229 MB | 160 MB | 69 MB (30%)  | 1.80x |
+| $48^3$ | 490 MB | 260 MB | 230 MB (47%) | 1.77x |
+| $64^3$ | 998 MB | 451 MB | 548 MB (55%) | 1.79x |
 
 **Key observations**:
-- Memory reduced by **~40%** in memory-saving mode
-- Memory scales linearly with grid size ($M$)
-- Checkpoints stored at $\sqrt{N}$ intervals reduce propagator storage
+- Memory reduced by **~8-55%** depending on chain length and grid size
+- Memory savings increase with chain length N (more propagators to checkpoint)
+- Memory savings increase with grid size (larger arrays benefit more from checkpointing)
+- Checkpoints stored at $\sqrt{N_{\text{total}}}$ intervals reduce propagator storage
+- Computation **1.5-1.9x slower** due to recomputation
 
 ## Performance by Polymer Architecture
 
 The slowdown in memory-saving mode varies with polymer architecture:
 
+### CPU-MKL Slowdown
+
 | Architecture Type | Continuous | Discrete | Notes |
 |-------------------|------------|----------|-------|
-| Linear chains (diblock) | 1.8-1.9x | 1.7-1.8x | Block-based recomputation |
+| Linear chains (diblock) | 1.8-1.9x | 1.6-1.8x | Block-based recomputation |
 | Triblock | 2.3x | 2.1x | Multiple blocks increase recomputation |
 | Star polymers | 1.9x | 1.8x | Symmetric architecture |
-| Bottle brush | 1.7-1.8x | 1.3-1.5x | Many junctions with shared checkpoints |
+| Bottle brush | 1.7-1.8x | 1.3-1.4x | Many junctions with shared checkpoints |
 
-**Why bottle brush polymers show lower slowdown**: Bottle brush polymers have many junction points that share checkpoints. The block-based computation algorithm efficiently reuses these checkpoints, minimizing redundant recomputation.
+### CUDA Slowdown
+
+| Architecture Type | Discrete | Notes |
+|-------------------|----------|-------|
+| Linear chains (diblock, N=40-160) | 2.3-3.5x | Increases with chain length |
+| Bottle brush (N=698) | 3.1-3.7x | GPU-CPU transfer overhead |
+
+**Why bottle brush polymers show lower slowdown on CPU**: Bottle brush polymers have many junction points that share checkpoints. The block-based computation algorithm efficiently reuses these checkpoints, minimizing redundant recomputation.
+
+**CUDA vs CPU slowdown**: CUDA shows higher slowdown (2.3-3.7x) compared to CPU (1.3-1.9x) because of the additional GPU-host memory transfer overhead for checkpoints stored in pinned host memory. CUDA slowdown increases with chain length due to more checkpoint transfers.
 
 ## Choosing the Right Mode
 

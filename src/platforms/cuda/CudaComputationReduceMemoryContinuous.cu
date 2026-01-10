@@ -148,19 +148,54 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             #endif
         }
 
-        // Find the total maximum n_segment and allocate temporary memory for recalculating propagators
+        // Find the total sum of segments and allocate temporary memory for recalculating propagators
         total_max_n_segment = 0;
         for(const auto& block: phi_block)
         {
             const auto& key = block.first;
             int n_segment_right = this->propagator_computation_optimizer->get_computation_block(key).n_segment_right;
-            total_max_n_segment = std::max(total_max_n_segment, n_segment_right);
+            total_max_n_segment += n_segment_right;
         }
-        this->q_recal.resize(total_max_n_segment+1);
-        for(int n=0; n<=total_max_n_segment; n++)
+
+        // Calculate checkpoint interval as sqrt(N) for optimal memory-computation tradeoff
+        checkpoint_interval = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(total_max_n_segment))));
+        if (checkpoint_interval < 1)
+            checkpoint_interval = 1;
+
+        #ifndef NDEBUG
+        std::cout << "total_max_n_segment: " << total_max_n_segment << std::endl;
+        std::cout << "checkpoint_interval: " << checkpoint_interval << std::endl;
+        #endif
+
+        // Allocate workspace for propagator recomputation
+        // We skip intermediate values from checkpoint to left_start, then store from left_start to left_end
+        // This requires only checkpoint_interval + 3 storage (block size + buffer)
+        const int workspace_size = checkpoint_interval + 3;
+        this->q_recal.resize(workspace_size);
+        for(int n=0; n<workspace_size; n++)
         {
             this->q_recal[n] = nullptr;
             gpu_error_check(cudaMallocHost((void**)&this->q_recal[n], sizeof(T)*M));
+        }
+
+        // Allocate checkpoints at sqrt(N) intervals for each propagator
+        for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
+        {
+            std::string key = item.first;
+            int max_n_segment = item.second.max_n_segment;
+
+            // Add checkpoints at sqrt(N) intervals
+            for(int n=checkpoint_interval; n<max_n_segment; n+=checkpoint_interval)
+            {
+                if(propagator_at_check_point.find(std::make_tuple(key, n)) == propagator_at_check_point.end())
+                {
+                    propagator_at_check_point[std::make_tuple(key, n)] = nullptr;
+                    gpu_error_check(cudaMallocHost((void**)&propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
+                    #ifndef NDEBUG
+                    std::cout << "Allocated checkpoint, " + key + ", " << n << std::endl;
+                    #endif
+                }
+            }
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -270,7 +305,9 @@ CudaComputationReduceMemoryContinuous<T>::~CudaComputationReduceMemoryContinuous
     delete propagator_solver;
     delete sc;
 
-    for(int n=0; n<=total_max_n_segment; n++)
+    // Free workspace (must match constructor allocation)
+    const int workspace_size = checkpoint_interval + 3;
+    for(int n=0; n<workspace_size; n++)
         cudaFreeHost(this->q_recal[n]);
 
     for(const auto& item: propagator_at_check_point)
@@ -827,56 +864,100 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 {
     try
     {
-        // In this method, propagators are recalculcated from the check points
-        // If a propagator is in propagator_at_check_point reuse it, otherwise compute it again with allocated memory space.
+        // Uses block-based computation for memory efficiency
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = this->cb->get_total_grid();
+        const int STREAM = 0;
+        const int k = checkpoint_interval;
+
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
-
-        // Recalcaulte q_left from the check point
-        std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
-
-        int prev = 0;
-        int next = 1;
-
-        // Copy propagators from host to device
-        gpu_error_check(cudaMemcpy(d_q_block_v[prev], q_left[N_RIGHT],
-            sizeof(T)*M, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_q_block_u[prev], propagator_at_check_point[std::make_tuple(key_right, 0)],
-            sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Initialize to zero
         gpu_error_check(cudaMemset(d_phi, 0, sizeof(T)*M));
 
-        // Compute the q_right and segment concentration
-        for(int n=0; n<=N_RIGHT; n++)
-        {
-            // MEMORY STREAM: (left) copy propagators from host to device
-            if (n < N_RIGHT)
-            {
-                gpu_error_check(cudaMemcpyAsync(d_q_block_v[next], q_left[N_RIGHT-(n+1)],
-                    sizeof(T)*M, cudaMemcpyHostToDevice, streams[0][1]));
-            }
-            // KERNEL STREAM: (right) calculate propagators
-            if (n < N_RIGHT)
-            {
-                propagator_solver->advance_propagator(
-                    0, 
-                    d_q_block_u[prev],
-                    d_q_block_u[next],
-                    monomer_type, d_q_mask);
-            }
-            CuDeviceData<T> norm;
-            if constexpr (std::is_same<T, double>::value)
-                norm = NORM*simpson_rule_coeff[n];
-            else
-                norm = stdToCuDoubleComplex(NORM*simpson_rule_coeff[n]);
+        // Initialize q_right at segment 0
+        gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_at_check_point[std::make_tuple(key_right, 0)],
+            sizeof(T)*M, cudaMemcpyHostToDevice));
+        int right_prev_idx = 0;
+        int right_next_idx = 1;
+        int current_n_right = 0;
 
-            // KERNEL STREAM: multiply two propagators
-            ker_add_multi<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>(d_phi, d_q_block_v[prev], d_q_block_u[prev], norm, M);
-            std::swap(prev, next);
-            cudaDeviceSynchronize();
+        // Process n = 0 to N_RIGHT using block-based computation
+        int num_blocks = (N_RIGHT + k) / k;
+
+        for (int blk = 0; blk < num_blocks; blk++)
+        {
+            int n_start = blk * k;  // First n in this block
+            int n_end = std::min((blk + 1) * k - 1, N_RIGHT);  // Last n in this block (non-overlapping)
+
+            // q_left positions needed: segment (N_LEFT - n) for n in [n_start, n_end]
+            // = segments [N_LEFT - n_end, N_LEFT - n_start]
+            int left_start = N_LEFT - n_end;
+            int left_end = N_LEFT - n_start;
+
+            // For continuous chains, valid segments are 0 to N_LEFT
+            int left_compute_start = std::max(left_start, 0);
+
+            // Find checkpoint at or before left_compute_start
+            int check_pos = (left_compute_start / k) * k;
+            if (check_pos < 0) check_pos = 0;
+
+            // Find the actual checkpoint
+            auto it = propagator_at_check_point.find(std::make_tuple(key_left, check_pos));
+            while (it == propagator_at_check_point.end() && check_pos > 0)
+            {
+                check_pos -= k;
+                if (check_pos < 0) check_pos = 0;
+                it = propagator_at_check_point.find(std::make_tuple(key_left, check_pos));
+            }
+
+            // Skip from checkpoint to left_start (don't store intermediate values)
+            gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            for (int i = check_pos; i < left_start; i++)
+            {
+                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask);
+                gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
+            }
+
+            // Store q_left from left_start to left_end
+            gpu_error_check(cudaMemcpy(q_recal[0], d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
+            for (int i = 1; i <= left_end - left_start; i++)
+            {
+                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask);
+                gpu_error_check(cudaMemcpy(q_recal[i], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
+            }
+            // Now q_recal[i] = q_left[left_start + i]
+
+            // Process each n in [n_start, n_end]
+            for (int n = n_start; n <= n_end; n++)
+            {
+                // Advance q_right to position n
+                while (current_n_right < n)
+                {
+                    propagator_solver->advance_propagator(STREAM, d_q_block_u[right_prev_idx], d_q_block_u[right_next_idx], monomer_type, d_q_mask);
+                    cudaDeviceSynchronize();
+                    std::swap(right_prev_idx, right_next_idx);
+                    current_n_right++;
+                }
+
+                // Get q_left position (segment N_LEFT - n)
+                int left_pos = N_LEFT - n;
+                int ws_idx = left_pos - left_start;
+
+                // Copy q_left to device
+                gpu_error_check(cudaMemcpy(d_q_block_v[0], q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+
+                CuDeviceData<T> norm;
+                if constexpr (std::is_same<T, double>::value)
+                    norm = NORM*simpson_rule_coeff[n];
+                else
+                    norm = stdToCuDoubleComplex(NORM*simpson_rule_coeff[n]);
+
+                // Multiply and accumulate
+                ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_block_v[0], d_q_block_u[right_prev_idx], norm, M);
+            }
         }
 
         // Copy propagators from device to host
@@ -1074,15 +1155,10 @@ template <typename T>
 void CudaComputationReduceMemoryContinuous<T>::compute_stress()
 {
     // This method should be invoked after invoking compute_statistics().
-
-    // To calculate stress, we multiply weighted fourier basis to q(k)*q^dagger(-k).
-    // We only need the real part of stress calculation.
+    // Uses block-based computation to minimize memory usage (O(sqrt(N)) workspace).
 
     try
     {
-        // if constexpr (std::is_same<T, std::complex<double>>::value)
-        //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
-
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
@@ -1090,6 +1166,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
+        const int k = checkpoint_interval;
 
         const int N_STRESS = 6;
         std::map<std::tuple<int, std::string, std::string>, std::array<T,N_STRESS>> block_dq_dl[n_streams];
@@ -1102,7 +1179,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     block_dq_dl[i][item.first][d] = 0.0;
         }
 
-        // Compute stress for each block
+        // Compute stress for each phi_block
         for(size_t b=0; b<phi_block.size();b++)
         {
             const int STREAM = omp_get_thread_num();
@@ -1129,54 +1206,141 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             for(int i=0; i<N_STRESS; i++)
                 _block_dq_dl[i] = 0.0;
 
-            // Number of stress components: 3D orthogonal->3, 3D non-orthogonal->6, 2D->3, 1D->1
+            // Number of stress components
             const bool is_ortho = this->cb->is_orthogonal();
             const int N_STRESS_DIM = (DIM == 3) ? (is_ortho ? 3 : 6) : ((DIM == 2) ? 3 : 1);
             CuDeviceData<T> *d_segment_stress;
-            T segment_stress[6];  // Max size to avoid VLA issues
+            T segment_stress[6];
             gpu_error_check(cudaMalloc((void**)&d_segment_stress, sizeof(T)*N_STRESS_DIM));
 
-            // Recalcaulte q_left from the check point
-            std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
+            // Number of blocks
+            const int num_blocks = (N_RIGHT + k) / k;
 
-            int prev = 0;
-            int next = 1;
+            // Pointers for q_right (ping-pong) - use d_q_pair[0] for right propagator
+            int right_prev_idx = 0;
+            int right_next_idx = 1;
 
-            // Copy propagators from host to device
-            gpu_error_check(cudaMemcpy(&d_q_pair[0][prev][0], q_left[N_RIGHT], 
-                sizeof(T)*M, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(&d_q_pair[0][prev][M], propagator_at_check_point[std::make_tuple(key_right, 0)],
-                sizeof(T)*M, cudaMemcpyHostToDevice));
+            // Current position of q_right
+            int current_n_right = -1;
 
-            // Compute the q_right and segment concentration
-            for(int n=0; n<=N_RIGHT; n++)
+            // Initialize q_right at position 0
+            auto it_right_0 = propagator_at_check_point.find(std::make_tuple(key_right, 0));
+            if(it_right_0 != propagator_at_check_point.end())
             {
-                // MEMORY STREAM: (left) copy propagators from host to device
-                if (n < N_RIGHT)
-                {
-                    gpu_error_check(cudaMemcpyAsync(&d_q_pair[0][next][0], q_left[N_RIGHT-(n+1)],
-                        sizeof(T)*M, cudaMemcpyHostToDevice, streams[0][1]));
-                }
-                // KERNEL STREAM: (right) calculate propagators
-                if (n < N_RIGHT)
-                {
-                    propagator_solver->advance_propagator(
-                        0, 
-                        &d_q_pair[0][prev][M],
-                        &d_q_pair[0][next][M],
-                        monomer_type, d_q_mask);
-                }
-                // KERNEL STREAM: Compute stress
-                propagator_solver->compute_single_segment_stress(
-                    0, d_q_pair[0][prev], d_segment_stress,
-                    monomer_type, false);
+                gpu_error_check(cudaMemcpy(&d_q_pair[0][right_prev_idx][M], it_right_0->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                current_n_right = 0;
+            }
 
-                std::swap(prev, next);
-                cudaDeviceSynchronize();
+            // Process each block
+            for(int blk = 0; blk < num_blocks; blk++)
+            {
+                const int n_start = blk * k;
+                const int n_end = std::min((blk + 1) * k, N_RIGHT + 1) - 1;
 
-                gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS_DIM, cudaMemcpyDeviceToHost));
-                for(int d=0; d<N_STRESS_DIM; d++)
-                    _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
+                // q_left positions needed: [N_LEFT - n_end, N_LEFT - n_start]
+                const int left_start = N_LEFT - n_end;
+                const int left_end = N_LEFT - n_start;
+
+                // Find the best checkpoint at or before left_start
+                int check_pos = -1;
+                for(int cp = 0; cp <= left_start; cp++)
+                {
+                    if(propagator_at_check_point.find(std::make_tuple(key_left, cp)) != propagator_at_check_point.end())
+                        check_pos = cp;
+                }
+
+                if(check_pos < 0)
+                    continue;
+
+                // Recompute q_left from checkpoint to left_end using q_recal workspace
+                const int steps_before = left_start - check_pos;
+                const int storage_count = left_end - left_start + 1;
+
+                auto it_checkpoint = propagator_at_check_point.find(std::make_tuple(key_left, check_pos));
+                if(it_checkpoint == propagator_at_check_point.end())
+                    continue;
+
+                // Load checkpoint to device and compute q_left positions
+                gpu_error_check(cudaMemcpy(d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                int left_ping = 0;
+                int left_pong = 1;
+
+                // Advance to left_start
+                for(int step = 0; step < steps_before; step++)
+                {
+                    int actual_pos = check_pos + step + 1;
+                    auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                    if(it != propagator_at_check_point.end())
+                    {
+                        gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    }
+                    else
+                    {
+                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                        cudaDeviceSynchronize();
+                    }
+                    std::swap(left_ping, left_pong);
+                }
+
+                // Now d_q_one[0][left_ping] contains q_left[left_start]
+                // Copy to q_recal[2] and compute remaining positions
+                gpu_error_check(cudaMemcpy(q_recal[2], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+
+                for(int idx = 1; idx < storage_count; idx++)
+                {
+                    int actual_pos = left_start + idx;
+                    auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                    if(it != propagator_at_check_point.end())
+                    {
+                        for(int i=0; i<M; i++)
+                            q_recal[2 + idx][i] = it->second[i];
+                        gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    }
+                    else
+                    {
+                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                        cudaDeviceSynchronize();
+                        gpu_error_check(cudaMemcpy(q_recal[2 + idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                    }
+                    std::swap(left_ping, left_pong);
+                }
+
+                // Process each n in [n_start, n_end]
+                for(int n = n_start; n <= n_end; n++)
+                {
+                    // Advance q_right if needed
+                    auto it_right = propagator_at_check_point.find(std::make_tuple(key_right, n));
+                    if(it_right != propagator_at_check_point.end())
+                    {
+                        gpu_error_check(cudaMemcpy(&d_q_pair[0][right_prev_idx][M], it_right->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        current_n_right = n;
+                    }
+                    else
+                    {
+                        while(current_n_right < n)
+                        {
+                            propagator_solver->advance_propagator(0, &d_q_pair[0][right_prev_idx][M], &d_q_pair[0][right_next_idx][M], monomer_type, d_q_mask);
+                            cudaDeviceSynchronize();
+                            std::swap(right_prev_idx, right_next_idx);
+                            current_n_right++;
+                        }
+                    }
+
+                    // Get q_left[N_LEFT - n] from q_recal
+                    int left_pos = N_LEFT - n;
+                    int storage_idx = 2 + (left_pos - left_start);
+
+                    // Copy q_left to device for stress computation
+                    gpu_error_check(cudaMemcpy(&d_q_pair[0][right_prev_idx][0], q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+
+                    // Compute stress
+                    propagator_solver->compute_single_segment_stress(0, d_q_pair[0][right_prev_idx], d_segment_stress, monomer_type, false);
+                    cudaDeviceSynchronize();
+
+                    gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS_DIM, cudaMemcpyDeviceToHost));
+                    for(int d=0; d<N_STRESS_DIM; d++)
+                        _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
+                }
             }
             for(int d=0; d<N_STRESS_DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
@@ -1233,9 +1397,8 @@ template <typename T>
 void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int polymer, int v, int u, int n)
 {
     // This method should be invoked after invoking compute_statistics()
+    // Uses block-based computation with reduced workspace (O(sqrt(N)))
 
-    // Get chain propagator for a selected polymer, block and direction.
-    // This is made for debugging and testing.
     try
     {
         const int M = this->cb->get_total_grid();
@@ -1245,9 +1408,9 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
         if (this->propagator_computation_optimizer->get_computation_propagators().find(dep) == this->propagator_computation_optimizer->get_computation_propagators().end())
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_computation_optimizer.");
 
-        const int N_RIGHT = this->propagator_computation_optimizer->get_computation_propagator(dep).max_n_segment;
-        if (n < 0 || n > N_RIGHT)
-            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
+        const int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(dep).max_n_segment;
+        if (n < 0 || n > max_n_segment)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(max_n_segment) + "]");
 
         // Check if the requested segment is at a checkpoint
         auto checkpoint_key = std::make_tuple(dep, n);
@@ -1260,14 +1423,42 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
         }
         else
         {
-            // Need to recalculate from nearest checkpoint
+            // Find nearest checkpoint at or before position n
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
-            std::vector<T*> q_recalc = recalcaulte_propagator(dep, 0, n, monomer_type);
+            int check_pos = -1;
+            for(int cp = 0; cp <= n; cp++)
+            {
+                if(propagator_at_check_point.find(std::make_tuple(dep, cp)) != propagator_at_check_point.end())
+                    check_pos = cp;
+            }
 
-            // q_recalc[n] corresponds to segment n
-            T* _propagator = q_recalc[n];
-            for(int i=0; i<M; i++)
-                q_out[i] = _propagator[i];
+            if(check_pos < 0)
+                throw_with_line_number("No checkpoint found at or before position " + std::to_string(n));
+
+            // Load checkpoint and advance to position n using ping-pong buffers
+            T* q_checkpoint = propagator_at_check_point[std::make_tuple(dep, check_pos)];
+            gpu_error_check(cudaMemcpy(d_q_one[0][0], q_checkpoint, sizeof(T)*M, cudaMemcpyHostToDevice));
+
+            int ping = 0;
+            int pong = 1;
+            for(int step = check_pos; step < n; step++)
+            {
+                // Check if next position is a checkpoint
+                auto it = propagator_at_check_point.find(std::make_tuple(dep, step + 1));
+                if(it != propagator_at_check_point.end())
+                {
+                    gpu_error_check(cudaMemcpy(d_q_one[0][pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                }
+                else
+                {
+                    propagator_solver->advance_propagator(0, d_q_one[0][ping], d_q_one[0][pong], monomer_type, d_q_mask);
+                    cudaDeviceSynchronize();
+                }
+                std::swap(ping, pong);
+            }
+
+            // Copy result from device to output
+            gpu_error_check(cudaMemcpy(q_out, d_q_one[0][ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }
     catch(std::exception& exc)
@@ -1278,8 +1469,11 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
 template <typename T>
 bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
 {
+    // Uses block-based computation to minimize memory usage (O(sqrt(N)) workspace).
     const int M = this->cb->get_total_grid();
+    const int k = checkpoint_interval;
     int n_polymer_types = this->molecules->get_n_polymer_types();
+
     std::vector<std::vector<T>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
     {
@@ -1304,48 +1498,136 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;
         #endif
 
-        // Recalcaulte q_left from the check point
-        std::vector<T*> q_left = recalcaulte_propagator(key_left, N_LEFT-N_RIGHT, N_RIGHT, monomer_type);
+        // Number of blocks
+        const int num_blocks = (N_RIGHT + k) / k;
 
-        int prev = 0;
-        int next = 1;
+        // Pointers for q_right (ping-pong)
+        int right_prev_idx = 0;
+        int right_next_idx = 1;
 
-        // Copy propagators from host to device
-        gpu_error_check(cudaMemcpy(d_q_block_v[prev], q_left[N_RIGHT], 
-            sizeof(T)*M, cudaMemcpyHostToDevice));
-        gpu_error_check(cudaMemcpy(d_q_block_u[prev], propagator_at_check_point[std::make_tuple(key_right, 0)],
-            sizeof(T)*M, cudaMemcpyHostToDevice));
+        // Current position of q_right
+        int current_n_right = -1;
 
-        // Compute the q_right and segment concentration
-        for(int n=0; n<=N_RIGHT; n++)
+        // Initialize q_right at position 0
+        auto it_right_0 = propagator_at_check_point.find(std::make_tuple(key_right, 0));
+        if(it_right_0 != propagator_at_check_point.end())
         {
-            // MEMORY STREAM: (left) copy propagators from host to device
-            if (n < N_RIGHT)
-            {
-                gpu_error_check(cudaMemcpyAsync(d_q_block_v[next], q_left[N_RIGHT-(n+1)],
-                    sizeof(T)*M, cudaMemcpyHostToDevice, streams[0][1]));
-            }
-            // KERNEL STREAM: (right) calculate propagators
-            if (n < N_RIGHT)
-            {
-                propagator_solver->advance_propagator(
-                    0, 
-                    d_q_block_u[prev],
-                    d_q_block_u[next],
-                    monomer_type, d_q_mask);
-            }
-            // KERNEL STREAM: multiply two propagators
-            T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(
-                d_q_block_v[prev], d_q_block_u[prev]);
+            gpu_error_check(cudaMemcpy(d_q_block_u[right_prev_idx], it_right_0->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            current_n_right = 0;
+        }
 
-            total_partition *= n_repeated/this->cb->get_volume()/n_propagators;
-            total_partitions[p].push_back(total_partition);
+        // Process each block
+        for(int blk = 0; blk < num_blocks; blk++)
+        {
+            const int n_start = blk * k;
+            const int n_end = std::min((blk + 1) * k, N_RIGHT + 1) - 1;
 
-            #ifndef NDEBUG
-            std::cout<< p << ", " << n << ": " << total_partition << std::endl;
-            #endif
-            std::swap(prev, next);
-            cudaDeviceSynchronize();
+            // q_left positions needed: [N_LEFT - n_end, N_LEFT - n_start]
+            const int left_start = N_LEFT - n_end;
+            const int left_end = N_LEFT - n_start;
+
+            // Find the best checkpoint at or before left_start
+            int check_pos = -1;
+            for(int cp = 0; cp <= left_start; cp++)
+            {
+                if(propagator_at_check_point.find(std::make_tuple(key_left, cp)) != propagator_at_check_point.end())
+                    check_pos = cp;
+            }
+
+            if(check_pos < 0)
+                continue;
+
+            // Recompute q_left from checkpoint to left_end
+            const int steps_before = left_start - check_pos;
+            const int storage_count = left_end - left_start + 1;
+
+            auto it_checkpoint = propagator_at_check_point.find(std::make_tuple(key_left, check_pos));
+            if(it_checkpoint == propagator_at_check_point.end())
+                continue;
+
+            // Load checkpoint to device and compute q_left positions
+            gpu_error_check(cudaMemcpy(d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            int left_ping = 0;
+            int left_pong = 1;
+
+            // Advance to left_start
+            for(int step = 0; step < steps_before; step++)
+            {
+                int actual_pos = check_pos + step + 1;
+                auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                if(it != propagator_at_check_point.end())
+                {
+                    gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                }
+                else
+                {
+                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                    cudaDeviceSynchronize();
+                }
+                std::swap(left_ping, left_pong);
+            }
+
+            // Copy to q_recal[2] and compute remaining positions
+            gpu_error_check(cudaMemcpy(q_recal[2], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+
+            for(int idx = 1; idx < storage_count; idx++)
+            {
+                int actual_pos = left_start + idx;
+                auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
+                if(it != propagator_at_check_point.end())
+                {
+                    for(int i=0; i<M; i++)
+                        q_recal[2 + idx][i] = it->second[i];
+                    gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                }
+                else
+                {
+                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                    cudaDeviceSynchronize();
+                    gpu_error_check(cudaMemcpy(q_recal[2 + idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                }
+                std::swap(left_ping, left_pong);
+            }
+
+            // Process each n in [n_start, n_end]
+            for(int n = n_start; n <= n_end; n++)
+            {
+                // Advance q_right if needed
+                auto it_right = propagator_at_check_point.find(std::make_tuple(key_right, n));
+                if(it_right != propagator_at_check_point.end())
+                {
+                    gpu_error_check(cudaMemcpy(d_q_block_u[right_prev_idx], it_right->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    current_n_right = n;
+                }
+                else
+                {
+                    while(current_n_right < n)
+                    {
+                        propagator_solver->advance_propagator(0, d_q_block_u[right_prev_idx], d_q_block_u[right_next_idx], monomer_type, d_q_mask);
+                        cudaDeviceSynchronize();
+                        std::swap(right_prev_idx, right_next_idx);
+                        current_n_right++;
+                    }
+                }
+
+                // Get q_left[N_LEFT - n] from q_recal
+                int left_pos = N_LEFT - n;
+                int storage_idx = 2 + (left_pos - left_start);
+
+                // Copy q_left to device for inner product
+                gpu_error_check(cudaMemcpy(d_q_block_v[0], q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+
+                // Compute partition at this position
+                T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(
+                    d_q_block_v[0], d_q_block_u[right_prev_idx]);
+
+                total_partition *= n_repeated/this->cb->get_volume()/n_propagators;
+                total_partitions[p].push_back(total_partition);
+
+                #ifndef NDEBUG
+                std::cout<< p << ", " << n << ": " << total_partition << std::endl;
+                #endif
+            }
         }
     }
 
