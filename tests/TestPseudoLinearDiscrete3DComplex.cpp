@@ -236,6 +236,9 @@ int main()
 
             //---------------- run --------------------
             std::cout<< std::endl << "Running Pseudo: " << solver_name_list[n] << std::endl;
+
+            const int p = 0;
+            Polymer& pc = molecules->get_polymer(p);
             solver->compute_propagators({{"A",w_a},{"B",w_b}},{});
             solver->compute_concentrations();
             solver->get_total_concentration("A", phi_a);
@@ -244,8 +247,6 @@ int main()
             //--------------- check --------------------
             std::cout<< "Checking"<< std::endl;
             std::cout<< "If error is less than 1.0e-7, it is ok!" << std::endl;
-            
-            const int p = 0;
 
             // Polymer& pc = molecules->get_polymer(p);
             // solver->get_chain_propagator(q1_last, p, 0, 1, pc.get_block(0,1).n_segment);
@@ -256,7 +257,6 @@ int main()
             if (solver->check_total_partition() == false)
                 return -1;
 
-            Polymer& pc = molecules->get_polymer(p);
             solver->get_chain_propagator(q1_last, p, 1, 2, pc.get_block(1,2).n_segment);
             for(int i=0; i<M; i++)
                 diff_sq[i] = pow(q1_last[i].real() - q1_last_ref[i],2);

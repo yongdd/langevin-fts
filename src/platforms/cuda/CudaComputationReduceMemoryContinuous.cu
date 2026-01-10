@@ -129,13 +129,6 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                 gpu_error_check(cudaMallocHost((void**)&propagator_at_check_point[std::make_tuple(key, 0)], sizeof(T)*M));
             }
 
-            // Add 'max_n_segment' to pass the tests
-            if(propagator_at_check_point.find(std::make_tuple(key, max_n_segment)) == propagator_at_check_point.end())
-            {
-                propagator_at_check_point[std::make_tuple(key, max_n_segment)] = nullptr;
-                gpu_error_check(cudaMallocHost((void**)&propagator_at_check_point[std::make_tuple(key, max_n_segment)], sizeof(T)*M));
-            }
-
             for(size_t d=0; d<deps.size(); d++)
             {
                 std::string sub_dep = std::get<0>(deps[d]);
@@ -1256,12 +1249,26 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
         if (n < 0 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
-        if (propagator_at_check_point.find(std::make_tuple(dep, n)) == propagator_at_check_point.end())
-            throw_with_line_number("The propagator " + dep + "[" + std::to_string(n) + "] is not stored'. Disable 'reduce_memory_usage' option to obtain propagator_computation_optimizer.");
+        // Check if the requested segment is at a checkpoint
+        auto checkpoint_key = std::make_tuple(dep, n);
+        if (propagator_at_check_point.find(checkpoint_key) != propagator_at_check_point.end())
+        {
+            // Directly copy from checkpoint
+            T *_q_from = propagator_at_check_point[checkpoint_key];
+            for(int i=0; i<M; i++)
+                q_out[i] = _q_from[i];
+        }
+        else
+        {
+            // Need to recalculate from nearest checkpoint
+            std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
+            std::vector<T*> q_recalc = recalcaulte_propagator(dep, 0, n, monomer_type);
 
-        T *_q_from = propagator_at_check_point[std::make_tuple(dep, n)];
-        for(int i=0; i<M; i++)
-            q_out[i] = _q_from[i];
+            // q_recalc[n] corresponds to segment n
+            T* _propagator = q_recalc[n];
+            for(int i=0; i<M; i++)
+                q_out[i] = _propagator[i];
+        }
     }
     catch(std::exception& exc)
     {
@@ -1362,6 +1369,40 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
             return false;
     }
     return true;
+}
+template <typename T>
+bool CudaComputationReduceMemoryContinuous<T>::add_checkpoint(int polymer, int v, int u, int n)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        Polymer& pc = this->molecules->get_polymer(polymer);
+        std::string key = pc.get_propagator_key(v, u);
+
+        // Validate the propagator key exists
+        if (this->propagator_computation_optimizer->get_computation_propagators().find(key) ==
+            this->propagator_computation_optimizer->get_computation_propagators().end())
+            throw_with_line_number("Could not find the propagator code '" + key + "'.");
+
+        // Validate n is within range
+        const int max_n_segment = this->propagator_computation_optimizer->get_computation_propagator(key).max_n_segment;
+        if (n < 0 || n > max_n_segment)
+            throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(max_n_segment) + "]");
+
+        // Check if checkpoint already exists
+        if (propagator_at_check_point.find(std::make_tuple(key, n)) != propagator_at_check_point.end())
+            return false;  // Checkpoint already exists
+
+        // Allocate pinned memory for the new checkpoint
+        propagator_at_check_point[std::make_tuple(key, n)] = nullptr;
+        gpu_error_check(cudaMallocHost((void**)&propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
+
+        return true;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
 }
 
 // Explicit template instantiation

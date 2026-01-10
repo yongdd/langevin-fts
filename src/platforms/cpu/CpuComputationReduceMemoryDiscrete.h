@@ -104,15 +104,24 @@ private:
     /**
      * @brief Maximum segment count across all propagators.
      *
-     * Determines size of recomputation workspace.
+     * Used to determine checkpoint_interval = ceil(sqrt(total_max_n_segment)).
      */
     int total_max_n_segment;
 
     /**
+     * @brief Interval between checkpoints.
+     *
+     * Set to ceil(sqrt(total_max_n_segment)) to minimize the product
+     * of storage and recomputation cost.
+     */
+    int checkpoint_interval;
+
+    /**
      * @brief Workspace for propagator recomputation.
      *
-     * Size: total_max_n_segment + 1
-     * Used to store recomputed propagator steps between checkpoints.
+     * Size: total_max_n_segment + 3
+     * Layout: [0-1] ping-pong buffers for calculate_phi_one_block, [2..] storage.
+     * Used by recalculate_propagator() for stress and partition computation.
      */
     std::vector<T*> q_recal;
 
@@ -288,5 +297,20 @@ public:
      * @brief Validate partition function.
      */
     bool check_total_partition() override;
+
+    /**
+     * @brief Add a checkpoint at a specific position.
+     *
+     * Allocates storage for a propagator checkpoint at the specified position.
+     * The checkpoint will be populated during the next compute_propagators() call.
+     *
+     * @param polymer Polymer index
+     * @param v       Starting vertex of the propagator direction
+     * @param u       Ending vertex of the propagator direction
+     * @param n       Contour step index (1 to n_segment)
+     *
+     * @return true if checkpoint was added, false if it already exists
+     */
+    bool add_checkpoint(int polymer, int v, int u, int n) override;
 };
 #endif
