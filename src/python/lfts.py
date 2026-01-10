@@ -24,6 +24,7 @@ from .utils import (
     process_random_copolymer,
     DEFAULT_MONOMER_COLORS,
 )
+from .smearing import Smearing
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -455,6 +456,16 @@ class LFTS:
         # Display factory info
         self.prop_solver._factory.display_info()
 
+        # Expose computation box as cb for convenience (like SCFT)
+        self.cb = self.prop_solver._computation_box
+
+        # Initialize smearing (must be after self.cb is set)
+        self.smearing = Smearing(
+            self.cb.get_nx(),
+            self.cb.get_lx(),
+            params.get("smearing", None)
+        )
+
         # (C++ class) Fields Relaxation using Anderson Mixing
         if params["compressor"]["name"] == "am" or params["compressor"]["name"] == "lram":
             am = self.prop_solver.create_anderson_mixing(
@@ -603,9 +614,12 @@ class LFTS:
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
+        # Apply smearing to fields before computing propagators
+        w_input_for_propagator = self.smearing.apply_to_dict(w_input)
+
         # For the given fields, compute propagators
         time_solver_start = time.time()
-        self.prop_solver.compute_propagators(w_input)
+        self.prop_solver.compute_propagators(w_input_for_propagator)
         elapsed_time["solver"] = time.time() - time_solver_start
 
         # Compute concentrations for each monomer type
