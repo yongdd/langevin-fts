@@ -97,14 +97,22 @@ private:
     std::array<T*,2> q_pair;    ///< Ping-pong buffers for propagator advancement
     /// @}
 
-    /// @name Concentration Computation Workspace
-    /// @{
-    CuDeviceData<T> *d_q_block_v[2];  ///< Forward propagator [prev, next]
-    CuDeviceData<T> *d_q_block_u[2];  ///< Backward propagator [prev, next]
-    CuDeviceData<T> *d_phi;           ///< Temporary concentration
-    /// @}
-
-    CuDeviceData<T> *d_q_pair[MAX_STREAMS][2];  ///< Stress computation workspace
+    /**
+     * @brief Shared GPU workspace buffers (2×M each).
+     *
+     * Memory layout for d_workspace[0] (2×M contiguous):
+     *   [0, M):    d_propagator_sub_dep[0][0], used as q_left in concentration
+     *   [M, 2M):   d_propagator_sub_dep[0][1], used as q_right in concentration
+     *
+     * Memory layout for d_workspace[1] (2×M contiguous):
+     *   [0, M):    d_phi (concentration output)
+     *   [M, 2M):   unused
+     *
+     * In stress computation, d_workspace[0] is used as contiguous 2×M buffer
+     * for batch FFT.
+     */
+    CuDeviceData<T> *d_workspace[2];
+    CuDeviceData<T> *d_phi;  ///< = d_workspace[1], concentration output
 
     Scheduler *sc;  ///< Propagator execution scheduler
 

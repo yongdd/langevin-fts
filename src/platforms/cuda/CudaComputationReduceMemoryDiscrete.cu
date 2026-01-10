@@ -225,25 +225,22 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         // Allocate memory for propagator computation
         for(int i=0; i<n_streams; i++)
         {
-            gpu_error_check(cudaMalloc((void**)&d_q_one[i][0], sizeof(T)*M)); // for prev
-            gpu_error_check(cudaMalloc((void**)&d_q_one[i][1], sizeof(T)*M)); // for next
-            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][0], sizeof(T)*M)); // for prev
-            gpu_error_check(cudaMalloc((void**)&d_propagator_sub_dep[i][1], sizeof(T)*M)); // for next
+            gpu_error_check(cudaMalloc((void**)&d_q_one[i][0], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&d_q_one[i][1], sizeof(T)*M));
         }
 
-        // For concentration computation
-        gpu_error_check(cudaMalloc((void**)&d_q_block_v[0], sizeof(T)*M)); // for prev
-        gpu_error_check(cudaMalloc((void**)&d_q_block_v[1], sizeof(T)*M)); // for next
-        gpu_error_check(cudaMalloc((void**)&d_q_block_u[0], sizeof(T)*M)); // for prev
-        gpu_error_check(cudaMalloc((void**)&d_q_block_u[1], sizeof(T)*M)); // for next
-        gpu_error_check(cudaMalloc((void**)&d_phi,          sizeof(T)*M));
+        // Allocate shared workspace (2×M each, contiguous for batch FFT in stress computation)
+        // d_workspace[0]: primary buffer, d_workspace[1]: second buffer
+        // Phase 1 (compute_propagators): uses d_propagator_sub_dep aliases
+        // Phase 2 (compute_concentrations): uses q_left, q_right, d_phi (see memory layout in header)
+        // Phase 3 (compute_stress): uses d_workspace directly (contiguous 2×M)
+        gpu_error_check(cudaMalloc((void**)&d_workspace[0], sizeof(T)*2*M));
+        gpu_error_check(cudaMalloc((void**)&d_workspace[1], sizeof(T)*2*M));
 
-        // Allocate memory for stress calculation
-        for(int i=0; i<n_streams; i++)
-        {
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][0], sizeof(T)*2*M)); // prev
-            gpu_error_check(cudaMalloc((void**)&d_q_pair[i][1], sizeof(T)*2*M)); // next
-        }
+        // Set up aliases
+        d_propagator_sub_dep[0][0] = d_workspace[0];        // first M of d_workspace[0]
+        d_propagator_sub_dep[0][1] = d_workspace[0] + M;    // second M of d_workspace[0]
+        d_phi                      = d_workspace[1];        // first M of d_workspace[1]
 
         // Copy mask to d_q_mask
         if (this->cb->get_mask() != nullptr)
@@ -292,27 +289,14 @@ CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
     #endif
 
     // Free GPU workspace
+    // Only free actual allocations (d_propagator_sub_dep, d_phi are aliases into d_workspace)
     for(int i=0; i<n_streams; i++)
     {
         cudaFree(d_q_one[i][0]);
         cudaFree(d_q_one[i][1]);
-        cudaFree(d_propagator_sub_dep[i][0]);
-        cudaFree(d_propagator_sub_dep[i][1]);
     }
-
-    // For stress calculation
-    for(int i=0; i<n_streams; i++)
-    {
-        cudaFree(d_q_pair[i][0]);
-        cudaFree(d_q_pair[i][1]);
-    }
-
-    // For concentration computation
-    cudaFree(d_q_block_v[0]);
-    cudaFree(d_q_block_v[1]);
-    cudaFree(d_q_block_u[0]);
-    cudaFree(d_q_block_u[1]);
-    cudaFree(d_phi);
+    cudaFree(d_workspace[0]);  // contains d_propagator_sub_dep[0][*], used for q_left, q_right in concentration
+    cudaFree(d_workspace[1]);  // contains d_phi
 
     if (d_q_mask != nullptr)
         cudaFree(d_q_mask);
@@ -624,6 +608,10 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
         }
 
         // Compute total partition function of each distinct polymers
+        // Set up local workspace pointers (see memory layout in header)
+        CuDeviceData<T> *d_q_left = d_workspace[0];          // first M of d_workspace[0]
+        CuDeviceData<T> *d_q_right = d_workspace[0] + M;     // second M of d_workspace[0]
+
         for(const auto& segment_info: single_partition_segment)
         {
             int p                    = std::get<0>(segment_info);
@@ -634,12 +622,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
 
             // Copy propagators from host to device
-            gpu_error_check(cudaMemcpy(d_q_block_v[0], propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_q_block_u[0], propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_q_right, propagator_right, sizeof(T)*M, cudaMemcpyHostToDevice));
 
             this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
-                d_q_block_v[0],  // q
-                d_q_block_u[0],  // q^dagger
+                d_q_left,   // q
+                d_q_right,  // q^dagger
                 _d_exp_dw)/(n_aggregated*this->cb->get_volume());
         }
     }
@@ -705,14 +693,14 @@ void CudaComputationReduceMemoryDiscrete<T>::advance_propagator_single_segment(
     {
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
-        gpu_error_check(cudaMemcpy(d_q_pair[STREAM][0], q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(d_workspace[0], q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
 
         propagator_solver->advance_propagator(
-                        STREAM, d_q_pair[STREAM][0], d_q_pair[STREAM][1],
+                        STREAM, d_workspace[0], d_workspace[1],
                         monomer_type, d_q_mask);
         gpu_error_check(cudaDeviceSynchronize());
 
-        gpu_error_check(cudaMemcpy(q_out, d_q_pair[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(q_out, d_workspace[1], sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {
@@ -802,6 +790,10 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
         const int k = checkpoint_interval;
+
+        // Set up local workspace pointers (see memory layout in header)
+        CuDeviceData<T> *d_q_left = d_workspace[0];          // first M of d_workspace[0]
+        CuDeviceData<T> *d_q_right = d_workspace[0] + M;     // second M of d_workspace[0]
 
         // Get block info for normalization
         auto block_key = std::make_tuple(0, key_left, key_right);
@@ -911,10 +903,10 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 int ws_idx = left_pos - left_compute_start;
 
                 // Add contribution: q_left * q_right
-                gpu_error_check(cudaMemcpy(d_q_block_v[0], q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_q_block_u[0], q_right_next, sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_left, q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_right, q_right_next, sizeof(T)*M, cudaMemcpyHostToDevice));
 
-                ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_block_v[0], d_q_block_u[0], cuda_norm, M);
+                ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_left, d_q_right, cuda_norm, M);
 
                 q_right_prev = q_right_next;
                 q_right_next = nullptr;
@@ -1214,11 +1206,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     q_segment_2 = propagator_half_steps_at_check_point[std::make_tuple(key_right, 0)];
                     is_half_bond_length = true;
 
-                    gpu_error_check(cudaMemcpy(&d_q_pair[STREAM][0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_pair[STREAM][0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_workspace[0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_workspace[0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
 
+                    // Compute stress (d_workspace[0] is contiguous 2×M buffer)
                     propagator_solver->compute_single_segment_stress(
-                        STREAM, d_q_pair[STREAM][0], d_segment_stress, monomer_type, is_half_bond_length);
+                        STREAM, d_workspace[0], d_segment_stress, monomer_type, is_half_bond_length);
 
                     gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS, cudaMemcpyDeviceToHost));
 
@@ -1322,12 +1315,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     }
 
                     // Copy propagator pair to device
-                    gpu_error_check(cudaMemcpy(&d_q_pair[STREAM][0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(&d_q_pair[STREAM][0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_workspace[0][0], q_segment_1, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&d_workspace[0][M], q_segment_2, sizeof(T)*M, cudaMemcpyHostToDevice));
 
-                    // Compute stress for this segment
+                    // Compute stress (d_workspace[0] is contiguous 2×M buffer)
                     propagator_solver->compute_single_segment_stress(
-                        STREAM, d_q_pair[STREAM][0], d_segment_stress, monomer_type, is_half_bond_length);
+                        STREAM, d_workspace[0], d_segment_stress, monomer_type, is_half_bond_length);
 
                     gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS, cudaMemcpyDeviceToHost));
 
@@ -1460,6 +1453,10 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
     const int STREAM = 0;
     const int k = checkpoint_interval;
 
+    // Set up local workspace pointers (see memory layout in header)
+    CuDeviceData<T> *d_q_left = d_workspace[0];          // first M of d_workspace[0]
+    CuDeviceData<T> *d_q_right = d_workspace[0] + M;     // second M of d_workspace[0]
+
     int n_polymer_types = this->molecules->get_n_polymer_types();
     std::vector<std::vector<T>> total_partitions;
     for(int p=0;p<n_polymer_types;p++)
@@ -1563,12 +1560,12 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
                 int ws_idx = left_pos - left_compute_start;
 
                 // Copy propagators from host to device
-                gpu_error_check(cudaMemcpy(d_q_block_v[0], q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_q_block_u[0], q_right_next, sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_left, q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_right, q_right_next, sizeof(T)*M, cudaMemcpyHostToDevice));
 
                 T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
-                    d_q_block_v[0],  // q
-                    d_q_block_u[0],  // q^dagger
+                    d_q_left,   // q
+                    d_q_right,  // q^dagger
                     _d_exp_dw);
 
                 total_partition *= n_repeated/this->cb->get_volume()/n_propagators;
