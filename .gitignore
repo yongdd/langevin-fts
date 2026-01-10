@@ -7,6 +7,7 @@ temp*
 *.dat
 *.out
 *.png
+!examples/clfts/dynamical_stabilization.png
 *.html
 *.qdrep
 *.sqlite
