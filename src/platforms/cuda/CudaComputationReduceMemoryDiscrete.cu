@@ -132,8 +132,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             #endif
         }
 
-        // Calculate checkpoint interval as sqrt(N) for optimal memory-computation tradeoff
-        checkpoint_interval = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(total_max_n_segment))));
+        // Calculate checkpoint interval as 2*sqrt(N) for better memory-computation tradeoff
+        checkpoint_interval = static_cast<int>(std::ceil(2.0*std::sqrt(static_cast<double>(total_max_n_segment))));
         if (checkpoint_interval < 1)
             checkpoint_interval = 1;
 
@@ -153,8 +153,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             }
         }
 
-        // Allocate workspace for recalculation (only need k+3 since we skip intermediate values)
-        const int workspace_size = checkpoint_interval + 3;
+        // Allocate workspace for recalculation (only need k since we skip intermediate values)
+        const int workspace_size = checkpoint_interval;
         for(int i=0; i<workspace_size; i++)
             gpu_error_check(cudaMallocHost((void**)&q_recal.emplace_back(), sizeof(T)*M));
 
@@ -275,7 +275,7 @@ CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
         cudaFreeHost(item.second);
 
     // Free recalculation workspace (must match constructor allocation)
-    const int workspace_size = checkpoint_interval + 3;
+    const int workspace_size = checkpoint_interval;
     for(int n=0; n<workspace_size; n++)
         cudaFreeHost(q_recal[n]);
     cudaFreeHost(q_pair[0]);

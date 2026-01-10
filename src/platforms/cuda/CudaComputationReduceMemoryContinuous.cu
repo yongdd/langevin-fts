@@ -157,8 +157,8 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             total_max_n_segment += n_segment_right;
         }
 
-        // Calculate checkpoint interval as sqrt(N) for optimal memory-computation tradeoff
-        checkpoint_interval = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(total_max_n_segment))));
+        // Calculate checkpoint interval as 2*sqrt(N) for better memory-computation tradeoff
+        checkpoint_interval = static_cast<int>(std::ceil(2.0*std::sqrt(static_cast<double>(total_max_n_segment))));
         if (checkpoint_interval < 1)
             checkpoint_interval = 1;
 
@@ -169,8 +169,8 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
         // Allocate workspace for propagator recomputation
         // We skip intermediate values from checkpoint to left_start, then store from left_start to left_end
-        // This requires only checkpoint_interval + 3 storage (block size + buffer)
-        const int workspace_size = checkpoint_interval + 3;
+        // This requires only checkpoint_interval storage
+        const int workspace_size = checkpoint_interval;
         this->q_recal.resize(workspace_size);
         for(int n=0; n<workspace_size; n++)
         {
@@ -306,7 +306,7 @@ CudaComputationReduceMemoryContinuous<T>::~CudaComputationReduceMemoryContinuous
     delete sc;
 
     // Free workspace (must match constructor allocation)
-    const int workspace_size = checkpoint_interval + 3;
+    const int workspace_size = checkpoint_interval;
     for(int n=0; n<workspace_size; n++)
         cudaFreeHost(this->q_recal[n]);
 
@@ -1283,8 +1283,8 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                 }
 
                 // Now d_q_one[0][left_ping] contains q_left[left_start]
-                // Copy to q_recal[2] and compute remaining positions
-                gpu_error_check(cudaMemcpy(q_recal[2], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                // Copy to q_recal[0] and compute remaining positions
+                gpu_error_check(cudaMemcpy(q_recal[0], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                 for(int idx = 1; idx < storage_count; idx++)
                 {
@@ -1293,14 +1293,14 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     if(it != propagator_at_check_point.end())
                     {
                         for(int i=0; i<M; i++)
-                            q_recal[2 + idx][i] = it->second[i];
+                            q_recal[idx][i] = it->second[i];
                         gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
                     }
                     else
                     {
                         propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
                         cudaDeviceSynchronize();
-                        gpu_error_check(cudaMemcpy(q_recal[2 + idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                        gpu_error_check(cudaMemcpy(q_recal[idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     }
                     std::swap(left_ping, left_pong);
                 }
@@ -1328,7 +1328,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
 
                     // Get q_left[N_LEFT - n] from q_recal
                     int left_pos = N_LEFT - n;
-                    int storage_idx = 2 + (left_pos - left_start);
+                    int storage_idx = left_pos - left_start;
 
                     // Copy q_left to device for stress computation
                     gpu_error_check(cudaMemcpy(&d_q_pair[0][right_prev_idx][0], q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
@@ -1567,8 +1567,8 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 std::swap(left_ping, left_pong);
             }
 
-            // Copy to q_recal[2] and compute remaining positions
-            gpu_error_check(cudaMemcpy(q_recal[2], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+            // Copy to q_recal[0] and compute remaining positions
+            gpu_error_check(cudaMemcpy(q_recal[0], d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
             for(int idx = 1; idx < storage_count; idx++)
             {
@@ -1577,14 +1577,14 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 if(it != propagator_at_check_point.end())
                 {
                     for(int i=0; i<M; i++)
-                        q_recal[2 + idx][i] = it->second[i];
+                        q_recal[idx][i] = it->second[i];
                     gpu_error_check(cudaMemcpy(d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
                 }
                 else
                 {
                     propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
                     cudaDeviceSynchronize();
-                    gpu_error_check(cudaMemcpy(q_recal[2 + idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(q_recal[idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 }
                 std::swap(left_ping, left_pong);
             }
@@ -1612,7 +1612,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
 
                 // Get q_left[N_LEFT - n] from q_recal
                 int left_pos = N_LEFT - n;
-                int storage_idx = 2 + (left_pos - left_start);
+                int storage_idx = left_pos - left_start;
 
                 // Copy q_left to device for inner product
                 gpu_error_check(cudaMemcpy(d_q_block_v[0], q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));

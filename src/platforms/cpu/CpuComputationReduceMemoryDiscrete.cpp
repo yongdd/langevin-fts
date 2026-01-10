@@ -167,8 +167,8 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
             max_n_segment_per_block = std::max(max_n_segment_per_block, block_max);
         }
 
-        // Calculate checkpoint interval as sqrt(N) for optimal memory-computation tradeoff
-        checkpoint_interval = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(total_max_n_segment))));
+        // Calculate checkpoint interval as 2*sqrt(N) for better memory-computation tradeoff
+        checkpoint_interval = static_cast<int>(std::ceil(2.0*std::sqrt(static_cast<double>(total_max_n_segment))));
         if (checkpoint_interval < 1)
             checkpoint_interval = 1;
 
@@ -177,12 +177,10 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
         #endif
 
         // Allocate workspace for propagator recomputation
-        // - q_recal[0..checkpoint_interval+1]: workspace (size = checkpoint_interval + 2)
-        //   In compute_concentrations: q_skip for ping-pong, q_recal[0+] for storage
-        //   In compute_stress: q_recal[0-1] for ping-pong, q_recal[2+] for storage
+        // - q_recal[0..checkpoint_interval-1]: workspace for storage (size = checkpoint_interval)
         // - q_pair[0-1]: ping-pong for q_right advancement
-        // - q_skip[0-1]: ping-pong for skip phase in compute_concentrations
-        const int workspace_size = checkpoint_interval + 2;
+        // - q_skip[0-1]: ping-pong for skip phase (used in both compute_concentrations and compute_stress)
+        const int workspace_size = checkpoint_interval;
         this->q_recal.resize(workspace_size);
         for(int n=0; n<workspace_size; n++)
             this->q_recal[n] = new T[M];
@@ -1260,23 +1258,24 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                         T* q_prev_left;
                         T* q_curr_left;
 
+                        // Skip phase uses q_skip[0-1] for ping-pong, storage uses q_recal[0+]
                         if(steps_before == 0)
-                        {
-                            for(int i=0; i<M; i++)
-                                q_recal[2][i] = q_checkpoint[i];
-                            q_prev_left = q_recal[2];
-                        }
-                        else
                         {
                             for(int i=0; i<M; i++)
                                 q_recal[0][i] = q_checkpoint[i];
                             q_prev_left = q_recal[0];
+                        }
+                        else
+                        {
+                            for(int i=0; i<M; i++)
+                                q_skip[0][i] = q_checkpoint[i];
+                            q_prev_left = q_skip[0];
                             int ping_pong = 1;
 
                             for(int step = 1; step < steps_before; step++)
                             {
                                 int actual_pos = check_pos + step;
-                                q_curr_left = q_recal[ping_pong];
+                                q_curr_left = q_skip[ping_pong];
 
                                 auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                                 if(it != propagator_at_check_point.end())
@@ -1297,20 +1296,20 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                             if(it != propagator_at_check_point.end())
                             {
                                 for(int i=0; i<M; i++)
-                                    q_recal[2][i] = it->second[i];
+                                    q_recal[0][i] = it->second[i];
                             }
                             else
                             {
-                                propagator_solver->advance_propagator(q_prev_left, q_recal[2], monomer_type, q_mask);
+                                propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask);
                             }
-                            q_prev_left = q_recal[2];
+                            q_prev_left = q_recal[0];
                         }
 
-                        // Compute remaining positions [left_start+1, left_end] and store in q_recal[3+]
+                        // Compute remaining positions [left_start+1, left_end] and store in q_recal[1+]
                         for(int idx = 1; idx < storage_count; idx++)
                         {
                             int actual_pos = left_start + idx;
-                            q_curr_left = q_recal[2 + idx];
+                            q_curr_left = q_recal[idx];
 
                             auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                             if(it != propagator_at_check_point.end())
@@ -1379,7 +1378,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                         int left_pos = N_LEFT;
                         if(left_pos >= 1 && left_pos >= left_start && left_pos <= left_end && storage_count > 0)
                         {
-                            int storage_idx = 2 + (left_pos - left_start);
+                            int storage_idx = left_pos - left_start;
                             q_segment_1 = q_recal[storage_idx];
                         }
                         else
@@ -1405,7 +1404,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                         int left_pos = N_LEFT - n;
                         if(left_pos >= 1 && left_pos >= left_start && left_pos <= left_end && storage_count > 0)
                         {
-                            int storage_idx = 2 + (left_pos - left_start);
+                            int storage_idx = left_pos - left_start;
                             q_segment_1 = q_recal[storage_idx];
                         }
                         q_segment_2 = q_right_curr;
@@ -1637,23 +1636,24 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                     T* q_prev_left;
                     T* q_curr_left;
 
+                    // Skip phase uses q_skip[0-1] for ping-pong, storage uses q_recal[0+]
                     if(steps_before == 0)
-                    {
-                        for(int i=0; i<M; i++)
-                            q_recal[2][i] = q_checkpoint[i];
-                        q_prev_left = q_recal[2];
-                    }
-                    else
                     {
                         for(int i=0; i<M; i++)
                             q_recal[0][i] = q_checkpoint[i];
                         q_prev_left = q_recal[0];
+                    }
+                    else
+                    {
+                        for(int i=0; i<M; i++)
+                            q_skip[0][i] = q_checkpoint[i];
+                        q_prev_left = q_skip[0];
                         int ping_pong = 1;
 
                         for(int step = 1; step < steps_before; step++)
                         {
                             int actual_pos = check_pos + step;
-                            q_curr_left = q_recal[ping_pong];
+                            q_curr_left = q_skip[ping_pong];
 
                             auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                             if(it != propagator_at_check_point.end())
@@ -1674,20 +1674,20 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                         if(it != propagator_at_check_point.end())
                         {
                             for(int i=0; i<M; i++)
-                                q_recal[2][i] = it->second[i];
+                                q_recal[0][i] = it->second[i];
                         }
                         else
                         {
-                            propagator_solver->advance_propagator(q_prev_left, q_recal[2], monomer_type, q_mask);
+                            propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask);
                         }
-                        q_prev_left = q_recal[2];
+                        q_prev_left = q_recal[0];
                     }
 
-                    // Compute remaining positions [left_start+1, left_end] and store in q_recal[3+]
+                    // Compute remaining positions [left_start+1, left_end] and store in q_recal[1+]
                     for(int idx = 1; idx < storage_count; idx++)
                     {
                         int actual_pos = left_start + idx;
-                        q_curr_left = q_recal[2 + idx];
+                        q_curr_left = q_recal[idx];
 
                         auto it = propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                         if(it != propagator_at_check_point.end())
@@ -1740,7 +1740,7 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                 T* q_left_n = nullptr;
                 if(left_pos >= 1 && left_pos >= left_start && left_pos <= left_end && storage_count > 0)
                 {
-                    int storage_idx = 2 + (left_pos - left_start);
+                    int storage_idx = left_pos - left_start;
                     q_left_n = q_recal[storage_idx];
                 }
 
