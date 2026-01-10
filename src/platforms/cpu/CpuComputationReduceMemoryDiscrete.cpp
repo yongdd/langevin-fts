@@ -177,9 +177,11 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
         #endif
 
         // Allocate workspace for propagator recomputation
-        // - q_recal[0..checkpoint_interval]: storage for block values
+        // - q_recal[0..checkpoint_interval+1]: workspace (size = checkpoint_interval + 2)
+        //   In compute_concentrations: q_skip for ping-pong, q_recal[0+] for storage
+        //   In compute_stress: q_recal[0-1] for ping-pong, q_recal[2+] for storage
         // - q_pair[0-1]: ping-pong for q_right advancement
-        // - q_skip[0-1]: ping-pong for skip phase (q_left)
+        // - q_skip[0-1]: ping-pong for skip phase in compute_concentrations
         const int workspace_size = checkpoint_interval + 2;
         this->q_recal.resize(workspace_size);
         for(int n=0; n<workspace_size; n++)
