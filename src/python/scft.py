@@ -32,6 +32,7 @@ from .utils import (
     DEFAULT_MONOMER_COLORS,
     configure_logging,
 )
+from .smearing import Smearing
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -667,6 +668,13 @@ class SCFT:
         # Expose computation box as public attribute (documented in class docstring)
         self.cb = self.prop_solver._computation_box
 
+        # Initialize smearing (must be after self.cb is set)
+        self.smearing = Smearing(
+            self.cb.get_nx(),
+            self.cb.get_lx(),
+            params.get("smearing", None)
+        )
+
         # Scaling factor for stress when the fields and box size are simultaneously computed
         if "scale_stress" in params:
             self.scale_stress = params["scale_stress"]
@@ -1033,9 +1041,12 @@ class SCFT:
             for monomer_type, fraction in random_fraction.items():
                 w_input[random_polymer_name] += w_input[monomer_type]*fraction
 
+        # Apply smearing to fields before computing propagators
+        w_input_for_propagator = self.smearing.apply_to_dict(w_input)
+
         # For the given fields, compute the polymer statistics
         time_p_start = time.time()
-        self.prop_solver.compute_propagators(w_input)
+        self.prop_solver.compute_propagators(w_input_for_propagator)
         self.prop_solver.compute_concentrations()
         elapsed_time["pseudo"] = time.time() - time_p_start
 

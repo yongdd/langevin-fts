@@ -4,6 +4,7 @@ from ._core import *
 # High-level Python classes
 from .polymer_field_theory import SymmetricPolymerTheory
 from .propagator_solver import PropagatorSolver
+from .smearing import Smearing
 from .scft import SCFT
 from .lfts import LFTS
 from .clfts import CLFTS

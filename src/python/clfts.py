@@ -76,6 +76,7 @@ from scipy.io import savemat, loadmat
 
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
+from .smearing import Smearing
 
 # OpenMP environment variables
 os.environ["MKL_NUM_THREADS"] = "1"  # always 1
@@ -413,209 +414,11 @@ class CLFTS:
         self.propagator_computation_optimizer = propagator_computation_optimizer
 
         # Initialize smearing (must be after self.cb is set)
-        self._init_smearing(params)
-
-    def _init_smearing(self, params):
-        """Initialize smearing function in Fourier space.
-
-        The smearing function Γ(r) defines finite-range interactions by convolving
-        concentration fields: φ_Γ(r) = ∫ φ(r')Γ(r-r')dr'.
-        In Fourier space: φ_Γ(k) = φ(k)·Γ(k).
-
-        Smearing helps stabilize CL-FTS simulations by damping high-frequency
-        fluctuations that can cause hot spot formation.
-
-        Supported smearing types:
-
-        - Gaussian: Γ(k) = exp(-a_int²·k²/2)
-          Parameters: {"type": "gaussian", "a_int": float}
-
-        - Sigmoidal: Γ(k) = C₀[1 - tanh((k - k_int)/Δk_int)]
-          Parameters: {"type": "sigmoidal", "k_int": float, "dk_int": float}
-
-        Parameters
-        ----------
-        params : dict
-            Simulation parameters containing optional "smearing" key.
-
-        Notes
-        -----
-        References:
-        - Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016)
-        - Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        """
-        if "smearing" not in params:
-            self.smearing_enabled = False
-            self.smearing_fourier = None
-            self.smearing_type = None
-            return
-
-        smearing = params["smearing"]
-        self.smearing_enabled = True
-        self.smearing_type = smearing.get("type", "gaussian")
-
-        # Get grid dimensions
-        nx = self.cb.get_nx()
-        lx = self.cb.get_lx()
-        dim = len(nx)
-
-        # Compute k vectors for each dimension
-        # k = 2π·n/L where n is the frequency index from fftfreq
-        k_vectors = []
-        for i in range(dim):
-            freq = np.fft.fftfreq(nx[i], d=lx[i] / nx[i])  # cycles per unit length
-            k = 2 * np.pi * freq  # angular wavenumber
-            k_vectors.append(k)
-
-        # Create k² grid using meshgrid with proper indexing
-        if dim == 1:
-            k_sq = k_vectors[0] ** 2
-            k_mag = np.abs(k_vectors[0])
-        elif dim == 2:
-            kx, ky = np.meshgrid(k_vectors[0], k_vectors[1], indexing='ij')
-            k_sq = kx ** 2 + ky ** 2
-            k_mag = np.sqrt(k_sq)
-        else:  # 3D
-            kx, ky, kz = np.meshgrid(k_vectors[0], k_vectors[1], k_vectors[2], indexing='ij')
-            k_sq = kx ** 2 + ky ** 2 + kz ** 2
-            k_mag = np.sqrt(k_sq)
-
-        # Store k magnitude for structure function calculation
-        self.k_mag = k_mag
-        self.k_sq = k_sq
-
-        if self.smearing_type == "gaussian":
-            # Gaussian smearing: Γ(k) = exp(-a_int²·k²/2)
-            # a_int is the smearing length scale
-            if "a_int" not in smearing:
-                raise ValueError("Gaussian smearing requires 'a_int' parameter.")
-            a_int = smearing["a_int"]
-            self.smearing_fourier = np.exp(-a_int ** 2 * k_sq / 2)
-            self.smearing_params = {"a_int": a_int}
-            print(f"Smearing: Gaussian, a_int = {a_int}")
-
-        elif self.smearing_type == "sigmoidal":
-            # Sigmoidal smearing: Γ(k) = C₀[1 - tanh((k - k_int)/Δk_int)]
-            # k_int is the cutoff wavenumber, Δk_int controls the transition width
-            if "k_int" not in smearing:
-                raise ValueError("Sigmoidal smearing requires 'k_int' parameter.")
-            k_int = smearing["k_int"]
-            dk_int = smearing.get("dk_int", 5.0)  # default from Matsen et al. 2026
-
-            gamma_unnorm = 1 - np.tanh((k_mag - k_int) / dk_int)
-            # Normalize so Γ(0) = 1
-            c0 = 1.0 / (1 - np.tanh(-k_int / dk_int))
-            self.smearing_fourier = c0 * gamma_unnorm
-            self.smearing_params = {"k_int": k_int, "dk_int": dk_int}
-            print(f"Smearing: Sigmoidal, k_int = {k_int}, dk_int = {dk_int}")
-
-        else:
-            raise ValueError(f"Unknown smearing type: {self.smearing_type}. "
-                           f"Supported types: 'gaussian', 'sigmoidal'")
-
-    def _smear_field(self, field):
-        """Apply smearing to a single field array.
-
-        Computes smeared field: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
-
-        Parameters
-        ----------
-        field : numpy.ndarray
-            Field array of length total_grid (can be complex).
-
-        Returns
-        -------
-        numpy.ndarray
-            Smeared field array of same shape.
-            Returns the original field unchanged if smearing is disabled.
-        """
-        if not self.smearing_enabled:
-            return field
-
-        nx = self.cb.get_nx()
-        n_grid = self.cb.get_total_grid()
-
-        # Reshape to grid dimensions
-        field_grid = np.reshape(field, nx)
-
-        # FFT -> multiply by Γ(k) -> IFFT
-        field_fourier = np.fft.fftn(field_grid)
-        field_smeared_fourier = field_fourier * self.smearing_fourier
-        field_smeared = np.fft.ifftn(field_smeared_fourier)
-
-        # Reshape back to flat array
-        return np.reshape(field_smeared, n_grid)
-
-    def _smear_fields(self, w_input):
-        """Apply smearing to monomer potential fields.
-
-        Computes smeared fields: w_Γ(r) = FFT⁻¹[FFT[w(r)]·Γ(k)]
-
-        This applies finite-range interactions by convolving potential
-        fields with the smearing function before computing propagators.
-        Following Matsen et al., J. Chem. Phys. 164, 014905 (2026), the
-        fields are smeared before computing the Boltzmann weights in the
-        propagator calculation.
-
-        Parameters
-        ----------
-        w_input : dict
-            Dictionary of potential fields for each monomer type.
-            Each field is a complex numpy array of length total_grid.
-
-        Returns
-        -------
-        dict
-            Dictionary of smeared potential fields with same structure.
-            Returns the original w_input unchanged if smearing is disabled.
-        """
-        if not self.smearing_enabled:
-            return w_input
-
-        w_smeared = {}
-        for key, field in w_input.items():
-            w_smeared[key] = self._smear_field(field)
-
-        return w_smeared
-
-    def _smear_phi(self, phi):
-        """Apply smearing to concentration fields.
-
-        Computes smeared concentration: φ_Γ(r) = FFT⁻¹[FFT[φ(r)]·Γ(k)]
-
-        This applies finite-range interactions by convolving concentration
-        fields with the smearing function. The smearing is performed in
-        Fourier space for efficiency.
-
-        Parameters
-        ----------
-        phi : dict
-            Dictionary of concentration fields for each monomer type.
-            Each field is a complex numpy array of length total_grid.
-
-        Returns
-        -------
-        dict
-            Dictionary of smeared concentration fields with same structure.
-            Returns the original phi unchanged if smearing is disabled.
-
-        Notes
-        -----
-        The smeared concentrations are used in the force calculation
-        (functional derivatives of the Hamiltonian) to implement
-        finite-range interactions as described in:
-
-        - Delaney & Fredrickson, J. Phys. Chem. B 120, 7615 (2016)
-        - Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        """
-        if not self.smearing_enabled:
-            return phi
-
-        phi_smeared = {}
-        for key, field in phi.items():
-            phi_smeared[key] = self._smear_field(field)
-
-        return phi_smeared
+        self.smearing = Smearing(
+            self.cb.get_nx(),
+            self.cb.get_lx(),
+            params.get("smearing", None)
+        )
 
     def compute_concentrations(self, w_aux):
         """Compute monomer concentration fields from auxiliary fields.
@@ -650,7 +453,7 @@ class CLFTS:
         # Apply smearing to fields before computing propagators
         # Following Matsen et al., J. Chem. Phys. 164, 014905 (2026), the fields
         # are smeared before computing the Boltzmann weights in the propagator.
-        w_input_for_propagator = self._smear_fields(w_input)
+        w_input_for_propagator = self.smearing.apply_to_dict(w_input)
 
         # For the given fields, compute propagators
         time_solver_start = time.time()
@@ -859,7 +662,7 @@ class CLFTS:
             # Apply smearing to concentrations for force calculation
             # Smearing implements finite-range interactions: φ_Γ = FFT⁻¹[FFT[φ]·Γ(k)]
             # Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-            phi_for_force = self._smear_phi(phi)
+            phi_for_force = self.smearing.apply_to_dict(phi)
 
             # Compute functional derivatives of Hamiltonian w.r.t. all fields
             # For an AB diblock, compute_func_deriv transforms per-monomer concentrations as:
