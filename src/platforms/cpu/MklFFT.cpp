@@ -223,9 +223,9 @@ void MklFFT<T, DIM>::initPeriodicFFT()
 template <typename T, int DIM>
 void MklFFT<T, DIM>::initNonPeriodicFFT()
 {
-    // Allocate work buffers
-    work_buffer_.resize(total_grid_);
-    temp_buffer_.resize(total_grid_);
+    // Allocate and zero-initialize work buffers
+    work_buffer_.resize(total_grid_, 0.0);
+    temp_buffer_.resize(total_grid_, 0.0);
 
     // Precompute trig tables
     precomputeTrigTables();
