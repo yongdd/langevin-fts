@@ -64,10 +64,6 @@ private:
     DFTI_DESCRIPTOR_HANDLE hand_forward_ = nullptr;   ///< Forward (r2c) transform
     DFTI_DESCRIPTOR_HANDLE hand_backward_ = nullptr;  ///< Backward (c2r) transform
 
-    // Working buffers for DCT/DST
-    std::vector<double> work_buffer_;              ///< Workspace for transforms
-    std::vector<double> temp_buffer_;              ///< Temporary buffer for dim-by-dim
-
     // Precomputed sine/cosine tables for DCT/DST
     std::vector<std::vector<double>> sin_tables_;  ///< Sine tables for DST
     std::vector<std::vector<double>> cos_tables_;  ///< Cosine tables for DCT
@@ -89,23 +85,35 @@ private:
 
     /**
      * @brief Apply DCT-II (forward) along specified dimension.
+     * @param data Input/output data array
+     * @param temp Thread-local temporary buffer (size total_grid_)
+     * @param dim Dimension to transform
      */
-    void applyDCT2Forward(double* data, int dim);
+    void applyDCT2Forward(double* data, double* temp, int dim);
 
     /**
      * @brief Apply DCT-III (backward/inverse) along specified dimension.
+     * @param data Input/output data array
+     * @param temp Thread-local temporary buffer (size total_grid_)
+     * @param dim Dimension to transform
      */
-    void applyDCT3Backward(double* data, int dim);
+    void applyDCT3Backward(double* data, double* temp, int dim);
 
     /**
      * @brief Apply DST-II (forward) along specified dimension.
+     * @param data Input/output data array
+     * @param temp Thread-local temporary buffer (size total_grid_)
+     * @param dim Dimension to transform
      */
-    void applyDST2Forward(double* data, int dim);
+    void applyDST2Forward(double* data, double* temp, int dim);
 
     /**
      * @brief Apply DST-III (backward/inverse) along specified dimension.
+     * @param data Input/output data array
+     * @param temp Thread-local temporary buffer (size total_grid_)
+     * @param dim Dimension to transform
      */
-    void applyDST3Backward(double* data, int dim);
+    void applyDST3Backward(double* data, double* temp, int dim);
 
     /**
      * @brief Get stride information for dimension-by-dimension transform.

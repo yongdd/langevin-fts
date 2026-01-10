@@ -223,11 +223,11 @@ void MklFFT<T, DIM>::initPeriodicFFT()
 template <typename T, int DIM>
 void MklFFT<T, DIM>::initNonPeriodicFFT()
 {
-    // Allocate and zero-initialize work buffers
-    work_buffer_.resize(total_grid_, 0.0);
-    temp_buffer_.resize(total_grid_, 0.0);
+    // Note: work_buffer_ and temp_buffer_ member variables are no longer used.
+    // Thread-local buffers are allocated in forward() and backward() for
+    // thread safety in OpenMP parallel regions.
 
-    // Precompute trig tables
+    // Precompute trig tables (read-only, thread-safe)
     precomputeTrigTables();
 }
 
@@ -291,7 +291,7 @@ void MklFFT<T, DIM>::getStrides(int dim, int& stride, int& num_transforms) const
 // DCT-II Forward
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
-void MklFFT<T, DIM>::applyDCT2Forward(double* data, int dim)
+void MklFFT<T, DIM>::applyDCT2Forward(double* data, double* temp, int dim)
 {
     int n = nx_[dim];
     int stride, num_transforms;
@@ -314,20 +314,20 @@ void MklFFT<T, DIM>::applyDCT2Forward(double* data, int dim)
                 double sum = 0.0;
                 for (int j = 0; j < n; ++j)
                     sum += slice[j] * cos_table[k * n + j];
-                temp_buffer_[offset + k * stride] = sum;
+                temp[offset + k * stride] = sum;
             }
         }
     }
 
     for (int i = 0; i < total_grid_; ++i)
-        data[i] = temp_buffer_[i];
+        data[i] = temp[i];
 }
 
 //------------------------------------------------------------------------------
 // DCT-III Backward
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
-void MklFFT<T, DIM>::applyDCT3Backward(double* data, int dim)
+void MklFFT<T, DIM>::applyDCT3Backward(double* data, double* temp, int dim)
 {
     int n = nx_[dim];
     int stride, num_transforms;
@@ -350,20 +350,20 @@ void MklFFT<T, DIM>::applyDCT3Backward(double* data, int dim)
                 double sum = slice[0] / n;
                 for (int k = 1; k < n; ++k)
                     sum += (2.0 / n) * slice[k] * cos_table[k * n + j];
-                temp_buffer_[offset + j * stride] = sum;
+                temp[offset + j * stride] = sum;
             }
         }
     }
 
     for (int i = 0; i < total_grid_; ++i)
-        data[i] = temp_buffer_[i];
+        data[i] = temp[i];
 }
 
 //------------------------------------------------------------------------------
 // DST-II Forward
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
-void MklFFT<T, DIM>::applyDST2Forward(double* data, int dim)
+void MklFFT<T, DIM>::applyDST2Forward(double* data, double* temp, int dim)
 {
     int n = nx_[dim];
     int stride, num_transforms;
@@ -386,20 +386,20 @@ void MklFFT<T, DIM>::applyDST2Forward(double* data, int dim)
                 double sum = 0.0;
                 for (int j = 0; j < n; ++j)
                     sum += slice[j] * sin_table[k * n + j];
-                temp_buffer_[offset + k * stride] = sum;
+                temp[offset + k * stride] = sum;
             }
         }
     }
 
     for (int i = 0; i < total_grid_; ++i)
-        data[i] = temp_buffer_[i];
+        data[i] = temp[i];
 }
 
 //------------------------------------------------------------------------------
 // DST-III Backward
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
-void MklFFT<T, DIM>::applyDST3Backward(double* data, int dim)
+void MklFFT<T, DIM>::applyDST3Backward(double* data, double* temp, int dim)
 {
     int n = nx_[dim];
     int stride, num_transforms;
@@ -427,13 +427,13 @@ void MklFFT<T, DIM>::applyDST3Backward(double* data, int dim)
                 for (int k = 0; k < n - 1; ++k)
                     sum += 2.0 * slice[k] * sin_table[k * n + j];
 
-                temp_buffer_[offset + j * stride] = sum / n;
+                temp[offset + j * stride] = sum / n;
             }
         }
     }
 
     for (int i = 0; i < total_grid_; ++i)
-        data[i] = temp_buffer_[i];
+        data[i] = temp[i];
 }
 
 //------------------------------------------------------------------------------
@@ -488,27 +488,38 @@ void MklFFT<T, DIM>::forward(T *rdata, double *cdata)
         }
         else
         {
+            // Thread-local static buffers: allocated once per thread, reused across calls
+            thread_local std::vector<double> work;
+            thread_local std::vector<double> temp;
+
+            // Resize only if needed (typically once per thread)
+            if (static_cast<int>(work.size()) < total_grid_)
+            {
+                work.resize(total_grid_);
+                temp.resize(total_grid_);
+            }
+
             // Copy input to work buffer
             for (int i = 0; i < total_grid_; ++i)
             {
                 if constexpr (std::is_same<T, double>::value)
-                    work_buffer_[i] = rdata[i];
+                    work[i] = rdata[i];
                 else
-                    work_buffer_[i] = std::real(rdata[i]);
+                    work[i] = std::real(rdata[i]);
             }
 
             // Apply transforms dimension by dimension
             for (int dim = 0; dim < DIM; ++dim)
             {
                 if (bc_[dim] == BoundaryCondition::REFLECTING)
-                    applyDCT2Forward(work_buffer_.data(), dim);
+                    applyDCT2Forward(work.data(), temp.data(), dim);
                 else if (bc_[dim] == BoundaryCondition::ABSORBING)
-                    applyDST2Forward(work_buffer_.data(), dim);
+                    applyDST2Forward(work.data(), temp.data(), dim);
             }
 
             // Copy to output
             for (int i = 0; i < total_complex_grid_; ++i)
-                cdata[i] = work_buffer_[i];
+                cdata[i] = work[i];
         }
     }
     catch (std::exception& exc)
@@ -535,26 +546,37 @@ void MklFFT<T, DIM>::backward(double *cdata, T *rdata)
         }
         else
         {
+            // Thread-local static buffers: allocated once per thread, reused across calls
+            thread_local std::vector<double> work;
+            thread_local std::vector<double> temp;
+
+            // Resize only if needed (typically once per thread)
+            if (static_cast<int>(work.size()) < total_grid_)
+            {
+                work.resize(total_grid_);
+                temp.resize(total_grid_);
+            }
+
             // Copy input to work buffer
             for (int i = 0; i < total_complex_grid_; ++i)
-                work_buffer_[i] = cdata[i];
+                work[i] = cdata[i];
 
             // Apply inverse transforms dimension by dimension (reverse order)
             for (int dim = DIM - 1; dim >= 0; --dim)
             {
                 if (bc_[dim] == BoundaryCondition::REFLECTING)
-                    applyDCT3Backward(work_buffer_.data(), dim);
+                    applyDCT3Backward(work.data(), temp.data(), dim);
                 else if (bc_[dim] == BoundaryCondition::ABSORBING)
-                    applyDST3Backward(work_buffer_.data(), dim);
+                    applyDST3Backward(work.data(), temp.data(), dim);
             }
 
             // Copy to output
             for (int i = 0; i < total_grid_; ++i)
             {
                 if constexpr (std::is_same<T, double>::value)
-                    rdata[i] = work_buffer_[i];
+                    rdata[i] = work[i];
                 else
-                    rdata[i] = T(work_buffer_[i], 0.0);
+                    rdata[i] = T(work[i], 0.0);
             }
         }
     }
