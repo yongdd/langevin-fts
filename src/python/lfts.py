@@ -424,7 +424,7 @@ class LFTS:
         for idx, polymer in enumerate(self.distinct_polymers):
             draw_polymer_architecture(polymer, idx, params["ds"], dict_color)
 
-        # Get numerical method (default: rqm4)
+        # Get numerical method
         numerical_method = params.get("numerical_method", "rqm4")
 
         # Create PropagatorSolver instance

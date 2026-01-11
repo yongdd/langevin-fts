@@ -26,7 +26,7 @@
  *
  * **Supported Methods:**
  *
- * - "pseudospectral": FFT-based solver (default)
+ * - "pseudospectral": FFT-based solver
  * - "realspace": Finite difference solver (beta)
  *
  * **Template Instantiations:**

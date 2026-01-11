@@ -397,7 +397,7 @@ ETDRK4 is implemented in:
 - `CudaSolverPseudoETDRK4` (CUDA)
 - `ETDRK4Coefficients` (shared coefficient computation)
 
-For the default RQM4 method, see:
+For the RQM4 method, see:
 - `CpuSolverPseudoRQM4` (CPU/MKL)
 - `CudaSolverPseudoRQM4` (CUDA)
 
@@ -410,7 +410,7 @@ Both RQM4 and ETDRK4 can be selected at runtime using the `numerical_method` par
 ```python
 params = {
     # ... other parameters ...
-    "numerical_method": "rqm4"   # Default: RQM4 (Ranjan-Qin-Morse 4th-order)
+    "numerical_method": "rqm4"   # RQM4 (Ranjan-Qin-Morse 4th-order)
     # or
     "numerical_method": "etdrk4"  # ETDRK4 (Exponential Time Differencing RK4)
 }

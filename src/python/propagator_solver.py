@@ -75,8 +75,8 @@ class PropagatorSolver:
     chain_model : str
         Chain model type: "continuous" or "discrete".
     numerical_method : str
-        Numerical algorithm for propagator computation:
-        - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation (default)
+        Numerical algorithm for propagator computation (default: 'rqm4'):
+        - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation
         - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
         - "cn-adi4": Real-space with 4th-order CN-ADI (Richardson extrapolation)

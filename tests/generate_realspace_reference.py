@@ -2,7 +2,7 @@
 """
 Generate reference values for TestRealSpaceLinearContinuous3D.
 
-Run this script after building with 2nd-order mode (default) to get
+Run this script after building with 2nd-order mode to get
 the correct reference values for the test.
 
 Usage:

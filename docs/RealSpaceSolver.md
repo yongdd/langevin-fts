@@ -262,7 +262,7 @@ params = {
            "reflecting", "reflecting",    # y-direction (low, high)
            "absorbing", "absorbing"],     # z-direction (low, high)
 
-    # Select real-space method: "cn-adi2" (default) or "cn-adi4"
+    # Select real-space method: "cn-adi2" or "cn-adi4"
     "numerical_method": "cn-adi2",
 
     # ... other parameters
