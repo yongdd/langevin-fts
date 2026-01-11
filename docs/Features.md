@@ -31,11 +31,13 @@ This document provides a detailed overview of the features available in the poly
   - Absorbing (DST) - zero value at boundaries
 
 #### Real-Space Method
-- Crank-Nicolson ADI (Alternating Direction Implicit) finite difference scheme
-- 2nd-order (default) or 4th-order Richardson extrapolation (via `-DPOLYMERFTS_USE_RICHARDSON=ON`)
+- CN-ADI (Crank-Nicolson Alternating Direction Implicit) finite difference scheme
+- CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order via `-DPOLYMERFTS_USE_CN_ADI4=ON`)
 - Supports only continuous chain model
 - Supports periodic, reflecting, and absorbing boundaries
 - See [RealSpaceSolver.md](RealSpaceSolver.md) for details
+
+For detailed performance benchmarks and method comparisons, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
 ### Simulation Box
 - **Dimensions**: 1D, 2D, and 3D
@@ -91,7 +93,7 @@ High-level simulation modules built on top of the core library.
 | Periodic BC | Yes (FFT) | Yes |
 | Reflecting BC | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes |
-| Temporal accuracy | 4th-order | 2nd or 4th-order |
+| Temporal accuracy | 4th-order (RQM4) | CN-ADI2 or CN-ADI4 |
 | Stress calculation | Yes | No |
 | Recommended for | Large grids, periodic systems | Non-periodic boundaries |
 
