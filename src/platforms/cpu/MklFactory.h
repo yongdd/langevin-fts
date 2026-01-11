@@ -74,12 +74,8 @@ public :
     /**
      * @brief Construct an MKL factory.
      * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
-     * @param pseudo_method       Pseudo-spectral method: "rqm4" (default) or "etdrk4"
-     * @param realspace_method    Real-space method: "cn-adi2" (default) or "cn-adi4"
      */
-    MklFactory(bool reduce_memory_usage,
-               std::string pseudo_method = "rqm4",
-               std::string realspace_method = "cn-adi2");
+    MklFactory(bool reduce_memory_usage);
 
     /**
      * @brief Create a CPU computation box.
@@ -129,9 +125,10 @@ public :
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
+     * @param numerical_method                "rqm4" or "etdrk4"
      * @return CPU propagator solver
      */
-    PropagatorComputation<T>* create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
+    PropagatorComputation<T>* create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
 
     /**
      * @brief Create real-space propagator solver.
@@ -141,9 +138,10 @@ public :
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
+     * @param numerical_method                "cn-adi2" or "cn-adi4"
      * @return CPU real-space solver
      */
-    PropagatorComputation<T>* create_realspace_solver     (ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) override;
+    PropagatorComputation<T>* create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
 
     /**
      * @brief Create CPU Anderson mixing optimizer.

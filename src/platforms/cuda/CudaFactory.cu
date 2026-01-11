@@ -49,20 +49,14 @@
 #include "CudaArray.h"
 
 /**
- * @brief Construct CUDA factory with optional memory reduction and method selection.
+ * @brief Construct CUDA factory with optional memory reduction.
  *
  * @param reduce_memory_usage Enable checkpointing mode
- * @param pseudo_method       Pseudo-spectral method: "rqm4" or "etdrk4"
- * @param realspace_method    Real-space method: "cn-adi2" or "cn-adi4"
  */
 template <typename T>
-CudaFactory<T>::CudaFactory(bool reduce_memory_usage,
-                            std::string pseudo_method,
-                            std::string realspace_method)
+CudaFactory<T>::CudaFactory(bool reduce_memory_usage)
 {
     this->reduce_memory_usage = reduce_memory_usage;
-    this->pseudo_method = pseudo_method;
-    this->realspace_method = realspace_method;
 }
 
 // Array* CudaFactory<T>::create_array(
@@ -97,14 +91,14 @@ Molecules* CudaFactory<T>::create_molecules_information(
     return new Molecules(chain_model, ds, bond_lengths);
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
 {
     std::string chain_model = molecules->get_model_name();
 
     if( chain_model == "continuous" && this->reduce_memory_usage == false)
-        return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", this->pseudo_method);
+        return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
     else if( chain_model == "continuous" && this->reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", this->pseudo_method);
+        return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
     else if( chain_model == "discrete" && this->reduce_memory_usage == false )
         return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     else if( chain_model == "discrete" && this->reduce_memory_usage == true)
@@ -112,15 +106,15 @@ PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(Computati
     return nullptr;
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer)
+PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
 {
     try
     {
         std::string chain_model = molecules->get_model_name();
         if( chain_model == "continuous" && this->reduce_memory_usage == false)
-            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", this->realspace_method);
+            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
         else if( chain_model == "continuous" && this->reduce_memory_usage == true)
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", this->realspace_method);
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
         else if ( chain_model == "discrete" )
         {
             throw_with_line_number("The real-space solver does not support discrete chain model.");

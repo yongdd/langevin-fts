@@ -95,8 +95,6 @@ class AbstractFactory
 {
 protected:
     bool reduce_memory_usage;    ///< Enable memory-saving mode
-    std::string pseudo_method;   ///< Pseudo-spectral method: "rqm4" or "etdrk4"
-    std::string realspace_method; ///< Real-space method: "cn-adi2" or "cn-adi4"
 
 public :
     /**
@@ -183,17 +181,18 @@ public :
      * @brief Create a pseudo-spectral propagator solver.
      *
      * Creates an FFT-based solver for the modified diffusion equation.
-     * Uses RQM4 (4th-order Richardson extrapolation) for continuous chains.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
+     * @param numerical_method                "rqm4" or "etdrk4"
      * @return Platform-specific PropagatorComputation solver
      *
      * @note Requires periodic boundary conditions.
      */
     virtual PropagatorComputation<T>* create_pseudospectral_solver(
-        ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0;
+        ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
+        std::string numerical_method) = 0;
 
     /**
      * @brief Create a real-space propagator solver.
@@ -204,12 +203,14 @@ public :
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
+     * @param numerical_method                "cn-adi2" or "cn-adi4"
      * @return Platform-specific PropagatorComputation solver
      *
      * @note This is a beta feature. Supports reflecting and absorbing BCs.
      */
     virtual PropagatorComputation<T>* create_realspace_solver(
-        ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer) = 0;
+        ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
+        std::string numerical_method) = 0;
 
     /**
      * @brief Create an Anderson Mixing optimizer.
