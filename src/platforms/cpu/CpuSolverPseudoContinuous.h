@@ -1,10 +1,10 @@
 /**
  * @file CpuSolverPseudoContinuous.h
- * @brief Pseudo-spectral solver for continuous chain model on CPU.
+ * @brief Pseudo-spectral solver for continuous chain model on CPU using RQM4.
  *
  * This header provides CpuSolverPseudoContinuous, which implements the
  * pseudo-spectral method for solving the modified diffusion equation
- * with continuous Gaussian chains.
+ * with continuous Gaussian chains using RQM4 (Ranjan-Qin-Morse 4th-order).
  *
  * **Boundary Conditions:**
  *
@@ -13,9 +13,9 @@
  * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
  * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
  *
- * **Numerical Method:**
+ * **Numerical Method (RQM4):**
  *
- * Uses 4th-order Richardson extrapolation for high accuracy:
+ * Uses RQM4 (4th-order Richardson extrapolation) for high accuracy:
  *
  *     q(s+ds) = (4/3) q^(ds/2,ds/2) - (1/3) q^(ds)
  *
@@ -31,6 +31,7 @@
  *
  * @see CpuSolverPseudoBase for shared functionality
  * @see CpuSolverPseudoDiscrete for discrete chain version
+ * @see CpuSolverPseudoETDRK4 for ETDRK4 alternative
  * @see Pseudo for the pseudo-spectral implementation details
  */
 
@@ -48,9 +49,9 @@
 
 /**
  * @class CpuSolverPseudoContinuous
- * @brief CPU pseudo-spectral solver for continuous Gaussian chains.
+ * @brief CPU pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
- * Implements operator splitting with 4th-order Richardson extrapolation
+ * Implements operator splitting with RQM4 (4th-order Richardson extrapolation)
  * for solving the continuous chain diffusion equation. Supports all
  * boundary conditions (periodic, reflecting, absorbing).
  *
@@ -66,7 +67,7 @@
  * **Performance:**
  *
  * Each propagator step requires:
- * - 6 FFTs (3 for full step, 3 for each half-step) with Richardson
+ * - 6 FFTs (3 for full step, 3 for each half-step)
  * - O(n_grid) element-wise operations
  *
  * @example
@@ -89,7 +90,7 @@ protected:
      * @brief Get Boltzmann bond factor for stress computation.
      *
      * For continuous chains, stress computation does not include the
-     * Boltzmann bond factor (it's absorbed into the Richardson scheme).
+     * Boltzmann bond factor (it's absorbed into the RQM4 scheme).
      *
      * @return nullptr (continuous chains don't use boltz_bond in stress)
      */
@@ -127,7 +128,7 @@ public:
     /**
      * @brief Advance propagator by one contour step ds.
      *
-     * Uses 4th-order Richardson extrapolation combining full and
+     * Uses RQM4 (4th-order Richardson extrapolation) combining full and
      * half-step results for high accuracy.
      *
      * @param q_in        Input propagator q(r,s)

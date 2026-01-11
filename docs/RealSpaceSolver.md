@@ -48,7 +48,7 @@ This ensures the scheme remains symmetric and accurate.
 
 ## Richardson Extrapolation (4th-Order Accuracy)
 
-By default, the solver uses **4th-order Richardson extrapolation** to achieve higher temporal accuracy. This combines one full step with two half-steps:
+Optionally, the solver can use **4th-order Richardson extrapolation** to achieve higher temporal accuracy. This combines one full step with two half-steps:
 
 $$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
 
@@ -142,7 +142,7 @@ The following results compare the partition function Q computed with different m
 |--------|-------------------|
 | 2nd-Order Real-Space | **p ≈ 2.0** |
 | 4th-Order Real-Space | **p ≈ 3.9** |
-| Pseudo-Spectral | **p ≈ 4.0** |
+| Pseudo-Spectral (RQM4) | **p ≈ 4.0** |
 
 #### Convergence Plot (Periodic Boundaries)
 
@@ -164,10 +164,10 @@ The following results compare the partition function Q computed with different m
 
 ### Grafted Brush Validation (Absorbing Boundaries)
 
-To validate the solver with non-periodic boundary conditions, we test a grafted brush configuration:
+To validate solvers with non-periodic boundary conditions, we test a grafted brush configuration:
 
 - **Setup**: 1D domain with absorbing boundaries on both sides
-- **Initial condition**: Gaussian centered at x₀ = 0.5, σ = 0.1
+- **Initial condition**: Gaussian centered at x₀ = 2.0 (center), varying σ
 - **Grid**: 512 points, Lx = 4.0
 - **Comparison**: Numerical vs analytical Fourier series solution
 
@@ -175,46 +175,72 @@ The analytical solution for diffusion with absorbing BCs and Gaussian initial co
 
 $$q(x,s) = \frac{2}{L} \sum_{n=1}^{\infty} a_n \sin\left(\frac{n\pi x}{L}\right) \exp\left(-\frac{n^2\pi^2 b^2 s}{6L^2}\right)$$
 
-where $a_n$ are the Fourier coefficients of the initial Gaussian.
+where $a_n$ are the Fourier sine coefficients of the initial Gaussian.
 
-#### 2nd-Order vs 4th-Order Comparison
+#### Real-Space vs Pseudo-Spectral Comparison
 
-| ds | N_steps | 4th-Order Error | 2nd-Order Error | Difference |
-|----|---------|-----------------|-----------------|------------|
-| 0.1 | 2 | 2.00% | 7.38% | 5.88% |
-| 0.05 | 4 | 0.42% | 0.95% | 0.67% |
-| 0.025 | 8 | 0.42% | 0.52% | 0.15% |
-| 0.0125 | 16 | 0.43% | 0.44% | 0.04% |
+For absorbing boundaries, two methods are available:
+- **Real-space (Crank-Nicolson)**: 2nd-order temporal accuracy
+- **Pseudo-spectral (DST)**: Spectral accuracy using Discrete Sine Transform
 
-#### Convergence Plot
+**Convergence Study (σ = 0.02, very sharp Gaussian):**
 
-![Grafted Brush Validation](grafted_brush_validation.png)
+| ds | N_steps | Real-Space L2 Error | Pseudo-Spectral L2 Error |
+|----|---------|---------------------|--------------------------|
+| 0.1 | 2 | 5.04×10⁻² | 4.69×10⁻¹⁷ |
+| 0.05 | 4 | 2.69×10⁻² | 5.29×10⁻¹⁷ |
+| 0.025 | 8 | 7.55×10⁻³ | 1.16×10⁻¹⁶ |
+| 0.0125 | 16 | 5.58×10⁻⁴ | 4.02×10⁻¹⁶ |
+| 0.00625 | 32 | 2.77×10⁻⁶ | — |
+| 0.003125 | 64 | 1.81×10⁻⁶ | — |
 
-*Left: Propagator profile at s=0.2 showing diffusion from grafting point with absorbing boundaries. Middle: Difference between 4th-order and 2nd-order methods decreases with ds. Right: Convergence comparison showing 4th-order reaches spatial error floor (~0.42%) at ds=0.05, while 2nd-order requires ds≈0.0125.*
+#### Effect of Gaussian Sharpness
+
+The initial condition width σ affects accuracy. Results with ds = 0.005:
+
+| σ | σ/dx | Real-Space Error | Pseudo-Spectral Error |
+|-------|------|------------------|----------------------|
+| 0.400 | 51.2 | 2.94×10⁻⁶ | 2.54×10⁻¹¹ |
+| 0.200 | 25.6 | 5.04×10⁻⁶ | 2.13×10⁻¹⁵ |
+| 0.100 | 12.8 | 4.28×10⁻⁶ | 2.46×10⁻¹⁵ |
+| 0.050 | 6.4 | 2.56×10⁻⁶ | 1.30×10⁻¹⁵ |
+| 0.020 | 2.6 | 1.10×10⁻⁶ | 6.24×10⁻¹⁶ |
+| 0.010 | 1.3 | 4.01×10⁻⁵ | 2.93×10⁻¹⁶ |
 
 #### Key Findings
 
-1. **4th-order converges faster**: Reaches spatial error floor at ds=0.05 (4 steps), while 2nd-order needs ds≈0.0125 (16 steps).
+1. **Pseudo-spectral (DST) achieves machine precision**: For all Gaussian widths tested, the DST-based solver achieves ~10⁻¹⁵ to 10⁻¹⁶ error regardless of σ.
 
-2. **~4x fewer steps needed**: For equivalent accuracy, 4th-order requires ~4x fewer contour steps than 2nd-order.
+2. **Real-space has spatial discretization error**: Error increases when σ/dx < 3 (under-resolved Gaussian). For well-resolved cases (σ/dx > 5), error is ~10⁻⁶.
 
-3. **Spatial error dominates at fine ds**: The ~0.42% residual error is due to finite difference spatial discretization, consistent across both methods once temporal error is negligible.
+3. **Real-space convergence order**: Approximately p ≈ 2 for the Crank-Nicolson method, reaching a spatial error floor at fine ds.
 
-4. **Absorbing BCs work correctly**: Both methods correctly handle the Dirichlet boundary conditions, with the propagator properly decaying to zero at boundaries.
+4. **Absorbing BCs work correctly**: Both methods properly handle Dirichlet boundary conditions, with propagators decaying to ~10⁻¹⁵ at boundaries.
+
+5. **Resolution requirement**: Real-space method needs σ/dx ≳ 3-5 for accurate results with sharp initial conditions.
+
+#### Method Selection for Absorbing Boundaries
+
+| Criterion | Recommended Method |
+|-----------|-------------------|
+| Maximum accuracy | Pseudo-spectral (DST) |
+| Sharp initial condition (σ/dx < 3) | Pseudo-spectral (DST) |
+| Simple geometry, periodic in other directions | Pseudo-spectral (DST) |
+| Non-uniform grids or complex geometries | Real-space (with sufficient resolution) |
 
 #### Stability Warning: Grafting Points Near Boundaries
 
-**Important**: Richardson extrapolation (4th-order) can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
+**Important**: 4th-order Richardson extrapolation can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
 
-| x₀/σ from boundary | 4th-Order | 2nd-Order |
-|-------------------|-----------|-----------|
+| x₀/σ from boundary | Richardson 4th-Order | Crank-Nicolson 2nd-Order |
+|-------------------|----------------------|--------------------------|
 | > 5σ | Stable | Stable |
 | 2-3σ | **Unstable** | Stable |
 | < 2σ | **Diverges** | Stable |
 
-**Recommendation**: For grafted brush simulations with grafting points within ~5σ of an absorbing boundary, use the default 2nd-order mode. Do not enable Richardson extrapolation (4th-order) in such cases.
-
-The instability arises because Richardson extrapolation amplifies small differences between full-step and half-step solutions near the boundary, where truncation errors in the absorbing BC treatment differ between step sizes.
+**Recommendation**: For grafted brush simulations:
+- Use pseudo-spectral (DST) when possible - it achieves spectral accuracy
+- For real-space: ensure σ/dx > 5 for accuracy, and avoid Richardson extrapolation near boundaries
 
 ## Usage
 

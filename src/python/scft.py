@@ -393,7 +393,7 @@ class SCFT:
 
     **Computational Details:**
 
-    - Pseudo-spectral method uses 4th-order Richardson extrapolation for accuracy.
+    - Pseudo-spectral method uses RQM4 (4th-order Richardson extrapolation) for accuracy.
     - Propagators use dynamic programming to avoid redundant calculations for
       branched polymers (see [1]_).
     - Anderson Mixing accelerates SCFT convergence by mixing field history.
