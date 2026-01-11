@@ -146,6 +146,12 @@ The following results compare the partition function Q computed with different m
 | 4th-Order Real-Space | **p ≈ 3.9** |
 | Pseudo-Spectral | **p ≈ 4.0** |
 
+#### Convergence Plot (Periodic Boundaries)
+
+![Convergence Study](convergence_plot.png)
+
+*Top-left: Partition function Q vs contour step size. Top-right: -ln(Q) vs step size. Bottom-left: Relative error (log-log) showing O(ds²) and O(ds⁴) convergence. Bottom-right: Computation time vs number of contour steps.*
+
 ### Key Findings
 
 1. **Richardson extrapolation achieves 4th-order accuracy**: The measured convergence order of ~3.9 confirms that Richardson extrapolation successfully improves temporal accuracy from O(ds²) to O(ds⁴).
@@ -157,6 +163,66 @@ The following results compare the partition function Q computed with different m
 4. **4th-order converges quickly**: The 4th-order real-space method is essentially converged by N=10, with further refinement showing negligible improvement.
 
 5. **Pseudo-spectral most accurate**: For periodic boundary conditions, pseudo-spectral remains the most accurate method, converging to machine precision even at coarse ds.
+
+### Grafted Brush Validation (Absorbing Boundaries)
+
+To validate the solver with non-periodic boundary conditions, we test a grafted brush configuration:
+
+- **Setup**: 1D domain with absorbing boundaries on both sides
+- **Initial condition**: Gaussian centered at x₀ = 0.5, σ = 0.1
+- **Grid**: 512 points, Lx = 4.0
+- **Comparison**: Numerical vs analytical Fourier series solution
+
+The analytical solution for diffusion with absorbing BCs and Gaussian initial condition is:
+
+$$q(x,s) = \frac{2}{L} \sum_{n=1}^{\infty} a_n \sin\left(\frac{n\pi x}{L}\right) \exp\left(-\frac{n^2\pi^2 b^2 s}{6L^2}\right)$$
+
+where $a_n$ are the Fourier coefficients of the initial Gaussian.
+
+#### 2nd-Order vs 4th-Order Comparison
+
+| ds | N_steps | 4th-Order Error | 2nd-Order Error | Difference |
+|----|---------|-----------------|-----------------|------------|
+| 0.1 | 2 | 2.00% | 7.38% | 5.88% |
+| 0.05 | 4 | 0.42% | 0.95% | 0.67% |
+| 0.025 | 8 | 0.42% | 0.52% | 0.15% |
+| 0.0125 | 16 | 0.43% | 0.44% | 0.04% |
+
+#### Convergence Plot
+
+![Grafted Brush Validation](grafted_brush_validation.png)
+
+*Left: Propagator profile at s=0.2 showing diffusion from grafting point with absorbing boundaries. Middle: Difference between 4th-order and 2nd-order methods decreases with ds. Right: Convergence comparison showing 4th-order reaches spatial error floor (~0.42%) at ds=0.05, while 2nd-order requires ds≈0.0125.*
+
+#### Key Findings
+
+1. **4th-order converges faster**: Reaches spatial error floor at ds=0.05 (4 steps), while 2nd-order needs ds≈0.0125 (16 steps).
+
+2. **~4x fewer steps needed**: For equivalent accuracy, 4th-order requires ~4x fewer contour steps than 2nd-order.
+
+3. **Spatial error dominates at fine ds**: The ~0.42% residual error is due to finite difference spatial discretization, consistent across both methods once temporal error is negligible.
+
+4. **Absorbing BCs work correctly**: Both methods correctly handle the Dirichlet boundary conditions, with the propagator properly decaying to zero at boundaries.
+
+#### Stability Warning: Grafting Points Near Boundaries
+
+**Important**: Richardson extrapolation (4th-order) can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
+
+| x₀/σ from boundary | 4th-Order | 2nd-Order |
+|-------------------|-----------|-----------|
+| > 5σ | Stable | Stable |
+| 2-3σ | **Unstable** | Stable |
+| < 2σ | **Diverges** | Stable |
+
+**Recommendation**: For grafted brush simulations with grafting points within ~5σ of an absorbing boundary, use 2nd-order mode:
+
+```bash
+cmake ../ -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0" \
+    -DCMAKE_CUDA_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0"
+```
+
+The instability arises because Richardson extrapolation amplifies small differences between full-step and half-step solutions near the boundary, where truncation errors in the absorbing BC treatment differ between step sizes.
 
 ## Usage
 
@@ -196,6 +262,53 @@ Different boundary conditions can be specified for each direction:
 "bc": ["periodic", "periodic",
        "periodic", "periodic",
        "reflecting", "absorbing"]   # z: reflecting bottom, absorbing top
+```
+
+### Grafted Brush Example
+
+For polymer brushes grafted to a surface, use a delta-function initial condition with absorbing boundaries:
+
+```python
+from polymerfts import PropagatorSolver
+import numpy as np
+
+# 1D grafted brush with absorbing boundaries
+solver = PropagatorSolver(
+    nx=[128],
+    lx=[4.0],
+    ds=0.01,
+    bond_lengths={"A": 1.0},
+    bc=["absorbing", "absorbing"],  # Absorbing on both sides
+    chain_model="continuous",
+    method="realspace",
+    platform="cpu-mkl",
+    reduce_memory_usage=False
+)
+
+# Add polymer with grafting point at node 0
+solver.add_polymer(
+    volume_fraction=1.0,
+    blocks=[["A", 1.0, 0, 1]],
+    grafting_points={0: "G"}  # Node 0 uses custom q_init
+)
+
+# Create delta-function initial condition at grafting point
+dx = 4.0 / 128
+x = (np.arange(128) + 0.5) * dx
+x0 = 0.5  # Grafting point position
+
+# Gaussian approximation to delta function
+sigma = 0.1
+q_init = np.exp(-(x - x0)**2 / (2 * sigma**2))
+q_init = q_init / (np.sum(q_init) * dx)  # Normalize
+
+# Compute propagators with zero field
+w_field = np.zeros(128)
+solver.compute_propagators({"A": w_field}, q_init={"G": q_init})
+
+# Get propagator at chain end
+q_end = solver.get_propagator(polymer=0, v=0, u=1, step=100)
+Q = solver.get_partition_function(polymer=0)
 ```
 
 ## Implementation Details
