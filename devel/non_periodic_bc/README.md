@@ -146,8 +146,8 @@ solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cuda")
 ## Notes
 
 - The high-level `PropagatorSolver` class automatically handles platform selection and method fallback
-- CUDA pseudo-spectral only supports periodic BC (uses cuFFT). For non-periodic BC on CUDA, it automatically falls back to the real-space method.
-- CPU-MKL supports both pseudo-spectral (DCT/DST) and real-space methods for all BC types
+- Both CUDA and CPU-MKL support pseudo-spectral methods with DCT (reflecting BC) and DST (absorbing BC)
+- Real-space methods (CN-ADI) are available on both platforms for all BC types
 - Full SCFT iterations with non-periodic BC require additional considerations for field normalization and incompressibility
 - The DCT-II/III and DST-II/III conventions follow scipy.fft
 
