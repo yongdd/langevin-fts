@@ -22,8 +22,17 @@ This document provides a detailed overview of the features available in the poly
 
 ### Numerical Methods
 
+Runtime selection of numerical algorithms via `numerical_method` parameter:
+
+| Method | Solver Type | Description |
+|--------|-------------|-------------|
+| `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
+| `etdrk4` | Pseudo-spectral | ETDRK4 exponential integrator |
+| `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
+| `cn-adi4` | Real-space | 4th-order CN-ADI (Richardson extrapolation) |
+
 #### Pseudo-Spectral Method
-- RQM4 (4th-order Richardson extrapolation) for continuous chains
+- RQM4 (default) or ETDRK4 for continuous chains
 - Supports both continuous and discrete chain models
 - Boundary conditions:
   - Periodic (FFT)
@@ -32,7 +41,7 @@ This document provides a detailed overview of the features available in the poly
 
 #### Real-Space Method
 - CN-ADI (Crank-Nicolson Alternating Direction Implicit) finite difference scheme
-- CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order via `-DPOLYMERFTS_USE_CN_ADI4=ON`)
+- CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order) selectable at runtime
 - Supports only continuous chain model
 - Supports periodic, reflecting, and absorbing boundaries
 - See [RealSpaceSolver.md](RealSpaceSolver.md) for details
@@ -93,7 +102,7 @@ High-level simulation modules built on top of the core library.
 | Periodic BC | Yes (FFT) | Yes |
 | Reflecting BC | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes |
-| Temporal accuracy | 4th-order (RQM4) | CN-ADI2 or CN-ADI4 |
+| Numerical methods | RQM4 (default), ETDRK4 | CN-ADI2 (default), CN-ADI4 |
 | Stress calculation | Yes | No |
 | Recommended for | Large grids, periodic systems | Non-periodic boundaries |
 

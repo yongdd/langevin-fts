@@ -104,10 +104,13 @@ public:
      * @param cb          Computation box
      * @param pc          Molecules container
      * @param propagator_computation_optimizer Optimization strategy
-     * @param method      Solver method ("pseudo" or "real")
+     * @param method      Solver method ("pseudospectral" or "realspace")
+     * @param numerical_method Numerical algorithm:
+     *                         - For pseudospectral: "rqm4" (default) or "etdrk4"
+     *                         - For realspace: "cn-adi2" (default) or "cn-adi4"
      */
     CudaComputationContinuous(ComputationBox<T>* cb, Molecules *pc,
-        PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method);
+        PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method, std::string numerical_method = "");
 
     /** @brief Destructor. Frees GPU resources. */
     ~CudaComputationContinuous();

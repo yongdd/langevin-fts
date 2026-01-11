@@ -58,17 +58,21 @@ where:
 
 This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
-### Compile-Time Toggle
+### Runtime Selection
 
-CN-ADI4 can be enabled at compile time for higher accuracy (but may be unstable near absorbing boundaries):
+CN-ADI2 or CN-ADI4 can be selected at runtime using the `numerical_method` parameter:
 
-```bash
+```python
+from polymerfts import PropagatorSolver
+
 # CN-ADI2 (default - faster, more stable)
-cmake ../ -DCMAKE_BUILD_TYPE=Release
+solver = PropagatorSolver(..., numerical_method="cn-adi2")
 
 # CN-ADI4 (more accurate, but may be unstable near absorbing boundaries)
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_CN_ADI4=ON
+solver = PropagatorSolver(..., numerical_method="cn-adi4")
 ```
+
+**Note**: CN-ADI4 may become unstable when initial conditions are close to absorbing boundaries (see Stability Warning below).
 
 ## Performance Benchmarks
 
@@ -258,9 +262,8 @@ params = {
            "reflecting", "reflecting",    # y-direction (low, high)
            "absorbing", "absorbing"],     # z-direction (low, high)
 
-    # Real-space method is automatically selected for non-periodic BC
-    # Or force it explicitly:
-    "propagator_method": "realspace",
+    # Select real-space method: "cn-adi2" (default) or "cn-adi4"
+    "numerical_method": "cn-adi2",
 
     # ... other parameters
 }
@@ -298,7 +301,7 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0},
     bc=["absorbing", "absorbing"],  # Absorbing on both sides
     chain_model="continuous",
-    method="realspace",
+    numerical_method="cn-adi2",     # or "cn-adi4" for 4th-order accuracy
     platform="cpu-mkl",
     reduce_memory_usage=False
 )

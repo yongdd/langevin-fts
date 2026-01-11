@@ -45,21 +45,20 @@
 #include "MklFactory.h"
 
 /**
- * @brief Construct MKL factory with optional memory reduction.
+ * @brief Construct MKL factory with optional memory reduction and method selection.
  *
  * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
+ * @param pseudo_method       Pseudo-spectral method: "rqm4" or "etdrk4"
+ * @param realspace_method    Real-space method: "cn-adi2" or "cn-adi4"
  */
 template <typename T>
-MklFactory<T>::MklFactory(bool reduce_memory_usage)
+MklFactory<T>::MklFactory(bool reduce_memory_usage,
+                          std::string pseudo_method,
+                          std::string realspace_method)
 {
-    // this->data_type = data_type;
-    // if (this->data_type != "double" && this->data_type != "complex")
-    //     throw_with_line_number("MklFactory only supports double and complex data types. Please check your input.");
-
     this->reduce_memory_usage = reduce_memory_usage;
-
-    // if (this->reduce_memory_usage)
-    //     std::cout << "(warning) Reducing memory usage option only works for CUDA. This option will be ignored in MKL." << std::endl;
+    this->pseudo_method = pseudo_method;
+    this->realspace_method = realspace_method;
 }
 // template <typename T>
 // Array* MklFactory<T>::create_array(
@@ -100,9 +99,9 @@ PropagatorComputation<T>* MklFactory<T>::create_pseudospectral_solver(Computatio
     std::string chain_model = molecules->get_model_name();
 
     if( chain_model == "continuous" && this->reduce_memory_usage == false)
-        return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+        return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", this->pseudo_method);
     else if( chain_model == "continuous" && this->reduce_memory_usage == true)
-        return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral");
+        return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", this->pseudo_method);
     else if( chain_model == "discrete" && this->reduce_memory_usage == false )
         return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
     else if( chain_model == "discrete" && this->reduce_memory_usage == true)
@@ -117,7 +116,7 @@ PropagatorComputation<T>* MklFactory<T>::create_realspace_solver(ComputationBox<
         std::string chain_model = molecules->get_model_name();
         if ( chain_model == "continuous" )
         {
-            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace");
+            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", this->realspace_method);
         }
         else if ( chain_model == "discrete" )
         {

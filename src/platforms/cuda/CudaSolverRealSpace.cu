@@ -42,7 +42,8 @@ CudaSolverRealSpace::CudaSolverRealSpace(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_memory_usage)
+    bool reduce_memory_usage,
+    bool use_4th_order)
 {
     try{
         this->cb = cb;
@@ -50,6 +51,7 @@ CudaSolverRealSpace::CudaSolverRealSpace(
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
         this->reduce_memory_usage = reduce_memory_usage;
+        this->use_4th_order = use_4th_order;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -473,111 +475,115 @@ void CudaSolverRealSpace::advance_propagator(
 
         double *_d_exp_dw = d_exp_dw[monomer_type];
 
-#if REALSPACE_CN_ADI4
-        double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
+        if (use_4th_order)
+        {
+            // CN-ADI4: 4th order accuracy via Richardson extrapolation
+            double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
 
-        // ========================================
-        // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
-        // ========================================
-        // Apply exp(-w*ds/2) at start
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in, _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // ========================================
+            // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            // ========================================
+            // Apply exp(-w*ds/2) at start
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in, _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Diffusion with full-step coefficients
-        if(DIM == 3)
-            advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
-        else if(DIM == 2)
-            advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
-        else if(DIM == 1)
-            advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+            // Diffusion with full-step coefficients
+            if(DIM == 3)
+                advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+            else if(DIM == 2)
+                advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+            else if(DIM == 1)
+                advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
 
-        // Apply exp(-w*ds/2) at end
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_full[STREAM], _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // Apply exp(-w*ds/2) at end
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_full[STREAM], _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // ========================================
-        // Two half steps: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2) * Diffusion(ds/2) * exp(-w*ds/4)
-        // ========================================
-        // First half-step: exp(-w*ds/4) at start
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // ========================================
+            // Two half steps: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2) * Diffusion(ds/2) * exp(-w*ds/4)
+            // ========================================
+            // First half-step: exp(-w*ds/4) at start
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Diffusion with half-step coefficients
-        if(DIM == 3)
-            advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
-                d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
-        else if(DIM == 2)
-            advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
-        else if(DIM == 1)
-            advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+            // Diffusion with half-step coefficients
+            if(DIM == 3)
+                advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
+                    d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+            else if(DIM == 2)
+                advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+            else if(DIM == 1)
+                advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
 
-        // Apply exp(-w*ds/2) at junction
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // Apply exp(-w*ds/2) at junction
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Second half-step: Diffusion with half-step coefficients
-        if(DIM == 3)
-            advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
-                d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
-        else if(DIM == 2)
-            advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
-        else if(DIM == 1)
-            advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
-                d_q_half[STREAM], d_q_half[STREAM],
-                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+            // Second half-step: Diffusion with half-step coefficients
+            if(DIM == 3)
+                advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
+                    d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+            else if(DIM == 2)
+                advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+            else if(DIM == 1)
+                advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_half[STREAM], d_q_half[STREAM],
+                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
 
-        // Apply exp(-w*ds/4) at end
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw_half, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // Apply exp(-w*ds/4) at end
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw_half, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // ========================================
-        // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
-        // Use ker_lin_comb (dst = a*src1 + b*src2), NOT ker_add_lin_comb (dst += a*src1 + b*src2)
-        // ========================================
-        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q_out, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
-        gpu_error_check(cudaPeekAtLastError());
+            // ========================================
+            // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
+            // Use ker_lin_comb (dst = a*src1 + b*src2), NOT ker_add_lin_comb (dst += a*src1 + b*src2)
+            // ========================================
+            ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
+        else
+        {
+            // CN-ADI2: single full step only (2nd order accuracy)
+            // ========================================
+            // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            // ========================================
+            // Apply exp(-w*ds/2) at start
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
 
-#else  // CN-ADI2: single full step only
-        // ========================================
-        // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
-        // ========================================
-        // Apply exp(-w*ds/2) at start
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
+            // Diffusion with full-step coefficients
+            if(DIM == 3)
+                advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_out, d_q_out, monomer_type);
+            else if(DIM == 2)
+                advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_out, d_q_out, monomer_type);
+            else if(DIM == 1)
+                advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
+                    d_q_out, d_q_out, monomer_type);
 
-        // Diffusion with full-step coefficients
-        if(DIM == 3)
-            advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_out, d_q_out, monomer_type);
-        else if(DIM == 2)
-            advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_out, d_q_out, monomer_type);
-        else if(DIM == 1)
-            advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
-                d_q_out, d_q_out, monomer_type);
-
-        // Apply exp(-w*ds/2) at end
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
-#endif
+            // Apply exp(-w*ds/2) at end
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
+            gpu_error_check(cudaPeekAtLastError());
+        }
 
         // Multiply mask
         if (d_q_mask != nullptr)

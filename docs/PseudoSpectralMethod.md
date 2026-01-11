@@ -403,6 +403,19 @@ For the default RQM4 method, see:
 
 The coefficients are precomputed once during initialization and reused for all propagator steps.
 
+### 7.7 Runtime Selection
+
+Both RQM4 and ETDRK4 can be selected at runtime using the `numerical_method` parameter:
+
+```python
+params = {
+    # ... other parameters ...
+    "numerical_method": "rqm4"   # Default: RQM4 (Ranjan-Qin-Morse 4th-order)
+    # or
+    "numerical_method": "etdrk4"  # ETDRK4 (Exponential Time Differencing RK4)
+}
+```
+
 ---
 
 ## 8. Stress Tensor Calculation

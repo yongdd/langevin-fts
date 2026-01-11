@@ -182,6 +182,13 @@ class LFTS:
             Computational backend (auto-selected if not specified).
         - reduce_memory_usage : bool, optional
             Enable memory-saving mode.
+        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4'}, optional
+            Numerical algorithm for propagator computation (default: 'rqm4'):
+
+            - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
+            - 'etdrk4': Pseudo-spectral with ETDRK4 exponential integrator
+            - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
+            - 'cn-adi4': Real-space with 4th-order CN-ADI (Richardson extrapolation)
 
         **Advanced Options:**
 
@@ -417,6 +424,9 @@ class LFTS:
         for idx, polymer in enumerate(self.distinct_polymers):
             draw_polymer_architecture(polymer, idx, params["ds"], dict_color)
 
+        # Get numerical method (default: rqm4)
+        numerical_method = params.get("numerical_method", "rqm4")
+
         # Create PropagatorSolver instance
         self.prop_solver = PropagatorSolver(
             nx=params["nx"],
@@ -425,7 +435,7 @@ class LFTS:
             bond_lengths=self.segment_lengths,
             bc=bc,
             chain_model=params["chain_model"],
-            method="pseudospectral",
+            numerical_method=numerical_method,
             platform=platform,
             reduce_memory_usage=reduce_memory_usage,
         )

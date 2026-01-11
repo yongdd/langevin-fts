@@ -54,13 +54,6 @@
 #ifndef FINITE_DIFFERENCE_H_
 #define FINITE_DIFFERENCE_H_
 
-// Toggle CN-ADI4 (4th-order) for real-space solver
-// Set to 0 for CN-ADI2 (2nd-order, faster, more stable) - default
-// Set to 1 for CN-ADI4 (4th-order, slower, may be unstable near absorbing boundaries)
-#ifndef REALSPACE_CN_ADI4
-#define REALSPACE_CN_ADI4 0
-#endif
-
 #include <string>
 #include <vector>
 #include <map>

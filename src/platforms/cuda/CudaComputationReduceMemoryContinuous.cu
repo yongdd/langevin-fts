@@ -47,6 +47,7 @@
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudoContinuous.h"
+#include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
 
@@ -55,7 +56,8 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
-    std::string method)
+    std::string method,
+    std::string numerical_method)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer)
 {
     try{
@@ -80,11 +82,21 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
         this->method = method;
         if(method == "pseudospectral")
-            this->propagator_solver = new CudaSolverPseudoContinuous<T>(cb, molecules, n_streams, streams, false);
+        {
+            if (numerical_method == "" || numerical_method == "rqm4")
+                this->propagator_solver = new CudaSolverPseudoContinuous<T>(cb, molecules, n_streams, streams, false);
+            else if (numerical_method == "etdrk4")
+                this->propagator_solver = new CudaSolverPseudoETDRK4<T>(cb, molecules, n_streams, streams, false);
+            else
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'etdrk4'.");
+        }
         else if(method == "realspace")
         {
-            if constexpr (std::is_same<T, double>::value) 
-                this->propagator_solver = new CudaSolverRealSpace(cb, molecules, n_streams, streams, false);
+            if constexpr (std::is_same<T, double>::value)
+            {
+                bool use_4th_order = (numerical_method == "cn-adi4");
+                this->propagator_solver = new CudaSolverRealSpace(cb, molecules, n_streams, streams, false, use_4th_order);
+            }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }

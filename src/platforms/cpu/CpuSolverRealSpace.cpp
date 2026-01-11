@@ -45,16 +45,19 @@
  * Allocates tridiagonal matrix coefficients for each dimension
  * and monomer type.
  *
- * @param cb        Computation box for grid and boundary info
- * @param molecules Molecular system (must use continuous model)
+ * @param cb            Computation box for grid and boundary info
+ * @param molecules     Molecular system (must use continuous model)
+ * @param use_4th_order Use CN-ADI4 (4th order accuracy via Richardson extrapolation)
+ *                      instead of CN-ADI2 (2nd order, default)
  *
  * @throws Exception if discrete chain model is specified
  */
-CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules)
+CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order)
 {
     try{
         this->cb = cb;
         this->molecules = molecules;
+        this->use_4th_order = use_4th_order;
 
         if(molecules->get_model_name() != "continuous")
             throw_with_line_number("Real-space method only support 'continuous' chain model.");
@@ -240,103 +243,107 @@ void CpuSolverRealSpace::advance_propagator(
         // Get Boltzmann factors for full and half steps
         const double *_exp_dw = exp_dw[monomer_type].data();           // exp(-w*ds/2)
 
-#if REALSPACE_CN_ADI4
-        const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
-
-        // Temporary arrays
-        double q_out1[M];  // Full step result
-        double q_out2[M];  // Two half-steps result
-
-        //=====================================================================
-        // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
-        //=====================================================================
-        advance_propagator_step(
-            q_in, q_out1,
-            _exp_dw,
-            xl[monomer_type], xd[monomer_type], xh[monomer_type],
-            yl[monomer_type], yd[monomer_type], yh[monomer_type],
-            zl[monomer_type], zd[monomer_type], zh[monomer_type],
-            nullptr);
-
-        //=====================================================================
-        // Two half-steps (ds/2 each)
-        // Structure: exp(-w*ds/4) * D(ds/2) * exp(-w*ds/2) * D(ds/2) * exp(-w*ds/4)
-        // where the middle exp(-w*ds/2) combines end of step1 and start of step2
-        //=====================================================================
+        if (use_4th_order)
         {
-            const int DIM = this->cb->get_dim();
-            double q_temp[M];
+            // CN-ADI4: 4th order accuracy via Richardson extrapolation
+            const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
 
-            // First half-step: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2)
-            // Apply exp(-w*ds/4) at start
+            // Temporary arrays
+            double q_out1[M];  // Full step result
+            double q_out2[M];  // Two half-steps result
+
+            //=====================================================================
+            // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            //=====================================================================
+            advance_propagator_step(
+                q_in, q_out1,
+                _exp_dw,
+                xl[monomer_type], xd[monomer_type], xh[monomer_type],
+                yl[monomer_type], yd[monomer_type], yh[monomer_type],
+                zl[monomer_type], zd[monomer_type], zh[monomer_type],
+                nullptr);
+
+            //=====================================================================
+            // Two half-steps (ds/2 each)
+            // Structure: exp(-w*ds/4) * D(ds/2) * exp(-w*ds/2) * D(ds/2) * exp(-w*ds/4)
+            // where the middle exp(-w*ds/2) combines end of step1 and start of step2
+            //=====================================================================
+            {
+                const int DIM = this->cb->get_dim();
+                double q_temp[M];
+
+                // First half-step: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2)
+                // Apply exp(-w*ds/4) at start
+                for(int i=0; i<M; i++)
+                    q_temp[i] = _exp_dw_half[i] * q_in[i];
+
+                // ADI diffusion with half-step coefficients
+                if(DIM == 3)
+                    advance_propagator_3d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                        yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
+                        zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
+                else if(DIM == 2)
+                    advance_propagator_2d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                        yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
+                else if(DIM == 1)
+                    advance_propagator_1d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
+
+                // Apply exp(-w*ds/2) at junction (combines ds/4 from end of step1 + ds/4 from start of step2)
+                for(int i=0; i<M; i++)
+                    q_out2[i] *= _exp_dw[i];
+
+                // Second half-step: Diffusion(ds/2) * exp(-w*ds/4)
+                // Copy for diffusion step
+                for(int i=0; i<M; i++)
+                    q_temp[i] = q_out2[i];
+
+                if(DIM == 3)
+                    advance_propagator_3d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                        yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
+                        zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
+                else if(DIM == 2)
+                    advance_propagator_2d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                        yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
+                else if(DIM == 1)
+                    advance_propagator_1d_step(
+                        this->cb->get_boundary_conditions(), q_temp, q_out2,
+                        xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
+
+                // Apply exp(-w*ds/4) at end
+                for(int i=0; i<M; i++)
+                    q_out2[i] *= _exp_dw_half[i];
+            }
+
+            //=====================================================================
+            // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
+            //=====================================================================
             for(int i=0; i<M; i++)
-                q_temp[i] = _exp_dw_half[i] * q_in[i];
-
-            // ADI diffusion with half-step coefficients
-            if(DIM == 3)
-                advance_propagator_3d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
-                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
-                    zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
-            else if(DIM == 2)
-                advance_propagator_2d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
-                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
-            else if(DIM == 1)
-                advance_propagator_1d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
-
-            // Apply exp(-w*ds/2) at junction (combines ds/4 from end of step1 + ds/4 from start of step2)
-            for(int i=0; i<M; i++)
-                q_out2[i] *= _exp_dw[i];
-
-            // Second half-step: Diffusion(ds/2) * exp(-w*ds/4)
-            // Copy for diffusion step
-            for(int i=0; i<M; i++)
-                q_temp[i] = q_out2[i];
-
-            if(DIM == 3)
-                advance_propagator_3d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
-                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
-                    zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
-            else if(DIM == 2)
-                advance_propagator_2d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
-                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
-            else if(DIM == 1)
-                advance_propagator_1d_step(
-                    this->cb->get_boundary_conditions(), q_temp, q_out2,
-                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
-
-            // Apply exp(-w*ds/4) at end
-            for(int i=0; i<M; i++)
-                q_out2[i] *= _exp_dw_half[i];
+                q_out[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
         }
-
-        //=====================================================================
-        // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
-        //=====================================================================
-        for(int i=0; i<M; i++)
-            q_out[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
-
-#else  // CN-ADI2: single full step only
-        //=====================================================================
-        // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
-        //=====================================================================
-        advance_propagator_step(
-            q_in, q_out,
-            _exp_dw,
-            xl[monomer_type], xd[monomer_type], xh[monomer_type],
-            yl[monomer_type], yd[monomer_type], yh[monomer_type],
-            zl[monomer_type], zd[monomer_type], zh[monomer_type],
-            nullptr);
-#endif
+        else
+        {
+            // CN-ADI2: single full step only (2nd order accuracy)
+            //=====================================================================
+            // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            //=====================================================================
+            advance_propagator_step(
+                q_in, q_out,
+                _exp_dw,
+                xl[monomer_type], xd[monomer_type], xh[monomer_type],
+                yl[monomer_type], yd[monomer_type], yh[monomer_type],
+                zl[monomer_type], zd[monomer_type], zh[monomer_type],
+                nullptr);
+        }
 
         // Multiply mask
         if(q_mask != nullptr)

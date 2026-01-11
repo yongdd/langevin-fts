@@ -4,19 +4,30 @@ This document provides benchmark results comparing the numerical methods availab
 
 ## Available Methods
 
+All numerical methods are selectable at runtime using the `numerical_method` parameter.
+
 ### Pseudo-Spectral Methods (Periodic Boundaries)
 
 | Method | Order | Description | Reference |
 |--------|-------|-------------|-----------|
-| **RQM4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters | *Macromolecules* 41, 942-954 (2008) |
-| **ETDRK4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
+| **rqm4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters (default) | *Macromolecules* 41, 942-954 (2008) |
+| **etdrk4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
 
 ### Real-Space Methods (Non-Periodic Boundaries)
 
-| Method | Order | Description | Build Option |
-|--------|-------|-------------|--------------|
-| **CN-ADI2** | 2nd | Crank-Nicolson Alternating Direction Implicit | Default |
-| **CN-ADI4** | 4th | CN-ADI with Richardson extrapolation | `-DPOLYMERFTS_USE_CN_ADI4=ON` |
+| Method | Order | Description |
+|--------|-------|-------------|
+| **cn-adi2** | 2nd | Crank-Nicolson Alternating Direction Implicit (default) |
+| **cn-adi4** | 4th | CN-ADI with Richardson extrapolation |
+
+### Usage Example
+
+```python
+params = {
+    # ... other parameters ...
+    "numerical_method": "rqm4"  # or "etdrk4", "cn-adi2", "cn-adi4"
+}
+```
 
 ## Convergence Analysis
 
@@ -142,7 +153,7 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 | **FFTs per step** | 6 | 8 |
 | **Stability** | Good for typical $ds$ | L-stable (better for stiff problems) |
 | **Memory** | Lower | Higher (stores phi coefficients) |
-| **Selection** | Compile-time (default) | Runtime (when implemented) |
+| **Selection** | `numerical_method="rqm4"` (default) | `numerical_method="etdrk4"` |
 
 ### CN-ADI2 vs CN-ADI4
 
@@ -152,26 +163,27 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 | **Steps per ds** | 1 | 2 (Richardson extrapolation) |
 | **Speed** | Faster | ~2x slower |
 | **Stability** | More stable | May be unstable near absorbing BC |
-| **Enable** | Default | `-DPOLYMERFTS_USE_CN_ADI4=ON` |
+| **Selection** | `numerical_method="cn-adi2"` (default) | `numerical_method="cn-adi4"` |
 
 ## Recommendations
 
 ### For Periodic Systems (SCFT, L-FTS, CL-FTS)
 
-1. Use **RQM4** (pseudo-spectral, default)
+1. Use **rqm4** (pseudo-spectral, default)
 2. Set $ds = 0.01$ ($N=100$) for most calculations
 3. Reduce to $ds = 0.005$ for high-precision comparisons
 4. Use **CUDA** platform for 2D/3D systems
+5. Consider **etdrk4** for stiff problems where RQM4 shows instability
 
 ### For Non-Periodic Systems (Brushes, Confined Films)
 
-1. Use **CN-ADI2** (real-space, default) for stability
-2. Enable **CN-ADI4** if higher accuracy is needed:
-   ```bash
-   cmake .. -DPOLYMERFTS_USE_CN_ADI4=ON
+1. Use **cn-adi2** (real-space, default) for stability
+2. Use **cn-adi4** if higher accuracy is needed:
+   ```python
+   params = {"numerical_method": "cn-adi4", ...}
    ```
 3. May require smaller $ds$ due to 2nd-order accuracy
-4. Test stability near absorbing boundaries before production runs
+4. Test stability near absorbing boundaries before production runs (CN-ADI4 may be unstable)
 
 ### Performance Optimization
 

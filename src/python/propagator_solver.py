@@ -17,7 +17,7 @@ Example usage:
         bond_lengths={"A": 1.0},
         bc=["reflecting", "reflecting"],
         chain_model="continuous",
-        method="pseudospectral",
+        numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4"
         platform="cpu-mkl",
         reduce_memory_usage=False
     )
@@ -74,8 +74,12 @@ class PropagatorSolver:
         Options: "periodic", "reflecting", "absorbing"
     chain_model : str
         Chain model type: "continuous" or "discrete".
-    method : str
-        Numerical method: "pseudospectral" or "realspace".
+    numerical_method : str
+        Numerical algorithm for propagator computation:
+        - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation (default)
+        - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
+        - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
+        - "cn-adi4": Real-space with 4th-order CN-ADI (Richardson extrapolation)
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
     reduce_memory_usage : bool
@@ -107,7 +111,7 @@ class PropagatorSolver:
     ...     bond_lengths={"A": 1.0},
     ...     bc=["reflecting", "reflecting"],
     ...     chain_model="continuous",
-    ...     method="pseudospectral",
+    ...     numerical_method="rqm4",
     ...     platform="cpu-mkl",
     ...     reduce_memory_usage=False
     ... )
@@ -116,7 +120,7 @@ class PropagatorSolver:
     >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
     >>> Q = solver.get_partition_function(polymer=0)
 
-    2D thin film with mixed boundaries:
+    2D thin film with real-space CN-ADI4 method:
 
     >>> solver = PropagatorSolver(
     ...     nx=[32, 24], lx=[4.0, 3.0],
@@ -124,11 +128,15 @@ class PropagatorSolver:
     ...     bond_lengths={"A": 1.0},
     ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     chain_model="continuous",
-    ...     method="pseudospectral",
+    ...     numerical_method="cn-adi4",
     ...     platform="cuda",
     ...     reduce_memory_usage=False
     ... )
     """
+
+    # Map numerical methods to solver types
+    _PSEUDO_METHODS = {"rqm4", "etdrk4"}
+    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4"}
 
     def __init__(
         self,
@@ -138,7 +146,7 @@ class PropagatorSolver:
         bond_lengths: Dict[str, float],
         bc: List[str],
         chain_model: str,
-        method: str,
+        numerical_method: str,
         platform: str,
         reduce_memory_usage: bool,
         mask: Optional[NDArray[np.floating]] = None
@@ -168,8 +176,24 @@ class PropagatorSolver:
         # Store other parameters
         self.ds = ds
         self.chain_model = chain_model.lower()
-        self.method = method.lower()
         self.bond_lengths = dict(bond_lengths)
+
+        # Validate and store numerical method
+        numerical_method = numerical_method.lower()
+        if numerical_method in self._PSEUDO_METHODS:
+            self.method = "pseudospectral"
+            self._pseudo_method = numerical_method
+            self._realspace_method = "cn-adi2"  # default
+        elif numerical_method in self._REALSPACE_METHODS:
+            self.method = "realspace"
+            self._pseudo_method = "rqm4"  # default
+            self._realspace_method = numerical_method
+        else:
+            raise ValueError(
+                f"Unknown numerical_method '{numerical_method}'. "
+                f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS}"
+            )
+        self.numerical_method = numerical_method
 
         # Determine platform
         if platform == "auto":
@@ -189,8 +213,10 @@ class PropagatorSolver:
             self.method == "pseudospectral"):
             # CUDA pseudospectral only supports periodic BC, fall back to realspace
             print("Note: CUDA pseudo-spectral only supports periodic BC. "
-                  "Switching to real-space method.")
+                  "Switching to real-space CN-ADI2 method.")
             self.method = "realspace"
+            self.numerical_method = "cn-adi2"
+            self._realspace_method = "cn-adi2"
 
         # Store memory usage option
         self.reduce_memory_usage = reduce_memory_usage
@@ -205,8 +231,11 @@ class PropagatorSolver:
         else:
             self.mask = None
 
-        # Create factory
-        self._factory = _core.PlatformSelector.create_factory(self.platform, self.reduce_memory_usage)
+        # Create factory with numerical method parameters
+        self._factory = _core.PlatformSelector.create_factory(
+            self.platform, self.reduce_memory_usage, "real",
+            self._pseudo_method, self._realspace_method
+        )
 
         # Create molecules
         self._molecules = self._factory.create_molecules_information(
@@ -595,7 +624,7 @@ class PropagatorSolver:
             f"  Boundary conditions: {self.bc}",
             f"  Chain model: {self.chain_model}",
             f"  Contour step (ds): {self.ds}",
-            f"  Method: {self.method}",
+            f"  Numerical method: {self.numerical_method}",
             f"  Platform: {self.platform}",
             f"  Monomer types: {list(self.bond_lengths.keys())}",
         ]
@@ -604,7 +633,7 @@ class PropagatorSolver:
     def __repr__(self):
         return (
             f"PropagatorSolver(nx={self.nx}, lx={self.lx}, "
-            f"method='{self.method}', platform='{self.platform}')"
+            f"numerical_method='{self.numerical_method}', platform='{self.platform}')"
         )
 
     # -------------------- Box operations --------------------

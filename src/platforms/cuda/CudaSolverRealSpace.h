@@ -280,6 +280,7 @@ private:
 
     std::string chain_model;     ///< Chain model type
     bool reduce_memory_usage;    ///< Memory-saving mode flag
+    bool use_4th_order;          ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
 
     int n_streams;               ///< Number of parallel streams
 
@@ -405,9 +406,11 @@ public:
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
      * @param reduce_memory_usage Memory-saving mode
+     * @param use_4th_order       Use CN-ADI4 (4th order accuracy via Richardson
+     *                            extrapolation) instead of CN-ADI2 (2nd order, default)
      */
     CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules,
-        int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+        int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage, bool use_4th_order = false);
 
     /**
      * @brief Destructor. Frees GPU resources.
