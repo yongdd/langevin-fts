@@ -42,6 +42,7 @@
 
 #include <complex>
 #include <cmath>
+#include <cstring>
 #include <vector>
 #include <omp.h>
 #include "CudaComputationReduceMemoryContinuous.h"
@@ -124,6 +125,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             phi_block[item.first] = nullptr;
             // Allocate pinned memory
             gpu_error_check(cudaMallocHost((void**)&phi_block[item.first], sizeof(T)*M));
+            std::memset(phi_block[item.first], 0, sizeof(T)*M);  // Zero-initialize
         }
 
         // Allocate memory for check points

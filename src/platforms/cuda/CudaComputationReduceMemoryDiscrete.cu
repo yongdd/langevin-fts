@@ -30,6 +30,7 @@
 
 #include <complex>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <chrono>
 #include <omp.h>
@@ -169,6 +170,7 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         {
             phi_block[item.first] = nullptr;
             gpu_error_check(cudaMallocHost((void**)&phi_block[item.first], sizeof(T)*M));
+            std::memset(phi_block[item.first], 0, sizeof(T)*M);  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function

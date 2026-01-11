@@ -137,6 +137,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         {
             this->d_phi_block[item.first] = nullptr;
             gpu_error_check(cudaMalloc((void**)&this->d_phi_block[item.first], sizeof(T)*M));
+            gpu_error_check(cudaMemset(this->d_phi_block[item.first], 0, sizeof(T)*M));  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function
