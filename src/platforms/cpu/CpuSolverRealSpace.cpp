@@ -240,7 +240,7 @@ void CpuSolverRealSpace::advance_propagator(
         // Get Boltzmann factors for full and half steps
         const double *_exp_dw = exp_dw[monomer_type].data();           // exp(-w*ds/2)
 
-#if USE_RICHARDSON_EXTRAPOLATION
+#if REALSPACE_RICHARDSON_EXTRAPOLATION
         const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
 
         // Temporary arrays

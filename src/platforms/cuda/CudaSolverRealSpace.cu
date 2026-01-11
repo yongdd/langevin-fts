@@ -473,7 +473,7 @@ void CudaSolverRealSpace::advance_propagator(
 
         double *_d_exp_dw = d_exp_dw[monomer_type];
 
-#if USE_RICHARDSON_EXTRAPOLATION
+#if REALSPACE_RICHARDSON_EXTRAPOLATION
         double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
 
         // ========================================
