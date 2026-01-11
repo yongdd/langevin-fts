@@ -74,6 +74,7 @@ ADD_LIBRARY(common
     src/common/PropagatorAggregator.cpp
     src/common/CircularBuffer.cpp
     src/common/Pseudo.cpp
+    src/common/ETDRK4Coefficients.cpp
     src/common/FiniteDifference.cpp
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
@@ -105,6 +106,7 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoBase.cpp
         src/platforms/cpu/CpuSolverPseudoContinuous.cpp
+        src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverRealSpace.cpp
         src/platforms/cpu/CpuComputationBase.cpp
@@ -135,6 +137,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaFFT.cu
         src/platforms/cuda/CudaSolverPseudoContinuous.cu
+        src/platforms/cuda/CudaSolverPseudoETDRK4.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverRealSpace.cu
         src/platforms/cuda/CudaComputationBase.cu
