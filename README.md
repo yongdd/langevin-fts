@@ -6,42 +6,14 @@ This open-source code is distributed under the Apache License 2.0. This license 
 
 ## Features
 
-### Core Library
-  * Any number of monomer types
-  * Arbitrary acyclic branched polymers
-  * Arbitrary mixtures of block copolymers and homopolymers
-  * Arbitrary initial conditions of propagators at chain ends
-  * Access to chain propagators
-  * Conformational asymmetry
-  * Simulation box dimension: 3D, 2D, and 1D
-  * Automatic optimization of chain propagator computations
-  * Chain models: continuous, discrete
-  * Pseudo-spectral method
-    * 4th-order Richardson extrapolation method for continuous chains
-    * Supports continuous and discrete chains
-    * Periodic boundaries only
-  * Real-space method
-    * 2nd-order Crank-Nicolson method
-    * Supports only continuous chains
-    * Supports periodic, reflecting, and absorbing boundaries
-  * Can set an impenetrable region using a mask
-  * Can constrain space group symmetries during the SCFT iterations (orthorhombic, tetragonal, and cubic only) (**beta**)
-  * Anderson mixing
-  * Platforms: MKL (CPU) and CUDA (GPU)
-  * Parallel computations of propagators with multi-core CPUs (up to 8) or multiple CUDA streams (up to 4) to maximize GPU usage
-  * Memory saving option
-  * Common interfaces regardless of chain model, simulation box dimension, and platform
+- Arbitrary acyclic branched polymers and their mixtures
+- Continuous and discrete chain models
+- Pseudo-spectral (FFT/DCT/DST) and real-space (finite difference) solvers
+- Periodic, reflecting, and absorbing boundary conditions
+- CPU (Intel MKL) and GPU (NVIDIA CUDA) platforms
+- SCFT, L-FTS, and CL-FTS simulation modules
 
-### SCFT, L-FTS, and CL-FTS Modules
-On top of the above library, SCFT, L-FTS, and CL-FTS are implemented. They support the following features:
-  * Polymer melts
-  * Arbitrary mixtures of block copolymers, homopolymers, and random copolymers
-  * Box size determination by stress calculation (for SCFT)
-  * Leimkuhler-Matthews method for updating exchange field (for L-FTS and CL-FTS)
-  * Random Number Generator: PCG64 (for L-FTS and CL-FTS)
-  * Complex-valued auxiliary fields for handling the sign problem (for CL-FTS)
-  * Dynamical stabilization option (for CL-FTS)
-  * Smearing for finite-range interactions (for CL-FTS)
+For a complete list of features, see [docs/Features.md](docs/Features.md).
 
 ## Installation
 
@@ -150,6 +122,7 @@ make install
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
+| `POLYMERFTS_USE_RICHARDSON` | OFF | Enable 4th-order Richardson extrapolation for real-space solver |
 
 Example with options:
 ```bash

@@ -39,13 +39,6 @@
 
 #include "CpuSolverRealSpace.h"
 
-// Toggle Richardson extrapolation for 4th-order accuracy
-// Set to 0 for 2nd-order (faster but less accurate)
-// Set to 1 for 4th-order (slower but more accurate) - default
-#ifndef USE_RICHARDSON_EXTRAPOLATION
-#define USE_RICHARDSON_EXTRAPOLATION 1
-#endif
-
 /**
  * @brief Construct real-space solver for continuous chains.
  *

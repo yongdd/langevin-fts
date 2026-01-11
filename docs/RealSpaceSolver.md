@@ -60,16 +60,14 @@ This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
 ### Compile-Time Toggle
 
-Richardson extrapolation can be disabled at compile time for faster (but less accurate) 2nd-order computations:
+Richardson extrapolation can be enabled at compile time for higher accuracy (but may be unstable near absorbing boundaries):
 
 ```bash
-# 4th-order (default - more accurate)
+# 2nd-order (default - faster, more stable)
 cmake ../ -DCMAKE_BUILD_TYPE=Release
 
-# 2nd-order (faster - for quick tests or when accuracy is less critical)
-cmake ../ -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_CXX_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0" \
-    -DCMAKE_CUDA_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0"
+# 4th-order (more accurate, but may be unstable near absorbing boundaries)
+cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_RICHARDSON=ON
 ```
 
 ## Performance Benchmarks
@@ -214,13 +212,7 @@ where $a_n$ are the Fourier coefficients of the initial Gaussian.
 | 2-3σ | **Unstable** | Stable |
 | < 2σ | **Diverges** | Stable |
 
-**Recommendation**: For grafted brush simulations with grafting points within ~5σ of an absorbing boundary, use 2nd-order mode:
-
-```bash
-cmake ../ -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_CXX_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0" \
-    -DCMAKE_CUDA_FLAGS="-DUSE_RICHARDSON_EXTRAPOLATION=0"
-```
+**Recommendation**: For grafted brush simulations with grafting points within ~5σ of an absorbing boundary, use the default 2nd-order mode. Do not enable Richardson extrapolation (4th-order) in such cases.
 
 The instability arises because Richardson extrapolation amplifies small differences between full-step and half-step solutions near the boundary, where truncation errors in the absorbing BC treatment differ between step sizes.
 

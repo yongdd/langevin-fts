@@ -54,6 +54,13 @@
 #ifndef FINITE_DIFFERENCE_H_
 #define FINITE_DIFFERENCE_H_
 
+// Toggle Richardson extrapolation for 4th-order accuracy in real-space solver
+// Set to 0 for 2nd-order (faster, more stable) - default
+// Set to 1 for 4th-order (slower, may be unstable near absorbing boundaries)
+#ifndef USE_RICHARDSON_EXTRAPOLATION
+#define USE_RICHARDSON_EXTRAPOLATION 0
+#endif
+
 #include <string>
 #include <vector>
 #include <map>
