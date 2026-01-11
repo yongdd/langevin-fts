@@ -92,7 +92,7 @@ The central computational engine. Computes chain propagators using dynamic progr
 
 Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
-- **Continuous chains**: Pseudo-spectral method with 4th-order Richardson extrapolation solving the modified diffusion equation
+- **Continuous chains**: Pseudo-spectral method with RQM4 (4th-order Richardson extrapolation) solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
 - **Real-space method**: Crank-Nicolson finite difference solver (beta feature, continuous chains only)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
@@ -229,7 +229,7 @@ Simulations are configured via Python dictionaries with keys:
 
 Derived classes implement chain-model-specific behavior:
 - `update_dw`: Different Boltzmann factor formulas (ds*0.5 vs ds)
-- `advance_propagator`: Different algorithms (Richardson extrapolation vs simple step)
+- `advance_propagator`: Different algorithms (RQM4 vs simple step)
 - `advance_propagator_half_bond_step`: Discrete-specific implementation
 - `get_stress_boltz_bond`: Returns nullptr for continuous, boltz_bond for discrete
 

@@ -15,7 +15,7 @@
  * **Chain Models:**
  *
  * - **Continuous**: Standard Gaussian chain model with continuous contour.
- *   Uses pseudo-spectral method with 4th-order Richardson extrapolation.
+ *   Uses pseudo-spectral method with RQM4 (4th-order Richardson extrapolation).
  * - **Discrete**: Bead-spring model with discrete segments.
  *   More accurate for short chains or when segment-level detail matters.
  *

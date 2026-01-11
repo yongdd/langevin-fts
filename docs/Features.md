@@ -23,7 +23,7 @@ This document provides a detailed overview of the features available in the poly
 ### Numerical Methods
 
 #### Pseudo-Spectral Method
-- 4th-order Richardson extrapolation for continuous chains
+- RQM4 (4th-order Richardson extrapolation) for continuous chains
 - Supports both continuous and discrete chain models
 - Boundary conditions:
   - Periodic (FFT)

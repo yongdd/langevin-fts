@@ -1,12 +1,12 @@
 /**
  * @file CudaSolverPseudoContinuous.cu
- * @brief CUDA pseudo-spectral solver for continuous Gaussian chains.
+ * @brief CUDA pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
- * Implements 4th-order Richardson extrapolation for advancing chain
- * propagators using cuFFT for Fourier transforms and multiple CUDA streams
- * for concurrent computation.
+ * Implements RQM4 (Ranjan-Qin-Morse 4th-order using Richardson extrapolation)
+ * for advancing chain propagators using cuFFT for Fourier transforms and
+ * multiple CUDA streams for concurrent computation.
  *
- * **Richardson Extrapolation:**
+ * **RQM4 (Richardson Extrapolation):**
  *
  * The propagator is advanced using two step sizes combined for 4th-order:
  * - Full step ds: O(ds²) accuracy
@@ -99,7 +99,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create exp_dw, and exp_dw_half
+        // Create exp_dw and exp_dw_half
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
@@ -230,6 +230,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
                 cub::DeviceReduce::Reduce(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[i][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
         }
+
         update_laplacian_operator();
     }
     catch(std::exception& exc)
@@ -345,7 +346,7 @@ void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::
 
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw     [monomer_type], w,      
+                this->d_exp_dw     [monomer_type], w,
                 sizeof(T)*M, cudaMemcpyInputToDevice));
             gpu_error_check(cudaMemcpyAsync(
                 this->d_exp_dw_half[monomer_type], w,
@@ -365,7 +366,7 @@ void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::
         throw_without_line_number(exc.what());
     }
 }
-// Advance propagator using Richardson extrapolation
+// Advance propagator using RQM4
 template <typename T>
 void CudaSolverPseudoContinuous<T>::advance_propagator(
         const int STREAM,
@@ -508,7 +509,7 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
             gpu_error_check(cudaPeekAtLastError());
         }
 
-        // ===== Richardson extrapolation =====
+        // ===== RQM4: Richardson extrapolation =====
         // Compute linear combination with 4/3 and -1/3 ratio
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, 4.0/3.0, d_q_step_2_one[STREAM], -1.0/3.0, d_q_step_1_one[STREAM], M);
         gpu_error_check(cudaPeekAtLastError());
@@ -525,6 +526,7 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
+
 template <typename T>
 void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
     const int STREAM,

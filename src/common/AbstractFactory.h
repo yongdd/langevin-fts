@@ -181,7 +181,7 @@ public :
      * @brief Create a pseudo-spectral propagator solver.
      *
      * Creates an FFT-based solver for the modified diffusion equation.
-     * Uses 4th-order Richardson extrapolation for continuous chains.
+     * Uses RQM4 (4th-order Richardson extrapolation) for continuous chains.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

@@ -1,10 +1,11 @@
 /**
  * @file CpuSolverPseudoContinuous.cpp
- * @brief CPU pseudo-spectral solver for continuous chain propagators.
+ * @brief CPU pseudo-spectral solver for continuous chain propagators using RQM4.
  *
  * Implements the operator splitting pseudo-spectral method with
- * 4th-order Richardson extrapolation for continuous Gaussian chains.
- * Supports all boundary conditions (periodic, reflecting, absorbing).
+ * RQM4 (Ranjan-Qin-Morse 4th-order using Richardson extrapolation)
+ * for continuous Gaussian chains. Supports all boundary conditions
+ * (periodic, reflecting, absorbing).
  *
  * **Operator Splitting Scheme:**
  *
@@ -13,7 +14,7 @@
  * 2. Diffusion step: FFT -> multiply by exp(-b^2 k^2 ds/6) -> IFFT
  * 3. Potential half-step: exp(-w·ds/2)
  *
- * **Richardson Extrapolation:**
+ * **RQM4 (Richardson Extrapolation):**
  *
  * Combines one full step (ds) and two half-steps (ds/2 each):
  *     q_out = (4·q_half - q_full) / 3
@@ -211,7 +212,7 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
         for (int i = 0; i < M; ++i)
             q_out2[i] *= _exp_dw_half[i];
 
-        // ===== Richardson extrapolation =====
+        // ===== RQM4: Richardson extrapolation =====
         for (int i = 0; i < M; ++i)
             q_out[i] = (4.0 * q_out2[i] - q_out1[i]) / 3.0;
 

@@ -1,10 +1,10 @@
 /**
  * @file CudaSolverPseudoContinuous.h
- * @brief GPU pseudo-spectral solver for continuous chain model.
+ * @brief GPU pseudo-spectral solver for continuous chain model using RQM4.
  *
  * This header provides CudaSolverPseudoContinuous, the CUDA implementation
- * of the pseudo-spectral method with 4th-order Richardson extrapolation
- * for continuous Gaussian chains.
+ * of the pseudo-spectral method with RQM4 (Ranjan-Qin-Morse 4th-order using
+ * Richardson extrapolation) for continuous Gaussian chains.
  *
  * **GPU Architecture:**
  *
@@ -49,14 +49,14 @@
 
 /**
  * @class CudaSolverPseudoContinuous
- * @brief GPU pseudo-spectral solver for continuous Gaussian chains.
+ * @brief GPU pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
- * Implements operator splitting with Richardson extrapolation on GPU
- * using cuFFT and custom CUDA kernels.
+ * Implements operator splitting with RQM4 (4th-order Richardson extrapolation)
+ * on GPU using cuFFT and custom CUDA kernels.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Richardson Extrapolation:**
+ * **RQM4 (Richardson Extrapolation):**
  *
  * Same algorithm as CPU version:
  *     q(s+ds) = (4/3) q^(ds/2,ds/2) - (1/3) q^(ds)
@@ -153,7 +153,7 @@ public:
     void update_dw(std::string device, std::map<std::string, const T*> w_input) override;
 
     /**
-     * @brief Advance propagator by one step using Richardson extrapolation.
+     * @brief Advance propagator by one step using RQM4.
      *
      * @param STREAM      Stream index for concurrent execution
      * @param d_q_in      Input propagator (device)
