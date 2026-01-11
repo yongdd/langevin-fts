@@ -8,6 +8,8 @@ temp*
 *.out
 *.png
 !examples/clfts/dynamical_stabilization.png
+!docs/grafted_brush_validation.png
+!docs/convergence_plot.png
 *.html
 *.qdrep
 *.sqlite
