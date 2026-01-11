@@ -714,8 +714,8 @@ PYBIND11_MODULE(_core, m)
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def_static("create_factory", [](std::string platform_name, bool reduce_memory_usage, std::string type,
-                                         std::string pseudo_method, std::string realspace_method)
+        .def_static("create_factory", [](std::string platform_name, bool reduce_memory_usage,
+                                         std::string type)
         {
             // Converting type to lowercase
             std::transform(type.begin(), type.end(), type.begin(),
@@ -723,15 +723,15 @@ PYBIND11_MODULE(_core, m)
 
             if (type == "real")
             {
-                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory_usage, pseudo_method, realspace_method));
+                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory_usage));
             }
             else if (type == "complex")
             {
-                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory_usage, pseudo_method, realspace_method));
+                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory_usage));
             }
             else {
                 throw std::runtime_error("Invalid type parameter. Must be either 'real' or 'complex'");
             }
-        }, py::arg("platform_name"), py::arg("reduce_memory_usage") = false, py::arg("type") = "real",
-           py::arg("pseudo_method") = "rqm4", py::arg("realspace_method") = "cn-adi2");
+        }, py::arg("platform_name"), py::arg("reduce_memory_usage") = false,
+           py::arg("type") = "real");
 }

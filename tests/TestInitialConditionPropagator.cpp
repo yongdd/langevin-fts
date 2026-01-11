@@ -71,7 +71,7 @@ int main()
                     propagator_computation_optimizer->display_blocks();
                     propagator_computation_optimizer->display_sub_propagators();
 
-                    PropagatorComputation<double>* solver = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer);
+                    PropagatorComputation<double>* solver = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer, "rqm4");
 
                     // -------------- Print simulation parameters ------------
                     std::cout << std::setprecision(default_precision);

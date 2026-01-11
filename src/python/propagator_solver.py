@@ -182,12 +182,8 @@ class PropagatorSolver:
         numerical_method = numerical_method.lower()
         if numerical_method in self._PSEUDO_METHODS:
             self.method = "pseudospectral"
-            self._pseudo_method = numerical_method
-            self._realspace_method = "cn-adi2"  # default
         elif numerical_method in self._REALSPACE_METHODS:
             self.method = "realspace"
-            self._pseudo_method = "rqm4"  # default
-            self._realspace_method = numerical_method
         else:
             raise ValueError(
                 f"Unknown numerical_method '{numerical_method}'. "
@@ -216,7 +212,6 @@ class PropagatorSolver:
                   "Switching to real-space CN-ADI2 method.")
             self.method = "realspace"
             self.numerical_method = "cn-adi2"
-            self._realspace_method = "cn-adi2"
 
         # Store memory usage option
         self.reduce_memory_usage = reduce_memory_usage
@@ -231,10 +226,9 @@ class PropagatorSolver:
         else:
             self.mask = None
 
-        # Create factory with numerical method parameters
+        # Create factory
         self._factory = _core.PlatformSelector.create_factory(
-            self.platform, self.reduce_memory_usage, "real",
-            self._pseudo_method, self._realspace_method
+            self.platform, self.reduce_memory_usage
         )
 
         # Create molecules
@@ -333,11 +327,13 @@ class PropagatorSolver:
         # Create solver based on method
         if self.method == "pseudospectral":
             self._propagator_computation = self._factory.create_pseudospectral_solver(
-                self._computation_box, self._molecules, self._propagator_optimizer
+                self._computation_box, self._molecules, self._propagator_optimizer,
+                self.numerical_method
             )
         elif self.method == "realspace":
             self._propagator_computation = self._factory.create_realspace_solver(
-                self._computation_box, self._molecules, self._propagator_optimizer
+                self._computation_box, self._molecules, self._propagator_optimizer,
+                self.numerical_method
             )
         else:
             raise ValueError(f"Unknown method: {self.method}")
