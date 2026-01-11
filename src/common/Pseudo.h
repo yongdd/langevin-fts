@@ -19,7 +19,7 @@
  * For non-orthogonal systems with periodic BC:
  * |k|² = G*_ij h_i h_j where G* is the reciprocal metric tensor.
  *
- * @see CpuSolverPseudoContinuous for continuous chain solver
+ * @see CpuSolverPseudoRQM4 for continuous chain solver
  * @see CpuSolverPseudoDiscrete for discrete chain solver
  */
 

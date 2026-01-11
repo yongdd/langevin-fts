@@ -3,7 +3,7 @@
  * @brief Common base class for CPU pseudo-spectral solvers.
  *
  * This header provides CpuSolverPseudoBase, a common base class that
- * consolidates shared functionality between CpuSolverPseudoContinuous
+ * consolidates shared functionality between CpuSolverPseudoRQM4
  * and CpuSolverPseudoDiscrete, including:
  *
  * - FFT object management (creation/destruction)
@@ -20,7 +20,7 @@
  * based on the dimensionality. This avoids maintaining separate fft_1d,
  * fft_2d, fft_3d pointers when only one is ever used per solver.
  *
- * @see CpuSolverPseudoContinuous for continuous chain implementation
+ * @see CpuSolverPseudoRQM4 for continuous chain implementation
  * @see CpuSolverPseudoDiscrete for discrete chain implementation
  */
 

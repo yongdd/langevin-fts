@@ -17,7 +17,7 @@
  * All input/output arrays are device pointers (CuDeviceData<T>).
  * No host-device transfers occur within solver methods.
  *
- * @see CudaSolverPseudoContinuous for continuous chain pseudo-spectral
+ * @see CudaSolverPseudoRQM4 for continuous chain pseudo-spectral
  * @see CudaSolverPseudoDiscrete for discrete chain pseudo-spectral
  * @see CudaSolverRealSpace for finite difference method
  */

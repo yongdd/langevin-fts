@@ -23,7 +23,7 @@
  * - CudaPseudo<std::complex<double>>: Complex field computations
  *
  * @see Pseudo for base class interface
- * @see CudaSolverPseudoContinuous for continuous chain solver
+ * @see CudaSolverPseudoRQM4 for continuous chain solver
  * @see CudaSolverPseudoDiscrete for discrete chain solver
  */
 

@@ -20,7 +20,7 @@
  * - w(r) is the potential field
  * - s is the contour variable (0 to N for continuous chains)
  *
- * @see CpuSolverPseudoContinuous for continuous chain pseudo-spectral
+ * @see CpuSolverPseudoRQM4 for continuous chain pseudo-spectral
  * @see CpuSolverPseudoDiscrete for discrete chain pseudo-spectral
  * @see CpuSolverRealSpace for finite difference method
  */
@@ -58,7 +58,7 @@
  *
  * @code
  * // Create solver (via derived class)
- * CpuSolver<double>* solver = new CpuSolverPseudoContinuous<double>(cb, molecules);
+ * CpuSolver<double>* solver = new CpuSolverPseudoRQM4<double>(cb, molecules);
  *
  * // Update when fields change
  * solver->update_dw(w_fields);

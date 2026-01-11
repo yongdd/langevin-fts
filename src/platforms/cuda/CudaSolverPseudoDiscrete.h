@@ -21,7 +21,7 @@
  * but uses half-bond diffusion operators instead of full-step.
  *
  * @see CudaSolver for the abstract interface
- * @see CudaSolverPseudoContinuous for continuous chain version
+ * @see CudaSolverPseudoRQM4 for continuous chain version
  * @see CpuSolverPseudoDiscrete for CPU version
  */
 

@@ -269,7 +269,7 @@ Simulations are configured via Python dictionaries with keys:
 
 ### Design Decisions
 
-**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoContinuous` and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
+**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4` and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
 - FFT object management (`init_shared`/`cleanup_shared`)
 - Transform dispatch (`transform_forward`/`transform_backward`)
 - Laplacian operator updates (`update_laplacian_operator`)

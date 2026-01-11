@@ -274,7 +274,7 @@ CpuSolver<T>                                  [Abstract Base]
         │   ├── transform_backward()
         │   └── update_laplacian_operator()
         │       │
-        │       ├── CpuSolverPseudoContinuous<T>
+        │       ├── CpuSolverPseudoRQM4<T>
         │       │   ├── update_dw(): exp(-w·ds/2)
         │       │   └── advance_propagator(): Richardson
         │       │

@@ -21,7 +21,7 @@
  * - CpuSolverPseudoETDRK4<std::complex<double>>: Complex fields
  *
  * @see ETDRK4Coefficients for coefficient computation
- * @see CpuSolverPseudoContinuous for RQM4 alternative
+ * @see CpuSolverPseudoRQM4 for RQM4 alternative
  */
 
 #include <iostream>

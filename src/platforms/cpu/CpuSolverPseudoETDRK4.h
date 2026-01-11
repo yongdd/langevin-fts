@@ -24,7 +24,7 @@
  * computation, avoiding catastrophic cancellation for small eigenvalues.
  *
  * @see ETDRK4Coefficients for coefficient computation
- * @see CpuSolverPseudoContinuous for RQM4 alternative
+ * @see CpuSolverPseudoRQM4 for RQM4 alternative
  */
 
 #ifndef CPU_SOLVER_PSEUDO_ETDRK4_H_
