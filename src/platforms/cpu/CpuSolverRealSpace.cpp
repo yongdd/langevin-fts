@@ -39,6 +39,13 @@
 
 #include "CpuSolverRealSpace.h"
 
+// Toggle Richardson extrapolation for 4th-order accuracy
+// Set to 0 for 2nd-order (faster but less accurate)
+// Set to 1 for 4th-order (slower but more accurate) - default
+#ifndef USE_RICHARDSON_EXTRAPOLATION
+#define USE_RICHARDSON_EXTRAPOLATION 1
+#endif
+
 /**
  * @brief Construct real-space solver for continuous chains.
  *
@@ -78,6 +85,7 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
             exp_dw     [monomer_type].resize(M);
             exp_dw_half[monomer_type].resize(M);
 
+            // Full step coefficients
             xl[monomer_type] = new double[M];
             xd[monomer_type] = new double[M];
             xh[monomer_type] = new double[M];
@@ -89,6 +97,19 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
             zl[monomer_type] = new double[M];
             zd[monomer_type] = new double[M];
             zh[monomer_type] = new double[M];
+
+            // Half step coefficients for Richardson extrapolation
+            xl_half[monomer_type] = new double[M];
+            xd_half[monomer_type] = new double[M];
+            xh_half[monomer_type] = new double[M];
+
+            yl_half[monomer_type] = new double[M];
+            yd_half[monomer_type] = new double[M];
+            yh_half[monomer_type] = new double[M];
+
+            zl_half[monomer_type] = new double[M];
+            zd_half[monomer_type] = new double[M];
+            zh_half[monomer_type] = new double[M];
         }
 
         update_laplacian_operator();
@@ -100,8 +121,9 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
 }
 CpuSolverRealSpace::~CpuSolverRealSpace()
 {
-    // exp_dw and exp_dw_half vectors are automatically cleaned up
+    // exp_dw, exp_dw_half, exp_dw_quarter vectors are automatically cleaned up
 
+    // Full step coefficients
     for(const auto& item: xl)
         delete[] item.second;
     for(const auto& item: xd)
@@ -122,6 +144,28 @@ CpuSolverRealSpace::~CpuSolverRealSpace()
         delete[] item.second;
     for(const auto& item: zh)
         delete[] item.second;
+
+    // Half step coefficients
+    for(const auto& item: xl_half)
+        delete[] item.second;
+    for(const auto& item: xd_half)
+        delete[] item.second;
+    for(const auto& item: xh_half)
+        delete[] item.second;
+
+    for(const auto& item: yl_half)
+        delete[] item.second;
+    for(const auto& item: yd_half)
+        delete[] item.second;
+    for(const auto& item: yh_half)
+        delete[] item.second;
+
+    for(const auto& item: zl_half)
+        delete[] item.second;
+    for(const auto& item: zd_half)
+        delete[] item.second;
+    for(const auto& item: zh_half)
+        delete[] item.second;
 }
 int CpuSolverRealSpace::max_of_two(int x, int y)
 {
@@ -135,18 +179,30 @@ void CpuSolverRealSpace::update_laplacian_operator()
 {
     try
     {
+        const double ds = this->molecules->get_ds();
+
         for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
 
+            // Full step coefficients (ds)
             FiniteDifference::get_laplacian_matrix(
                 this->cb->get_boundary_conditions(),
                 this->cb->get_nx(), this->cb->get_dx(),
                 xl[monomer_type], xd[monomer_type], xh[monomer_type],
                 yl[monomer_type], yd[monomer_type], yh[monomer_type],
                 zl[monomer_type], zd[monomer_type], zh[monomer_type],
-                bond_length_sq, this->molecules->get_ds());
+                bond_length_sq, ds);
+
+            // Half step coefficients (ds/2) for Richardson extrapolation
+            FiniteDifference::get_laplacian_matrix(
+                this->cb->get_boundary_conditions(),
+                this->cb->get_nx(), this->cb->get_dx(),
+                xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
+                zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type],
+                bond_length_sq, ds*0.5);
         }
     }
     catch(std::exception& exc)
@@ -174,7 +230,9 @@ void CpuSolverRealSpace::update_dw(std::map<std::string, const double*> w_input)
 
         for(int i=0; i<M; i++)
         {
+            // Full step: exp(-w*ds/2) for symmetric splitting
             exp_dw_vec[i] = exp(-w[i]*ds*0.5);
+            // Half step: exp(-w*ds/4) for symmetric splitting with ds/2
             exp_dw_half_vec[i] = exp(-w[i]*ds*0.25);
         }
     }
@@ -185,25 +243,107 @@ void CpuSolverRealSpace::advance_propagator(
     try
     {
         const int M = this->cb->get_total_grid();
-        const int DIM = this->cb->get_dim();
 
-        const double *_exp_dw = exp_dw[monomer_type].data();
-        double q_exp[M];
+        // Get Boltzmann factors for full and half steps
+        const double *_exp_dw = exp_dw[monomer_type].data();           // exp(-w*ds/2)
 
-        // Evaluate exp(-w*ds/2) in real space
+#if USE_RICHARDSON_EXTRAPOLATION
+        const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
+
+        // Temporary arrays
+        double q_out1[M];  // Full step result
+        double q_out2[M];  // Two half-steps result
+
+        //=====================================================================
+        // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+        //=====================================================================
+        advance_propagator_step(
+            q_in, q_out1,
+            _exp_dw,
+            xl[monomer_type], xd[monomer_type], xh[monomer_type],
+            yl[monomer_type], yd[monomer_type], yh[monomer_type],
+            zl[monomer_type], zd[monomer_type], zh[monomer_type],
+            nullptr);
+
+        //=====================================================================
+        // Two half-steps (ds/2 each)
+        // Structure: exp(-w*ds/4) * D(ds/2) * exp(-w*ds/2) * D(ds/2) * exp(-w*ds/4)
+        // where the middle exp(-w*ds/2) combines end of step1 and start of step2
+        //=====================================================================
+        {
+            const int DIM = this->cb->get_dim();
+            double q_temp[M];
+
+            // First half-step: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2)
+            // Apply exp(-w*ds/4) at start
+            for(int i=0; i<M; i++)
+                q_temp[i] = _exp_dw_half[i] * q_in[i];
+
+            // ADI diffusion with half-step coefficients
+            if(DIM == 3)
+                advance_propagator_3d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
+                    zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
+            else if(DIM == 2)
+                advance_propagator_2d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
+            else if(DIM == 1)
+                advance_propagator_1d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
+
+            // Apply exp(-w*ds/2) at junction (combines ds/4 from end of step1 + ds/4 from start of step2)
+            for(int i=0; i<M; i++)
+                q_out2[i] *= _exp_dw[i];
+
+            // Second half-step: Diffusion(ds/2) * exp(-w*ds/4)
+            // Copy for diffusion step
+            for(int i=0; i<M; i++)
+                q_temp[i] = q_out2[i];
+
+            if(DIM == 3)
+                advance_propagator_3d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
+                    zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
+            else if(DIM == 2)
+                advance_propagator_2d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
+                    yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
+            else if(DIM == 1)
+                advance_propagator_1d_step(
+                    this->cb->get_boundary_conditions(), q_temp, q_out2,
+                    xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
+
+            // Apply exp(-w*ds/4) at end
+            for(int i=0; i<M; i++)
+                q_out2[i] *= _exp_dw_half[i];
+        }
+
+        //=====================================================================
+        // Richardson extrapolation: q_out = (4*q_half - q_full) / 3
+        //=====================================================================
         for(int i=0; i<M; i++)
-            q_exp[i] = _exp_dw[i]*q_in[i];
+            q_out[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
 
-        if(DIM == 3)                                                // input, output
-            advance_propagator_3d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
-        else if(DIM == 2)
-            advance_propagator_2d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
-        else if(DIM ==1 )
-            advance_propagator_1d(this->cb->get_boundary_conditions(), q_exp, q_out, monomer_type);
-
-        // Evaluate exp(-w*ds/2) in real space
-        for(int i=0; i<M; i++)
-            q_out[i] *= _exp_dw[i];
+#else  // 2nd-order: single full step only
+        //=====================================================================
+        // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+        //=====================================================================
+        advance_propagator_step(
+            q_in, q_out,
+            _exp_dw,
+            xl[monomer_type], xd[monomer_type], xh[monomer_type],
+            yl[monomer_type], yd[monomer_type], yh[monomer_type],
+            zl[monomer_type], zd[monomer_type], zh[monomer_type],
+            nullptr);
+#endif
 
         // Multiply mask
         if(q_mask != nullptr)
@@ -215,6 +355,45 @@ void CpuSolverRealSpace::advance_propagator(
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverRealSpace::advance_propagator_step(
+    double *q_in, double *q_out,
+    const double *exp_dw_ptr,
+    double *_xl, double *_xd, double *_xh,
+    double *_yl, double *_yd, double *_yh,
+    double *_zl, double *_zd, double *_zh,
+    const double *q_mask)
+{
+    const int M = this->cb->get_total_grid();
+    const int DIM = this->cb->get_dim();
+    double q_temp[M];
+
+    // Apply starting Boltzmann factor: exp(-w*h/2)
+    for(int i=0; i<M; i++)
+        q_temp[i] = exp_dw_ptr[i] * q_in[i];
+
+    // ADI diffusion step
+    if(DIM == 3)
+        advance_propagator_3d_step(this->cb->get_boundary_conditions(), q_temp, q_out,
+            _xl, _xd, _xh, _yl, _yd, _yh, _zl, _zd, _zh);
+    else if(DIM == 2)
+        advance_propagator_2d_step(this->cb->get_boundary_conditions(), q_temp, q_out,
+            _xl, _xd, _xh, _yl, _yd, _yh);
+    else if(DIM == 1)
+        advance_propagator_1d_step(this->cb->get_boundary_conditions(), q_temp, q_out,
+            _xl, _xd, _xh);
+
+    // Apply ending Boltzmann factor: exp(-w*h/2)
+    for(int i=0; i<M; i++)
+        q_out[i] *= exp_dw_ptr[i];
+
+    // Apply mask if provided
+    if(q_mask != nullptr)
+    {
+        for(int i=0; i<M; i++)
+            q_out[i] *= q_mask[i];
     }
 }
 void CpuSolverRealSpace::advance_propagator_3d(
@@ -504,6 +683,279 @@ void CpuSolverRealSpace::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
+
+// ============================================================================
+// Step methods with explicit coefficient parameters for Richardson extrapolation
+// ============================================================================
+
+void CpuSolverRealSpace::advance_propagator_3d_step(
+    std::vector<BoundaryCondition> bc,
+    double *q_in, double *q_out,
+    double *_xl, double *_xd, double *_xh,
+    double *_yl, double *_yd, double *_yh,
+    double *_zl, double *_zd, double *_zh)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+        double q_star[M];
+        double q_dstar[M];
+        double temp1[nx[0]];
+        double temp2[nx[1]];
+        double temp3[nx[2]];
+
+        int im, ip, jm, jp, km, kp;
+
+        // Calculate q_star
+        for(int j=0;j<nx[1];j++)
+        {
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                jm = (nx[1]+j-1) % nx[1];
+            else
+                jm = max_of_two(0,j-1);
+            if (bc[3] == BoundaryCondition::PERIODIC)
+                jp = (j+1) % nx[1];
+            else
+                jp = min_of_two(nx[1]-1,j+1);
+
+            for(int k=0;k<nx[2];k++)
+            {
+                if (bc[4] == BoundaryCondition::PERIODIC)
+                    km = (nx[2]+k-1) % nx[2];
+                else
+                    km = max_of_two(0,k-1);
+                if (bc[5] == BoundaryCondition::PERIODIC)
+                    kp = (k+1) % nx[2];
+                else
+                    kp = min_of_two(nx[2]-1,k+1);
+
+                // B part of Ax=B matrix equation
+                for(int i=0;i<nx[0];i++)
+                {
+                    if (bc[0] == BoundaryCondition::PERIODIC)
+                        im = (nx[0]+i-1) % nx[0];
+                    else
+                        im = max_of_two(0,i-1);
+                    if (bc[1] == BoundaryCondition::PERIODIC)
+                        ip = (i+1) % nx[0];
+                    else
+                        ip = min_of_two(nx[0]-1,i+1);
+
+                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
+                    int im_j_k = im*nx[1]*nx[2] + j*nx[2] + k;
+                    int ip_j_k = ip*nx[1]*nx[2] + j*nx[2] + k;
+                    int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
+                    int i_jp_k = i*nx[1]*nx[2] + jp*nx[2] + k;
+                    int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
+                    int i_j_kp = i*nx[1]*nx[2] + j*nx[2] + kp;
+
+                    temp1[i] = 2.0*((3.0-0.5*_xd[i]-_yd[j]-_zd[k])*q_in[i_j_k]
+                            - _zl[k]*q_in[i_j_km] - _zh[k]*q_in[i_j_kp]
+                            - _yl[j]*q_in[i_jm_k] - _yh[j]*q_in[i_jp_k])
+                            - _xl[i]*q_in[im_j_k] - _xh[i]*q_in[ip_j_k];
+                }
+                int j_k = j*nx[2] + k;
+                if (bc[0] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
+                else
+                    tridiagonal         (_xl, _xd, _xh, &q_star[j_k], nx[1]*nx[2], temp1, nx[0]);
+            }
+        }
+        // Calculate q_dstar
+        for(int i=0;i<nx[0];i++)
+        {
+            for(int k=0;k<nx[2];k++)
+            {
+                for(int j=0;j<nx[1];j++)
+                {
+                    if (bc[2] == BoundaryCondition::PERIODIC)
+                        jm = (nx[1]+j-1) % nx[1];
+                    else
+                        jm = max_of_two(0,j-1);
+                    if (bc[3] == BoundaryCondition::PERIODIC)
+                        jp = (j+1) % nx[1];
+                    else
+                        jp = min_of_two(nx[1]-1,j+1);
+
+                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
+                    int i_jm_k = i*nx[1]*nx[2] + jm*nx[2] + k;
+                    int i_jp_k = i*nx[1]*nx[2] + jp*nx[2] + k;
+
+                    temp2[j] = q_star[i_j_k] + (_yd[j]-1.0)*q_in[i_j_k]
+                        + _yl[j]*q_in[i_jm_k] + _yh[j]*q_in[i_jp_k];
+                }
+                int i_k = i*nx[1]*nx[2] + k;
+                if (bc[2] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
+                else
+                    tridiagonal         (_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
+            }
+        }
+
+        // Calculate q^(n+1)
+        for(int i=0;i<nx[0];i++)
+        {
+            for(int j=0;j<nx[1];j++)
+            {
+                for(int k=0;k<nx[2];k++)
+                {
+                    if (bc[4] == BoundaryCondition::PERIODIC)
+                        km = (nx[2]+k-1) % nx[2];
+                    else
+                        km = max_of_two(0,k-1);
+                    if (bc[5] == BoundaryCondition::PERIODIC)
+                        kp = (k+1) % nx[2];
+                    else
+                        kp = min_of_two(nx[2]-1,k+1);
+
+                    int i_j_k  = i*nx[1]*nx[2] + j*nx[2] + k;
+                    int i_j_km = i*nx[1]*nx[2] + j*nx[2] + km;
+                    int i_j_kp = i*nx[1]*nx[2] + j*nx[2] + kp;
+
+                    temp3[k] = q_dstar[i_j_k] + (_zd[k]-1.0)*q_in[i_j_k]
+                        + _zl[k]*q_in[i_j_km] + _zh[k]*q_in[i_j_kp];
+                }
+                int i_j = i*nx[1]*nx[2] + j*nx[2];
+                if (bc[4] == BoundaryCondition::PERIODIC)
+                    tridiagonal_periodic(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
+                else
+                    tridiagonal         (_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
+            }
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverRealSpace::advance_propagator_2d_step(
+    std::vector<BoundaryCondition> bc,
+    double *q_in, double *q_out,
+    double *_xl, double *_xd, double *_xh,
+    double *_yl, double *_yd, double *_yh)
+{
+    try
+    {
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+        double q_star[M];
+        double temp1[nx[0]];
+        double temp2[nx[1]];
+
+        int im, ip, jm, jp;
+
+        // Calculate q_star
+        for(int j=0;j<nx[1];j++)
+        {
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                jm = (nx[1]+j-1) % nx[1];
+            else
+                jm = max_of_two(0,j-1);
+            if (bc[3] == BoundaryCondition::PERIODIC)
+                jp = (j+1) % nx[1];
+            else
+                jp = min_of_two(nx[1]-1,j+1);
+
+            // B part of Ax=B matrix equation
+            for(int i=0;i<nx[0];i++)
+            {
+                if (bc[0] == BoundaryCondition::PERIODIC)
+                    im = (nx[0]+i-1) % nx[0];
+                else
+                    im = max_of_two(0,i-1);
+                if (bc[1] == BoundaryCondition::PERIODIC)
+                    ip = (i+1) % nx[0];
+                else
+                    ip = min_of_two(nx[0]-1,i+1);
+
+                int i_j = i*nx[1] + j;
+                int i_jm = i*nx[1] + jm;
+                int i_jp = i*nx[1] + jp;
+                int im_j = im*nx[1] + j;
+                int ip_j = ip*nx[1] + j;
+
+                temp1[i] = 2.0*((2.0-0.5*_xd[i]-_yd[j])*q_in[i_j]
+                          - _yl[j]*q_in[i_jm] - _yh[j]*q_in[i_jp])
+                          - _xl[i]*q_in[im_j] - _xh[i]*q_in[ip_j];
+            }
+            if (bc[0] == BoundaryCondition::PERIODIC)
+                tridiagonal_periodic(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
+            else
+                tridiagonal         (_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
+        }
+
+        // Calculate q^(n+1)
+        for(int i=0;i<nx[0];i++)
+        {
+            for(int j=0;j<nx[1];j++)
+            {
+                if (bc[2] == BoundaryCondition::PERIODIC)
+                    jm = (nx[1]+j-1) % nx[1];
+                else
+                    jm = max_of_two(0,j-1);
+                if (bc[3] == BoundaryCondition::PERIODIC)
+                    jp = (j+1) % nx[1];
+                else
+                    jp = min_of_two(nx[1]-1,j+1);
+
+                int i_j = i*nx[1] + j;
+                int i_jm = i*nx[1] + jm;
+                int i_jp = i*nx[1] + jp;
+
+                temp2[j] = q_star[i_j] + (_yd[j]-1.0)*q_in[i_j]
+                    + _yl[j]*q_in[i_jm] + _yh[j]*q_in[i_jp];
+            }
+            if (bc[2] == BoundaryCondition::PERIODIC)
+                tridiagonal_periodic(_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
+            else
+                tridiagonal         (_yl, _yd, _yh, &q_out[i*nx[1]], 1, temp2, nx[1]);
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverRealSpace::advance_propagator_1d_step(
+    std::vector<BoundaryCondition> bc,
+    double *q_in, double *q_out,
+    double *_xl, double *_xd, double *_xh)
+{
+    try
+    {
+        const std::vector<int> nx = this->cb->get_nx();
+        double q_star[nx[0]];
+
+        int im, ip;
+
+        for(int i=0;i<nx[0];i++)
+        {
+            if (bc[0] == BoundaryCondition::PERIODIC)
+                im = (nx[0]+i-1) % nx[0];
+            else
+                im = max_of_two(0,i-1);
+            if (bc[1] == BoundaryCondition::PERIODIC)
+                ip = (i+1) % nx[0];
+            else
+                ip = min_of_two(nx[0]-1,i+1);
+
+            // B part of Ax=B matrix equation
+            q_star[i] = (2.0-_xd[i])*q_in[i] - _xl[i]*q_in[im] - _xh[i]*q_in[ip];
+        }
+        if (bc[0] == BoundaryCondition::PERIODIC)
+            tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+        else
+            tridiagonal         (_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
 std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
     [[maybe_unused]] double *q_1, [[maybe_unused]] double *q_2,
     [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)

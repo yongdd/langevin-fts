@@ -37,6 +37,13 @@
 #include <numbers>
 #include "CudaSolverRealSpace.h"
 
+// Toggle Richardson extrapolation for 4th-order accuracy
+// Set to 0 for 2nd-order (faster but less accurate)
+// Set to 1 for 4th-order (slower but more accurate) - default
+#ifndef USE_RICHARDSON_EXTRAPOLATION
+#define USE_RICHARDSON_EXTRAPOLATION 1
+#endif
+
 CudaSolverRealSpace::CudaSolverRealSpace(
     ComputationBox<double>* cb,
     Molecules *molecules,
@@ -106,6 +113,28 @@ CudaSolverRealSpace::CudaSolverRealSpace(
             gpu_error_check(cudaMalloc((void**)&d_zl[monomer_type], sizeof(double)*nx[2]));
             gpu_error_check(cudaMalloc((void**)&d_zd[monomer_type], sizeof(double)*nx[2]));
             gpu_error_check(cudaMalloc((void**)&d_zh[monomer_type], sizeof(double)*nx[2]));
+
+            // Half-step coefficients for Richardson extrapolation
+            d_xl_half[monomer_type] = nullptr;
+            d_xd_half[monomer_type] = nullptr;
+            d_xh_half[monomer_type] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_xl_half[monomer_type], sizeof(double)*nx[0]));
+            gpu_error_check(cudaMalloc((void**)&d_xd_half[monomer_type], sizeof(double)*nx[0]));
+            gpu_error_check(cudaMalloc((void**)&d_xh_half[monomer_type], sizeof(double)*nx[0]));
+
+            d_yl_half[monomer_type] = nullptr;
+            d_yd_half[monomer_type] = nullptr;
+            d_yh_half[monomer_type] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_yl_half[monomer_type], sizeof(double)*nx[1]));
+            gpu_error_check(cudaMalloc((void**)&d_yd_half[monomer_type], sizeof(double)*nx[1]));
+            gpu_error_check(cudaMalloc((void**)&d_yh_half[monomer_type], sizeof(double)*nx[1]));
+
+            d_zl_half[monomer_type] = nullptr;
+            d_zd_half[monomer_type] = nullptr;
+            d_zh_half[monomer_type] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&d_zl_half[monomer_type], sizeof(double)*nx[2]));
+            gpu_error_check(cudaMalloc((void**)&d_zd_half[monomer_type], sizeof(double)*nx[2]));
+            gpu_error_check(cudaMalloc((void**)&d_zh_half[monomer_type], sizeof(double)*nx[2]));
         }
 
         if(DIM == 3)
@@ -117,6 +146,8 @@ CudaSolverRealSpace::CudaSolverRealSpace(
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_temp[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_full[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_half[i], sizeof(double)*M));
             }
 
             int offset_xy[nx[0]*nx[1]];
@@ -155,6 +186,8 @@ CudaSolverRealSpace::CudaSolverRealSpace(
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_temp[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_full[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_half[i], sizeof(double)*M));
             }
 
             int offset_x[nx[0]];
@@ -179,6 +212,8 @@ CudaSolverRealSpace::CudaSolverRealSpace(
                 gpu_error_check(cudaMalloc((void**)&d_q_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_c_star[i], sizeof(double)*M));
                 gpu_error_check(cudaMalloc((void**)&d_q_sparse[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_full[i], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_q_half[i], sizeof(double)*M));
             }
 
             gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(int)));
@@ -227,6 +262,28 @@ CudaSolverRealSpace::~CudaSolverRealSpace()
     for(const auto& item: d_zh)
         cudaFree(item.second);
 
+    // Free half-step coefficients
+    for(const auto& item: d_xl_half)
+        cudaFree(item.second);
+    for(const auto& item: d_xd_half)
+        cudaFree(item.second);
+    for(const auto& item: d_xh_half)
+        cudaFree(item.second);
+
+    for(const auto& item: d_yl_half)
+        cudaFree(item.second);
+    for(const auto& item: d_yd_half)
+        cudaFree(item.second);
+    for(const auto& item: d_yh_half)
+        cudaFree(item.second);
+
+    for(const auto& item: d_zl_half)
+        cudaFree(item.second);
+    for(const auto& item: d_zd_half)
+        cudaFree(item.second);
+    for(const auto& item: d_zh_half)
+        cudaFree(item.second);
+
     if(DIM == 3)
     {
         for(int i=0; i<n_streams; i++)
@@ -236,6 +293,8 @@ CudaSolverRealSpace::~CudaSolverRealSpace()
             cudaFree(d_c_star[i]);
             cudaFree(d_q_sparse[i]);
             cudaFree(d_temp[i]);
+            cudaFree(d_q_full[i]);
+            cudaFree(d_q_half[i]);
         }
         cudaFree(d_offset_xy);
         cudaFree(d_offset_yz);
@@ -249,6 +308,8 @@ CudaSolverRealSpace::~CudaSolverRealSpace()
             cudaFree(d_c_star[i]);
             cudaFree(d_q_sparse[i]);
             cudaFree(d_temp[i]);
+            cudaFree(d_q_full[i]);
+            cudaFree(d_q_half[i]);
         }
         cudaFree(d_offset_x);
         cudaFree(d_offset_y);
@@ -260,6 +321,8 @@ CudaSolverRealSpace::~CudaSolverRealSpace()
             cudaFree(d_q_star[i]);
             cudaFree(d_c_star[i]);
             cudaFree(d_q_sparse[i]);
+            cudaFree(d_q_full[i]);
+            cudaFree(d_q_half[i]);
         }
         cudaFree(d_offset);
     }
@@ -282,18 +345,24 @@ void CudaSolverRealSpace::update_laplacian_operator()
         double yl[nx[1]], yd[nx[1]], yh[nx[1]];
         double zl[nx[2]], zd[nx[2]], zh[nx[2]];
 
+        double xl_half[nx[0]], xd_half[nx[0]], xh_half[nx[0]];
+        double yl_half[nx[1]], yd_half[nx[1]], yh_half[nx[1]];
+        double zl_half[nx[2]], zd_half[nx[2]], zh_half[nx[2]];
+
         for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
+            double ds = this->molecules->get_ds();
 
+            // Full-step coefficients
             FiniteDifference::get_laplacian_matrix(
                 this->cb->get_boundary_conditions(),
                 this->cb->get_nx(), this->cb->get_dx(),
                 xl, xd, xh,
                 yl, yd, yh,
                 zl, zd, zh,
-                bond_length_sq, this->molecules->get_ds());
+                bond_length_sq, ds);
 
             gpu_error_check(cudaMemcpy(d_xl[monomer_type], xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_xd[monomer_type], xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
@@ -306,6 +375,27 @@ void CudaSolverRealSpace::update_laplacian_operator()
             gpu_error_check(cudaMemcpy(d_zl[monomer_type], zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_zd[monomer_type], zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_zh[monomer_type], zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+
+            // Half-step coefficients for Richardson extrapolation
+            FiniteDifference::get_laplacian_matrix(
+                this->cb->get_boundary_conditions(),
+                this->cb->get_nx(), this->cb->get_dx(),
+                xl_half, xd_half, xh_half,
+                yl_half, yd_half, yh_half,
+                zl_half, zd_half, zh_half,
+                bond_length_sq, ds/2.0);
+
+            gpu_error_check(cudaMemcpy(d_xl_half[monomer_type], xl_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_xd_half[monomer_type], xd_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_xh_half[monomer_type], xh_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+
+            gpu_error_check(cudaMemcpy(d_yl_half[monomer_type], yl_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_yd_half[monomer_type], yd_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_yh_half[monomer_type], yh_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+
+            gpu_error_check(cudaMemcpy(d_zl_half[monomer_type], zl_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_zd_half[monomer_type], zd_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_zh_half[monomer_type], zh_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
         }
     }
     catch(std::exception& exc)
@@ -378,7 +468,7 @@ void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, co
 void CudaSolverRealSpace::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
-    std::string monomer_type, double *d_q_mask) 
+    std::string monomer_type, double *d_q_mask)
 {
     try
     {
@@ -390,20 +480,111 @@ void CudaSolverRealSpace::advance_propagator(
 
         double *_d_exp_dw = d_exp_dw[monomer_type];
 
-        // Evaluate exp(-w*ds/2) in real space
+#if USE_RICHARDSON_EXTRAPOLATION
+        double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
+
+        // ========================================
+        // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+        // ========================================
+        // Apply exp(-w*ds/2) at start
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in, _d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Diffusion with full-step coefficients
+        if(DIM == 3)
+            advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+        else if(DIM == 2)
+            advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+        else if(DIM == 1)
+            advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+
+        // Apply exp(-w*ds/2) at end
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_full[STREAM], _d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        // ========================================
+        // Two half steps: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2) * Diffusion(ds/2) * exp(-w*ds/4)
+        // ========================================
+        // First half-step: exp(-w*ds/4) at start
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Diffusion with half-step coefficients
+        if(DIM == 3)
+            advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
+                d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+        else if(DIM == 2)
+            advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+        else if(DIM == 1)
+            advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+
+        // Apply exp(-w*ds/2) at junction
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Second half-step: Diffusion with half-step coefficients
+        if(DIM == 3)
+            advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
+                d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+        else if(DIM == 2)
+            advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
+                d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+        else if(DIM == 1)
+            advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
+                d_q_half[STREAM], d_q_half[STREAM],
+                d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+
+        // Apply exp(-w*ds/4) at end
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw_half, 1.0, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        // ========================================
+        // Richardson extrapolation: q_out = (4*q_half - q_full) / 3
+        // Use ker_lin_comb (dst = a*src1 + b*src2), NOT ker_add_lin_comb (dst += a*src1 + b*src2)
+        // ========================================
+        ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            d_q_out, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
+        gpu_error_check(cudaPeekAtLastError());
+
+#else  // 2nd-order: single full step only
+        // ========================================
+        // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+        // ========================================
+        // Apply exp(-w*ds/2) at start
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
         gpu_error_check(cudaPeekAtLastError());
 
-        if(DIM == 3)           // input, output
-            advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
+        // Diffusion with full-step coefficients
+        if(DIM == 3)
+            advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_out, d_q_out, monomer_type);
         else if(DIM == 2)
-            advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
-        else if(DIM ==1 )
-            advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM, d_q_out, d_q_out, monomer_type);
+            advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_out, d_q_out, monomer_type);
+        else if(DIM == 1)
+            advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
+                d_q_out, d_q_out, monomer_type);
 
-        // Evaluate exp(-w*ds/2) in real space
+        // Apply exp(-w*ds/2) at end
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
         gpu_error_check(cudaPeekAtLastError());
+#endif
 
         // Multiply mask
         if (d_q_mask != nullptr)
@@ -615,6 +796,210 @@ void CudaSolverRealSpace::advance_propagator_1d(
         double *_d_xl = d_xl[monomer_type];
         double *_d_xd = d_xd[monomer_type];
         double *_d_xh = d_xh[monomer_type];
+
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+
+        compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[0], bc[1],
+            _d_xl, _d_xd, _d_xh,
+            d_q_star[STREAM], d_q_in, nx[0]);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[0] == BoundaryCondition::PERIODIC)
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_q_star[STREAM], d_q_out,
+                d_offset, 1, 1, nx[0]);
+        else
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
+        gpu_error_check(cudaPeekAtLastError());
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaSolverRealSpace::advance_propagator_3d_step(
+    std::vector<BoundaryCondition> bc,
+    const int STREAM,
+    double *d_q_in, double *d_q_out,
+    double *_d_xl, double *_d_xd, double *_d_xh,
+    double *_d_yl, double *_d_yd, double *_d_yh,
+    double *_d_zl, double *_d_zd, double *_d_zh)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+        size_t shmem_y = 3 * nx[1] * sizeof(double);
+        size_t shmem_z = 3 * nx[2] * sizeof(double);
+
+        // Calculate q_star
+        compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[0], bc[1], bc[2], bc[3], bc[4], bc[5],
+            _d_xl, _d_xd, _d_xh, nx[0],
+            _d_yl, _d_yd, _d_yh, nx[1],
+            _d_zl, _d_zd, _d_zh, nx[2],
+            d_temp[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[0] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
+                d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
+                d_offset_yz, nx[1]*nx[2], nx[1]*nx[2], nx[0]);
+        }
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Calculate q_dstar
+        compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[2], bc[3],
+            _d_yl, _d_yd, _d_yh, nx[1], nx[2],
+            d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[2] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
+                d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star[STREAM], d_temp[STREAM], d_q_dstar[STREAM],
+                d_offset_xz, nx[0]*nx[2], nx[2], nx[1]);
+        }
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Calculate q^(n+1)
+        compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[4], bc[5],
+            _d_zl, _d_zd, _d_zh, nx[1], nx[2],
+            d_temp[STREAM], d_q_dstar[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[4] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_zl, _d_zd, _d_zh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
+                d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_z, streams[STREAM][0]>>>(
+                _d_zl, _d_zd, _d_zh,
+                d_c_star[STREAM], d_temp[STREAM], d_q_out,
+                d_offset_xy, nx[0]*nx[1], 1, nx[2]);
+        }
+        gpu_error_check(cudaPeekAtLastError());
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaSolverRealSpace::advance_propagator_2d_step(
+    std::vector<BoundaryCondition> bc,
+    const int STREAM,
+    double *d_q_in, double *d_q_out,
+    double *_d_xl, double *_d_xd, double *_d_xh,
+    double *_d_yl, double *_d_yd, double *_d_yh)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+
+        // Shared memory size for 3 arrays of doubles
+        size_t shmem_x = 3 * nx[0] * sizeof(double);
+        size_t shmem_y = 3 * nx[1] * sizeof(double);
+
+        // Calculate q_star
+        compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[0], bc[1], bc[2], bc[3],
+            _d_xl, _d_xd, _d_xh, nx[0],
+            _d_yl, _d_yd, _d_yh, nx[1],
+            d_temp[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[0] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_star[STREAM],
+                d_offset_y, nx[1], nx[1], nx[0]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
+                _d_xl, _d_xd, _d_xh,
+                d_c_star[STREAM], d_temp[STREAM], d_q_star[STREAM],
+                d_offset_y, nx[1], nx[1], nx[0]);
+        }
+        gpu_error_check(cudaPeekAtLastError());
+
+        // Calculate q_dstar
+        compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            bc[2], bc[3],
+            _d_yl, _d_yd, _d_yh, nx[1],
+            d_temp[STREAM], d_q_star[STREAM], d_q_in, M);
+        gpu_error_check(cudaPeekAtLastError());
+
+        if (bc[2] == BoundaryCondition::PERIODIC)
+        {
+            tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
+                d_offset_x, nx[0], 1, nx[1]);
+        }
+        else
+        {
+            tridiagonal<<<N_BLOCKS, N_THREADS, shmem_y, streams[STREAM][0]>>>(
+                _d_yl, _d_yd, _d_yh,
+                d_c_star[STREAM], d_temp[STREAM], d_q_out,
+                d_offset_x, nx[0], 1, nx[1]);
+        }
+        gpu_error_check(cudaPeekAtLastError());
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+void CudaSolverRealSpace::advance_propagator_1d_step(
+    std::vector<BoundaryCondition> bc,
+    const int STREAM,
+    double *d_q_in, double *d_q_out,
+    double *_d_xl, double *_d_xd, double *_d_xh)
+{
+    try
+    {
+        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
+        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        const int M = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);
