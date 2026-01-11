@@ -285,3 +285,6 @@ The implementation is based on these publications:
 - L-FTS algorithm: *Polymers* **2021**, 13, 2437
 - Field update methods: *J. Chem. Phys.* **2023**, 158, 114117
 - CUDA implementation: *Eur. Phys. J. E* **2020**, 43, 15
+- RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
+- Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
+- ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)

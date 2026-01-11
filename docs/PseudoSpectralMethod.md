@@ -211,7 +211,7 @@ boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 
 ## 6. RQM4: 4th-Order Accuracy via Richardson Extrapolation
 
-**RQM4** (Ranjan-Qin-Morse 4th-order) is named after Ranjan, Qin, and Morse [6], who extended the Rasmussen-Kalosakas algorithm to 4th-order accuracy using Richardson extrapolation. This method combines the simplicity of the RK algorithm with higher-order temporal accuracy.
+**RQM4** (Ranjan-Qin-Morse 4th-order) is named after Ranjan, Qin, and Morse [6], who extended the Rasmussen-Kalosakas algorithm to 4th-order accuracy using Richardson extrapolation. This method combines the simplicity of the RK algorithm with higher-order temporal accuracy. A comprehensive benchmark comparing RQM4 with other pseudo-spectral algorithms is provided by Stasiak and Matsen [7].
 
 ### 6.1 Rasmussen-Kalosakas (RK) Algorithm
 
@@ -314,7 +314,7 @@ where `RK_step(q, ds)` implements the symmetric operator splitting from Section 
 
 ### 7.1 Overview
 
-**Exponential Time Differencing Runge-Kutta 4th-order (ETDRK4)** is an alternative to Richardson extrapolation for achieving 4th-order temporal accuracy. Originally developed by Cox and Matthews (2002), ETDRK4 treats the linear diffusion term exactly while using a 4th-order Runge-Kutta scheme for the nonlinear potential term.
+**Exponential Time Differencing Runge-Kutta 4th-order (ETDRK4)** is an alternative to RQM4 for achieving 4th-order temporal accuracy. Originally developed by Cox and Matthews [9], ETDRK4 treats the linear diffusion term exactly while using a 4th-order Runge-Kutta scheme for the nonlinear potential term. Song, Liu, and Zhang [8] demonstrated that ETDRK4 can be more than 10 times more accurate than RQM4 at the same contour resolution, requiring fewer contour steps to achieve the same accuracy. The performance advantage is particularly pronounced at high segregation strengths.
 
 ### 7.2 Algorithm Formulation
 
@@ -365,7 +365,7 @@ where all $\varphi$-functions are evaluated at $z = ch$.
 
 ### 7.4 Kassam-Trefethen Stabilization
 
-For small $|ch|$, the $\varphi$-functions suffer from **catastrophic cancellation** due to subtraction of nearly equal terms. Kassam and Trefethen (2005) proposed evaluating these functions using **contour integration**:
+For small $|ch|$, the $\varphi$-functions suffer from **catastrophic cancellation** due to subtraction of nearly equal terms. Kassam and Trefethen [10] proposed evaluating these functions using **contour integration**:
 
 $$\varphi_n(z) \approx \frac{1}{M} \sum_{m=0}^{M-1} \varphi_n(z + r e^{2\pi i m/M})$$
 
@@ -402,11 +402,6 @@ For the default RQM4 method, see:
 - `CudaSolverPseudoContinuous` (CUDA)
 
 The coefficients are precomputed once during initialization and reused for all propagator steps.
-
-### 7.7 References
-
-- Cox, S. M. & Matthews, P. C. "Exponential time differencing for stiff systems." *J. Comput. Phys.* **176**, 430-455 (2002).
-- Kassam, A.-K. & Trefethen, L. N. "Fourth-order time-stepping for stiff PDEs." *SIAM J. Sci. Comput.* **26**, 1214-1233 (2005).
 
 ---
 
@@ -528,3 +523,11 @@ All cross-terms may be non-zero.
 5. Park, S. J., Yong, D., Kim, Y. & Kim, J. U. "Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains." *J. Chem. Phys.* **150**, 234901 (2019).
 
 6. Ranjan, A., Qin, J. & Morse, D. C. "Linear response and stability of ordered phases of block copolymer melts." *Macromolecules* **41**, 942-954 (2008).
+
+7. Stasiak, P. & Matsen, M. W. "Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases." *Eur. Phys. J. E* **34**, 110 (2011).
+
+8. Song, J. Q., Liu, Y. X. & Zhang, H. D. "An efficient algorithm for self-consistent field theory calculations of complex self-assembled structures of block copolymer melts." *Chinese J. Polym. Sci.* **36**, 488-496 (2018).
+
+9. Cox, S. M. & Matthews, P. C. "Exponential time differencing for stiff systems." *J. Comput. Phys.* **176**, 430-455 (2002).
+
+10. Kassam, A.-K. & Trefethen, L. N. "Fourth-order time-stepping for stiff PDEs." *SIAM J. Sci. Comput.* **26**, 1214-1233 (2005).
