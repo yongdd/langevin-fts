@@ -6,7 +6,7 @@
  * discretized Laplacian operator for the real-space (finite difference)
  * propagator solver. Unlike the pseudo-spectral method which uses FFT,
  * the real-space method directly solves the diffusion equation using
- * Crank-Nicolson time stepping with tridiagonal matrix solvers.
+ * CN-ADI (Crank-Nicolson ADI) with tridiagonal matrix solvers.
  *
  * **Real-Space Method:**
  *
@@ -54,11 +54,11 @@
 #ifndef FINITE_DIFFERENCE_H_
 #define FINITE_DIFFERENCE_H_
 
-// Toggle Richardson extrapolation for 4th-order accuracy in real-space solver
-// Set to 0 for 2nd-order (faster, more stable) - default
-// Set to 1 for 4th-order (slower, may be unstable near absorbing boundaries)
-#ifndef REALSPACE_RICHARDSON_EXTRAPOLATION
-#define REALSPACE_RICHARDSON_EXTRAPOLATION 0
+// Toggle CN-ADI4 (4th-order) for real-space solver
+// Set to 0 for CN-ADI2 (2nd-order, faster, more stable) - default
+// Set to 1 for CN-ADI4 (4th-order, slower, may be unstable near absorbing boundaries)
+#ifndef REALSPACE_CN_ADI4
+#define REALSPACE_CN_ADI4 0
 #endif
 
 #include <string>
@@ -74,8 +74,8 @@
  * @brief Static utility for constructing finite difference Laplacian matrices.
  *
  * Constructs tridiagonal matrix coefficients for the discretized Laplacian
- * operator in each direction. The matrices are used in Crank-Nicolson
- * time stepping for the real-space propagator solver.
+ * operator in each direction. The matrices are used in CN-ADI (Crank-Nicolson
+ * Alternating Direction Implicit) time stepping for the real-space propagator solver.
  *
  * **Matrix Structure:**
  *
@@ -118,7 +118,7 @@ public:
      *       For 2D, pass nullptr for z arrays.
      *
      * @note The coefficients include the factor (a²/6) * ds / dx² for
-     *       Crank-Nicolson integration.
+     *       CN-ADI integration.
      */
     static void get_laplacian_matrix(
         std::vector<BoundaryCondition> bc,

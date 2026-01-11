@@ -2,28 +2,29 @@
  * @file CpuSolverRealSpace.h
  * @brief Real-space finite difference solver for continuous chains on CPU.
  *
- * This header provides CpuSolverRealSpace, which implements the Crank-Nicolson
- * finite difference method for solving the modified diffusion equation.
+ * This header provides CpuSolverRealSpace, which implements the CN-ADI
+ * (Crank-Nicolson Alternating Direction Implicit) finite difference method
+ * for solving the modified diffusion equation.
  * Unlike pseudo-spectral methods, this supports non-periodic boundary conditions.
  *
  * **Numerical Method:**
  *
- * Uses Crank-Nicolson (implicit) scheme with operator splitting (ADI):
+ * Uses CN-ADI (implicit) scheme with operator splitting:
  *
  *     (1 + A_x/2)(1 + A_y/2)(1 + A_z/2) q^(n+1) =
  *     (1 - A_x/2)(1 - A_y/2)(1 - A_z/2) q^(n)
  *
  * where A_α = -(b²ds/12) ∂²/∂α² + (w·ds/6).
  *
- * **4th Order Richardson Extrapolation:**
+ * **CN-ADI4 (4th Order via Richardson Extrapolation):**
  *
- * To achieve 4th order accuracy in contour step ds, Richardson extrapolation
- * is applied:
+ * To achieve 4th order accuracy (CN-ADI4), Richardson extrapolation is applied:
  *
  *     q_out = (4·q_half - q_full) / 3
  *
  * where q_full is one full step (ds) and q_half is two half steps (ds/2 each).
  * This cancels the O(ds²) error term, yielding O(ds⁴) accuracy.
+ * By default, CN-ADI2 (2nd order) is used.
  *
  * **ADI (Alternating Direction Implicit):**
  *
@@ -56,13 +57,13 @@
 
 /**
  * @class CpuSolverRealSpace
- * @brief CPU real-space solver using Crank-Nicolson with Richardson extrapolation.
+ * @brief CPU real-space solver using CN-ADI (Crank-Nicolson ADI).
  *
- * Implements the ADI (Alternating Direction Implicit) scheme for solving
- * the modified diffusion equation with various boundary conditions, using
- * 4th order Richardson extrapolation for high accuracy.
+ * Implements the CN-ADI scheme for solving the modified diffusion equation
+ * with various boundary conditions. Supports CN-ADI2 (2nd order, default)
+ * and CN-ADI4 (4th order via Richardson extrapolation).
  *
- * **4th Order Accuracy:**
+ * **CN-ADI4 (4th Order Accuracy):**
  *
  * Richardson extrapolation combines one full step and two half steps:
  *     q_out = (4·q_half - q_full) / 3
@@ -126,7 +127,7 @@ private:
     std::map<std::string, double*> zh;  ///< Upper diagonal
     /// @}
 
-    /// @name Half-step tridiagonal coefficients for Richardson extrapolation
+    /// @name Half-step tridiagonal coefficients for CN-ADI4
     /// @{
     std::map<std::string, double*> xl_half;  ///< x-direction lower (ds/2)
     std::map<std::string, double*> xd_half;  ///< x-direction diagonal (ds/2)

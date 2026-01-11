@@ -122,7 +122,7 @@ make install
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
-| `POLYMERFTS_USE_RICHARDSON` | OFF | Enable 4th-order Richardson extrapolation for real-space solver |
+| `POLYMERFTS_USE_CN_ADI4` | OFF | Enable CN-ADI4 (4th-order) for real-space solver |
 
 Example with options:
 ```bash

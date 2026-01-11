@@ -22,11 +22,11 @@ OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
 OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
 OPTION(POLYMERFTS_INSTALL_HEADERS "Install C++ headers for downstream projects" OFF)
-OPTION(POLYMERFTS_USE_RICHARDSON "Enable 4th-order Richardson extrapolation for real-space solver (may be unstable near absorbing boundaries)" OFF)
+OPTION(POLYMERFTS_USE_CN_ADI4 "Enable CN-ADI4 (4th-order Crank-Nicolson ADI) for real-space solver (may be unstable near absorbing boundaries)" OFF)
 
-# Richardson extrapolation compile definition
-IF(POLYMERFTS_USE_RICHARDSON)
-    ADD_COMPILE_DEFINITIONS(REALSPACE_RICHARDSON_EXTRAPOLATION=1)
+# CN-ADI4 compile definition
+IF(POLYMERFTS_USE_CN_ADI4)
+    ADD_COMPILE_DEFINITIONS(REALSPACE_CN_ADI4=1)
 ENDIF()
 
 SET(CMAKE_CXX_STANDARD 20)

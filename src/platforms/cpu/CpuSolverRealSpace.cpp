@@ -1,12 +1,12 @@
 /**
  * @file CpuSolverRealSpace.cpp
- * @brief CPU real-space Crank-Nicolson solver for chain propagators.
+ * @brief CPU real-space CN-ADI solver for chain propagators.
  *
- * Implements the Crank-Nicolson finite difference method with ADI
- * (Alternating Direction Implicit) splitting for solving the modified
- * diffusion equation in real space.
+ * Implements the CN-ADI (Crank-Nicolson Alternating Direction Implicit)
+ * finite difference method for solving the modified diffusion equation
+ * in real space.
  *
- * **Crank-Nicolson Scheme:**
+ * **CN-ADI Scheme:**
  *
  * Semi-implicit discretization:
  *     (I - ds/2·L) q^(n+1) = (I + ds/2·L) q^n
@@ -91,7 +91,7 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
             zd[monomer_type] = new double[M];
             zh[monomer_type] = new double[M];
 
-            // Half step coefficients for Richardson extrapolation
+            // Half step coefficients for CN-ADI4
             xl_half[monomer_type] = new double[M];
             xd_half[monomer_type] = new double[M];
             xh_half[monomer_type] = new double[M];
@@ -188,7 +188,7 @@ void CpuSolverRealSpace::update_laplacian_operator()
                 zl[monomer_type], zd[monomer_type], zh[monomer_type],
                 bond_length_sq, ds);
 
-            // Half step coefficients (ds/2) for Richardson extrapolation
+            // Half step coefficients (ds/2) for CN-ADI4
             FiniteDifference::get_laplacian_matrix(
                 this->cb->get_boundary_conditions(),
                 this->cb->get_nx(), this->cb->get_dx(),
@@ -240,7 +240,7 @@ void CpuSolverRealSpace::advance_propagator(
         // Get Boltzmann factors for full and half steps
         const double *_exp_dw = exp_dw[monomer_type].data();           // exp(-w*ds/2)
 
-#if REALSPACE_RICHARDSON_EXTRAPOLATION
+#if REALSPACE_CN_ADI4
         const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
 
         // Temporary arrays
@@ -320,12 +320,12 @@ void CpuSolverRealSpace::advance_propagator(
         }
 
         //=====================================================================
-        // Richardson extrapolation: q_out = (4*q_half - q_full) / 3
+        // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
         //=====================================================================
         for(int i=0; i<M; i++)
             q_out[i] = (4.0*q_out2[i] - q_out1[i]) / 3.0;
 
-#else  // 2nd-order: single full step only
+#else  // CN-ADI2: single full step only
         //=====================================================================
         // Full step (ds): exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
         //=====================================================================
@@ -678,7 +678,7 @@ void CpuSolverRealSpace::advance_propagator_1d(
 }
 
 // ============================================================================
-// Step methods with explicit coefficient parameters for Richardson extrapolation
+// Step methods with explicit coefficient parameters for CN-ADI4
 // ============================================================================
 
 void CpuSolverRealSpace::advance_propagator_3d_step(

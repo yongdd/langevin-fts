@@ -31,3 +31,4 @@ devel/test*
 devel/*.m
 references
 Testing
+benchmark_results.json

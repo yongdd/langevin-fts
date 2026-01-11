@@ -284,7 +284,7 @@ CpuSolver<T>                                  [Abstract Base]
         │           └── advance_propagator_half_bond_step()
         │
         └── CpuSolverRealSpace<T>             [Finite Difference]
-            └── Crank-Nicolson with tridiagonal solver
+            └── CN-ADI with tridiagonal solver
 ```
 
 ### Design Notes

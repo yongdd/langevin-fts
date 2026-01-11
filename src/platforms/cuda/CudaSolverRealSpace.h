@@ -1,16 +1,18 @@
 /**
  * @file CudaSolverRealSpace.h
- * @brief GPU real-space solver using Crank-Nicolson finite difference.
+ * @brief GPU real-space solver using CN-ADI finite difference.
  *
  * This header provides CudaSolverRealSpace, the CUDA implementation
- * of the real-space finite difference method for propagator computation.
- * Uses ADI (Alternating Direction Implicit) splitting for multi-dimensional
- * problems with parallel tridiagonal solves on GPU.
+ * of the CN-ADI (Crank-Nicolson Alternating Direction Implicit) finite
+ * difference method for propagator computation. Uses parallel tridiagonal
+ * solves on GPU.
  *
- * **Crank-Nicolson Method:**
+ * **CN-ADI Method:**
  *
- * Implicit time-stepping with second-order accuracy:
+ * Implicit time-stepping with 2nd-order accuracy (CN-ADI2, default):
  *     (I - ds/2 L) q(n+1) = (I + ds/2 L) q(n)
+ *
+ * With Richardson extrapolation enabled, achieves 4th-order (CN-ADI4).
  *
  * **ADI Splitting:**
  *
@@ -304,7 +306,7 @@ private:
     std::map<std::string, double*> d_zh;  ///< Upper diagonal
     /// @}
 
-    /// @name Half-step Tridiagonal Coefficients for Richardson Extrapolation
+    /// @name Half-step Tridiagonal Coefficients for CN-ADI4
     /// @{
     std::map<std::string, double*> d_xl_half;  ///< X-direction lower (ds/2)
     std::map<std::string, double*> d_xd_half;  ///< X-direction diagonal (ds/2)
@@ -326,8 +328,8 @@ private:
     double *d_c_star  [MAX_STREAMS];  ///< Modified upper diagonal
     double *d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
     double *d_temp    [MAX_STREAMS];  ///< General temporary
-    double *d_q_full  [MAX_STREAMS];  ///< Full step result for Richardson
-    double *d_q_half  [MAX_STREAMS];  ///< Half step result for Richardson
+    double *d_q_full  [MAX_STREAMS];  ///< Full step result for CN-ADI4
+    double *d_q_half  [MAX_STREAMS];  ///< Half step result for CN-ADI4
     /// @}
 
     /// @name Index Offset Arrays
