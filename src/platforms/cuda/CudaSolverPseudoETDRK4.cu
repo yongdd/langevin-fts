@@ -113,8 +113,8 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
         if (is_periodic_)
         {
             // Create cuFFT plans for periodic BC
-            const int NRANK{cb->get_dim()};
-            int total_grid[NRANK];
+            // Use fixed-size array (max 3 dims) instead of VLA for portability
+            int total_grid[3] = {1, 1, 1};
 
             if(cb->get_dim() == 3)
             {
@@ -147,8 +147,8 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
 
             for(int i=0; i<n_streams; i++)
             {
-                cufftPlanMany(&plan_for_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
-                cufftPlanMany(&plan_bak_one[i], NRANK, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
+                cufftPlanMany(&plan_for_one[i], dim_, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_forward, 1);
+                cufftPlanMany(&plan_bak_one[i], dim_, total_grid, nullptr, 1, 0, nullptr, 1, 0, cufft_backward, 1);
                 cufftSetStream(plan_for_one[i], streams[i][0]);
                 cufftSetStream(plan_bak_one[i], streams[i][0]);
             }
@@ -516,10 +516,14 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
             gpu_error_check(cudaPeekAtLastError());
 
             // IFFT to get a
+            // IMPORTANT: Copy k_a to work buffer first because cuFFT Z2D may corrupt
+            // the input array, and we need k_a again for stage c.
+            gpu_error_check(cudaMemcpyAsync(d_k_work[STREAM], d_k_a[STREAM],
+                sizeof(cuDoubleComplex)*M_COMPLEX, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
             if constexpr (std::is_same<T, double>::value)
-                cufftExecZ2D(plan_bak_one[STREAM], d_k_a[STREAM], d_etdrk4_a[STREAM]);
+                cufftExecZ2D(plan_bak_one[STREAM], d_k_work[STREAM], d_etdrk4_a[STREAM]);
             else
-                cufftExecZ2Z(plan_bak_one[STREAM], d_k_a[STREAM], d_etdrk4_a[STREAM], CUFFT_INVERSE);
+                cufftExecZ2Z(plan_bak_one[STREAM], d_k_work[STREAM], d_etdrk4_a[STREAM], CUFFT_INVERSE);
             gpu_error_check(cudaPeekAtLastError());
 
             // Normalize and compute N_a = -w * a
@@ -595,9 +599,18 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 cufftExecZ2Z(plan_bak_one[STREAM], d_k_work[STREAM], d_q_out, CUFFT_INVERSE);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Normalize final result
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_q_out, d_q_out, d_q_out, 1.0/static_cast<double>(M)/static_cast<double>(M), M);
+            // Normalize final result (divide by M for IFFT normalization)
+            if constexpr (std::is_same<T, double>::value)
+            {
+                ker_linear_scaling<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_out, d_q_out, 1.0/static_cast<double>(M), 0.0, M);
+            }
+            else
+            {
+                cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
+                ker_linear_scaling<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_q_out, d_q_out, 1.0/static_cast<double>(M), zero, M);
+            }
             gpu_error_check(cudaPeekAtLastError());
         }
         else
