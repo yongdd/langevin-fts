@@ -6,14 +6,14 @@ This document provides benchmark results comparing the numerical methods availab
 
 All numerical methods are selectable at runtime using the `numerical_method` parameter.
 
-### Pseudo-Spectral Methods (Periodic Boundaries)
+### Pseudo-Spectral Methods
 
 | Method | Order | Description | Reference |
 |--------|-------|-------------|-----------|
 | **rqm4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters (default) | *Macromolecules* 41, 942-954 (2008) |
 | **etdrk4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
 
-### Real-Space Methods (Non-Periodic Boundaries)
+### Real-Space Methods
 
 | Method | Order | Description |
 |--------|-------|-------------|
@@ -23,192 +23,112 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 ### Usage Example
 
 ```python
-params = {
-    # ... other parameters ...
-    "numerical_method": "rqm4"  # or "etdrk4", "cn-adi2", "cn-adi4"
-}
+from polymerfts import PropagatorSolver
+
+solver = PropagatorSolver(
+    nx=[256], lx=[4.0],
+    ds=0.01,
+    bond_lengths={"A": 1.0},
+    bc=["absorbing", "absorbing"],
+    chain_model="continuous",
+    numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4"
+    platform="cpu-mkl",
+    reduce_memory_usage=False
+)
 ```
 
-## Convergence Analysis
+## Grafted Brush Benchmark (1D)
 
-Following the methodology of Stasiak & Matsen (*Eur. Phys. J. E* 34, 110, 2011), we analyze how the partition function $Q$ converges as the contour discretization $ds \to 0$.
+This benchmark tests all four numerical methods on a challenging problem: a polymer brush with absorbing boundary conditions and a Gaussian initial condition.
 
 ### Test Configuration
 
-- **System**: Homopolymer A in lamellar external field
-- **Field**: $w(\mathbf{r}) = (\chi N/2) \cos(2\pi n_p z / L_z)$ with $\chi N = 12$, $n_p = 3$
-- **Grid**: $32 \times 32 \times 32$
-- **Box size**: $4.0 \times 4.0 \times 4.0$ (in units of $bN^{1/2}$)
+- **System**: Homopolymer grafted to surface (absorbing BC)
+- **Grid**: 256 points
+- **Domain**: [0, 4.0] (in units of $bN^{1/2}$)
+- **Grafting point**: $x_0 = 2.0$ (center)
+- **Initial condition**: Gaussian with $\sigma = 0.1$
+- **Contour length**: $s = 0.2$
 - **Chain model**: Continuous
 
-### Partition Function vs Contour Steps
+### Convergence Results
 
-| $N$ ($ds=1/N$) | RQM4 $Q$ | CN-ADI2 $Q$ | Difference |
-|----------------|----------|-------------|------------|
-| 10 | 12.652569057 | 13.089088363 | 3.45% |
-| 20 | 12.645948526 | 13.126915040 | 3.80% |
-| 40 | 12.645395735 | 13.136356896 | 3.88% |
-| 80 | 12.645355694 | 13.138716398 | 3.90% |
-| 160 | 12.645353000 | 13.139306213 | 3.91% |
-| 320 | 12.645352825 | 13.139453663 | 3.91% |
+The following table shows L2 error versus analytical solution as the contour step size $ds$ decreases:
 
-The difference between methods arises from different spatial discretization approaches:
-- **RQM4**: Cell-centered grid with periodic Fourier transforms
-- **CN-ADI2**: Finite difference grid with ADI tridiagonal solvers
+| $ds$ | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
+|------|------|--------|---------|---------|
+| 0.1 | 1.2×10⁻¹⁶ | 5.1×10⁻¹⁷ | 8.8×10⁻³ | 2.4×10⁻³ |
+| 0.05 | 3.1×10⁻¹⁶ | 1.6×10⁻¹⁶ | 7.4×10⁻⁴ | 5.4×10⁻⁵ |
+| 0.025 | 2.8×10⁻¹⁶ | 2.2×10⁻¹⁶ | 1.4×10⁻⁴ | 3.8×10⁻⁵ |
+| 0.0125 | 8.5×10⁻¹⁶ | 3.4×10⁻¹⁶ | 1.8×10⁻⁵ | 3.7×10⁻⁵ |
+| 0.00625 | 1.5×10⁻¹⁵ | 6.2×10⁻¹⁶ | 2.8×10⁻⁵ | 3.7×10⁻⁵ |
 
-### Convergence Order
+**Key Observations:**
 
-The convergence order $p$ is estimated from:
-$$|Q(ds) - Q_{ref}| \propto ds^p$$
+1. **Pseudo-spectral methods (RQM4, ETDRK4)** achieve machine precision (~10⁻¹⁶) regardless of $ds$. This is because the Discrete Sine Transform (DST) is spectrally accurate in space, and the error is dominated by spatial discretization which is negligible.
 
-| Method | Measured Order | Expected Order |
-|--------|----------------|----------------|
-| **RQM4** | $p \approx 3.83$ | 4.0 |
-| **CN-ADI2** | $p \approx 2.10$ | 2.0 |
+2. **Real-space methods (CN-ADI2, CN-ADI4)** show convergence initially but plateau at ~10⁻⁵ error due to spatial discretization of the finite difference scheme.
 
-Both methods achieve their expected convergence orders.
+3. **CN-ADI4** shows some instability at coarse $ds$, which is consistent with known behavior near absorbing boundaries.
 
-### Error vs Contour Steps
+### Performance Comparison
 
-For RQM4 (pseudo-spectral), using $Q_{ref} = Q(N=320)$:
+Performance at $ds = 0.01$ (N = 100 contour steps):
 
-| $N$ | $|Q - Q_{ref}|$ | Relative Error |
-|-----|-----------------|----------------|
-| 10 | $7.2 \times 10^{-3}$ | $5.7 \times 10^{-4}$ |
-| 20 | $5.96 \times 10^{-4}$ | $4.7 \times 10^{-5}$ |
-| 40 | $4.29 \times 10^{-5}$ | $3.4 \times 10^{-6}$ |
-| 80 | $2.87 \times 10^{-6}$ | $2.3 \times 10^{-7}$ |
-| 160 | $1.75 \times 10^{-7}$ | $1.4 \times 10^{-8}$ |
+| Method | Platform | Time (ms) | L2 Error | Q |
+|--------|----------|-----------|----------|---|
+| **RQM4** | CPU-MKL | 11.7 | 8.4×10⁻¹⁶ | 0.062665707 |
+| **ETDRK4** | CPU-MKL | 16.5 | 5.5×10⁻¹⁶ | 0.062665707 |
+| **CN-ADI2** | CPU-MKL | 0.10 | 1.7×10⁻⁵ | 0.062665707 |
+| **CN-ADI4** | CPU-MKL | 0.25 | 3.7×10⁻⁵ | 0.062665707 |
+| **CN-ADI2** | CUDA | 2.31 | 1.7×10⁻⁵ | 0.062665707 |
+| **CN-ADI4** | CUDA | 6.70 | 3.7×10⁻⁵ | 0.062665707 |
 
-For practical SCFT/FTS calculations, $N = 100$ ($ds = 0.01$) typically provides sufficient accuracy.
+**Performance Notes:**
 
-## Performance Benchmarks
+1. **For 1D problems**: CPU is faster than CUDA due to GPU kernel launch overhead. Real-space methods are fastest because tridiagonal solvers are O(N) while FFT is O(N log N).
 
-Following Song, Liu & Zhang (*Chinese J. Polym. Sci.* 36, 488-496, 2018), we compare computation time for propagator calculations.
+2. **For 2D/3D problems**: CUDA provides significant speedup (typically 7-10x), and pseudo-spectral methods become competitive.
 
-### CUDA (GPU) Performance
+3. **CUDA pseudo-spectral**: Currently only supports periodic boundary conditions (FFT). For non-periodic BC (DCT/DST), use CPU pseudo-spectral.
 
-**Hardware**: NVIDIA A10 GPU
+### Benchmark Plot
 
-| $N$ ($ds=1/N$) | RQM4 (ms) | CN-ADI2 (ms) | Ratio |
-|----------------|-----------|--------------|-------|
-| 10 | 1.30 | 3.77 | 2.9x |
-| 20 | 2.46 | 7.42 | 3.0x |
-| 40 | 4.79 | 14.72 | 3.1x |
-| 80 | 9.48 | 29.32 | 3.1x |
-| 160 | 18.86 | 58.53 | 3.1x |
+![Grafted Brush Performance](grafted_brush_performance.png)
 
-**Scaling**: Both methods scale linearly with $N$, as expected.
-
-### CPU-MKL Performance
-
-**Hardware**: Intel CPU with MKL (4 OpenMP threads)
-
-| $N$ ($ds=1/N$) | RQM4 (ms) | CN-ADI2 (ms) | Ratio |
-|----------------|-----------|--------------|-------|
-| 10 | 10.79 | 27.64 | 2.6x |
-| 20 | 21.33 | 54.73 | 2.6x |
-| 40 | 42.37 | 109.30 | 2.6x |
-| 80 | 85.02 | 219.05 | 2.6x |
-| 160 | 169.87 | 437.70 | 2.6x |
-| 320 | 331.76 | 881.06 | 2.7x |
-
-### Platform Comparison
-
-For $N=100$ ($ds=0.01$), $32^3$ grid:
-
-| Method | CPU (ms) | CUDA (ms) | GPU Speedup |
-|--------|----------|-----------|-------------|
-| **RQM4** | 103.5 | 11.8 | **8.8x** |
-| **CN-ADI2** | 274.3 | 36.7 | **7.5x** |
-
-### Cross-Platform Consistency
-
-Results between CPU and CUDA platforms are identical within machine precision:
-
-| Method | CPU $Q$ | CUDA $Q$ | Relative Difference |
-|--------|---------|----------|---------------------|
-| RQM4 | 12.645354010317 | 12.645354010315 | $1.6 \times 10^{-13}$ |
-| CN-ADI2 | 13.138999512002 | 13.138999512001 | $7.6 \times 10^{-14}$ |
-
-This confirms that the library produces consistent results regardless of platform.
-
-## Phase Benchmarks: Gyroid and Fddd
-
-Realistic benchmarks using ordered block copolymer phases with all four numerical methods.
-
-### Gyroid Phase (Ia-3d)
-
-**Configuration:**
-- **System**: AB diblock copolymer, $f = 0.36$, $\chi N = 20$
-- **Grid**: $32 \times 32 \times 32$
-- **Box**: $3.3 \times 3.3 \times 3.3$ (in units of $bN^{1/2}$)
-- **Contour**: $ds = 0.01$ ($N = 100$)
-
-| Method | Solver | CPU-MKL (ms) | CUDA (ms) | GPU Speedup |
-|--------|--------|--------------|-----------|-------------|
-| **RQM4** | Pseudo-Spectral | 107.1 | 15.0 | **7.1x** |
-| **ETDRK4** | Pseudo-Spectral | 163.4 | — | — |
-| **CN-ADI2** | Real-Space | 278.6 | 37.1 | **7.5x** |
-| **CN-ADI4** | Real-Space | 828.3 | 110.6 | **7.5x** |
-
-**Partition Function Comparison:**
-
-| Method | $Q$ |
-|--------|-----|
-| RQM4 | 1.011194981 |
-| ETDRK4 | 1.011741041 |
-| CN-ADI2 | 1.011205118 |
-| CN-ADI4 | 1.011205997 |
-
-### Fddd Phase (O^70)
-
-**Configuration:**
-- **System**: AB diblock copolymer, $f = 0.43$, $\chi N = 14$
-- **Grid**: $48 \times 32 \times 24$
-- **Box**: $5.58 \times 3.17 \times 1.59$ (in units of $bN^{1/2}$)
-- **Contour**: $ds = 0.01$ ($N = 100$)
-
-| Method | Solver | CPU-MKL (ms) | CUDA (ms) | GPU Speedup |
-|--------|--------|--------------|-----------|-------------|
-| **RQM4** | Pseudo-Spectral | 127.9 | 16.7 | **7.7x** |
-| **ETDRK4** | Pseudo-Spectral | 198.5 | — | — |
-| **CN-ADI2** | Real-Space | 285.9 | 37.0 | **7.7x** |
-| **CN-ADI4** | Real-Space | 855.6 | 110.0 | **7.8x** |
-
-**Partition Function Comparison:**
-
-| Method | $Q$ |
-|--------|-----|
-| RQM4 | 1.002484518 |
-| ETDRK4 | 1.002631538 |
-| CN-ADI2 | 1.002482218 |
-| CN-ADI4 | 1.002482481 |
-
-### Key Findings
-
-1. **RQM4 is fastest**: Approximately 1.5x faster than ETDRK4, 2.5x faster than CN-ADI2
-2. **GPU acceleration**: Consistent 7-8x speedup across all methods
-3. **CN-ADI4 overhead**: Richardson extrapolation adds ~3x overhead compared to CN-ADI2
-4. **Accuracy**: Real-space and pseudo-spectral methods give slightly different $Q$ values due to different spatial discretization, but both converge to the same physical solution
-
-### Benchmark Script
-
-```bash
-python tests/benchmark_phases.py cuda    # Run on GPU
-python tests/benchmark_phases.py cpu-mkl # Run on CPU
-```
+The plot shows:
+- **Top-left**: Propagator profile at finest $ds$ - all methods match analytical solution
+- **Top-right**: Convergence plot - pseudo-spectral methods achieve machine precision immediately
+- **Bottom-left**: Performance scaling - real-space methods are faster for 1D
+- **Bottom-right**: Efficiency plot - lower-left is better (pseudo-spectral wins at high accuracy)
 
 ## Method Selection Guide
 
-### Pseudo-Spectral vs Real-Space
+### By Boundary Condition
 
-| Criterion | Pseudo-Spectral | Real-Space |
-|-----------|-----------------|------------|
-| **Boundaries** | Periodic only | Periodic, reflecting, absorbing |
-| **Speed** | Faster (~3x) | Slower |
-| **Memory** | FFT workspace | Tridiagonal solver workspace |
-| **Use case** | Bulk systems, SCFT/FTS | Confined systems, brushes |
+| Boundary Type | Recommended Method | Reason |
+|---------------|-------------------|--------|
+| **Periodic** | RQM4 (pseudo-spectral) | Fastest + spectrally accurate |
+| **Absorbing** | RQM4 on CPU, CN-ADI2 on CUDA | DST not available on CUDA |
+| **Reflecting** | RQM4 on CPU, CN-ADI2 on CUDA | DCT not available on CUDA |
+| **Mixed** | CN-ADI2 (real-space) | Most flexible |
+
+### By Accuracy Requirement
+
+| Accuracy Needed | Recommended Method | Notes |
+|-----------------|-------------------|-------|
+| Machine precision | RQM4, ETDRK4 | Pseudo-spectral achieves ~10⁻¹⁵ |
+| High (10⁻⁶) | RQM4 or CN-ADI2 with fine $ds$ | Both work well |
+| Moderate (10⁻⁴) | CN-ADI2 | Fast and stable |
+| Low (10⁻²) | CN-ADI2 with coarse $ds$ | Maximum speed |
+
+### By Problem Size
+
+| Problem Size | Platform | Recommended Method |
+|--------------|----------|-------------------|
+| 1D (any N) | CPU-MKL | CN-ADI2 (fastest), RQM4 (most accurate) |
+| 2D/3D periodic | CUDA | RQM4 |
+| 2D/3D non-periodic | CUDA | CN-ADI2 |
 
 ### RQM4 vs ETDRK4
 
@@ -219,7 +139,7 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 | **FFTs per step** | 6 | 8 |
 | **Stability** | Good for typical $ds$ | L-stable (better for stiff problems) |
 | **Memory** | Lower | Higher (stores phi coefficients) |
-| **Selection** | `numerical_method="rqm4"` (default) | `numerical_method="etdrk4"` |
+| **Speed** | ~1.4x faster | Slower but more stable |
 
 ### CN-ADI2 vs CN-ADI4
 
@@ -227,56 +147,45 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 |-----------|---------|---------|
 | **Order** | 2nd | 4th |
 | **Steps per ds** | 1 | 2 (Richardson extrapolation) |
-| **Speed** | Faster | ~2x slower |
+| **Speed** | Faster | ~2.5x slower |
 | **Stability** | More stable | May be unstable near absorbing BC |
-| **Selection** | `numerical_method="cn-adi2"` (default) | `numerical_method="cn-adi4"` |
+| **Best for** | Most applications | When 2nd order is insufficient |
 
 ## Recommendations
 
-### For Periodic Systems (SCFT, L-FTS, CL-FTS)
+### For Bulk Systems (SCFT, L-FTS, CL-FTS)
 
-1. Use **rqm4** (pseudo-spectral, default)
+1. Use **RQM4** (pseudo-spectral, default)
 2. Set $ds = 0.01$ ($N=100$) for most calculations
 3. Reduce to $ds = 0.005$ for high-precision comparisons
 4. Use **CUDA** platform for 2D/3D systems
-5. Consider **etdrk4** for stiff problems where RQM4 shows instability
+5. Consider **ETDRK4** for stiff problems where RQM4 shows instability
 
-### For Non-Periodic Systems (Brushes, Confined Films)
+### For Confined Systems (Brushes, Thin Films)
 
-1. Use **cn-adi2** (real-space, default) for stability
-2. Use **cn-adi4** if higher accuracy is needed:
-   ```python
-   params = {"numerical_method": "cn-adi4", ...}
-   ```
-3. May require smaller $ds$ due to 2nd-order accuracy
-4. Test stability near absorbing boundaries before production runs (CN-ADI4 may be unstable)
+1. Use **RQM4** on CPU-MKL for absorbing/reflecting BC (highest accuracy)
+2. Use **CN-ADI2** on CUDA for large 2D/3D confined systems
+3. Avoid **CN-ADI4** near absorbing boundaries (potential instability)
 
 ### Performance Optimization
 
-1. **GPU**: Use CUDA for all 2D/3D simulations (8-15x speedup)
-2. **Grid size**: Pseudo-spectral has $O(M \log M)$ FFT cost; real-space has $O(M)$ cost per direction
-3. **Memory**: For large grids, enable `reduce_memory_usage=True` (see [MemoryAndPerformance.md](MemoryAndPerformance.md))
+1. **GPU**: Use CUDA for all 2D/3D simulations with periodic BC
+2. **CPU**: Use for 1D problems or non-periodic BC
+3. **Memory**: For large grids, enable `reduce_memory_usage=True`
 
 ## Benchmark Scripts
 
-Two benchmark scripts are available:
-
-### Basic Convergence and Performance
-
 ```bash
+# Grafted brush benchmark (1D, absorbing BC)
+python tests/test_grafted_brush_validation.py
+
+# Phase benchmarks (3D, periodic BC)
+python tests/benchmark_phases.py cuda
+python tests/benchmark_phases.py cpu-mkl
+
+# Basic numerical methods comparison
 python tests/benchmark_numerical_methods.py
 ```
-
-Tests convergence order and timing vs contour discretization. Results saved to `benchmark_results.json`.
-
-### Phase Benchmarks (Gyroid, Fddd)
-
-```bash
-python tests/benchmark_phases.py cuda    # GPU benchmark
-python tests/benchmark_phases.py cpu-mkl # CPU benchmark
-```
-
-Tests all four methods on realistic ordered phases. Results saved to `benchmark_phases_results.json`.
 
 ## References
 
