@@ -90,7 +90,7 @@ Performance at $ds = 0.01$ (N = 100 contour steps):
 
 2. **For 2D/3D problems**: CUDA provides significant speedup (typically 7-10x), and pseudo-spectral methods become competitive.
 
-3. **CUDA pseudo-spectral**: Currently only supports periodic boundary conditions (FFT). For non-periodic BC (DCT/DST), use CPU pseudo-spectral.
+3. **CUDA pseudo-spectral**: Supports periodic (FFT), reflecting (DCT), and absorbing (DST) boundary conditions.
 
 ### Benchmark Plot
 
@@ -177,9 +177,9 @@ Real-space methods (CN-ADI) can produce negative (unphysical) propagator values 
 | Boundary Type | Recommended Method | Reason |
 |---------------|-------------------|--------|
 | **Periodic** | RQM4 (pseudo-spectral) | Fastest + spectrally accurate |
-| **Absorbing** | RQM4 on CPU, CN-ADI2 on CUDA | DST not available on CUDA |
-| **Reflecting** | RQM4 on CPU, CN-ADI2 on CUDA | DCT not available on CUDA |
-| **Mixed** | CN-ADI2 (real-space) | Most flexible |
+| **Absorbing** | RQM4 (pseudo-spectral with DST) | Spectrally accurate, available on both CPU and CUDA |
+| **Reflecting** | RQM4 (pseudo-spectral with DCT) | Spectrally accurate, available on both CPU and CUDA |
+| **Mixed** | CN-ADI2 (real-space) | Most flexible for mixed BCs |
 
 ### By Accuracy Requirement
 
