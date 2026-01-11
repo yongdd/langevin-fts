@@ -37,71 +37,6 @@ solver = PropagatorSolver(
 )
 ```
 
-## Grafted Brush Benchmark (1D)
-
-This benchmark tests all four numerical methods on a challenging problem: a polymer brush with absorbing boundary conditions and a Gaussian initial condition.
-
-### Test Configuration
-
-- **System**: Homopolymer grafted to surface (absorbing BC)
-- **Grid**: 256 points
-- **Domain**: [0, 4.0] (in units of $bN^{1/2}$)
-- **Grafting point**: $x_0 = 2.0$ (center)
-- **Initial condition**: Gaussian with $\sigma = 0.1$
-- **Contour length**: $s = 0.2$
-- **Chain model**: Continuous
-
-### Convergence Results
-
-The following table shows L2 error versus analytical solution as the contour step size $ds$ decreases:
-
-| $ds$ | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
-|------|------|--------|---------|---------|
-| 0.1 | 1.2×10⁻¹⁶ | 5.1×10⁻¹⁷ | 8.8×10⁻³ | 2.4×10⁻³ |
-| 0.05 | 3.1×10⁻¹⁶ | 1.6×10⁻¹⁶ | 7.4×10⁻⁴ | 5.4×10⁻⁵ |
-| 0.025 | 2.8×10⁻¹⁶ | 2.2×10⁻¹⁶ | 1.4×10⁻⁴ | 3.8×10⁻⁵ |
-| 0.0125 | 8.5×10⁻¹⁶ | 3.4×10⁻¹⁶ | 1.8×10⁻⁵ | 3.7×10⁻⁵ |
-| 0.00625 | 1.5×10⁻¹⁵ | 6.2×10⁻¹⁶ | 2.8×10⁻⁵ | 3.7×10⁻⁵ |
-
-**Key Observations:**
-
-1. **Pseudo-spectral methods (RQM4, ETDRK4)** achieve machine precision (~10⁻¹⁶) regardless of $ds$. This is because the Discrete Sine Transform (DST) is spectrally accurate in space, and the error is dominated by spatial discretization which is negligible.
-
-2. **Real-space methods (CN-ADI2, CN-ADI4)** show convergence initially but plateau at ~10⁻⁵ error due to spatial discretization of the finite difference scheme.
-
-3. **CN-ADI4** shows some instability at coarse $ds$, which is consistent with known behavior near absorbing boundaries.
-
-### Performance Comparison
-
-Performance at $ds = 0.01$ (N = 100 contour steps):
-
-| Method | Platform | Time (ms) | L2 Error | Q |
-|--------|----------|-----------|----------|---|
-| **RQM4** | CPU-MKL | 11.7 | 8.4×10⁻¹⁶ | 0.062665707 |
-| **ETDRK4** | CPU-MKL | 16.5 | 5.5×10⁻¹⁶ | 0.062665707 |
-| **CN-ADI2** | CPU-MKL | 0.10 | 1.7×10⁻⁵ | 0.062665707 |
-| **CN-ADI4** | CPU-MKL | 0.25 | 3.7×10⁻⁵ | 0.062665707 |
-| **CN-ADI2** | CUDA | 2.31 | 1.7×10⁻⁵ | 0.062665707 |
-| **CN-ADI4** | CUDA | 6.70 | 3.7×10⁻⁵ | 0.062665707 |
-
-**Performance Notes:**
-
-1. **For 1D problems**: CPU is faster than CUDA due to GPU kernel launch overhead. Real-space methods are fastest because tridiagonal solvers are O(N) while FFT is O(N log N).
-
-2. **For 2D/3D problems**: CUDA provides significant speedup (typically 7-10x), and pseudo-spectral methods become competitive.
-
-3. **CUDA pseudo-spectral**: Supports periodic (FFT), reflecting (DCT), and absorbing (DST) boundary conditions.
-
-### Benchmark Plot
-
-![Grafted Brush Performance](grafted_brush_performance.png)
-
-The plot shows:
-- **Top-left**: Propagator profile at finest $ds$ - all methods match analytical solution
-- **Top-right**: Convergence plot - pseudo-spectral methods achieve machine precision immediately
-- **Bottom-left**: Performance scaling - real-space methods are faster for 1D
-- **Bottom-right**: Efficiency plot - lower-left is better (pseudo-spectral wins at high accuracy)
-
 ## Stability Analysis: Sharp Initial Conditions
 
 When using very sharp initial conditions (e.g., delta-function approximations for grafted brushes), the stability of numerical methods becomes critical. This section analyzes stability thresholds for under-resolved Gaussian initial conditions.
@@ -244,9 +179,6 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 ## Benchmark Scripts
 
 ```bash
-# Grafted brush benchmark (1D, absorbing BC)
-python tests/test_grafted_brush_validation.py
-
 # Phase benchmarks (3D, periodic BC)
 python tests/benchmark_phases.py cuda
 python tests/benchmark_phases.py cpu-mkl
