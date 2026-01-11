@@ -82,7 +82,7 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            phi_block[item.first] = new T[M];
+            phi_block[item.first] = new T[M]();  // Zero-initialize
         }
 
         // Allocate memory for check points

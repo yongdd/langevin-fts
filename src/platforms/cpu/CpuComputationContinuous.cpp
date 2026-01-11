@@ -128,7 +128,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            this->phi_block[item.first] = new T[M];
+            this->phi_block[item.first] = new T[M]();  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function
