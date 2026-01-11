@@ -24,7 +24,7 @@ It supports the following features:
 
 * Real-space method (**beta**)
 
-   * 2th-order Crank-Nicolson method
+   * CN-ADI2 (2nd-order) or CN-ADI4 (4th-order via ``-DPOLYMERFTS_USE_CN_ADI4=ON``)
    * Support only continuous chain
    * Support periodic, reflecting, absorbing boundaries
 

@@ -94,7 +94,7 @@ Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
 - **Continuous chains**: Pseudo-spectral method with RQM4 (4th-order Richardson extrapolation) solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
-- **Real-space method**: Crank-Nicolson finite difference solver (beta feature, continuous chains only)
+- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order via `-DPOLYMERFTS_USE_CN_ADI4=ON`)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)

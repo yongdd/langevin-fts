@@ -4,7 +4,7 @@ This document describes the real-space finite difference solver for continuous c
 
 ## Overview
 
-The real-space solver uses the **Crank-Nicolson ADI** (Alternating Direction Implicit) method to solve the modified diffusion equation:
+The real-space solver uses the **CN-ADI** (Crank-Nicolson Alternating Direction Implicit) method to solve the modified diffusion equation:
 
 $$\frac{\partial q}{\partial s} = \frac{b^2}{6} \nabla^2 q - w(\mathbf{r}) q$$
 
@@ -46,9 +46,9 @@ $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delt
 
 This ensures the scheme remains symmetric and accurate.
 
-## Richardson Extrapolation (4th-Order Accuracy)
+## CN-ADI4: Richardson Extrapolation for 4th-Order Accuracy
 
-Optionally, the solver can use **4th-order Richardson extrapolation** to achieve higher temporal accuracy. This combines one full step with two half-steps:
+By default, the solver uses **CN-ADI2** (2nd-order Crank-Nicolson ADI). Optionally, **CN-ADI4** (4th-order) can be enabled using Richardson extrapolation to achieve higher temporal accuracy. This combines one full step with two half-steps:
 
 $$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
 
@@ -60,14 +60,14 @@ This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
 ### Compile-Time Toggle
 
-Richardson extrapolation can be enabled at compile time for higher accuracy (but may be unstable near absorbing boundaries):
+CN-ADI4 can be enabled at compile time for higher accuracy (but may be unstable near absorbing boundaries):
 
 ```bash
-# 2nd-order (default - faster, more stable)
+# CN-ADI2 (default - faster, more stable)
 cmake ../ -DCMAKE_BUILD_TYPE=Release
 
-# 4th-order (more accurate, but may be unstable near absorbing boundaries)
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_RICHARDSON=ON
+# CN-ADI4 (more accurate, but may be unstable near absorbing boundaries)
+cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_CN_ADI4=ON
 ```
 
 ## Performance Benchmarks
@@ -81,23 +81,23 @@ cmake ../ -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_RICHARDSON=ON
 
 ### Computation Time vs Contour Steps (32³ grid, CUDA)
 
-| N (ds=1/N) | 2nd-Order | 4th-Order | Pseudo-Spectral | 4th/2nd Ratio |
-|------------|-----------|-----------|-----------------|---------------|
-| 10 (0.1)   | 117 ms    | 327 ms    | 403 ms          | 2.8x          |
-| 20 (0.05)  | 99 ms     | 339 ms    | 405 ms          | 3.4x          |
-| 40 (0.025) | 108 ms    | 351 ms    | 408 ms          | 3.3x          |
-| 80 (0.0125)| 115 ms    | 382 ms    | 414 ms          | 3.3x          |
-| 160 (0.00625)| 136 ms  | 446 ms    | 425 ms          | 3.3x          |
+| N (ds=1/N) | CN-ADI2 | CN-ADI4 | Pseudo-Spectral | CN-ADI4/CN-ADI2 Ratio |
+|------------|---------|---------|-----------------|----------------------|
+| 10 (0.1)   | 117 ms  | 327 ms  | 403 ms          | 2.8x                 |
+| 20 (0.05)  | 99 ms   | 339 ms  | 405 ms          | 3.4x                 |
+| 40 (0.025) | 108 ms  | 351 ms  | 408 ms          | 3.3x                 |
+| 80 (0.0125)| 115 ms  | 382 ms  | 414 ms          | 3.3x                 |
+| 160 (0.00625)| 136 ms| 446 ms  | 425 ms          | 3.3x                 |
 
 ### Key Observations
 
-1. **4th-order is ~3x slower than 2nd-order**: This matches the expected computational cost:
-   - 4th-order: 1 full step + 2 half-steps = 3 ADI solves per contour step
-   - 2nd-order: 1 full step = 1 ADI solve per contour step
+1. **CN-ADI4 is ~3x slower than CN-ADI2**: This matches the expected computational cost:
+   - CN-ADI4: 1 full step + 2 half-steps = 3 ADI solves per contour step
+   - CN-ADI2: 1 full step = 1 ADI solve per contour step
 
-2. **Real-space 2nd-order is fastest**: About 3-4x faster than both 4th-order methods
+2. **CN-ADI2 is fastest**: About 3-4x faster than both 4th-order methods
 
-3. **4th-order real-space comparable to pseudo-spectral**: Similar computation time on GPU
+3. **CN-ADI4 comparable to pseudo-spectral**: Similar computation time on GPU
 
 ### Scaling Analysis
 
@@ -118,18 +118,18 @@ The following results compare the partition function Q computed with different m
 
 #### Partition Function Q vs Contour Discretization
 
-| N (ds=1/N) | 2nd-Order Real-Space | 4th-Order Real-Space | Pseudo-Spectral |
-|------------|---------------------|---------------------|-----------------|
-| 10         | 1.014664450650      | 1.014833599719      | 1.014872188468  |
-| 20         | 1.014791309578      | 1.014833596455      | 1.014872184716  |
-| 40         | 1.014823024545      | 1.014833596238      | 1.014872184464  |
-| 80         | 1.014830953303      | 1.014833596224      | 1.014872184448  |
-| 160        | 1.014832935493      | 1.014833596223      | 1.014872184447  |
+| N (ds=1/N) | CN-ADI2 | CN-ADI4 | Pseudo-Spectral |
+|------------|---------|---------|-----------------|
+| 10         | 1.014664450650 | 1.014833599719 | 1.014872188468 |
+| 20         | 1.014791309578 | 1.014833596455 | 1.014872184716 |
+| 40         | 1.014823024545 | 1.014833596238 | 1.014872184464 |
+| 80         | 1.014830953303 | 1.014833596224 | 1.014872184448 |
+| 160        | 1.014832935493 | 1.014833596223 | 1.014872184447 |
 
 #### Relative Error vs Pseudo-Spectral Reference (N=160)
 
-| N | 2nd-Order Error | 4th-Order Error |
-|---|-----------------|-----------------|
+| N | CN-ADI2 Error | CN-ADI4 Error |
+|---|---------------|---------------|
 | 10 | 0.0205% | 0.0038% |
 | 20 | 0.0080% | 0.0038% |
 | 40 | 0.0048% | 0.0038% |
@@ -140,8 +140,8 @@ The following results compare the partition function Q computed with different m
 
 | Method | Estimated Order p |
 |--------|-------------------|
-| 2nd-Order Real-Space | **p ≈ 2.0** |
-| 4th-Order Real-Space | **p ≈ 3.9** |
+| CN-ADI2 | **p ≈ 2.0** |
+| CN-ADI4 | **p ≈ 3.9** |
 | Pseudo-Spectral (RQM4) | **p ≈ 4.0** |
 
 #### Convergence Plot (Periodic Boundaries)
@@ -152,13 +152,13 @@ The following results compare the partition function Q computed with different m
 
 ### Key Findings
 
-1. **Richardson extrapolation achieves 4th-order accuracy**: The measured convergence order of ~3.9 confirms that Richardson extrapolation successfully improves temporal accuracy from O(ds²) to O(ds⁴).
+1. **CN-ADI4 achieves 4th-order accuracy**: The measured convergence order of ~3.9 confirms that Richardson extrapolation successfully improves temporal accuracy from O(ds²) to O(ds⁴).
 
 2. **Systematic difference between methods**: There is a ~0.0038% systematic difference between real-space and pseudo-spectral methods, arising from different spatial discretization (finite difference vs spectral).
 
-3. **2nd-order converges as expected**: The 2nd-order method shows clear O(ds²) convergence, with error decreasing by ~4x when ds is halved.
+3. **CN-ADI2 converges as expected**: The CN-ADI2 method shows clear O(ds²) convergence, with error decreasing by ~4x when ds is halved.
 
-4. **4th-order converges quickly**: The 4th-order real-space method is essentially converged by N=10, with further refinement showing negligible improvement.
+4. **CN-ADI4 converges quickly**: The CN-ADI4 method is essentially converged by N=10, with further refinement showing negligible improvement.
 
 5. **Pseudo-spectral most accurate**: For periodic boundary conditions, pseudo-spectral remains the most accurate method, converging to machine precision even at coarse ds.
 
@@ -180,7 +180,7 @@ where $a_n$ are the Fourier sine coefficients of the initial Gaussian.
 #### Real-Space vs Pseudo-Spectral Comparison
 
 For absorbing boundaries, two methods are available:
-- **Real-space (Crank-Nicolson)**: 2nd-order temporal accuracy
+- **Real-space (CN-ADI2)**: 2nd-order temporal accuracy (CN-ADI4 available but may be unstable)
 - **Pseudo-spectral (DST)**: Spectral accuracy using Discrete Sine Transform
 
 **Convergence Study (σ = 0.02, very sharp Gaussian):**
@@ -213,7 +213,7 @@ The initial condition width σ affects accuracy. Results with ds = 0.005:
 
 2. **Real-space has spatial discretization error**: Error increases when σ/dx < 3 (under-resolved Gaussian). For well-resolved cases (σ/dx > 5), error is ~10⁻⁶.
 
-3. **Real-space convergence order**: Approximately p ≈ 2 for the Crank-Nicolson method, reaching a spatial error floor at fine ds.
+3. **Real-space convergence order**: Approximately p ≈ 2 for CN-ADI2, reaching a spatial error floor at fine ds.
 
 4. **Absorbing BCs work correctly**: Both methods properly handle Dirichlet boundary conditions, with propagators decaying to ~10⁻¹⁵ at boundaries.
 
@@ -230,17 +230,17 @@ The initial condition width σ affects accuracy. Results with ds = 0.005:
 
 #### Stability Warning: Grafting Points Near Boundaries
 
-**Important**: 4th-order Richardson extrapolation can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
+**Important**: CN-ADI4 (with Richardson extrapolation) can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
 
-| x₀/σ from boundary | Richardson 4th-Order | Crank-Nicolson 2nd-Order |
-|-------------------|----------------------|--------------------------|
+| x₀/σ from boundary | CN-ADI4 | CN-ADI2 |
+|-------------------|---------|---------|
 | > 5σ | Stable | Stable |
 | 2-3σ | **Unstable** | Stable |
 | < 2σ | **Diverges** | Stable |
 
 **Recommendation**: For grafted brush simulations:
 - Use pseudo-spectral (DST) when possible - it achieves spectral accuracy
-- For real-space: ensure σ/dx > 5 for accuracy, and avoid Richardson extrapolation near boundaries
+- For real-space: ensure σ/dx > 5 for accuracy, and use CN-ADI2 (avoid CN-ADI4) near boundaries
 
 ## Usage
 
@@ -372,7 +372,7 @@ Q = solver.get_partition_function(polymer=0)
 ### Use Real-Space When:
 - Non-periodic boundary conditions are required (confined systems, interfaces)
 - Small grid sizes where real-space is competitive
-- Accuracy requirements favor 4th-order Richardson extrapolation
+- CN-ADI4 (4th-order) accuracy is needed with non-periodic boundaries
 
 ### Use Pseudo-Spectral When:
 - Periodic boundary conditions are acceptable

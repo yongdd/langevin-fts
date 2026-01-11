@@ -1,13 +1,13 @@
 /**
  * @file CudaSolverRealSpace.cu
- * @brief CUDA real-space solver using Crank-Nicolson ADI method.
+ * @brief CUDA real-space solver using CN-ADI method.
  *
  * Implements propagator advancement for continuous chains using finite
  * differences instead of FFT. Supports non-periodic boundary conditions
  * (reflecting, absorbing) and uses ADI splitting with GPU-accelerated
  * tridiagonal solvers.
  *
- * **Crank-Nicolson ADI:**
+ * **CN-ADI (Crank-Nicolson ADI):**
  *
  * The modified diffusion equation is split dimensionally:
  * - 3D: Three sequential tridiagonal solves (x, y, z directions)
@@ -107,7 +107,7 @@ CudaSolverRealSpace::CudaSolverRealSpace(
             gpu_error_check(cudaMalloc((void**)&d_zd[monomer_type], sizeof(double)*nx[2]));
             gpu_error_check(cudaMalloc((void**)&d_zh[monomer_type], sizeof(double)*nx[2]));
 
-            // Half-step coefficients for Richardson extrapolation
+            // Half-step coefficients for CN-ADI4
             d_xl_half[monomer_type] = nullptr;
             d_xd_half[monomer_type] = nullptr;
             d_xh_half[monomer_type] = nullptr;
@@ -369,7 +369,7 @@ void CudaSolverRealSpace::update_laplacian_operator()
             gpu_error_check(cudaMemcpy(d_zd[monomer_type], zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_zh[monomer_type], zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
 
-            // Half-step coefficients for Richardson extrapolation
+            // Half-step coefficients for CN-ADI4
             FiniteDifference::get_laplacian_matrix(
                 this->cb->get_boundary_conditions(),
                 this->cb->get_nx(), this->cb->get_dx(),
@@ -473,7 +473,7 @@ void CudaSolverRealSpace::advance_propagator(
 
         double *_d_exp_dw = d_exp_dw[monomer_type];
 
-#if REALSPACE_RICHARDSON_EXTRAPOLATION
+#if REALSPACE_CN_ADI4
         double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
 
         // ========================================
@@ -548,14 +548,14 @@ void CudaSolverRealSpace::advance_propagator(
         gpu_error_check(cudaPeekAtLastError());
 
         // ========================================
-        // Richardson extrapolation: q_out = (4*q_half - q_full) / 3
+        // CN-ADI4: Richardson extrapolation q_out = (4*q_half - q_full) / 3
         // Use ker_lin_comb (dst = a*src1 + b*src2), NOT ker_add_lin_comb (dst += a*src1 + b*src2)
         // ========================================
         ker_lin_comb<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
             d_q_out, 4.0/3.0, d_q_half[STREAM], -1.0/3.0, d_q_full[STREAM], M);
         gpu_error_check(cudaPeekAtLastError());
 
-#else  // 2nd-order: single full step only
+#else  // CN-ADI2: single full step only
         // ========================================
         // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
         // ========================================
