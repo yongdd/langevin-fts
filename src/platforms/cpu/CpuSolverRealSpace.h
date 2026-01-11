@@ -15,6 +15,16 @@
  *
  * where A_α = -(b²ds/12) ∂²/∂α² + (w·ds/6).
  *
+ * **4th Order Richardson Extrapolation:**
+ *
+ * To achieve 4th order accuracy in contour step ds, Richardson extrapolation
+ * is applied:
+ *
+ *     q_out = (4·q_half - q_full) / 3
+ *
+ * where q_full is one full step (ds) and q_half is two half steps (ds/2 each).
+ * This cancels the O(ds²) error term, yielding O(ds⁴) accuracy.
+ *
  * **ADI (Alternating Direction Implicit):**
  *
  * Each spatial direction is solved implicitly in sequence, resulting in
@@ -46,10 +56,19 @@
 
 /**
  * @class CpuSolverRealSpace
- * @brief CPU real-space solver using Crank-Nicolson finite differences.
+ * @brief CPU real-space solver using Crank-Nicolson with Richardson extrapolation.
  *
  * Implements the ADI (Alternating Direction Implicit) scheme for solving
- * the modified diffusion equation with various boundary conditions.
+ * the modified diffusion equation with various boundary conditions, using
+ * 4th order Richardson extrapolation for high accuracy.
+ *
+ * **4th Order Accuracy:**
+ *
+ * Richardson extrapolation combines one full step and two half steps:
+ *     q_out = (4·q_half - q_full) / 3
+ *
+ * This achieves O(ds⁴) accuracy in the contour step, matching the
+ * pseudo-spectral continuous chain solver.
  *
  * **Tridiagonal Systems:**
  *
@@ -65,9 +84,9 @@
  *
  * **Memory per Direction per Monomer:**
  *
- * - xl, xd, xh: Lower, diagonal, upper coefficients for x-direction
- * - yl, yd, yh: Same for y-direction
- * - zl, zd, zh: Same for z-direction
+ * - xl, xd, xh: Lower, diagonal, upper coefficients for x-direction (full step)
+ * - xl_half, xd_half, xh_half: Same for half step (ds/2)
+ * - Similar for y and z directions
  *
  * @note This is a beta feature. Stress calculation is not yet implemented.
  *
@@ -107,6 +126,21 @@ private:
     std::map<std::string, double*> zh;  ///< Upper diagonal
     /// @}
 
+    /// @name Half-step tridiagonal coefficients for Richardson extrapolation
+    /// @{
+    std::map<std::string, double*> xl_half;  ///< x-direction lower (ds/2)
+    std::map<std::string, double*> xd_half;  ///< x-direction diagonal (ds/2)
+    std::map<std::string, double*> xh_half;  ///< x-direction upper (ds/2)
+
+    std::map<std::string, double*> yl_half;  ///< y-direction lower (ds/2)
+    std::map<std::string, double*> yd_half;  ///< y-direction diagonal (ds/2)
+    std::map<std::string, double*> yh_half;  ///< y-direction upper (ds/2)
+
+    std::map<std::string, double*> zl_half;  ///< z-direction lower (ds/2)
+    std::map<std::string, double*> zd_half;  ///< z-direction diagonal (ds/2)
+    std::map<std::string, double*> zh_half;  ///< z-direction upper (ds/2)
+    /// @}
+
     /**
      * @brief Return maximum of two integers.
      */
@@ -142,6 +176,58 @@ private:
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
         double *q_in, double *q_out, std::string monomer_type);
+
+    /**
+     * @brief Single ADI step with specified coefficients.
+     *
+     * Core implementation of the ADI step used by both full and half-step
+     * propagation. This method performs:
+     * 1. Apply potential Boltzmann factor: q_exp = exp_dw * q_in
+     * 2. ADI diffusion solve
+     * 3. Apply potential Boltzmann factor: q_out *= exp_dw
+     *
+     * @param q_in        Input propagator
+     * @param q_out       Output propagator
+     * @param exp_dw_ptr  Boltzmann factor for potential
+     * @param _xl,_xd,_xh X-direction tridiagonal coefficients
+     * @param _yl,_yd,_yh Y-direction tridiagonal coefficients
+     * @param _zl,_zd,_zh Z-direction tridiagonal coefficients
+     * @param q_mask      Optional mask for impenetrable regions
+     */
+    void advance_propagator_step(
+        double *q_in, double *q_out,
+        const double *exp_dw_ptr,
+        double *_xl, double *_xd, double *_xh,
+        double *_yl, double *_yd, double *_yh,
+        double *_zl, double *_zd, double *_zh,
+        const double *q_mask);
+
+    /**
+     * @brief 3D ADI step with specified coefficients.
+     */
+    void advance_propagator_3d_step(
+        std::vector<BoundaryCondition> bc,
+        double *q_in, double *q_out,
+        double *_xl, double *_xd, double *_xh,
+        double *_yl, double *_yd, double *_yh,
+        double *_zl, double *_zd, double *_zh);
+
+    /**
+     * @brief 2D ADI step with specified coefficients.
+     */
+    void advance_propagator_2d_step(
+        std::vector<BoundaryCondition> bc,
+        double *q_in, double *q_out,
+        double *_xl, double *_xd, double *_xh,
+        double *_yl, double *_yd, double *_yh);
+
+    /**
+     * @brief 1D step with specified coefficients.
+     */
+    void advance_propagator_1d_step(
+        std::vector<BoundaryCondition> bc,
+        double *q_in, double *q_out,
+        double *_xl, double *_xd, double *_xh);
 
 public:
     /**

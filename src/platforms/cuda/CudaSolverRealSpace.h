@@ -304,6 +304,21 @@ private:
     std::map<std::string, double*> d_zh;  ///< Upper diagonal
     /// @}
 
+    /// @name Half-step Tridiagonal Coefficients for Richardson Extrapolation
+    /// @{
+    std::map<std::string, double*> d_xl_half;  ///< X-direction lower (ds/2)
+    std::map<std::string, double*> d_xd_half;  ///< X-direction diagonal (ds/2)
+    std::map<std::string, double*> d_xh_half;  ///< X-direction upper (ds/2)
+
+    std::map<std::string, double*> d_yl_half;  ///< Y-direction lower (ds/2)
+    std::map<std::string, double*> d_yd_half;  ///< Y-direction diagonal (ds/2)
+    std::map<std::string, double*> d_yh_half;  ///< Y-direction upper (ds/2)
+
+    std::map<std::string, double*> d_zl_half;  ///< Z-direction lower (ds/2)
+    std::map<std::string, double*> d_zd_half;  ///< Z-direction diagonal (ds/2)
+    std::map<std::string, double*> d_zh_half;  ///< Z-direction upper (ds/2)
+    /// @}
+
     /// @name Tridiagonal Solver Workspace (per stream)
     /// @{
     double *d_q_star  [MAX_STREAMS];  ///< First intermediate solution
@@ -311,6 +326,8 @@ private:
     double *d_c_star  [MAX_STREAMS];  ///< Modified upper diagonal
     double *d_q_sparse[MAX_STREAMS];  ///< Sherman-Morrison correction
     double *d_temp    [MAX_STREAMS];  ///< General temporary
+    double *d_q_full  [MAX_STREAMS];  ///< Full step result for Richardson
+    double *d_q_half  [MAX_STREAMS];  ///< Half step result for Richardson
     /// @}
 
     /// @name Index Offset Arrays
@@ -346,6 +363,36 @@ private:
         std::vector<BoundaryCondition> bc,
         const int STREAM,
         double *d_q_in, double *d_q_out, std::string monomer_type);
+
+    /**
+     * @brief 3D ADI step with explicit coefficient arrays.
+     */
+    void advance_propagator_3d_step(
+        std::vector<BoundaryCondition> bc,
+        const int STREAM,
+        double *d_q_in, double *d_q_out,
+        double *_d_xl, double *_d_xd, double *_d_xh,
+        double *_d_yl, double *_d_yd, double *_d_yh,
+        double *_d_zl, double *_d_zd, double *_d_zh);
+
+    /**
+     * @brief 2D ADI step with explicit coefficient arrays.
+     */
+    void advance_propagator_2d_step(
+        std::vector<BoundaryCondition> bc,
+        const int STREAM,
+        double *d_q_in, double *d_q_out,
+        double *_d_xl, double *_d_xd, double *_d_xh,
+        double *_d_yl, double *_d_yd, double *_d_yh);
+
+    /**
+     * @brief 1D step with explicit coefficient arrays.
+     */
+    void advance_propagator_1d_step(
+        std::vector<BoundaryCondition> bc,
+        const int STREAM,
+        double *d_q_in, double *d_q_out,
+        double *_d_xl, double *_d_xd, double *_d_xh);
 
 public:
     /**
