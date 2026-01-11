@@ -13,9 +13,11 @@ Real-Space Methods (for non-periodic boundaries):
 - CN-ADI4: 4th-order Crank-Nicolson ADI with Richardson extrapolation
 
 Tests performed:
-1. Convergence analysis (Q vs ds) - similar to Stasiak & Matsen (2011)
+1. Convergence analysis (F vs ds) - similar to Stasiak & Matsen (2011)
 2. Performance comparison (time vs ds) - similar to Song et al. (2018)
 3. Method comparison on same problem
+
+Note: F = -ln(Q) is the free energy per chain (in units of kT).
 
 References:
 - RQM4: Ranjan, Qin & Morse, Macromolecules 41, 942-954 (2008)
@@ -66,13 +68,12 @@ def benchmark_pseudospectral(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3
     """
     Benchmark pseudo-spectral solver (RQM4).
 
-    Returns partition function Q and computation time for each ds value.
+    Returns free energy F = -ln(Q) and computation time for each ds value.
     """
     results = {
         'ds': [],
         'N': [],
-        'Q': [],
-        'neg_ln_Q': [],
+        'F': [],
         'time_ms': [],
         'method': 'RQM4 (Pseudo-Spectral)'
     }
@@ -103,12 +104,12 @@ def benchmark_pseudospectral(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)  # Free energy
         avg_time = np.mean(times) * 1000  # Convert to ms
 
         results['ds'].append(ds)
         results['N'].append(N)
-        results['Q'].append(Q)
-        results['neg_ln_Q'].append(-np.log(Q))
+        results['F'].append(F)
         results['time_ms'].append(avg_time)
 
     return results
@@ -118,13 +119,12 @@ def benchmark_realspace(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3, n_r
     """
     Benchmark real-space solver (CN-ADI2).
 
-    Note: CN-ADI4 requires recompilation with -DPOLYMERFTS_USE_CN_ADI4=ON
+    Returns free energy F = -ln(Q) and computation time for each ds value.
     """
     results = {
         'ds': [],
         'N': [],
-        'Q': [],
-        'neg_ln_Q': [],
+        'F': [],
         'time_ms': [],
         'method': 'CN-ADI2 (Real-Space)'
     }
@@ -157,20 +157,20 @@ def benchmark_realspace(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3, n_r
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)  # Free energy
         avg_time = np.mean(times) * 1000  # Convert to ms
 
         results['ds'].append(ds)
         results['N'].append(N)
-        results['Q'].append(Q)
-        results['neg_ln_Q'].append(-np.log(Q))
+        results['F'].append(F)
         results['time_ms'].append(avg_time)
 
     return results
 
 
-def compute_convergence_order(ds_values, Q_values, Q_ref):
+def compute_convergence_order(ds_values, F_values, F_ref):
     """Compute convergence order from error analysis."""
-    errors = [abs(Q - Q_ref) for Q in Q_values[:-1]]  # Exclude reference
+    errors = [abs(F - F_ref) for F in F_values[:-1]]  # Exclude reference
     ds_vals = ds_values[:-1]
 
     if len(errors) < 2 or errors[0] < 1e-14 or errors[1] < 1e-14:
@@ -194,16 +194,17 @@ def run_convergence_study(platform="cpu-mkl"):
     """
     Run convergence study similar to Stasiak & Matsen (2011).
 
-    Tests how partition function Q converges as ds -> 0.
+    Tests how free energy F = -ln(Q) converges as ds -> 0.
     """
     print("\n" + "="*70)
     print(f"CONVERGENCE STUDY ({platform})")
     print("="*70)
     print("\nTest configuration:")
-    print("  - AB diblock copolymer, f = 0.5")
-    print("  - Lamellar external field, chi_N = 12")
+    print("  - Homopolymer A in lamellar external field")
+    print("  - chi_N = 12, n_periods = 3")
     print("  - Grid: 32 x 32 x 32")
     print("  - Box: 4.0 x 4.0 x 4.0")
+    print("  - F = -ln(Q) is the free energy per chain")
 
     nx = [32, 32, 32]
     lx = [4.0, 4.0, 4.0]
@@ -225,39 +226,39 @@ def run_convergence_study(platform="cpu-mkl"):
 
     # Print results
     print("\n" + "-"*70)
-    print("PARTITION FUNCTION Q vs CONTOUR DISCRETIZATION")
+    print("FREE ENERGY F = -ln(Q) vs CONTOUR DISCRETIZATION")
     print("-"*70)
-    print(f"{'N (ds=1/N)':<12} {'RQM4 Q':<20} {'CN-ADI2 Q':<20} {'Difference':<15}")
+    print(f"{'N (ds=1/N)':<12} {'RQM4 F':<20} {'CN-ADI2 F':<20} {'Difference':<15}")
     print("-"*70)
 
     for i in range(len(ds_values)):
         N = int(round(1.0 / ds_values[i]))
-        Q_ps = ps_results['Q'][i]
+        F_ps = ps_results['F'][i]
         if rs_results:
-            Q_rs = rs_results['Q'][i]
-            diff = abs(Q_ps - Q_rs) / Q_ps * 100
-            print(f"{N:<12} {Q_ps:<20.12f} {Q_rs:<20.12f} {diff:<15.6f}%")
+            F_rs = rs_results['F'][i]
+            diff = abs(F_ps - F_rs)
+            print(f"{N:<12} {F_ps:<20.12f} {F_rs:<20.12f} {diff:<15.2e}")
         else:
-            print(f"{N:<12} {Q_ps:<20.12f} {'N/A':<20}")
+            print(f"{N:<12} {F_ps:<20.12f} {'N/A':<20}")
 
     # Convergence order
     print("\n" + "-"*70)
     print("CONVERGENCE ORDER ANALYSIS")
     print("-"*70)
 
-    Q_ref_ps = ps_results['Q'][-1]
-    order_ps = compute_convergence_order(ds_values, ps_results['Q'], Q_ref_ps)
+    F_ref_ps = ps_results['F'][-1]
+    order_ps = compute_convergence_order(ds_values, ps_results['F'], F_ref_ps)
     print(f"\nRQM4 (Pseudo-Spectral):")
-    print(f"  Reference Q (N=320): {Q_ref_ps:.12f}")
+    print(f"  Reference F (N=320): {F_ref_ps:.12f}")
     if order_ps:
         print(f"  Estimated convergence order: p ≈ {order_ps:.2f}")
         print(f"  Expected: p ≈ 4.0 (4th-order method)")
 
     if rs_results:
-        Q_ref_rs = rs_results['Q'][-1]
-        order_rs = compute_convergence_order(ds_values, rs_results['Q'], Q_ref_rs)
+        F_ref_rs = rs_results['F'][-1]
+        order_rs = compute_convergence_order(ds_values, rs_results['F'], F_ref_rs)
         print(f"\nCN-ADI2 (Real-Space):")
-        print(f"  Reference Q (N=320): {Q_ref_rs:.12f}")
+        print(f"  Reference F (N=320): {F_ref_rs:.12f}")
         if order_rs:
             print(f"  Estimated convergence order: p ≈ {order_rs:.2f}")
             print(f"  Expected: p ≈ 2.0 (2nd-order method)")
@@ -351,10 +352,11 @@ def run_method_comparison():
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)
         avg_time = np.mean(times) * 1000
 
-        results['cpu_rqm4'] = {'Q': Q, 'time_ms': avg_time}
-        print(f"  Q = {Q:.12f}, time = {avg_time:.2f} ms")
+        results['cpu_rqm4'] = {'F': F, 'time_ms': avg_time}
+        print(f"  F = {F:.12f}, time = {avg_time:.2f} ms")
     except Exception as e:
         print(f"  Failed: {e}")
 
@@ -379,10 +381,11 @@ def run_method_comparison():
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)
         avg_time = np.mean(times) * 1000
 
-        results['cuda_rqm4'] = {'Q': Q, 'time_ms': avg_time}
-        print(f"  Q = {Q:.12f}, time = {avg_time:.2f} ms")
+        results['cuda_rqm4'] = {'F': F, 'time_ms': avg_time}
+        print(f"  F = {F:.12f}, time = {avg_time:.2f} ms")
     except Exception as e:
         print(f"  Failed: {e}")
 
@@ -408,10 +411,11 @@ def run_method_comparison():
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)
         avg_time = np.mean(times) * 1000
 
-        results['cpu_cn_adi2'] = {'Q': Q, 'time_ms': avg_time}
-        print(f"  Q = {Q:.12f}, time = {avg_time:.2f} ms")
+        results['cpu_cn_adi2'] = {'F': F, 'time_ms': avg_time}
+        print(f"  F = {F:.12f}, time = {avg_time:.2f} ms")
     except Exception as e:
         print(f"  Failed: {e}")
 
@@ -437,28 +441,29 @@ def run_method_comparison():
             times.append(time.perf_counter() - t0)
 
         Q = solver.get_total_partition(0)
+        F = -np.log(Q)
         avg_time = np.mean(times) * 1000
 
-        results['cuda_cn_adi2'] = {'Q': Q, 'time_ms': avg_time}
-        print(f"  Q = {Q:.12f}, time = {avg_time:.2f} ms")
+        results['cuda_cn_adi2'] = {'F': F, 'time_ms': avg_time}
+        print(f"  F = {F:.12f}, time = {avg_time:.2f} ms")
     except Exception as e:
         print(f"  Failed: {e}")
 
     # Summary table
     print("\n" + "-"*70)
-    print("SUMMARY")
+    print("SUMMARY (F = -ln(Q))")
     print("-"*70)
-    print(f"{'Method':<30} {'Q':<20} {'Time (ms)':<15}")
+    print(f"{'Method':<30} {'F':<20} {'Time (ms)':<15}")
     print("-"*70)
 
     for key, val in results.items():
         method_name = key.replace('_', ' ').upper()
-        print(f"{method_name:<30} {val['Q']:<20.12f} {val['time_ms']:<15.2f}")
+        print(f"{method_name:<30} {val['F']:<20.12f} {val['time_ms']:<15.2f}")
 
     # Check consistency
     if 'cpu_rqm4' in results and 'cuda_rqm4' in results:
-        diff = abs(results['cpu_rqm4']['Q'] - results['cuda_rqm4']['Q']) / results['cpu_rqm4']['Q']
-        print(f"\nCPU vs CUDA RQM4 relative difference: {diff:.2e}")
+        diff = abs(results['cpu_rqm4']['F'] - results['cuda_rqm4']['F'])
+        print(f"\nCPU vs CUDA RQM4 absolute difference in F: {diff:.2e}")
 
     return results
 
@@ -471,8 +476,8 @@ def main():
     print("\nThis benchmark compares numerical methods for chain propagator computation:")
     print("- RQM4: 4th-order pseudo-spectral (Ranjan, Qin, Morse 2008)")
     print("- CN-ADI2: 2nd-order real-space Crank-Nicolson ADI")
-    print("\nNote: ETDRK4 requires runtime method selection (not yet implemented)")
-    print("      CN-ADI4 requires rebuild with -DPOLYMERFTS_USE_CN_ADI4=ON")
+    print("\nOutput: F = -ln(Q) (free energy per chain in units of kT)")
+    print("\nAll numerical methods can be selected at runtime via numerical_method parameter.")
 
     all_results = {}
 
@@ -531,7 +536,7 @@ def main():
     print("""
 Key findings:
 
-1. CONVERGENCE ORDER:
+1. CONVERGENCE ORDER (for F = -ln(Q)):
    - RQM4 (Pseudo-Spectral): 4th-order accurate in ds
    - CN-ADI2 (Real-Space): 2nd-order accurate in ds
 
