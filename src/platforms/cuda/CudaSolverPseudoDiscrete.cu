@@ -53,7 +53,20 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
-        
+
+        // Validate that both sides of each direction have matching BC
+        // (required for pseudo-spectral: FFT/DCT/DST apply to entire direction)
+        auto bc_vec = cb->get_boundary_conditions();
+        int dim = cb->get_dim();
+        for (int d = 0; d < dim; ++d)
+        {
+            if (bc_vec[2*d] != bc_vec[2*d + 1])
+            {
+                throw_with_line_number("Pseudo-spectral method requires matching boundary conditions on both sides of each direction. "
+                    "Direction " + std::to_string(d) + " has mismatched BCs. Use real-space method for mixed BCs.");
+            }
+        }
+
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
