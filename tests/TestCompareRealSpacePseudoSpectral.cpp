@@ -50,6 +50,23 @@
 #endif
 
 /**
+ * @brief Check if boundary conditions are mixed (different on each side of a direction).
+ *
+ * Pseudo-spectral methods require matching BCs on both sides of each direction
+ * because FFT/DCT/DST transforms apply to the entire direction.
+ */
+bool has_mixed_bc(const std::vector<std::string>& bc)
+{
+    int dim = bc.size() / 2;
+    for (int d = 0; d < dim; ++d)
+    {
+        if (bc[2*d] != bc[2*d + 1])
+            return true;
+    }
+    return false;
+}
+
+/**
  * @brief Run a single comparison test between pseudo-spectral and real-space methods.
  *
  * @param test_name   Name of the test for output
@@ -59,6 +76,9 @@
  * @param n_steps     Number of propagator steps
  * @param tolerance   Maximum allowed relative error
  * @return true if test passed, false otherwise
+ *
+ * Note: For mixed BCs (different on each side of a direction), only real-space
+ * is tested since pseudo-spectral doesn't support mixed BCs.
  */
 template <typename T>
 bool run_comparison_test(
@@ -135,13 +155,55 @@ bool run_comparison_test(
     double max_diff, rel_err;
     bool all_passed = true;
 
+    // Check if BCs are mixed (different on each side of a direction)
+    // Pseudo-spectral doesn't support mixed BCs
+    bool mixed_bc = has_mixed_bc(bc);
+
     // ====================================================================
     // CPU Tests: Compare pseudo-spectral vs real-space
     // Both methods support non-periodic BCs on CPU (DCT/DST for pseudo-spectral)
+    // For mixed BCs, only test real-space (pseudo-spectral not supported)
     // ====================================================================
 #ifdef USE_CPU_MKL
-    std::cout << "  [CPU-MKL PS vs RS] " << std::flush;
+    std::vector<double> q_cpu_ref(M);  // Reference for CUDA comparison
+
+    if (mixed_bc)
     {
+        // Mixed BCs: only test real-space
+        std::cout << "  [CPU-MKL RS only] " << std::flush;
+        CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
+        CpuComputationContinuous<T>* solver_rs = new CpuComputationContinuous<T>(cb_rs, &molecules, &prop_opt, "realspace");
+
+        // Run real-space solver
+        solver_rs->compute_propagators({{"A", w.data()}}, {});
+        q_rs = q_init;
+        for (int step = 0; step < n_steps; ++step)
+        {
+            solver_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
+            std::swap(q_rs, q_out);
+        }
+
+        // Just verify it ran without errors and produced reasonable output
+        double max_val = *std::max_element(q_rs.begin(), q_rs.end());
+        if (max_val > 0 && std::isfinite(max_val))
+        {
+            std::cout << "PASSED (max_q=" << max_val << ")" << std::endl;
+        }
+        else
+        {
+            std::cout << "FAILED (invalid output)" << std::endl;
+            all_passed = false;
+        }
+
+        q_cpu_ref = q_rs;  // Use CPU real-space as reference for CUDA
+
+        delete solver_rs;
+        delete cb_rs;
+    }
+    else
+    {
+        // Matching BCs: compare pseudo-spectral vs real-space
+        std::cout << "  [CPU-MKL PS vs RS] " << std::flush;
         CpuComputationBox<T>* cb_ps = new CpuComputationBox<T>(nx, lx, bc);
         CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
 
@@ -181,55 +243,56 @@ bool run_comparison_test(
             std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
         }
 
-        // Store CPU pseudo-spectral result for comparison with CUDA
-        std::vector<double> q_cpu_ps = q_ps;
+        q_cpu_ref = q_ps;  // Use CPU pseudo-spectral as reference for CUDA
 
         delete solver_ps;
         delete solver_rs;
         delete cb_ps;
         delete cb_rs;
-
-        // ====================================================================
-        // CUDA Tests: Compare CUDA real-space vs CPU pseudo-spectral
-        // CUDA pseudo-spectral uses FFT only (periodic BCs), so we compare
-        // CUDA real-space against CPU pseudo-spectral as reference
-        // ====================================================================
-#ifdef USE_CUDA
-        std::cout << "  [CUDA RS vs CPU PS] " << std::flush;
-        {
-            CudaComputationBox<T>* cb_cuda_rs = new CudaComputationBox<T>(nx, lx, bc);
-            CudaComputationContinuous<T>* solver_cuda_rs = new CudaComputationContinuous<T>(cb_cuda_rs, &molecules, &prop_opt, "realspace");
-
-            // Run CUDA real-space solver
-            solver_cuda_rs->compute_propagators({{"A", w.data()}}, {});
-            q_rs = q_init;
-            for (int step = 0; step < n_steps; ++step)
-            {
-                solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
-                std::swap(q_rs, q_out);
-            }
-
-            // Compare CUDA real-space result with CPU pseudo-spectral reference
-            max_diff = 0.0;
-            for (int i = 0; i < M; ++i)
-                max_diff = std::max(max_diff, std::abs(q_cpu_ps[i] - q_rs[i]));
-            rel_err = max_diff / (*std::max_element(q_cpu_ps.begin(), q_cpu_ps.end()));
-
-            if (rel_err > tolerance)
-            {
-                std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
-                all_passed = false;
-            }
-            else
-            {
-                std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
-            }
-
-            delete solver_cuda_rs;
-            delete cb_cuda_rs;
-        }
-#endif
     }
+
+    // ====================================================================
+    // CUDA Tests: Compare CUDA real-space vs CPU reference
+    // For matching BCs: compare with CPU pseudo-spectral
+    // For mixed BCs: compare with CPU real-space
+    // ====================================================================
+#ifdef USE_CUDA
+    std::cout << "  [CUDA RS vs CPU " << (mixed_bc ? "RS" : "PS") << "] " << std::flush;
+    {
+        CudaComputationBox<T>* cb_cuda_rs = new CudaComputationBox<T>(nx, lx, bc);
+        CudaComputationContinuous<T>* solver_cuda_rs = new CudaComputationContinuous<T>(cb_cuda_rs, &molecules, &prop_opt, "realspace");
+
+        // Run CUDA real-space solver
+        solver_cuda_rs->compute_propagators({{"A", w.data()}}, {});
+        q_rs = q_init;
+        for (int step = 0; step < n_steps; ++step)
+        {
+            solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
+            std::swap(q_rs, q_out);
+        }
+
+        // Compare CUDA real-space result with CPU reference
+        max_diff = 0.0;
+        for (int i = 0; i < M; ++i)
+            max_diff = std::max(max_diff, std::abs(q_cpu_ref[i] - q_rs[i]));
+        rel_err = max_diff / (*std::max_element(q_cpu_ref.begin(), q_cpu_ref.end()));
+
+        // For mixed BCs comparing RS vs RS, use tighter tolerance
+        double cuda_tol = mixed_bc ? 1e-10 : tolerance;
+        if (rel_err > cuda_tol)
+        {
+            std::cout << "FAILED (rel_err=" << rel_err << ")" << std::endl;
+            all_passed = false;
+        }
+        else
+        {
+            std::cout << "PASSED (rel_err=" << rel_err << ")" << std::endl;
+        }
+
+        delete solver_cuda_rs;
+        delete cb_cuda_rs;
+    }
+#endif
 #endif
 
     return all_passed;
