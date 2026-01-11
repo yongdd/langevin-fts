@@ -3,22 +3,32 @@
  * @brief GPU pseudo-spectral solver for discrete chain model.
  *
  * This header provides CudaSolverPseudoDiscrete, the CUDA implementation
- * of the pseudo-spectral method for discrete chain propagators.
+ * of the pseudo-spectral method for discrete chain propagators using
+ * the Chapman-Kolmogorov integral equation.
  *
- * **Discrete Chain Algorithm:**
+ * **Chapman-Kolmogorov Equation:**
+ *
+ * For discrete chains, the propagator satisfies an integral equation:
+ *     q(r, n+1) = exp(-w(r)*ds) * integral g(r-r') q(r', n) dr'
+ *
+ * where g(r) is the bond function with Fourier transform ĝ(k).
+ * See Park et al. J. Chem. Phys. 150, 234901 (2019).
+ *
+ * **Numerical Method (Operator Splitting):**
  *
  * Full segment step:
- *     q(n+1) = B^(1/2) · exp(-w) · B^(1/2) · q(n)
+ *     q(n+1) = B^(1/2) · exp(-w*ds) · B^(1/2) · q(n)
  *
- * Half-bond step:
+ * Half-bond step (at chain ends):
  *     q'(n+1/2) = B^(1/2) · q(n)
  *
- * where B^(1/2) = FFT⁻¹[ exp(-k²b²/12) · FFT[·] ]
+ * where B^(1/2) = FFT⁻¹[ ĝ^(1/2)(k) · FFT[·] ] is half-bond convolution
+ * with ĝ^(1/2)(k) = exp(-b²|k|²ds/12).
  *
  * **GPU Resources:**
  *
  * Same stream and cuFFT organization as continuous solver,
- * but uses half-bond diffusion operators instead of full-step.
+ * but uses bond convolution operators instead of diffusion.
  *
  * @see CudaSolver for the abstract interface
  * @see CudaSolverPseudoRQM4 for continuous chain version
@@ -43,16 +53,16 @@
  * @class CudaSolverPseudoDiscrete
  * @brief GPU pseudo-spectral solver for discrete chain model.
  *
- * Implements discrete chain propagator updates using half-bond
- * operator splitting on the GPU.
+ * Implements discrete chain propagator updates using the Chapman-Kolmogorov
+ * integral equation with operator splitting on the GPU.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
  * **Operator Splitting:**
  *
  * Uses symmetric splitting: B^(1/2) · A · B^(1/2)
- * - A = exp(-w) is the Boltzmann factor
- * - B^(1/2) = half-bond diffusion
+ * - A = exp(-w*ds) is the segment Boltzmann factor
+ * - B^(1/2) = half-bond convolution with ĝ^(1/2)(k)
  */
 template <typename T>
 class CudaSolverPseudoDiscrete : public CudaSolver<T>
@@ -127,7 +137,8 @@ public:
     /**
      * @brief Advance propagator by one full segment.
      *
-     * Computes: q(n+1) = B^(1/2) · exp(-w) · B^(1/2) · q(n)
+     * Computes: q(n+1) = B^(1/2) · exp(-w*ds) · B^(1/2) · q(n)
+     * where B^(1/2) is half-bond convolution.
      *
      * @param STREAM      Stream index
      * @param d_q_in      Input propagator q(n)
@@ -143,11 +154,12 @@ public:
     /**
      * @brief Advance by half bond step only.
      *
-     * Computes: q' = B^(1/2) · q
+     * Computes: q' = B^(1/2) · q = FFT⁻¹[ ĝ^(1/2)(k) · FFT[q] ]
+     * where ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function.
      *
      * @param STREAM      Stream index
      * @param d_q_in      Input propagator
-     * @param d_q_out     Output after half-bond diffusion
+     * @param d_q_out     Output after half-bond convolution
      * @param monomer_type Monomer type
      */
     void advance_propagator_half_bond_step(

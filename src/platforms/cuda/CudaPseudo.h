@@ -3,13 +3,17 @@
  * @brief GPU implementation of pseudo-spectral method utilities.
  *
  * This header provides CudaPseudo, the GPU-specific implementation
- * of Pseudo that stores Boltzmann factors and Fourier basis vectors
+ * of Pseudo that stores Boltzmann bond factors and Fourier basis vectors
  * in GPU device memory.
  *
  * **GPU Memory Contents:**
  *
- * - d_boltz_bond: exp(-k²b²ds/6) for each monomer type
- * - d_boltz_bond_half: exp(-k²b²ds/12) for half-bond steps
+ * - d_boltz_bond: exp(-b²|k|²ds/6) for full step propagation
+ *     - Continuous chains: diffusion propagator
+ *     - Discrete chains: bond function ĝ(k)
+ * - d_boltz_bond_half: exp(-b²|k|²ds/12) for half steps
+ *     - Continuous chains: half-step diffusion
+ *     - Discrete chains: half-bond function ĝ^(1/2)(k)
  * - d_fourier_basis_*: Weighted wavenumbers for stress calculation
  * - d_negative_k_idx: Index mapping for Hermitian symmetry
  *
@@ -39,11 +43,17 @@
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Boltzmann Factors:**
+ * **Boltzmann Bond Factors:**
  *
- * Stored in Fourier space for efficient multiplication:
- * - boltz_bond[k] = exp(-k²b²ds/6) for continuous chains
- * - boltz_bond_half[k] = exp(-k²b²ds/12) for discrete chains
+ * Stored in Fourier space for efficient multiplication. Same formula
+ * for both chain models but different physical interpretation:
+ *
+ * - boltz_bond[k] = exp(-b²|k|²ds/6)
+ *     - Continuous: diffusion propagator
+ *     - Discrete: bond function ĝ(k) from Chapman-Kolmogorov equation
+ * - boltz_bond_half[k] = exp(-b²|k|²ds/12)
+ *     - Continuous: half-step diffusion
+ *     - Discrete: half-bond function ĝ^(1/2)(k) for chain ends
  *
  * **Fourier Basis:**
  *
@@ -112,16 +122,16 @@ public:
     ~CudaPseudo();
 
     /**
-     * @brief Get full bond Boltzmann factor (device pointer).
+     * @brief Get full bond factor (device pointer).
      * @param monomer_type Monomer type
-     * @return Device pointer to exp(-k²b²ds/6)
+     * @return Device pointer to exp(-b²|k|²ds/6)
      */
     double* get_boltz_bond(std::string monomer_type) override { return d_boltz_bond[monomer_type]; };
 
     /**
-     * @brief Get half bond Boltzmann factor (device pointer).
+     * @brief Get half bond factor (device pointer).
      * @param monomer_type Monomer type
-     * @return Device pointer to exp(-k²b²ds/12)
+     * @return Device pointer to exp(-b²|k|²ds/12)
      */
     double* get_boltz_bond_half(std::string monomer_type) override { return d_boltz_bond_half[monomer_type];};
 

@@ -7,8 +7,12 @@
  *
  * **Device Arrays:**
  *
- * - d_boltz_bond: exp(-k² b² ds/6) for full step propagation
- * - d_boltz_bond_half: exp(-k² b² ds/12) for half step
+ * - d_boltz_bond: exp(-b²|k|²ds/6) for full step propagation
+ *     - Continuous chains: diffusion propagator
+ *     - Discrete chains: bond function ĝ(k)
+ * - d_boltz_bond_half: exp(-b²|k|²ds/12) for half step
+ *     - Continuous chains: half-step diffusion
+ *     - Discrete chains: half-bond function ĝ^(1/2)(k)
  * - d_fourier_basis_x/y/z: Fourier basis for stress computation
  * - d_negative_k_idx: Mapping for conjugate symmetry (complex fields)
  *

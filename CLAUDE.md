@@ -185,6 +185,8 @@ CUDA code uses:
 
 The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory_usage=True` (stores only checkpoints, increases execution time 2-4x).
 
+**cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** This issue was discovered in the ETDRK4 solver where Fourier coefficients were corrupted after IFFT operations. See `CudaSolverPseudoETDRK4.cu` for the correct pattern using `cudaMemcpyAsync` to preserve input data.
+
 ## Running Simulations
 
 ### SCFT Examples
@@ -241,6 +243,46 @@ Simulations are configured via Python dictionaries with keys:
 **Memory issues**: Set `"reduce_memory_usage": True` in parameters
 
 **Single CPU core usage**: Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports
+
+## Chain Models
+
+This library supports two chain models with different mathematical formulations:
+
+### Continuous Chain Model (Gaussian Chain)
+
+Solves the **modified diffusion equation**:
+
+$$\frac{\partial q(\mathbf{r}, s)}{\partial s} = \frac{b^2}{6} \nabla^2 q(\mathbf{r}, s) - w(\mathbf{r}) q(\mathbf{r}, s)$$
+
+where $q(\mathbf{r}, s)$ is the chain propagator, $b$ is the statistical segment length, and $w(\mathbf{r})$ is the potential field.
+
+**Pseudo-spectral solution** (operator splitting):
+$$q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}\left[ e^{-b^2 |\mathbf{k}|^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] \right]$$
+
+The term $e^{-b^2 |\mathbf{k}|^2 \Delta s/6}$ is the **diffusion propagator** in Fourier space.
+
+### Discrete Chain Model (Chapman-Kolmogorov Equation)
+
+Solves the **Chapman-Kolmogorov integral equation** (NOT the modified diffusion equation):
+
+$$q(\mathbf{r}, n+1) = e^{-w(\mathbf{r}) \Delta s} \int g(\mathbf{r} - \mathbf{r}') q(\mathbf{r}', n) \, d\mathbf{r}'$$
+
+where $g(\mathbf{r})$ is the **bond function** representing the probability distribution of bond vectors.
+
+**Bead-spring (Gaussian) bond function**:
+$$g(\mathbf{r}) = \left( \frac{3}{2\pi a^2} \right)^{3/2} \exp\left( -\frac{3|\mathbf{r}|^2}{2a^2} \right)$$
+
+**Fourier transform of bond function**:
+$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{a^2 |\mathbf{k}|^2}{6} \right)$$
+
+With the convention $a^2 = b^2 \Delta s$ (where $\Delta s = 1/N$), this becomes:
+$$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right)$$
+
+**Key distinction**: The formula $\exp(-b^2 |\mathbf{k}|^2 \Delta s/6)$ appears in both models but has different physical meanings:
+- **Continuous**: Diffusion propagator from solving the modified diffusion equation
+- **Discrete**: Bond function (Fourier transform of Gaussian bond distribution)
+
+**Reference**: Park et al., *J. Chem. Phys.* **2019**, 150, 234901
 
 ## Units and Conventions
 
