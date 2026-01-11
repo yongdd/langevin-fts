@@ -172,10 +172,10 @@ You can select the numerical algorithm for propagator computation at runtime usi
 
 | Method | Solver Type | Description |
 |--------|-------------|-------------|
-| `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
-| `etdrk4` | Pseudo-spectral | ETDRK4 exponential integrator |
-| `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
-| `cn-adi4` | Real-space | 4th-order CN-ADI (Richardson extrapolation) |
+| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation (default) |
+| `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
+| `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
+| `cn-adi4` | Real-space | CN-ADI4: 4th-order CN-ADI (Richardson extrapolation) |
 
 Example:
 ```python

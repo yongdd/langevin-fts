@@ -10,15 +10,15 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 
 | Method | Order | Description | Reference |
 |--------|-------|-------------|-----------|
-| **rqm4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters (default) | *Macromolecules* 41, 942-954 (2008) |
-| **etdrk4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
+| **RQM4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters (default) | *Macromolecules* 41, 942-954 (2008) |
+| **ETDRK4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
 
 ### Real-Space Methods
 
 | Method | Order | Description |
 |--------|-------|-------------|
-| **cn-adi2** | 2nd | Crank-Nicolson Alternating Direction Implicit (default) |
-| **cn-adi4** | 4th | CN-ADI with Richardson extrapolation |
+| **CN-ADI2** | 2nd | Crank-Nicolson Alternating Direction Implicit (default) |
+| **CN-ADI4** | 4th | CN-ADI with Richardson extrapolation |
 
 ### Usage Example
 

@@ -26,10 +26,10 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 
 | Method | Solver Type | Description |
 |--------|-------------|-------------|
-| `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
-| `etdrk4` | Pseudo-spectral | ETDRK4 exponential integrator |
-| `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
-| `cn-adi4` | Real-space | 4th-order CN-ADI (Richardson extrapolation) |
+| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation (default) |
+| `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
+| `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
+| `cn-adi4` | Real-space | CN-ADI4: 4th-order CN-ADI (Richardson extrapolation) |
 
 #### Pseudo-Spectral Method
 - RQM4 (default) or ETDRK4 for continuous chains
