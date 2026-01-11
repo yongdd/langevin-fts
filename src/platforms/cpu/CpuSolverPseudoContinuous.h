@@ -29,6 +29,10 @@
  * - 4th-order accurate in ds (contour discretization)
  * - Spectral accuracy in spatial discretization
  *
+ * **References:**
+ * - Ranjan, Qin & Morse, Macromolecules 41, 942-954 (2008)
+ * - Stasiak & Matsen, Eur. Phys. J. E 34, 110 (2011)
+ *
  * @see CpuSolverPseudoBase for shared functionality
  * @see CpuSolverPseudoDiscrete for discrete chain version
  * @see CpuSolverPseudoETDRK4 for ETDRK4 alternative

@@ -103,3 +103,6 @@ For implementation details and algorithms, see:
 - Chain propagator optimization: *J. Chem. Theory Comput.* **2025**, 21, 3676
 - Discrete chain model: *J. Chem. Phys.* **2019**, 150, 234901
 - Multi-monomer theory: *Macromolecules* **2025**, 58, 816
+- RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
+- Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
+- ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)

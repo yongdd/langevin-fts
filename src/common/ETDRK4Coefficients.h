@@ -24,6 +24,11 @@
  * - Avoids catastrophic cancellation for small eigenvalues
  * - 32-point contour with radius 1.0 provides ~15 digits accuracy
  *
+ * **References:**
+ * - Cox & Matthews, J. Comput. Phys. 176, 430-455 (2002)
+ * - Kassam & Trefethen, SIAM J. Sci. Comput. 26, 1214-1233 (2005)
+ * - Song, Liu & Zhang, Chinese J. Polym. Sci. 36, 488-496 (2018)
+ *
  * @see CpuSolverPseudoContinuous for usage
  */
 
