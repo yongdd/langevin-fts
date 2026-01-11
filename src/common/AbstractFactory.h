@@ -94,7 +94,9 @@ template <typename T>
 class AbstractFactory
 {
 protected:
-    bool reduce_memory_usage;  ///< Enable memory-saving mode
+    bool reduce_memory_usage;    ///< Enable memory-saving mode
+    std::string pseudo_method;   ///< Pseudo-spectral method: "rqm4" or "etdrk4"
+    std::string realspace_method; ///< Real-space method: "cn-adi2" or "cn-adi4"
 
 public :
     /**

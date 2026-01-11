@@ -39,6 +39,7 @@
 
 #include "CpuComputationContinuous.h"
 #include "CpuSolverPseudoContinuous.h"
+#include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
 
@@ -52,13 +53,15 @@
  * @param molecules                      Polymer/solvent species definitions
  * @param propagator_computation_optimizer Optimized computation schedule
  * @param method                         "pseudospectral" or "realspace"
+ * @param numerical_method               Numerical algorithm (e.g., "rqm4", "etdrk4", "cn-adi2", "cn-adi4")
  */
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
-    std::string method)
+    std::string method,
+    std::string numerical_method)
     : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -68,14 +71,24 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         #endif
 
         const int M = this->cb->get_total_grid();
-        
+
         this->method = method;
         if(method == "pseudospectral")
-            this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
+        {
+            if (numerical_method == "" || numerical_method == "rqm4")
+                this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
+            else if (numerical_method == "etdrk4")
+                this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules);
+            else
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'etdrk4'.");
+        }
         else if(method == "realspace")
         {
-            if constexpr (std::is_same<T, double>::value) 
-                this->propagator_solver = new CpuSolverRealSpace(cb, molecules);
+            if constexpr (std::is_same<T, double>::value)
+            {
+                bool use_4th_order = (numerical_method == "cn-adi4");
+                this->propagator_solver = new CpuSolverRealSpace(cb, molecules, use_4th_order);
+            }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
         }

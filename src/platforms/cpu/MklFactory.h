@@ -73,9 +73,13 @@ class MklFactory : public AbstractFactory<T>
 public :
     /**
      * @brief Construct an MKL factory.
-     * @param reduce_memory_usage Currently ignored for CPU (accepted for API compatibility)
+     * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
+     * @param pseudo_method       Pseudo-spectral method: "rqm4" (default) or "etdrk4"
+     * @param realspace_method    Real-space method: "cn-adi2" (default) or "cn-adi4"
      */
-    MklFactory(bool reduce_memory_usage);
+    MklFactory(bool reduce_memory_usage,
+               std::string pseudo_method = "rqm4",
+               std::string realspace_method = "cn-adi2");
 
     /**
      * @brief Create a CPU computation box.

@@ -282,6 +282,13 @@ class SCFT:
         - reduce_memory_usage : bool, optional
             Enable memory-saving mode (default: False).
             Stores only checkpoints, recomputes propagators as needed.
+        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4'}, optional
+            Numerical algorithm for propagator computation (default: 'rqm4'):
+
+            - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
+            - 'etdrk4': Pseudo-spectral with ETDRK4 exponential integrator
+            - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
+            - 'cn-adi4': Real-space with 4th-order CN-ADI (Richardson extrapolation)
 
         **Optimization Parameters:**
 
@@ -393,7 +400,8 @@ class SCFT:
 
     **Computational Details:**
 
-    - Pseudo-spectral method uses RQM4 (4th-order Richardson extrapolation) for accuracy.
+    - Pseudo-spectral methods: RQM4 (4th-order Richardson) or ETDRK4 (exponential integrator).
+    - Real-space methods: CN-ADI2 (2nd-order) or CN-ADI4 (4th-order Crank-Nicolson ADI).
     - Propagators use dynamic programming to avoid redundant calculations for
       branched polymers (see [1]_).
     - Anderson Mixing accelerates SCFT convergence by mixing field history.
@@ -620,6 +628,9 @@ class SCFT:
         # Get angles if provided
         angles = params.get("angles", None)
 
+        # Get numerical method (default: rqm4)
+        numerical_method = params.get("numerical_method", "rqm4")
+
         # Create PropagatorSolver instance
         self.prop_solver = PropagatorSolver(
             nx=params["nx"],
@@ -628,7 +639,7 @@ class SCFT:
             bond_lengths=self.segment_lengths,
             bc=bc,
             chain_model=params["chain_model"],
-            method="pseudospectral",
+            numerical_method=numerical_method,
             platform=platform,
             reduce_memory_usage=reduce_memory_usage,
         )
@@ -658,9 +669,14 @@ class SCFT:
                 self.prop_solver._molecules, aggregate
             )
             # Recreate propagator computation with the new optimizer
-            self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
-                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
-            )
+            if self.prop_solver.method == "pseudospectral":
+                self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
+                    self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
+                )
+            else:
+                self.prop_solver._propagator_computation = self.prop_solver._factory.create_realspace_solver(
+                    self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
+                )
 
         # Display factory info
         self.prop_solver._factory.display_info()

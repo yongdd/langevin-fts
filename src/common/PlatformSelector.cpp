@@ -67,19 +67,23 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
  * @param reduce_memory_usage Enable memory-saving mode
+ * @param pseudo_method       Pseudo-spectral method: "rqm4" or "etdrk4"
+ * @param realspace_method    Real-space method: "cn-adi2" or "cn-adi4"
  *
  * @return Pointer to platform-specific AbstractFactory<double>
  * @throws Exception if platform not found or not compiled
  */
-AbstractFactory<double>* PlatformSelector::create_factory_real(std::string platform, bool reduce_memory_usage)
+AbstractFactory<double>* PlatformSelector::create_factory_real(
+    std::string platform, bool reduce_memory_usage,
+    std::string pseudo_method, std::string realspace_method)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<double>(reduce_memory_usage);
+        return new MklFactory<double>(reduce_memory_usage, pseudo_method, realspace_method);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<double>(reduce_memory_usage);
+        return new CudaFactory<double>(reduce_memory_usage, pseudo_method, realspace_method);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;
@@ -94,19 +98,23 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(std::string platf
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
  * @param reduce_memory_usage Enable memory-saving mode
+ * @param pseudo_method       Pseudo-spectral method: "rqm4" or "etdrk4"
+ * @param realspace_method    Real-space method: "cn-adi2" or "cn-adi4"
  *
  * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
  * @throws Exception if platform not found or not compiled
  */
-AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(std::string platform, bool reduce_memory_usage)
+AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
+    std::string platform, bool reduce_memory_usage,
+    std::string pseudo_method, std::string realspace_method)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<std::complex<double>>(reduce_memory_usage);
+        return new MklFactory<std::complex<double>>(reduce_memory_usage, pseudo_method, realspace_method);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<std::complex<double>>(reduce_memory_usage);
+        return new CudaFactory<std::complex<double>>(reduce_memory_usage, pseudo_method, realspace_method);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;

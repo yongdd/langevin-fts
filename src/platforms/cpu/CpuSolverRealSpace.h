@@ -105,6 +105,7 @@ class CpuSolverRealSpace : public CpuSolver<double>
 private:
     ComputationBox<double>* cb;  ///< Computation box for grid/boundary info
     Molecules *molecules;         ///< Molecules container
+    bool use_4th_order;           ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
 
     /// @name Tridiagonal coefficients for x-direction
     /// @{
@@ -237,10 +238,12 @@ public:
      * Allocates tridiagonal coefficient arrays for each direction
      * and each monomer type.
      *
-     * @param cb        Computation box with boundary conditions
-     * @param molecules Molecules container with monomer types
+     * @param cb            Computation box with boundary conditions
+     * @param molecules     Molecules container with monomer types
+     * @param use_4th_order Use CN-ADI4 (4th order accuracy via Richardson extrapolation)
+     *                      instead of CN-ADI2 (2nd order, default)
      */
-    CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules);
+    CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order = false);
 
     /**
      * @brief Destructor. Frees tridiagonal coefficient arrays.

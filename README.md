@@ -9,6 +9,7 @@ This open-source code is distributed under the Apache License 2.0. This license 
 - Arbitrary acyclic branched polymers and their mixtures
 - Continuous and discrete chain models
 - Pseudo-spectral (FFT/DCT/DST) and real-space (finite difference) solvers
+- Runtime selection of numerical methods: RQM4, ETDRK4, CN-ADI2, CN-ADI4
 - Periodic, reflecting, and absorbing boundary conditions
 - CPU (Intel MKL) and GPU (NVIDIA CUDA) platforms
 - SCFT, L-FTS, and CL-FTS simulation modules
@@ -122,7 +123,6 @@ make install
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
-| `POLYMERFTS_USE_CN_ADI4` | OFF | Enable CN-ADI4 (4th-order) for real-space solver |
 
 Example with options:
 ```bash
@@ -166,6 +166,25 @@ docker rmi polymerfts:cpu polymerfts:cuda
 
 ### Units and Conventions
 + The unit of length in this library is ${bN^{1/2}}$ for both `Continuous` and `Discrete` chain models, where $b$ is a reference statistical segment length and $N$ is a reference polymerization index. The fields acting on chains are defined as `per reference chain` potential instead of `per reference segment` potential. The same notation is used in [*Macromolecules* **2013**, 46, 8037]. If you want to obtain the `per reference segment` potential, multiply $ds$ to each field.
+
+### Numerical Methods
+You can select the numerical algorithm for propagator computation at runtime using the `numerical_method` parameter:
+
+| Method | Solver Type | Description |
+|--------|-------------|-------------|
+| `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
+| `etdrk4` | Pseudo-spectral | ETDRK4 exponential integrator |
+| `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
+| `cn-adi4` | Real-space | 4th-order CN-ADI (Richardson extrapolation) |
+
+Example:
+```python
+params = {
+    # ... other parameters ...
+    "numerical_method": "etdrk4"  # or "rqm4", "cn-adi2", "cn-adi4"
+}
+scft = SCFT(params)
+```
 
 ### Performance Tips
 + Set 'reduce_memory_usage=True' if memory is insufficient to run your simulation. However, the execution time increases by several times. The method is based on the idea used in pscfplus (https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).

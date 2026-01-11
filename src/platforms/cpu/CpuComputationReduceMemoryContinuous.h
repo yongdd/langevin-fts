@@ -204,9 +204,12 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer
-     * @param method                          Solver method
+     * @param method                          Solver method ("pseudospectral" or "realspace")
+     * @param numerical_method                Numerical algorithm:
+     *                                        - For pseudospectral: "rqm4" (default) or "etdrk4"
+     *                                        - For realspace: "cn-adi2" (default) or "cn-adi4"
      */
-    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method);
+    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "");
 
     /**
      * @brief Destructor. Frees checkpoints and workspace.

@@ -104,6 +104,8 @@ public:
      * @param reduce_memory_usage Enable memory-saving mode.
      *                            Stores only propagator checkpoints to reduce
      *                            memory usage at the cost of recomputation.
+     * @param pseudo_method       Pseudo-spectral method: "rqm4" (default) or "etdrk4"
+     * @param realspace_method    Real-space method: "cn-adi2" (default) or "cn-adi4"
      *
      * @return AbstractFactory<double>* pointer to the created factory
      *
@@ -113,17 +115,20 @@ public:
      *
      * @example
      * @code
-     * // Standard CUDA factory
+     * // Standard CUDA factory with default methods (RQM4, CN-ADI2)
      * auto* factory = PlatformSelector::create_factory_real("cuda", false);
      *
-     * // Memory-efficient CUDA factory (for large grids)
-     * auto* factory_mem = PlatformSelector::create_factory_real("cuda", true);
+     * // CUDA factory with ETDRK4 for pseudo-spectral
+     * auto* factory_etdrk4 = PlatformSelector::create_factory_real("cuda", false, "etdrk4");
      *
-     * // Memory-efficient CPU factory
-     * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-mkl", true);
+     * // CPU factory with CN-ADI4 for real-space
+     * auto* factory_adi4 = PlatformSelector::create_factory_real("cpu-mkl", false, "rqm4", "cn-adi4");
      * @endcode
      */
-    static AbstractFactory<double>* create_factory_real(std::string platform, bool reduce_memory_usage);
+    static AbstractFactory<double>* create_factory_real(
+        std::string platform, bool reduce_memory_usage,
+        std::string pseudo_method = "rqm4",
+        std::string realspace_method = "cn-adi2");
 
     /**
      * @brief Create an AbstractFactory for complex-valued fields.
@@ -133,6 +138,8 @@ public:
      *
      * @param platform            Platform name: "cuda" or "cpu-mkl"
      * @param reduce_memory_usage Enable memory-saving mode
+     * @param pseudo_method       Pseudo-spectral method: "rqm4" (default) or "etdrk4"
+     * @param realspace_method    Real-space method: "cn-adi2" (default) or "cn-adi4"
      *
      * @return AbstractFactory<std::complex<double>>* pointer to the created factory
      *
@@ -141,7 +148,10 @@ public:
      * @note Complex field support is less commonly used. Most simulations
      *       use real-valued fields via create_factory_real().
      */
-    static AbstractFactory<std::complex<double>>* create_factory_complex(std::string platform, bool reduce_memory_usage);
+    static AbstractFactory<std::complex<double>>* create_factory_complex(
+        std::string platform, bool reduce_memory_usage,
+        std::string pseudo_method = "rqm4",
+        std::string realspace_method = "cn-adi2");
 };
 
 #endif
