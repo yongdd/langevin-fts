@@ -133,6 +133,72 @@ Results between CPU and CUDA platforms are identical within machine precision:
 
 This confirms that the library produces consistent results regardless of platform.
 
+## Phase Benchmarks: Gyroid and Fddd
+
+Realistic benchmarks using ordered block copolymer phases with all four numerical methods.
+
+### Gyroid Phase (Ia-3d)
+
+**Configuration:**
+- **System**: AB diblock copolymer, $f = 0.36$, $\chi N = 20$
+- **Grid**: $32 \times 32 \times 32$
+- **Box**: $3.3 \times 3.3 \times 3.3$ (in units of $bN^{1/2}$)
+- **Contour**: $ds = 0.01$ ($N = 100$)
+
+| Method | Solver | CPU-MKL (ms) | CUDA (ms) | GPU Speedup |
+|--------|--------|--------------|-----------|-------------|
+| **RQM4** | Pseudo-Spectral | 107.1 | 15.0 | **7.1x** |
+| **ETDRK4** | Pseudo-Spectral | 163.4 | — | — |
+| **CN-ADI2** | Real-Space | 278.6 | 37.1 | **7.5x** |
+| **CN-ADI4** | Real-Space | 828.3 | 110.6 | **7.5x** |
+
+**Partition Function Comparison:**
+
+| Method | $Q$ |
+|--------|-----|
+| RQM4 | 1.011194981 |
+| ETDRK4 | 1.011741041 |
+| CN-ADI2 | 1.011205118 |
+| CN-ADI4 | 1.011205997 |
+
+### Fddd Phase (O^70)
+
+**Configuration:**
+- **System**: AB diblock copolymer, $f = 0.43$, $\chi N = 14$
+- **Grid**: $48 \times 32 \times 24$
+- **Box**: $5.58 \times 3.17 \times 1.59$ (in units of $bN^{1/2}$)
+- **Contour**: $ds = 0.01$ ($N = 100$)
+
+| Method | Solver | CPU-MKL (ms) | CUDA (ms) | GPU Speedup |
+|--------|--------|--------------|-----------|-------------|
+| **RQM4** | Pseudo-Spectral | 127.9 | 16.7 | **7.7x** |
+| **ETDRK4** | Pseudo-Spectral | 198.5 | — | — |
+| **CN-ADI2** | Real-Space | 285.9 | 37.0 | **7.7x** |
+| **CN-ADI4** | Real-Space | 855.6 | 110.0 | **7.8x** |
+
+**Partition Function Comparison:**
+
+| Method | $Q$ |
+|--------|-----|
+| RQM4 | 1.002484518 |
+| ETDRK4 | 1.002631538 |
+| CN-ADI2 | 1.002482218 |
+| CN-ADI4 | 1.002482481 |
+
+### Key Findings
+
+1. **RQM4 is fastest**: Approximately 1.5x faster than ETDRK4, 2.5x faster than CN-ADI2
+2. **GPU acceleration**: Consistent 7-8x speedup across all methods
+3. **CN-ADI4 overhead**: Richardson extrapolation adds ~3x overhead compared to CN-ADI2
+4. **Accuracy**: Real-space and pseudo-spectral methods give slightly different $Q$ values due to different spatial discretization, but both converge to the same physical solution
+
+### Benchmark Script
+
+```bash
+python tests/benchmark_phases.py cuda    # Run on GPU
+python tests/benchmark_phases.py cpu-mkl # Run on CPU
+```
+
 ## Method Selection Guide
 
 ### Pseudo-Spectral vs Real-Space
@@ -191,14 +257,26 @@ Both are 4th-order accurate for pseudo-spectral solvers:
 2. **Grid size**: Pseudo-spectral has $O(M \log M)$ FFT cost; real-space has $O(M)$ cost per direction
 3. **Memory**: For large grids, enable `reduce_memory_usage=True` (see [MemoryAndPerformance.md](MemoryAndPerformance.md))
 
-## Benchmark Script
+## Benchmark Scripts
 
-The benchmark script used to generate these results is available at:
+Two benchmark scripts are available:
+
+### Basic Convergence and Performance
+
 ```bash
 python tests/benchmark_numerical_methods.py
 ```
 
-Results are saved to `benchmark_results.json` in the current directory.
+Tests convergence order and timing vs contour discretization. Results saved to `benchmark_results.json`.
+
+### Phase Benchmarks (Gyroid, Fddd)
+
+```bash
+python tests/benchmark_phases.py cuda    # GPU benchmark
+python tests/benchmark_phases.py cpu-mkl # CPU benchmark
+```
+
+Tests all four methods on realistic ordered phases. Results saved to `benchmark_phases_results.json`.
 
 ## References
 
