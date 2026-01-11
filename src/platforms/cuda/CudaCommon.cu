@@ -633,6 +633,106 @@ __global__ void ker_complex_real_multi_bond_four(
     }
 }
 
+// ============================================================
+// ETDRK4 kernels for complex coefficients (periodic BC)
+// ============================================================
+
+// Stage a/b: dst = E2 * q_hat + alpha * N_hat
+__global__ void ker_etdrk4_stage_a(
+    cuDoubleComplex* dst, const cuDoubleComplex* q_hat, const cuDoubleComplex* N_hat,
+    const double* E2, const double* alpha, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i].x = E2[i] * q_hat[i].x + alpha[i] * N_hat[i].x;
+        dst[i].y = E2[i] * q_hat[i].y + alpha[i] * N_hat[i].y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// Stage c: dst = E2 * a_hat + alpha * (2*N_b_hat - N_n_hat)
+__global__ void ker_etdrk4_stage_c(
+    cuDoubleComplex* dst, const cuDoubleComplex* a_hat, const cuDoubleComplex* N_b_hat,
+    const cuDoubleComplex* N_n_hat, const double* E2, const double* alpha, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double coeff_x = 2.0 * N_b_hat[i].x - N_n_hat[i].x;
+        double coeff_y = 2.0 * N_b_hat[i].y - N_n_hat[i].y;
+        dst[i].x = E2[i] * a_hat[i].x + alpha[i] * coeff_x;
+        dst[i].y = E2[i] * a_hat[i].y + alpha[i] * coeff_y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// Final: dst = E * q_hat + f1 * N_n_hat + f2 * (N_a_hat + N_b_hat) + f3 * N_c_hat
+__global__ void ker_etdrk4_final(
+    cuDoubleComplex* dst, const cuDoubleComplex* q_hat,
+    const cuDoubleComplex* N_n_hat, const cuDoubleComplex* N_a_hat,
+    const cuDoubleComplex* N_b_hat, const cuDoubleComplex* N_c_hat,
+    const double* E, const double* f1, const double* f2, const double* f3, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double sum_ab_x = N_a_hat[i].x + N_b_hat[i].x;
+        double sum_ab_y = N_a_hat[i].y + N_b_hat[i].y;
+
+        dst[i].x = E[i] * q_hat[i].x + f1[i] * N_n_hat[i].x + f2[i] * sum_ab_x + f3[i] * N_c_hat[i].x;
+        dst[i].y = E[i] * q_hat[i].y + f1[i] * N_n_hat[i].y + f2[i] * sum_ab_y + f3[i] * N_c_hat[i].y;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// ============================================================
+// ETDRK4 kernels for real coefficients (non-periodic BC - DCT/DST)
+// ============================================================
+
+// Stage a/b: dst = E2 * q_hat + alpha * N_hat
+__global__ void ker_etdrk4_stage_a_real(
+    double* dst, const double* q_hat, const double* N_hat,
+    const double* E2, const double* alpha, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = E2[i] * q_hat[i] + alpha[i] * N_hat[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// Stage c: dst = E2 * a_hat + alpha * (2*N_b_hat - N_n_hat)
+__global__ void ker_etdrk4_stage_c_real(
+    double* dst, const double* a_hat, const double* N_b_hat,
+    const double* N_n_hat, const double* E2, const double* alpha, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double coeff = 2.0 * N_b_hat[i] - N_n_hat[i];
+        dst[i] = E2[i] * a_hat[i] + alpha[i] * coeff;
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// Final: dst = E * q_hat + f1 * N_n_hat + f2 * (N_a_hat + N_b_hat) + f3 * N_c_hat
+__global__ void ker_etdrk4_final_real(
+    double* dst, const double* q_hat,
+    const double* N_n_hat, const double* N_a_hat,
+    const double* N_b_hat, const double* N_c_hat,
+    const double* E, const double* f1, const double* f2, const double* f3, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        double sum_ab = N_a_hat[i] + N_b_hat[i];
+        dst[i] = E[i] * q_hat[i] + f1[i] * N_n_hat[i] + f2[i] * sum_ab + f3[i] * N_c_hat[i];
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 // Explicit template instantiation
 
 template std::map<std::string, const double*> 

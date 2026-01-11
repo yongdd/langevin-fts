@@ -14,6 +14,7 @@
 #include <cmath>
 #include <numbers>
 #include <array>
+#include <complex>
 #include "Pseudo.h"
 
 //------------------------------------------------------------------------------
