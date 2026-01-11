@@ -6,19 +6,18 @@
  * for different propagator solving methods on CPU. The two main implementations
  * are:
  *
- * - **Pseudo-spectral method**: Uses FFT to solve diffusion in Fourier space
+ * - **Pseudo-spectral method**: Uses FFT for diffusion (continuous) or bond
+ *   convolution (discrete) in Fourier space
  * - **Real-space method**: Uses finite differences with Crank-Nicolson scheme
  *
- * **Modified Diffusion Equation:**
+ * **Chain Models:**
  *
- * All solvers advance the chain propagator q(r,s) according to:
+ * - **Continuous chains**: Solve the modified diffusion equation
+ *       ∂q/∂s = (b²/6) ∇²q - w(r) q
  *
- *     ∂q/∂s = (b²/6) ∇²q - w(r) q
- *
- * where:
- * - b is the statistical segment length
- * - w(r) is the potential field
- * - s is the contour variable (0 to N for continuous chains)
+ * - **Discrete chains**: Solve the Chapman-Kolmogorov integral equation
+ *       q(r, n+1) = exp(-w(r)*ds) * ∫ g(r-r') q(r', n) dr'
+ *   where g(r) is the bond function. See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
  * @see CpuSolverPseudoRQM4 for continuous chain pseudo-spectral
  * @see CpuSolverPseudoDiscrete for discrete chain pseudo-spectral
@@ -46,13 +45,17 @@
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Operator Splitting:**
+ * **Operator Splitting (Continuous Chains):**
  *
- * Pseudo-spectral methods use operator splitting:
+ * For continuous chains (modified diffusion equation):
+ *     q(s+ds) = exp(-w·ds/2) · FFT⁻¹[ exp(-b²|k|²ds/6) · FFT[ exp(-w·ds/2) · q(s) ] ]
  *
- *     q(s+ds) = exp(-w·ds/2) · FFT⁻¹[ exp(-k²b²ds/6) · FFT[ exp(-w·ds/2) · q(s) ] ]
+ * **Operator Splitting (Discrete Chains):**
  *
- * This requires precomputed Boltzmann factors exp(-w·ds) and exp(-w·ds/2).
+ * For discrete chains (Chapman-Kolmogorov equation):
+ *     q(n+1) = B^(1/2) · exp(-w·ds) · B^(1/2) · q(n)
+ *
+ * where B^(1/2) is half-bond convolution with ĝ^(1/2)(k) = exp(-b²|k|²ds/12).
  *
  * **Common Usage Pattern:**
  *
@@ -102,7 +105,9 @@ public:
      * Called when box size changes (e.g., during stress relaxation).
      * Recomputes FFT wavenumbers k² or finite difference coefficients.
      *
-     * For pseudo-spectral: Updates exp(-k²b²ds/6) in Fourier space
+     * For pseudo-spectral: Updates exp(-b²|k|²ds/6) in Fourier space
+     *     - Continuous chains: diffusion propagator
+     *     - Discrete chains: bond function ĝ(k)
      * For real-space: Updates tridiagonal matrix coefficients
      */
     virtual void update_laplacian_operator() = 0;
@@ -158,7 +163,7 @@ public:
      *
      *     q(n+1) = B^(1/2) · A · B^(1/2) · q(n)
      *
-     * where B^(1/2) is the half-bond diffusion step.
+     * where B^(1/2) is the half-bond convolution with ĝ^(1/2)(k) = exp(-b²|k|²ds/12).
      *
      * @param q_in        Input propagator (size n_grid)
      * @param q_out       Output propagator (size n_grid)

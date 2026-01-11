@@ -12,9 +12,21 @@
  * - REFLECTING (DCT): k = π*n/L (n = 0, 1, ..., N-1)
  * - ABSORBING (DST): k = π*(n+1)/L (n = 0, 1, ..., N-1)
  *
- * **Boltzmann Factors:**
+ * **Boltzmann Bond Factors:**
+ *
+ * Both chain models use the same mathematical formula but with different
+ * physical interpretations:
  *
  * boltz_bond[k] = exp(-b²*|k|²*ds/6)
+ *
+ * - **Continuous chains**: This is the diffusion propagator from solving
+ *   the modified diffusion equation ∂q/∂s = (b²/6)∇²q - wq.
+ *
+ * - **Discrete chains**: This is the bond function ĝ(k) = exp(-a²|k|²/6)
+ *   from the Chapman-Kolmogorov integral equation. With the convention
+ *   a² = b²ds (where a is the segment length and ds = 1/N), it takes
+ *   the same form as the continuous case. See Park et al. J. Chem. Phys.
+ *   150, 234901 (2019) for details.
  *
  * For non-orthogonal systems with periodic BC:
  * |k|² = G*_ij h_i h_j where G* is the reciprocal metric tensor.
@@ -76,17 +88,23 @@ protected:
     int *negative_k_idx;  ///< Mapping from k to -k indices (for complex fields)
 
     /**
-     * @brief Boltzmann factors for full contour step.
+     * @brief Boltzmann bond factors for full step.
      *
-     * boltz_bond[type][idx] = exp(-ds * |k|² * b²/6)
+     * boltz_bond[type][idx] = exp(-|k|² * b² * ds / 6)
      * where k depends on boundary condition type.
+     *
+     * For continuous chains: diffusion propagator.
+     * For discrete chains: bond function (Fourier transform of Gaussian).
      */
     std::map<std::string, double*> boltz_bond;
 
     /**
-     * @brief Boltzmann factors for half contour step.
+     * @brief Boltzmann bond factors for half step.
      *
-     * boltz_bond_half[type][idx] = exp(-ds/2 * |k|² * b²/6)
+     * boltz_bond_half[type][idx] = exp(-|k|² * b² * ds / 12)
+     *
+     * For continuous chains: half-step diffusion propagator.
+     * For discrete chains: half-bond function (used at chain ends).
      */
     std::map<std::string, double*> boltz_bond_half;
 

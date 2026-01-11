@@ -129,15 +129,15 @@ protected:
     void cleanup_shared();
 
     /**
-     * @brief Get Boltzmann bond factor for stress computation.
+     * @brief Get bond factor for stress computation.
      *
      * Returns the appropriate multiplier for stress coefficient:
-     * - Continuous: Returns nullptr (no boltz_bond factor in stress)
-     * - Discrete: Returns boltz_bond or boltz_bond_half based on is_half_bond_length
+     * - Continuous: Returns nullptr (no bond factor in stress)
+     * - Discrete: Returns bond function ĝ(k) or half-bond ĝ^(1/2)(k)
      *
      * @param monomer_type Monomer type
      * @param is_half_bond_length Whether using half bond length
-     * @return Pointer to Boltzmann bond array, or nullptr if not applicable
+     * @return Pointer to bond function array, or nullptr if not applicable
      */
     virtual const double* get_stress_boltz_bond(
         std::string monomer_type, bool is_half_bond_length) const = 0;
@@ -154,10 +154,13 @@ public:
     virtual ~CpuSolverPseudoBase() {}
 
     /**
-     * @brief Update Fourier-space diffusion operators.
+     * @brief Update Fourier-space operators.
      *
-     * Recomputes exp(-k^2 b^2 ds/6) for each monomer type when box
+     * Recomputes exp(-b²|k|²ds/6) for each monomer type when box
      * dimensions change. Required after box size updates.
+     *
+     * - Continuous chains: diffusion propagator
+     * - Discrete chains: bond function ĝ(k)
      */
     void update_laplacian_operator() override;
 

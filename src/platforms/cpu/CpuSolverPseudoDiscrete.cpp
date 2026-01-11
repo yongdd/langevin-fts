@@ -2,23 +2,27 @@
  * @file CpuSolverPseudoDiscrete.cpp
  * @brief CPU pseudo-spectral solver for discrete chain propagators.
  *
- * Implements the pseudo-spectral method for discrete (freely-jointed)
- * chain models. Supports all boundary conditions (periodic, reflecting,
- * absorbing). Unlike continuous chains, discrete chains use single
- * diffusion/potential steps per segment with half-bond step support.
+ * Implements the pseudo-spectral method for discrete chain models using the
+ * Chapman-Kolmogorov integral equation. Supports all boundary conditions
+ * (periodic, reflecting, absorbing).
  *
- * **Propagator Equation:**
+ * **Chapman-Kolmogorov Equation:**
  *
  * For discrete chains, the propagator satisfies:
- *     q(r,n+1) = exp(-w(r)*ds) * FFT^-1[exp(-b^2 k^2 ds/6) * FFT[q(r,n)]]
+ *     q(r,n+1) = exp(-w(r)*ds) * integral g(r-r') q(r',n) dr'
+ *
+ * where g(r) is the bond function. In Fourier space:
+ *     q(r,n+1) = exp(-w(r)*ds) * FFT^-1[ ĝ(k) * FFT[q(r,n)] ]
+ *
+ * with bond function ĝ(k) = exp(-b^2 k^2 ds/6) for bead-spring model.
+ * See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
  * **Half-Bond Steps:**
  *
- * At junction points, half-bond steps are used:
- *     exp(-b^2 k^2 ds/12)
+ * At chain ends and junction points, half-bond steps are used:
+ *     ĝ^(1/2)(k) = exp(-b^2 k^2 ds/12)
  *
- * This ensures proper handling of chain junctions where multiple
- * propagators meet.
+ * This ensures proper handling of the N-1 bond model.
  *
  * **Template Instantiations:**
  *
@@ -135,7 +139,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         // Forward transform
         this->transform_forward(q_in, k_q_in.data());
 
-        // Multiply exp(-k^2 ds/6) in Fourier space
+        // Multiply by bond function ĝ(k) in Fourier space
         if (this->is_periodic_)
         {
             std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
@@ -190,7 +194,7 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         // Forward transform
         this->transform_forward(q_in, k_q_in.data());
 
-        // Multiply exp(-k^2 ds/12) in Fourier space
+        // Multiply by half-bond function ĝ^(1/2)(k) in Fourier space
         if (this->is_periodic_)
         {
             std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());

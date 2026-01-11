@@ -2,20 +2,24 @@
  * @file CudaSolverPseudoDiscrete.cu
  * @brief CUDA pseudo-spectral solver for discrete chain model.
  *
- * Implements propagator advancement for discrete chain representation
- * using cuFFT for Fourier transforms. Handles full bond steps and
- * half-bond steps at junctions between blocks.
+ * Implements propagator advancement for discrete chains using the
+ * Chapman-Kolmogorov integral equation via cuFFT.
  *
- * **Discrete Chain Model:**
+ * **Chapman-Kolmogorov Equation:**
  *
- * Propagator advancement: q(s+1) = exp(-w*ds) * F⁻¹[exp(-k²b²ds/6) * F[q(s)]]
- * - Simpler than continuous model (no Richardson extrapolation needed)
- * - Half-bond steps at block junctions for proper normalization
+ * For discrete chains, the propagator satisfies:
+ *     q(r, n+1) = exp(-w(r)*ds) * integral g(r-r') q(r', n) dr'
+ *
+ * In Fourier space:
+ *     q(n+1) = exp(-w*ds) * F⁻¹[ ĝ(k) * F[q(n)] ]
+ *
+ * where ĝ(k) = exp(-b²|k|²ds/6) is the bond function.
+ * See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
  * **Methods:**
  *
- * - advance_propagator(): Full bond step with potential application
- * - advance_propagator_half_bond_step(): Half bond step at junctions
+ * - advance_propagator(): Full bond step (bond convolution + segment weight)
+ * - advance_propagator_half_bond_step(): Half bond convolution at chain ends
  * - compute_single_segment_stress(): Stress contribution per segment
  *
  * **cuFFT Plans:**

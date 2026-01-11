@@ -3,8 +3,8 @@
  * @brief Pseudo-spectral solver for discrete chain model on CPU.
  *
  * This header provides CpuSolverPseudoDiscrete, which implements the
- * pseudo-spectral method for solving the discrete chain propagator
- * recurrence relation.
+ * pseudo-spectral method for discrete chain propagators using the
+ * Chapman-Kolmogorov integral equation.
  *
  * **Boundary Conditions:**
  *
@@ -13,24 +13,31 @@
  * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
  * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
  *
- * **Discrete Chain Model:**
+ * **Discrete Chain Model (Chapman-Kolmogorov Equation):**
  *
- * Unlike continuous chains that solve a differential equation, discrete
- * chains use a recurrence relation:
+ * Unlike continuous chains that solve the modified diffusion equation,
+ * discrete chains use the Chapman-Kolmogorov integral equation:
  *
- *     q(r, n+1) = exp(-w(r)) * integral G(r-r') q(r', n) dr'
+ *     q(r, n+1) = exp(-w(r)*ds) * integral g(r-r') q(r', n) dr'
  *
- * where G(r) is the bond distribution (Gaussian for Gaussian chains).
+ * where g(r) is the bond function. For the bead-spring (Gaussian) model:
  *
- * **Numerical Method:**
+ *     g(r) = (3/2πa²)^(3/2) exp(-3|r|²/2a²)
  *
- * Uses operator splitting with half-bond steps for accuracy:
+ * with Fourier transform ĝ(k) = exp(-a²|k|²/6).
+ *
+ * See Park et al. J. Chem. Phys. 150, 234901 (2019) for details.
+ *
+ * **Numerical Method (Operator Splitting):**
+ *
+ * Uses symmetric splitting with half-bond steps for accuracy at chain ends:
  *
  *     q(n+1) = B^(1/2) * A * B^(1/2) * q(n)
  *
  * where:
- * - A = exp(-w) is the Boltzmann factor
- * - B^(1/2) = FFT^-1[ exp(-k^2 b^2/12) * FFT[.] ] is half-bond diffusion
+ * - A = exp(-w*ds) is the segment Boltzmann factor
+ * - B^(1/2) = FFT^-1[ ĝ^(1/2)(k) * FFT[.] ] is the half-bond convolution
+ * - ĝ^(1/2)(k) = exp(-a²|k|²/12) = exp(-b²|k|²ds/12) is the half-bond function
  *
  * **Advantages of Discrete Model:**
  *
@@ -58,27 +65,28 @@
  * @class CpuSolverPseudoDiscrete
  * @brief CPU pseudo-spectral solver for discrete chain model.
  *
- * Implements the discrete chain propagator update using operator splitting
- * with half-bond steps for improved accuracy at chain ends. Supports all
- * boundary conditions (periodic, reflecting, absorbing).
+ * Implements the discrete chain propagator update using the Chapman-Kolmogorov
+ * integral equation with operator splitting. Half-bond steps at chain ends
+ * ensure proper treatment of the N-1 bond model. Supports all boundary
+ * conditions (periodic, reflecting, absorbing).
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
  * **Operator Splitting Scheme:**
  *
- * Full segment step:
- *     q(n+1) = B^(1/2) * exp(-w) * B^(1/2) * q(n)
+ * Full segment step (bond convolution + segment Boltzmann weight):
+ *     q(n+1) = B^(1/2) * exp(-w*ds) * B^(1/2) * q(n)
  *
- * Half-bond step only:
+ * Half-bond step only (for chain ends):
  *     q'(n+1/2) = B^(1/2) * q(n)
  *
- * where B^(1/2) is diffusion by half a bond length.
+ * where B^(1/2) is bond convolution with the half-bond function ĝ^(1/2)(k).
  *
  * **Memory per Monomer Type:**
  *
- * - exp_dw: Full Boltzmann factor exp(-w)
- * - exp_dw_half: Not used (discrete uses full factor)
- * - exp_k2: Half-bond diffusion exp(-k^2 b^2/12)
+ * - exp_dw: Segment Boltzmann factor exp(-w*ds)
+ * - exp_dw_half: Not used (discrete uses full segment factor)
+ * - boltz_bond_half: Half-bond function ĝ^(1/2)(k) = exp(-b²|k|²ds/12)
  *
  * @example
  * @code
@@ -97,14 +105,15 @@ class CpuSolverPseudoDiscrete : public CpuSolverPseudoBase<T>
 {
 protected:
     /**
-     * @brief Get Boltzmann bond factor for stress computation.
+     * @brief Get bond function for stress computation.
      *
-     * For discrete chains, stress computation includes the Boltzmann
-     * bond factor exp(-k^2 b^2 ds/6) or exp(-k^2 b^2 ds/12) for half-bond.
+     * For discrete chains, stress computation includes the bond function.
+     * Returns ĝ(k) = exp(-b²|k|²ds/6) for full bond or
+     * ĝ^(1/2)(k) = exp(-b²|k|²ds/12) for half-bond.
      *
      * @param monomer_type Monomer type
      * @param is_half_bond_length Whether using half bond length
-     * @return Pointer to appropriate Boltzmann bond array
+     * @return Pointer to appropriate bond function array
      */
     const double* get_stress_boltz_bond(
         std::string monomer_type, bool is_half_bond_length) const override;
@@ -138,11 +147,12 @@ public:
     /**
      * @brief Advance propagator by one full segment step.
      *
-     * Computes: q(n+1) = B^(1/2) * exp(-w) * B^(1/2) * q(n)
+     * Computes: q(n+1) = B^(1/2) * exp(-w*ds) * B^(1/2) * q(n)
+     * where B^(1/2) is half-bond convolution.
      *
      * @param q_in        Input propagator q(n)
      * @param q_out       Output propagator q(n+1)
-     * @param monomer_type Monomer type for Boltzmann factor and bond length
+     * @param monomer_type Monomer type for bond function and segment weight
      * @param q_mask      Optional mask (set q=0 in masked regions)
      */
     void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask) override;
@@ -150,13 +160,14 @@ public:
     /**
      * @brief Advance propagator by half bond step only.
      *
-     * Computes: q' = B^(1/2) * q = FFT^-1[ exp(-k^2 b^2/12) * FFT[q] ]
+     * Computes: q' = B^(1/2) * q = FFT^-1[ ĝ^(1/2)(k) * FFT[q] ]
+     * where ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function.
      *
-     * Used at chain ends to properly handle the half-bond contribution.
+     * Used at chain ends to properly handle the N-1 bond model.
      *
      * @param q_in        Input propagator
-     * @param q_out       Output propagator after half-bond diffusion
-     * @param monomer_type Monomer type for bond length
+     * @param q_out       Output propagator after half-bond convolution
+     * @param monomer_type Monomer type for bond function
      */
     void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) override;
 };
