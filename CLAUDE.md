@@ -71,6 +71,48 @@ python tests/TestNumPyFFT2D.py
 python tests/TestNumPyFFT3D.py
 ```
 
+### Performance and Accuracy Benchmarks
+
+Benchmark scripts for numerical method comparison are in `tests/`:
+- `tests/benchmark_numerical_methods.py`: Comprehensive benchmark comparing RQM4, ETDRK4, CN-ADI2, CN-ADI4
+- `tests/benchmark_etdrk4_vs_rqm4.py`: Focused comparison of pseudo-spectral methods
+
+**Running benchmarks with SLURM job scheduler:**
+
+Use the provided SLURM template `slurm_run.sh`:
+```bash
+#!/bin/bash
+#SBATCH --job-name=benchmark
+#SBATCH --partition=a10          # GPU partition (adjust for your cluster)
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1             # Request 1 GPU
+#SBATCH --cpus-per-task=4        # CPUs for OpenMP threads
+#SBATCH --time=02:00:00
+#SBATCH --output=%j.out
+#SBATCH --error=%j.out
+
+export OMP_MAX_ACTIVE_LEVELS=0
+export OMP_NUM_THREADS=4
+
+python -u tests/benchmark_numerical_methods.py
+```
+
+Submit the job:
+```bash
+sbatch slurm_run.sh
+```
+
+**Benchmark output:**
+- Convergence analysis (Q vs ds) following Stasiak & Matsen methodology
+- Performance comparison (time vs N) following Song et al. methodology
+- Cross-platform consistency verification (CPU vs CUDA)
+- Results saved to `benchmark_results.json`
+
+**Key metrics to verify:**
+- RQM4 convergence order ≈ 4.0
+- CN-ADI2 convergence order ≈ 2.0
+- CPU vs CUDA results identical within machine precision (~10⁻¹³)
+
 ## Code Architecture
 
 ### Platform Abstraction (Abstract Factory Pattern)
