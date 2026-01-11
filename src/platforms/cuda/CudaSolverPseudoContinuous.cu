@@ -62,6 +62,17 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
 
         // Check if all BCs are periodic
         auto bc_vec = cb->get_boundary_conditions();
+
+        // Validate that both sides of each direction have matching BC
+        // (required for pseudo-spectral: FFT/DCT/DST apply to entire direction)
+        for (int d = 0; d < this->dim_; ++d)
+        {
+            if (bc_vec[2*d] != bc_vec[2*d + 1])
+            {
+                throw_with_line_number("Pseudo-spectral method requires matching boundary conditions on both sides of each direction. "
+                    "Direction " + std::to_string(d) + " has mismatched BCs. Use real-space method for mixed BCs.");
+            }
+        }
         is_periodic_ = true;
         for (const auto& b : bc_vec)
         {
