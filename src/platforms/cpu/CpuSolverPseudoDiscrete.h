@@ -39,7 +39,7 @@
  * - Compatible with discrete interaction models
  *
  * @see CpuSolverPseudoBase for shared functionality
- * @see CpuSolverPseudoContinuous for continuous chain version
+ * @see CpuSolverPseudoRQM4 for continuous chain version
  */
 
 #ifndef CPU_SOLVER_PSEUDO_DISCRETE_H_

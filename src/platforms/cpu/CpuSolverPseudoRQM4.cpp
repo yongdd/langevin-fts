@@ -1,5 +1,5 @@
 /**
- * @file CpuSolverPseudoContinuous.cpp
+ * @file CpuSolverPseudoRQM4.cpp
  * @brief CPU pseudo-spectral solver for continuous chain propagators using RQM4.
  *
  * Implements the operator splitting pseudo-spectral method with
@@ -23,8 +23,8 @@
  *
  * **Template Instantiations:**
  *
- * - CpuSolverPseudoContinuous<double>: Real fields with r2c FFT
- * - CpuSolverPseudoContinuous<std::complex<double>>: Complex fields
+ * - CpuSolverPseudoRQM4<double>: Real fields with r2c FFT
+ * - CpuSolverPseudoRQM4<std::complex<double>>: Complex fields
  *
  * @see Pseudo for Boltzmann factor computation
  * @see CpuComputationContinuous for usage context
@@ -34,13 +34,13 @@
 #include <cmath>
 #include <complex>
 
-#include "CpuSolverPseudoContinuous.h"
+#include "CpuSolverPseudoRQM4.h"
 
 //------------------------------------------------------------------------------
 // Constructor
 //------------------------------------------------------------------------------
 template <typename T>
-CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules)
+CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules)
 {
     try
     {
@@ -68,7 +68,7 @@ CpuSolverPseudoContinuous<T>::CpuSolverPseudoContinuous(ComputationBox<T>* cb, M
 // Destructor
 //------------------------------------------------------------------------------
 template <typename T>
-CpuSolverPseudoContinuous<T>::~CpuSolverPseudoContinuous()
+CpuSolverPseudoRQM4<T>::~CpuSolverPseudoRQM4()
 {
     // exp_dw and exp_dw_half vectors are automatically cleaned up
 
@@ -80,7 +80,7 @@ CpuSolverPseudoContinuous<T>::~CpuSolverPseudoContinuous()
 // Get stress Boltzmann bond factor
 //------------------------------------------------------------------------------
 template <typename T>
-const double* CpuSolverPseudoContinuous<T>::get_stress_boltz_bond(
+const double* CpuSolverPseudoRQM4<T>::get_stress_boltz_bond(
     std::string /*monomer_type*/, bool /*is_half_bond_length*/) const
 {
     // Continuous chains don't use boltz_bond factor in stress computation
@@ -91,7 +91,7 @@ const double* CpuSolverPseudoContinuous<T>::get_stress_boltz_bond(
 // Update dw (Boltzmann factors from field)
 //------------------------------------------------------------------------------
 template <typename T>
-void CpuSolverPseudoContinuous<T>::update_dw(std::map<std::string, const T*> w_input)
+void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
@@ -121,7 +121,7 @@ void CpuSolverPseudoContinuous<T>::update_dw(std::map<std::string, const T*> w_i
 // Advance propagator
 //------------------------------------------------------------------------------
 template <typename T>
-void CpuSolverPseudoContinuous<T>::advance_propagator(
+void CpuSolverPseudoRQM4<T>::advance_propagator(
     T* q_in, T* q_out, std::string monomer_type, const double* q_mask)
 {
     try
@@ -231,4 +231,4 @@ void CpuSolverPseudoContinuous<T>::advance_propagator(
 
 // Explicit template instantiation
 #include "TemplateInstantiations.h"
-INSTANTIATE_CLASS(CpuSolverPseudoContinuous);
+INSTANTIATE_CLASS(CpuSolverPseudoRQM4);

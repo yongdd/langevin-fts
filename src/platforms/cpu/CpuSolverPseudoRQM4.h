@@ -1,8 +1,8 @@
 /**
- * @file CpuSolverPseudoContinuous.h
+ * @file CpuSolverPseudoRQM4.h
  * @brief Pseudo-spectral solver for continuous chain model on CPU using RQM4.
  *
- * This header provides CpuSolverPseudoContinuous, which implements the
+ * This header provides CpuSolverPseudoRQM4, which implements the
  * pseudo-spectral method for solving the modified diffusion equation
  * with continuous Gaussian chains using RQM4 (Ranjan-Qin-Morse 4th-order).
  *
@@ -39,8 +39,8 @@
  * @see Pseudo for the pseudo-spectral implementation details
  */
 
-#ifndef CPU_SOLVER_PSEUDO_CONTINUOUS_H_
-#define CPU_SOLVER_PSEUDO_CONTINUOUS_H_
+#ifndef CPU_SOLVER_PSEUDO_RQM4_H_
+#define CPU_SOLVER_PSEUDO_RQM4_H_
 
 #include <string>
 #include <vector>
@@ -52,7 +52,7 @@
 #include "CpuSolverPseudoBase.h"
 
 /**
- * @class CpuSolverPseudoContinuous
+ * @class CpuSolverPseudoRQM4
  * @brief CPU pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
  * Implements operator splitting with RQM4 (4th-order Richardson extrapolation)
@@ -77,7 +77,7 @@
  * @example
  * @code
  * // Create solver
- * CpuSolverPseudoContinuous<double> solver(cb, molecules);
+ * CpuSolverPseudoRQM4<double> solver(cb, molecules);
  *
  * // Update for new fields
  * solver.update_dw(w_fields);
@@ -87,7 +87,7 @@
  * @endcode
  */
 template <typename T>
-class CpuSolverPseudoContinuous : public CpuSolverPseudoBase<T>
+class CpuSolverPseudoRQM4 : public CpuSolverPseudoBase<T>
 {
 protected:
     /**
@@ -113,12 +113,12 @@ public:
      *
      * @note Uses MklFFT for the FFT implementation with BC support.
      */
-    CpuSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules);
+    CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules);
 
     /**
      * @brief Destructor. Frees exp_dw arrays.
      */
-    ~CpuSolverPseudoContinuous();
+    ~CpuSolverPseudoRQM4();
 
     /**
      * @brief Update Boltzmann factors from potential fields.

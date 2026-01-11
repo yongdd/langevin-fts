@@ -1,8 +1,8 @@
 /**
- * @file CudaSolverPseudoContinuous.h
+ * @file CudaSolverPseudoRQM4.h
  * @brief GPU pseudo-spectral solver for continuous chain model using RQM4.
  *
- * This header provides CudaSolverPseudoContinuous, the CUDA implementation
+ * This header provides CudaSolverPseudoRQM4, the CUDA implementation
  * of the pseudo-spectral method with RQM4 (Ranjan-Qin-Morse 4th-order using
  * Richardson extrapolation) for continuous Gaussian chains.
  *
@@ -28,11 +28,11 @@
  *
  * @see CudaSolver for the abstract interface
  * @see CudaSolverPseudoDiscrete for discrete chain version
- * @see CpuSolverPseudoContinuous for CPU version
+ * @see CpuSolverPseudoRQM4 for CPU version
  */
 
-#ifndef CUDA_SOLVER_PSEUDO_CONTINUOUS_H_
-#define CUDA_SOLVER_PSEUDO_CONTINUOUS_H_
+#ifndef CUDA_SOLVER_PSEUDO_RQM4_H_
+#define CUDA_SOLVER_PSEUDO_RQM4_H_
 
 #include <string>
 #include <vector>
@@ -48,7 +48,7 @@
 #include "FFT.h"
 
 /**
- * @class CudaSolverPseudoContinuous
+ * @class CudaSolverPseudoRQM4
  * @brief GPU pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
  * Implements operator splitting with RQM4 (4th-order Richardson extrapolation)
@@ -70,7 +70,7 @@
  * - d_qk_in_*: Fourier space buffers
  */
 template <typename T>
-class CudaSolverPseudoContinuous : public CudaSolver<T>
+class CudaSolverPseudoRQM4 : public CudaSolver<T>
 {
 private:
     ComputationBox<T>* cb;       ///< Computation box
@@ -135,12 +135,12 @@ public:
      * @param streams             Pre-created CUDA streams
      * @param reduce_memory_usage Memory saving mode (affects workspace allocation)
      */
-    CudaSolverPseudoContinuous(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+    CudaSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
 
     /**
      * @brief Destructor. Frees GPU memory and cuFFT plans.
      */
-    ~CudaSolverPseudoContinuous();
+    ~CudaSolverPseudoRQM4();
 
     /** @brief Update Fourier-space operators for new box dimensions. */
     void update_laplacian_operator() override;

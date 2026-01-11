@@ -23,7 +23,7 @@
  * - CudaSolverPseudoETDRK4<std::complex<double>>: Complex field solver
  *
  * @see ETDRK4Coefficients for coefficient computation
- * @see CudaSolverPseudoContinuous for RQM4 alternative
+ * @see CudaSolverPseudoRQM4 for RQM4 alternative
  */
 
 #include <iostream>

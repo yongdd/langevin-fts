@@ -2,7 +2,7 @@
  * @file CpuSolverPseudoBase.cpp
  * @brief Implementation of common pseudo-spectral solver functionality.
  *
- * Implements shared code between CpuSolverPseudoContinuous and
+ * Implements shared code between CpuSolverPseudoRQM4 and
  * CpuSolverPseudoDiscrete, including:
  *
  * - FFT object initialization and cleanup

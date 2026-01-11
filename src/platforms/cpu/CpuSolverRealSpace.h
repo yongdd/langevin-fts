@@ -38,7 +38,7 @@
  * - Absorbing (Dirichlet): q = 0 at boundary
  *
  * @see CpuSolver for the abstract interface
- * @see CpuSolverPseudoContinuous for spectral method (periodic only)
+ * @see CpuSolverPseudoRQM4 for spectral method (periodic only)
  * @see FiniteDifference for coefficient generation
  */
 

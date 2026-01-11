@@ -29,7 +29,7 @@
  * - Kassam & Trefethen, SIAM J. Sci. Comput. 26, 1214-1233 (2005)
  * - Song, Liu & Zhang, Chinese J. Polym. Sci. 36, 488-496 (2018)
  *
- * @see CpuSolverPseudoContinuous for usage
+ * @see CpuSolverPseudoRQM4 for usage
  */
 
 #ifndef ETDRK4_COEFFICIENTS_H_

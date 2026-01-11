@@ -1,5 +1,5 @@
 /**
- * @file CudaSolverPseudoContinuous.cu
+ * @file CudaSolverPseudoRQM4.cu
  * @brief CUDA pseudo-spectral solver for continuous Gaussian chains using RQM4.
  *
  * Implements RQM4 (Ranjan-Qin-Morse 4th-order using Richardson extrapolation)
@@ -26,8 +26,8 @@
  *
  * **Template Instantiations:**
  *
- * - CudaSolverPseudoContinuous<double>: Real field solver
- * - CudaSolverPseudoContinuous<std::complex<double>>: Complex field solver
+ * - CudaSolverPseudoRQM4<double>: Real field solver
+ * - CudaSolverPseudoRQM4<std::complex<double>>: Complex field solver
  *
  * @see CudaPseudo for Boltzmann factors
  * @see CudaComputationContinuous for propagator orchestration
@@ -39,10 +39,10 @@
 #include <thrust/reduce.h>
 
 #include "CudaPseudo.h"
-#include "CudaSolverPseudoContinuous.h"
+#include "CudaSolverPseudoRQM4.h"
 
 template <typename T>
-CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
+CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
     ComputationBox<T>* cb,
     Molecules *molecules,
     int n_streams,
@@ -239,7 +239,7 @@ CudaSolverPseudoContinuous<T>::CudaSolverPseudoContinuous(
     }
 }
 template <typename T>
-CudaSolverPseudoContinuous<T>::~CudaSolverPseudoContinuous()
+CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
 {
     delete pseudo;
 
@@ -298,7 +298,7 @@ CudaSolverPseudoContinuous<T>::~CudaSolverPseudoContinuous()
     }
 }
 template <typename T>
-void CudaSolverPseudoContinuous<T>::update_laplacian_operator()
+void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
 {
     try{
         pseudo->update(
@@ -313,7 +313,7 @@ void CudaSolverPseudoContinuous<T>::update_laplacian_operator()
     }
 }
 template <typename T>
-void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::string, const T*> w_input)
+void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string, const T*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -368,7 +368,7 @@ void CudaSolverPseudoContinuous<T>::update_dw(std::string device, std::map<std::
 }
 // Advance propagator using RQM4
 template <typename T>
-void CudaSolverPseudoContinuous<T>::advance_propagator(
+void CudaSolverPseudoRQM4<T>::advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
         std::string monomer_type, double *d_q_mask)
@@ -528,7 +528,7 @@ void CudaSolverPseudoContinuous<T>::advance_propagator(
 }
 
 template <typename T>
-void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
+void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
     const int STREAM,
     CuDeviceData<T> *d_q_pair, CuDeviceData<T>  *d_segment_stress,
     std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
@@ -678,5 +678,5 @@ void CudaSolverPseudoContinuous<T>::compute_single_segment_stress(
 }
 
 // Explicit template instantiation
-template class CudaSolverPseudoContinuous<double>;
-template class CudaSolverPseudoContinuous<std::complex<double>>;
+template class CudaSolverPseudoRQM4<double>;
+template class CudaSolverPseudoRQM4<std::complex<double>>;

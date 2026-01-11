@@ -34,7 +34,7 @@
  * - CudaComputationContinuous<double>: Real field simulations
  * - CudaComputationContinuous<std::complex<double>>: L-FTS simulations
  *
- * @see CudaSolverPseudoContinuous for propagator advancement
+ * @see CudaSolverPseudoRQM4 for propagator advancement
  * @see Scheduler for computation ordering
  */
 
@@ -46,7 +46,7 @@
 
 #include "CudaComputationContinuous.h"
 #include "CudaComputationBox.h"
-#include "CudaSolverPseudoContinuous.h"
+#include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
@@ -89,7 +89,7 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
         if(method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                this->propagator_solver = new CudaSolverPseudoContinuous<T>(cb, molecules, this->n_streams, this->streams, false);
+                this->propagator_solver = new CudaSolverPseudoRQM4<T>(cb, molecules, this->n_streams, this->streams, false);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CudaSolverPseudoETDRK4<T>(cb, molecules, this->n_streams, this->streams, false);
             else

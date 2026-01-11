@@ -23,7 +23,7 @@
  * Coefficients computed using Kassam-Trefethen (2005) contour integral.
  *
  * @see CudaSolver for the abstract interface
- * @see CudaSolverPseudoContinuous for RQM4 version
+ * @see CudaSolverPseudoRQM4 for RQM4 version
  * @see CpuSolverPseudoETDRK4 for CPU version
  */
 

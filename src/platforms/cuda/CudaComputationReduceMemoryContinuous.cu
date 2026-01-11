@@ -46,7 +46,7 @@
 #include <omp.h>
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
-#include "CudaSolverPseudoContinuous.h"
+#include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverRealSpace.h"
 #include "SimpsonRule.h"
@@ -84,7 +84,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         if(method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                this->propagator_solver = new CudaSolverPseudoContinuous<T>(cb, molecules, n_streams, streams, false);
+                this->propagator_solver = new CudaSolverPseudoRQM4<T>(cb, molecules, n_streams, streams, false);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CudaSolverPseudoETDRK4<T>(cb, molecules, n_streams, streams, false);
             else

@@ -29,7 +29,7 @@
  * - CpuComputationContinuous<double>: Real fields
  * - CpuComputationContinuous<std::complex<double>>: Complex fields
  *
- * @see CpuSolverPseudoContinuous for pseudo-spectral solver
+ * @see CpuSolverPseudoRQM4 for pseudo-spectral solver
  * @see CpuSolverRealSpace for real-space solver
  */
 
@@ -38,7 +38,7 @@
 #include <omp.h>
 
 #include "CpuComputationContinuous.h"
-#include "CpuSolverPseudoContinuous.h"
+#include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
@@ -76,7 +76,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         if(method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules);
             else

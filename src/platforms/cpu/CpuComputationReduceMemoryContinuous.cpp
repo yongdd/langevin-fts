@@ -36,7 +36,7 @@
 #include <omp.h>
 
 #include "CpuComputationReduceMemoryContinuous.h"
-#include "CpuSolverPseudoContinuous.h"
+#include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverRealSpace.h"
 #include "SimpsonRule.h"
@@ -76,7 +76,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         if(method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                this->propagator_solver = new CpuSolverPseudoContinuous<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules);
             else

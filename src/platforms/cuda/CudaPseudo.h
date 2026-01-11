@@ -14,7 +14,7 @@
  * - d_negative_k_idx: Index mapping for Hermitian symmetry
  *
  * @see Pseudo for the abstract interface
- * @see CudaSolverPseudoContinuous for usage in continuous chains
+ * @see CudaSolverPseudoRQM4 for usage in continuous chains
  * @see CudaSolverPseudoDiscrete for usage in discrete chains
  */
 

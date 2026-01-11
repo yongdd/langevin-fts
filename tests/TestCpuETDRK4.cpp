@@ -21,7 +21,7 @@
 
 #ifdef USE_CPU_MKL
 #include "CpuComputationBox.h"
-#include "CpuSolverPseudoContinuous.h"
+#include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "Pseudo.h"
 #endif
@@ -74,8 +74,8 @@ int main()
             {II, JJ, KK}, {Lx, Ly, Lz}, {});
 
         // Create solvers - RQM4 and ETDRK4 as separate classes
-        CpuSolverPseudoContinuous<double>* solver_rqm4 =
-            new CpuSolverPseudoContinuous<double>(cb, molecules);
+        CpuSolverPseudoRQM4<double>* solver_rqm4 =
+            new CpuSolverPseudoRQM4<double>(cb, molecules);
         CpuSolverPseudoETDRK4<double>* solver_etdrk4 =
             new CpuSolverPseudoETDRK4<double>(cb, molecules);
 

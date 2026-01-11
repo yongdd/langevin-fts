@@ -398,8 +398,8 @@ ETDRK4 is implemented in:
 - `ETDRK4Coefficients` (shared coefficient computation)
 
 For the default RQM4 method, see:
-- `CpuSolverPseudoContinuous` (CPU/MKL)
-- `CudaSolverPseudoContinuous` (CUDA)
+- `CpuSolverPseudoRQM4` (CPU/MKL)
+- `CudaSolverPseudoRQM4` (CUDA)
 
 The coefficients are precomputed once during initialization and reused for all propagator steps.
 
