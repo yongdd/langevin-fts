@@ -2,6 +2,8 @@
 
 This document describes the memory management strategies and performance characteristics of the polymer field theory simulation library for both CUDA (GPU) and CPU-MKL platforms.
 
+For numerical method benchmarks (RQM4 vs CN-ADI2, convergence analysis), see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
+
 ## Overview
 
 The library provides two memory modes controlled by the `reduce_memory_usage` parameter:
