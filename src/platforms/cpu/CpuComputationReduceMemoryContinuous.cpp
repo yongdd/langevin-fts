@@ -52,8 +52,8 @@
  * @param propagator_computation_optimizer Optimized computation schedule
  * @param method                         "pseudospectral" or "realspace"
  * @param numerical_method               Numerical algorithm:
- *                                       - For pseudospectral: "rqm4" (default) or "etdrk4"
- *                                       - For realspace: "cn-adi2" (default) or "cn-adi4"
+ *                                       - For pseudospectral: "rqm4" or "etdrk4"
+ *                                       - For realspace: "cn-adi2" or "cn-adi4"
  */
 template <typename T>
 CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(

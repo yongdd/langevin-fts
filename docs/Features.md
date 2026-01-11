@@ -26,13 +26,13 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 
 | Method | Solver Type | Description |
 |--------|-------------|-------------|
-| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation (default) |
+| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation |
 | `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
 | `cn-adi4` | Real-space | CN-ADI4: 4th-order CN-ADI (Richardson extrapolation) |
 
 #### Pseudo-Spectral Method
-- RQM4 (default) or ETDRK4 for continuous chains
+- RQM4 or ETDRK4 for continuous chains
 - Supports both continuous and discrete chain models
 - Boundary conditions:
   - Periodic (FFT)
@@ -102,7 +102,7 @@ High-level simulation modules built on top of the core library.
 | Periodic BC | Yes (FFT) | Yes |
 | Reflecting BC | Yes (DCT) | Yes |
 | Absorbing BC | Yes (DST) | Yes |
-| Numerical methods | RQM4 (default), ETDRK4 | CN-ADI2 (default), CN-ADI4 |
+| Numerical methods | RQM4, ETDRK4 | CN-ADI2, CN-ADI4 |
 | Stress calculation | Yes | No |
 | Recommended for | Large grids, periodic systems | Non-periodic boundaries |
 

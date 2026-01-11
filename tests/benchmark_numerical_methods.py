@@ -9,7 +9,7 @@ Pseudo-Spectral Methods (for periodic boundaries):
 - ETDRK4: Exponential Time Differencing Runge-Kutta 4 (Cox & Matthews 2002)
 
 Real-Space Methods (for non-periodic boundaries):
-- CN-ADI2: 2nd-order Crank-Nicolson ADI (default)
+- CN-ADI2: 2nd-order Crank-Nicolson ADI
 - CN-ADI4: 4th-order Crank-Nicolson ADI with Richardson extrapolation
 
 Tests performed:

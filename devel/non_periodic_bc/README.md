@@ -117,7 +117,7 @@ q_final = solver.propagate(q_init, "A", n_steps=100)
 ### Choosing numerical method
 
 ```python
-# Pseudo-spectral method (default, higher accuracy)
+# Pseudo-spectral method (higher accuracy)
 solver = PropagatorSolver(
     nx=[32], lx=[4.0], bc=["reflecting", "reflecting"],
     method="pseudospectral"
@@ -133,7 +133,7 @@ solver = PropagatorSolver(
 ### Platform selection
 
 ```python
-# Auto-select platform (default): cuda for 2D/3D, cpu-mkl for 1D
+# Auto-select platform: cuda for 2D/3D, cpu-mkl for 1D
 solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="auto")
 
 # Force CPU

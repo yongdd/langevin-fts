@@ -628,7 +628,7 @@ class SCFT:
         # Get angles if provided
         angles = params.get("angles", None)
 
-        # Get numerical method (default: rqm4)
+        # Get numerical method
         numerical_method = params.get("numerical_method", "rqm4")
 
         # Create PropagatorSolver instance

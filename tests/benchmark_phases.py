@@ -7,8 +7,8 @@ This script benchmarks all numerical methods on realistic polymer phases:
 - Fddd (O^70): AB diblock, f=0.43, chi_N=14
 
 Methods tested:
-- Pseudo-spectral: RQM4 (default), ETDRK4
-- Real-space: CN-ADI2 (default), CN-ADI4
+- Pseudo-spectral: RQM4, ETDRK4
+- Real-space: CN-ADI2, CN-ADI4
 
 All methods are selected at runtime via the pseudo_method and realspace_method
 parameters to PlatformSelector.create_factory().

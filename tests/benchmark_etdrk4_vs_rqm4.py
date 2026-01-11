@@ -3,7 +3,7 @@
 Benchmark: ETDRK4 vs RQM4
 
 Note: ETDRK4 is tested via C++ unit test (TestCpuETDRK4).
-This script benchmarks the default pseudo-spectral solver (RQM4)
+This script benchmarks the RQM4 pseudo-spectral solver
 and compares CPU vs CUDA performance.
 
 RQM4 (Ranjan-Qin-Morse 4th-order) uses Richardson extrapolation to achieve
