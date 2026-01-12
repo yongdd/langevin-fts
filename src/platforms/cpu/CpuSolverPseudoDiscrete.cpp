@@ -6,23 +6,19 @@
  * Chapman-Kolmogorov integral equation. Supports all boundary conditions
  * (periodic, reflecting, absorbing).
  *
- * **Chapman-Kolmogorov Equation:**
+ * **Chapman-Kolmogorov Equation (N-1 Bond Model):**
  *
  * For discrete chains, the propagator satisfies:
- *     q(r,n+1) = exp(-w(r)*ds) * integral g(r-r') q(r',n) dr'
+ *     q(r, i+1) = exp(-w(r)*ds) * integral g(r-r') q(r', i) dr'
  *
- * where g(r) is the bond function. In Fourier space:
- *     q(r,n+1) = exp(-w(r)*ds) * FFT^-1[ ĝ(k) * FFT[q(r,n)] ]
+ * In Fourier space:
+ *     q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
  *
- * with bond function ĝ(k) = exp(-b^2 k^2 ds/6) for bead-spring model.
+ * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
  * See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
- * **Half-Bond Steps:**
- *
- * At chain ends and junction points, half-bond steps are used:
- *     ĝ^(1/2)(k) = exp(-b^2 k^2 ds/12)
- *
- * This ensures proper handling of the N-1 bond model.
+ * Half-bond steps (ĝ^(1/2)(k) = exp(-b²|k|²ds/12)) are used only at
+ * chain ends and junction points.
  *
  * **Template Instantiations:**
  *

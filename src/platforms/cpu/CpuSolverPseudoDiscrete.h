@@ -28,16 +28,20 @@
  *
  * See Park et al. J. Chem. Phys. 150, 234901 (2019) for details.
  *
- * **Numerical Method (Operator Splitting):**
+ * **Numerical Method (N-1 Bond Model):**
  *
- * Uses symmetric splitting with half-bond steps for accuracy at chain ends:
+ * For each propagator step from segment i to i+1:
  *
- *     q(n+1) = B^(1/2) * A * B^(1/2) * q(n)
+ *     q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
  *
  * where:
- * - A = exp(-w*ds) is the segment Boltzmann factor
- * - B^(1/2) = FFT^-1[ ĝ^(1/2)(k) * FFT[.] ] is the half-bond convolution
- * - ĝ^(1/2)(k) = exp(-a²|k|²/12) = exp(-b²|k|²ds/12) is the half-bond function
+ * - ĝ(k) = exp(-b²|k|²ds/6) is the full bond function
+ * - exp(-w*ds) is the full-segment Boltzmann factor
+ *
+ * The initial condition is q(1) = exp(-w*ds).
+ *
+ * Half-bond steps (ĝ^(1/2)(k) = exp(-b²|k|²ds/12)) are used only at
+ * chain ends and junction points for proper boundary treatment.
  *
  * **Advantages of Discrete Model:**
  *
@@ -66,27 +70,28 @@
  * @brief CPU pseudo-spectral solver for discrete chain model.
  *
  * Implements the discrete chain propagator update using the Chapman-Kolmogorov
- * integral equation with operator splitting. Half-bond steps at chain ends
- * ensure proper treatment of the N-1 bond model. Supports all boundary
- * conditions (periodic, reflecting, absorbing).
+ * integral equation. Supports all boundary conditions (periodic, reflecting,
+ * absorbing).
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Operator Splitting Scheme:**
+ * **N-1 Bond Model:**
  *
- * Full segment step (bond convolution + segment Boltzmann weight):
- *     q(n+1) = B^(1/2) * exp(-w*ds) * B^(1/2) * q(n)
+ * Full segment step (bond convolution + full-segment Boltzmann weight):
+ *     q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
  *
- * Half-bond step only (for chain ends):
- *     q'(n+1/2) = B^(1/2) * q(n)
+ * Half-bond step only (for chain ends and junctions):
+ *     q' = FFT^-1[ ĝ^(1/2)(k) * FFT[q] ]
  *
- * where B^(1/2) is bond convolution with the half-bond function ĝ^(1/2)(k).
+ * where:
+ * - ĝ(k) = exp(-b²|k|²ds/6) is the full bond function
+ * - ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function
  *
  * **Memory per Monomer Type:**
  *
- * - exp_dw: Segment Boltzmann factor exp(-w*ds)
- * - exp_dw_half: Not used (discrete uses full segment factor)
- * - boltz_bond_half: Half-bond function ĝ^(1/2)(k) = exp(-b²|k|²ds/12)
+ * - exp_dw: Full-segment Boltzmann factor exp(-w*ds)
+ * - boltz_bond: Full bond function ĝ(k)
+ * - boltz_bond_half: Half-bond function ĝ^(1/2)(k)
  *
  * @example
  * @code
@@ -94,7 +99,7 @@
  * solver.update_dw(w_fields);
  *
  * // Full segment step
- * solver.advance_propagator(q_n, q_n1, "A", nullptr);
+ * solver.advance_propagator(q_i, q_i1, "A", nullptr);
  *
  * // Half-bond step for chain ends
  * solver.advance_propagator_half_bond_step(q, q_half, "A");
@@ -147,11 +152,11 @@ public:
     /**
      * @brief Advance propagator by one full segment step.
      *
-     * Computes: q(n+1) = B^(1/2) * exp(-w*ds) * B^(1/2) * q(n)
-     * where B^(1/2) is half-bond convolution.
+     * Computes: q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
+     * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
      *
-     * @param q_in        Input propagator q(n)
-     * @param q_out       Output propagator q(n+1)
+     * @param q_in        Input propagator q(i)
+     * @param q_out       Output propagator q(i+1)
      * @param monomer_type Monomer type for bond function and segment weight
      * @param q_mask      Optional mask (set q=0 in masked regions)
      */
@@ -160,10 +165,10 @@ public:
     /**
      * @brief Advance propagator by half bond step only.
      *
-     * Computes: q' = B^(1/2) * q = FFT^-1[ ĝ^(1/2)(k) * FFT[q] ]
+     * Computes: q' = FFT^-1[ ĝ^(1/2)(k) * FFT[q] ]
      * where ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function.
      *
-     * Used at chain ends to properly handle the N-1 bond model.
+     * Used at chain ends and junction points.
      *
      * @param q_in        Input propagator
      * @param q_out       Output propagator after half-bond convolution

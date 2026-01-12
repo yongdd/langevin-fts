@@ -6,24 +6,19 @@
  * of the pseudo-spectral method for discrete chain propagators using
  * the Chapman-Kolmogorov integral equation.
  *
- * **Chapman-Kolmogorov Equation:**
+ * **Chapman-Kolmogorov Equation (N-1 Bond Model):**
  *
- * For discrete chains, the propagator satisfies an integral equation:
- *     q(r, n+1) = exp(-w(r)*ds) * integral g(r-r') q(r', n) dr'
+ * For discrete chains, the propagator satisfies:
+ *     q(r, i+1) = exp(-w(r)*ds) * integral g(r-r') q(r', i) dr'
  *
- * where g(r) is the bond function with Fourier transform ĝ(k).
+ * In Fourier space:
+ *     q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
+ *
+ * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
  * See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
- * **Numerical Method (Operator Splitting):**
- *
- * Full segment step:
- *     q(n+1) = B^(1/2) · exp(-w*ds) · B^(1/2) · q(n)
- *
- * Half-bond step (at chain ends):
- *     q'(n+1/2) = B^(1/2) · q(n)
- *
- * where B^(1/2) = FFT⁻¹[ ĝ^(1/2)(k) · FFT[·] ] is half-bond convolution
- * with ĝ^(1/2)(k) = exp(-b²|k|²ds/12).
+ * Half-bond steps (ĝ^(1/2)(k) = exp(-b²|k|²ds/12)) are used only at
+ * chain ends and junction points.
  *
  * **GPU Resources:**
  *
@@ -54,15 +49,15 @@
  * @brief GPU pseudo-spectral solver for discrete chain model.
  *
  * Implements discrete chain propagator updates using the Chapman-Kolmogorov
- * integral equation with operator splitting on the GPU.
+ * integral equation on the GPU.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Operator Splitting:**
+ * **N-1 Bond Model:**
  *
- * Uses symmetric splitting: B^(1/2) · A · B^(1/2)
- * - A = exp(-w*ds) is the segment Boltzmann factor
- * - B^(1/2) = half-bond convolution with ĝ^(1/2)(k)
+ * Full segment step: q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
+ * - ĝ(k) = exp(-b²|k|²ds/6) is the full bond function
+ * - exp(-w*ds) is the full-segment Boltzmann factor
  */
 template <typename T>
 class CudaSolverPseudoDiscrete : public CudaSolver<T>
@@ -137,12 +132,12 @@ public:
     /**
      * @brief Advance propagator by one full segment.
      *
-     * Computes: q(n+1) = B^(1/2) · exp(-w*ds) · B^(1/2) · q(n)
-     * where B^(1/2) is half-bond convolution.
+     * Computes: q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
+     * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
      *
      * @param STREAM      Stream index
-     * @param d_q_in      Input propagator q(n)
-     * @param d_q_out     Output propagator q(n+1)
+     * @param d_q_in      Input propagator q(i)
+     * @param d_q_out     Output propagator q(i+1)
      * @param monomer_type Monomer type
      * @param d_q_mask    Optional mask
      */
@@ -154,8 +149,10 @@ public:
     /**
      * @brief Advance by half bond step only.
      *
-     * Computes: q' = B^(1/2) · q = FFT⁻¹[ ĝ^(1/2)(k) · FFT[q] ]
+     * Computes: q' = FFT^-1[ ĝ^(1/2)(k) * FFT[q] ]
      * where ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function.
+     *
+     * Used at chain ends and junction points.
      *
      * @param STREAM      Stream index
      * @param d_q_in      Input propagator
