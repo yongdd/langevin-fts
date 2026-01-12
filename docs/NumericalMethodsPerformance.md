@@ -1,6 +1,6 @@
 # Numerical Methods: Performance and Accuracy
 
-This document provides benchmark results comparing the numerical methods available for chain propagator computation in polymer field theory simulations.
+This document provides benchmark results comparing the numerical methods available for chain propagator computation in polymer field theory simulations. The benchmarks reproduce Fig. 1 and Fig. 2 from Song et al., *Chinese J. Polym. Sci.* **2018**, 36, 488-496.
 
 ## Available Methods
 
@@ -37,134 +37,104 @@ params = {
 calculation = scft.SCFT(params=params)
 ```
 
-## Performance Benchmarks
-
-### Benchmark Configuration
+## Benchmark Configuration
 
 - **Platform**: NVIDIA A10 GPU (CUDA)
-- **Phases tested**: Gyroid (Ia-3d, f=0.36) and Fddd (O^70, f=0.43)
-- **Polymer**: AB diblock copolymer
-- **SCFT iterations**: 100 per test
+- **System**: AB diblock copolymer, Gyroid phase
+- **SCFT convergence**: tolerance = 10⁻⁹
+- **Max iterations**: 2000
 - **Date**: 2026-01-12
 
-### Gyroid Phase Results
+## Fig. 1: Contour Discretization Convergence
 
-#### Time per Iteration vs Contour Steps (N)
+**Conditions**: f = 0.375, χN = 18, M = 32³, L = 3.65
 
-*Grid size: 32³, χN = 15-25*
+### Convergence Plot
 
-| Method | N=50 | N=100 | N=200 | N=400 |
-|--------|------|-------|-------|-------|
-| **RQM4** | 14.1 ms | 25.5 ms | 49.3 ms | 96.8 ms |
-| **ETDRK4** | 27.0 ms | 52.0 ms | 102.2 ms | 202.7 ms |
-| **CN-ADI2** | 38.5 ms | 75.3 ms | 148.7 ms | 295.5 ms |
-| **CN-ADI4** | 111.5 ms | 221.3 ms | 440.7 ms | 879.6 ms |
+![Contour Convergence](figure1_song2018.png)
 
-**Key findings:**
-- RQM4 is **2.0x faster** than ETDRK4
-- RQM4 is **2.9x faster** than CN-ADI2
-- RQM4 is **8.6x faster** than CN-ADI4
-- Time scales linearly with N (doubling N doubles time)
+### Execution Time vs Contour Steps (Ns)
 
-#### Time per Iteration vs Grid Size
+| Method | Ns=100 | Ns=200 | Ns=400 | Ns=1000 | Ns=4000 |
+|--------|--------|--------|--------|---------|---------|
+| **RQM4** | 7.5 s | 14.4 s | 28.4 s | 70.3 s | 280.8 s |
+| **ETDRK4** | 15.2 s | 29.8 s | 59.2 s | 146.6 s | 588.7 s |
+| **CN-ADI2** | 19.1 s | 38.0 s | 76.2 s | 191.2 s | 766.0 s |
+| **CN-ADI4** | 57.4 s | 113.6 s | 228.5 s | 570.5 s | 2290.2 s |
 
-*N=100 (ds=0.01), χN = 15*
+### Free Energy vs Contour Steps (Ns)
 
-| Method | 24³ | 32³ | 48³ | 64³ |
-|--------|-----|-----|-----|-----|
-| **RQM4** | 17.2 ms | 25.6 ms | 57.4 ms | 96.9 ms |
-| **ETDRK4** | 34.4 ms | 51.8 ms | 98.6 ms | 151.3 ms |
-| **CN-ADI2** | 55.0 ms | 75.2 ms | 119.5 ms | 163.2 ms |
-| **CN-ADI4** | 162.1 ms | 221.4 ms | 349.1 ms | 468.9 ms |
+| Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=1000 | Ns=4000 |
+|--------|-------|-------|--------|--------|---------|---------|
+| **RQM4** | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 |
+| **ETDRK4** | -0.4769 | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 |
+| **CN-ADI2** | -0.4777 | -0.4790 | -0.4793 | -0.4793 | -0.4793 | -0.4794 |
+| **CN-ADI4** | -0.4794 | -0.4794 | -0.4794 | -0.4794 | -0.4794 | -0.4794 |
 
-**Key findings:**
-- Pseudo-spectral methods (RQM4, ETDRK4) scale as O(M log M)
-- CN-ADI methods scale as O(M) but with higher constant overhead
-- At large grids (64³), RQM4 maintains significant advantage
+### Speedup Relative to CN-ADI2 (at Ns=1000)
 
-### Fddd Phase Results
+| Method | Speedup |
+|--------|---------|
+| **RQM4** | **2.7x faster** |
+| **ETDRK4** | 1.3x faster |
+| **CN-ADI2** | 1.0x (baseline) |
+| **CN-ADI4** | 3.0x slower |
 
-#### Time per Iteration vs Contour Steps (N)
+### Convergence Order Analysis
 
-*Grid size: 84×48×24, χN = 12-16*
+**Key findings**:
+- **RQM4** and **ETDRK4** both show 4th-order convergence, following the slope -4 reference line
+- **CN-ADI4** shows 4th-order convergence
+- **CN-ADI2** shows 2nd-order convergence (follows slope -2)
+- Both pseudo-spectral methods converge to F = -0.4770
 
-| Method | N=50 | N=100 | N=200 | N=400 |
-|--------|------|-------|-------|-------|
-| **RQM4** | 27.6 ms | 49.7 ms | 94.8 ms | 185.0 ms |
-| **ETDRK4** | 43.2 ms | 80.1 ms | 155.3 ms | 305.3 ms |
-| **CN-ADI2** | 55.0 ms | 103.3 ms | 201.9 ms | 399.2 ms |
-| **CN-ADI4** | 155.7 ms | 300.8 ms | 596.8 ms | 1189.1 ms |
+## Fig. 2: Spatial Resolution Convergence
 
-![Time per iteration vs contour steps](figures/ds_variation.png)
+**Conditions**: f = 0.32, Ns = 101, χN = 40 and 80
 
-#### Time per Iteration vs Grid Size
+### Free Energy vs Grid Size (χN = 40, L = 3.85)
 
-*N=100 (ds=0.01), χN = 12*
+| Method | Nx=24 | Nx=32 | Nx=48 | Nx=64 | Nx=96 | Nx=128 |
+|--------|-------|-------|-------|-------|-------|--------|
+| **RQM4** | -3.351 | -3.337 | -3.334 | -3.334 | -3.334 | -3.334 |
+| **ETDRK4** | -3.350 | -3.336 | -3.334 | -3.334 | -3.334 | - |
+| **CN-ADI2** | -3.445 | -3.384 | -3.354 | -3.346 | -3.341 | -3.339 |
+| **CN-ADI4** | -3.446 | -3.383 | -3.353 | -3.344 | -3.338 | -3.337 |
 
-| Method | 56×32×16 | 84×48×24 | 112×64×32 |
-|--------|----------|----------|-----------|
-| **RQM4** | 25.0 ms | 50.2 ms | 89.0 ms |
-| **ETDRK4** | 49.1 ms | 80.5 ms | 140.3 ms |
-| **CN-ADI2** | 69.0 ms | 103.5 ms | 148.8 ms |
-| **CN-ADI4** | 202.9 ms | 301.0 ms | 428.4 ms |
+### Execution Time vs Grid Size (χN = 40)
 
-![Time per iteration vs grid size](figures/nx_variation.png)
+| Method | Nx=32 | Nx=64 | Nx=96 | Nx=128 |
+|--------|-------|-------|-------|--------|
+| **RQM4** | 14.6 s | 63.7 s | 293.5 s | 653.8 s |
+| **ETDRK4** | 29.4 s | 126.8 s | 576.5 s | - |
+| **CN-ADI2** | 34.8 s | 96.1 s | 208.8 s | 2493.7 s |
 
-### Performance Summary
+### Speedup at High Resolution (Nx=96, χN=40)
 
-#### Speedup Relative to CN-ADI2 (at N=100)
+| Method | Time | Speedup vs CN-ADI2 |
+|--------|------|-------------------|
+| **RQM4** | 294 s | **1.4x slower** |
+| **CN-ADI2** | 209 s | 1.0x (baseline) |
 
-| Method | Gyroid (32³) | Fddd (84×48×24) |
-|--------|--------------|-----------------|
-| **RQM4** | 2.9x faster | 2.1x faster |
-| **ETDRK4** | 1.4x faster | 1.3x faster |
-| **CN-ADI4** | 2.9x slower | 2.9x slower |
+At high spatial resolution, CN-ADI2 becomes competitive due to its O(N) FFT cost vs O(N log N) for pseudo-spectral methods.
 
-![Method comparison](figures/method_comparison.png)
+## Performance Summary
 
-#### χN Independence
+### Method Comparison
 
-Time per iteration is essentially **independent of χN** for all methods:
-- Gyroid: <1% variation across χN = 15, 20, 25
-- Fddd: <2% variation across χN = 12, 14, 16
+| Method | Convergence Order | Speed (vs CN-ADI2) | Notes |
+|--------|-------------------|-------------------|-------|
+| **RQM4** | 4th ✓ | **2.7x faster** | Recommended for most applications |
+| **ETDRK4** | 4th ✓ | 1.3x faster | Same accuracy as RQM4, 2x slower |
+| **CN-ADI2** | 2nd ✓ | baseline | Supports non-periodic BC |
+| **CN-ADI4** | 4th ✓ | 3.0x slower | High accuracy with non-periodic BC |
 
-## Accuracy Analysis
+### Key Findings
 
-### Free Energy Convergence
-
-The free energy (F) was measured after 100 SCFT iterations for each method and contour discretization.
-
-#### Gyroid Phase (χN = 15)
-
-| Method | N=50 | N=100 | N=200 | N=400 |
-|--------|------|-------|-------|-------|
-| **RQM4** | -0.116745 | -0.116746 | -0.116746 | -0.116746 |
-| **CN-ADI4** | -0.117272 | -0.117272 | -0.117272 | -0.117272 |
-| **CN-ADI2** | -0.117179 | -0.117250 | -0.117267 | -0.117271 |
-
-#### Fddd Phase (χN = 14)
-
-| Method | N=50 | N=100 | N=200 | N=400 |
-|--------|------|-------|-------|-------|
-| **RQM4** | -0.156641 | -0.156641 | -0.156641 | -0.156641 |
-| **CN-ADI4** | -0.156854 | -0.156854 | -0.156854 | -0.156854 |
-| **CN-ADI2** | -0.156310 | -0.156631 | -0.156799 | -0.156840 |
-
-**Key findings:**
-- **RQM4** and **CN-ADI4** show excellent convergence - free energy is independent of ds
-- **CN-ADI2** shows 2nd-order convergence behavior (F improves as ds decreases)
-- All 4th-order methods (RQM4, CN-ADI4) achieve consistent F values even at coarse discretization (N=50)
-
-### Contour Discretization Order
-
-| Method | Error Scaling | Convergence Order |
-|--------|---------------|-------------------|
-| **RQM4** | $O(\Delta s^4)$ | 4 |
-| **ETDRK4** | $O(\Delta s^4)$ | 4 |
-| **CN-ADI2** | $O(\Delta s^2)$ | 2 |
-| **CN-ADI4** | $O(\Delta s^4)$ | 4 |
-
-For the same accuracy, RQM4/ETDRK4 require fewer contour steps than CN-ADI2, making them more efficient for high-precision calculations.
+1. **RQM4 is the fastest pseudo-spectral method** - 2x faster than ETDRK4 per iteration
+2. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.4770
+3. **Pseudo-spectral methods** (RQM4, ETDRK4) show exponential spatial convergence
+4. **CN-ADI methods** support non-periodic boundary conditions
 
 ## Method Recommendations
 
@@ -173,20 +143,20 @@ For the same accuracy, RQM4/ETDRK4 require fewer contour steps than CN-ADI2, mak
 | Use Case | Recommended Method | Reason |
 |----------|-------------------|--------|
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest, 4th-order accurate |
-| Alternative pseudo-spectral | **ETDRK4** | Similar accuracy, ~2x slower |
 | Non-periodic boundaries | **CN-ADI2** | Supports absorbing/reflecting BC |
 | High-precision confined systems | **CN-ADI4** | 4th-order with non-periodic BC |
 
-### Performance Summary
+### ETDRK4 vs RQM4
 
-For periodic boundary conditions (standard SCFT):
-1. **RQM4** is the best choice for most applications
-2. **ETDRK4** is a valid alternative with similar accuracy
-3. **CN-ADI** methods are not recommended for periodic BC due to lower efficiency
+Both methods achieve **identical accuracy** (4th-order convergence). The choice depends on:
 
-For non-periodic boundary conditions:
-1. **CN-ADI2** for moderate accuracy requirements
-2. **CN-ADI4** when higher accuracy is needed
+| Factor | RQM4 | ETDRK4 |
+|--------|------|--------|
+| Speed | **2x faster** | Slower |
+| Implementation | Operator splitting | Exponential integrator |
+| Coefficients | Pre-computed | Contour integral |
+
+**Recommendation**: Use **RQM4** for standard simulations. ETDRK4 is available as an alternative but offers no advantage over RQM4 for polymer SCFT.
 
 ## References
 
@@ -200,4 +170,4 @@ For non-periodic boundary conditions:
    - Convergence analysis methodology
 
 4. J. Song, Y. Liu, and R. Zhang, **"Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers"**, *Chinese J. Polym. Sci.*, **2018**, 36, 488-496.
-   - ETDRK4 for polymer field theory, performance benchmarks
+   - ETDRK4 for polymer field theory, benchmark methodology

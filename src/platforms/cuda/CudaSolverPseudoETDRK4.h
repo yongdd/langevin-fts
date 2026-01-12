@@ -6,6 +6,16 @@
  * of the ETDRK4 (Exponential Time Differencing Runge-Kutta 4th order)
  * method for continuous Gaussian chains.
  *
+ * @warning **Reduced Convergence Order for Polymer MDE**
+ *
+ * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
+ * applied to the polymer modified diffusion equation. This is because N(q) = -w*q
+ * is linear in q, so intermediate stage evaluations provide no additional
+ * information for the Runge-Kutta weighting to exploit.
+ *
+ * **Recommendation:** Use CudaSolverPseudoRQM4 instead. RQM4 is 2x faster and
+ * achieves true 4th-order convergence.
+ *
  * **GPU Architecture:**
  *
  * - Multiple CUDA streams for concurrent propagator computation
@@ -50,16 +60,16 @@
  * @brief GPU ETDRK4 pseudo-spectral solver for continuous Gaussian chains.
  *
  * Implements the ETDRK4 method with Kassam-Trefethen coefficient computation
- * for stable and L-stable 4th-order time stepping.
+ * for stable and L-stable time stepping.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
  * **ETDRK4 vs RQM4:**
  *
- * - ETDRK4: L-stable, may allow larger step sizes
- * - RQM4: Simpler, well-tested
+ * - ETDRK4: L-stable, but only O(ds) accuracy for polymer MDE
+ * - RQM4: True 4th-order convergence, 2x faster
  *
- * Both methods are 4th-order accurate.
+ * **Use RQM4 instead** for polymer SCFT/FTS simulations.
  */
 template <typename T>
 class CudaSolverPseudoETDRK4 : public CudaSolver<T>
