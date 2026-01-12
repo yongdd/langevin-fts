@@ -5,21 +5,21 @@
  * Implements propagator advancement for discrete chains using the
  * Chapman-Kolmogorov integral equation via cuFFT.
  *
- * **Chapman-Kolmogorov Equation:**
+ * **Chapman-Kolmogorov Equation (N-1 Bond Model):**
  *
  * For discrete chains, the propagator satisfies:
- *     q(r, n+1) = exp(-w(r)*ds) * integral g(r-r') q(r', n) dr'
+ *     q(r, i+1) = exp(-w(r)*ds) * integral g(r-r') q(r', i) dr'
  *
  * In Fourier space:
- *     q(n+1) = exp(-w*ds) * F⁻¹[ ĝ(k) * F[q(n)] ]
+ *     q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
  *
- * where ĝ(k) = exp(-b²|k|²ds/6) is the bond function.
+ * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
  * See Park et al. J. Chem. Phys. 150, 234901 (2019).
  *
  * **Methods:**
  *
- * - advance_propagator(): Full bond step (bond convolution + segment weight)
- * - advance_propagator_half_bond_step(): Half bond convolution at chain ends
+ * - advance_propagator(): Full segment step (bond convolution + full-segment weight)
+ * - advance_propagator_half_bond_step(): Half bond convolution at chain ends/junctions
  * - compute_single_segment_stress(): Stress contribution per segment
  *
  * **cuFFT Plans:**

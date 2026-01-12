@@ -211,15 +211,16 @@ Discrete Chain Model:
     - Segment positions: s = Δs, 2Δs, 3Δs, ..., 1
 ```
 
-**Propagator Evolution (segment-to-segment):**
+**Propagator Evolution (N-1 Bond Model):**
 
-The propagator evolution from segment s to s+Δs follows three steps:
+The propagator evolution from segment i to i+1 follows two steps:
 
 ```
-q*(r)      = exp(-w(r)·Δs/2) · q(r, s)     [1] Half-segment Boltzmann weight
-q**(r)     = ∫ g(R) q*(r - R) dR           [2] Bond convolution
-q(r, s+Δs) = exp(-w(r)·Δs/2) · q**(r)      [3] Half-segment Boltzmann weight
+q*(r)    = ∫ g(R) q_i(r - R) dR        [1] Bond convolution
+q_{i+1}(r) = exp(-w(r)·Δs) · q*(r)     [2] Full-segment Boltzmann weight
 ```
+
+with initial condition: q_1(r) = exp(-w(r)·Δs)
 
 **Bond Function g(R):**
 
@@ -230,9 +231,9 @@ g(R) = (3/2πa²)^(3/2) exp(-3|R|²/2a²)
 
 **Pseudo-Spectral Implementation:**
 
-The bond convolution (step 2) is computed efficiently in Fourier space:
+The bond convolution (step 1) is computed efficiently in Fourier space:
 ```
-q̃**(k) = g̃(k) · q̃*(k)
+q̃*(k) = g̃(k) · q̃_i(k)
 ```
 
 where the Fourier transform of the bond function is:

@@ -55,32 +55,38 @@ $$q^{n+1} = \frac{4 q(\Delta s/2, \Delta s/2) - q(\Delta s)}{3}$$
 
 ### 2.2 Discrete Chain Model
 
-For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation. This library implements the discrete chain model from Park et al. (2019).
+For discrete chains, the propagator is computed using **recursive integral equations** (Chapman-Kolmogorov equations) rather than solving a differential equation. This library implements the **N-1 bond model** from Park et al. (2019) [5] and Matsen & Beardsley (2021) [11].
 
 **Units and Conventions:**
 - **Unit length**: $R_0 = aN^{1/2}$, where $a$ is the statistical segment length and $N$ is the polymerization index
 - **Contour step size**: $\Delta s = 1/N$
-- **Segment positions**: $s = \Delta s, 2\Delta s, \ldots, 1$ (N segments total)
-- A polymer chain has **N segments** connected by **N-1 bonds**
+- **Segment indices**: $i = 1, 2, \ldots, N$ (N segments total)
+- A polymer chain has **N segments** (monomers) connected by **N-1 bonds**
 
-The propagator evolution from segment $s$ to $s + \Delta s$ follows:
+The propagator evolution from segment $i$ to segment $i+1$ follows:
 
-1. **Half-segment Boltzmann weight** (real space):
-   $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
+1. **Bond convolution** (Fourier space):
+   $$\hat{q}^*(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}_i(\mathbf{k})$$
 
-2. **Bond convolution** (Fourier space):
-   $$\hat{q}^{**} = \hat{g}(\mathbf{k}) \cdot \hat{q}^*$$
+2. **Full-segment Boltzmann weight** (real space):
+   $$q_{i+1}(\mathbf{r}) = \exp(-w(\mathbf{r}) \Delta s) \cdot q^*(\mathbf{r})$$
 
-3. **Half-segment Boltzmann weight** (real space):
-   $$q^{n+1} = \exp\left(-\frac{w \Delta s}{2}\right) q^{**}$$
+with **initial condition**:
+$$q_1(\mathbf{r}) = \exp(-w(\mathbf{r}) \Delta s)$$
 
-where $g(\mathbf{R})$ is the bond function. For the bead-spring model:
+where $g(\mathbf{R})$ is the **bond function** representing the probability distribution of bond vectors. For the bead-spring (Gaussian) model:
 
 $$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
 
 Its Fourier transform is:
 
 $$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^2}{6}\right)$$
+
+**Physical Interpretation:**
+
+The recursion relation computes the statistical weight of finding segment $i+1$ at position $\mathbf{r}$:
+1. First, the bond convolution accounts for all possible positions of segment $i$ connected to segment $i+1$ by a bond
+2. Then, the Boltzmann weight accounts for the field acting on segment $i+1$
 
 This formulation makes the discrete chain computation as fast as the continuous chain with $O(M \log M)$ complexity per step.
 
@@ -544,3 +550,5 @@ All cross-terms may be non-zero.
 9. Cox, S. M. & Matthews, P. C. "Exponential time differencing for stiff systems." *J. Comput. Phys.* **176**, 430-455 (2002).
 
 10. Kassam, A.-K. & Trefethen, L. N. "Fourth-order time-stepping for stiff PDEs." *SIAM J. Sci. Comput.* **26**, 1214-1233 (2005).
+
+11. Matsen, M. W. & Beardsley, T. M. "Field-theoretic simulations for block copolymer melts using the partial saddle-point approximation." *Polymers* **13**, 2437 (2021).
