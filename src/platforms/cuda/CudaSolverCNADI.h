@@ -345,27 +345,30 @@ private:
 
     /**
      * @brief 3D ADI propagator advancement.
+     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
      */
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
 
     /**
      * @brief 2D ADI propagator advancement.
+     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
      */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
 
     /**
      * @brief 1D Crank-Nicolson propagator advancement.
+     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
      */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
 
     /**
      * @brief 3D ADI step with explicit coefficient arrays.
@@ -433,11 +436,12 @@ public:
      * @param d_q_out      Output propagator (device)
      * @param monomer_type Monomer type
      * @param d_q_mask     Optional mask (device)
+     * @param ds_index     Index for ds value (CN-ADI uses ds_index=1)
      */
     void advance_propagator(
         const int STREAM,
         double *d_q_in, double *d_q_out,
-        std::string monomer_type, double *d_q_mask) override;
+        std::string monomer_type, double *d_q_mask, int ds_index = 1) override;
 
     /** @brief Half-bond step (not applicable for CN-ADI continuous). */
     void advance_propagator_half_bond_step(

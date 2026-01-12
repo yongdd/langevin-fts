@@ -73,13 +73,14 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
         // }
 
         const int M = cb->get_total_grid();
+        const int ds_index = 1;  // CN-ADI always uses ds_index=1
 
         // Create exp_dw vectors and tridiagonal matrix coefficient arrays
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            exp_dw     [monomer_type].resize(M);
-            exp_dw_half[monomer_type].resize(M);
+            exp_dw     [ds_index][monomer_type].resize(M);
+            exp_dw_half[ds_index][monomer_type].resize(M);
 
             // Full step coefficients
             xl[monomer_type] = new double[M];
@@ -210,19 +211,18 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
-
-    for(const auto& item: w_input)
-    {
-        if( !exp_dw.contains(item.first))
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
-    }
+    const int ds_index = 1;  // CN-ADI always uses ds_index=1
 
     for(const auto& item: w_input)
     {
         const std::string& monomer_type = item.first;
         const double *w = item.second;
-        std::vector<double>& exp_dw_vec = exp_dw[monomer_type];
-        std::vector<double>& exp_dw_half_vec = exp_dw_half[monomer_type];
+
+        if( !exp_dw[ds_index].contains(monomer_type))
+            throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw.");
+
+        std::vector<double>& exp_dw_vec = exp_dw[ds_index][monomer_type];
+        std::vector<double>& exp_dw_half_vec = exp_dw_half[ds_index][monomer_type];
 
         for(int i=0; i<M; i++)
         {
@@ -234,19 +234,22 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
     }
 }
 void CpuSolverCNADI::advance_propagator(
-    double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
+    double *q_in, double *q_out, std::string monomer_type, const double *q_mask, int /*ds_index*/)
 {
+    // Note: CN-ADI currently uses global ds for all blocks.
+    // Per-block ds support would require updating matrix coefficients.
     try
     {
         const int M = this->cb->get_total_grid();
+        const int ds_idx = 1;  // CN-ADI always uses ds_index=1
 
         // Get Boltzmann factors for full and half steps
-        const double *_exp_dw = exp_dw[monomer_type].data();           // exp(-w*ds/2)
+        const double *_exp_dw = exp_dw[ds_idx][monomer_type].data();           // exp(-w*ds/2)
 
         if (use_4th_order)
         {
             // CN-ADI4: 4th order accuracy via Richardson extrapolation
-            const double *_exp_dw_half = exp_dw_half[monomer_type].data(); // exp(-w*ds/4)
+            const double *_exp_dw_half = exp_dw_half[ds_idx][monomer_type].data(); // exp(-w*ds/4)
 
             // Temporary arrays
             double q_out1[M];  // Full step result

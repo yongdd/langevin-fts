@@ -159,8 +159,9 @@ public:
      * @param q_out       Output propagator q(i+1)
      * @param monomer_type Monomer type for bond function and segment weight
      * @param q_mask      Optional mask (set q=0 in masked regions)
+     * @param ds_index    Ignored for discrete chains (always uses global ds)
      */
-    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask) override;
+    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask, int ds_index = 1) override;
 
     /**
      * @brief Advance propagator by half bond step only.

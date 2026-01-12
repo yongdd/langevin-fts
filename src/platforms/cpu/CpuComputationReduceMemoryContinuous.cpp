@@ -40,6 +40,7 @@
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
 #include "SimpsonRule.h"
+#include "PropagatorCode.h"
 
 /**
  * @brief Construct memory-efficient propagator computation.
@@ -478,6 +479,10 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                 }
 
                 // Advance propagator successively
+                // Get ds_index from the key
+                int ds_index = PropagatorCode::get_ds_index_from_key(key);
+                if (ds_index < 1) ds_index = 1;  // Default to global ds
+
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
@@ -490,7 +495,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                     propagator_solver->advance_propagator(
                             q_pair[prev],
                             q_pair[next],
-                            monomer_type, q_mask);
+                            monomer_type, q_mask, ds_index);
 
                     #ifndef NDEBUG
                     propagator_finished[key][n+1] = true;
@@ -629,7 +634,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             
             T *_phi = phi_solvent[s];
-            T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
+            T *_exp_dw = propagator_solver->exp_dw[1][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -654,6 +659,8 @@ std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(
     try
     {
         const double *q_mask = this->cb->get_mask();
+        int ds_index = PropagatorCode::get_ds_index_from_key(key);
+        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // Output array of pointers (will contain mix of checkpoint pointers and q_recal pointers)
         std::vector<T*> q_out(N_RIGHT + 1, nullptr);
@@ -710,7 +717,7 @@ std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(
                         "N_RIGHT=" + std::to_string(N_RIGHT) + ", n=" + std::to_string(n) + ". " +
                         "This function should only be called with N_RIGHT <= checkpoint_interval.");
                 }
-                propagator_solver->advance_propagator(q_prev, q_recal[ws_idx], monomer_type, q_mask);
+                propagator_solver->advance_propagator(q_prev, q_recal[ws_idx], monomer_type, q_mask, ds_index);
                 q_out[n] = q_recal[ws_idx];
                 q_prev = q_recal[ws_idx];
                 ws_idx++;
@@ -744,6 +751,12 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
+
+        // Get ds_index from keys (left and right should have the same ds_index for the same block)
+        int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
+        if (ds_index_left < 1) ds_index_left = 1;
+        int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
+        if (ds_index_right < 1) ds_index_right = 1;
 
         // Initialize phi to zero
         for(int i=0; i<M; i++)
@@ -824,7 +837,7 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, ds_index_left);
                     }
                     q_prev = q_curr;
                     ping_pong = 1 - ping_pong;
@@ -840,7 +853,7 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(q_prev, q_recal[0], monomer_type, q_mask);
+                    propagator_solver->advance_propagator(q_prev, q_recal[0], monomer_type, q_mask, ds_index_left);
                 }
                 q_prev = q_recal[0];
             }
@@ -859,7 +872,7 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                    propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, ds_index_left);
                 }
                 q_prev = q_curr;
             }
@@ -883,7 +896,7 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                     while(current_n_right < n)
                     {
                         T* q_out = this->q_pair[right_next_idx];
-                        propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask, ds_index_right);
                         q_right_prev = q_out;
                         q_right_curr = q_out;
                         std::swap(right_prev_idx, right_next_idx);
@@ -1137,6 +1150,12 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
+            // Get ds_index from keys
+            int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
+            if (ds_index_left < 1) ds_index_left = 1;
+            int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
+            if (ds_index_right < 1) ds_index_right = 1;
+
             // If there is no segment
             if(N_RIGHT == 0)
                 continue;
@@ -1219,7 +1238,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                         }
                         else
                         {
-                            propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                            propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, ds_index_left);
                         }
                         q_prev_left = q_curr_left;
                         ping_pong = 1 - ping_pong;
@@ -1234,7 +1253,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask, ds_index_left);
                     }
                     q_prev_left = q_recal[0];
                 }
@@ -1253,7 +1272,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, ds_index_left);
                     }
                     q_prev_left = q_curr_left;
                 }
@@ -1274,7 +1293,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                         while(current_n_right < n)
                         {
                             T* q_out = this->q_pair[right_next_idx];
-                            propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                            propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask, ds_index_right);
                             q_right_prev = q_out;
                             q_right_curr = q_out;
                             std::swap(right_prev_idx, right_next_idx);
@@ -1377,6 +1396,8 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
             // Recalculate from checkpoint to position n
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
             const double *q_mask = this->cb->get_mask();
+            int ds_index = PropagatorCode::get_ds_index_from_key(dep);
+            if (ds_index < 1) ds_index = 1;
 
             // Load checkpoint
             T* q_checkpoint = propagator_at_check_point[std::make_tuple(dep, check_pos)];
@@ -1399,7 +1420,7 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
                 else
                 {
                     T* q_curr = q_recal[ping_pong];
-                    propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                    propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, ds_index);
                     q_prev = q_curr;
                     ping_pong = 1 - ping_pong;
                 }
@@ -1445,6 +1466,12 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
         const int N_LEFT         = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
         int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
         int n_propagators        = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
+
+        // Get ds_index from keys
+        int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
+        if (ds_index_left < 1) ds_index_left = 1;
+        int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
+        if (ds_index_right < 1) ds_index_right = 1;
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;
@@ -1525,7 +1552,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, ds_index_left);
                     }
                     q_prev_left = q_curr_left;
                     ping_pong = 1 - ping_pong;
@@ -1540,7 +1567,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask);
+                    propagator_solver->advance_propagator(q_prev_left, q_recal[0], monomer_type, q_mask, ds_index_left);
                 }
                 q_prev_left = q_recal[0];
             }
@@ -1559,7 +1586,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                    propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, ds_index_left);
                 }
                 q_prev_left = q_curr_left;
             }
@@ -1580,7 +1607,7 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
                     while(current_n_right < n)
                     {
                         T* q_out = this->q_pair[right_next_idx];
-                        propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                        propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask, ds_index_right);
                         q_right_prev = q_out;
                         q_right_curr = q_out;
                         std::swap(right_prev_idx, right_next_idx);

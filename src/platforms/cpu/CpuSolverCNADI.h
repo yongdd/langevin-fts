@@ -313,9 +313,12 @@ public:
      * @param q_out       Output propagator
      * @param monomer_type Monomer type
      * @param q_mask      Optional mask (currently ignored for CN-ADI)
+     * @param ds_index    Index for the ds value (1-based, default: 1 for global ds)
+     *
+     * @note CN-ADI currently uses global ds for all blocks.
      */
     void advance_propagator(
-                double *q_in, double *q_out, std::string monomer_type, const double *q_mask) override;
+                double *q_in, double *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) override;
 
     /**
      * @brief Half-bond step (not used for continuous chains).

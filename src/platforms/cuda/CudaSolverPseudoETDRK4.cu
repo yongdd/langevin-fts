@@ -91,15 +91,17 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create exp_dw, exp_dw_half, and w_field for each monomer type
+        // ETDRK4 uses only global ds (ds_index=1)
+        // Create exp_dw, exp_dw_half, and w_field for ds_index=1 and each monomer type
+        const int ds_idx = 1;  // ETDRK4 uses global ds only
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->d_exp_dw     [monomer_type] = nullptr;
-            this->d_exp_dw_half[monomer_type] = nullptr;
+            this->d_exp_dw     [ds_idx][monomer_type] = nullptr;
+            this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
             this->d_w_field    [monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(T)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [ds_idx][monomer_type], sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
             gpu_error_check(cudaMalloc((void**)&this->d_w_field    [monomer_type], sizeof(T)*M));
         }
 
@@ -303,11 +305,13 @@ CudaSolverPseudoETDRK4<T>::~CudaSolverPseudoETDRK4()
         }
     }
 
-    // Free Boltzmann factors
-    for(const auto& item: this->d_exp_dw)
-        cudaFree(item.second);
-    for(const auto& item: this->d_exp_dw_half)
-        cudaFree(item.second);
+    // Free Boltzmann factors (nested maps: d_exp_dw[ds_index][monomer_type])
+    for(const auto& ds_entry: this->d_exp_dw)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_exp_dw_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
     for(const auto& item: this->d_w_field)
         cudaFree(item.second);
 
@@ -410,11 +414,8 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
         const int M = cb->get_total_grid();
         const double ds = this->molecules->get_ds();
 
-        for(const auto& item: w_input)
-        {
-            if( this->d_exp_dw.find(item.first) == this->d_exp_dw.end())
-                throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");
-        }
+        // ETDRK4 uses only global ds (ds_index=1)
+        const int ds_idx = 1;
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -432,6 +433,9 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
             std::string monomer_type = item.first;
             const T *w = item.second;
 
+            if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+
             // Copy raw w field for ETDRK4
             gpu_error_check(cudaMemcpyAsync(
                 this->d_w_field[monomer_type], w,
@@ -439,20 +443,20 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
 
             // Copy for exp computation
             gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw     [monomer_type], w,
+                this->d_exp_dw     [ds_idx][monomer_type], w,
                 sizeof(T)*M, cudaMemcpyInputToDevice));
             gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw_half[monomer_type], w,
+                this->d_exp_dw_half[ds_idx][monomer_type], w,
                 sizeof(T)*M, cudaMemcpyInputToDevice));
 
             // Compute d_exp_dw and d_exp_dw_half
             ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw[monomer_type],      this->d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
+                (this->d_exp_dw[ds_idx][monomer_type],      this->d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*ds, M);
             ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw_half[monomer_type], this->d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
-            gpu_error_check(cudaPeekAtLastError());
-            gpu_error_check(cudaDeviceSynchronize());
+                (this->d_exp_dw_half[ds_idx][monomer_type], this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*ds, M);
         }
+        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
     {
@@ -465,8 +469,10 @@ template <typename T>
 void CudaSolverPseudoETDRK4<T>::advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask)
+        std::string monomer_type, double *d_q_mask, [[maybe_unused]] int ds_index)
 {
+    // Note: ETDRK4 currently uses only global ds (ds_index=1)
+    // Per-ds support would require computing ETDRK4 coefficients for each ds value
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();

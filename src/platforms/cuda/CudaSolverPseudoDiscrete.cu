@@ -87,12 +87,14 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create exp_dw
+        // Discrete chains use only global ds (ds_index=1)
+        // Create exp_dw for ds_index=1 and each monomer type
+        const int ds_idx = 1;  // Discrete chains use global ds only
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->d_exp_dw   [monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw[monomer_type], sizeof(T)*M));
+            this->d_exp_dw[ds_idx][monomer_type] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw[ds_idx][monomer_type], sizeof(T)*M));
         }
 
         // Create FFT plan
@@ -185,8 +187,10 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
         cufftDestroy(plan_bak_two[i]);
     }
 
-    for(const auto& item: this->d_exp_dw)
-        cudaFree(item.second);
+    // Free nested maps: d_exp_dw[ds_index][monomer_type]
+    for(const auto& ds_entry: this->d_exp_dw)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
     // For pseudo-spectral: advance_propagator()
     for(int i=0; i<n_streams; i++)
@@ -224,14 +228,11 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-        const int M = cb->get_total_grid();;
+        const int M = cb->get_total_grid();
         const double ds = this->molecules->get_ds();
 
-        for(const auto& item: w_input)
-        {
-            if( this->d_exp_dw.find(item.first) == this->d_exp_dw.end())
-                throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
-        }
+        // Discrete chains use only global ds (ds_index=1)
+        const int ds_idx = 1;
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -243,24 +244,26 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        // Compute exp_dw and exp_dw_half
+        // Compute exp_dw
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
             const T *w = item.second;
 
+            if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpy(
-                this->d_exp_dw[monomer_type], w,      
+                this->d_exp_dw[ds_idx][monomer_type], w,
                 sizeof(T)*M, cudaMemcpyInputToDevice));
 
-            // Compute exp_dw and exp_dw_half
+            // Compute exp_dw: exp(-w * ds)
             ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw[monomer_type],
-                 this->d_exp_dw[monomer_type], 1.0, -1.0*ds, M);
-
-            gpu_error_check(cudaDeviceSynchronize());
+                (this->d_exp_dw[ds_idx][monomer_type],
+                 this->d_exp_dw[ds_idx][monomer_type], 1.0, -1.0*ds, M);
         }
+        gpu_error_check(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
     {
@@ -272,18 +275,20 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
     const int STREAM,
     CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
     std::string monomer_type,
-    double *d_q_mask)
+    double *d_q_mask, [[maybe_unused]] int ds_index)
 {
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_total_grid();;
+        const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[monomer_type];
-        const double* _d_boltz_bond = pseudo->get_boltz_bond(monomer_type);
+        // Discrete chains always use ds_index=1 (global ds)
+        const int ds_idx = 1;
+        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[ds_idx][monomer_type];
+        const double* _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, ds_idx);
 
         // Execute a forward FFT
         if constexpr (std::is_same<T, double>::value)

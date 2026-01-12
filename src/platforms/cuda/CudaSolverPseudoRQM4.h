@@ -160,11 +160,12 @@ public:
      * @param d_q_out     Output propagator (device)
      * @param monomer_type Monomer type
      * @param d_q_mask    Optional mask (device, nullptr if none)
+     * @param ds_index    Index for ds value (1-based, for per-block ds support)
      */
     void advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask) override;
+        std::string monomer_type, double *d_q_mask, int ds_index = 1) override;
 
     /** @brief Half-bond step (empty for continuous chains). */
     void advance_propagator_half_bond_step(
