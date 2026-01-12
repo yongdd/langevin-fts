@@ -133,7 +133,7 @@ public :
     /**
      * @brief Create real-space propagator solver.
      *
-     * Creates CpuSolverRealSpace using Crank-Nicolson finite differences.
+     * Creates CpuSolverCNADI using Crank-Nicolson finite differences.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

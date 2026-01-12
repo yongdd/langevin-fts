@@ -21,7 +21,7 @@
  *
  * @see CpuSolverPseudoRQM4 for continuous chain pseudo-spectral
  * @see CpuSolverPseudoDiscrete for discrete chain pseudo-spectral
- * @see CpuSolverRealSpace for finite difference method
+ * @see CpuSolverCNADI for finite difference method
  */
 
 #ifndef CPU_SOLVER_H_

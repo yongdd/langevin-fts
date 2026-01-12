@@ -1,6 +1,6 @@
 /**
- * @file CudaSolverRealSpace.cu
- * @brief CUDA real-space solver using CN-ADI method.
+ * @file CudaSolverCNADI.cu
+ * @brief CUDA solver using CN-ADI method.
  *
  * Implements propagator advancement for continuous chains using finite
  * differences instead of FFT. Supports non-periodic boundary conditions
@@ -26,7 +26,7 @@
  * - REFLECTING: Zero flux (Neumann) boundary
  * - ABSORBING: Zero value (Dirichlet) boundary
  *
- * **Note:** Stress computation not yet supported for real-space method.
+ * **Note:** Stress computation not yet supported for CN-ADI method.
  *
  * @see FiniteDifference for matrix construction
  * @see CudaComputationContinuous for integration
@@ -35,9 +35,9 @@
 #include <iostream>
 #include <cmath>
 #include <numbers>
-#include "CudaSolverRealSpace.h"
+#include "CudaSolverCNADI.h"
 
-CudaSolverRealSpace::CudaSolverRealSpace(
+CudaSolverCNADI::CudaSolverCNADI(
     ComputationBox<double>* cb,
     Molecules *molecules,
     int n_streams,
@@ -227,7 +227,7 @@ CudaSolverRealSpace::CudaSolverRealSpace(
         throw_without_line_number(exc.what());
     }
 }
-CudaSolverRealSpace::~CudaSolverRealSpace()
+CudaSolverCNADI::~CudaSolverCNADI()
 {
     const int DIM = this->dim;
 
@@ -322,7 +322,7 @@ CudaSolverRealSpace::~CudaSolverRealSpace()
         cudaFree(d_offset);
     }
 }
-void CudaSolverRealSpace::update_laplacian_operator()
+void CudaSolverCNADI::update_laplacian_operator()
 {
     try
     {
@@ -398,7 +398,7 @@ void CudaSolverRealSpace::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, const double*> w_input)
+void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const double*> w_input)
 {
     try{
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -460,7 +460,7 @@ void CudaSolverRealSpace::update_dw(std::string device, std::map<std::string, co
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator(
+void CudaSolverCNADI::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
     std::string monomer_type, double *d_q_mask)
@@ -597,7 +597,7 @@ void CudaSolverRealSpace::advance_propagator(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_3d(
+void CudaSolverCNADI::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -702,7 +702,7 @@ void CudaSolverRealSpace::advance_propagator_3d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_2d(
+void CudaSolverCNADI::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -780,7 +780,7 @@ void CudaSolverRealSpace::advance_propagator_2d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_1d(
+void CudaSolverCNADI::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out, std::string monomer_type)
@@ -821,7 +821,7 @@ void CudaSolverRealSpace::advance_propagator_1d(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_3d_step(
+void CudaSolverCNADI::advance_propagator_3d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -917,7 +917,7 @@ void CudaSolverRealSpace::advance_propagator_3d_step(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_2d_step(
+void CudaSolverCNADI::advance_propagator_2d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -987,7 +987,7 @@ void CudaSolverRealSpace::advance_propagator_2d_step(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::advance_propagator_1d_step(
+void CudaSolverCNADI::advance_propagator_1d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -1025,14 +1025,14 @@ void CudaSolverRealSpace::advance_propagator_1d_step(
         throw_without_line_number(exc.what());
     }
 }
-void CudaSolverRealSpace::compute_single_segment_stress(
+void CudaSolverCNADI::compute_single_segment_stress(
     [[maybe_unused]] const int STREAM,
     [[maybe_unused]] double *d_q_pair, [[maybe_unused]] double *d_segment_stress,
     [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
     try
     {
-        throw_with_line_number("Currently, the real-space method does not support stress computation.");
+        throw_with_line_number("Currently, the CN-ADI method does not support stress computation.");
     }
     catch(std::exception& exc)
     {

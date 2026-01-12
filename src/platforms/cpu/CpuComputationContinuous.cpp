@@ -30,7 +30,7 @@
  * - CpuComputationContinuous<std::complex<double>>: Complex fields
  *
  * @see CpuSolverPseudoRQM4 for pseudo-spectral solver
- * @see CpuSolverRealSpace for real-space solver
+ * @see CpuSolverCNADI for real-space solver
  */
 
 #include <cmath>
@@ -40,7 +40,7 @@
 #include "CpuComputationContinuous.h"
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
-#include "CpuSolverRealSpace.h"
+#include "CpuSolverCNADI.h"
 #include "SimpsonRule.h"
 
 /**
@@ -87,7 +87,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
             if constexpr (std::is_same<T, double>::value)
             {
                 bool use_4th_order = (numerical_method == "cn-adi4");
-                this->propagator_solver = new CpuSolverRealSpace(cb, molecules, use_4th_order);
+                this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

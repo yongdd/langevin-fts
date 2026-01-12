@@ -28,7 +28,7 @@
  * @note This is a beta feature. The pseudo-spectral method is generally
  *       preferred for periodic systems due to higher accuracy.
  *
- * @see CpuSolverRealSpace, CudaSolverRealSpace for implementations
+ * @see CpuSolverCNADI, CudaSolverCNADI for implementations
  * @see Pseudo for the pseudo-spectral alternative
  *
  * @example

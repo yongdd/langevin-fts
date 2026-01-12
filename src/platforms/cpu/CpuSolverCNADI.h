@@ -1,8 +1,8 @@
 /**
- * @file CpuSolverRealSpace.h
- * @brief Real-space finite difference solver for continuous chains on CPU.
+ * @file CpuSolverCNADI.h
+ * @brief CN-ADI finite difference solver for continuous chains on CPU.
  *
- * This header provides CpuSolverRealSpace, which implements the CN-ADI
+ * This header provides CpuSolverCNADI, which implements the CN-ADI
  * (Crank-Nicolson Alternating Direction Implicit) finite difference method
  * for solving the modified diffusion equation.
  * Unlike pseudo-spectral methods, this supports non-periodic boundary conditions.
@@ -42,8 +42,8 @@
  * @see FiniteDifference for coefficient generation
  */
 
-#ifndef CPU_SOLVER_REAL_SPACE_H_
-#define CPU_SOLVER_REAL_SPACE_H_
+#ifndef CPU_SOLVER_CNADI_H_
+#define CPU_SOLVER_CNADI_H_
 
 #include <string>
 #include <vector>
@@ -56,8 +56,8 @@
 #include "FiniteDifference.h"
 
 /**
- * @class CpuSolverRealSpace
- * @brief CPU real-space solver using CN-ADI (Crank-Nicolson ADI).
+ * @class CpuSolverCNADI
+ * @brief CPU solver using CN-ADI (Crank-Nicolson ADI).
  *
  * Implements the CN-ADI scheme for solving the modified diffusion equation
  * with various boundary conditions. Supports CN-ADI2 (2nd order, default)
@@ -93,14 +93,14 @@
  *
  * @example
  * @code
- * CpuSolverRealSpace solver(cb, molecules);
+ * CpuSolverCNADI solver(cb, molecules);
  * solver.update_dw(w_fields);
  *
  * // Advance with reflecting boundaries
  * solver.advance_propagator(q_in, q_out, "A", nullptr);
  * @endcode
  */
-class CpuSolverRealSpace : public CpuSolver<double>
+class CpuSolverCNADI : public CpuSolver<double>
 {
 private:
     ComputationBox<double>* cb;  ///< Computation box for grid/boundary info
@@ -233,7 +233,7 @@ private:
 
 public:
     /**
-     * @brief Construct real-space solver.
+     * @brief Construct CN-ADI solver.
      *
      * Allocates tridiagonal coefficient arrays for each direction
      * and each monomer type.
@@ -243,12 +243,12 @@ public:
      * @param use_4th_order Use CN-ADI4 (4th order accuracy via Richardson extrapolation)
      *                      instead of CN-ADI2 (2nd order, default)
      */
-    CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order = false);
+    CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order = false);
 
     /**
      * @brief Destructor. Frees tridiagonal coefficient arrays.
      */
-    ~CpuSolverRealSpace();
+    ~CpuSolverCNADI();
 
     /**
      * @brief Update finite difference coefficients.
@@ -312,7 +312,7 @@ public:
      * @param q_in        Input propagator
      * @param q_out       Output propagator
      * @param monomer_type Monomer type
-     * @param q_mask      Optional mask (currently ignored for real-space)
+     * @param q_mask      Optional mask (currently ignored for CN-ADI)
      */
     void advance_propagator(
                 double *q_in, double *q_out, std::string monomer_type, const double *q_mask) override;
@@ -327,7 +327,7 @@ public:
     /**
      * @brief Compute stress from one segment.
      *
-     * @warning Not yet implemented for real-space method.
+     * @warning Not yet implemented for CN-ADI method.
      *
      * @return Empty vector (stress calculation not supported)
      */

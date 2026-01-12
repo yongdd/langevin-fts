@@ -157,7 +157,7 @@ public :
     /**
      * @brief Create CUDA real-space propagator solver.
      *
-     * Creates CudaSolverRealSpace using GPU-parallelized tridiagonal solvers.
+     * Creates CudaSolverCNADI using GPU-parallelized tridiagonal solvers.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container

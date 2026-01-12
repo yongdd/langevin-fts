@@ -178,7 +178,7 @@ PropagatorComputation<T>                      [Abstract Base]
 
 | Model | Propagator Equation | Solver Method |
 |-------|---------------------|---------------|
-| Continuous | ∂q/∂s = (b²/6)∇²q - wq | Richardson extrapolation |
+| Continuous | $\partial q/\partial s = (b^2/6)\nabla^2 q - wq$ | Richardson extrapolation |
 | Discrete | Recursive integral (Chapman-Kolmogorov) | Pseudo-spectral (bond convolution) |
 
 #### Continuous Chain Model
@@ -194,9 +194,9 @@ This is solved using 4th-order Richardson extrapolation with the operator splitt
 This library implements the discrete chain model as described in Park et al. (2019). Unlike continuous chains that solve a differential equation, discrete chains use **recursive integral equations** based on the Chapman-Kolmogorov equation.
 
 **Units and Conventions:**
-- **Unit length**: R₀ = aN^(1/2), where a is the statistical segment length and N is the polymerization index
-- **Contour step size**: Δs = 1/N
-- **Segment positions**: s = Δs, 2Δs, ..., 1 (N segments total)
+- **Unit length**: $R_0 = aN^{1/2}$, where $a$ is the statistical segment length and $N$ is the polymerization index
+- **Contour step size**: $\Delta s = 1/N$
+- **Segment positions**: $s = \Delta s, 2\Delta s, \ldots, 1$ ($N$ segments total)
 
 ```
 Discrete Chain Model:
@@ -211,37 +211,37 @@ Discrete Chain Model:
     - Segment positions: s = Δs, 2Δs, 3Δs, ..., 1
 ```
 
+Note: In this diagram, $\Delta s = 1/N$.
+
 **Propagator Evolution (N-1 Bond Model):**
 
-The propagator evolution from segment i to i+1 follows two steps:
+The propagator evolution from segment $i$ to $i+1$ follows two steps:
 
-```
-q*(r)    = ∫ g(R) q_i(r - R) dR        [1] Bond convolution
-q_{i+1}(r) = exp(-w(r)·Δs) · q*(r)     [2] Full-segment Boltzmann weight
-```
+1. **Bond convolution:**
+$$q^*(\mathbf{r}) = \int g(\mathbf{R}) \, q_i(\mathbf{r} - \mathbf{R}) \, d\mathbf{R}$$
 
-with initial condition: q_1(r) = exp(-w(r)·Δs)
+2. **Full-segment Boltzmann weight:**
+$$q_{i+1}(\mathbf{r}) = \exp(-w(\mathbf{r}) \cdot \Delta s) \cdot q^*(\mathbf{r})$$
 
-**Bond Function g(R):**
+with initial condition: $q_1(\mathbf{r}) = \exp(-w(\mathbf{r}) \cdot \Delta s)$
+
+**Bond Function $g(\mathbf{R})$:**
 
 For the bead-spring model used in this library:
-```
-g(R) = (3/2πa²)^(3/2) exp(-3|R|²/2a²)
-```
+
+$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
 
 **Pseudo-Spectral Implementation:**
 
 The bond convolution (step 1) is computed efficiently in Fourier space:
-```
-q̃*(k) = g̃(k) · q̃_i(k)
-```
+
+$$\hat{q}^*(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}_i(\mathbf{k})$$
 
 where the Fourier transform of the bond function is:
-```
-g̃(k) = exp(-a²|k|²/6)
-```
 
-This makes the discrete chain SCFT as fast as the continuous chain SCFT with O(M log M) complexity per step.
+$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^2}{6}\right)$$
+
+This makes the discrete chain SCFT as fast as the continuous chain SCFT with $O(M \log M)$ complexity per step.
 
 ### Memory Modes (GPU)
 
@@ -284,7 +284,7 @@ CpuSolver<T>                                  [Abstract Base]
         │           ├── advance_propagator(): split-step
         │           └── advance_propagator_half_bond_step()
         │
-        └── CpuSolverRealSpace<T>             [Finite Difference]
+        └── CpuSolverCNADI<T>                  [Finite Difference]
             └── CN-ADI with tridiagonal solver
 ```
 
