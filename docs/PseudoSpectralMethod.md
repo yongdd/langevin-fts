@@ -391,8 +391,8 @@ With $M = 32$ points on a circle of radius $r = 1$, this achieves approximately 
 
 | Metric | RQM4 | ETDRK4 |
 |--------|------|--------|
-| Max relative difference | — | 3.16×10⁻⁵ |
-| After 10 steps | — | 2.91×10⁻⁴ |
+| Max relative difference | — | $3.16 \times 10^{-5}$ |
+| After 10 steps | — | $2.91 \times 10^{-4}$ |
 
 Both methods produce nearly identical results, confirming equivalent 4th-order accuracy.
 

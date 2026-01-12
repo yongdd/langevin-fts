@@ -102,7 +102,7 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuSolverPseudoRQM4.cpp
         src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
-        src/platforms/cpu/CpuSolverRealSpace.cpp
+        src/platforms/cpu/CpuSolverCNADI.cpp
         src/platforms/cpu/CpuComputationBase.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
@@ -133,7 +133,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoETDRK4.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
-        src/platforms/cuda/CudaSolverRealSpace.cu
+        src/platforms/cuda/CudaSolverCNADI.cu
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu

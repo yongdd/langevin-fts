@@ -1,8 +1,8 @@
 /**
- * @file CudaSolverRealSpace.h
- * @brief GPU real-space solver using CN-ADI finite difference.
+ * @file CudaSolverCNADI.h
+ * @brief GPU solver using CN-ADI finite difference.
  *
- * This header provides CudaSolverRealSpace, the CUDA implementation
+ * This header provides CudaSolverCNADI, the CUDA implementation
  * of the CN-ADI (Crank-Nicolson Alternating Direction Implicit) finite
  * difference method for propagator computation. Uses parallel tridiagonal
  * solves on GPU.
@@ -32,12 +32,12 @@
  * which are not available in pseudo-spectral methods.
  *
  * @see CudaSolver for the abstract interface
- * @see CpuSolverRealSpace for CPU version
+ * @see CpuSolverCNADI for CPU version
  * @see FiniteDifference for coefficient computation
  */
 
-#ifndef CUDA_SOLVER_REAL_SPACE_H_
-#define CUDA_SOLVER_REAL_SPACE_H_
+#ifndef CUDA_SOLVER_CNADI_H_
+#define CUDA_SOLVER_CNADI_H_
 
 #include <string>
 #include <vector>
@@ -239,8 +239,8 @@ __global__ void tridiagonal_periodic(
     const int REPEAT, const int INTERVAL, const int M);
 
 /**
- * @class CudaSolverRealSpace
- * @brief GPU real-space solver using Crank-Nicolson finite difference.
+ * @class CudaSolverCNADI
+ * @brief GPU solver using CN-ADI (Crank-Nicolson ADI) finite difference.
  *
  * Implements propagator advancement using ADI (Alternating Direction Implicit)
  * method with parallel tridiagonal solves on GPU. Supports non-periodic
@@ -267,10 +267,10 @@ __global__ void tridiagonal_periodic(
  * - d_offset_xy, d_offset_yz, d_offset_xz: 3D sweeps
  * - d_offset_x, d_offset_y: 2D sweeps
  *
- * @note Only supports double type (not complex) as real-space method
+ * @note Only supports double type (not complex) as CN-ADI method
  *       is primarily for continuous chains with non-periodic BCs.
  */
-class CudaSolverRealSpace : public CudaSolver<double>
+class CudaSolverCNADI : public CudaSolver<double>
 {
 private:
     ComputationBox<double>* cb;  ///< Computation box
@@ -399,7 +399,7 @@ private:
 
 public:
     /**
-     * @brief Construct GPU real-space solver.
+     * @brief Construct GPU CN-ADI solver.
      *
      * @param cb                  Computation box
      * @param molecules           Molecules container
@@ -409,13 +409,13 @@ public:
      * @param use_4th_order       Use CN-ADI4 (4th order accuracy via Richardson
      *                            extrapolation) instead of CN-ADI2 (2nd order, default)
      */
-    CudaSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules,
+    CudaSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
         int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage, bool use_4th_order = false);
 
     /**
      * @brief Destructor. Frees GPU resources.
      */
-    ~CudaSolverRealSpace();
+    ~CudaSolverCNADI();
 
     /** @brief Update finite difference coefficients for new box. */
     void update_laplacian_operator() override;
@@ -439,7 +439,7 @@ public:
         double *d_q_in, double *d_q_out,
         std::string monomer_type, double *d_q_mask) override;
 
-    /** @brief Half-bond step (not applicable for real-space continuous). */
+    /** @brief Half-bond step (not applicable for CN-ADI continuous). */
     void advance_propagator_half_bond_step(
         const int, double *, double *, std::string) override {};
 
@@ -450,7 +450,7 @@ public:
      * @param d_q_pair          Propagator product (device)
      * @param d_segment_stress  Output stress (device)
      * @param monomer_type      Monomer type
-     * @param is_half_bond_length Ignored for real-space
+     * @param is_half_bond_length Ignored for CN-ADI
      */
     void compute_single_segment_stress(
         const int STREAM,

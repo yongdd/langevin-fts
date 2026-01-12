@@ -3,7 +3,7 @@
 #include <numbers>
 #include <algorithm>
 #include <CudaCommon.h>
-#include "CudaSolverRealSpace.h"
+#include "CudaSolverCNADI.h"
 
 int main()
 {

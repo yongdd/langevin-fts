@@ -1,6 +1,6 @@
 /**
- * @file CpuSolverRealSpace.cpp
- * @brief CPU real-space CN-ADI solver for chain propagators.
+ * @file CpuSolverCNADI.cpp
+ * @brief CPU CN-ADI solver for chain propagators.
  *
  * Implements the CN-ADI (Crank-Nicolson Alternating Direction Implicit)
  * finite difference method for solving the modified diffusion equation
@@ -37,10 +37,10 @@
 #include <cmath>
 #include <numbers>
 
-#include "CpuSolverRealSpace.h"
+#include "CpuSolverCNADI.h"
 
 /**
- * @brief Construct real-space solver for continuous chains.
+ * @brief Construct CN-ADI solver for continuous chains.
  *
  * Allocates tridiagonal matrix coefficients for each dimension
  * and monomer type.
@@ -52,7 +52,7 @@
  *
  * @throws Exception if discrete chain model is specified
  */
-CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order)
+CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules, bool use_4th_order)
 {
     try{
         this->cb = cb;
@@ -115,7 +115,7 @@ CpuSolverRealSpace::CpuSolverRealSpace(ComputationBox<double>* cb, Molecules *mo
         throw_without_line_number(exc.what());
     }
 }
-CpuSolverRealSpace::~CpuSolverRealSpace()
+CpuSolverCNADI::~CpuSolverCNADI()
 {
     // exp_dw, exp_dw_half, exp_dw_quarter vectors are automatically cleaned up
 
@@ -163,15 +163,15 @@ CpuSolverRealSpace::~CpuSolverRealSpace()
     for(const auto& item: zh_half)
         delete[] item.second;
 }
-int CpuSolverRealSpace::max_of_two(int x, int y)
+int CpuSolverCNADI::max_of_two(int x, int y)
 {
    return (x > y) ? x : y;
 }
-int CpuSolverRealSpace::min_of_two(int x, int y)
+int CpuSolverCNADI::min_of_two(int x, int y)
 {
    return (x < y) ? x : y;
 }
-void CpuSolverRealSpace::update_laplacian_operator()
+void CpuSolverCNADI::update_laplacian_operator()
 {
     try
     {
@@ -206,7 +206,7 @@ void CpuSolverRealSpace::update_laplacian_operator()
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverRealSpace::update_dw(std::map<std::string, const double*> w_input)
+void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
@@ -233,7 +233,7 @@ void CpuSolverRealSpace::update_dw(std::map<std::string, const double*> w_input)
         }
     }
 }
-void CpuSolverRealSpace::advance_propagator(
+void CpuSolverCNADI::advance_propagator(
     double *q_in, double *q_out, std::string monomer_type, const double *q_mask)
 {
     try
@@ -358,7 +358,7 @@ void CpuSolverRealSpace::advance_propagator(
     }
 }
 
-void CpuSolverRealSpace::advance_propagator_step(
+void CpuSolverCNADI::advance_propagator_step(
     double *q_in, double *q_out,
     const double *exp_dw_ptr,
     double *_xl, double *_xd, double *_xh,
@@ -396,7 +396,7 @@ void CpuSolverRealSpace::advance_propagator_step(
             q_out[i] *= q_mask[i];
     }
 }
-void CpuSolverRealSpace::advance_propagator_3d(
+void CpuSolverCNADI::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -546,7 +546,7 @@ void CpuSolverRealSpace::advance_propagator_3d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverRealSpace::advance_propagator_2d(
+void CpuSolverCNADI::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -643,7 +643,7 @@ void CpuSolverRealSpace::advance_propagator_2d(
         throw_without_line_number(exc.what());
     }
 }
-void CpuSolverRealSpace::advance_propagator_1d(
+void CpuSolverCNADI::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out, std::string monomer_type)
 {
@@ -688,7 +688,7 @@ void CpuSolverRealSpace::advance_propagator_1d(
 // Step methods with explicit coefficient parameters for CN-ADI4
 // ============================================================================
 
-void CpuSolverRealSpace::advance_propagator_3d_step(
+void CpuSolverCNADI::advance_propagator_3d_step(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out,
     double *_xl, double *_xd, double *_xh,
@@ -830,7 +830,7 @@ void CpuSolverRealSpace::advance_propagator_3d_step(
     }
 }
 
-void CpuSolverRealSpace::advance_propagator_2d_step(
+void CpuSolverCNADI::advance_propagator_2d_step(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out,
     double *_xl, double *_xd, double *_xh,
@@ -919,7 +919,7 @@ void CpuSolverRealSpace::advance_propagator_2d_step(
     }
 }
 
-void CpuSolverRealSpace::advance_propagator_1d_step(
+void CpuSolverCNADI::advance_propagator_1d_step(
     std::vector<BoundaryCondition> bc,
     double *q_in, double *q_out,
     double *_xl, double *_xd, double *_xh)
@@ -956,7 +956,7 @@ void CpuSolverRealSpace::advance_propagator_1d_step(
     }
 }
 
-std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
+std::vector<double> CpuSolverCNADI::compute_single_segment_stress(
     [[maybe_unused]] double *q_1, [[maybe_unused]] double *q_2,
     [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {
@@ -965,7 +965,7 @@ std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
         const int DIM  = this->cb->get_dim();
         std::vector<double> stress(DIM); 
 
-        throw_with_line_number("Currently, the real-space method does not support stress computation.");
+        throw_with_line_number("Currently, the CN-ADI method does not support stress computation.");
         
         return stress;
     }
@@ -976,7 +976,7 @@ std::vector<double> CpuSolverRealSpace::compute_single_segment_stress(
 }
 
 // This method solves CX=Y, where C is a tridiagonal matrix
-void CpuSolverRealSpace::tridiagonal(
+void CpuSolverCNADI::tridiagonal(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {
@@ -1005,7 +1005,7 @@ void CpuSolverRealSpace::tridiagonal(
 }
 
 // This method solves CX=Y, where C is a near-tridiagonal matrix with periodic boundary condition
-void CpuSolverRealSpace::tridiagonal_periodic(
+void CpuSolverCNADI::tridiagonal_periodic(
     const double *xl, const double *xd, const double *xh,
     double *x, const int INTERVAL, const double *d, const int M)
 {

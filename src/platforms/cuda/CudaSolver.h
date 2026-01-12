@@ -19,7 +19,7 @@
  *
  * @see CudaSolverPseudoRQM4 for continuous chain pseudo-spectral
  * @see CudaSolverPseudoDiscrete for discrete chain pseudo-spectral
- * @see CudaSolverRealSpace for finite difference method
+ * @see CudaSolverCNADI for finite difference method
  */
 
 #ifndef CUDA_SOLVER_H_
