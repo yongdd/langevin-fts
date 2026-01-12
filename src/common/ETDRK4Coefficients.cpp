@@ -51,12 +51,15 @@ std::complex<double> beta1_stable(std::complex<double> z) {
  * @brief ETDRK4 coefficient beta_2 = 2(2 + z + e^z(-2 + z))/z^3.
  *
  * Coefficient for (N_a + N_b) in the final ETDRK4 combination step.
- * Limit as z->0: beta_2 -> 2/3
+ * Limit as z->0: beta_2 -> 1/3
+ *
+ * Note: f2 = h*beta_2 is applied to (N_a + N_b), so each of N_a and N_b
+ * gets weight f2, giving effective RK4 weights of 1/3 each at z=0.
  */
 std::complex<double> beta2_stable(std::complex<double> z) {
     if (std::abs(z) < 1e-4) {
-        // Taylor series: 2/3 + z/3 + z^2/10 + z^3/36 + z^4/168 + ...
-        return 2.0/3.0 + z/3.0 + z*z/10.0 + z*z*z/36.0 + z*z*z*z/168.0;
+        // Taylor series: 1/3 + z/6 + z^2/20 + z^3/90 + z^4/504 + ...
+        return 1.0/3.0 + z/6.0 + z*z/20.0 + z*z*z/90.0 + z*z*z*z/504.0;
     }
     std::complex<double> ez = std::exp(z);
     return 2.0*(2.0 + z + ez*(-2.0 + z)) / (z*z*z);
@@ -70,8 +73,8 @@ std::complex<double> beta2_stable(std::complex<double> z) {
  */
 std::complex<double> beta3_stable(std::complex<double> z) {
     if (std::abs(z) < 1e-4) {
-        // Taylor series: 1/6 + z/6 + z^2/20 + z^3/90 + z^4/504 + ...
-        return 1.0/6.0 + z/6.0 + z*z/20.0 + z*z*z/90.0 + z*z*z*z/504.0;
+        // Taylor series: 1/6 - z^2/120 - z^3/360 - z^4/1680 + ...
+        return 1.0/6.0 - z*z/120.0 - z*z*z/360.0 - z*z*z*z/1680.0;
     }
     std::complex<double> ez = std::exp(z);
     return (-4.0 - 3.0*z - z*z + ez*(4.0 - z)) / (z*z*z);
@@ -375,9 +378,10 @@ void ETDRK4Coefficients<T>::compute_coefficients_periodic()
                         double ch2 = ch / 2.0;
 
                         // ETDRK4 coefficients using contour integral
+                        // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
                         _E[idx] = std::exp(ch);
                         _E2[idx] = std::exp(ch2);
-                        _alpha[idx] = ds * phi1_contour(ch2);
+                        _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
                         _f1[idx] = ds * beta_contour(1, ch);
                         _f2[idx] = ds * beta_contour(2, ch);
                         _f3[idx] = ds * beta_contour(3, ch);
@@ -400,9 +404,10 @@ void ETDRK4Coefficients<T>::compute_coefficients_periodic()
                         double ch = c * ds;
                         double ch2 = ch / 2.0;
 
+                        // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
                         _E[idx] = std::exp(ch);
                         _E2[idx] = std::exp(ch2);
-                        _alpha[idx] = ds * phi1_contour(ch2);
+                        _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
                         _f1[idx] = ds * beta_contour(1, ch);
                         _f2[idx] = ds * beta_contour(2, ch);
                         _f3[idx] = ds * beta_contour(3, ch);
@@ -496,9 +501,10 @@ void ETDRK4Coefficients<T>::compute_coefficients_mixed()
                     double ch2 = ch / 2.0;
 
                     // ETDRK4 coefficients using contour integral
+                    // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
                     _E[idx] = std::exp(ch);
                     _E2[idx] = std::exp(ch2);
-                    _alpha[idx] = ds * phi1_contour(ch2);
+                    _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
                     _f1[idx] = ds * beta_contour(1, ch);
                     _f2[idx] = ds * beta_contour(2, ch);
                     _f3[idx] = ds * beta_contour(3, ch);

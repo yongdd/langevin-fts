@@ -6,6 +6,16 @@
  * (Exponential Time Differencing Runge-Kutta 4th order) method for solving
  * the modified diffusion equation with continuous Gaussian chains.
  *
+ * @warning **Reduced Convergence Order for Polymer MDE**
+ *
+ * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
+ * applied to the polymer modified diffusion equation. This is because N(q) = -w*q
+ * is linear in q, so intermediate stage evaluations provide no additional
+ * information for the Runge-Kutta weighting to exploit.
+ *
+ * **Recommendation:** Use CpuSolverPseudoRQM4 instead. RQM4 is 2x faster and
+ * achieves true 4th-order convergence.
+ *
  * **ETDRK4 Algorithm (Cox & Matthews 2002):**
  *
  * For the equation: dq/ds = L*q + N(q) where:

@@ -6,6 +6,21 @@
  * coefficients used in the ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
  * time integration scheme for the modified diffusion equation.
  *
+ * @warning **Reduced Convergence Order for Polymer MDE**
+ *
+ * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
+ * applied to the polymer modified diffusion equation. This is because:
+ *
+ * 1. ETDRK4 treats N(q) = -w*q as a "nonlinear" term, but it is linear in q
+ * 2. When N(q) is linear, intermediate stage evaluations N(a), N(b), N(c) are
+ *    linear combinations of N(q_n), providing no additional information
+ * 3. The method's Runge-Kutta weighting cannot achieve full accuracy
+ *
+ * **Recommendation:** Use RQM4 instead for polymer SCFT/FTS simulations.
+ * RQM4 is 2x faster and achieves true 4th-order convergence.
+ *
+ * See docs/NumericalMethodsPerformance.md for detailed benchmark results.
+ *
  * **ETDRK4 Algorithm (Cox & Matthews 2002):**
  *
  * For the equation: dq/ds = L*q + N(q) where:
