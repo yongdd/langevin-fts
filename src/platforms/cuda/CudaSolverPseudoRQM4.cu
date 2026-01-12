@@ -107,13 +107,10 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw and exp_dw_half for each ds_index and monomer_type
+        // NOTE: add_ds_value() is called later, after update_laplacian_operator(),
+        // because update() resets ds_values[1] to global_ds.
         for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
-
-            // Register this ds value with Pseudo for boltz_bond computation
-            pseudo->add_ds_value(ds_idx, local_ds);
-
             for(const auto& item: molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
@@ -123,9 +120,6 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
                 gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
             }
         }
-
-        // Finalize Pseudo to compute boltz_bond for all ds values (and allocate GPU memory)
-        pseudo->finalize_ds_values();
 
         // Initialize cuFFT plans to 0
         for(int i=0; i<n_streams; i++)
@@ -249,6 +243,8 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
         }
 
+        // update_laplacian_operator() handles registration of local_ds values
+        // and calls finalize_ds_values() to compute boltz_bond with correct local_ds
         update_laplacian_operator();
     }
     catch(std::exception& exc)
@@ -322,11 +318,26 @@ template <typename T>
 void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
 {
     try{
+        // Update Pseudo with global_ds (this resets ds_values[1] to global_ds)
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
             this->cb->get_dx(), this->molecules->get_ds(),
             this->cb->get_recip_metric());
+
+        // Re-register local_ds values for each block
+        // (pseudo->update() resets ds_values[1] to global_ds)
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            pseudo->add_ds_value(ds_idx, local_ds);
+        }
+
+        // Finalize Pseudo to compute boltz_bond with correct local_ds
+        pseudo->finalize_ds_values();
     }
     catch(std::exception& exc)
     {

@@ -153,5 +153,16 @@ public:
      * @param monomer_type Ignored
      */
     void advance_propagator_half_bond_step(T *, T *, std::string) override {};
+
+    /**
+     * @brief Update Laplacian operator and re-register local ds values.
+     *
+     * Overrides base class to ensure local_ds values are re-registered
+     * after the base implementation resets ds_values[1] to global_ds.
+     * This is necessary because Pseudo::update() recomputes boltz_bond
+     * for ds_index=1, which would otherwise use global_ds instead of
+     * the correct local_ds values from ContourLengthMapping.
+     */
+    void update_laplacian_operator() override;
 };
 #endif

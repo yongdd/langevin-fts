@@ -59,11 +59,6 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
         // Create exp_dw vectors for each ds_index and monomer type
         for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
-
-            // Register this ds value with Pseudo for boltz_bond computation
-            this->pseudo->add_ds_value(ds_idx, local_ds);
-
             for (const auto& item : molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
@@ -72,9 +67,8 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
             }
         }
 
-        // Finalize Pseudo to compute boltz_bond for all ds values
-        this->pseudo->finalize_ds_values();
-
+        // update_laplacian_operator() handles registration of local_ds values
+        // and calls finalize_ds_values() to compute boltz_bond with correct local_ds
         this->update_laplacian_operator();
     }
     catch (std::exception& exc)
@@ -249,6 +243,37 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
             for (int i = 0; i < M; ++i)
                 q_out[i] *= q_mask[i];
         }
+    }
+    catch (std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Update Laplacian operator and re-register local ds values
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoRQM4<T>::update_laplacian_operator()
+{
+    try
+    {
+        // Call base class implementation (updates Pseudo with global_ds)
+        CpuSolverPseudoBase<T>::update_laplacian_operator();
+
+        // Re-register local_ds values for each block
+        // (base class's pseudo->update() resets ds_values[1] to global_ds)
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            this->pseudo->add_ds_value(ds_idx, local_ds);
+        }
+
+        // Finalize Pseudo to compute boltz_bond with correct local_ds
+        this->pseudo->finalize_ds_values();
     }
     catch (std::exception& exc)
     {
