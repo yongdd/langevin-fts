@@ -51,7 +51,7 @@ calculation = scft.SCFT(params=params)
 
 ### Convergence Plot
 
-![Contour Convergence](figure1_song2018.png)
+![Contour Convergence](figures/figure1_song2018.png)
 
 ### Execution Time vs Contour Steps (Ns)
 

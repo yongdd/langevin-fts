@@ -150,7 +150,7 @@ The following results compare the partition function Q computed with different m
 
 #### Convergence Plot (Periodic Boundaries)
 
-![Convergence Study](convergence_plot.png)
+![Convergence Study](figures/convergence_plot.png)
 
 *Top-left: Partition function Q vs contour step size. Top-right: -ln(Q) vs step size. Bottom-left: Relative error (log-log) showing $O(\Delta s^2)$ and $O(\Delta s^4)$ convergence. Bottom-right: Computation time vs number of contour steps.*
 
