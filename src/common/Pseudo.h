@@ -88,25 +88,37 @@ protected:
     int *negative_k_idx;  ///< Mapping from k to -k indices (for complex fields)
 
     /**
-     * @brief Boltzmann bond factors for full step.
+     * @brief Boltzmann bond factors for full step (per ds_index).
      *
-     * boltz_bond[type][idx] = exp(-|k|² * b² * ds / 6)
+     * boltz_bond[ds_index][type][idx] = exp(-|k|² * b² * ds / 6)
      * where k depends on boundary condition type.
      *
      * For continuous chains: diffusion propagator.
      * For discrete chains: bond function (Fourier transform of Gaussian).
+     *
+     * ds_index is 1-based (from ContourLengthMapping).
      */
-    std::map<std::string, double*> boltz_bond;
+    std::map<int, std::map<std::string, double*>> boltz_bond;
 
     /**
-     * @brief Boltzmann bond factors for half step.
+     * @brief Boltzmann bond factors for half step (per ds_index).
      *
-     * boltz_bond_half[type][idx] = exp(-|k|² * b² * ds / 12)
+     * boltz_bond_half[ds_index][type][idx] = exp(-|k|² * b² * ds / 12)
      *
      * For continuous chains: half-step diffusion propagator.
      * For discrete chains: half-bond function (used at chain ends).
+     *
+     * ds_index is 1-based (from ContourLengthMapping).
      */
-    std::map<std::string, double*> boltz_bond_half;
+    std::map<int, std::map<std::string, double*>> boltz_bond_half;
+
+    /**
+     * @brief Unique ds values for each ds_index.
+     *
+     * ds_values[ds_index] = local_ds value for that index.
+     * ds_index is 1-based.
+     */
+    std::map<int, double> ds_values;
 
     /**
      * @brief Fourier basis for stress calculation (diagonal terms).
@@ -165,6 +177,16 @@ protected:
     void update_boltz_bond_mixed();
 
     /**
+     * @brief Update Boltzmann factors for a specific ds_index (periodic BC).
+     */
+    void update_boltz_bond_periodic_for_ds_index(int ds_idx);
+
+    /**
+     * @brief Update Boltzmann factors for a specific ds_index (mixed BC).
+     */
+    void update_boltz_bond_mixed_for_ds_index(int ds_idx);
+
+    /**
      * @brief Update Fourier basis for periodic BC (with cross-terms).
      */
     void update_weighted_fourier_basis_periodic();
@@ -205,14 +227,44 @@ public:
     int get_total_complex_grid();
 
     /**
-     * @brief Get Boltzmann factor for full step.
+     * @brief Get Boltzmann factor for full step for given ds_index.
+     *
+     * @param monomer_type Monomer type (e.g., "A", "B")
+     * @param ds_index     1-based index for ds value (default: 1 for global ds)
+     * @return Pointer to Boltzmann factor array
      */
-    virtual double* get_boltz_bond(std::string monomer_type);
+    virtual double* get_boltz_bond(std::string monomer_type, int ds_index = 1);
 
     /**
-     * @brief Get Boltzmann factor for half step.
+     * @brief Get Boltzmann factor for half step for given ds_index.
+     *
+     * @param monomer_type Monomer type (e.g., "A", "B")
+     * @param ds_index     1-based index for ds value (default: 1 for global ds)
+     * @return Pointer to Boltzmann factor array
      */
-    virtual double* get_boltz_bond_half(std::string monomer_type);
+    virtual double* get_boltz_bond_half(std::string monomer_type, int ds_index = 1);
+
+    /**
+     * @brief Add a ds value to be pre-computed.
+     *
+     * Call this for each unique local_ds value before calling
+     * finalize_ds_values() to pre-compute Boltzmann factors.
+     *
+     * @param ds_index 1-based index for this ds value
+     * @param ds_value The ds value
+     */
+    void add_ds_value(int ds_index, double ds_value);
+
+    /**
+     * @brief Finalize and compute Boltzmann factors for all added ds values.
+     *
+     * Must be called after all add_ds_value() calls and before
+     * using get_boltz_bond() with ds_index parameter.
+     *
+     * This method is virtual to allow GPU implementations to allocate
+     * device memory for the new ds_index values.
+     */
+    virtual void finalize_ds_values();
 
     /**
      * @brief Get x-direction Fourier basis for stress.

@@ -81,10 +81,10 @@ private:
 
     int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
 
-    /// @name Pseudo-Spectral Operators
+    /// @name Pseudo-Spectral Operators (per ds_index)
     /// @{
-    std::map<std::string, double*> d_boltz_bond;       ///< Full bond diffusion (device)
-    std::map<std::string, double*> d_boltz_bond_half;  ///< Half bond diffusion (device)
+    std::map<int, std::map<std::string, double*>> d_boltz_bond;       ///< Full bond diffusion (device) [ds_index][monomer_type]
+    std::map<int, std::map<std::string, double*>> d_boltz_bond_half;  ///< Half bond diffusion (device) [ds_index][monomer_type]
     /// @}
 
     /**
@@ -124,16 +124,18 @@ public:
     /**
      * @brief Get full bond factor (device pointer).
      * @param monomer_type Monomer type
+     * @param ds_index Index for ds value (1-based)
      * @return Device pointer to exp(-b²|k|²ds/6)
      */
-    double* get_boltz_bond(std::string monomer_type) override { return d_boltz_bond[monomer_type]; };
+    double* get_boltz_bond(std::string monomer_type, int ds_index = 1) override { return d_boltz_bond[ds_index][monomer_type]; };
 
     /**
      * @brief Get half bond factor (device pointer).
      * @param monomer_type Monomer type
+     * @param ds_index Index for ds value (1-based)
      * @return Device pointer to exp(-b²|k|²ds/12)
      */
-    double* get_boltz_bond_half(std::string monomer_type) override { return d_boltz_bond_half[monomer_type];};
+    double* get_boltz_bond_half(std::string monomer_type, int ds_index = 1) override { return d_boltz_bond_half[ds_index][monomer_type];};
 
     /** @brief Get x-direction Fourier basis (device pointer). */
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};
@@ -172,5 +174,13 @@ public:
         std::map<std::string, double> bond_lengths,
         std::vector<double> dx, double ds,
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0}) override;
+
+    /**
+     * @brief Finalize ds values and allocate GPU memory.
+     *
+     * Overrides base class to allocate GPU memory for new ds_index values
+     * added via add_ds_value(), then uploads all Boltzmann factors to GPU.
+     */
+    void finalize_ds_values() override;
 };
 #endif

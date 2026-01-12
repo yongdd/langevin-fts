@@ -44,11 +44,13 @@ CpuSolverPseudoETDRK4<T>::CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules
         const int M = cb->get_total_grid();
 
         // Create field vectors for each monomer type
+        // ETDRK4 uses only global ds (ds_index=1)
+        const int ds_index = 1;
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw[monomer_type].resize(M);
-            this->exp_dw_half[monomer_type].resize(M);
+            this->exp_dw[ds_index][monomer_type].resize(M);
+            this->exp_dw_half[ds_index][monomer_type].resize(M);
             this->w_field[monomer_type].resize(M);
         }
 
@@ -101,10 +103,11 @@ void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
+    const int ds_index = 1;  // ETDRK4 uses only global ds
 
     for (const auto& item : w_input)
     {
-        if (!this->exp_dw.contains(item.first))
+        if (!this->exp_dw[ds_index].contains(item.first))
             throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
     }
 
@@ -112,8 +115,8 @@ void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input
     {
         const std::string& monomer_type = item.first;
         const T* w = item.second;
-        std::vector<T>& exp_dw_vec = this->exp_dw[monomer_type];
-        std::vector<T>& exp_dw_half_vec = this->exp_dw_half[monomer_type];
+        std::vector<T>& exp_dw_vec = this->exp_dw[ds_index][monomer_type];
+        std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_index][monomer_type];
         std::vector<T>& w_field_vec = this->w_field[monomer_type];
 
         for (int i = 0; i < M; ++i)
@@ -130,8 +133,10 @@ void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoETDRK4<T>::advance_propagator(
-    T* q_in, T* q_out, std::string monomer_type, const double* q_mask)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int /*ds_index*/)
 {
+    // Note: ETDRK4 currently uses global ds for all blocks.
+    // Per-block ds support would require recomputing coefficients.
     try
     {
         const int M = this->cb->get_total_grid();

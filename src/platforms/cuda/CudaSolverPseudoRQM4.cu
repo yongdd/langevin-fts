@@ -99,15 +99,33 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create exp_dw and exp_dw_half
-        for(const auto& item: molecules->get_bond_lengths())
+        // Ensure ContourLengthMapping is finalized before using it
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create exp_dw and exp_dw_half for each ds_index and monomer_type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            this->d_exp_dw     [monomer_type] = nullptr;
-            this->d_exp_dw_half[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [monomer_type], sizeof(T)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[monomer_type], sizeof(T)*M));
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+
+            // Register this ds value with Pseudo for boltz_bond computation
+            pseudo->add_ds_value(ds_idx, local_ds);
+
+            for(const auto& item: molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                this->d_exp_dw     [ds_idx][monomer_type] = nullptr;
+                this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [ds_idx][monomer_type], sizeof(T)*M));
+                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
+            }
         }
+
+        // Finalize Pseudo to compute boltz_bond for all ds values (and allocate GPU memory)
+        pseudo->finalize_ds_values();
 
         // Initialize cuFFT plans to 0
         for(int i=0; i<n_streams; i++)
@@ -274,10 +292,13 @@ CudaSolverPseudoRQM4<T>::~CudaSolverPseudoRQM4()
         }
     }
 
-    for(const auto& item: this->d_exp_dw)
-        cudaFree(item.second);
-    for(const auto& item: this->d_exp_dw_half)
-        cudaFree(item.second);
+    // Free d_exp_dw nested maps: d_exp_dw[ds_index][monomer_type]
+    for(const auto& ds_entry: this->d_exp_dw)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_exp_dw_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
     // For pseudo-spectral: advance_propagator()
     for(int i=0; i<n_streams; i++)
@@ -320,13 +341,10 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();
-        const double ds = this->molecules->get_ds();
 
-        for(const auto& item: w_input)
-        {
-            if( this->d_exp_dw.find(item.first) == this->d_exp_dw.end())
-                throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
-        }
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -338,28 +356,36 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        // Compute exp_dw and exp_dw_half
-        for(const auto& item: w_input)
+        // Compute exp_dw for each ds_index and monomer type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            const T *w = item.second;
+            double local_ds = mapping.get_ds_from_index(ds_idx);
 
-            // Copy field configurations from host to device
-            gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw     [monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice));
-            gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw_half[monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice));
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T *w = item.second;
 
-            // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw[monomer_type],      this->d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw_half[monomer_type], this->d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
-            gpu_error_check(cudaPeekAtLastError());
-            gpu_error_check(cudaDeviceSynchronize());
+                if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
+                    throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+
+                // Copy field configurations from host to device
+                gpu_error_check(cudaMemcpyAsync(
+                    this->d_exp_dw     [ds_idx][monomer_type], w,
+                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                gpu_error_check(cudaMemcpyAsync(
+                    this->d_exp_dw_half[ds_idx][monomer_type], w,
+                    sizeof(T)*M, cudaMemcpyInputToDevice));
+
+                // Compute d_exp_dw = exp(-w * local_ds * 0.5) and d_exp_dw_half = exp(-w * local_ds * 0.25)
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    (this->d_exp_dw[ds_idx][monomer_type],      this->d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    (this->d_exp_dw_half[ds_idx][monomer_type], this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
+            }
         }
+        gpu_error_check(cudaPeekAtLastError());
+        gpu_error_check(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
     {
@@ -371,7 +397,7 @@ template <typename T>
 void CudaSolverPseudoRQM4<T>::advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask)
+        std::string monomer_type, double *d_q_mask, int ds_index)
 {
     try
     {
@@ -381,10 +407,10 @@ void CudaSolverPseudoRQM4<T>::advance_propagator(
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[monomer_type];
-        CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[monomer_type];
-        const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type);
-        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
+        CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[ds_index][monomer_type];
+        CuDeviceData<T> *_d_exp_dw_half = this->d_exp_dw_half[ds_index][monomer_type];
+        const double* _d_boltz_bond      = pseudo->get_boltz_bond     (monomer_type, ds_index);
+        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, ds_index);
 
         if (is_periodic_)
         {

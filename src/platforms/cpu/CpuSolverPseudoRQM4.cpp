@@ -47,14 +47,33 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
         // Initialize shared components (FFT, Pseudo, etc.)
         this->init_shared(cb, molecules);
 
-        // Create exp_dw vectors for continuous chains
         const int M = cb->get_total_grid();
-        for (const auto& item : molecules->get_bond_lengths())
+
+        // Ensure ContourLengthMapping is finalized before using it
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create exp_dw vectors for each ds_index and monomer type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            this->exp_dw[monomer_type].resize(M);
-            this->exp_dw_half[monomer_type].resize(M);
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+
+            // Register this ds value with Pseudo for boltz_bond computation
+            this->pseudo->add_ds_value(ds_idx, local_ds);
+
+            for (const auto& item : molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                this->exp_dw[ds_idx][monomer_type].resize(M);
+                this->exp_dw_half[ds_idx][monomer_type].resize(M);
+            }
         }
+
+        // Finalize Pseudo to compute boltz_bond for all ds values
+        this->pseudo->finalize_ds_values();
 
         this->update_laplacian_operator();
     }
@@ -94,25 +113,32 @@ template <typename T>
 void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
 
-    for (const auto& item : w_input)
+    // Get unique ds values from ContourLengthMapping
+    const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+    int n_unique_ds = mapping.get_n_unique_ds();
+
+    // Compute exp_dw for each ds_index and monomer type
+    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
     {
-        if (!this->exp_dw.contains(item.first))
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
-    }
+        double local_ds = mapping.get_ds_from_index(ds_idx);
 
-    for (const auto& item : w_input)
-    {
-        const std::string& monomer_type = item.first;
-        const T* w = item.second;
-        std::vector<T>& exp_dw_vec = this->exp_dw[monomer_type];
-        std::vector<T>& exp_dw_half_vec = this->exp_dw_half[monomer_type];
-
-        for (int i = 0; i < M; ++i)
+        for (const auto& item : w_input)
         {
-            exp_dw_vec[i] = std::exp(-w[i] * ds * 0.5);
-            exp_dw_half_vec[i] = std::exp(-w[i] * ds * 0.25);
+            const std::string& monomer_type = item.first;
+            const T* w = item.second;
+
+            if (!this->exp_dw[ds_idx].contains(monomer_type))
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
+
+            std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
+            std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_idx][monomer_type];
+
+            for (int i = 0; i < M; ++i)
+            {
+                exp_dw_vec[i] = std::exp(-w[i] * local_ds * 0.5);
+                exp_dw_half_vec[i] = std::exp(-w[i] * local_ds * 0.25);
+            }
         }
     }
 }
@@ -122,7 +148,7 @@ void CpuSolverPseudoRQM4<T>::update_dw(std::map<std::string, const T*> w_input)
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoRQM4<T>::advance_propagator(
-    T* q_in, T* q_out, std::string monomer_type, const double* q_mask)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int ds_index)
 {
     try
     {
@@ -138,11 +164,12 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
         std::vector<double> k_q_in1(coeff_size);
         std::vector<double> k_q_in2(coeff_size);
 
-        const T* _exp_dw = this->exp_dw[monomer_type].data();
-        const T* _exp_dw_half = this->exp_dw_half[monomer_type].data();
+        // Get Boltzmann factors for the correct ds_index
+        const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
+        const T* _exp_dw_half = this->exp_dw_half[ds_index][monomer_type].data();
 
-        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type);
-        const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type);
+        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
+        const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, ds_index);
 
         // ===== Step 1: Full step =====
         for (int i = 0; i < M; ++i)

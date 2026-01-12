@@ -452,7 +452,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
                 #endif
                 
                 CuDeviceData<T> **_d_propagator = this->d_propagator[key];
-                CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[monomer_type];
+                CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
 
                 // Calculate one block end
                 if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -748,7 +748,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
             CuDeviceData<T> *d_propagator_right = std::get<2>(segment_info);
             std::string monomer_type            = std::get<3>(segment_info);
             int n_aggregated                    = std::get<4>(segment_info);
-            CuDeviceData<T> *_d_exp_dw          = this->propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw          = this->propagator_solver->d_exp_dw[1][monomer_type];
 
             this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_inverse_weight_device(
                 d_propagator_left,   // q
@@ -805,7 +805,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
             int n_segment_left  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
 
             // If there is no segment
             if(n_segment_right == 0)
@@ -855,7 +855,7 @@ void CudaComputationDiscrete<T>::compute_concentrations()
             CuDeviceData<T> *d_phi_ = this->d_phi_solvent[s];
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
 
@@ -1162,7 +1162,7 @@ bool CudaComputationDiscrete<T>::check_total_partition()
         int n_propagators   = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << this->propagator_computation_optimizer->get_computation_block(key).n_repeated << std::endl;

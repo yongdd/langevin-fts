@@ -46,8 +46,8 @@
  * **Boltzmann Factors:**
  *
  * Like CpuSolver, stores precomputed exp(-w·ds) factors in GPU memory:
- * - d_exp_dw: Full segment Boltzmann factor
- * - d_exp_dw_half: Half segment Boltzmann factor
+ * - d_exp_dw: Full segment Boltzmann factor (per ds_index for local ds support)
+ * - d_exp_dw_half: Half segment Boltzmann factor (per ds_index)
  */
 template <typename T>
 class CudaSolver
@@ -56,18 +56,20 @@ public:
     /**
      * @brief Full segment Boltzmann factor: exp(-w·ds) on GPU.
      *
-     * Key: monomer type
+     * Outer key: ds_index (1-based)
+     * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
-    std::map<std::string, CuDeviceData<T>*> d_exp_dw;
+    std::map<int, std::map<std::string, CuDeviceData<T>*>> d_exp_dw;
 
     /**
      * @brief Half segment Boltzmann factor: exp(-w·ds/2) on GPU.
      *
-     * Key: monomer type
+     * Outer key: ds_index (1-based)
+     * Inner key: monomer type
      * Value: Device pointer to array (size n_grid)
      */
-    std::map<std::string, CuDeviceData<T>*> d_exp_dw_half;
+    std::map<int, std::map<std::string, CuDeviceData<T>*>> d_exp_dw_half;
 
     /**
      * @brief Virtual destructor.
@@ -97,11 +99,12 @@ public:
      * @param d_q_out     Output propagator (device pointer)
      * @param monomer_type Monomer type for Boltzmann factor
      * @param d_q_mask    Optional mask for impenetrable regions (device)
+     * @param ds_index    Index for ds value (1-based, for per-block ds support)
      */
     virtual void advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask) = 0;
+        std::string monomer_type, double *d_q_mask, int ds_index = 1) = 0;
 
     /**
      * @brief Advance propagator by half bond step (discrete chains).

@@ -51,6 +51,7 @@
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
 #include "SimpsonRule.h"
+#include "PropagatorCode.h"
 
 template <typename T>
 CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
@@ -605,6 +606,10 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 prev = 0;
                 next = 1;
 
+                // Get ds_index from the propagator key
+                int ds_index = PropagatorCode::get_ds_index_from_key(key);
+                if (ds_index < 1) ds_index = 1;  // Default to global ds
+
                 // Create events
                 cudaEvent_t kernel_done;
                 cudaEvent_t memcpy_done;
@@ -622,10 +627,10 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
 
                     // KERNEL STREAM: calculate propagators
                     propagator_solver->advance_propagator(
-                        STREAM, 
+                        STREAM,
                         d_q_one[STREAM][prev],
                         d_q_one[STREAM][next],
-                        monomer_type, d_q_mask);
+                        monomer_type, d_q_mask, ds_index);
                     gpu_error_check(cudaEventRecord(kernel_done, streams[STREAM][0]));
 
                     // MEMORY STREAM: copy memory from device to host
@@ -765,7 +770,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
         {
             double volume_fraction = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
 
@@ -798,6 +803,10 @@ std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalcaulte_propagator
         const int M = this->cb->get_total_grid();
         int prev = 0;
         int next = 1;
+
+        // Get ds_index from the propagator key
+        int ds_index = PropagatorCode::get_ds_index_from_key(key);
+        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // An array of pointers for q_out (use dynamic container to avoid VLA/stack overflow)
         std::vector<T*> q_out(total_max_n_segment + 1);
@@ -844,7 +853,7 @@ std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalcaulte_propagator
                     0,
                     d_q_one[0][prev],   // q_out[n]
                     d_q_one[0][next],   // q_out[n+1]
-                    monomer_type, d_q_mask);
+                    monomer_type, d_q_mask, ds_index);
             }
             std::swap(prev, next);
             cudaDeviceSynchronize();
@@ -868,6 +877,10 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
         const int k = checkpoint_interval;
+
+        // Get ds_index from the propagator key (use key_left, both should have same ds_index)
+        int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
+        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // Set up local workspace pointers (see memory layout in header)
         CuDeviceData<T> *d_q_left = d_workspace[0];                           // first M of d_workspace[0]
@@ -918,7 +931,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
             for (int i = check_pos; i < left_start; i++)
             {
-                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask);
+                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask, ds_index);
                 gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
 
@@ -926,7 +939,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             gpu_error_check(cudaMemcpy(q_recal[0], d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
             for (int i = 1; i <= left_end - left_start; i++)
             {
-                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask);
+                propagator_solver->advance_propagator(STREAM, d_q_one[STREAM][0], d_q_one[STREAM][1], monomer_type, d_q_mask, ds_index);
                 gpu_error_check(cudaMemcpy(q_recal[i], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 gpu_error_check(cudaMemcpy(d_q_one[STREAM][0], d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
@@ -938,7 +951,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 // Advance q_right to position n
                 while (current_n_right < n)
                 {
-                    propagator_solver->advance_propagator(STREAM, d_q_right[right_prev_idx], d_q_right[right_next_idx], monomer_type, d_q_mask);
+                    propagator_solver->advance_propagator(STREAM, d_q_right[right_prev_idx], d_q_right[right_next_idx], monomer_type, d_q_mask, ds_index);
                     cudaDeviceSynchronize();
                     std::swap(right_prev_idx, right_next_idx);
                     current_n_right++;
@@ -1198,6 +1211,10 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
 
+            // Get ds_index from the propagator key
+            int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
+            if (ds_index < 1) ds_index = 1;  // Default to global ds
+
             // If there is no segment
             if(N_RIGHT == 0)
                 continue;
@@ -1278,7 +1295,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask, ds_index);
                         cudaDeviceSynchronize();
                     }
                     std::swap(left_ping, left_pong);
@@ -1300,7 +1317,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     }
                     else
                     {
-                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                        propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask, ds_index);
                         cudaDeviceSynchronize();
                         gpu_error_check(cudaMemcpy(q_recal[idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     }
@@ -1321,7 +1338,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     {
                         while(current_n_right < n)
                         {
-                            propagator_solver->advance_propagator(0, &d_workspace[right_prev_idx][M], &d_workspace[right_next_idx][M], monomer_type, d_q_mask);
+                            propagator_solver->advance_propagator(0, &d_workspace[right_prev_idx][M], &d_workspace[right_next_idx][M], monomer_type, d_q_mask, ds_index);
                             cudaDeviceSynchronize();
                             std::swap(right_prev_idx, right_next_idx);
                             current_n_right++;
@@ -1427,6 +1444,11 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
         {
             // Find nearest checkpoint at or before position n
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
+
+            // Get ds_index from the propagator key
+            int ds_index = PropagatorCode::get_ds_index_from_key(dep);
+            if (ds_index < 1) ds_index = 1;  // Default to global ds
+
             int check_pos = -1;
             for(int cp = 0; cp <= n; cp++)
             {
@@ -1453,7 +1475,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(0, d_q_one[0][ping], d_q_one[0][pong], monomer_type, d_q_mask);
+                    propagator_solver->advance_propagator(0, d_q_one[0][ping], d_q_one[0][pong], monomer_type, d_q_mask, ds_index);
                     cudaDeviceSynchronize();
                 }
                 std::swap(ping, pong);
@@ -1495,6 +1517,10 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
         int N_LEFT               = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
         int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
         int n_propagators        = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
+
+        // Get ds_index from the propagator key
+        int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
+        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;
@@ -1567,7 +1593,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask, ds_index);
                     cudaDeviceSynchronize();
                 }
                 std::swap(left_ping, left_pong);
@@ -1588,7 +1614,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 }
                 else
                 {
-                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask);
+                    propagator_solver->advance_propagator(0, d_q_one[0][left_ping], d_q_one[0][left_pong], monomer_type, d_q_mask, ds_index);
                     cudaDeviceSynchronize();
                     gpu_error_check(cudaMemcpy(q_recal[idx], d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 }
@@ -1609,7 +1635,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 {
                     while(current_n_right < n)
                     {
-                        propagator_solver->advance_propagator(0, d_q_right[right_prev_idx], d_q_right[right_next_idx], monomer_type, d_q_mask);
+                        propagator_solver->advance_propagator(0, d_q_right[right_prev_idx], d_q_right[right_next_idx], monomer_type, d_q_mask, ds_index);
                         cudaDeviceSynchronize();
                         std::swap(right_prev_idx, right_next_idx);
                         current_n_right++;

@@ -51,15 +51,27 @@ CudaPseudo<T>::CudaPseudo(
     {
         const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
-        for(const auto& item: this->bond_lengths)
+        // Create boltz_bond, boltz_bond_half for each ds_index and monomer_type
+        // The base class Pseudo computes boltz_bond[ds_index][monomer_type]
+        for (const auto& ds_entry : this->boltz_bond)
         {
-            std::string monomer_type = item.first;
-            d_boltz_bond       [monomer_type] = nullptr;
-            d_boltz_bond_half  [monomer_type] = nullptr;
-
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond       [monomer_type], sizeof(double)*M_COMPLEX));
-            gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half  [monomer_type], sizeof(double)*M_COMPLEX));
+            int ds_index = ds_entry.first;
+            for (const auto& item : ds_entry.second)
+            {
+                std::string monomer_type = item.first;
+                d_boltz_bond[ds_index][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_boltz_bond[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+            }
+        }
+        for (const auto& ds_entry : this->boltz_bond_half)
+        {
+            int ds_index = ds_entry.first;
+            for (const auto& item : ds_entry.second)
+            {
+                std::string monomer_type = item.first;
+                d_boltz_bond_half[ds_index][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+            }
         }
 
         // Allocate memory for stress calculation: compute_stress()
@@ -90,10 +102,13 @@ CudaPseudo<T>::CudaPseudo(
 template <typename T>
 CudaPseudo<T>::~CudaPseudo()
 {
-    for(const auto& item: d_boltz_bond)
-        cudaFree(item.second);
-    for(const auto& item: d_boltz_bond_half)
-        cudaFree(item.second);
+    // Free GPU memory for nested maps: d_boltz_bond[ds_index][monomer_type]
+    for (const auto& ds_entry : d_boltz_bond)
+        for (const auto& item : ds_entry.second)
+            cudaFree(item.second);
+    for (const auto& ds_entry : d_boltz_bond_half)
+        for (const auto& item : ds_entry.second)
+            cudaFree(item.second);
 
     // For stress calculation: compute_stress()
     // Diagonal terms
@@ -115,18 +130,27 @@ void CudaPseudo<T>::upload_boltz_bond()
 {
     const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
 
-    for (const auto& item : this->boltz_bond)
+    // Upload all ds_index values: boltz_bond[ds_index][monomer_type]
+    for (const auto& ds_entry : this->boltz_bond)
     {
-        std::string monomer_type = item.first;
-        gpu_error_check(cudaMemcpy(d_boltz_bond[monomer_type], item.second,
-                                   sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+        int ds_index = ds_entry.first;
+        for (const auto& item : ds_entry.second)
+        {
+            std::string monomer_type = item.first;
+            gpu_error_check(cudaMemcpy(d_boltz_bond[ds_index][monomer_type], item.second,
+                                       sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+        }
     }
 
-    for (const auto& item : this->boltz_bond_half)
+    for (const auto& ds_entry : this->boltz_bond_half)
     {
-        std::string monomer_type = item.first;
-        gpu_error_check(cudaMemcpy(d_boltz_bond_half[monomer_type], item.second,
-                                   sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+        int ds_index = ds_entry.first;
+        for (const auto& item : ds_entry.second)
+        {
+            std::string monomer_type = item.first;
+            gpu_error_check(cudaMemcpy(d_boltz_bond_half[ds_index][monomer_type], item.second,
+                                       sizeof(double) * M_COMPLEX, cudaMemcpyHostToDevice));
+        }
     }
 }
 
@@ -173,7 +197,52 @@ void CudaPseudo<T>::update(
     // Upload updated data to GPU
     upload_boltz_bond();
     upload_fourier_basis();
-} 
+}
+
+//----------------- finalize_ds_values -----------------------------
+template <typename T>
+void CudaPseudo<T>::finalize_ds_values()
+{
+    // Call base class to compute host-side Boltzmann factors for all ds values
+    Pseudo<T>::finalize_ds_values();
+
+    const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
+
+    // Allocate GPU memory for any new ds_index values not already allocated
+    for (const auto& ds_entry : this->boltz_bond)
+    {
+        int ds_index = ds_entry.first;
+        for (const auto& item : ds_entry.second)
+        {
+            std::string monomer_type = item.first;
+            // Check if GPU memory already exists for this ds_index/monomer_type
+            if (d_boltz_bond.find(ds_index) == d_boltz_bond.end() ||
+                d_boltz_bond[ds_index].find(monomer_type) == d_boltz_bond[ds_index].end())
+            {
+                d_boltz_bond[ds_index][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_boltz_bond[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+            }
+        }
+    }
+    for (const auto& ds_entry : this->boltz_bond_half)
+    {
+        int ds_index = ds_entry.first;
+        for (const auto& item : ds_entry.second)
+        {
+            std::string monomer_type = item.first;
+            // Check if GPU memory already exists for this ds_index/monomer_type
+            if (d_boltz_bond_half.find(ds_index) == d_boltz_bond_half.end() ||
+                d_boltz_bond_half[ds_index].find(monomer_type) == d_boltz_bond_half[ds_index].end())
+            {
+                d_boltz_bond_half[ds_index][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
+            }
+        }
+    }
+
+    // Upload all Boltzmann factors to GPU
+    upload_boltz_bond();
+}
 
 // Explicit template instantiation
 template class CudaPseudo<double>;

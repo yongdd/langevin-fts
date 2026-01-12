@@ -75,24 +75,37 @@ class CpuSolver
 {
 public:
     /**
-     * @brief Boltzmann factor for full segment: exp(-w(r)·ds).
+     * @brief Boltzmann factor for full segment: exp(-w(r)·ds) per ds_index.
      *
-     * Key: monomer type (e.g., "A", "B")
+     * Key: (ds_index, monomer_type)
      * Value: Vector of size n_grid containing exp(-w[i]*ds)
      *
+     * ds_index is 1-based (from ContourLengthMapping).
      * Used in the real-space method and discrete chain pseudo-spectral.
      */
-    std::map<std::string, std::vector<T>> exp_dw;
+    std::map<int, std::map<std::string, std::vector<T>>> exp_dw;
 
     /**
-     * @brief Boltzmann factor for half segment: exp(-w(r)·ds/2).
+     * @brief Boltzmann factor for half segment: exp(-w(r)·ds/2) per ds_index.
      *
-     * Key: monomer type (e.g., "A", "B")
+     * Key: (ds_index, monomer_type)
      * Value: Vector of size n_grid containing exp(-w[i]*ds/2)
      *
+     * ds_index is 1-based (from ContourLengthMapping).
      * Used in operator splitting schemes for symmetric time stepping.
      */
-    std::map<std::string, std::vector<T>> exp_dw_half;
+    std::map<int, std::map<std::string, std::vector<T>>> exp_dw_half;
+
+    /**
+     * @brief Boltzmann factor for quarter segment: exp(-w(r)·ds/4) per ds_index.
+     *
+     * Key: (ds_index, monomer_type)
+     * Value: Vector of size n_grid containing exp(-w[i]*ds/4)
+     *
+     * ds_index is 1-based (from ContourLengthMapping).
+     * Used in RQM4 Richardson extrapolation.
+     */
+    std::map<int, std::map<std::string, std::vector<T>>> exp_dw_quarter;
 
     /**
      * @brief Virtual destructor.
@@ -143,18 +156,19 @@ public:
      * @param q_out       Output propagator at contour s+ds (size n_grid)
      * @param monomer_type Monomer type determining segment length and field
      * @param q_mask      Optional mask for impenetrable regions (nullptr if none)
+     * @param ds_index    Index for the ds value to use (1-based, default: 1 for global ds)
      *
      * @note For continuous chains, ds is the contour discretization parameter.
      *       For discrete chains, this advances by one segment.
      *
      * @example
      * @code
-     * // Advance propagator for type A monomer
-     * solver->advance_propagator(q_current, q_next, "A", nullptr);
+     * // Advance propagator for type A monomer with global ds
+     * solver->advance_propagator(q_current, q_next, "A", nullptr, 1);
      * @endcode
      */
     virtual void advance_propagator(
-        T *q_in, T *q_out, std::string monomer_type, const double *q_mask) = 0;
+        T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) = 0;
 
     /**
      * @brief Advance propagator by half bond step (discrete chain model).

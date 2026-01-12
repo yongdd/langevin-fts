@@ -50,6 +50,7 @@
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
 #include "SimpsonRule.h"
+#include "PropagatorCode.h"
 
 template <typename T>
 CudaComputationContinuous<T>::CudaComputationContinuous(
@@ -432,6 +433,10 @@ void CudaComputationContinuous<T>::compute_propagators(
                     gpu_error_check(cudaPeekAtLastError());
                 }
 
+                // Get ds_index from the propagator key
+                int ds_index = PropagatorCode::get_ds_index_from_key(key);
+                if (ds_index < 1) ds_index = 1;  // Default to global ds
+
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
                     #ifndef NDEBUG
@@ -443,10 +448,10 @@ void CudaComputationContinuous<T>::compute_propagators(
 
                     // STREAM 0
                     this->propagator_solver->advance_propagator(
-                        STREAM, 
+                        STREAM,
                         _d_propagator[n],
                         _d_propagator[n+1],
-                        monomer_type, this->d_q_mask);
+                        monomer_type, this->d_q_mask, ds_index);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -567,7 +572,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
             CuDeviceData<T> *d_phi_ = this->d_phi_solvent[s];
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(_d_exp_dw, _d_exp_dw)/this->cb->get_volume();
 

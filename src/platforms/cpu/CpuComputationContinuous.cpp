@@ -42,6 +42,7 @@
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
 #include "SimpsonRule.h"
+#include "PropagatorCode.h"
 
 /**
  * @brief Construct CPU propagator computation for continuous chains.
@@ -365,6 +366,10 @@ void CpuComputationContinuous<T>::compute_propagators(
                         _propagator[0][i] *= q_mask[i];
                 }
 
+                // Get ds_index from the key
+                int ds_index = PropagatorCode::get_ds_index_from_key(key);
+                if (ds_index < 1) ds_index = 1;  // Default to global ds
+
                 // Advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
@@ -378,7 +383,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                     this->propagator_solver->advance_propagator(
                             _propagator[n],
                             _propagator[n+1],
-                            monomer_type, q_mask);
+                            monomer_type, q_mask, ds_index);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -512,7 +517,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
             
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[monomer_type].data();
+            T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)

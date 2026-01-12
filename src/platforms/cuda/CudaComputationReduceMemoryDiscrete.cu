@@ -394,7 +394,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 auto& junction_ends = this->propagator_computation_optimizer->get_computation_propagator(key).junction_ends;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+                CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
                 // Calculate one block end
                 if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -621,7 +621,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
             // Copy propagators from host to device
             gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
@@ -754,7 +754,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+            CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
 
@@ -810,7 +810,7 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
 
         int p = std::get<0>(block_key);
         int n_repeated = this->propagator_computation_optimizer->get_computation_block(block_key).n_repeated;
-        CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+        CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;
@@ -1480,7 +1480,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_propagators = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[monomer_type];
+        CuDeviceData<T> *_d_exp_dw = propagator_solver->d_exp_dw[1][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;

@@ -378,7 +378,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                 int n_segment_to   = std::get<2>((*parallel_job)[job]);
                 auto& deps = this->propagator_computation_optimizer->get_computation_propagator(key).deps;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
-                const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
+                const T *_exp_dw = propagator_solver->exp_dw[1][monomer_type].data();
 
                 // Display job info
                 #ifndef NDEBUG
@@ -635,7 +635,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            const T *_exp_dw         = propagator_solver->exp_dw[monomer_type].data();
+            const T *_exp_dw         = propagator_solver->exp_dw[1][monomer_type].data();
 
             this->single_polymer_partitions[p]= this->cb->inner_product_inverse_weight(
                 propagator_left, propagator_right, _exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -729,7 +729,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = phi_solvent[s];
-            T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
+            T *_exp_dw = propagator_solver->exp_dw[1][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -804,7 +804,7 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
         // q_skip[0-1]: ping-pong for skip phase, q_recal[0..]: storage for block values
 
         const int M = this->cb->get_total_grid();
-        const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
+        const T *_exp_dw = propagator_solver->exp_dw[1][monomer_type].data();
         const double *q_mask = this->cb->get_mask();
         const int k = checkpoint_interval;
 
@@ -1573,7 +1573,7 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_repeated           = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
         int n_propagators        = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
-        const T *_exp_dw = propagator_solver->exp_dw[monomer_type].data();
+        const T *_exp_dw = propagator_solver->exp_dw[1][monomer_type].data();
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;

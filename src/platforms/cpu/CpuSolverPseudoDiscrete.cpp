@@ -45,12 +45,13 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
         // Initialize shared components (FFT, Pseudo, etc.)
         this->init_shared(cb, molecules);
 
-        // Create exp_dw vectors for discrete chains (no exp_dw_half needed)
+        // For discrete chains, always use ds_index=1 (global ds)
+        const int ds_index = 1;
         const int M = cb->get_total_grid();
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw[monomer_type].resize(M);
+            this->exp_dw[ds_index][monomer_type].resize(M);
         }
 
         this->update_laplacian_operator();
@@ -95,18 +96,17 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
-
-    for (const auto& item : w_input)
-    {
-        if (!this->exp_dw.contains(item.first))
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
-    }
+    const int ds_index = 1;  // Discrete chains always use ds_index=1
 
     for (const auto& item : w_input)
     {
         const std::string& monomer_type = item.first;
         const T* w = item.second;
-        std::vector<T>& exp_dw_vec = this->exp_dw[monomer_type];
+
+        if (!this->exp_dw[ds_index].contains(monomer_type))
+            throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw.");
+
+        std::vector<T>& exp_dw_vec = this->exp_dw[ds_index][monomer_type];
 
         for (int i = 0; i < M; ++i)
             exp_dw_vec[i] = std::exp(-w[i] * ds);
@@ -118,10 +118,12 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoDiscrete<T>::advance_propagator(
-    T* q_in, T* q_out, std::string monomer_type, const double* q_mask)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int /*ds_index*/)
 {
     try
     {
+        // Discrete chains always use ds_index=1
+        const int ds_idx = 1;
         const int M = this->cb->get_total_grid();
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
@@ -129,8 +131,8 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
-        const T* _exp_dw = this->exp_dw[monomer_type].data();
-        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type);
+        const T* _exp_dw = this->exp_dw[ds_idx][monomer_type].data();
+        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_idx);
 
         // Forward transform
         this->transform_forward(q_in, k_q_in.data());

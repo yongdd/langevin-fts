@@ -78,15 +78,17 @@ CudaSolverCNADI::CudaSolverCNADI(
             this->streams[i][1] = streams[i][1];
         }
 
-        // Create boltz_bond, boltz_bond_half, exp_dw, and exp_dw_half
+        // CN-ADI uses only global ds (ds_index=1)
+        // Create exp_dw and exp_dw_half for ds_index=1 and each monomer type
+        const int ds_idx = 1;  // CN-ADI uses global ds only
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            d_exp_dw     [monomer_type] = nullptr;
-            d_exp_dw_half[monomer_type] = nullptr;
+            d_exp_dw     [ds_idx][monomer_type] = nullptr;
+            d_exp_dw_half[ds_idx][monomer_type] = nullptr;
 
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw     [monomer_type], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half[monomer_type], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw     [ds_idx][monomer_type], sizeof(double)*M));
+            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half[ds_idx][monomer_type], sizeof(double)*M));
 
             d_xl[monomer_type] = nullptr;
             d_xd[monomer_type] = nullptr;
@@ -231,10 +233,13 @@ CudaSolverCNADI::~CudaSolverCNADI()
 {
     const int DIM = this->dim;
 
-    for(const auto& item: d_exp_dw)
-        cudaFree(item.second);
-    for(const auto& item: d_exp_dw_half)
-        cudaFree(item.second);
+    // Free nested maps: d_exp_dw[ds_index][monomer_type]
+    for(const auto& ds_entry: d_exp_dw)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_exp_dw_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
     
     for(const auto& item: d_xl)
         cudaFree(item.second);
@@ -407,11 +412,8 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         const int M = this->cb->get_total_grid();
         const double ds = this->molecules->get_ds();
 
-        for(const auto& item: w_input)
-        {
-            if( d_exp_dw.find(item.first) == d_exp_dw.end())
-                throw_with_line_number("monomer_type \"" + item.first + "\" is not in d_exp_dw.");     
-        }
+        // CN-ADI uses only global ds (ds_index=1)
+        const int ds_idx = 1;
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -429,31 +431,26 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
             std::string monomer_type = item.first;
             const double *w = item.second;
 
+            if (d_exp_dw[ds_idx].find(monomer_type) == d_exp_dw[ds_idx].end())
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+
             // Copy field configurations from host to device
             gpu_error_check(cudaMemcpyAsync(
-                d_exp_dw     [monomer_type], w,      
+                d_exp_dw     [ds_idx][monomer_type], w,
                 sizeof(double)*M, cudaMemcpyInputToDevice));
             gpu_error_check(cudaMemcpyAsync(
-                d_exp_dw_half[monomer_type], w,
+                d_exp_dw_half[ds_idx][monomer_type], w,
                 sizeof(double)*M, cudaMemcpyInputToDevice));
 
             // Compute d_exp_dw and d_exp_dw_half
-            // ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>
-            //     ((double*) d_exp_dw[monomer_type],
-            //     (double*) d_exp_dw[monomer_type], 1.0, -0.50*ds, M);
-            // ker_exp<<<N_BLOCKS, N_THREADS, 0, streams[0][0]>>>
-            //     ((double*) d_exp_dw_half[monomer_type],
-            //     (double*) d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
-
             ker_exp<<<N_BLOCKS, N_THREADS>>>
-                ((double*) d_exp_dw[monomer_type],
-                 (double*) d_exp_dw[monomer_type],      1.0, -0.50*ds, M);
+                ((double*) d_exp_dw[ds_idx][monomer_type],
+                 (double*) d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*ds, M);
             ker_exp<<<N_BLOCKS, N_THREADS>>>
-                ((double*) d_exp_dw_half[monomer_type],
-                 (double*) d_exp_dw_half[monomer_type], 1.0, -0.25*ds, M);
-
-            gpu_error_check(cudaDeviceSynchronize());
+                ((double*) d_exp_dw_half[ds_idx][monomer_type],
+                 (double*) d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*ds, M);
         }
+        gpu_error_check(cudaDeviceSynchronize());
     }
     catch(std::exception& exc)
     {
@@ -463,8 +460,9 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
 void CudaSolverCNADI::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
-    std::string monomer_type, double *d_q_mask)
+    std::string monomer_type, double *d_q_mask, [[maybe_unused]] int ds_index)
 {
+    // Note: CN-ADI currently uses only global ds (ds_index=1)
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -473,12 +471,14 @@ void CudaSolverCNADI::advance_propagator(
         const int M = this->cb->get_total_grid();
         const int DIM = this->cb->get_dim();
 
-        double *_d_exp_dw = d_exp_dw[monomer_type];
+        // CN-ADI uses only global ds (ds_index=1)
+        const int ds_idx = 1;
+        double *_d_exp_dw = d_exp_dw[ds_idx][monomer_type];
 
         if (use_4th_order)
         {
             // CN-ADI4: 4th order accuracy via Richardson extrapolation
-            double *_d_exp_dw_half = d_exp_dw_half[monomer_type];
+            double *_d_exp_dw_half = d_exp_dw_half[ds_idx][monomer_type];
 
             // ========================================
             // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
@@ -600,7 +600,7 @@ void CudaSolverCNADI::advance_propagator(
 void CudaSolverCNADI::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type)
+    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
 {
     try
     {
@@ -705,7 +705,7 @@ void CudaSolverCNADI::advance_propagator_3d(
 void CudaSolverCNADI::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type)
+    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
 {
     try
     {
@@ -783,7 +783,7 @@ void CudaSolverCNADI::advance_propagator_2d(
 void CudaSolverCNADI::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type)
+    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
 {
     try
     {
