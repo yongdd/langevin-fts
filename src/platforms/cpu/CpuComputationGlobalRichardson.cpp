@@ -70,7 +70,6 @@ CpuComputationGlobalRichardson::CpuComputationGlobalRichardson(
                 propagator_half[key][i] = new double[M];
 
             // Richardson-extrapolated: N+1 propagators (same size as full)
-            propagator_richardson_size[key] = full_size;
             propagator_richardson[key] = new double*[full_size];
             for (int i = 0; i < full_size; i++)
                 propagator_richardson[key][i] = new double[M];
@@ -120,14 +119,6 @@ CpuComputationGlobalRichardson::CpuComputationGlobalRichardson(
             current_p++;
         }
 
-        // Initialize partition function storage (base class vectors already sized)
-        int n_polymer_types = molecules->get_n_polymer_types();
-        for (int p = 0; p < n_polymer_types; p++)
-        {
-            single_polymer_partitions_full[p] = 0.0;
-            single_polymer_partitions_half[p] = 0.0;
-        }
-
         // Solvent concentrations
         for (int s = 0; s < molecules->get_n_solvent_types(); s++)
         {
@@ -166,7 +157,7 @@ CpuComputationGlobalRichardson::~CpuComputationGlobalRichardson()
 
     for (const auto& item : propagator_richardson)
     {
-        for (int i = 0; i < propagator_richardson_size[item.first]; i++)
+        for (int i = 0; i < propagator_full_size[item.first]; i++)
             delete[] item.second[i];
         delete[] item.second;
     }
@@ -364,7 +355,7 @@ void CpuComputationGlobalRichardson::compute_propagators(
         for (const auto& item : propagator_computation_optimizer->get_computation_propagators())
         {
             std::string key = item.first;
-            int n_segment = propagator_richardson_size[key] - 1;
+            int n_segment = propagator_full_size[key] - 1;
 
             double** _prop_full = propagator_full[key];
             double** _prop_half = propagator_half[key];
@@ -668,14 +659,11 @@ bool CpuComputationGlobalRichardson::check_total_partition()
     int n_polymer_types = molecules->get_n_polymer_types();
 
     std::cout << "Global Richardson Partition Functions:" << std::endl;
-    std::cout << "Polymer\tQ_full\t\tQ_half\t\tQ_richardson" << std::endl;
+    std::cout << "Polymer\tQ_richardson" << std::endl;
 
     for (int p = 0; p < n_polymer_types; p++)
     {
-        std::cout << p << "\t"
-                  << single_polymer_partitions_full[p] << "\t"
-                  << single_polymer_partitions_half[p] << "\t"
-                  << single_polymer_partitions[p] << std::endl;
+        std::cout << p << "\t" << single_polymer_partitions[p] << std::endl;
     }
 
     // Check consistency across blocks (using half-step propagators)

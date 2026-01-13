@@ -3,8 +3,8 @@
  * @brief CPU propagator computation with Global Richardson extrapolation.
  *
  * This class implements Global Richardson extrapolation at the quadrature level,
- * maintaining two independent propagator chains that are combined only when
- * computing physical quantities (Q, φ).
+ * maintaining two independent propagator chains that are combined via Richardson
+ * extrapolation to compute physical quantities (Q, φ).
  *
  * **Global Richardson at Quadrature Level:**
  *
@@ -13,15 +13,16 @@
  * 1. Maintains TWO independent propagator chains:
  *    - Full-step chain: q_full[0..N] advanced with step size ds
  *    - Half-step chain: q_half[0..2N] advanced with step size ds/2
- * 2. Uses the half-step propagators for concentration φ (4× smaller error)
- * 3. Applies Richardson only when computing Q:
- *    Q = (4·Q_half - Q_full) / 3
+ * 2. Computes Richardson-extrapolated propagators:
+ *    q_rich[n] = (4·q_half[2n] - q_full[n]) / 3
+ * 3. Uses q_rich for both Q and φ computation
  *
  * **Memory Layout:**
  *
  * For each propagator key:
  * - propagator_full[key][n] for n = 0..N (N+1 values)
  * - propagator_half[key][n] for n = 0..2N (2N+1 values)
+ * - propagator_richardson[key][n] for n = 0..N (N+1 values)
  *
  * **Computational Cost:**
  *
@@ -31,8 +32,7 @@
  *
  * **Accuracy:**
  *
- * - Q: O(ds⁴) via Richardson extrapolation
- * - φ: O(ds²/4) using half-step propagators (4× better than full-step)
+ * - Q and φ: O(ds⁴) via Richardson extrapolation
  *
  * @see CpuSolverGlobalRichardsonBase for the base solver
  * @see CpuComputationContinuous for per-step methods
@@ -79,23 +79,16 @@ private:
     std::map<std::string, int> propagator_half_size;
     /// @}
 
-    /// @name Richardson-extrapolated propagators (N+1 steps)
+    /// @name Richardson-extrapolated propagators (N+1 steps, same size as full)
     /// q_rich[n] = (4·q_half[2n] - q_full[n]) / 3
     /// @{
     std::map<std::string, double**> propagator_richardson;
-    std::map<std::string, int> propagator_richardson_size;
     /// @}
 
     /// @name Concentration fields
     /// @{
     std::map<std::tuple<int, std::string, std::string>, double*> phi_block;
     std::vector<double*> phi_solvent;
-    /// @}
-
-    /// @name Partition functions (full and half for Richardson)
-    /// @{
-    std::map<int, double> single_polymer_partitions_full;  ///< From full-step chain
-    std::map<int, double> single_polymer_partitions_half;  ///< From half-step chain
     /// @}
 
     /**
@@ -160,7 +153,7 @@ public:
     }
 
     /**
-     * @brief Compute concentrations using half-step propagators.
+     * @brief Compute concentrations using Richardson-extrapolated propagators.
      */
     void compute_concentrations() override;
 
@@ -184,9 +177,7 @@ public:
     void get_chain_propagator(double* q_out, int polymer, int v, int u, int n) override;
 
     /**
-     * @brief Get total partition function (Richardson extrapolated).
-     *
-     * Returns Q = (4·Q_half - Q_full) / 3
+     * @brief Get total partition function (computed from Richardson propagators).
      */
     double get_total_partition(int polymer) override
     {
