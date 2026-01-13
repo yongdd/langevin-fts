@@ -294,7 +294,7 @@ $$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right
 
 ### Workflow Rules
 
-- **Never commit without permission**: Always wait for explicit user approval before running `git commit`.
+- **Never commit without permission**: Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
 
 - **Use SLURM for long-running jobs**: For any computation expected to take longer than 2 minutes, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
   ```bash
