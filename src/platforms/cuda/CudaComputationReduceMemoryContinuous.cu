@@ -50,6 +50,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
+#include "CudaSolverRichardsonGlobal.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -98,8 +99,8 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             {
                 if (numerical_method == "cn-adi4-g")
                 {
-                    throw_with_line_number("Global Richardson method (cn-adi4-g) is not yet supported on CUDA. "
-                                           "Use platform='cpu-mkl' or use 'cn-adi4' for per-step Richardson.");
+                    // Global Richardson method
+                    this->propagator_solver = new CudaSolverRichardsonGlobal(cb, molecules, n_streams, streams, false);
                 }
                 else
                 {
@@ -619,6 +620,11 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
                 if (ds_index < 1) ds_index = 1;  // Default to global ds
 
+                // Reset solver internal state when starting a new propagator
+                // (needed for Global Richardson method)
+                if (n_segment_from == 0)
+                    propagator_solver->reset_internal_state(STREAM);
+
                 // Create events
                 cudaEvent_t kernel_done;
                 cudaEvent_t memcpy_done;
@@ -817,6 +823,10 @@ std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalcaulte_propagator
         int ds_index = PropagatorCode::get_ds_index_from_key(key);
         if (ds_index < 1) ds_index = 1;  // Default to global ds
 
+        // Reset solver internal state when starting propagator recalculation
+        // (needed for Global Richardson method)
+        propagator_solver->reset_internal_state(0);
+
         // An array of pointers for q_out (use dynamic container to avoid VLA/stack overflow)
         std::vector<T*> q_out(total_max_n_segment + 1);
 
@@ -906,6 +916,12 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         int right_prev_idx = 0;
         int right_next_idx = 1;
         int current_n_right = 0;
+
+        // Reset solver internal state for q_right (starts from segment 0)
+        // Note: For Global Richardson, this only works correctly for q_right
+        // which starts from 0. For q_left (starting from checkpoint), accuracy
+        // may be reduced compared to recomputing from segment 0.
+        propagator_solver->reset_internal_state(STREAM);
 
         // Process n = 0 to N_RIGHT using block-based computation
         int num_blocks = (N_RIGHT + k) / k;

@@ -135,6 +135,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoETDRK4.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
+        src/platforms/cuda/CudaSolverRichardsonGlobal.cu
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu
