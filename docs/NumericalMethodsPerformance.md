@@ -1,6 +1,6 @@
 # Numerical Methods: Performance and Accuracy
 
-This document provides benchmark results comparing the numerical methods available for chain propagator computation in polymer field theory simulations. The benchmarks reproduce Fig. 1 and Fig. 2 from Song et al., *Chinese J. Polym. Sci.* **2018**, 36, 488-496.
+This document provides benchmark results comparing the numerical methods available for chain propagator computation in polymer field theory simulations. The benchmarks reproduce Fig. 1 from Song et al., *Chinese J. Polym. Sci.* **2018**, 36, 488-496.
 
 ## Available Methods
 
@@ -88,36 +88,6 @@ calculation = scft.SCFT(params=params)
 - **CN-ADI2** shows 2nd-order convergence (follows slope -2)
 - Both pseudo-spectral methods converge to F = -0.4770
 
-## Fig. 2: Spatial Resolution Convergence
-
-**Conditions**: f = 0.32, Ns = 101, χN = 40 and 80
-
-### Free Energy vs Grid Size (χN = 40, L = 3.85)
-
-| Method | Nx=24 | Nx=32 | Nx=48 | Nx=64 | Nx=96 | Nx=128 |
-|--------|-------|-------|-------|-------|-------|--------|
-| **RQM4** | -3.351 | -3.337 | -3.334 | -3.334 | -3.334 | -3.334 |
-| **ETDRK4** | -3.350 | -3.336 | -3.334 | -3.334 | -3.334 | - |
-| **CN-ADI2** | -3.445 | -3.384 | -3.354 | -3.346 | -3.341 | -3.339 |
-| **CN-ADI4** | -3.446 | -3.383 | -3.353 | -3.344 | -3.338 | -3.337 |
-
-### Execution Time vs Grid Size (χN = 40)
-
-| Method | Nx=32 | Nx=64 | Nx=96 | Nx=128 |
-|--------|-------|-------|-------|--------|
-| **RQM4** | 14.6 s | 63.7 s | 293.5 s | 653.8 s |
-| **ETDRK4** | 29.4 s | 126.8 s | 576.5 s | - |
-| **CN-ADI2** | 34.8 s | 96.1 s | 208.8 s | 2493.7 s |
-
-### Speedup at High Resolution (Nx=96, χN=40)
-
-| Method | Time | Speedup vs CN-ADI2 |
-|--------|------|-------------------|
-| **RQM4** | 294 s | **1.4x slower** |
-| **CN-ADI2** | 209 s | 1.0x (baseline) |
-
-At high spatial resolution, CN-ADI2 becomes competitive due to its O(N) FFT cost vs O(N log N) for pseudo-spectral methods.
-
 ## Performance Summary
 
 ### Method Comparison
@@ -133,8 +103,7 @@ At high spatial resolution, CN-ADI2 becomes competitive due to its O(N) FFT cost
 
 1. **RQM4 is the fastest pseudo-spectral method** - 2x faster than ETDRK4 per iteration
 2. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.4770
-3. **Pseudo-spectral methods** (RQM4, ETDRK4) show exponential spatial convergence
-4. **CN-ADI methods** support non-periodic boundary conditions
+3. **CN-ADI methods** support non-periodic boundary conditions
 
 ## Method Recommendations
 
