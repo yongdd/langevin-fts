@@ -73,7 +73,7 @@ def benchmark_pseudospectral(platform, nx, lx, ds_values, n_warmup=2, n_runs=5):
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt, "rqm4")
 
         # Warmup
         for _ in range(n_warmup):
@@ -122,7 +122,7 @@ def test_convergence(platform="cpu-mkl"):
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt, "rqm4")
 
         solver.compute_propagators({"A": w_a})
         Q = solver.get_total_partition(0)
@@ -172,7 +172,7 @@ def compare_cpu_cuda():
     molecules_cpu.add_polymer(1.0, [["A", 1.0, 0, 1]])
     cb_cpu = factory_cpu.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
     prop_opt_cpu = factory_cpu.create_propagator_computation_optimizer(molecules_cpu, True)
-    solver_cpu = factory_cpu.create_pseudospectral_solver(cb_cpu, molecules_cpu, prop_opt_cpu)
+    solver_cpu = factory_cpu.create_propagator_computation(cb_cpu, molecules_cpu, prop_opt_cpu, "rqm4")
 
     solver_cpu.compute_propagators({"A": w_a})
     Q_cpu = solver_cpu.get_total_partition(0)
@@ -186,7 +186,7 @@ def compare_cpu_cuda():
         molecules_cuda.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb_cuda = factory_cuda.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt_cuda = factory_cuda.create_propagator_computation_optimizer(molecules_cuda, True)
-        solver_cuda = factory_cuda.create_pseudospectral_solver(cb_cuda, molecules_cuda, prop_opt_cuda)
+        solver_cuda = factory_cuda.create_propagator_computation(cb_cuda, molecules_cuda, prop_opt_cuda, "rqm4")
 
         solver_cuda.compute_propagators({"A": w_a})
         Q_cuda = solver_cuda.get_total_partition(0)

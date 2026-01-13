@@ -459,8 +459,9 @@ class LFTS:
             self.prop_solver._propagator_optimizer = self.prop_solver._factory.create_propagator_computation_optimizer(
                 self.prop_solver._molecules, aggregate
             )
-            self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
-                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
+            self.prop_solver._propagator_computation = self.prop_solver._factory.create_propagator_computation(
+                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer,
+                self.prop_solver.numerical_method
             )
 
         # Display factory info

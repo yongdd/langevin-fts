@@ -88,7 +88,7 @@ def benchmark_pseudospectral(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup
         for _ in range(n_warmup):
@@ -140,7 +140,7 @@ def benchmark_realspace(platform, nx, lx, ds_values, chi_n=12.0, n_warmup=3, n_r
         bc = ["periodic"] * (2 * len(nx))
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=bc)
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_realspace_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup
         for _ in range(n_warmup):
@@ -334,7 +334,7 @@ def run_method_comparison():
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup and benchmark
         for _ in range(3):
@@ -362,7 +362,7 @@ def run_method_comparison():
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup and benchmark
         for _ in range(5):
@@ -391,7 +391,7 @@ def run_method_comparison():
         bc = ["periodic"] * 6
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=bc)
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_realspace_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup and benchmark
         for _ in range(3):
@@ -420,7 +420,7 @@ def run_method_comparison():
         bc = ["periodic"] * 6
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=bc)
         prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
-        solver = factory.create_realspace_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
         # Warmup and benchmark
         for _ in range(5):

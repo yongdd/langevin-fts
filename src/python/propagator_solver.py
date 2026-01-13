@@ -324,19 +324,11 @@ class PropagatorSolver:
                     nx=self.nx, lx=self.lx, bc=self.bc
                 )
 
-        # Create solver based on method
-        if self.method == "pseudospectral":
-            self._propagator_computation = self._factory.create_pseudospectral_solver(
-                self._computation_box, self._molecules, self._propagator_optimizer,
-                self.numerical_method
-            )
-        elif self.method == "realspace":
-            self._propagator_computation = self._factory.create_realspace_solver(
-                self._computation_box, self._molecules, self._propagator_optimizer,
-                self.numerical_method
-            )
-        else:
-            raise ValueError(f"Unknown method: {self.method}")
+        # Create solver
+        self._propagator_computation = self._factory.create_propagator_computation(
+            self._computation_box, self._molecules, self._propagator_optimizer,
+            self.numerical_method
+        )
 
     def compute_propagators(
         self,

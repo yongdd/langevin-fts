@@ -37,7 +37,7 @@
  *
  * // Create simulation objects
  * auto* cb = factory.create_computation_box(nx, lx, bc);
- * auto* solver = factory.create_pseudospectral_solver(cb, mols, optimizer);
+ * auto* solver = factory.create_propagator_computation(cb, mols, optimizer, "rqm4");
  *
  * // Display GPU info
  * factory.display_info();
@@ -141,31 +141,19 @@ public :
         std::string chain_model, double ds, std::map<std::string, double> bond_lengths) override;
 
     /**
-     * @brief Create CUDA pseudo-spectral propagator solver.
+     * @brief Create CUDA propagator computation solver.
      *
      * Creates CudaComputationContinuous, CudaComputationDiscrete, or their
-     * reduce-memory variants based on chain model and memory mode.
+     * reduce-memory variants based on chain model, memory mode, and numerical method.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "rqm4" or "etdrk4"
+     * @param numerical_method                "rqm4", "etdrk4" (pseudo-spectral) or
+     *                                        "cn-adi2", "cn-adi4" (real-space)
      * @return CUDA propagator solver
      */
-    PropagatorComputation<T>* create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
-
-    /**
-     * @brief Create CUDA real-space propagator solver.
-     *
-     * Creates CudaSolverCNADI using GPU-parallelized tridiagonal solvers.
-     *
-     * @param cb                              Computation box
-     * @param molecules                       Molecules container
-     * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "cn-adi2" or "cn-adi4"
-     * @return CUDA real-space solver
-     */
-    PropagatorComputation<T>* create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
+    PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
 
     /**
      * @brief Create CUDA Anderson mixing optimizer.

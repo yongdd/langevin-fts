@@ -57,7 +57,7 @@ propagator_computation_optimizer.display_blocks()
 propagator_computation_optimizer.display_propagators()
 
 # Create Solver
-solver = factory.create_realspace_solver(cb, molecules, propagator_computation_optimizer)
+solver = factory.create_propagator_computation(cb, molecules, propagator_computation_optimizer, "cn-adi4")
 
 # Fields
 w = {"A": np.zeros(nx)}

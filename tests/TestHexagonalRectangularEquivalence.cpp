@@ -78,7 +78,7 @@ ScftResult run_scft_fixed_box(
 
     // Create solver
     PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, false);
-    PropagatorComputation<double>* solver = factory->create_pseudospectral_solver(cb, molecules, optimizer, "rqm4");
+    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
 
     // Create Anderson mixing
     const int M = cb->get_total_grid();

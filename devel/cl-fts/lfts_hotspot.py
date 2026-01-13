@@ -206,7 +206,7 @@ class LFTS:
             propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        self.solver = factory.create_pseudospectral_solver(self.cb, molecules, propagator_computation_optimizer)
+        self.solver = factory.create_propagator_computation(self.cb, molecules, propagator_computation_optimizer, "rqm4")
 
         # Standard deviation of normal noise of Langevin dynamics
         langevin_sigma = calculate_sigma(params["langevin"]["nbar"], params["langevin"]["dt"], np.prod(params["nx"]), np.prod(params["lx"]))

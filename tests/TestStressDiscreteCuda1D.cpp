@@ -96,7 +96,7 @@ int main()
                 molecules->add_polymer(0.3, blocks_1, {});
                 molecules->add_polymer(0.7, blocks_2, {});
                 PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                PropagatorComputation<double>* solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer, "rqm4");
+                PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
 
                 // -------------- Print simulation parameters ------------
                 std::cout << std::setprecision(default_precision);

@@ -33,7 +33,7 @@
  * ComputationBox<double>* cb = factory->create_computation_box(nx, lx, bc);
  * Molecules* molecules = factory->create_molecules_information("continuous", ds, bonds);
  * auto* optimizer = factory->create_propagator_computation_optimizer(molecules, true);
- * auto* solver = factory->create_pseudospectral_solver(cb, molecules, optimizer);
+ * auto* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
  * auto* am = factory->create_anderson_mixing(n_var, 20, 1e-1, 0.1, 0.1);
  *
  * // Display platform information
@@ -178,37 +178,26 @@ public :
     };
 
     /**
-     * @brief Create a pseudo-spectral propagator solver.
+     * @brief Create a propagator computation solver.
      *
-     * Creates an FFT-based solver for the modified diffusion equation.
-     *
-     * @param cb                              Computation box
-     * @param molecules                       Molecules container
-     * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "rqm4" or "etdrk4"
-     * @return Platform-specific PropagatorComputation solver
-     *
-     * @note Requires periodic boundary conditions.
-     */
-    virtual PropagatorComputation<T>* create_pseudospectral_solver(
-        ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
-        std::string numerical_method) = 0;
-
-    /**
-     * @brief Create a real-space propagator solver.
-     *
-     * Creates a finite-difference solver using Crank-Nicolson method.
-     * Supports non-periodic boundary conditions.
+     * Creates a solver for the chain propagator computation. The numerical method
+     * determines whether a pseudo-spectral (FFT-based) or real-space (finite-difference)
+     * solver is used.
      *
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
-     * @param numerical_method                "cn-adi2" or "cn-adi4"
+     * @param numerical_method                Numerical method:
+     *                                        - "rqm4": 4th-order Richardson (pseudo-spectral)
+     *                                        - "etdrk4": Exponential time differencing RK4 (pseudo-spectral)
+     *                                        - "cn-adi2": 2nd-order Crank-Nicolson ADI (real-space)
+     *                                        - "cn-adi4": 4th-order CN-ADI (real-space)
      * @return Platform-specific PropagatorComputation solver
      *
-     * @note This is a beta feature. Supports reflecting and absorbing BCs.
+     * @note Real-space methods (cn-adi*) support non-periodic boundary conditions
+     *       but are a beta feature.
      */
-    virtual PropagatorComputation<T>* create_realspace_solver(
+    virtual PropagatorComputation<T>* create_propagator_computation(
         ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
         std::string numerical_method) = 0;
 

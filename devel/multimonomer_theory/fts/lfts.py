@@ -205,7 +205,7 @@ class LFTS:
             propagator_computation_optimizer = factory.create_propagator_computation_optimizer(molecules, True)
 
         # (C++ class) Solver using Pseudo-spectral method
-        solver = factory.create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer)
+        solver = factory.create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4")
 
         # (C++ class) Fields Relaxation using Anderson Mixing
         am = factory.create_anderson_mixing(

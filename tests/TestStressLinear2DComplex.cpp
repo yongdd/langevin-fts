@@ -84,7 +84,7 @@ int main()
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
                         new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
                     PropagatorComputation<T>* solver =
-                        factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer, "rqm4");
+                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
                     if (!aggregate_propagator_computation)

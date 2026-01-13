@@ -163,7 +163,7 @@ int run_tests(const std::string& platform, bool reduce_memory_usage)
 
     // Create propagator optimizer and solver
     PropagatorComputationOptimizer* optimizer = new PropagatorComputationOptimizer(molecules, false);
-    PropagatorComputation<double>* solver = factory->create_pseudospectral_solver(cb, molecules, optimizer, "rqm4");
+    PropagatorComputation<double>* solver = factory->create_propagator_computation(cb, molecules, optimizer, "rqm4");
 
     // Compute propagators with zero field and custom initial condition
     solver->compute_propagators({{"A", w_zero.data()}}, {{"G", q_init.data()}});

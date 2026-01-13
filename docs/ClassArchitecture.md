@@ -50,8 +50,7 @@ The abstract factory provides a unified interface for creating platform-specific
 AbstractFactory<T>                    [Abstract Base]
 ├── create_computation_box()          [pure virtual]
 ├── create_molecules_information()    [pure virtual]
-├── create_pseudospectral_solver()    [pure virtual]
-├── create_realspace_solver()         [pure virtual]
+├── create_propagator_computation()        [pure virtual]
 ├── create_anderson_mixing()          [pure virtual]
 └── display_info()                    [pure virtual]
         │
@@ -83,8 +82,7 @@ auto factory = PlatformSelector::create_factory("auto", reduce_memory_usage);
 | `create_computation_box(nx, lx, bc)` | `ComputationBox<T>*` | Simulation grid with boundary conditions |
 | `create_computation_box(nx, lx, bc, mask)` | `ComputationBox<T>*` | Grid with impenetrable mask regions |
 | `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
-| `create_pseudospectral_solver(box, molecules, optimizer)` | `PropagatorComputation<T>*` | FFT-based solver |
-| `create_realspace_solver(box, molecules, optimizer)` | `PropagatorComputation<T>*` | Finite-difference solver |
+| `create_propagator_computation(box, molecules, optimizer, method)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, etdrk4, cn-adi2, cn-adi4) |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
 
 ---
@@ -164,7 +162,7 @@ PropagatorComputation<T>                      [Abstract Base]
         │   │   └── 4th-order Richardson extrapolation
         │   │
         │   └── CpuComputationDiscrete<T>     [Discrete Chains]
-        │       └── Split-step Boltzmann operator
+        │       └── Boltzmann weight + bond convolution
         │
         └── CudaComputationBase<T>            [GPU Common Logic]
             │
@@ -194,7 +192,7 @@ This is solved using 4th-order Richardson extrapolation with the operator splitt
 This library implements the discrete chain model as described in Park et al. (2019). Unlike continuous chains that solve a differential equation, discrete chains use **recursive integral equations** based on the Chapman-Kolmogorov equation.
 
 **Units and Conventions:**
-- **Unit length**: $R_0 = aN^{1/2}$, where $a$ is the statistical segment length and $N$ is the polymerization index
+- **Unit length**: $bN^{1/2}$, where $b$ is the reference statistical segment length and $N$ is the reference polymerization index
 - **Contour step size**: $\Delta s = 1/N$
 - **Segment positions**: $s = \Delta s, 2\Delta s, \ldots, 1$ ($N$ segments total)
 
@@ -211,35 +209,33 @@ Discrete Chain Model:
     - Segment positions: s = Δs, 2Δs, 3Δs, ..., 1
 ```
 
-Note: In this diagram, $\Delta s = 1/N$.
-
 **Propagator Evolution (N-1 Bond Model):**
 
 The propagator evolution from segment $i$ to $i+1$ follows two steps:
 
-1. **Bond convolution:**
-$$q^*(\mathbf{r}) = \int g(\mathbf{R}) \, q_i(\mathbf{r} - \mathbf{R}) \, d\mathbf{R}$$
+1. **Full-segment Boltzmann weight:**
+$$q^*(\mathbf{r}) = \exp(-w(\mathbf{r}) \cdot \Delta s) \cdot q_i(\mathbf{r})$$
 
-2. **Full-segment Boltzmann weight:**
-$$q_{i+1}(\mathbf{r}) = \exp(-w(\mathbf{r}) \cdot \Delta s) \cdot q^*(\mathbf{r})$$
+2. **Bond convolution:**
+$$q_{i+1}(\mathbf{r}) = \int g(\mathbf{R}) \, q^*(\mathbf{r} - \mathbf{R}) \, d\mathbf{R}$$
 
 with initial condition: $q_1(\mathbf{r}) = \exp(-w(\mathbf{r}) \cdot \Delta s)$
 
 **Bond Function $g(\mathbf{R})$:**
 
-For the bead-spring model used in this library:
+For the bead-spring (Gaussian) model:
 
-$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
+$$g(\mathbf{R}) = \left(\frac{3}{2\pi b^2 \Delta s}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2 b^2 \Delta s}\right)$$
 
 **Pseudo-Spectral Implementation:**
 
-The bond convolution (step 1) is computed efficiently in Fourier space:
+The bond convolution is computed efficiently in Fourier space:
 
-$$\hat{q}^*(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}_i(\mathbf{k})$$
+$$\hat{q}_{i+1}(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \hat{q}^*(\mathbf{k})$$
 
 where the Fourier transform of the bond function is:
 
-$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{a^2 |\mathbf{k}|^2}{6}\right)$$
+$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$$
 
 This makes the discrete chain SCFT as fast as the continuous chain SCFT with $O(M \log M)$ complexity per step.
 
@@ -281,7 +277,7 @@ CpuSolver<T>                                  [Abstract Base]
         │       │
         │       └── CpuSolverPseudoDiscrete<T>
         │           ├── update_dw(): exp(-w·ds)
-        │           ├── advance_propagator(): split-step
+        │           ├── advance_propagator(): bond convolution
         │           └── advance_propagator_half_bond_step()
         │
         └── CpuSolverCNADI<T>                  [Finite Difference]
@@ -514,31 +510,39 @@ scft.run()
 ```cpp
 #include "PlatformSelector.h"
 
-// Create factory
-auto factory = PlatformSelector::create_factory_real("cuda", false);
-
-// Create molecules
-auto molecules = factory->create_molecules_information(
-    "continuous", 0.01, {{"A", 1.0}, {"B", 1.0}}
-);
-molecules->add_polymer(1.0, {{"A", 0.5, 0, 1}, {"B", 0.5, 1, 2}});
+// Create factory (use "cuda" or "cpu-mkl")
+AbstractFactory<double>* factory = PlatformSelector::create_factory_real("cuda", false);
 
 // Create computation box
-auto box = factory->create_computation_box(
-    {32, 32, 32}, {4.0, 4.0, 4.0}, {"periodic", "periodic", "periodic", "periodic", "periodic", "periodic"}
-);
+std::vector<int> nx = {32, 32, 32};
+std::vector<double> lx = {4.0, 4.0, 4.0};
+std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic", "periodic", "periodic"};
+ComputationBox<double>* box = factory->create_computation_box(nx, lx, bc);
+
+// Create molecules
+std::map<std::string, double> bond_lengths = {{"A", 1.0}, {"B", 1.0}};
+Molecules* molecules = factory->create_molecules_information("continuous", 0.01, bond_lengths);
+molecules->add_polymer(1.0, {{"A", 0.5, 0, 1}, {"B", 0.5, 1, 2}});
 
 // Create optimizer and solver
-auto optimizer = factory->create_propagator_computation_optimizer(molecules, true);
-auto solver = factory->create_pseudospectral_solver(box, molecules, optimizer);
+PropagatorComputationOptimizer* optimizer = factory->create_propagator_computation_optimizer(molecules, true);
+PropagatorComputation<double>* solver = factory->create_propagator_computation(box, molecules, optimizer, "rqm4");
 
-// Compute propagators
+// Compute propagators (w_A, w_B are pre-allocated arrays)
 std::map<std::string, double*> w_fields = {{"A", w_A}, {"B", w_B}};
 solver->compute_propagators(w_fields);
+solver->compute_concentrations();
 
 // Get results
 double Q = solver->get_total_partition(0);
 double* phi_A = solver->get_total_concentration("A");
+
+// Clean up
+delete solver;
+delete optimizer;
+delete molecules;
+delete box;
+delete factory;
 ```
 
 ### Using PropagatorSolver (Python)
@@ -554,7 +558,7 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0},
     bc=["reflecting", "reflecting"],
     chain_model="continuous",
-    method="pseudospectral",
+    numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4"
     platform="cpu-mkl",
     reduce_memory_usage=False
 )
@@ -562,13 +566,14 @@ solver = PropagatorSolver(
 # Add polymer
 solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
-# Compute
+# Compute propagators
 w = np.zeros(64)
 solver.compute_propagators({"A": w})
 
 # Get results
 Q = solver.get_partition_function(0)
 q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
+phi_A = solver.get_concentration("A")
 ```
 
 ---
@@ -595,7 +600,7 @@ q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
 
 ### Why Separate Continuous/Discrete Classes?
 
-- **Algorithm differences**: Richardson extrapolation vs split-step
+- **Algorithm differences**: Richardson extrapolation vs bond convolution
 - **Memory layout**: Discrete needs half-step propagators
 - **Performance**: Specialized implementations avoid runtime checks
 

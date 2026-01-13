@@ -132,7 +132,7 @@ int main()
                         Molecules* molecules       = factory->create_molecules_information(chain_model, ds, bond_lengths);
                         molecules->add_polymer(1.0, blocks, {});
                         PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                        PropagatorComputation<double>* solver     = factory->create_pseudospectral_solver(cb, molecules, propagator_computation_optimizer, "rqm4");
+                        PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
                         AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
                                             am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
