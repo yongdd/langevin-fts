@@ -148,12 +148,6 @@ The following results compare the partition function Q computed with different m
 | CN-ADI4 | **p ≈ 3.9** |
 | Pseudo-Spectral (RQM4) | **p ≈ 4.0** |
 
-#### Convergence Plot (Periodic Boundaries)
-
-![Convergence Study](figures/convergence_plot.png)
-
-*Top-left: Partition function Q vs contour step size. Top-right: -ln(Q) vs step size. Bottom-left: Relative error (log-log) showing $O(\Delta s^2)$ and $O(\Delta s^4)$ convergence. Bottom-right: Computation time vs number of contour steps.*
-
 ### Key Findings
 
 1. **CN-ADI4 achieves 4th-order accuracy**: The measured convergence order of ~3.9 confirms that Richardson extrapolation successfully improves temporal accuracy from $O(\Delta s^2)$ to $O(\Delta s^4)$.
