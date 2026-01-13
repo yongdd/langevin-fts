@@ -103,10 +103,8 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverCNADI.cpp
-        src/platforms/cpu/CpuSolverRichardsonGlobal.cpp
-        src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp
+        src/platforms/cpu/CpuSolverCNADIG.cpp
         src/platforms/cpu/CpuComputationBase.cpp
-        src/platforms/cpu/CpuComputationGlobalRichardson.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
         src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
@@ -137,14 +135,12 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoETDRK4.cu
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
-        src/platforms/cuda/CudaSolverRichardsonGlobal.cu
-        src/platforms/cuda/CudaSolverGlobalRichardsonBase.cu
+        src/platforms/cuda/CudaSolverCNADIG.cu
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu
         src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu
         src/platforms/cuda/CudaComputationReduceMemoryDiscrete.cu
-        src/platforms/cuda/CudaComputationGlobalRichardson.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu

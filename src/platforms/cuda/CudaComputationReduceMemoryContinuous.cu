@@ -50,7 +50,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
-#include "CudaSolverRichardsonGlobal.h"
+#include "CudaSolverCNADIG.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -100,7 +100,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
                 if (numerical_method == "cn-adi4-g")
                 {
                     // Global Richardson method
-                    this->propagator_solver = new CudaSolverRichardsonGlobal(cb, molecules, n_streams, streams, false);
+                    this->propagator_solver = new CudaSolverCNADIG(cb, molecules, n_streams, streams, false);
                 }
                 else
                 {

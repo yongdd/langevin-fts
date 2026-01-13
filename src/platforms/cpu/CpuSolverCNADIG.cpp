@@ -1,18 +1,18 @@
 /**
- * @file CpuSolverRichardsonGlobal.cpp
+ * @file CpuSolverCNADIG.cpp
  * @brief Implementation of Global Richardson extrapolation solver for CPU.
  *
  * Implements the Global Richardson method where two independent propagator
  * evolutions are maintained and combined via Richardson extrapolation.
  *
- * @see CpuSolverRichardsonGlobal.h for algorithm details
+ * @see CpuSolverCNADIG.h for algorithm details
  */
 
 #include <iostream>
 #include <cmath>
 #include <cstring>
 
-#include "CpuSolverRichardsonGlobal.h"
+#include "CpuSolverCNADIG.h"
 
 /**
  * @brief Construct Global Richardson solver.
@@ -20,7 +20,7 @@
  * Allocates tridiagonal coefficient arrays for both full and half step sizes,
  * and internal propagator state arrays.
  */
-CpuSolverRichardsonGlobal::CpuSolverRichardsonGlobal(
+CpuSolverCNADIG::CpuSolverCNADIG(
     ComputationBox<double>* cb, Molecules* molecules)
 {
     try {
@@ -84,7 +84,7 @@ CpuSolverRichardsonGlobal::CpuSolverRichardsonGlobal(
     }
 }
 
-CpuSolverRichardsonGlobal::~CpuSolverRichardsonGlobal()
+CpuSolverCNADIG::~CpuSolverCNADIG()
 {
     // Free internal state arrays
     delete[] q_full_internal;
@@ -118,17 +118,17 @@ CpuSolverRichardsonGlobal::~CpuSolverRichardsonGlobal()
     for (const auto& item : zh_half) delete[] item.second;
 }
 
-int CpuSolverRichardsonGlobal::max_of_two(int x, int y)
+int CpuSolverCNADIG::max_of_two(int x, int y)
 {
     return (x > y) ? x : y;
 }
 
-int CpuSolverRichardsonGlobal::min_of_two(int x, int y)
+int CpuSolverCNADIG::min_of_two(int x, int y)
 {
     return (x < y) ? x : y;
 }
 
-void CpuSolverRichardsonGlobal::update_laplacian_operator()
+void CpuSolverCNADIG::update_laplacian_operator()
 {
     try
     {
@@ -164,7 +164,7 @@ void CpuSolverRichardsonGlobal::update_laplacian_operator()
     }
 }
 
-void CpuSolverRichardsonGlobal::update_dw(std::map<std::string, const double*> w_input)
+void CpuSolverCNADIG::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
     const double ds = this->molecules->get_ds();
@@ -190,12 +190,12 @@ void CpuSolverRichardsonGlobal::update_dw(std::map<std::string, const double*> w
     }
 }
 
-void CpuSolverRichardsonGlobal::reset_internal_state()
+void CpuSolverCNADIG::reset_internal_state()
 {
     is_initialized = false;
 }
 
-void CpuSolverRichardsonGlobal::advance_full_step(
+void CpuSolverCNADIG::advance_full_step(
     double* q_in, double* q_out, std::string monomer_type)
 {
     const int M = this->cb->get_total_grid();
@@ -228,7 +228,7 @@ void CpuSolverRichardsonGlobal::advance_full_step(
         q_out[i] *= _exp_dw[i];
 }
 
-void CpuSolverRichardsonGlobal::advance_half_step(
+void CpuSolverCNADIG::advance_half_step(
     double* q_in, double* q_out, std::string monomer_type)
 {
     const int M = this->cb->get_total_grid();
@@ -287,7 +287,7 @@ void CpuSolverRichardsonGlobal::advance_half_step(
         q_out[i] *= _exp_dw_half[i];
 }
 
-void CpuSolverRichardsonGlobal::advance_propagator(
+void CpuSolverCNADIG::advance_propagator(
     double* q_in, double* q_out, std::string monomer_type,
     const double* q_mask, int /*ds_index*/)
 {
@@ -336,7 +336,7 @@ void CpuSolverRichardsonGlobal::advance_propagator(
 // ADI step methods (copied from CpuSolverCNADI with explicit coefficients)
 // ============================================================================
 
-void CpuSolverRichardsonGlobal::advance_propagator_3d_step(
+void CpuSolverCNADIG::advance_propagator_3d_step(
     std::vector<BoundaryCondition> bc,
     double* q_in, double* q_out,
     double* _xl, double* _xd, double* _xh,
@@ -479,7 +479,7 @@ void CpuSolverRichardsonGlobal::advance_propagator_3d_step(
     }
 }
 
-void CpuSolverRichardsonGlobal::advance_propagator_2d_step(
+void CpuSolverCNADIG::advance_propagator_2d_step(
     std::vector<BoundaryCondition> bc,
     double* q_in, double* q_out,
     double* _xl, double* _xd, double* _xh,
@@ -568,7 +568,7 @@ void CpuSolverRichardsonGlobal::advance_propagator_2d_step(
     }
 }
 
-void CpuSolverRichardsonGlobal::advance_propagator_1d_step(
+void CpuSolverCNADIG::advance_propagator_1d_step(
     std::vector<BoundaryCondition> bc,
     double* q_in, double* q_out,
     double* _xl, double* _xd, double* _xh)
@@ -609,7 +609,7 @@ void CpuSolverRichardsonGlobal::advance_propagator_1d_step(
 // Tridiagonal solvers (identical to CpuSolverCNADI)
 // ============================================================================
 
-void CpuSolverRichardsonGlobal::tridiagonal(
+void CpuSolverCNADIG::tridiagonal(
     const double* xl, const double* xd, const double* xh,
     double* x, const int INTERVAL, const double* d, const int M)
 {
@@ -633,7 +633,7 @@ void CpuSolverRichardsonGlobal::tridiagonal(
         x[i * INTERVAL] = x[i * INTERVAL] - c_star[i] * x[(i + 1) * INTERVAL];
 }
 
-void CpuSolverRichardsonGlobal::tridiagonal_periodic(
+void CpuSolverCNADIG::tridiagonal_periodic(
     const double* xl, const double* xd, const double* xh,
     double* x, const int INTERVAL, const double* d, const int M)
 {
@@ -671,7 +671,7 @@ void CpuSolverRichardsonGlobal::tridiagonal_periodic(
         x[i * INTERVAL] = x[i * INTERVAL] - q[i] * value;
 }
 
-std::vector<double> CpuSolverRichardsonGlobal::compute_single_segment_stress(
+std::vector<double> CpuSolverCNADIG::compute_single_segment_stress(
     [[maybe_unused]] double* q_1, [[maybe_unused]] double* q_2,
     [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
 {

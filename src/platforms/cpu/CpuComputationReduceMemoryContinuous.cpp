@@ -39,7 +39,7 @@
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
-#include "CpuSolverRichardsonGlobal.h"
+#include "CpuSolverCNADIG.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -91,7 +91,7 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
                 if (numerical_method == "cn-adi4-g")
                 {
                     // Global Richardson: two independent evolutions combined at the end
-                    this->propagator_solver = new CpuSolverRichardsonGlobal(cb, molecules);
+                    this->propagator_solver = new CpuSolverCNADIG(cb, molecules);
                 }
                 else
                 {

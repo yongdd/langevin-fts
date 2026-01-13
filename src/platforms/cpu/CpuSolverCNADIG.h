@@ -1,8 +1,8 @@
 /**
- * @file CpuSolverRichardsonGlobal.h
+ * @file CpuSolverCNADIG.h
  * @brief Global Richardson extrapolation solver for continuous chains on CPU.
  *
- * This header provides CpuSolverRichardsonGlobal, which implements "Global Richardson"
+ * This header provides CpuSolverCNADIG, which implements "Global Richardson"
  * extrapolation for solving the modified diffusion equation. Unlike CN-ADI4 (per-step
  * Richardson), this method maintains two independent propagator evolutions and applies
  * Richardson extrapolation to combine them.
@@ -42,8 +42,8 @@
  * @see CpuSolverCNADI for per-step Richardson (CN-ADI4)
  */
 
-#ifndef CPU_SOLVER_RICHARDSON_GLOBAL_H_
-#define CPU_SOLVER_RICHARDSON_GLOBAL_H_
+#ifndef CPU_SOLVER_CN_ADI_G_H_
+#define CPU_SOLVER_CN_ADI_G_H_
 
 #include <string>
 #include <vector>
@@ -56,7 +56,7 @@
 #include "FiniteDifference.h"
 
 /**
- * @class CpuSolverRichardsonGlobal
+ * @class CpuSolverCNADIG
  * @brief CPU solver using Global Richardson extrapolation.
  *
  * Implements Richardson extrapolation with two independent propagator evolutions.
@@ -77,7 +77,7 @@
  * - 1 full step (ds) + 2 half steps (ds/2) = 3 ADI solves
  * - Same cost as CN-ADI4, but different algorithm
  */
-class CpuSolverRichardsonGlobal : public CpuSolver<double>
+class CpuSolverCNADIG : public CpuSolver<double>
 {
 private:
     ComputationBox<double>* cb;  ///< Computation box for grid/boundary info
@@ -192,12 +192,12 @@ public:
      * @param cb        Computation box with boundary conditions
      * @param molecules Molecules container with monomer types
      */
-    CpuSolverRichardsonGlobal(ComputationBox<double>* cb, Molecules* molecules);
+    CpuSolverCNADIG(ComputationBox<double>* cb, Molecules* molecules);
 
     /**
      * @brief Destructor. Frees all allocated arrays.
      */
-    ~CpuSolverRichardsonGlobal();
+    ~CpuSolverCNADIG();
 
     /**
      * @brief Update finite difference coefficients.
@@ -277,4 +277,4 @@ public:
         bool is_half_bond_length) override;
 };
 
-#endif  // CPU_SOLVER_RICHARDSON_GLOBAL_H_
+#endif  // CPU_SOLVER_CN_ADI_G_H_

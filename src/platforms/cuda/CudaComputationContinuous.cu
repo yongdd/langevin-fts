@@ -49,7 +49,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
-#include "CudaSolverRichardsonGlobal.h"
+#include "CudaSolverCNADIG.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -104,7 +104,7 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
                 if (numerical_method == "cn-adi4-g")
                 {
                     // Global Richardson method
-                    this->propagator_solver = new CudaSolverRichardsonGlobal(cb, molecules, this->n_streams, this->streams, false);
+                    this->propagator_solver = new CudaSolverCNADIG(cb, molecules, this->n_streams, this->streams, false);
                 }
                 else
                 {
