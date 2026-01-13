@@ -138,11 +138,13 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaSolverPseudoDiscrete.cu
         src/platforms/cuda/CudaSolverCNADI.cu
         src/platforms/cuda/CudaSolverRichardsonGlobal.cu
+        src/platforms/cuda/CudaSolverGlobalRichardsonBase.cu
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu
         src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu
         src/platforms/cuda/CudaComputationReduceMemoryDiscrete.cu
+        src/platforms/cuda/CudaComputationGlobalRichardson.cu
         src/platforms/cuda/CudaCircularBuffer.cu
         src/platforms/cuda/PinnedCircularBuffer.cu
         src/platforms/cuda/CudaAndersonMixing.cu
