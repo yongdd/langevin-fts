@@ -103,6 +103,7 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverCNADI.cpp
+        src/platforms/cpu/CpuSolverRichardsonGlobal.cpp
         src/platforms/cpu/CpuComputationBase.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp

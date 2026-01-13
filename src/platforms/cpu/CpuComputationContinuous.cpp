@@ -41,6 +41,7 @@
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
+#include "CpuSolverRichardsonGlobal.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -87,8 +88,17 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                bool use_4th_order = (numerical_method == "cn-adi4");
-                this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
+                if (numerical_method == "cn-adi4-g")
+                {
+                    // Global Richardson: two independent evolutions combined at the end
+                    this->propagator_solver = new CpuSolverRichardsonGlobal(cb, molecules);
+                }
+                else
+                {
+                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
+                    bool use_4th_order = (numerical_method == "cn-adi4");
+                    this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
+                }
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
@@ -369,6 +379,11 @@ void CpuComputationContinuous<T>::compute_propagators(
                 // Get ds_index from the key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
                 if (ds_index < 1) ds_index = 1;  // Default to global ds
+
+                // Reset solver internal state when starting a new propagator
+                // (needed for Global Richardson method)
+                if (n_segment_from == 0)
+                    this->propagator_solver->reset_internal_state();
 
                 // Advance propagator successively
                 for(int n=n_segment_from; n<n_segment_to; n++)
