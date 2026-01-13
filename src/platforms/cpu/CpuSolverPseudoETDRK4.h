@@ -6,27 +6,18 @@
  * (Exponential Time Differencing Runge-Kutta 4th order) method for solving
  * the modified diffusion equation with continuous Gaussian chains.
  *
- * @warning **Reduced Convergence Order for Polymer MDE**
- *
- * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
- * applied to the polymer modified diffusion equation. This is because N(q) = -w*q
- * is linear in q, so intermediate stage evaluations provide no additional
- * information for the Runge-Kutta weighting to exploit.
- *
- * **Recommendation:** Use CpuSolverPseudoRQM4 instead. RQM4 is 2x faster and
- * achieves true 4th-order convergence.
- *
- * **ETDRK4 Algorithm (Cox & Matthews 2002):**
+ * **ETDRK4 Algorithm (Krogstad scheme, Song et al. 2018):**
  *
  * For the equation: dq/ds = L*q + N(q) where:
  * - L = (b^2/6)*nabla^2 (linear diffusion, eigenvalue c = -k^2*b^2/6)
  * - N(q) = -w*q (nonlinear/potential term)
  *
- * Stages:
- *   a = E2*q_hat + alpha*N_hat_n
- *   b = E2*q_hat + alpha*N_hat_a
- *   c = E2*a_hat + alpha*(2*N_hat_b - N_hat_n)
- *   q_hat_{n+1} = E*q_hat + f1*N_hat_n + f2*(N_hat_a + N_hat_b) + f3*N_hat_c
+ * Stages (Eq. 7a-7d from Song et al. 2018):
+ *   a_hat = E2*q_hat + alpha*N_hat_n                           (7a)
+ *   b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)              (7b)
+ *   c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)  (7c)
+ *   q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+ *                 + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)  (7d)
  *
  * **Numerical Stability:**
  *
@@ -65,7 +56,7 @@
  *
  * Per monomer type:
  * - w_field: Raw potential field (n_grid)
- * - ETDRK4 coefficients: E, E2, alpha, f1, f2, f3 (n_complex each)
+ * - ETDRK4 coefficients: E, E2, alpha, phi2_half, phi1, phi2, phi3 (n_complex each)
  *
  * **Performance:**
  *
