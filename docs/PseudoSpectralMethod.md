@@ -238,21 +238,7 @@ This **symmetric Strang splitting** has several important properties:
 - The potential operators are applied in real space (diagonal)
 - The symmetry makes the algorithm **time-reversible**
 
-### 6.2 Error Analysis of the RK Algorithm
-
-For symmetric operator splitting, the local truncation error per step is $O(\Delta s^3)$, leading to a **global error of $O(\Delta s^2)$** after $1/\Delta s$ steps.
-
-The exact propagator can be expanded as:
-
-$$q(s + \Delta s) = q(s) + \Delta s \cdot f_1 + \Delta s^2 \cdot f_2 + \Delta s^3 \cdot f_3 + O(\Delta s^4)$$
-
-The RK algorithm gives:
-
-$$q_{RK}(s + \Delta s; \Delta s) = q(s) + \Delta s \cdot f_1 + \Delta s^2 \cdot f_2 + \Delta s^3 \cdot g_3 + O(\Delta s^4)$$
-
-where $g_3 \neq f_3$ represents the leading-order error.
-
-### 6.3 RQM4: Richardson Extrapolation for 4th-Order Accuracy
+### 6.2 RQM4: Richardson Extrapolation for 4th-Order Accuracy
 
 **RQM4** uses Richardson extrapolation to eliminate the leading-order error by combining results from different step sizes. For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:
 
@@ -266,29 +252,7 @@ The extrapolated result is:
 
 $$q^{n+1} = \frac{4 q_{half} - q_{full}}{3}$$
 
-### 6.4 Why 4th-Order Accuracy?
-
-For a generic $O(\Delta s^2)$ integrator, Richardson extrapolation would yield only $O(\Delta s^3)$ accuracy. However, the RQM4 method achieves **$O(\Delta s^4)$ accuracy** due to the **time-reversibility** of the underlying RK algorithm [6].
-
-For reversible integrators, the error expansion contains only **even powers** of $\Delta s$:
-
-$$q_{RK}(s + \Delta s; \Delta s) = q_{exact}(s + \Delta s) + c_2 \Delta s^2 + c_4 \Delta s^4 + O(\Delta s^6)$$
-
-The $O(\Delta s^3)$ term vanishes identically due to time-reversal symmetry.
-
-Applying Richardson extrapolation:
-- $q_{full}$ has error $c_2 \Delta s^2 + c_4 \Delta s^4 + O(\Delta s^6)$
-- $q_{half}$ has error $c_2 (\Delta s/2)^2 + c_4 (\Delta s/2)^4 + O(\Delta s^6) = \frac{c_2}{4}\Delta s^2 + \frac{c_4}{16}\Delta s^4 + O(\Delta s^6)$
-
-The extrapolation:
-
-$$\frac{4 q_{half} - q_{full}}{3} = q_{exact} + \frac{4 \cdot \frac{c_2}{4} - c_2}{3}\Delta s^2 + \frac{4 \cdot \frac{c_4}{16} - c_4}{3}\Delta s^4 + O(\Delta s^6)$$
-
-$$= q_{exact} + 0 \cdot \Delta s^2 - \frac{3c_4}{16}\Delta s^4 + O(\Delta s^6)$$
-
-The $O(\Delta s^2)$ error is eliminated, and because the $O(\Delta s^3)$ term was already zero, the result has **$O(\Delta s^4)$ global accuracy**.
-
-### 6.5 Computational Cost
+### 6.3 Computational Cost
 
 RQM4 requires **3 RK applications** per effective step:
 - 1 full step
@@ -296,7 +260,7 @@ RQM4 requires **3 RK applications** per effective step:
 
 This triples the computational cost but provides two orders of magnitude better accuracy, which is typically more efficient than reducing $\Delta s$ by a factor of 10.
 
-### 6.6 Implementation Summary
+### 6.4 Implementation Summary
 
 For each contour step in continuous chain propagation:
 
