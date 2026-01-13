@@ -87,8 +87,6 @@ private:
     std::map<std::string, double*> zl_half, zd_half, zh_half;
     /// @}
 
-    double* q_temp;  ///< Temporary work array
-
     int max_of_two(int x, int y);
     int min_of_two(int x, int y);
 

@@ -75,12 +75,9 @@ CpuComputationGlobalRichardson::CpuComputationGlobalRichardson(
                 propagator_richardson[key][i] = new double[M];
 
             #ifndef NDEBUG
-            propagator_full_finished[key] = new bool[full_size];
-            propagator_half_finished[key] = new bool[half_size];
+            propagator_finished[key] = new bool[full_size];
             for (int i = 0; i < full_size; i++)
-                propagator_full_finished[key][i] = false;
-            for (int i = 0; i < half_size; i++)
-                propagator_half_finished[key][i] = false;
+                propagator_finished[key][i] = false;
             #endif
         }
 
@@ -169,9 +166,7 @@ CpuComputationGlobalRichardson::~CpuComputationGlobalRichardson()
         delete[] item;
 
     #ifndef NDEBUG
-    for (const auto& item : propagator_full_finished)
-        delete[] item.second;
-    for (const auto& item : propagator_half_finished)
+    for (const auto& item : propagator_finished)
         delete[] item.second;
     #endif
 }
@@ -206,9 +201,7 @@ void CpuComputationGlobalRichardson::compute_propagators(
         {
             std::string key = item.first;
             for (int i = 0; i < propagator_full_size[key]; i++)
-                propagator_full_finished[key][i] = false;
-            for (int i = 0; i < propagator_half_size[key]; i++)
-                propagator_half_finished[key][i] = false;
+                propagator_finished[key][i] = false;
         }
         #endif
 
@@ -253,8 +246,7 @@ void CpuComputationGlobalRichardson::compute_propagators(
                     }
 
                     #ifndef NDEBUG
-                    propagator_full_finished[key][0] = true;
-                    propagator_half_finished[key][0] = true;
+                    propagator_finished[key][0] = true;
                     #endif
                 }
                 else if (n_segment_from == 0 && deps.size() > 0)
@@ -312,8 +304,7 @@ void CpuComputationGlobalRichardson::compute_propagators(
                     }
 
                     #ifndef NDEBUG
-                    propagator_full_finished[key][0] = true;
-                    propagator_half_finished[key][0] = true;
+                    propagator_finished[key][0] = true;
                     #endif
                 }
 
@@ -343,9 +334,7 @@ void CpuComputationGlobalRichardson::compute_propagators(
                         _prop_half[half_idx + 1], _prop_half[half_idx + 2], monomer_type, q_mask);
 
                     #ifndef NDEBUG
-                    propagator_full_finished[key][n + 1] = true;
-                    propagator_half_finished[key][half_idx + 1] = true;
-                    propagator_half_finished[key][half_idx + 2] = true;
+                    propagator_finished[key][n + 1] = true;
                     #endif
                 }
             }

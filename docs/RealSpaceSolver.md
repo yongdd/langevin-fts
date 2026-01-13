@@ -60,7 +60,7 @@ This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
 ### Runtime Selection
 
-CN-ADI2 or CN-ADI4 can be selected at runtime using the `numerical_method` parameter:
+CN-ADI2, CN-ADI4, or CN-ADI4-GQ can be selected at runtime using the `numerical_method` parameter:
 
 ```python
 from polymerfts import PropagatorSolver
@@ -70,9 +70,85 @@ solver = PropagatorSolver(..., numerical_method="cn-adi2")
 
 # CN-ADI4 (more accurate, but may be unstable near absorbing boundaries)
 solver = PropagatorSolver(..., numerical_method="cn-adi4")
+
+# CN-ADI4-GQ (Global Richardson - same accuracy, different implementation)
+solver = PropagatorSolver(..., numerical_method="cn-adi4-gq")
 ```
 
 **Note**: CN-ADI4 may become unstable when initial conditions are close to absorbing boundaries (see Stability Warning below).
+
+## CN-ADI4-GQ: Global Richardson at Quadrature Level
+
+An alternative 4th-order method, **CN-ADI4-GQ** (Global Richardson at Quadrature Level), applies Richardson extrapolation differently than CN-ADI4. Instead of extrapolating propagators at each step, it maintains two independent propagator chains and applies Richardson extrapolation only when computing physical quantities (Q, φ).
+
+### Comparison: CN-ADI4 vs CN-ADI4-GQ
+
+| Aspect | CN-ADI4 (Per-Step) | CN-ADI4-GQ (Global) |
+|--------|-------------------|---------------------|
+| **Extrapolation** | Every contour step | Only at quadrature (Q, φ) |
+| **Propagator chains** | Single chain (extrapolated) | Two independent chains |
+| **Memory** | 1× propagator storage | 3× propagator storage |
+| **ADI solves per step** | 3 (1 full + 2 half) | 3 (1 full + 2 half) |
+| **Q accuracy** | O(ds⁴) | O(ds⁴) |
+| **φ accuracy** | O(ds⁴) | O(ds⁴) |
+
+### How CN-ADI4-GQ Works
+
+CN-ADI4-GQ maintains two independent propagator chains:
+
+1. **Full-step chain**: $q_{\text{full}}[0..N]$ advanced with step size $\Delta s$
+2. **Half-step chain**: $q_{\text{half}}[0..2N]$ advanced with step size $\Delta s/2$
+
+Richardson-extrapolated propagators are computed as:
+
+$$q_{\text{rich}}[n] = \frac{4 \cdot q_{\text{half}}[2n] - q_{\text{full}}[n]}{3}$$
+
+These extrapolated propagators are used for computing Q and φ:
+
+$$Q = \frac{1}{V} \int q_{\text{rich}} \cdot q^{\dagger}_{\text{rich}} \, d\mathbf{r}$$
+
+$$\phi = \frac{\phi_v}{Q} \int_0^1 q_{\text{rich}}(s) \cdot q^{\dagger}_{\text{rich}}(1-s) \, ds$$
+
+### Design Philosophy
+
+The key insight is that Richardson extrapolation is most effective when applied to the final computed quantities (Q, φ) rather than intermediate propagator values:
+
+1. The half-step chain already has 4× smaller error per step
+2. Richardson's power comes from canceling accumulated error at the endpoint
+3. Intermediate propagators are used for φ integration where errors average out
+
+### When to Use CN-ADI4-GQ
+
+CN-ADI4-GQ may be preferred when:
+
+- You need access to both full-step and half-step propagators for analysis
+- You want to study the effect of Richardson extrapolation on different quantities
+- Memory is not a constraint (requires 3× more propagator storage)
+
+For most applications, **CN-ADI4** (per-step Richardson) is recommended as it:
+- Uses less memory
+- Provides identical accuracy for Q and φ
+- Has simpler implementation
+
+### Usage
+
+```python
+from polymerfts import PropagatorSolver
+
+# CN-ADI4-GQ (Global Richardson at quadrature level)
+solver = PropagatorSolver(..., numerical_method="cn-adi4-gq")
+```
+
+### Implementation Files
+
+| File | Description |
+|------|-------------|
+| `src/platforms/cpu/CpuComputationGlobalRichardson.cpp` | Computation layer |
+| `src/platforms/cpu/CpuComputationGlobalRichardson.h` | Header |
+| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp` | Base CN-ADI2 solver |
+| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.h` | Header |
+
+**Note**: CN-ADI4-GQ is currently only available on CPU (cpu-mkl platform).
 
 ## Performance Benchmarks
 
@@ -332,10 +408,14 @@ Q = solver.get_partition_function(polymer=0)
 
 | File | Description |
 |------|-------------|
-| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU implementation |
+| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4 solver |
 | `src/platforms/cpu/CpuSolverCNADI.h` | CPU header |
-| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA implementation |
+| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4 solver |
 | `src/platforms/cuda/CudaSolverCNADI.h` | CUDA header |
+| `src/platforms/cpu/CpuComputationGlobalRichardson.cpp` | CPU CN-ADI4-GQ computation |
+| `src/platforms/cpu/CpuComputationGlobalRichardson.h` | CPU header |
+| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp` | CPU CN-ADI4-GQ base solver |
+| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.h` | CPU header |
 | `src/common/FiniteDifference.cpp` | Tridiagonal coefficient generation |
 
 ### Tridiagonal Solvers
