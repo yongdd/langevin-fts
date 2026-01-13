@@ -79,6 +79,13 @@ private:
     std::map<std::string, int> propagator_half_size;
     /// @}
 
+    /// @name Richardson-extrapolated propagators (N+1 steps)
+    /// q_rich[n] = (4·q_half[2n] - q_full[n]) / 3
+    /// @{
+    std::map<std::string, double**> propagator_richardson;
+    std::map<std::string, int> propagator_richardson_size;
+    /// @}
+
     /// @name Concentration fields
     /// @{
     std::map<std::tuple<int, std::string, std::string>, double*> phi_block;
@@ -93,8 +100,9 @@ private:
 
     /**
      * @brief Segment pairs for partition function calculation.
+     * Tuple: (polymer_idx, q_richardson_left, q_richardson_right, n_aggregated)
      */
-    std::vector<std::tuple<int, double*, double*, double*, double*, int>> partition_segment_info;
+    std::vector<std::tuple<int, double*, double*, int>> partition_segment_info;
 
     #ifndef NDEBUG
     std::map<std::string, bool*> propagator_full_finished;
@@ -104,15 +112,12 @@ private:
     /**
      * @brief Calculate concentration using Richardson-extrapolated propagators.
      *
-     * Computes q_rich[n] = (4·q_half[2n] - q_full[n]) / 3 at each grid point,
-     * then integrates: φ = Σ simpson_coeff[n] * q_rich_1 * q_rich_2
+     * Integrates: φ = Σ simpson_coeff[n] * q_rich_1 * q_rich_2
      */
-    void calculate_phi_one_block_richardson(
+    void calculate_phi_one_block(
         double* phi,
-        double** q_1_full,
-        double** q_1_half,
-        double** q_2_full,
-        double** q_2_half,
+        double** q_1_richardson,
+        double** q_2_richardson,
         const int N_LEFT,
         const int N_RIGHT
     );
