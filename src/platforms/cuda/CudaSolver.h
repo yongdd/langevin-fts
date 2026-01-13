@@ -77,6 +77,16 @@ public:
     virtual ~CudaSolver() {};
 
     /**
+     * @brief Reset internal propagator states for a stream.
+     *
+     * Used by Global Richardson method to reset per-stream state.
+     * Default implementation does nothing (for solvers without internal state).
+     *
+     * @param STREAM Stream index to reset
+     */
+    virtual void reset_internal_state([[maybe_unused]] int STREAM) {}
+
+    /**
      * @brief Update Laplacian operator for new box dimensions.
      *
      * Recomputes Fourier-space operators or finite difference coefficients.

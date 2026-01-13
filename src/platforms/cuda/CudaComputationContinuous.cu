@@ -49,6 +49,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
+#include "CudaSolverRichardsonGlobal.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -102,8 +103,8 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
             {
                 if (numerical_method == "cn-adi4-g")
                 {
-                    throw_with_line_number("Global Richardson method (cn-adi4-g) is not yet supported on CUDA. "
-                                           "Use platform='cpu-mkl' or use 'cn-adi4' for per-step Richardson.");
+                    // Global Richardson method
+                    this->propagator_solver = new CudaSolverRichardsonGlobal(cb, molecules, this->n_streams, this->streams, false);
                 }
                 else
                 {
@@ -445,6 +446,11 @@ void CudaComputationContinuous<T>::compute_propagators(
                 // Get ds_index from the propagator key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
                 if (ds_index < 1) ds_index = 1;  // Default to global ds
+
+                // Reset solver internal state when starting a new propagator
+                // (needed for Global Richardson method)
+                if (n_segment_from == 0)
+                    this->propagator_solver->reset_internal_state(STREAM);
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
