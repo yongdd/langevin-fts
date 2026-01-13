@@ -4,17 +4,7 @@
  *
  * This header provides CudaSolverPseudoETDRK4, the CUDA implementation
  * of the ETDRK4 (Exponential Time Differencing Runge-Kutta 4th order)
- * method for continuous Gaussian chains.
- *
- * @warning **Reduced Convergence Order for Polymer MDE**
- *
- * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
- * applied to the polymer modified diffusion equation. This is because N(q) = -w*q
- * is linear in q, so intermediate stage evaluations provide no additional
- * information for the Runge-Kutta weighting to exploit.
- *
- * **Recommendation:** Use CudaSolverPseudoRQM4 instead. RQM4 is 2x faster and
- * achieves true 4th-order convergence.
+ * method for continuous Gaussian chains using the Krogstad scheme.
  *
  * **GPU Architecture:**
  *
@@ -22,13 +12,14 @@
  * - cuFFT for GPU-accelerated FFT operations
  * - Custom CUDA kernels for element-wise operations
  *
- * **ETDRK4 Algorithm (Cox & Matthews 2002):**
+ * **Krogstad ETDRK4 Algorithm (Song et al. 2018, Eq. 7a-7d):**
  *
  * For dq/ds = L·q + N(q) where L = (b²/6)∇² and N(q) = -w·q:
- * - Stage a: â = E2·q̂ + α·N̂_n
- * - Stage b: b̂ = E2·q̂ + α·N̂_a
- * - Stage c: ĉ = E2·â + α·(2N̂_b - N̂_n)
- * - Final: q̂_{n+1} = E·q̂ + f1·N̂_n + f2·(N̂_a + N̂_b) + f3·N̂_c
+ * - Stage a (7a): â = E2·q̂ + α·N̂_n
+ * - Stage b (7b): b̂ = â + φ₂_half·(N̂_a - N̂_n)
+ * - Stage c (7c): ĉ = E·q̂ + φ₁·N̂_n + 2φ₂·(N̂_b - N̂_n)
+ * - Final (7d):   q̂_{n+1} = ĉ + (4φ₃ - φ₂)·(N̂_n + N̂_c)
+ *                 + 2φ₂·N̂_a - 4φ₃·(N̂_a + N̂_b)
  *
  * Coefficients computed using Kassam-Trefethen (2005) contour integral.
  *
@@ -59,17 +50,10 @@
  * @class CudaSolverPseudoETDRK4
  * @brief GPU ETDRK4 pseudo-spectral solver for continuous Gaussian chains.
  *
- * Implements the ETDRK4 method with Kassam-Trefethen coefficient computation
- * for stable and L-stable time stepping.
+ * Implements the Krogstad ETDRK4 scheme (Song et al. 2018) with
+ * Kassam-Trefethen coefficient computation for stable time stepping.
  *
  * @tparam T Numeric type (double or std::complex<double>)
- *
- * **ETDRK4 vs RQM4:**
- *
- * - ETDRK4: L-stable, but only O(ds) accuracy for polymer MDE
- * - RQM4: True 4th-order convergence, 2x faster
- *
- * **Use RQM4 instead** for polymer SCFT/FTS simulations.
  */
 template <typename T>
 class CudaSolverPseudoETDRK4 : public CudaSolver<T>
@@ -98,15 +82,16 @@ private:
     std::map<std::string, CuDeviceData<T>*> d_w_field;    ///< Raw potential field (per monomer type)
     /// @}
 
-    /// @name ETDRK4 Coefficients
+    /// @name ETDRK4 Krogstad Coefficients
     /// @{
     std::unique_ptr<ETDRK4Coefficients<T>> etdrk4_coefficients_;  ///< ETDRK4 coefficient arrays (host)
-    std::map<std::string, double*> d_etdrk4_E;     ///< exp(c*h) on device
-    std::map<std::string, double*> d_etdrk4_E2;    ///< exp(c*h/2) on device
-    std::map<std::string, double*> d_etdrk4_alpha; ///< h*phi_1(c*h/2) on device
-    std::map<std::string, double*> d_etdrk4_f1;    ///< h*beta_1(c*h) on device
-    std::map<std::string, double*> d_etdrk4_f2;    ///< h*beta_2(c*h) on device
-    std::map<std::string, double*> d_etdrk4_f3;    ///< h*beta_3(c*h) on device
+    std::map<std::string, double*> d_etdrk4_E;         ///< exp(c*h) on device
+    std::map<std::string, double*> d_etdrk4_E2;        ///< exp(c*h/2) on device
+    std::map<std::string, double*> d_etdrk4_alpha;     ///< (h/2)*phi_1(c*h/2) on device - stage a
+    std::map<std::string, double*> d_etdrk4_phi2_half; ///< h*phi_2(c*h/2) on device - stage b
+    std::map<std::string, double*> d_etdrk4_phi1;      ///< h*phi_1(c*h) on device - stage c
+    std::map<std::string, double*> d_etdrk4_phi2;      ///< h*phi_2(c*h) on device - stages c, final
+    std::map<std::string, double*> d_etdrk4_phi3;      ///< h*phi_3(c*h) on device - final step
     /// @}
 
     /// @name ETDRK4 Workspace Arrays (per stream)

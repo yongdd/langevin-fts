@@ -1,37 +1,23 @@
 /**
  * @file ETDRK4Coefficients.h
- * @brief ETDRK4 coefficients for pseudo-spectral method.
+ * @brief ETDRK4 coefficients for pseudo-spectral method (Krogstad scheme).
  *
  * This header provides the ETDRK4Coefficients class for computing and storing
  * coefficients used in the ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
  * time integration scheme for the modified diffusion equation.
  *
- * @warning **Reduced Convergence Order for Polymer MDE**
- *
- * ETDRK4 achieves only O(ds) convergence (1st-order) instead of O(ds^4) when
- * applied to the polymer modified diffusion equation. This is because:
- *
- * 1. ETDRK4 treats N(q) = -w*q as a "nonlinear" term, but it is linear in q
- * 2. When N(q) is linear, intermediate stage evaluations N(a), N(b), N(c) are
- *    linear combinations of N(q_n), providing no additional information
- * 3. The method's Runge-Kutta weighting cannot achieve full accuracy
- *
- * **Recommendation:** Use RQM4 instead for polymer SCFT/FTS simulations.
- * RQM4 is 2x faster and achieves true 4th-order convergence.
- *
- * See docs/NumericalMethodsPerformance.md for detailed benchmark results.
- *
- * **ETDRK4 Algorithm (Cox & Matthews 2002):**
+ * **ETDRK4 Algorithm (Krogstad 2003, Song et al. 2018):**
  *
  * For the equation: dq/ds = L*q + N(q) where:
  * - L = (b^2/6)*nabla^2 (linear diffusion, eigenvalue c = -k^2*b^2/6 in Fourier space)
  * - N(q) = -w*q (nonlinear/potential term)
  *
- * Stages:
- *   a = E2*q_hat + alpha*N_hat_n
- *   b = E2*q_hat + alpha*N_hat_a
- *   c = E2*a_hat + alpha*(2*N_hat_b - N_hat_n)
- *   q_hat_{n+1} = E*q_hat + f1*N_hat_n + f2*(N_hat_a + N_hat_b) + f3*N_hat_c
+ * Stages (Krogstad scheme from Song et al. 2018):
+ *   a_hat = E2*q_hat + alpha*N_hat_n
+ *   b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
+ *   c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
+ *   q_hat_{n+1} = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+ *                 + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
  *
  * **Coefficient Computation:**
  *
@@ -40,11 +26,11 @@
  * - 32-point contour with radius 1.0 provides ~15 digits accuracy
  *
  * **References:**
- * - Cox & Matthews, J. Comput. Phys. 176, 430-455 (2002)
+ * - Krogstad, Topics in Numerical Lie Group Integration, PhD thesis (2003)
  * - Kassam & Trefethen, SIAM J. Sci. Comput. 26, 1214-1233 (2005)
  * - Song, Liu & Zhang, Chinese J. Polym. Sci. 36, 488-496 (2018)
  *
- * @see CpuSolverPseudoRQM4 for usage
+ * @see CpuSolverPseudoETDRK4 for usage
  */
 
 #ifndef ETDRK4_COEFFICIENTS_H_
@@ -62,19 +48,24 @@
  * @class ETDRK4Coefficients
  * @brief Pre-computed ETDRK4 coefficient arrays for pseudo-spectral solver.
  *
- * This class computes and stores the ETDRK4 coefficients for each monomer type.
+ * This class computes and stores the ETDRK4 coefficients for each monomer type
+ * using the Krogstad scheme (Song et al. 2018).
+ *
  * Supports all boundary conditions (periodic, reflecting, absorbing) and
  * non-orthogonal crystal systems.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *
- * **Coefficient Storage:**
+ * **Coefficient Storage (Krogstad scheme):**
  *
- * Per monomer type, stores 6 arrays of size M_complex:
- * - E:     exp(c*h)        - full step exponential
- * - E2:    exp(c*h/2)      - half step exponential
- * - alpha: h*phi_1(c*h/2)  - stage coefficient
- * - f1, f2, f3: beta_1, beta_2, beta_3 (scaled by h) for final combination
+ * Per monomer type, stores 7 arrays of size M_complex:
+ * - E:         exp(c*h)           - full step exponential
+ * - E2:        exp(c*h/2)         - half step exponential
+ * - alpha:     (h/2)*phi_1(c*h/2) - stage a coefficient
+ * - phi2_half: h*phi_2(c*h/2)     - stage b coefficient
+ * - phi1:      h*phi_1(c*h)       - stage c coefficient
+ * - phi2:      h*phi_2(c*h)       - stages c and final
+ * - phi3:      h*phi_3(c*h)       - final step coefficient
  *
  * where h = ds (contour step) and c = -b^2*k^2/6 (eigenvalue).
  */
@@ -90,13 +81,14 @@ private:
     std::array<double, 6> recip_metric_;         ///< Reciprocal metric tensor
     int total_complex_grid;                      ///< Size of coefficient arrays
 
-    // ETDRK4 coefficient arrays per monomer type
-    std::map<std::string, double*> E_;      ///< exp(c*h)
-    std::map<std::string, double*> E2_;     ///< exp(c*h/2)
-    std::map<std::string, double*> alpha_;  ///< h*phi_1(c*h/2)
-    std::map<std::string, double*> f1_;     ///< h*beta_1(c*h)
-    std::map<std::string, double*> f2_;     ///< h*beta_2(c*h)
-    std::map<std::string, double*> f3_;     ///< h*beta_3(c*h)
+    // ETDRK4 coefficient arrays per monomer type (Krogstad scheme)
+    std::map<std::string, double*> E_;         ///< exp(c*h)
+    std::map<std::string, double*> E2_;        ///< exp(c*h/2)
+    std::map<std::string, double*> alpha_;     ///< (h/2)*phi_1(c*h/2) - stage a
+    std::map<std::string, double*> phi2_half_; ///< h*phi_2(c*h/2) - stage b
+    std::map<std::string, double*> phi1_;      ///< h*phi_1(c*h) - stage c
+    std::map<std::string, double*> phi2_;      ///< h*phi_2(c*h) - stages c, final
+    std::map<std::string, double*> phi3_;      ///< h*phi_3(c*h) - final step
 
     /**
      * @brief Check if all BCs are periodic.
@@ -160,24 +152,29 @@ public:
     const double* get_E2(const std::string& monomer_type) const;
 
     /**
-     * @brief Get stage coefficient h*phi_1(c*h/2).
+     * @brief Get stage a coefficient (h/2)*phi_1(c*h/2).
      */
     const double* get_alpha(const std::string& monomer_type) const;
 
     /**
-     * @brief Get beta_1 coefficient h*beta_1(c*h).
+     * @brief Get stage b coefficient h*phi_2(c*h/2).
      */
-    const double* get_f1(const std::string& monomer_type) const;
+    const double* get_phi2_half(const std::string& monomer_type) const;
 
     /**
-     * @brief Get beta_2 coefficient h*beta_2(c*h).
+     * @brief Get stage c coefficient h*phi_1(c*h).
      */
-    const double* get_f2(const std::string& monomer_type) const;
+    const double* get_phi1(const std::string& monomer_type) const;
 
     /**
-     * @brief Get beta_3 coefficient h*beta_3(c*h).
+     * @brief Get stages c and final coefficient h*phi_2(c*h).
      */
-    const double* get_f3(const std::string& monomer_type) const;
+    const double* get_phi2(const std::string& monomer_type) const;
+
+    /**
+     * @brief Get final step coefficient h*phi_3(c*h).
+     */
+    const double* get_phi3(const std::string& monomer_type) const;
 
     /**
      * @brief Update coefficients after parameter changes.

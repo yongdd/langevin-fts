@@ -4,23 +4,19 @@
  *
  * Implements the ETDRK4 (Exponential Time Differencing Runge-Kutta 4th order)
  * method for advancing chain propagators using cuFFT and multiple CUDA streams.
+ * Uses the Krogstad scheme from Song et al. 2018.
  *
- * **ETDRK4 Algorithm (Cox & Matthews 2002):**
+ * **Krogstad ETDRK4 Algorithm (Song et al. 2018, Eq. 7a-7d):**
  *
  * For dq/ds = L·q + N(q) where L = (b²/6)∇² and N(q) = -w·q:
  *
- * Stage a: â = E2·q̂ + α·N̂_n           where N_n = -w·q
- * Stage b: b̂ = E2·q̂ + α·N̂_a           where N_a = -w·a
- * Stage c: ĉ = E2·â + α·(2N̂_b - N̂_n)  where N_b = -w·b
- * Final:   q̂_{n+1} = E·q̂ + f1·N̂_n + f2·(N̂_a + N̂_b) + f3·N̂_c  where N_c = -w·c
+ * Stage a (7a): â = E2·q̂ + α·N̂_n                        where N_n = -w·q
+ * Stage b (7b): b̂ = â + φ₂_half·(N̂_a - N̂_n)            where N_a = -w·a
+ * Stage c (7c): ĉ = E·q̂ + φ₁·N̂_n + 2φ₂·(N̂_b - N̂_n)   where N_b = -w·b
+ * Final (7d):   q̂_{n+1} = ĉ + (4φ₃ - φ₂)·(N̂_n + N̂_c)
+ *               + 2φ₂·N̂_a - 4φ₃·(N̂_a + N̂_b)           where N_c = -w·c
  *
- * Coefficients E, E2, α, f1, f2, f3 are computed using the Kassam-Trefethen
- * contour integral method for numerical stability.
- *
- * **Template Instantiations:**
- *
- * - CudaSolverPseudoETDRK4<double>: Real field solver
- * - CudaSolverPseudoETDRK4<std::complex<double>>: Complex field solver
+ * Coefficients are computed using the Kassam-Trefethen contour integral method.
  *
  * @see ETDRK4Coefficients for coefficient computation
  * @see CudaSolverPseudoRQM4 for RQM4 alternative
@@ -193,7 +189,7 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
 
         int coeff_size = etdrk4_coefficients_->get_total_complex_grid();
 
-        // Allocate and copy coefficients to device
+        // Allocate and copy Krogstad coefficients to device
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string type = item.first;
@@ -201,9 +197,10 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
             gpu_error_check(cudaMalloc((void**)&d_etdrk4_E[type], sizeof(double)*coeff_size));
             gpu_error_check(cudaMalloc((void**)&d_etdrk4_E2[type], sizeof(double)*coeff_size));
             gpu_error_check(cudaMalloc((void**)&d_etdrk4_alpha[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_f1[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_f2[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_f3[type], sizeof(double)*coeff_size));
+            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2_half[type], sizeof(double)*coeff_size));
+            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi1[type], sizeof(double)*coeff_size));
+            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2[type], sizeof(double)*coeff_size));
+            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi3[type], sizeof(double)*coeff_size));
 
             gpu_error_check(cudaMemcpy(d_etdrk4_E[type], etdrk4_coefficients_->get_E(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
@@ -211,11 +208,13 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_etdrk4_alpha[type], etdrk4_coefficients_->get_alpha(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f1[type], etdrk4_coefficients_->get_f1(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[type], etdrk4_coefficients_->get_phi2_half(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f2[type], etdrk4_coefficients_->get_f2(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi1[type], etdrk4_coefficients_->get_phi1(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f3[type], etdrk4_coefficients_->get_f3(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi2[type], etdrk4_coefficients_->get_phi2(type),
+                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi3[type], etdrk4_coefficients_->get_phi3(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
         }
 
@@ -315,18 +314,20 @@ CudaSolverPseudoETDRK4<T>::~CudaSolverPseudoETDRK4()
     for(const auto& item: this->d_w_field)
         cudaFree(item.second);
 
-    // Free ETDRK4 coefficient arrays
+    // Free ETDRK4 coefficient arrays (Krogstad scheme)
     for(const auto& item: this->d_etdrk4_E)
         cudaFree(item.second);
     for(const auto& item: this->d_etdrk4_E2)
         cudaFree(item.second);
     for(const auto& item: this->d_etdrk4_alpha)
         cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_f1)
+    for(const auto& item: this->d_etdrk4_phi2_half)
         cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_f2)
+    for(const auto& item: this->d_etdrk4_phi1)
         cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_f3)
+    for(const auto& item: this->d_etdrk4_phi2)
+        cudaFree(item.second);
+    for(const auto& item: this->d_etdrk4_phi3)
         cudaFree(item.second);
 
     // Free ETDRK4 workspace arrays
@@ -379,7 +380,7 @@ void CudaSolverPseudoETDRK4<T>::update_laplacian_operator()
             this->cb->get_recip_metric()
         );
 
-        // Copy updated coefficients to device
+        // Copy updated Krogstad coefficients to device
         int coeff_size = etdrk4_coefficients_->get_total_complex_grid();
         for (const auto& item : molecules->get_bond_lengths())
         {
@@ -390,11 +391,13 @@ void CudaSolverPseudoETDRK4<T>::update_laplacian_operator()
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
             gpu_error_check(cudaMemcpy(d_etdrk4_alpha[type], etdrk4_coefficients_->get_alpha(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f1[type], etdrk4_coefficients_->get_f1(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[type], etdrk4_coefficients_->get_phi2_half(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f2[type], etdrk4_coefficients_->get_f2(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi1[type], etdrk4_coefficients_->get_phi1(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_f3[type], etdrk4_coefficients_->get_f3(type),
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi2[type], etdrk4_coefficients_->get_phi2(type),
+                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_etdrk4_phi3[type], etdrk4_coefficients_->get_phi3(type),
                 sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
         }
     }
@@ -481,13 +484,14 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        // Get ETDRK4 coefficients for this monomer type
+        // Get Krogstad ETDRK4 coefficients for this monomer type
         const double* _d_E = d_etdrk4_E[monomer_type];
         const double* _d_E2 = d_etdrk4_E2[monomer_type];
         const double* _d_alpha = d_etdrk4_alpha[monomer_type];
-        const double* _d_f1 = d_etdrk4_f1[monomer_type];
-        const double* _d_f2 = d_etdrk4_f2[monomer_type];
-        const double* _d_f3 = d_etdrk4_f3[monomer_type];
+        const double* _d_phi2_half = d_etdrk4_phi2_half[monomer_type];
+        const double* _d_phi1 = d_etdrk4_phi1[monomer_type];
+        const double* _d_phi2 = d_etdrk4_phi2[monomer_type];
+        const double* _d_phi3 = d_etdrk4_phi3[monomer_type];
 
         // Get raw w field for nonlinear term
         CuDeviceData<T>* _d_w = d_w_field[monomer_type];
@@ -516,14 +520,14 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
             }
             gpu_error_check(cudaPeekAtLastError());
 
-            // Stage a: â = E2·q̂ + α·N̂_n
+            // Stage a (Eq. 7a): â = E2·q̂ + α·N̂_n
             ker_etdrk4_stage_a<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 d_k_a[STREAM], d_k_q[STREAM], d_k_N_n[STREAM], _d_E2, _d_alpha, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
 
             // IFFT to get a
             // IMPORTANT: Copy k_a to work buffer first because cuFFT Z2D may corrupt
-            // the input array, and we need k_a again for stage c.
+            // the input array, and we need k_a again for stage b.
             gpu_error_check(cudaMemcpyAsync(d_k_work[STREAM], d_k_a[STREAM],
                 sizeof(cuDoubleComplex)*M_COMPLEX, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
             if constexpr (std::is_same<T, double>::value)
@@ -544,9 +548,9 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 cufftExecZ2Z(plan_for_one[STREAM], d_etdrk4_N_a[STREAM], d_k_N_a[STREAM], CUFFT_FORWARD);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Stage b: b̂ = E2·q̂ + α·N̂_a
-            ker_etdrk4_stage_a<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_k_work[STREAM], d_k_q[STREAM], d_k_N_a[STREAM], _d_E2, _d_alpha, M_COMPLEX);
+            // Stage b (Eq. 7b): b̂ = â + φ₂_half·(N̂_a - N̂_n)
+            ker_etdrk4_krogstad_stage_b<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_k_work[STREAM], d_k_a[STREAM], d_k_N_a[STREAM], d_k_N_n[STREAM], _d_phi2_half, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
 
             // IFFT to get b
@@ -568,12 +572,18 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 cufftExecZ2Z(plan_for_one[STREAM], d_etdrk4_N_b[STREAM], d_k_N_b[STREAM], CUFFT_FORWARD);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Stage c: ĉ = E2·â + α·(2N̂_b - N̂_n)
-            ker_etdrk4_stage_c<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_k_work[STREAM], d_k_a[STREAM], d_k_N_b[STREAM], d_k_N_n[STREAM], _d_E2, _d_alpha, M_COMPLEX);
+            // Stage c (Eq. 7c): ĉ = E·q̂ + φ₁·N̂_n + 2φ₂·(N̂_b - N̂_n)
+            ker_etdrk4_krogstad_stage_c<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_k_work[STREAM], d_k_q[STREAM], d_k_N_n[STREAM], d_k_N_b[STREAM],
+                _d_E, _d_phi1, _d_phi2, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
 
-            // IFFT to get c
+            // IMPORTANT: Save c_hat to d_k_a before IFFT because cuFFT Z2D corrupts input.
+            // We reuse d_k_a since it's no longer needed after stage b.
+            gpu_error_check(cudaMemcpyAsync(d_k_a[STREAM], d_k_work[STREAM],
+                sizeof(cuDoubleComplex)*M_COMPLEX, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+
+            // IFFT to get c (this corrupts d_k_work)
             if constexpr (std::is_same<T, double>::value)
                 cufftExecZ2D(plan_bak_one[STREAM], d_k_work[STREAM], d_etdrk4_c[STREAM]);
             else
@@ -592,10 +602,11 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 cufftExecZ2Z(plan_for_one[STREAM], d_etdrk4_N_c[STREAM], d_k_N_c[STREAM], CUFFT_FORWARD);
             gpu_error_check(cudaPeekAtLastError());
 
-            // Final step: q̂_{n+1} = E·q̂ + f1·N̂_n + f2·(N̂_a + N̂_b) + f3·N̂_c
-            ker_etdrk4_final<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                d_k_work[STREAM], d_k_q[STREAM], d_k_N_n[STREAM], d_k_N_a[STREAM],
-                d_k_N_b[STREAM], d_k_N_c[STREAM], _d_E, _d_f1, _d_f2, _d_f3, M_COMPLEX);
+            // Final step (Eq. 7d): q̂_{n+1} = ĉ + (4φ₃ - φ₂)·(N̂_n + N̂_c) + 2φ₂·N̂_a - 4φ₃·(N̂_a + N̂_b)
+            // Use d_k_a which has the saved c_hat (d_k_work was corrupted by IFFT)
+            ker_etdrk4_krogstad_final<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_k_work[STREAM], d_k_a[STREAM], d_k_N_n[STREAM], d_k_N_a[STREAM],
+                d_k_N_b[STREAM], d_k_N_c[STREAM], _d_phi2, _d_phi3, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
 
             // IFFT to get final result
@@ -657,7 +668,7 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 fft_[STREAM]->forward(d_q_in, rk_q);
                 fft_[STREAM]->forward(d_N_n, rk_N_n);
 
-                // Stage a: â = E2·q̂ + α·N̂_n
+                // Stage a (Eq. 7a): â = E2·q̂ + α·N̂_n
                 ker_etdrk4_stage_a_real<<<N_BLOCKS, N_THREADS>>>(
                     rk_a, rk_q, rk_N_n, _d_E2, _d_alpha, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
@@ -672,9 +683,9 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 // FFT of N_a
                 fft_[STREAM]->forward(d_N_a, rk_N_a);
 
-                // Stage b: b̂ = E2·q̂ + α·N̂_a
-                ker_etdrk4_stage_a_real<<<N_BLOCKS, N_THREADS>>>(
-                    rk_work, rk_q, rk_N_a, _d_E2, _d_alpha, M_COMPLEX);
+                // Stage b (Eq. 7b): b̂ = â + φ₂_half·(N̂_a - N̂_n)
+                ker_etdrk4_krogstad_stage_b_real<<<N_BLOCKS, N_THREADS>>>(
+                    rk_work, rk_a, rk_N_a, rk_N_n, _d_phi2_half, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // IFFT to get b
@@ -687,10 +698,13 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 // FFT of N_b
                 fft_[STREAM]->forward(d_N_b, rk_N_b);
 
-                // Stage c: ĉ = E2·â + α·(2N̂_b - N̂_n)
-                ker_etdrk4_stage_c_real<<<N_BLOCKS, N_THREADS>>>(
-                    rk_work, rk_a, rk_N_b, rk_N_n, _d_E2, _d_alpha, M_COMPLEX);
+                // Stage c (Eq. 7c): ĉ = E·q̂ + φ₁·N̂_n + 2φ₂·(N̂_b - N̂_n)
+                ker_etdrk4_krogstad_stage_c_real<<<N_BLOCKS, N_THREADS>>>(
+                    rk_work, rk_q, rk_N_n, rk_N_b, _d_E, _d_phi1, _d_phi2, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
+
+                // Save c_hat to rk_a before IFFT (rk_a is no longer needed after stage b)
+                gpu_error_check(cudaMemcpy(rk_a, rk_work, sizeof(double)*M_COMPLEX, cudaMemcpyDeviceToDevice));
 
                 // IFFT to get c
                 fft_[STREAM]->backward(rk_work, d_c);
@@ -702,10 +716,11 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
                 // FFT of N_c
                 fft_[STREAM]->forward(d_N_c, rk_N_c);
 
-                // Final step: q̂_{n+1} = E·q̂ + f1·N̂_n + f2·(N̂_a + N̂_b) + f3·N̂_c
-                ker_etdrk4_final_real<<<N_BLOCKS, N_THREADS>>>(
-                    rk_work, rk_q, rk_N_n, rk_N_a, rk_N_b, rk_N_c,
-                    _d_E, _d_f1, _d_f2, _d_f3, M_COMPLEX);
+                // Final step (Eq. 7d): q̂_{n+1} = ĉ + (4φ₃ - φ₂)·(N̂_n + N̂_c) + 2φ₂·N̂_a - 4φ₃·(N̂_a + N̂_b)
+                // Use rk_a which has the saved c_hat
+                ker_etdrk4_krogstad_final_real<<<N_BLOCKS, N_THREADS>>>(
+                    rk_work, rk_a, rk_N_n, rk_N_a, rk_N_b, rk_N_c,
+                    _d_phi2, _d_phi3, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
 
                 // IFFT to get final result

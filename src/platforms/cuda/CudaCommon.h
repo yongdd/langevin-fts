@@ -334,4 +334,38 @@ __global__ void ker_etdrk4_final_real(
     const double* N_b_hat, const double* N_c_hat,
     const double* E, const double* f1, const double* f2, const double* f3, const int M);
 
+// Krogstad ETDRK4 kernels for complex coefficients (periodic BC)
+__global__ void ker_etdrk4_krogstad_stage_b(
+    cuDoubleComplex* dst, const cuDoubleComplex* a_hat,
+    const cuDoubleComplex* N_a_hat, const cuDoubleComplex* N_n_hat,
+    const double* phi2_half, const int M);
+
+__global__ void ker_etdrk4_krogstad_stage_c(
+    cuDoubleComplex* dst, const cuDoubleComplex* q_hat,
+    const cuDoubleComplex* N_n_hat, const cuDoubleComplex* N_b_hat,
+    const double* E, const double* phi1, const double* phi2, const int M);
+
+__global__ void ker_etdrk4_krogstad_final(
+    cuDoubleComplex* dst, const cuDoubleComplex* c_hat,
+    const cuDoubleComplex* N_n_hat, const cuDoubleComplex* N_a_hat,
+    const cuDoubleComplex* N_b_hat, const cuDoubleComplex* N_c_hat,
+    const double* phi2, const double* phi3, const int M);
+
+// Krogstad ETDRK4 kernels for real coefficients (non-periodic BC - DCT/DST)
+__global__ void ker_etdrk4_krogstad_stage_b_real(
+    double* dst, const double* a_hat,
+    const double* N_a_hat, const double* N_n_hat,
+    const double* phi2_half, const int M);
+
+__global__ void ker_etdrk4_krogstad_stage_c_real(
+    double* dst, const double* q_hat,
+    const double* N_n_hat, const double* N_b_hat,
+    const double* E, const double* phi1, const double* phi2, const int M);
+
+__global__ void ker_etdrk4_krogstad_final_real(
+    double* dst, const double* c_hat,
+    const double* N_n_hat, const double* N_a_hat,
+    const double* N_b_hat, const double* N_c_hat,
+    const double* phi2, const double* phi3, const int M);
+
 #endif

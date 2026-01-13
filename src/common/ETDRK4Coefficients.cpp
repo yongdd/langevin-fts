@@ -1,10 +1,12 @@
 /**
  * @file ETDRK4Coefficients.cpp
- * @brief Implementation of ETDRK4 coefficient computation.
+ * @brief Implementation of ETDRK4 coefficient computation (Krogstad scheme).
  *
  * Implements the Kassam-Trefethen (2005) contour integral method for
  * stable computation of ETDRK4 coefficients, especially for small eigenvalues
  * where direct formulas suffer from catastrophic cancellation.
+ *
+ * Uses the Krogstad scheme as described in Song et al. (2018).
  *
  * @see ETDRK4Coefficients.h for class documentation
  */
@@ -16,13 +18,15 @@
 #include "ETDRK4Coefficients.h"
 
 //------------------------------------------------------------------------------
-// Phi and Beta Function Utilities (Kassam-Trefethen 2005)
+// Phi Function Utilities for Krogstad ETDRK4 (Kassam-Trefethen 2005)
 //------------------------------------------------------------------------------
 
 namespace {
 
 /**
  * @brief Compute phi_1(z) = (exp(z) - 1) / z with Taylor series for small z.
+ *
+ * Limit as z->0: phi_1 -> 1
  */
 std::complex<double> phi1_stable(std::complex<double> z) {
     if (std::abs(z) < 1e-4) {
@@ -33,84 +37,41 @@ std::complex<double> phi1_stable(std::complex<double> z) {
 }
 
 /**
- * @brief ETDRK4 coefficient beta_1 = (-4 - z + e^z(4 - 3z + z^2))/z^3.
+ * @brief Compute phi_2(z) = (exp(z) - 1 - z) / z^2 with Taylor series for small z.
  *
- * Coefficient for N_n in the final ETDRK4 combination step.
- * Limit as z->0: beta_1 -> 1/6
+ * Limit as z->0: phi_2 -> 1/2
  */
-std::complex<double> beta1_stable(std::complex<double> z) {
+std::complex<double> phi2_stable(std::complex<double> z) {
     if (std::abs(z) < 1e-4) {
-        // Taylor series: 1/6 + z/6 + 3z^2/40 + z^3/45 + 5z^4/1008 + ...
-        return 1.0/6.0 + z/6.0 + 3.0*z*z/40.0 + z*z*z/45.0 + 5.0*z*z*z*z/1008.0;
+        // Taylor series: 1/2 + z/6 + z^2/24 + z^3/120 + z^4/720
+        return 1.0/2.0 + z/6.0 + z*z/24.0 + z*z*z/120.0 + z*z*z*z/720.0;
     }
-    std::complex<double> ez = std::exp(z);
-    return (-4.0 - z + ez*(4.0 - 3.0*z + z*z)) / (z*z*z);
+    return (std::exp(z) - 1.0 - z) / (z*z);
 }
 
 /**
- * @brief ETDRK4 coefficient beta_2 = 2(2 + z + e^z(-2 + z))/z^3.
+ * @brief Compute phi_3(z) = (exp(z) - 1 - z - z^2/2) / z^3 with Taylor series for small z.
  *
- * Coefficient for (N_a + N_b) in the final ETDRK4 combination step.
- * Limit as z->0: beta_2 -> 1/3
- *
- * Note: f2 = h*beta_2 is applied to (N_a + N_b), so each of N_a and N_b
- * gets weight f2, giving effective RK4 weights of 1/3 each at z=0.
+ * Limit as z->0: phi_3 -> 1/6
  */
-std::complex<double> beta2_stable(std::complex<double> z) {
+std::complex<double> phi3_stable(std::complex<double> z) {
     if (std::abs(z) < 1e-4) {
-        // Taylor series: 1/3 + z/6 + z^2/20 + z^3/90 + z^4/504 + ...
-        return 1.0/3.0 + z/6.0 + z*z/20.0 + z*z*z/90.0 + z*z*z*z/504.0;
+        // Taylor series: 1/6 + z/24 + z^2/120 + z^3/720 + z^4/5040
+        return 1.0/6.0 + z/24.0 + z*z/120.0 + z*z*z/720.0 + z*z*z*z/5040.0;
     }
-    std::complex<double> ez = std::exp(z);
-    return 2.0*(2.0 + z + ez*(-2.0 + z)) / (z*z*z);
+    return (std::exp(z) - 1.0 - z - z*z/2.0) / (z*z*z);
 }
 
 /**
- * @brief ETDRK4 coefficient beta_3 = (-4 - 3z - z^2 + e^z(4 - z))/z^3.
+ * @brief Compute phi_n using Kassam-Trefethen contour integral.
  *
- * Coefficient for N_c in the final ETDRK4 combination step.
- * Limit as z->0: beta_3 -> 1/6
- */
-std::complex<double> beta3_stable(std::complex<double> z) {
-    if (std::abs(z) < 1e-4) {
-        // Taylor series: 1/6 - z^2/120 - z^3/360 - z^4/1680 + ...
-        return 1.0/6.0 - z*z/120.0 - z*z*z/360.0 - z*z*z*z/1680.0;
-    }
-    std::complex<double> ez = std::exp(z);
-    return (-4.0 - 3.0*z - z*z + ez*(4.0 - z)) / (z*z*z);
-}
-
-/**
- * @brief Compute phi_1 using Kassam-Trefethen contour integral.
- *
- * @param z Real argument
- * @param M Number of contour points (default 32)
- * @param r Contour radius (default 1.0)
- * @return phi_1(z) computed via contour integral
- */
-double phi1_contour(double z, int M = 32, double r = 1.0) {
-    const double PI = std::numbers::pi;
-    std::complex<double> sum = 0.0;
-
-    for (int m = 0; m < M; m++) {
-        double theta = 2.0 * PI * m / M;
-        std::complex<double> zeta = z + r * std::exp(std::complex<double>(0.0, theta));
-        sum += phi1_stable(zeta);
-    }
-
-    return std::real(sum) / M;
-}
-
-/**
- * @brief Compute beta_n using Kassam-Trefethen contour integral.
- *
- * @param n Beta function index (1, 2, or 3)
+ * @param n Phi function index (1, 2, or 3)
  * @param z Real argument (c*h where c is eigenvalue, h is step size)
  * @param M Number of contour points (default 32)
  * @param r Contour radius (default 1.0)
- * @return beta_n(z) computed via contour integral
+ * @return phi_n(z) computed via contour integral
  */
-double beta_contour(int n, double z, int M = 32, double r = 1.0) {
+double phi_contour(int n, double z, int M = 32, double r = 1.0) {
     const double PI = std::numbers::pi;
     std::complex<double> sum = 0.0;
 
@@ -119,11 +80,11 @@ double beta_contour(int n, double z, int M = 32, double r = 1.0) {
         std::complex<double> zeta = z + r * std::exp(std::complex<double>(0.0, theta));
 
         if (n == 1)
-            sum += beta1_stable(zeta);
+            sum += phi1_stable(zeta);
         else if (n == 2)
-            sum += beta2_stable(zeta);
+            sum += phi2_stable(zeta);
         else if (n == 3)
-            sum += beta3_stable(zeta);
+            sum += phi3_stable(zeta);
     }
 
     return std::real(sum) / M;
@@ -152,16 +113,17 @@ ETDRK4Coefficients<T>::ETDRK4Coefficients(
 
         compute_total_complex_grid();
 
-        // Allocate coefficient arrays
+        // Allocate coefficient arrays (Krogstad scheme)
         for (const auto& item : bond_lengths)
         {
             std::string monomer_type = item.first;
             E_[monomer_type] = new double[total_complex_grid];
             E2_[monomer_type] = new double[total_complex_grid];
             alpha_[monomer_type] = new double[total_complex_grid];
-            f1_[monomer_type] = new double[total_complex_grid];
-            f2_[monomer_type] = new double[total_complex_grid];
-            f3_[monomer_type] = new double[total_complex_grid];
+            phi2_half_[monomer_type] = new double[total_complex_grid];
+            phi1_[monomer_type] = new double[total_complex_grid];
+            phi2_[monomer_type] = new double[total_complex_grid];
+            phi3_[monomer_type] = new double[total_complex_grid];
         }
 
         // Compute coefficients
@@ -188,11 +150,13 @@ ETDRK4Coefficients<T>::~ETDRK4Coefficients()
         delete[] item.second;
     for (const auto& item : alpha_)
         delete[] item.second;
-    for (const auto& item : f1_)
+    for (const auto& item : phi2_half_)
         delete[] item.second;
-    for (const auto& item : f2_)
+    for (const auto& item : phi1_)
         delete[] item.second;
-    for (const auto& item : f3_)
+    for (const auto& item : phi2_)
+        delete[] item.second;
+    for (const auto& item : phi3_)
         delete[] item.second;
 }
 
@@ -275,28 +239,37 @@ const double* ETDRK4Coefficients<T>::get_alpha(const std::string& monomer_type) 
 }
 
 template <typename T>
-const double* ETDRK4Coefficients<T>::get_f1(const std::string& monomer_type) const
+const double* ETDRK4Coefficients<T>::get_phi2_half(const std::string& monomer_type) const
 {
-    auto it = f1_.find(monomer_type);
-    if (it == f1_.end())
+    auto it = phi2_half_.find(monomer_type);
+    if (it == phi2_half_.end())
         throw_with_line_number("Monomer type \"" + monomer_type + "\" not found.");
     return it->second;
 }
 
 template <typename T>
-const double* ETDRK4Coefficients<T>::get_f2(const std::string& monomer_type) const
+const double* ETDRK4Coefficients<T>::get_phi1(const std::string& monomer_type) const
 {
-    auto it = f2_.find(monomer_type);
-    if (it == f2_.end())
+    auto it = phi1_.find(monomer_type);
+    if (it == phi1_.end())
         throw_with_line_number("Monomer type \"" + monomer_type + "\" not found.");
     return it->second;
 }
 
 template <typename T>
-const double* ETDRK4Coefficients<T>::get_f3(const std::string& monomer_type) const
+const double* ETDRK4Coefficients<T>::get_phi2(const std::string& monomer_type) const
 {
-    auto it = f3_.find(monomer_type);
-    if (it == f3_.end())
+    auto it = phi2_.find(monomer_type);
+    if (it == phi2_.end())
+        throw_with_line_number("Monomer type \"" + monomer_type + "\" not found.");
+    return it->second;
+}
+
+template <typename T>
+const double* ETDRK4Coefficients<T>::get_phi3(const std::string& monomer_type) const
+{
+    auto it = phi3_.find(monomer_type);
+    if (it == phi3_.end())
         throw_with_line_number("Monomer type \"" + monomer_type + "\" not found.");
     return it->second;
 }
@@ -341,9 +314,10 @@ void ETDRK4Coefficients<T>::compute_coefficients_periodic()
         double* _E = E_[monomer_type];
         double* _E2 = E2_[monomer_type];
         double* _alpha = alpha_[monomer_type];
-        double* _f1 = f1_[monomer_type];
-        double* _f2 = f2_[monomer_type];
-        double* _f3 = f3_[monomer_type];
+        double* _phi2_half = phi2_half_[monomer_type];
+        double* _phi1 = phi1_[monomer_type];
+        double* _phi2 = phi2_[monomer_type];
+        double* _phi3 = phi3_[monomer_type];
 
         // c_prefactor: multiply by k^2 to get eigenvalue c = -b^2*k^2/6
         double c_prefactor = -bond_length_sq * FOUR_PI_SQ / 6.0;
@@ -372,19 +346,30 @@ void ETDRK4Coefficients<T>::compute_coefficients_periodic()
                                     2.0 * Gik * i_signed * k_signed +
                                     2.0 * Gjk * j_signed * k_signed;
 
-                        // Eigenvalue c and c*h
+                        // Eigenvalue c and arguments
                         double c = c_prefactor * k2;
-                        double ch = c * ds;
-                        double ch2 = ch / 2.0;
+                        double ch = c * ds;      // c*h for full step
+                        double ch2 = ch / 2.0;   // c*h/2 for half step
 
-                        // ETDRK4 coefficients using contour integral
-                        // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
+                        // Krogstad ETDRK4 coefficients (Song et al. 2018)
+                        // E = exp(c*h), E2 = exp(c*h/2)
                         _E[idx] = std::exp(ch);
                         _E2[idx] = std::exp(ch2);
-                        _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
-                        _f1[idx] = ds * beta_contour(1, ch);
-                        _f2[idx] = ds * beta_contour(2, ch);
-                        _f3[idx] = ds * beta_contour(3, ch);
+
+                        // alpha = (h/2) * phi_1(c*h/2) for stage a
+                        _alpha[idx] = (ds / 2.0) * phi_contour(1, ch2);
+
+                        // phi2_half = h * phi_2(c*h/2) for stage b
+                        _phi2_half[idx] = ds * phi_contour(2, ch2);
+
+                        // phi1 = h * phi_1(c*h) for stage c
+                        _phi1[idx] = ds * phi_contour(1, ch);
+
+                        // phi2 = h * phi_2(c*h) for stages c and final
+                        _phi2[idx] = ds * phi_contour(2, ch);
+
+                        // phi3 = h * phi_3(c*h) for final step
+                        _phi3[idx] = ds * phi_contour(3, ch);
                     }
                 }
                 else
@@ -404,13 +389,14 @@ void ETDRK4Coefficients<T>::compute_coefficients_periodic()
                         double ch = c * ds;
                         double ch2 = ch / 2.0;
 
-                        // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
+                        // Krogstad ETDRK4 coefficients
                         _E[idx] = std::exp(ch);
                         _E2[idx] = std::exp(ch2);
-                        _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
-                        _f1[idx] = ds * beta_contour(1, ch);
-                        _f2[idx] = ds * beta_contour(2, ch);
-                        _f3[idx] = ds * beta_contour(3, ch);
+                        _alpha[idx] = (ds / 2.0) * phi_contour(1, ch2);
+                        _phi2_half[idx] = ds * phi_contour(2, ch2);
+                        _phi1[idx] = ds * phi_contour(1, ch);
+                        _phi2[idx] = ds * phi_contour(2, ch);
+                        _phi3[idx] = ds * phi_contour(3, ch);
                     }
                 }
             }
@@ -447,9 +433,10 @@ void ETDRK4Coefficients<T>::compute_coefficients_mixed()
         double* _E = E_[monomer_type];
         double* _E2 = E2_[monomer_type];
         double* _alpha = alpha_[monomer_type];
-        double* _f1 = f1_[monomer_type];
-        double* _f2 = f2_[monomer_type];
-        double* _f3 = f3_[monomer_type];
+        double* _phi2_half = phi2_half_[monomer_type];
+        double* _phi1 = phi1_[monomer_type];
+        double* _phi2 = phi2_[monomer_type];
+        double* _phi3 = phi3_[monomer_type];
 
         // Compute wavenumber factors based on BC
         // c_factor[d] = -(b^2/6) * (k_factor[d])^2
@@ -500,14 +487,14 @@ void ETDRK4Coefficients<T>::compute_coefficients_mixed()
                     double ch = c * ds;
                     double ch2 = ch / 2.0;
 
-                    // ETDRK4 coefficients using contour integral
-                    // alpha = L^{-1}(e^{Lh/2} - 1) = (e^{ch/2} - 1)/c = (h/2)*phi1(ch/2)
+                    // Krogstad ETDRK4 coefficients (Song et al. 2018)
                     _E[idx] = std::exp(ch);
                     _E2[idx] = std::exp(ch2);
-                    _alpha[idx] = (ds / 2.0) * phi1_contour(ch2);
-                    _f1[idx] = ds * beta_contour(1, ch);
-                    _f2[idx] = ds * beta_contour(2, ch);
-                    _f3[idx] = ds * beta_contour(3, ch);
+                    _alpha[idx] = (ds / 2.0) * phi_contour(1, ch2);
+                    _phi2_half[idx] = ds * phi_contour(2, ch2);
+                    _phi1[idx] = ds * phi_contour(1, ch);
+                    _phi2[idx] = ds * phi_contour(2, ch);
+                    _phi3[idx] = ds * phi_contour(3, ch);
                 }
             }
         }

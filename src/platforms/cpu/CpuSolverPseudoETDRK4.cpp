@@ -3,22 +3,18 @@
  * @brief CPU ETDRK4 pseudo-spectral solver for continuous chain propagators.
  *
  * Implements the ETDRK4 (Exponential Time Differencing Runge-Kutta 4th order)
- * method for solving the modified diffusion equation. This provides an
- * alternative to RQM4 with L-stability properties.
+ * method for solving the modified diffusion equation using the Krogstad scheme
+ * (Song et al. 2018).
  *
- * **ETDRK4 Stages:**
+ * **Krogstad ETDRK4 Stages (Song et al. 2018, Eq. 7a-7d):**
  *
  * Given dq/ds = L*q + N(q) where L = (b^2/6)*nabla^2 and N(q) = -w*q:
  *
- * 1. a = E2*q_hat + alpha*N_hat_n     (N_n = -w*q_in)
- * 2. b = E2*q_hat + alpha*N_hat_a     (N_a = -w*a)
- * 3. c = E2*a_hat + alpha*(2*N_hat_b - N_hat_n)  (N_b = -w*b)
- * 4. q_{n+1} = E*q_hat + f1*N_hat_n + f2*(N_hat_a + N_hat_b) + f3*N_hat_c
- *
- * **Template Instantiations:**
- *
- * - CpuSolverPseudoETDRK4<double>: Real fields with r2c FFT
- * - CpuSolverPseudoETDRK4<std::complex<double>>: Complex fields
+ * 1. a_hat = E2*q_hat + alpha*N_hat_n                       (7a)
+ * 2. b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)          (7b)
+ * 3. c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)  (7c)
+ * 4. q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+ *                  + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)  (7d)
  *
  * @see ETDRK4Coefficients for coefficient computation
  * @see CpuSolverPseudoRQM4 for RQM4 alternative
@@ -145,13 +141,14 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         // For periodic BC, coefficient array is actually complex (interleaved real/imag)
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
 
-        // Get ETDRK4 coefficients
+        // Get ETDRK4 coefficients (Krogstad scheme)
         const double* _E = this->etdrk4_coefficients_->get_E(monomer_type);
         const double* _E2 = this->etdrk4_coefficients_->get_E2(monomer_type);
         const double* _alpha = this->etdrk4_coefficients_->get_alpha(monomer_type);
-        const double* _f1 = this->etdrk4_coefficients_->get_f1(monomer_type);
-        const double* _f2 = this->etdrk4_coefficients_->get_f2(monomer_type);
-        const double* _f3 = this->etdrk4_coefficients_->get_f3(monomer_type);
+        const double* _phi2_half = this->etdrk4_coefficients_->get_phi2_half(monomer_type);
+        const double* _phi1 = this->etdrk4_coefficients_->get_phi1(monomer_type);
+        const double* _phi2 = this->etdrk4_coefficients_->get_phi2(monomer_type);
+        const double* _phi3 = this->etdrk4_coefficients_->get_phi3(monomer_type);
 
         // Get raw w field for nonlinear term
         const T* _w = this->w_field[monomer_type].data();
@@ -171,7 +168,7 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         this->transform_forward(q_in, k_q.data());
         this->transform_forward(N_n.data(), k_N_n.data());
 
-        // ETDRK4 stages
+        // Krogstad ETDRK4 stages (Song et al. 2018)
         if (this->is_periodic_)
         {
             // Complex coefficients for periodic BC
@@ -183,7 +180,7 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
             std::complex<double>* k_a_c = reinterpret_cast<std::complex<double>*>(k_a.data());
             std::complex<double>* k_work_c = reinterpret_cast<std::complex<double>*>(k_work.data());
 
-            // Stage a: a_hat = E2*q_hat + alpha*N_hat_n
+            // Stage a (Eq. 7a): a_hat = E2*q_hat + alpha*N_hat_n
             for (int i = 0; i < M_COMPLEX; ++i)
                 k_a_c[i] = _E2[i] * k_q_c[i] + _alpha[i] * k_N_n_c[i];
 
@@ -193,9 +190,9 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_a[i] = -_w[i] * a[i];
             this->transform_forward(N_a.data(), k_N_a.data());
 
-            // Stage b: b_hat = E2*q_hat + alpha*N_hat_a
+            // Stage b (Eq. 7b): b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_work_c[i] = _E2[i] * k_q_c[i] + _alpha[i] * k_N_a_c[i];
+                k_work_c[i] = k_a_c[i] + _phi2_half[i] * (k_N_a_c[i] - k_N_n_c[i]);
 
             // IFFT to get b, compute N_b = -w*b
             this->transform_backward(k_work.data(), b.data());
@@ -203,9 +200,10 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_b[i] = -_w[i] * b[i];
             this->transform_forward(N_b.data(), k_N_b.data());
 
-            // Stage c: c_hat = E2*a_hat + alpha*(2*N_hat_b - N_hat_n)
+            // Stage c (Eq. 7c): c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_work_c[i] = _E2[i] * k_a_c[i] + _alpha[i] * (2.0 * k_N_b_c[i] - k_N_n_c[i]);
+                k_work_c[i] = _E[i] * k_q_c[i] + _phi1[i] * k_N_n_c[i]
+                            + 2.0 * _phi2[i] * (k_N_b_c[i] - k_N_n_c[i]);
 
             // IFFT to get c, compute N_c = -w*c
             this->transform_backward(k_work.data(), c.data());
@@ -213,13 +211,15 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_c[i] = -_w[i] * c[i];
             this->transform_forward(N_c.data(), k_N_c.data());
 
-            // Final step: q_hat_{n+1} = E*q_hat + f1*N_hat_n + f2*(N_hat_a + N_hat_b) + f3*N_hat_c
+            // Final step (Eq. 7d): q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+            //                                   + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
             for (int i = 0; i < M_COMPLEX; ++i)
             {
-                k_work_c[i] = _E[i] * k_q_c[i]
-                            + _f1[i] * k_N_n_c[i]
-                            + _f2[i] * (k_N_a_c[i] + k_N_b_c[i])
-                            + _f3[i] * k_N_c_c[i];
+                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];  // coefficient for N_n and N_c
+                k_work_c[i] = k_work_c[i]  // c_hat is already in k_work_c
+                            + coeff_nc * (k_N_n_c[i] + k_N_c_c[i])
+                            + 2.0 * _phi2[i] * k_N_a_c[i]
+                            - 4.0 * _phi3[i] * (k_N_a_c[i] + k_N_b_c[i]);
             }
 
             // IFFT to get final result
@@ -229,7 +229,7 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         {
             // Real coefficients for non-periodic BC (DCT/DST)
 
-            // Stage a: a_hat = E2*q_hat + alpha*N_hat_n
+            // Stage a (Eq. 7a): a_hat = E2*q_hat + alpha*N_hat_n
             for (int i = 0; i < M_COMPLEX; ++i)
                 k_a[i] = _E2[i] * k_q[i] + _alpha[i] * k_N_n[i];
 
@@ -239,9 +239,9 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_a[i] = -_w[i] * a[i];
             this->transform_forward(N_a.data(), k_N_a.data());
 
-            // Stage b: b_hat = E2*q_hat + alpha*N_hat_a
+            // Stage b (Eq. 7b): b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_work[i] = _E2[i] * k_q[i] + _alpha[i] * k_N_a[i];
+                k_work[i] = k_a[i] + _phi2_half[i] * (k_N_a[i] - k_N_n[i]);
 
             // IFFT to get b, compute N_b = -w*b
             this->transform_backward(k_work.data(), b.data());
@@ -249,9 +249,10 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_b[i] = -_w[i] * b[i];
             this->transform_forward(N_b.data(), k_N_b.data());
 
-            // Stage c: c_hat = E2*a_hat + alpha*(2*N_hat_b - N_hat_n)
+            // Stage c (Eq. 7c): c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_work[i] = _E2[i] * k_a[i] + _alpha[i] * (2.0 * k_N_b[i] - k_N_n[i]);
+                k_work[i] = _E[i] * k_q[i] + _phi1[i] * k_N_n[i]
+                          + 2.0 * _phi2[i] * (k_N_b[i] - k_N_n[i]);
 
             // IFFT to get c, compute N_c = -w*c
             this->transform_backward(k_work.data(), c.data());
@@ -259,13 +260,15 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
                 N_c[i] = -_w[i] * c[i];
             this->transform_forward(N_c.data(), k_N_c.data());
 
-            // Final step: q_hat_{n+1} = E*q_hat + f1*N_hat_n + f2*(N_hat_a + N_hat_b) + f3*N_hat_c
+            // Final step (Eq. 7d): q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+            //                                   + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
             for (int i = 0; i < M_COMPLEX; ++i)
             {
-                k_work[i] = _E[i] * k_q[i]
-                          + _f1[i] * k_N_n[i]
-                          + _f2[i] * (k_N_a[i] + k_N_b[i])
-                          + _f3[i] * k_N_c[i];
+                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];  // coefficient for N_n and N_c
+                k_work[i] = k_work[i]  // c_hat is already in k_work
+                          + coeff_nc * (k_N_n[i] + k_N_c[i])
+                          + 2.0 * _phi2[i] * k_N_a[i]
+                          - 4.0 * _phi3[i] * (k_N_a[i] + k_N_b[i]);
             }
 
             // IFFT to get final result
