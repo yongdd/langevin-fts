@@ -296,6 +296,15 @@ $$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right
 
 - **Never commit without permission**: Always wait for explicit user approval before running `git commit`.
 
+- **Use SLURM for long-running jobs**: For any computation expected to take longer than 2 minutes, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
+  ```bash
+  # Submit multiple jobs in parallel
+  for param in 100 200 400 800; do
+      sbatch --job-name="test_$param" --wrap="python script.py --param $param"
+  done
+  ```
+  See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
+
 ### When Modifying C++ Code
 
 1. Changes to `src/common/*.cpp` or `src/platforms/*/*.cpp|.cu` require rebuilding:
