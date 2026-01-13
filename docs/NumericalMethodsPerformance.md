@@ -11,7 +11,7 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 | Method | Order | Description | Reference |
 |--------|-------|-------------|-----------|
 | **RQM4** | 4th | Richardson extrapolation with Ranjan-Qin-Morse 2008 parameters | *Macromolecules* 41, 942-954 (2008) |
-| **ETDRK4** | 4th | Exponential Time Differencing Runge-Kutta | *J. Comput. Phys.* 176, 430-455 (2002) |
+| **ETDRK4** | 4th | Exponential Time Differencing Runge-Kutta (Krogstad scheme) | *Chinese J. Polym. Sci.* 36, 488-496 (2018) |
 
 ### Real-Space Methods
 
@@ -43,7 +43,7 @@ calculation = scft.SCFT(params=params)
 - **System**: AB diblock copolymer, Gyroid phase
 - **SCFT convergence**: tolerance = 10⁻⁹
 - **Max iterations**: 2000
-- **Date**: 2026-01-12
+- **Date**: 2026-01-13
 
 ## Fig. 1: Contour Discretization Convergence
 
@@ -53,23 +53,32 @@ calculation = scft.SCFT(params=params)
 
 ![Contour Convergence](figures/figure1_song2018.png)
 
+**(a)** Pseudo-spectral methods (RQM4, ETDRK4) show 4th-order convergence. **(b)** CN-ADI methods: CN-ADI2 shows 2nd-order convergence, CN-ADI4 shows 4th-order convergence. Note: CN-ADI uses a different reference free energy (F_ref = -0.47935) due to finite-difference spatial discretization. **(c)** Execution time comparison for all methods.
+
 ### Execution Time vs Contour Steps (Ns)
 
 | Method | Ns=100 | Ns=200 | Ns=400 | Ns=1000 | Ns=4000 |
 |--------|--------|--------|--------|---------|---------|
-| **RQM4** | 7.5 s | 14.4 s | 28.4 s | 70.3 s | 280.8 s |
-| **ETDRK4** | 15.2 s | 29.8 s | 59.2 s | 146.6 s | 588.7 s |
-| **CN-ADI2** | 19.1 s | 38.0 s | 76.2 s | 191.2 s | 766.0 s |
-| **CN-ADI4** | 57.4 s | 113.6 s | 228.5 s | 570.5 s | 2290.2 s |
+| **RQM4** | 7.6 s | 14.5 s | 28.3 s | 70.6 s | 281.9 s |
+| **ETDRK4** | 15.4 s | 30.1 s | 59.7 s | 148.0 s | 598.6 s |
+| **CN-ADI2** | 19.1 s | 38.0 s | 76.1 s | 191.3 s | 766.1 s |
+| **CN-ADI4** | 57.4 s | 113.5 s | 228.4 s | 570.4 s | 2289.4 s |
 
 ### Free Energy vs Contour Steps (Ns)
 
-| Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=1000 | Ns=4000 |
-|--------|-------|-------|--------|--------|---------|---------|
-| **RQM4** | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 |
-| **ETDRK4** | -0.4769 | -0.4770 | -0.4770 | -0.4770 | -0.4770 | -0.4770 |
-| **CN-ADI2** | -0.4777 | -0.4790 | -0.4793 | -0.4793 | -0.4793 | -0.4794 |
-| **CN-ADI4** | -0.4794 | -0.4794 | -0.4794 | -0.4794 | -0.4794 | -0.4794 |
+| Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
+|--------|-------|-------|--------|--------|--------|---------|
+| **RQM4** | -0.47701093 | -0.47697737 | -0.47697436 | -0.47697413 | -0.47697411 | -0.47697411 |
+| **ETDRK4** | -0.47693550 | -0.47697152 | -0.47697394 | -0.47697410 | -0.47697411 | -0.47697411 |
+| **CN-ADI2** | -0.47773363 | -0.47895081 | -0.47925127 | -0.47932631 | -0.47934509 | -0.47934879 |
+| **CN-ADI4** | -0.47936255 | -0.47935202 | -0.47935137 | -0.47935135 | -0.47935135 | -0.47935135 |
+
+### Error vs Contour Steps (|F - F_ref|, F_ref = -0.47697411)
+
+| Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 |
+|--------|-------|-------|--------|--------|--------|
+| **RQM4** | 3.68e-05 | 3.26e-06 | 2.47e-07 | 1.71e-08 | 1.13e-09 |
+| **ETDRK4** | 3.86e-05 | 2.60e-06 | 1.68e-07 | 1.07e-08 | 6.77e-10 |
 
 ### Speedup Relative to CN-ADI2 (at Ns=1000)
 
@@ -82,11 +91,19 @@ calculation = scft.SCFT(params=params)
 
 ### Convergence Order Analysis
 
+| Ns transition | ETDRK4 order | RQM4 order |
+|---------------|--------------|------------|
+| 40 → 80 | 3.89 | 3.50 |
+| 80 → 160 | 3.95 | 3.72 |
+| 160 → 320 | 3.97 | 3.86 |
+| 320 → 640 | 3.98 | 3.92 |
+| 640 → 1000 | 4.01 | 3.97 |
+
 **Key findings**:
-- **RQM4** and **ETDRK4** both show 4th-order convergence, following the slope -4 reference line
-- **CN-ADI4** shows 4th-order convergence
-- **CN-ADI2** shows 2nd-order convergence (follows slope -2)
-- Both pseudo-spectral methods converge to F = -0.4770
+- **RQM4** and **ETDRK4** both show 4th-order convergence (order ≈ 4.0)
+- **ETDRK4** has slightly smaller error coefficients than RQM4 at the same ds
+- Both pseudo-spectral methods converge to F = -0.47697411
+- **CN-ADI methods** converge to a different value (F = -0.47935) due to different spatial discretization
 
 ## Performance Summary
 
@@ -102,8 +119,8 @@ calculation = scft.SCFT(params=params)
 ### Key Findings
 
 1. **RQM4 is the fastest pseudo-spectral method** - 2x faster than ETDRK4 per iteration
-2. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.4770
-3. **CN-ADI methods** support non-periodic boundary conditions
+2. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.47697411
+3. **CN-ADI methods** support non-periodic boundary conditions but converge to a different free energy (F = -0.47935) due to finite-difference spatial discretization error
 
 ## Method Recommendations
 
@@ -117,26 +134,38 @@ calculation = scft.SCFT(params=params)
 
 ### ETDRK4 vs RQM4
 
-Both methods achieve **identical accuracy** (4th-order convergence). The choice depends on:
+Both methods achieve **4th-order convergence** with comparable accuracy. The implementation uses:
 
 | Factor | RQM4 | ETDRK4 |
 |--------|------|--------|
-| Speed | **2x faster** | Slower |
-| Implementation | Operator splitting | Exponential integrator |
-| Coefficients | Pre-computed | Contour integral |
+| Speed | **~2x faster** | Slower (more FFTs per step) |
+| Implementation | Operator splitting + Richardson extrapolation | Krogstad scheme (no operator splitting) |
+| Coefficients | Pre-computed Boltzmann factors | Kassam-Trefethen contour integral |
+| Error coefficient | Slightly larger | Slightly smaller |
 
-**Recommendation**: Use **RQM4** for standard simulations. ETDRK4 is available as an alternative but offers no advantage over RQM4 for polymer SCFT.
+**Recommendation**: Use **RQM4** for standard simulations due to its speed advantage. **ETDRK4** (Krogstad scheme) achieves similar accuracy with slightly smaller error coefficients but requires more computation per step.
 
 ## References
 
 1. A. Ranjan, J. Qin, and D. C. Morse, **"Linear Response and Stability of Ordered Phases of Block Copolymer Melts"**, *Macromolecules*, **2008**, 41, 942-954.
    - RQM4 parameters for Richardson extrapolation
 
-2. S. M. Cox and P. C. Matthews, **"Exponential Time Differencing for Stiff Systems"**, *J. Comput. Phys.*, **2002**, 176, 430-455.
-   - ETDRK4 algorithm
+2. J. Song, Y. Liu, and R. Zhang, **"Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers"**, *Chinese J. Polym. Sci.*, **2018**, 36, 488-496.
+   - Krogstad ETDRK4 scheme for polymer field theory, benchmark methodology
 
-3. P. Stasiak and M. W. Matsen, **"Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases"**, *Eur. Phys. J. E*, **2011**, 34, 110.
+3. A.-K. Kassam and L. N. Trefethen, **"Fourth-Order Time-Stepping for Stiff PDEs"**, *SIAM J. Sci. Comput.*, **2005**, 26, 1214-1233.
+   - Contour integral method for stable ETDRK4 coefficient computation
+
+4. P. Stasiak and M. W. Matsen, **"Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases"**, *Eur. Phys. J. E*, **2011**, 34, 110.
    - Convergence analysis methodology
 
-4. J. Song, Y. Liu, and R. Zhang, **"Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers"**, *Chinese J. Polym. Sci.*, **2018**, 36, 488-496.
-   - ETDRK4 for polymer field theory, benchmark methodology
+## Notes on Pseudo-Spectral vs Real-Space Discrepancy
+
+The CN-ADI methods converge to a free energy (F = -0.47935) that differs from the pseudo-spectral methods (F = -0.47697) by approximately 0.5%. This discrepancy arises from the different spatial discretization approaches:
+
+- **Pseudo-spectral methods** (RQM4, ETDRK4): Use spectral (Fourier) representation for spatial derivatives, achieving exponential convergence in spatial resolution for smooth periodic fields
+- **Real-space methods** (CN-ADI): Use finite-difference approximations for spatial derivatives, introducing O(Δx²) spatial discretization error
+
+For the 32³ grid used in these benchmarks, the finite-difference spatial error dominates the contour discretization error. To achieve comparable accuracy between methods, CN-ADI would require a finer spatial grid (higher M).
+
+**Implication**: When comparing free energies between pseudo-spectral and real-space solvers, ensure sufficient spatial resolution for the real-space method. For periodic boundary conditions, pseudo-spectral methods are more efficient and accurate.
