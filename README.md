@@ -172,16 +172,18 @@ You can select the numerical algorithm for propagator computation at runtime usi
 
 | Method | Solver Type | Description |
 |--------|-------------|-------------|
-| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation |
+| `rqm4` | Pseudo-spectral | RQM4: 4th-order Richardson extrapolation (default) |
 | `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
 | `cn-adi4` | Real-space | CN-ADI4: 4th-order CN-ADI (Richardson extrapolation) |
+
+**Note**: `rqm4` is the default numerical method for `scft.py`, `lfts.py`, and `clfts.py`. It offers the best performance among 4th-order methods. See [docs/NumericalMethodsPerformance.md](docs/NumericalMethodsPerformance.md) for benchmark comparisons.
 
 Example:
 ```python
 params = {
     # ... other parameters ...
-    "numerical_method": "etdrk4"  # or "rqm4", "cn-adi2", "cn-adi4"
+    "numerical_method": "etdrk4"  # or "rqm4" (default), "cn-adi2", "cn-adi4"
 }
 scft = SCFT(params)
 ```
