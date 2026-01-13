@@ -79,12 +79,12 @@ def main():
 
     # DCT solver (reflecting BC)
     cb_dct = factory.create_computation_box(nx=[N], lx=[L], bc=["reflecting", "reflecting"])
-    solver_dct = factory.create_pseudospectral_solver(cb_dct, molecules, propagator_optimizer)
+    solver_dct = factory.create_propagator_computation(cb_dct, molecules, propagator_optimizer, "rqm4")
     solver_dct.compute_propagators({"A": np.zeros(N)})
 
     # FFT solver (periodic BC on 2L domain)
     cb_fft = factory.create_computation_box(nx=[N2], lx=[L2], bc=["periodic", "periodic"])
-    solver_fft = factory.create_pseudospectral_solver(cb_fft, molecules, propagator_optimizer)
+    solver_fft = factory.create_propagator_computation(cb_fft, molecules, propagator_optimizer, "rqm4")
     solver_fft.compute_propagators({"A": np.zeros(N2)})
 
     # Evolve both
@@ -129,7 +129,7 @@ def main():
 
     # DST solver (absorbing BC)
     cb_dst = factory.create_computation_box(nx=[N], lx=[L], bc=["absorbing", "absorbing"])
-    solver_dst = factory.create_pseudospectral_solver(cb_dst, molecules, propagator_optimizer)
+    solver_dst = factory.create_propagator_computation(cb_dst, molecules, propagator_optimizer, "rqm4")
     solver_dst.compute_propagators({"A": np.zeros(N)})
 
     # Evolve both
@@ -171,9 +171,9 @@ def main():
     q_dst_mass = q_gauss_init.copy()
 
     # Create fresh solvers
-    solver_dct2 = factory.create_pseudospectral_solver(cb_dct, molecules, propagator_optimizer)
+    solver_dct2 = factory.create_propagator_computation(cb_dct, molecules, propagator_optimizer, "rqm4")
     solver_dct2.compute_propagators({"A": np.zeros(N)})
-    solver_dst2 = factory.create_pseudospectral_solver(cb_dst, molecules, propagator_optimizer)
+    solver_dst2 = factory.create_propagator_computation(cb_dst, molecules, propagator_optimizer, "rqm4")
     solver_dst2.compute_propagators({"A": np.zeros(N)})
 
     for step in range(50):

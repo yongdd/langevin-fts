@@ -91,34 +91,42 @@ Molecules* CudaFactory<T>::create_molecules_information(
     return new Molecules(chain_model, ds, bond_lengths);
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_pseudospectral_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
-{
-    std::string chain_model = molecules->get_model_name();
-
-    if( chain_model == "continuous" && this->reduce_memory_usage == false)
-        return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
-    else if( chain_model == "continuous" && this->reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
-    else if( chain_model == "discrete" && this->reduce_memory_usage == false )
-        return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-    else if( chain_model == "discrete" && this->reduce_memory_usage == true)
-        return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-    return nullptr;
-}
-template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_realspace_solver(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
+PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
 {
     try
     {
         std::string chain_model = molecules->get_model_name();
-        if( chain_model == "continuous" && this->reduce_memory_usage == false)
-            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
-        else if( chain_model == "continuous" && this->reduce_memory_usage == true)
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
-        else if ( chain_model == "discrete" )
+
+        // Determine solver type from numerical method
+        std::string solver_type;
+        if (numerical_method == "rqm4" || numerical_method == "etdrk4")
+            solver_type = "pseudospectral";
+        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4")
+            solver_type = "realspace";
+        else
+            throw_with_line_number("Unknown numerical method: " + numerical_method);
+
+        // Real-space solver
+        if (solver_type == "realspace")
         {
-            throw_with_line_number("The real-space solver does not support discrete chain model.");
+            if (chain_model == "discrete")
+                throw_with_line_number("The real-space solver does not support discrete chain model.");
+            if (!this->reduce_memory_usage)
+                return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
+            else
+                return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
         }
+
+        // Pseudo-spectral solver
+        if (chain_model == "continuous" && !this->reduce_memory_usage)
+            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
+        else if (chain_model == "continuous" && this->reduce_memory_usage)
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
+        else if (chain_model == "discrete" && !this->reduce_memory_usage)
+            return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+        else if (chain_model == "discrete" && this->reduce_memory_usage)
+            return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+
         return nullptr;
     }
     catch(std::exception& exc)

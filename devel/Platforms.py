@@ -71,7 +71,7 @@ for dim in [1,2,3]:
             # create instances
             pc     = factory.create_polymer_chain(["A","B"], block_lengths, dict_a_n, ds)
             cb     = factory.create_computation_box(nx, lx)
-            solver = factory.create_pseudospectral_solver(cb, pc)
+            solver = factory.create_propagator_computation(cb, pc)
             am     = factory.create_anderson_mixing(am_n_comp*np.prod(nx),
                         am_max_hist, am_start_error, am_mix_min, am_mix_init)
 

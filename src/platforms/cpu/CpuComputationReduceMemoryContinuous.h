@@ -83,7 +83,7 @@
  * MklFactory<double> factory(true);  // reduce_memory_usage = true
  *
  * // Usage is identical to standard version
- * auto* comp = factory.create_pseudospectral_solver(cb, molecules, optimizer);
+ * auto* comp = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4");
  * comp->compute_statistics(w_fields);
  * @endcode
  */

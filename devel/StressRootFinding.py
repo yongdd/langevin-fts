@@ -115,7 +115,7 @@ factory = PlatformSelector.create_factory(platform, chain_model)
 # create instances
 pc     = factory.create_polymer_chain(["A","B"], [f, 1-f], dict_a_n, ds)
 cb     = factory.create_computation_box(nx, lx)
-solver = factory.create_pseudospectral_solver(cb, pc)
+solver = factory.create_propagator_computation(cb, pc)
 am     = factory.create_anderson_mixing(am_n_var,
             am_max_hist, am_start_error, am_mix_min, am_mix_init)
 

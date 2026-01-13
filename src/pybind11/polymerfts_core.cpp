@@ -492,8 +492,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
  * - create_computation_box(nx, lx, bc=None, mask=None): Create ComputationBox
  * - create_molecules_information(): Create Molecules container
  * - create_propagator_computation_optimizer(): Create optimizer
- * - create_pseudospectral_solver(): Create pseudo-spectral solver
- * - create_realspace_solver(): Create real-space solver
+ * - create_propagator_computation(): Create propagator solver
  * - create_anderson_mixing(): Create Anderson mixing
  * - display_info(): Print platform information
  *
@@ -567,8 +566,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         }, py::arg("nx"), py::arg("lx"), py::arg("angles") = py::none(), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory<T>::create_molecules_information)
         .def("create_propagator_computation_optimizer", &AbstractFactory<T>::create_propagator_computation_optimizer)
-        .def("create_pseudospectral_solver", &AbstractFactory<T>::create_pseudospectral_solver)
-        .def("create_realspace_solver", &AbstractFactory<T>::create_realspace_solver)
+        .def("create_propagator_computation", &AbstractFactory<T>::create_propagator_computation)
         .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
         .def("display_info", &AbstractFactory<T>::display_info);
 }

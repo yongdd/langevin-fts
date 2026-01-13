@@ -669,14 +669,10 @@ class SCFT:
                 self.prop_solver._molecules, aggregate
             )
             # Recreate propagator computation with the new optimizer
-            if self.prop_solver.method == "pseudospectral":
-                self.prop_solver._propagator_computation = self.prop_solver._factory.create_pseudospectral_solver(
-                    self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
-                )
-            else:
-                self.prop_solver._propagator_computation = self.prop_solver._factory.create_realspace_solver(
-                    self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer
-                )
+            self.prop_solver._propagator_computation = self.prop_solver._factory.create_propagator_computation(
+                self.prop_solver._computation_box, self.prop_solver._molecules, self.prop_solver._propagator_optimizer,
+                self.prop_solver.numerical_method
+            )
 
         # Display factory info
         self.prop_solver._factory.display_info()

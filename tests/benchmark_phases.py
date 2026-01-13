@@ -116,9 +116,9 @@ def benchmark_method(platform, pseudo_method, realspace_method,
     # Create solver
     prop_opt = factory.create_propagator_computation_optimizer(molecules, True)
     if solver_type == "pseudospectral":
-        solver = factory.create_pseudospectral_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
     else:
-        solver = factory.create_realspace_solver(cb, molecules, prop_opt)
+        solver = factory.create_propagator_computation(cb, molecules, prop_opt)
 
     # Create field dictionary (need to compute w from w_A, w_B for incompressible system)
     # For AB diblock: w_A = w+ + w-, w_B = w+ - w-

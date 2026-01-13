@@ -117,8 +117,9 @@ public:
      * auto* factory = PlatformSelector::create_factory_real("cuda", false);
      *
      * // Create solver with specific numerical method
-     * auto* solver = factory->create_pseudospectral_solver(cb, mols, optimizer, "rqm4");
-     * auto* solver = factory->create_realspace_solver(cb, mols, optimizer, "cn-adi4");
+     * auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "rqm4");
+     * // Or for real-space methods:
+     * // auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "cn-adi4");
      * @endcode
      */
     static AbstractFactory<double>* create_factory_real(
