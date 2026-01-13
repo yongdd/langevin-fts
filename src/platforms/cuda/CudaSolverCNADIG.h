@@ -1,8 +1,8 @@
 /**
- * @file CudaSolverRichardsonGlobal.h
+ * @file CudaSolverCNADIG.h
  * @brief GPU solver using Global Richardson extrapolation.
  *
- * This header provides CudaSolverRichardsonGlobal, the CUDA implementation
+ * This header provides CudaSolverCNADIG, the CUDA implementation
  * of the Global Richardson extrapolation method for propagator computation.
  *
  * **Algorithm (Global Richardson):**
@@ -40,8 +40,8 @@
  * @see CudaSolverCNADI for per-step Richardson (CN-ADI4)
  */
 
-#ifndef CUDA_SOLVER_RICHARDSON_GLOBAL_H_
-#define CUDA_SOLVER_RICHARDSON_GLOBAL_H_
+#ifndef CUDA_SOLVER_CN_ADI_G_H_
+#define CUDA_SOLVER_CN_ADI_G_H_
 
 #include <string>
 #include <vector>
@@ -55,7 +55,7 @@
 #include "CudaCommon.h"
 
 /**
- * @class CudaSolverRichardsonGlobal
+ * @class CudaSolverCNADIG
  * @brief GPU solver using Global Richardson extrapolation.
  *
  * Implements Richardson extrapolation with two independent propagator evolutions.
@@ -76,7 +76,7 @@
  * - 1 full step (ds) + 2 half steps (ds/2) = 3 ADI solves
  * - Same cost as CN-ADI4, but different algorithm
  */
-class CudaSolverRichardsonGlobal : public CudaSolver<double>
+class CudaSolverCNADIG : public CudaSolver<double>
 {
 private:
     ComputationBox<double>* cb;  ///< Computation box
@@ -204,13 +204,13 @@ public:
      * @param streams             Pre-created CUDA streams
      * @param reduce_memory_usage Memory-saving mode
      */
-    CudaSolverRichardsonGlobal(ComputationBox<double>* cb, Molecules *molecules,
+    CudaSolverCNADIG(ComputationBox<double>* cb, Molecules *molecules,
         int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
 
     /**
      * @brief Destructor. Frees GPU resources.
      */
-    ~CudaSolverRichardsonGlobal();
+    ~CudaSolverCNADIG();
 
     /** @brief Update finite difference coefficients for new box. */
     void update_laplacian_operator() override;

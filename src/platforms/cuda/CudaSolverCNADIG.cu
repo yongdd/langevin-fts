@@ -1,5 +1,5 @@
 /**
- * @file CudaSolverRichardsonGlobal.cu
+ * @file CudaSolverCNADIG.cu
  * @brief CUDA solver using Global Richardson extrapolation.
  *
  * Implements propagator advancement for continuous chains using finite
@@ -20,17 +20,17 @@
  *   - q_half_internal_{n+1} = A(A(q_half_internal_n, ds/2), ds/2)
  *   - q_out = (4*q_half_internal - q_full_internal) / 3
  *
- * @see CudaSolverRichardsonGlobal.h for algorithm details
+ * @see CudaSolverCNADIG.h for algorithm details
  * @see CudaSolverCNADI for per-step Richardson implementation
  */
 
 #include <iostream>
 #include <cmath>
 #include <numbers>
-#include "CudaSolverRichardsonGlobal.h"
+#include "CudaSolverCNADIG.h"
 #include "CudaSolverCNADI.h"  // For tridiagonal kernel declarations
 
-CudaSolverRichardsonGlobal::CudaSolverRichardsonGlobal(
+CudaSolverCNADIG::CudaSolverCNADIG(
     ComputationBox<double>* cb,
     Molecules *molecules,
     int n_streams,
@@ -229,7 +229,7 @@ CudaSolverRichardsonGlobal::CudaSolverRichardsonGlobal(
     }
 }
 
-CudaSolverRichardsonGlobal::~CudaSolverRichardsonGlobal()
+CudaSolverCNADIG::~CudaSolverCNADIG()
 {
     const int DIM = this->dim;
 
@@ -320,7 +320,7 @@ CudaSolverRichardsonGlobal::~CudaSolverRichardsonGlobal()
     }
 }
 
-void CudaSolverRichardsonGlobal::update_laplacian_operator()
+void CudaSolverCNADIG::update_laplacian_operator()
 {
     try
     {
@@ -399,7 +399,7 @@ void CudaSolverRichardsonGlobal::update_laplacian_operator()
     }
 }
 
-void CudaSolverRichardsonGlobal::update_dw(
+void CudaSolverCNADIG::update_dw(
     std::string device, std::map<std::string, const double*> w_input)
 {
     try
@@ -457,12 +457,12 @@ void CudaSolverRichardsonGlobal::update_dw(
     }
 }
 
-void CudaSolverRichardsonGlobal::reset_internal_state(int STREAM)
+void CudaSolverCNADIG::reset_internal_state(int STREAM)
 {
     is_initialized[STREAM] = false;
 }
 
-void CudaSolverRichardsonGlobal::advance_full_step(
+void CudaSolverCNADIG::advance_full_step(
     const int STREAM, double* d_q_in, double* d_q_out, std::string monomer_type)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -499,7 +499,7 @@ void CudaSolverRichardsonGlobal::advance_full_step(
     gpu_error_check(cudaPeekAtLastError());
 }
 
-void CudaSolverRichardsonGlobal::advance_two_half_steps(
+void CudaSolverCNADIG::advance_two_half_steps(
     const int STREAM, double* d_q_in, double* d_q_out, std::string monomer_type)
 {
     const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -558,7 +558,7 @@ void CudaSolverRichardsonGlobal::advance_two_half_steps(
     gpu_error_check(cudaPeekAtLastError());
 }
 
-void CudaSolverRichardsonGlobal::advance_propagator(
+void CudaSolverCNADIG::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
     std::string monomer_type, double *d_q_mask, [[maybe_unused]] int ds_index)
@@ -611,7 +611,7 @@ void CudaSolverRichardsonGlobal::advance_propagator(
 // ADI step methods (reuse kernels from CudaSolverCNADI)
 // ============================================================================
 
-void CudaSolverRichardsonGlobal::advance_propagator_3d_step(
+void CudaSolverCNADIG::advance_propagator_3d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -708,7 +708,7 @@ void CudaSolverRichardsonGlobal::advance_propagator_3d_step(
     }
 }
 
-void CudaSolverRichardsonGlobal::advance_propagator_2d_step(
+void CudaSolverCNADIG::advance_propagator_2d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -778,7 +778,7 @@ void CudaSolverRichardsonGlobal::advance_propagator_2d_step(
     }
 }
 
-void CudaSolverRichardsonGlobal::advance_propagator_1d_step(
+void CudaSolverCNADIG::advance_propagator_1d_step(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -821,7 +821,7 @@ void CudaSolverRichardsonGlobal::advance_propagator_1d_step(
     }
 }
 
-void CudaSolverRichardsonGlobal::compute_single_segment_stress(
+void CudaSolverCNADIG::compute_single_segment_stress(
     [[maybe_unused]] const int STREAM,
     [[maybe_unused]] double *d_q_pair, [[maybe_unused]] double *d_segment_stress,
     [[maybe_unused]] std::string monomer_type, [[maybe_unused]] bool is_half_bond_length)
