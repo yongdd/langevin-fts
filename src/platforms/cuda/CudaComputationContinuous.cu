@@ -100,8 +100,17 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                bool use_4th_order = (numerical_method == "cn-adi4");
-                this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
+                if (numerical_method == "cn-adi4-g")
+                {
+                    throw_with_line_number("Global Richardson method (cn-adi4-g) is not yet supported on CUDA. "
+                                           "Use platform='cpu-mkl' or use 'cn-adi4' for per-step Richardson.");
+                }
+                else
+                {
+                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
+                    bool use_4th_order = (numerical_method == "cn-adi4");
+                    this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
+                }
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

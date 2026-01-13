@@ -98,7 +98,8 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         std::string solver_type;
         if (numerical_method == "rqm4" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
-        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4")
+        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4" ||
+                 numerical_method == "cn-adi4-g")
             solver_type = "realspace";
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
