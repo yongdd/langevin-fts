@@ -41,6 +41,8 @@
 #include "CpuComputationDiscrete.h"
 #include "CpuComputationReduceMemoryContinuous.h"
 #include "CpuComputationReduceMemoryDiscrete.h"
+#include "CpuComputationGlobalRichardson.h"
+#include "CpuComputationReduceMemoryGlobalRichardson.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
 
@@ -101,8 +103,26 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4" ||
                  numerical_method == "cn-adi4-g")
             solver_type = "realspace";
+        else if (numerical_method == "cn-adi4-gq")
+            solver_type = "realspace-global-richardson";
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
+
+        // Global Richardson at quadrature level (cn-adi4-gq)
+        if (solver_type == "realspace-global-richardson")
+        {
+            if (chain_model == "discrete")
+                throw_with_line_number("Global Richardson does not support discrete chain model.");
+            if constexpr (std::is_same<T, double>::value)
+            {
+                if (!this->reduce_memory_usage)
+                    return new CpuComputationGlobalRichardson(cb, molecules, propagator_computation_optimizer);
+                else
+                    return new CpuComputationReduceMemoryGlobalRichardson(cb, molecules, propagator_computation_optimizer);
+            }
+            else
+                throw_with_line_number("Global Richardson only supports double precision.");
+        }
 
         // Real-space solver
         if (solver_type == "realspace")
