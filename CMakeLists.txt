@@ -104,7 +104,9 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
         src/platforms/cpu/CpuSolverCNADI.cpp
         src/platforms/cpu/CpuSolverRichardsonGlobal.cpp
+        src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp
         src/platforms/cpu/CpuComputationBase.cpp
+        src/platforms/cpu/CpuComputationGlobalRichardson.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
         src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
