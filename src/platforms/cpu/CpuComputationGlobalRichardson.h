@@ -98,8 +98,7 @@ private:
     std::vector<std::tuple<int, double*, double*, int>> partition_segment_info;
 
     #ifndef NDEBUG
-    std::map<std::string, bool*> propagator_full_finished;
-    std::map<std::string, bool*> propagator_half_finished;
+    std::map<std::string, bool*> propagator_finished;  ///< Debug: tracks completed segments
     #endif
 
     /**

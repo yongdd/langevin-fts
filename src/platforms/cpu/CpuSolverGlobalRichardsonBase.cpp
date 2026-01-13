@@ -29,9 +29,6 @@ CpuSolverGlobalRichardsonBase::CpuSolverGlobalRichardsonBase(
 
         const int M = cb->get_total_grid();
 
-        // Allocate temporary work array
-        q_temp = new double[M];
-
         // Allocate coefficient arrays for each monomer type
         for (const auto& item : molecules->get_bond_lengths())
         {
@@ -78,8 +75,6 @@ CpuSolverGlobalRichardsonBase::CpuSolverGlobalRichardsonBase(
 
 CpuSolverGlobalRichardsonBase::~CpuSolverGlobalRichardsonBase()
 {
-    delete[] q_temp;
-
     // Free full step coefficients
     for (const auto& item : xl_full) delete[] item.second;
     for (const auto& item : xd_full) delete[] item.second;
@@ -189,25 +184,28 @@ void CpuSolverGlobalRichardsonBase::advance_full_step(
         const int DIM = this->cb->get_dim();
         const double* _exp_dw = exp_dw_full[monomer_type].data();
 
+        // Thread-local temporary array to avoid race conditions
+        std::vector<double> q_temp_local(M);
+
         // Apply starting Boltzmann factor: exp(-w*ds/2)
         for (int i = 0; i < M; i++)
-            q_temp[i] = _exp_dw[i] * q_in[i];
+            q_temp_local[i] = _exp_dw[i] * q_in[i];
 
         // ADI diffusion step with full step coefficients
         if (DIM == 3)
             advance_propagator_3d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_full[monomer_type], xd_full[monomer_type], xh_full[monomer_type],
                 yl_full[monomer_type], yd_full[monomer_type], yh_full[monomer_type],
                 zl_full[monomer_type], zd_full[monomer_type], zh_full[monomer_type]);
         else if (DIM == 2)
             advance_propagator_2d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_full[monomer_type], xd_full[monomer_type], xh_full[monomer_type],
                 yl_full[monomer_type], yd_full[monomer_type], yh_full[monomer_type]);
         else if (DIM == 1)
             advance_propagator_1d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_full[monomer_type], xd_full[monomer_type], xh_full[monomer_type]);
 
         // Apply ending Boltzmann factor: exp(-w*ds/2)
@@ -237,25 +235,28 @@ void CpuSolverGlobalRichardsonBase::advance_half_step(
         const int DIM = this->cb->get_dim();
         const double* _exp_dw = exp_dw_half[monomer_type].data();
 
+        // Thread-local temporary array to avoid race conditions
+        std::vector<double> q_temp_local(M);
+
         // Apply starting Boltzmann factor: exp(-w*ds/4)
         for (int i = 0; i < M; i++)
-            q_temp[i] = _exp_dw[i] * q_in[i];
+            q_temp_local[i] = _exp_dw[i] * q_in[i];
 
         // ADI diffusion step with half step coefficients
         if (DIM == 3)
             advance_propagator_3d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
                 yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type],
                 zl_half[monomer_type], zd_half[monomer_type], zh_half[monomer_type]);
         else if (DIM == 2)
             advance_propagator_2d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type],
                 yl_half[monomer_type], yd_half[monomer_type], yh_half[monomer_type]);
         else if (DIM == 1)
             advance_propagator_1d_step(
-                this->cb->get_boundary_conditions(), q_temp, q_out,
+                this->cb->get_boundary_conditions(), q_temp_local.data(), q_out,
                 xl_half[monomer_type], xd_half[monomer_type], xh_half[monomer_type]);
 
         // Apply ending Boltzmann factor: exp(-w*ds/4)
