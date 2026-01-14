@@ -2,7 +2,7 @@
 
 This document describes the real-space finite difference solver for continuous chain propagators, including its numerical methods, boundary condition support, and usage.
 
-For detailed benchmark comparisons, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md) and [RealSpaceConvergence.md](RealSpaceConvergence.md).
+For performance benchmarks and comparison with pseudo-spectral methods, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
 ## Overview
 
@@ -62,6 +62,42 @@ $$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
 
 This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
+### CN-ADI4-LR vs CN-ADI4-GR
+
+Both methods achieve 4th-order convergence but differ in where Richardson extrapolation is applied:
+
+**CN-ADI4-LR (Local Richardson)** - Extrapolation at each propagator step:
+```
+for each step n:
+    q_full[n+1] = advance(q[n], ds)
+    q_half_temp = advance(q[n], ds/2)
+    q_half[n+1] = advance(q_half_temp, ds/2)
+    q[n+1] = (4·q_half[n+1] - q_full[n+1]) / 3
+```
+
+**CN-ADI4-GR (Global Richardson)** - Extrapolation at quadrature level:
+```
+# Advance two independent chains with different step sizes
+for each step n:
+    q_full[n+1] = advance(q_full[n], ds)
+
+for each half-step:
+    q_half[n+1] = advance(q_half[n], ds/2)
+
+# Richardson extrapolation applied to final quantities
+Q_rich = (4·Q_half - Q_full) / 3
+φ_rich = (4·φ_half - φ_full) / 3
+```
+
+| Factor | CN-ADI4-LR | CN-ADI4-GR |
+|--------|------------|------------|
+| Convergence (1D) | ~3.5 order | True 4th order |
+| Convergence (3D) | ~3.7 order | ~4th order (limited by spatial error) |
+| Memory | Lower | Higher (stores two chains) |
+| ADI steps per N | 3N | 3N |
+
+**Recommendation**: Both methods have similar computational cost. CN-ADI4-GR achieves true 4th-order convergence but requires more memory. For most applications, CN-ADI4-LR is sufficient.
+
 ### Runtime Selection
 
 ```python
@@ -116,94 +152,47 @@ Different boundary conditions can be specified for each direction:
        "reflecting", "absorbing"]   # z: reflecting bottom, absorbing top
 ```
 
-### Grafted Brush Example
-
-For polymer brushes grafted to a surface:
-
-```python
-from polymerfts import PropagatorSolver
-import numpy as np
-
-# 1D grafted brush with absorbing boundaries
-solver = PropagatorSolver(
-    nx=[128],
-    lx=[4.0],
-    ds=0.01,
-    bond_lengths={"A": 1.0},
-    bc=["absorbing", "absorbing"],
-    chain_model="continuous",
-    numerical_method="cn-adi2",
-    platform="cpu-mkl"
-)
-
-# Add polymer with grafting point at node 0
-solver.add_polymer(
-    volume_fraction=1.0,
-    blocks=[["A", 1.0, 0, 1]],
-    grafting_points={0: "G"}
-)
-
-# Create delta-function initial condition at grafting point
-dx = 4.0 / 128
-x = (np.arange(128) + 0.5) * dx
-x0 = 0.5  # Grafting point position
-
-# Gaussian approximation to delta function
-sigma = 0.1
-q_init = np.exp(-(x - x0)**2 / (2 * sigma**2))
-q_init = q_init / (np.sum(q_init) * dx)  # Normalize
-
-# Compute propagators with zero field
-w_field = np.zeros(128)
-solver.compute_propagators({"A": w_field}, q_init={"G": q_init})
-
-# Get results
-q_end = solver.get_propagator(polymer=0, v=0, u=1, step=100)
-Q = solver.get_partition_function(polymer=0)
-```
-
-## Grafted Brush Validation
-
-### Absorbing Boundaries with Sharp Initial Conditions
-
-For absorbing boundaries, the pseudo-spectral method using Discrete Sine Transform (DST) achieves spectral accuracy (~10⁻¹⁵ error), while real-space CN-ADI achieves ~10⁻⁶ error.
-
-**Key findings:**
-1. **Pseudo-spectral (DST) achieves machine precision** for all Gaussian widths
-2. **Real-space requires sufficient resolution**: $\sigma/\Delta x > 3$-$5$ for accurate results
-3. **Both methods handle absorbing BCs correctly**
-
-### Stability Warning
-
-**CN-ADI4** can become unstable when initial conditions are close to absorbing boundaries:
-
-| Distance from boundary | CN-ADI4 | CN-ADI2 |
-|------------------------|---------|---------|
-| $> 5\sigma$ | Stable | Stable |
-| $2$-$3\sigma$ | **Unstable** | Stable |
-| $< 2\sigma$ | **Diverges** | Stable |
-
-**Recommendation**: Use CN-ADI2 (not CN-ADI4) when grafting points are near absorbing boundaries.
-
 ## Implementation Details
 
 ### Files
 
 | File | Description |
 |------|-------------|
-| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI solver |
-| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI solver |
-| `src/common/FiniteDifference.cpp` | Tridiagonal coefficient generation |
+| `src/common/FiniteDifference.cpp` | Tridiagonal matrix coefficient generation |
+| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4-LR solver |
+| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4-LR solver |
+| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp` | CPU CN-ADI4-GR base solver |
+| `src/platforms/cuda/CudaSolverGlobalRichardsonBase.cu` | CUDA CN-ADI4-GR base solver |
 
-### Tridiagonal Solvers
+### Tridiagonal Systems
+
+Each ADI sweep requires solving a tridiagonal system $A\mathbf{x} = \mathbf{b}$:
+
+$$\begin{pmatrix} d_0 & h_0 & & & \\ l_1 & d_1 & h_1 & & \\ & \ddots & \ddots & \ddots & \\ & & l_{n-1} & d_{n-1} & h_{n-1} \\ & & & l_n & d_n \end{pmatrix} \begin{pmatrix} x_0 \\ x_1 \\ \vdots \\ x_{n-1} \\ x_n \end{pmatrix} = \begin{pmatrix} b_0 \\ b_1 \\ \vdots \\ b_{n-1} \\ b_n \end{pmatrix}$$
 
 **Non-periodic (Thomas Algorithm)**:
-- Forward elimination followed by back substitution
-- CUDA: Uses shared memory for coefficient caching
+- Forward elimination: Modify coefficients to eliminate lower diagonal $l_i$
+- Back substitution: Solve for $x_i$ from $i = n$ down to $0$
+- Complexity: $O(N)$
+- CUDA: Parallel solves with shared memory caching for coefficients
 
 **Periodic (Sherman-Morrison)**:
-- Converts cyclic system to standard tridiagonal + correction
-- Solves two systems and combines results
+- Cyclic system has corner elements: $A_{0,n} = h_n$ and $A_{n,0} = l_0$
+- Decomposes as $A = B + \mathbf{u}\mathbf{v}^T$ where $B$ is standard tridiagonal
+- Solves $B\mathbf{y} = \mathbf{b}$ and $B\mathbf{z} = \mathbf{u}$, then $\mathbf{x} = \mathbf{y} - \frac{\mathbf{v}^T \mathbf{y}}{1 + \mathbf{v}^T \mathbf{z}} \mathbf{z}$
+- Complexity: $O(N)$ with constant factor overhead
+
+### ADI Splitting
+
+For 3D problems with grid $(N_x, N_y, N_z)$:
+
+| Sweep | Systems to Solve | System Size |
+|-------|------------------|-------------|
+| X-sweep | $N_y \times N_z$ | $N_x$ |
+| Y-sweep | $N_x \times N_z$ | $N_y$ |
+| Z-sweep | $N_x \times N_y$ | $N_z$ |
+
+CUDA parallelizes across systems, solving thousands of tridiagonal systems simultaneously.
 
 ## Limitations
 
@@ -214,13 +203,20 @@ For absorbing boundaries, the pseudo-spectral method using Discrete Sine Transfo
 
 ## When to Use Real-Space vs Pseudo-Spectral
 
-### Use Real-Space When:
-- Non-periodic boundary conditions are required
-- CN-ADI4 accuracy is needed with non-periodic boundaries
+| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI) |
+|-----------|------------------------------|---------------------|
+| **Boundary conditions** | Periodic only | Periodic, reflecting, absorbing |
+| **Performance** | Fastest (~3x faster) | Slower |
+| **Stress calculation** | Supported | Not yet implemented |
+| **Spatial accuracy** | Spectral (exponential) | O(Δx²) |
 
-### Use Pseudo-Spectral When:
+### Use Real-Space (CN-ADI) When:
+- Non-periodic boundary conditions are required (confined films, grafted polymers)
+- Absorbing or reflecting boundaries are needed
+
+### Use Pseudo-Spectral (RQM4) When:
 - Periodic boundary conditions are acceptable
-- Stress calculations are needed
+- Stress calculations are needed for box optimization
 - Maximum performance is required
 
 ## References
