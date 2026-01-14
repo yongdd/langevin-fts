@@ -66,8 +66,8 @@ calculation = scft.SCFT(params=params)
 | **CN-ADI2** | 11.8 s | 22.9 s | 45.5 s | 90.3 s | 180.1 s | 282.0 s |
 | **CN-ADI4-LR** | 35.4 s | 68.7 s | 136.5 s | 270.9 s | 540.3 s | 846.0 s |
 | **CN-ADI4-GR** | 34.6 s | 68.3 s | 135.8 s | 271.2 s | 541.2 s | 844.9 s |
-| **SDC-4** | 48.1 s | 89.0 s | 160.5 s | 209.9 s | - | - |
-| **SDC-6** | 102.2 s | 189.4 s | 268.7 s | 471.6 s | - | - |
+| **SDC-4** | 48.1 s | 89.0 s | 160.5 s | 209.9 s | 418.0 s | - |
+| **SDC-6** | 102.2 s | 189.4 s | 268.7 s | 471.6 s | 945.6 s | - |
 
 ### Free Energy vs Contour Steps (Ns)
 
@@ -181,20 +181,6 @@ Both methods achieve 4th-order convergence with similar computational cost (~3x 
 
 For implementation details, see [RealSpaceMethod.md](RealSpaceMethod.md#cn-adi4-lr-vs-cn-adi4-gr).
 
-## References
-
-1. A. Ranjan, J. Qin, and D. C. Morse, **"Linear Response and Stability of Ordered Phases of Block Copolymer Melts"**, *Macromolecules*, **2008**, 41, 942-954.
-   - RQM4 parameters for Richardson extrapolation
-
-2. J. Song, Y. Liu, and R. Zhang, **"Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers"**, *Chinese J. Polym. Sci.*, **2018**, 36, 488-496.
-   - Krogstad ETDRK4 scheme for polymer field theory, benchmark methodology
-
-3. A.-K. Kassam and L. N. Trefethen, **"Fourth-Order Time-Stepping for Stiff PDEs"**, *SIAM J. Sci. Comput.*, **2005**, 26, 1214-1233.
-   - Contour integral method for stable ETDRK4 coefficient computation
-
-4. P. Stasiak and M. W. Matsen, **"Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases"**, *Eur. Phys. J. E*, **2011**, 34, 110.
-   - Convergence analysis methodology
-
 ## SDC Method Performance Notes
 
 The Spectral Deferred Correction (SDC) method provides Nth-order temporal accuracy (N=2-10) for real-space problems with non-periodic boundary conditions.
@@ -203,8 +189,8 @@ The Spectral Deferred Correction (SDC) method provides Nth-order temporal accura
 
 | Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 |
 |--------|-------|-------|--------|--------|--------|
-| **SDC-4** | 48.1 s | 89.0 s | 160.5 s | 209.9 s | ~350 s |
-| **SDC-6** | 102.2 s | 189.4 s | 268.7 s | 471.6 s | ~750 s |
+| **SDC-4** | 48.1 s | 89.0 s | 160.5 s | 209.9 s | 418.0 s |
+| **SDC-6** | 102.2 s | 189.4 s | 268.7 s | 471.6 s | 945.6 s |
 
 ### Free Energy Convergence ($F_{\rm ref}$ = -0.479351355095385)
 
@@ -250,3 +236,17 @@ The CN-ADI methods converge to a free energy (F = -0.47935) that differs from th
 For the 32³ grid used in these benchmarks, the finite-difference spatial error dominates the contour discretization error. To achieve comparable accuracy between methods, CN-ADI would require a finer spatial grid (higher M).
 
 **Implication**: When comparing free energies between pseudo-spectral and real-space solvers, ensure sufficient spatial resolution for the real-space method. For periodic boundary conditions, pseudo-spectral methods are more efficient and accurate.
+
+## References
+
+1. A. Ranjan, J. Qin, and D. C. Morse, **"Linear Response and Stability of Ordered Phases of Block Copolymer Melts"**, *Macromolecules*, **2008**, 41, 942-954.
+   - RQM4 parameters for Richardson extrapolation
+
+2. J. Song, Y. Liu, and R. Zhang, **"Exponential Time Differencing Schemes for Solving the Self-Consistent Field Equations of Polymers"**, *Chinese J. Polym. Sci.*, **2018**, 36, 488-496.
+   - Krogstad ETDRK4 scheme for polymer field theory, benchmark methodology
+
+3. A.-K. Kassam and L. N. Trefethen, **"Fourth-Order Time-Stepping for Stiff PDEs"**, *SIAM J. Sci. Comput.*, **2005**, 26, 1214-1233.
+   - Contour integral method for stable ETDRK4 coefficient computation
+
+4. P. Stasiak and M. W. Matsen, **"Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases"**, *Eur. Phys. J. E*, **2011**, 34, 110.
+   - Convergence analysis methodology
