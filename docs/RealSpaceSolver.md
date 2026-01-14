@@ -1,6 +1,8 @@
 # Real-Space Solver Documentation
 
-This document describes the real-space finite difference solver for continuous chain propagators, including its numerical methods, boundary condition support, and performance characteristics.
+This document describes the real-space finite difference solver for continuous chain propagators, including its numerical methods, boundary condition support, and usage.
+
+For detailed benchmark comparisons, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md) and [RealSpaceConvergence.md](RealSpaceConvergence.md).
 
 ## Overview
 
@@ -44,216 +46,36 @@ The propagator advancement includes the potential term using symmetric splitting
 
 $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delta s/2} \cdot q^n$$
 
-This ensures the scheme remains symmetric and accurate.
+## Available Methods
 
-## CN-ADI4: Richardson Extrapolation for 4th-Order Accuracy
+| Method | Order | Description |
+|--------|-------|-------------|
+| **cn-adi2** | 2nd | Standard Crank-Nicolson ADI |
+| **cn-adi4-lr** | 4th | CN-ADI with Local Richardson extrapolation |
+| **cn-adi4-gr** | 4th | CN-ADI with Global Richardson extrapolation |
 
-By default, the solver uses **CN-ADI2** (2nd-order Crank-Nicolson ADI). Optionally, **CN-ADI4** (4th-order) can be enabled using Richardson extrapolation to achieve higher temporal accuracy. This combines one full step with two half-steps:
+### Richardson Extrapolation for 4th-Order Accuracy
+
+The 4th-order methods use Richardson extrapolation combining one full step with two half-steps:
 
 $$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
-
-where:
-- $q_{\text{full}}$: Result from one full step of size $\Delta s$
-- $q_{\text{half}}$: Result from two half-steps of size $\Delta s/2$ each
 
 This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
 ### Runtime Selection
 
-CN-ADI2 or CN-ADI4 can be selected at runtime using the `numerical_method` parameter:
-
 ```python
 from polymerfts import PropagatorSolver
 
-# CN-ADI2 (default - faster, more stable)
+# CN-ADI2 (default - faster)
 solver = PropagatorSolver(..., numerical_method="cn-adi2")
 
-# CN-ADI4 (more accurate, but may be unstable near absorbing boundaries)
+# CN-ADI4 with local Richardson (good balance)
 solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
+
+# CN-ADI4 with global Richardson (highest accuracy in 1D)
+solver = PropagatorSolver(..., numerical_method="cn-adi4-gr")
 ```
-
-**Note**: CN-ADI4 may become unstable when initial conditions are close to absorbing boundaries (see Stability Warning below).
-
-## Performance Benchmarks
-
-### Test Configuration
-
-- **Polymer**: AB Diblock copolymer (f = 0.5)
-- **Chain model**: Continuous
-- **Box**: 4.0 x 4.0 x 4.0
-- **Hardware**: NVIDIA H100 GPU
-
-### Computation Time vs Contour Steps (32³ grid, CUDA)
-
-| N (ds=1/N) | CN-ADI2 | CN-ADI4 | Pseudo-Spectral | CN-ADI4/CN-ADI2 Ratio |
-|------------|---------|---------|-----------------|----------------------|
-| 10 (0.1)   | 117 ms  | 327 ms  | 403 ms          | 2.8x                 |
-| 20 (0.05)  | 99 ms   | 339 ms  | 405 ms          | 3.4x                 |
-| 40 (0.025) | 108 ms  | 351 ms  | 408 ms          | 3.3x                 |
-| 80 (0.0125)| 115 ms  | 382 ms  | 414 ms          | 3.3x                 |
-| 160 (0.00625)| 136 ms| 446 ms  | 425 ms          | 3.3x                 |
-
-### Key Observations
-
-1. **CN-ADI4 is ~3x slower than CN-ADI2**: This matches the expected computational cost:
-   - CN-ADI4: 1 full step + 2 half-steps = 3 ADI solves per contour step
-   - CN-ADI2: 1 full step = 1 ADI solve per contour step
-
-2. **CN-ADI2 is fastest**: About 3-4x faster than both 4th-order methods
-
-3. **CN-ADI4 comparable to pseudo-spectral**: Similar computation time on GPU
-
-### Scaling Analysis
-
-The real-space method scales as:
-- **Time complexity**: O(M) per direction, O(3M) per ADI step (3D)
-- **Memory complexity**: O(M) for propagators + O(N_x + N_y + N_z) for tridiagonal coefficients
-
-Compared to pseudo-spectral (O(M log M) per step), real-space is:
-- Faster for very small grids
-- Slower for large grids
-- Essential when non-periodic boundaries are required
-
-## Accuracy and Convergence
-
-### Convergence Study Results
-
-The following results compare the partition function Q computed with different methods for a homopolymer in a fixed lamellar external field (χN=12, 3 periods) on a 32³ grid. Benchmark run on CUDA platform.
-
-#### Partition Function Q vs Contour Discretization
-
-| N (ds=1/N) | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
-|------------|------|--------|---------|---------|
-| 20 | 12.6459485262 | 12.6442520116 | 13.1269150396 | 13.1395511288 |
-| 40 | 12.6453957351 | 12.6452747926 | 13.1363568960 | 13.1395065418 |
-| 80 | 12.6453556945 | 12.6453476063 | 13.1387163979 | 13.1395030750 |
-| 160 | 12.6453529997 | 12.6453524766 | 13.1393062126 | 13.1395028297 |
-| 320 | 12.6453528250 | 12.6453527917 | 13.1394536625 | 13.1395028133 |
-| 640 | 12.6453528138 | 12.6453528117 | 13.1394905247 | 13.1395028122 |
-
-**Note**: Pseudo-spectral (RQM4, ETDRK4) and real-space (CN-ADI) methods converge to different Q values because they use different spatial discretization schemes.
-
-#### Error |Q - Q_ref| (Q_ref = value at N=640)
-
-| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
-|---|------|--------|---------|---------|
-| 20 | 5.96e-04 | 1.10e-03 | 1.26e-02 | 4.83e-05 |
-| 40 | 4.29e-05 | 7.80e-05 | 3.13e-03 | 3.73e-06 |
-| 80 | 2.88e-06 | 5.21e-06 | 7.74e-04 | 2.63e-07 |
-| 160 | 1.86e-07 | 3.35e-07 | 1.84e-04 | 1.75e-08 |
-| 320 | 1.11e-08 | 2.00e-08 | 3.69e-05 | 1.06e-09 |
-
-#### Measured Convergence Order
-
-| Method | Estimated Order p | Expected |
-|--------|-------------------|----------|
-| RQM4 (Pseudo-Spectral) | **p ≈ 3.93** | 4.0 |
-| ETDRK4 (Pseudo-Spectral) | **p ≈ 3.94** | 4.0 |
-| CN-ADI2 (Real-Space) | **p ≈ 2.10** | 2.0 |
-| CN-ADI4 (Real-Space, per-step Richardson) | **p ≈ 3.87** | 4.0 |
-
-#### Computation Time (ms) on CUDA
-
-| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
-|---|------|--------|---------|---------|
-| 20 | 2.5 | 5.2 | 7.4 | 22.0 |
-| 40 | 4.8 | 10.2 | 14.7 | 43.9 |
-| 80 | 9.5 | 20.3 | 29.3 | 87.9 |
-| 160 | 18.9 | 40.1 | 58.6 | 175.3 |
-| 320 | 37.6 | 80.5 | 117.0 | 350.4 |
-| 640 | 75.2 | 160.8 | 233.8 | 700.7 |
-
-### Key Findings
-
-1. **All 4th-order methods achieve expected accuracy**: The measured convergence orders confirm that:
-   - RQM4, ETDRK4: p ≈ 3.9-4.0 (pseudo-spectral)
-   - CN-ADI4: p ≈ 3.9 (real-space)
-
-2. **CN-ADI2 converges as expected**: Shows clear $O(\Delta s^2)$ convergence with error decreasing by ~4× when $\Delta s$ is halved.
-
-3. **Systematic difference between methods**: Real-space and pseudo-spectral methods converge to different Q values (~4% difference) due to different spatial discretization (finite difference vs spectral).
-
-4. **Performance**: CN-ADI4 is approximately 3× slower than CN-ADI2 due to the 3 ADI solves per step.
-
-### Grafted Brush Validation (Absorbing Boundaries)
-
-To validate solvers with non-periodic boundary conditions, we test a grafted brush configuration:
-
-- **Setup**: 1D domain with absorbing boundaries on both sides
-- **Initial condition**: Gaussian centered at $x_0 = 2.0$ (center), varying $\sigma$
-- **Grid**: 512 points, Lx = 4.0
-- **Comparison**: Numerical vs analytical Fourier series solution
-
-The analytical solution for diffusion with absorbing BCs and Gaussian initial condition is:
-
-$$q(x,s) = \frac{2}{L} \sum_{n=1}^{\infty} a_n \sin\left(\frac{n\pi x}{L}\right) \exp\left(-\frac{n^2\pi^2 b^2 s}{6L^2}\right)$$
-
-where $a_n$ are the Fourier sine coefficients of the initial Gaussian.
-
-#### Real-Space vs Pseudo-Spectral Comparison
-
-For absorbing boundaries, two methods are available:
-- **Real-space (CN-ADI2)**: 2nd-order temporal accuracy (CN-ADI4 available but may be unstable)
-- **Pseudo-spectral (DST)**: Spectral accuracy using Discrete Sine Transform
-
-**Convergence Study (σ = 0.02, very sharp Gaussian):**
-
-| $\Delta s$ | N_steps | Real-Space L2 Error | Pseudo-Spectral L2 Error |
-|----|---------|---------------------|--------------------------|
-| 0.1 | 2 | $5.04 \times 10^{-2}$ | $4.69 \times 10^{-17}$ |
-| 0.05 | 4 | $2.69 \times 10^{-2}$ | $5.29 \times 10^{-17}$ |
-| 0.025 | 8 | $7.55 \times 10^{-3}$ | $1.16 \times 10^{-16}$ |
-| 0.0125 | 16 | $5.58 \times 10^{-4}$ | $4.02 \times 10^{-16}$ |
-| 0.00625 | 32 | $2.77 \times 10^{-6}$ | — |
-| 0.003125 | 64 | $1.81 \times 10^{-6}$ | — |
-
-#### Effect of Gaussian Sharpness
-
-The initial condition width $\sigma$ affects accuracy. Results with $\Delta s = 0.005$:
-
-| $\sigma$ | $\sigma/\Delta x$ | Real-Space Error | Pseudo-Spectral Error |
-|-------|------|------------------|----------------------|
-| 0.400 | 51.2 | $2.94 \times 10^{-6}$ | $2.54 \times 10^{-11}$ |
-| 0.200 | 25.6 | $5.04 \times 10^{-6}$ | $2.13 \times 10^{-15}$ |
-| 0.100 | 12.8 | $4.28 \times 10^{-6}$ | $2.46 \times 10^{-15}$ |
-| 0.050 | 6.4 | $2.56 \times 10^{-6}$ | $1.30 \times 10^{-15}$ |
-| 0.020 | 2.6 | $1.10 \times 10^{-6}$ | $6.24 \times 10^{-16}$ |
-| 0.010 | 1.3 | $4.01 \times 10^{-5}$ | $2.93 \times 10^{-16}$ |
-
-#### Key Findings
-
-1. **Pseudo-spectral (DST) achieves machine precision**: For all Gaussian widths tested, the DST-based solver achieves $\sim 10^{-15}$ to $10^{-16}$ error regardless of $\sigma$.
-
-2. **Real-space has spatial discretization error**: Error increases when $\sigma/\Delta x < 3$ (under-resolved Gaussian). For well-resolved cases ($\sigma/\Delta x > 5$), error is $\sim 10^{-6}$.
-
-3. **Real-space convergence order**: Approximately $p \approx 2$ for CN-ADI2, reaching a spatial error floor at fine $\Delta s$.
-
-4. **Absorbing BCs work correctly**: Both methods properly handle Dirichlet boundary conditions, with propagators decaying to $\sim 10^{-15}$ at boundaries.
-
-5. **Resolution requirement**: Real-space method needs $\sigma/\Delta x \gtrsim 3$-$5$ for accurate results with sharp initial conditions.
-
-#### Method Selection for Absorbing Boundaries
-
-| Criterion | Recommended Method |
-|-----------|-------------------|
-| Maximum accuracy | Pseudo-spectral (DST) |
-| Sharp initial condition ($\sigma/\Delta x < 3$) | Pseudo-spectral (DST) |
-| Simple geometry, periodic in other directions | Pseudo-spectral (DST) |
-| Non-uniform grids or complex geometries | Real-space (with sufficient resolution) |
-
-#### Stability Warning: Grafting Points Near Boundaries
-
-**Important**: CN-ADI4 (with Richardson extrapolation) can become unstable when the initial condition (grafting point) is close to an absorbing boundary. Testing shows:
-
-| $x_0/\sigma$ from boundary | CN-ADI4 | CN-ADI2 |
-|-------------------|---------|---------|
-| $> 5\sigma$ | Stable | Stable |
-| $2$-$3\sigma$ | **Unstable** | Stable |
-| $< 2\sigma$ | **Diverges** | Stable |
-
-**Recommendation**: For grafted brush simulations:
-- Use pseudo-spectral (DST) when possible - it achieves spectral accuracy
-- For real-space: ensure $\sigma/\Delta x > 5$ for accuracy, and use CN-ADI2 (avoid CN-ADI4) near boundaries
 
 ## Usage
 
@@ -271,7 +93,7 @@ params = {
            "reflecting", "reflecting",    # y-direction (low, high)
            "absorbing", "absorbing"],     # z-direction (low, high)
 
-    # Select real-space method: "cn-adi2" or "cn-adi4-lr"
+    # Select real-space method
     "numerical_method": "cn-adi2",
 
     # ... other parameters
@@ -296,7 +118,7 @@ Different boundary conditions can be specified for each direction:
 
 ### Grafted Brush Example
 
-For polymer brushes grafted to a surface, use a delta-function initial condition with absorbing boundaries:
+For polymer brushes grafted to a surface:
 
 ```python
 from polymerfts import PropagatorSolver
@@ -308,18 +130,17 @@ solver = PropagatorSolver(
     lx=[4.0],
     ds=0.01,
     bond_lengths={"A": 1.0},
-    bc=["absorbing", "absorbing"],  # Absorbing on both sides
+    bc=["absorbing", "absorbing"],
     chain_model="continuous",
-    numerical_method="cn-adi2",     # or "cn-adi4-lr" for 4th-order accuracy
-    platform="cpu-mkl",
-    reduce_memory_usage=False
+    numerical_method="cn-adi2",
+    platform="cpu-mkl"
 )
 
 # Add polymer with grafting point at node 0
 solver.add_polymer(
     volume_fraction=1.0,
     blocks=[["A", 1.0, 0, 1]],
-    grafting_points={0: "G"}  # Node 0 uses custom q_init
+    grafting_points={0: "G"}
 )
 
 # Create delta-function initial condition at grafting point
@@ -336,10 +157,33 @@ q_init = q_init / (np.sum(q_init) * dx)  # Normalize
 w_field = np.zeros(128)
 solver.compute_propagators({"A": w_field}, q_init={"G": q_init})
 
-# Get propagator at chain end
+# Get results
 q_end = solver.get_propagator(polymer=0, v=0, u=1, step=100)
 Q = solver.get_partition_function(polymer=0)
 ```
+
+## Grafted Brush Validation
+
+### Absorbing Boundaries with Sharp Initial Conditions
+
+For absorbing boundaries, the pseudo-spectral method using Discrete Sine Transform (DST) achieves spectral accuracy (~10⁻¹⁵ error), while real-space CN-ADI achieves ~10⁻⁶ error.
+
+**Key findings:**
+1. **Pseudo-spectral (DST) achieves machine precision** for all Gaussian widths
+2. **Real-space requires sufficient resolution**: $\sigma/\Delta x > 3$-$5$ for accurate results
+3. **Both methods handle absorbing BCs correctly**
+
+### Stability Warning
+
+**CN-ADI4** can become unstable when initial conditions are close to absorbing boundaries:
+
+| Distance from boundary | CN-ADI4 | CN-ADI2 |
+|------------------------|---------|---------|
+| $> 5\sigma$ | Stable | Stable |
+| $2$-$3\sigma$ | **Unstable** | Stable |
+| $< 2\sigma$ | **Diverges** | Stable |
+
+**Recommendation**: Use CN-ADI2 (not CN-ADI4) when grafting points are near absorbing boundaries.
 
 ## Implementation Details
 
@@ -347,10 +191,8 @@ Q = solver.get_partition_function(polymer=0)
 
 | File | Description |
 |------|-------------|
-| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4 solver |
-| `src/platforms/cpu/CpuSolverCNADI.h` | CPU header |
-| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4 solver |
-| `src/platforms/cuda/CudaSolverCNADI.h` | CUDA header |
+| `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI solver |
+| `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI solver |
 | `src/common/FiniteDifference.cpp` | Tridiagonal coefficient generation |
 
 ### Tridiagonal Solvers
@@ -358,19 +200,10 @@ Q = solver.get_partition_function(polymer=0)
 **Non-periodic (Thomas Algorithm)**:
 - Forward elimination followed by back substitution
 - CUDA: Uses shared memory for coefficient caching
-- CPU: Direct sequential solve
 
 **Periodic (Sherman-Morrison)**:
 - Converts cyclic system to standard tridiagonal + correction
 - Solves two systems and combines results
-- CUDA: Optimized with register reuse
-
-### CUDA Optimizations
-
-- **Shared memory**: Tridiagonal coefficients cached in shared memory
-- **Coalesced access**: Data layout optimized for memory coalescing
-- **Stream support**: Multiple propagators computed concurrently
-- **Dynamic parallelism**: Each thread handles one tridiagonal system
 
 ## Limitations
 
@@ -382,22 +215,18 @@ Q = solver.get_partition_function(polymer=0)
 ## When to Use Real-Space vs Pseudo-Spectral
 
 ### Use Real-Space When:
-- Non-periodic boundary conditions are required (confined systems, interfaces)
-- Small grid sizes where real-space is competitive
-- CN-ADI4 (4th-order) accuracy is needed with non-periodic boundaries
+- Non-periodic boundary conditions are required
+- CN-ADI4 accuracy is needed with non-periodic boundaries
 
 ### Use Pseudo-Spectral When:
 - Periodic boundary conditions are acceptable
-- Large grid sizes (pseudo-spectral scales better)
 - Stress calculations are needed
 - Maximum performance is required
 
 ## References
 
-1. **Crank-Nicolson Method**: J. Crank and P. Nicolson, "A practical method for numerical evaluation of solutions of partial differential equations of the heat-conduction type", *Proc. Cambridge Phil. Soc.*, **1947**, 43, 50-67.
+1. **Crank-Nicolson Method**: J. Crank and P. Nicolson, *Proc. Cambridge Phil. Soc.*, **1947**, 43, 50-67.
 
-2. **ADI Method**: D. W. Peaceman and H. H. Rachford, "The numerical solution of parabolic and elliptic differential equations", *J. Soc. Indust. Appl. Math.*, **1955**, 3, 28-41.
+2. **ADI Method**: D. W. Peaceman and H. H. Rachford, *J. Soc. Indust. Appl. Math.*, **1955**, 3, 28-41.
 
-3. **Richardson Extrapolation**: L. F. Richardson, "The approximate arithmetical solution by finite differences of physical problems involving differential equations", *Phil. Trans. R. Soc. A*, **1911**, 210, 307-357.
-
-4. **Thomas Algorithm**: L. H. Thomas, "Elliptic problems in linear differential equations over a network", Watson Sci. Comput. Lab Report, Columbia University, **1949**.
+3. **Richardson Extrapolation**: L. F. Richardson, *Phil. Trans. R. Soc. A*, **1911**, 210, 307-357.

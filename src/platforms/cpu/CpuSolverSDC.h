@@ -23,17 +23,18 @@
  *
  * **Order of Accuracy:**
  *
- * - 1D: High order (up to 2K+1 with K corrections) - implicit solves are exact
- * - 2D/3D: Limited to 2nd-order due to O(ds²) ADI splitting error
+ * - 1D: High order (up to 2K+1 with K corrections) - tridiagonal solve is exact
+ * - 2D/3D: High order using MKL PARDISO direct sparse solver (no ADI splitting)
  *
  * With IMEX predictor (Backward Euler) and K corrections, the theoretical order
- * is 2K+1 for 1D problems. However, in 2D/3D, the ADI splitting error dominates.
+ * is 2K+1 for problems where the implicit solve is exact.
  *
- * **Limitations:**
+ * **Implementation Details:**
  *
- * ADI splitting solves (I - dt*Dx)(I - dt*Dy)q = RHS instead of (I - dt*(Dx+Dy))q = RHS.
- * The O(dt²*Dx*Dy) difference is an irreducible splitting error that persists
- * regardless of the number of SDC corrections. This limits 2D/3D to 2nd-order accuracy.
+ * - 1D: Uses tridiagonal solver (exact, fast)
+ * - 2D/3D: Uses MKL PARDISO direct sparse solver to avoid ADI splitting error
+ *   The sparse matrix A = I - dtau * L is built in CSR format and factorized once
+ *   per sub-interval per monomer type. The factorization is reused for all solves.
  *
  * **References:**
  *
@@ -43,7 +44,7 @@
  *   ordinary differential equations." Comm. Math. Sci. 1(3), 471-500.
  *
  * @see CpuSolver for the abstract interface
- * @see CpuSolverCNADI for the underlying ADI solver
+ * @see CpuSolverCNADI for the underlying ADI solver (1D only)
  */
 
 #ifndef CPU_SOLVER_SDC_H_
@@ -53,11 +54,29 @@
 #include <vector>
 #include <map>
 
+#include "mkl.h"
+#include "mkl_pardiso.h"
+
 #include "Exception.h"
 #include "Molecules.h"
 #include "ComputationBox.h"
 #include "CpuSolver.h"
 #include "CpuSolverCNADI.h"
+
+/**
+ * @struct SparseMatrixCSR
+ * @brief CSR (Compressed Sparse Row) format sparse matrix for PCG solver.
+ */
+struct SparseMatrixCSR
+{
+    std::vector<MKL_INT> row_ptr;   ///< Row pointers (size n+1)
+    std::vector<MKL_INT> col_idx;   ///< Column indices (size nnz)
+    std::vector<double> values;      ///< Matrix values (size nnz)
+    std::vector<double> diag_inv;    ///< Inverse diagonal for Jacobi preconditioner
+    MKL_INT n;                       ///< Matrix dimension
+    MKL_INT nnz;                     ///< Number of non-zeros
+    bool built;                      ///< Whether matrix is built
+};
 
 /**
  * @class CpuSolverSDC
@@ -114,12 +133,24 @@ private:
     // Store w field directly for SDC corrections (like CUDA)
     std::map<std::string, std::vector<double>> w_field_store;
 
+    // Sparse matrices for direct solve (2D/3D only)
+    // Indexed by [sub_interval][monomer_type]
+    std::vector<std::map<std::string, SparseMatrixCSR>> sparse_matrices;
+
     // Workspace arrays
     std::vector<double*> X;        ///< Solution at GL nodes: X[m] of size n_grid
     std::vector<double*> F_diff;   ///< Diffusion term D∇²q at GL nodes
     std::vector<double*> F_react;  ///< Reaction term -wq at GL nodes
     double* temp_array;            ///< Temporary workspace
     double* rhs_array;             ///< RHS for implicit solves
+
+    // PCG workspace arrays (allocated for 2D/3D)
+    double* pcg_r;                 ///< Residual vector
+    double* pcg_z;                 ///< Preconditioned residual
+    double* pcg_p;                 ///< Search direction
+    double* pcg_Ap;                ///< Matrix-vector product A*p
+    int pcg_max_iter;              ///< Maximum PCG iterations
+    double pcg_tol;                ///< PCG convergence tolerance
 
     /**
      * @brief Compute Gauss-Lobatto nodes on [0, 1].
@@ -175,6 +206,46 @@ private:
     void adi_step_1d(int sub_interval,
         std::vector<BoundaryCondition> bc,
         double* q_in, double* q_out, std::string monomer_type);
+
+    /**
+     * @brief Build sparse Laplacian matrix in CSR format.
+     *
+     * Builds A = I - dtau * D * ∇² for the full 2D or 3D Laplacian.
+     * Uses 0-based indexing for MKL sparse BLAS.
+     *
+     * @param sub_interval Sub-interval index
+     * @param monomer_type Monomer type for bond length
+     */
+    void build_sparse_matrix(int sub_interval, std::string monomer_type);
+
+    /**
+     * @brief Sparse matrix-vector product: y = A * x.
+     *
+     * @param mat Sparse matrix in CSR format
+     * @param x Input vector
+     * @param y Output vector
+     */
+    void sparse_matvec(const SparseMatrixCSR& mat, const double* x, double* y);
+
+    /**
+     * @brief Solve sparse linear system using Preconditioned Conjugate Gradient.
+     *
+     * Solves A * q_out = q_in using PCG with Jacobi preconditioner.
+     * The matrix A = I - dtau * D * ∇² is symmetric positive definite.
+     *
+     * @param sub_interval Sub-interval index
+     * @param q_in Input (RHS)
+     * @param q_out Output (solution)
+     * @param monomer_type Monomer type
+     */
+    void sparse_solve(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
+
+    /**
+     * @brief Iterative solve step for 2D/3D (replaces ADI).
+     *
+     * Uses PCG solver instead of ADI splitting to avoid O(dt²) error.
+     */
+    void direct_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
 
     /**
      * @brief Return maximum of two integers.

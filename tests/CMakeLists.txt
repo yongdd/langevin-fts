@@ -22,6 +22,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
         factory
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
+        $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
@@ -50,7 +52,7 @@ IF(CUDAToolkit_FOUND)
 
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
         TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
-            factory cuda CUDA::cufft
+            factory cuda CUDA::cufft CUDA::cusparse CUDA::cusolver
             $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
             $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
             $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
