@@ -48,11 +48,30 @@
 #include <vector>
 #include <map>
 
+#include <cuda_runtime.h>
+#include <cusparse.h>
+#include <cusolverSp.h>
+
 #include "Exception.h"
 #include "Molecules.h"
 #include "ComputationBox.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
+
+/**
+ * @struct CudaSparseMatrixCSR
+ * @brief CSR sparse matrix for PCG solver.
+ */
+struct CudaSparseMatrixCSR
+{
+    int* d_row_ptr;          ///< Row pointers (device, size n+1)
+    int* d_col_idx;          ///< Column indices (device, size nnz)
+    double* d_values;        ///< Matrix values (device, size nnz)
+    double* d_diag_inv;      ///< Inverse diagonal for Jacobi preconditioner (device, size n)
+    int n;                   ///< Matrix dimension
+    int nnz;                 ///< Number of non-zeros
+    bool built;              ///< Whether matrix is built
+};
 
 /**
  * @brief CUDA kernel: Compute F(q) = D∇²q - wq for SDC.
@@ -192,6 +211,17 @@ private:
     int* d_offset_y;
     int* d_offset;
 
+    // Sparse matrices for PCG solve (2D/3D only)
+    std::vector<std::map<std::string, CudaSparseMatrixCSR>> sparse_matrices;
+
+    // PCG workspace arrays (per stream, allocated for 2D/3D)
+    double* d_pcg_r[MAX_STREAMS];        ///< Residual vector
+    double* d_pcg_z[MAX_STREAMS];        ///< Preconditioned residual
+    double* d_pcg_p[MAX_STREAMS];        ///< Search direction
+    double* d_pcg_Ap[MAX_STREAMS];       ///< Matrix-vector product A*p
+    int pcg_max_iter;                    ///< Maximum PCG iterations
+    double pcg_tol;                      ///< PCG convergence tolerance
+
     /**
      * @brief Compute Gauss-Lobatto nodes on [0, 1].
      */
@@ -225,6 +255,50 @@ private:
     void adi_step_1d(int STREAM, int sub_interval,
         std::vector<BoundaryCondition> bc,
         double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief Build sparse Laplacian matrix in CSR format for direct solve.
+     *
+     * Builds A = I - dtau * D * ∇² for 2D or 3D Laplacian.
+     *
+     * @param sub_interval Sub-interval index
+     * @param monomer_type Monomer type for bond length
+     */
+    void build_sparse_matrix(int sub_interval, std::string monomer_type);
+
+    /**
+     * @brief Sparse matrix-vector product: y = A * x on GPU.
+     *
+     * Uses CUDA kernel for CSR sparse matrix-vector multiplication.
+     *
+     * @param mat Sparse matrix in CSR format
+     * @param d_x Input vector (device)
+     * @param d_y Output vector (device)
+     * @param stream CUDA stream for async execution
+     */
+    void sparse_matvec(const CudaSparseMatrixCSR& mat, const double* d_x,
+                       double* d_y, cudaStream_t stream);
+
+    /**
+     * @brief Solve sparse linear system using PCG on GPU.
+     *
+     * Solves A * q_out = q_in using Preconditioned Conjugate Gradient
+     * with Jacobi preconditioner. Matrix A = I - dtau * D * ∇² is SPD.
+     *
+     * @param STREAM CUDA stream index
+     * @param sub_interval Sub-interval index
+     * @param d_q_in Input (RHS)
+     * @param d_q_out Output (solution)
+     * @param monomer_type Monomer type
+     */
+    void sparse_solve(int STREAM, int sub_interval,
+                      double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief Direct solve step for 2D/3D (replaces ADI).
+     */
+    void direct_solve_step(int STREAM, int sub_interval,
+                           double* d_q_in, double* d_q_out, std::string monomer_type);
 
 public:
     /**

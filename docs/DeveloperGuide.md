@@ -2,44 +2,7 @@
 
 This document provides guidance for developers who want to understand or contribute to the polymer field theory simulation library.
 
-## Architecture Overview
-
-### Chain Propagator Computation
-The core algorithm for chain propagator computation is described in:
-> D. Yong and J. U. Kim, *J. Chem. Theory Comput.* **2025**, 21, 3676
-
-### Platform Abstraction (Abstract Factory Pattern)
-This program is designed to run on different platforms (MKL and CUDA). There is a family of classes for each platform. To produce instances of these classes for a given platform, the **abstract factory pattern** is adopted.
-
-### CUDA Programming
-The CUDA implementation utilizes `streams` and `cuFFT` for parallel computation.
-
-Reference: [NVIDIA Streams and Concurrency](https://developer.download.nvidia.com/CUDA/training/StreamsAndConcurrencyWebinar.pdf)
-
-### Python Binding
-`pybind11` is used to generate Python interfaces for the C++ classes.
-
-Reference: [pybind11 Documentation](https://pybind11.readthedocs.io/en/stable/index.html)
-
-## Code Structure
-
-```
-src/
-├── common/           # Platform-independent code
-│   ├── PropagatorComputation.h   # Chain propagator computation
-│   ├── ComputationBox.h          # Simulation grid and FFT
-│   ├── Polymer.h                 # Polymer chain definitions
-│   ├── Molecules.h               # Polymer mixtures
-│   └── AndersonMixing.h          # SCFT solver
-├── platforms/
-│   ├── cpu/          # Intel MKL implementations
-│   └── cuda/         # NVIDIA CUDA implementations
-├── python/           # Python simulation modules
-│   ├── scft.py
-│   ├── lfts.py
-│   └── clfts.py
-└── pybind11/         # Python bindings
-```
+For class hierarchies and design patterns, see [ClassArchitecture.md](ClassArchitecture.md).
 
 ## Building and Testing
 
@@ -82,15 +45,6 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 2. Add the method to the factory classes
 3. Update parameter validation in Python modules
 4. Add tests and benchmarks
-
-## Validation Requirements
-
-Results must match:
-- **PSCF** ([github.com/dmorse/pscfpp](https://github.com/dmorse/pscfpp)) for continuous chains with even contour steps
-- **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
-- Results should be **identical across platforms** (CUDA vs MKL) within machine precision
-
-Verify by running the same parameters on both platforms.
 
 ## Contributing Guidelines
 

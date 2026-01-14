@@ -25,6 +25,8 @@
 #include <iostream>
 #include <cmath>
 #include <numbers>
+#include <algorithm>
+#include <utility>
 
 #include "CpuSolverSDC.h"
 #include "FiniteDifference.h"
@@ -97,6 +99,38 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
             w_field_store[monomer_type].resize(n_grid);
         }
 
+        // Initialize sparse matrices and PCG workspace for 2D/3D
+        const int DIM = cb->get_dim();
+        if(DIM >= 2)
+        {
+            sparse_matrices.resize(M - 1);
+            for(int m = 0; m < M - 1; m++)
+            {
+                for(const auto& item: molecules->get_bond_lengths())
+                {
+                    std::string monomer_type = item.first;
+                    SparseMatrixCSR& mat = sparse_matrices[m][monomer_type];
+                    mat.n = n_grid;
+                    mat.built = false;
+                }
+            }
+
+            // Allocate PCG workspace arrays
+            pcg_r = new double[n_grid];
+            pcg_z = new double[n_grid];
+            pcg_p = new double[n_grid];
+            pcg_Ap = new double[n_grid];
+            pcg_max_iter = 1000;  // Maximum iterations
+            pcg_tol = 1e-10;      // Convergence tolerance
+        }
+        else
+        {
+            pcg_r = nullptr;
+            pcg_z = nullptr;
+            pcg_p = nullptr;
+            pcg_Ap = nullptr;
+        }
+
         // Allocate workspace arrays for GL node solutions
         X.resize(M);
         F_diff.resize(M);
@@ -122,6 +156,16 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
 
 CpuSolverSDC::~CpuSolverSDC()
 {
+    // Free PCG workspace (2D/3D only)
+    const int DIM = cb->get_dim();
+    if(DIM >= 2)
+    {
+        delete[] pcg_r;
+        delete[] pcg_z;
+        delete[] pcg_p;
+        delete[] pcg_Ap;
+    }
+
     // Free tridiagonal coefficients
     for(int m = 0; m < M - 1; m++)
     {
@@ -289,11 +333,12 @@ void CpuSolverSDC::update_laplacian_operator()
             double bond_length_sq = item.second * item.second;
 
             // Compute coefficients for each sub-interval
+            // Use Backward Euler matrix (not Crank-Nicolson) for SDC
             for(int m = 0; m < M - 1; m++)
             {
                 double dtau = (tau[m + 1] - tau[m]) * ds;
 
-                FiniteDifference::get_laplacian_matrix(
+                FiniteDifference::get_backward_euler_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
                     xl[m][monomer_type], xd[m][monomer_type], xh[m][monomer_type],
@@ -440,12 +485,15 @@ void CpuSolverSDC::adi_step(int sub_interval, double* q_in, double* q_out, std::
     const int DIM = this->cb->get_dim();
     std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
 
-    if(DIM == 3)
-        adi_step_3d(sub_interval, bc, q_in, q_out, monomer_type);
-    else if(DIM == 2)
-        adi_step_2d(sub_interval, bc, q_in, q_out, monomer_type);
-    else if(DIM == 1)
+    if(DIM >= 2)
+    {
+        // Use direct sparse solver for 2D/3D to avoid ADI splitting error
+        direct_solve_step(sub_interval, q_in, q_out, monomer_type);
+    }
+    else // DIM == 1
+    {
         adi_step_1d(sub_interval, bc, q_in, q_out, monomer_type);
+    }
 }
 
 void CpuSolverSDC::adi_step_3d(int sub_interval,
@@ -474,54 +522,20 @@ void CpuSolverSDC::adi_step_3d(int sub_interval,
         double *_zd = zd[sub_interval][monomer_type];
         double *_zh = zh[sub_interval][monomer_type];
 
-        int im, ip, jm, jp, km, kp;
+        // Backward Euler ADI: Solve (I - dt*Dx)(I - dt*Dy)(I - dt*Dz) q = rhs
+        // Step 1: Solve (I - dt*Dx) q_star = q_in along x-direction
+        // Step 2: Solve (I - dt*Dy) q_dstar = q_star along y-direction
+        // Step 3: Solve (I - dt*Dz) q_out = q_dstar along z-direction
 
-        // Calculate q_star (X-sweep)
+        // X-sweep: solve A_x * q_star = q_in for each (j,k) pencil
         for(int j = 0; j < nx[1]; j++)
         {
-            if(bc[2] == BoundaryCondition::PERIODIC)
-                jm = (nx[1] + j - 1) % nx[1];
-            else
-                jm = max_of_two(0, j - 1);
-            if(bc[3] == BoundaryCondition::PERIODIC)
-                jp = (j + 1) % nx[1];
-            else
-                jp = min_of_two(nx[1] - 1, j + 1);
-
             for(int k = 0; k < nx[2]; k++)
             {
-                if(bc[4] == BoundaryCondition::PERIODIC)
-                    km = (nx[2] + k - 1) % nx[2];
-                else
-                    km = max_of_two(0, k - 1);
-                if(bc[5] == BoundaryCondition::PERIODIC)
-                    kp = (k + 1) % nx[2];
-                else
-                    kp = min_of_two(nx[2] - 1, k + 1);
-
                 for(int i = 0; i < nx[0]; i++)
                 {
-                    if(bc[0] == BoundaryCondition::PERIODIC)
-                        im = (nx[0] + i - 1) % nx[0];
-                    else
-                        im = max_of_two(0, i - 1);
-                    if(bc[1] == BoundaryCondition::PERIODIC)
-                        ip = (i + 1) % nx[0];
-                    else
-                        ip = min_of_two(nx[0] - 1, i + 1);
-
                     int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    int im_j_k = im * nx[1] * nx[2] + j * nx[2] + k;
-                    int ip_j_k = ip * nx[1] * nx[2] + j * nx[2] + k;
-                    int i_jm_k = i * nx[1] * nx[2] + jm * nx[2] + k;
-                    int i_jp_k = i * nx[1] * nx[2] + jp * nx[2] + k;
-                    int i_j_km = i * nx[1] * nx[2] + j * nx[2] + km;
-                    int i_j_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
-
-                    temp1[i] = 2.0 * ((3.0 - 0.5 * _xd[i] - _yd[j] - _zd[k]) * q_in[i_j_k]
-                            - _zl[k] * q_in[i_j_km] - _zh[k] * q_in[i_j_kp]
-                            - _yl[j] * q_in[i_jm_k] - _yh[j] * q_in[i_jp_k])
-                            - _xl[i] * q_in[im_j_k] - _xh[i] * q_in[ip_j_k];
+                    temp1[i] = q_in[i_j_k];
                 }
 
                 int j_k = j * nx[2] + k;
@@ -532,28 +546,15 @@ void CpuSolverSDC::adi_step_3d(int sub_interval,
             }
         }
 
-        // Calculate q_dstar (Y-sweep)
+        // Y-sweep: solve A_y * q_dstar = q_star for each (i,k) pencil
         for(int i = 0; i < nx[0]; i++)
         {
             for(int k = 0; k < nx[2]; k++)
             {
                 for(int j = 0; j < nx[1]; j++)
                 {
-                    if(bc[2] == BoundaryCondition::PERIODIC)
-                        jm = (nx[1] + j - 1) % nx[1];
-                    else
-                        jm = max_of_two(0, j - 1);
-                    if(bc[3] == BoundaryCondition::PERIODIC)
-                        jp = (j + 1) % nx[1];
-                    else
-                        jp = min_of_two(nx[1] - 1, j + 1);
-
                     int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    int i_jm_k = i * nx[1] * nx[2] + jm * nx[2] + k;
-                    int i_jp_k = i * nx[1] * nx[2] + jp * nx[2] + k;
-
-                    temp2[j] = q_star[i_j_k] + (_yd[j] - 1.0) * q_in[i_j_k]
-                        + _yl[j] * q_in[i_jm_k] + _yh[j] * q_in[i_jp_k];
+                    temp2[j] = q_star[i_j_k];
                 }
 
                 int i_k = i * nx[1] * nx[2] + k;
@@ -564,28 +565,15 @@ void CpuSolverSDC::adi_step_3d(int sub_interval,
             }
         }
 
-        // Calculate q_out (Z-sweep)
+        // Z-sweep: solve A_z * q_out = q_dstar for each (i,j) pencil
         for(int i = 0; i < nx[0]; i++)
         {
             for(int j = 0; j < nx[1]; j++)
             {
                 for(int k = 0; k < nx[2]; k++)
                 {
-                    if(bc[4] == BoundaryCondition::PERIODIC)
-                        km = (nx[2] + k - 1) % nx[2];
-                    else
-                        km = max_of_two(0, k - 1);
-                    if(bc[5] == BoundaryCondition::PERIODIC)
-                        kp = (k + 1) % nx[2];
-                    else
-                        kp = min_of_two(nx[2] - 1, k + 1);
-
                     int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    int i_j_km = i * nx[1] * nx[2] + j * nx[2] + km;
-                    int i_j_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
-
-                    temp3[k] = q_dstar[i_j_k] + (_zd[k] - 1.0) * q_in[i_j_k]
-                        + _zl[k] * q_in[i_j_km] + _zh[k] * q_in[i_j_kp];
+                    temp3[k] = q_dstar[i_j_k];
                 }
 
                 int i_j = i * nx[1] * nx[2] + j * nx[2];
@@ -622,40 +610,17 @@ void CpuSolverSDC::adi_step_2d(int sub_interval,
         double *_yd = yd[sub_interval][monomer_type];
         double *_yh = yh[sub_interval][monomer_type];
 
-        int im, ip, jm, jp;
+        // Backward Euler ADI: Solve (I - dt*Dx)(I - dt*Dy) q = rhs
+        // Step 1: Solve (I - dt*Dx) q_star = rhs along x-direction
+        // Step 2: Solve (I - dt*Dy) q_out = q_star along y-direction
 
-        // Calculate q_star (X-sweep)
+        // X-sweep: solve A_x * q_star = q_in for each row
         for(int j = 0; j < nx[1]; j++)
         {
-            if(bc[2] == BoundaryCondition::PERIODIC)
-                jm = (nx[1] + j - 1) % nx[1];
-            else
-                jm = max_of_two(0, j - 1);
-            if(bc[3] == BoundaryCondition::PERIODIC)
-                jp = (j + 1) % nx[1];
-            else
-                jp = min_of_two(nx[1] - 1, j + 1);
-
             for(int i = 0; i < nx[0]; i++)
             {
-                if(bc[0] == BoundaryCondition::PERIODIC)
-                    im = (nx[0] + i - 1) % nx[0];
-                else
-                    im = max_of_two(0, i - 1);
-                if(bc[1] == BoundaryCondition::PERIODIC)
-                    ip = (i + 1) % nx[0];
-                else
-                    ip = min_of_two(nx[0] - 1, i + 1);
-
                 int i_j = i * nx[1] + j;
-                int i_jm = i * nx[1] + jm;
-                int i_jp = i * nx[1] + jp;
-                int im_j = im * nx[1] + j;
-                int ip_j = ip * nx[1] + j;
-
-                temp1[i] = 2.0 * ((2.0 - 0.5 * _xd[i] - _yd[j]) * q_in[i_j]
-                          - _yl[j] * q_in[i_jm] - _yh[j] * q_in[i_jp])
-                          - _xl[i] * q_in[im_j] - _xh[i] * q_in[ip_j];
+                temp1[i] = q_in[i_j];
             }
 
             if(bc[0] == BoundaryCondition::PERIODIC)
@@ -664,26 +629,13 @@ void CpuSolverSDC::adi_step_2d(int sub_interval,
                 CpuSolverCNADI::tridiagonal(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
         }
 
-        // Calculate q_out (Y-sweep)
+        // Y-sweep: solve A_y * q_out = q_star for each column
         for(int i = 0; i < nx[0]; i++)
         {
             for(int j = 0; j < nx[1]; j++)
             {
-                if(bc[2] == BoundaryCondition::PERIODIC)
-                    jm = (nx[1] + j - 1) % nx[1];
-                else
-                    jm = max_of_two(0, j - 1);
-                if(bc[3] == BoundaryCondition::PERIODIC)
-                    jp = (j + 1) % nx[1];
-                else
-                    jp = min_of_two(nx[1] - 1, j + 1);
-
                 int i_j = i * nx[1] + j;
-                int i_jm = i * nx[1] + jm;
-                int i_jp = i * nx[1] + jp;
-
-                temp2[j] = q_star[i_j] + (_yd[j] - 1.0) * q_in[i_j]
-                    + _yl[j] * q_in[i_jm] + _yh[j] * q_in[i_jp];
+                temp2[j] = q_star[i_j];
             }
 
             if(bc[2] == BoundaryCondition::PERIODIC)
@@ -705,37 +657,366 @@ void CpuSolverSDC::adi_step_1d(int sub_interval,
     try
     {
         const std::vector<int> nx = this->cb->get_nx();
-        double q_star[nx[0]];
 
         double *_xl = xl[sub_interval][monomer_type];
         double *_xd = xd[sub_interval][monomer_type];
         double *_xh = xh[sub_interval][monomer_type];
 
-        int im, ip;
-
-        for(int i = 0; i < nx[0]; i++)
-        {
-            if(bc[0] == BoundaryCondition::PERIODIC)
-                im = (nx[0] + i - 1) % nx[0];
-            else
-                im = max_of_two(0, i - 1);
-            if(bc[1] == BoundaryCondition::PERIODIC)
-                ip = (i + 1) % nx[0];
-            else
-                ip = min_of_two(nx[0] - 1, i + 1);
-
-            q_star[i] = (2.0 - _xd[i]) * q_in[i] - _xl[i] * q_in[im] - _xh[i] * q_in[ip];
-        }
-
+        // For Backward Euler: solve A * q_out = q_in directly
+        // No transformation of RHS (unlike Crank-Nicolson)
         if(bc[0] == BoundaryCondition::PERIODIC)
-            CpuSolverCNADI::tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+            CpuSolverCNADI::tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_in, nx[0]);
         else
-            CpuSolverCNADI::tridiagonal(_xl, _xd, _xh, q_out, 1, q_star, nx[0]);
+            CpuSolverCNADI::tridiagonal(_xl, _xd, _xh, q_out, 1, q_in, nx[0]);
     }
     catch(std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
+}
+
+void CpuSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_type)
+{
+    try
+    {
+        const int DIM = this->cb->get_dim();
+        const int n_grid = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+        const std::vector<double> dx = this->cb->get_dx();
+        const std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
+        const double ds = this->molecules->get_ds();
+
+        double bond_length = this->molecules->get_bond_lengths().at(monomer_type);
+        double bond_length_sq = bond_length * bond_length;
+        const double D = bond_length_sq / 6.0;
+        double dtau = (tau[sub_interval + 1] - tau[sub_interval]) * ds;
+
+        SparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
+
+        // Build A = I - dtau * D * ∇² in CSR format (0-based indexing for MKL sparse BLAS)
+        // For 2D: 5-point stencil (1 diagonal + 4 off-diagonals)
+        // For 3D: 7-point stencil (1 diagonal + 6 off-diagonals)
+        int stencil_size = (DIM == 2) ? 5 : 7;
+        int max_nnz = n_grid * stencil_size;
+
+        mat.row_ptr.resize(n_grid + 1);
+        mat.col_idx.reserve(max_nnz);
+        mat.values.reserve(max_nnz);
+        mat.diag_inv.resize(n_grid);  // For Jacobi preconditioner
+        mat.col_idx.clear();
+        mat.values.clear();
+
+        if(DIM == 2)
+        {
+            double rx = D * dtau / (dx[0] * dx[0]);
+            double ry = D * dtau / (dx[1] * dx[1]);
+
+            MKL_INT nnz_count = 0;
+            for(int i = 0; i < nx[0]; i++)
+            {
+                int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : max_of_two(0, i - 1);
+                int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : min_of_two(nx[0] - 1, i + 1);
+
+                for(int j = 0; j < nx[1]; j++)
+                {
+                    int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : max_of_two(0, j - 1);
+                    int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : min_of_two(nx[1] - 1, j + 1);
+
+                    int row = i * nx[1] + j;
+                    mat.row_ptr[row] = nnz_count;  // 0-based
+
+                    // Store entries in column order
+                    std::vector<std::pair<int, double>> entries;
+
+                    // Left neighbor (im, j)
+                    int col_im = im * nx[1] + j;
+                    if(col_im != row)
+                        entries.push_back({col_im, -rx});
+
+                    // Bottom neighbor (i, jm)
+                    int col_jm = i * nx[1] + jm;
+                    if(col_jm != row)
+                        entries.push_back({col_jm, -ry});
+
+                    // Diagonal (i, j)
+                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
+                    // Adjust for boundaries (Neumann: factor of 2)
+                    if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                        diag_val -= rx;  // left boundary
+                    if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                        diag_val -= rx;  // right boundary
+                    if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                        diag_val -= ry;  // bottom boundary
+                    if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                        diag_val -= ry;  // top boundary
+                    entries.push_back({row, diag_val});
+
+                    // Store inverse diagonal for Jacobi preconditioner
+                    mat.diag_inv[row] = 1.0 / diag_val;
+
+                    // Top neighbor (i, jp)
+                    int col_jp = i * nx[1] + jp;
+                    if(col_jp != row)
+                        entries.push_back({col_jp, -ry});
+
+                    // Right neighbor (ip, j)
+                    int col_ip = ip * nx[1] + j;
+                    if(col_ip != row)
+                        entries.push_back({col_ip, -rx});
+
+                    // Sort by column index
+                    std::sort(entries.begin(), entries.end());
+
+                    // Add to CSR (0-based indexing)
+                    for(const auto& e: entries)
+                    {
+                        mat.col_idx.push_back(e.first);  // 0-based
+                        mat.values.push_back(e.second);
+                        nnz_count++;
+                    }
+                }
+            }
+            mat.row_ptr[n_grid] = nnz_count;
+            mat.nnz = nnz_count;
+        }
+        else // DIM == 3
+        {
+            double rx = D * dtau / (dx[0] * dx[0]);
+            double ry = D * dtau / (dx[1] * dx[1]);
+            double rz = D * dtau / (dx[2] * dx[2]);
+
+            MKL_INT nnz_count = 0;
+            for(int i = 0; i < nx[0]; i++)
+            {
+                int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : max_of_two(0, i - 1);
+                int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : min_of_two(nx[0] - 1, i + 1);
+
+                for(int j = 0; j < nx[1]; j++)
+                {
+                    int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : max_of_two(0, j - 1);
+                    int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : min_of_two(nx[1] - 1, j + 1);
+
+                    for(int k = 0; k < nx[2]; k++)
+                    {
+                        int km = (bc[4] == BoundaryCondition::PERIODIC) ? (nx[2] + k - 1) % nx[2] : max_of_two(0, k - 1);
+                        int kp = (bc[5] == BoundaryCondition::PERIODIC) ? (k + 1) % nx[2] : min_of_two(nx[2] - 1, k + 1);
+
+                        int row = i * nx[1] * nx[2] + j * nx[2] + k;
+                        mat.row_ptr[row] = nnz_count;  // 0-based
+
+                        // Store entries in column order
+                        std::vector<std::pair<int, double>> entries;
+
+                        // Left neighbor (im, j, k)
+                        int col_im = im * nx[1] * nx[2] + j * nx[2] + k;
+                        if(col_im != row)
+                            entries.push_back({col_im, -rx});
+
+                        // Back neighbor (i, jm, k)
+                        int col_jm = i * nx[1] * nx[2] + jm * nx[2] + k;
+                        if(col_jm != row)
+                            entries.push_back({col_jm, -ry});
+
+                        // Bottom neighbor (i, j, km)
+                        int col_km = i * nx[1] * nx[2] + j * nx[2] + km;
+                        if(col_km != row)
+                            entries.push_back({col_km, -rz});
+
+                        // Diagonal (i, j, k)
+                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+                        // Adjust for boundaries
+                        if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                            diag_val -= rx;
+                        if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                            diag_val -= rx;
+                        if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                            diag_val -= ry;
+                        if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                            diag_val -= ry;
+                        if(bc[4] != BoundaryCondition::PERIODIC && k == 0)
+                            diag_val -= rz;
+                        if(bc[5] != BoundaryCondition::PERIODIC && k == nx[2] - 1)
+                            diag_val -= rz;
+                        entries.push_back({row, diag_val});
+
+                        // Store inverse diagonal for Jacobi preconditioner
+                        mat.diag_inv[row] = 1.0 / diag_val;
+
+                        // Top neighbor (i, j, kp)
+                        int col_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
+                        if(col_kp != row)
+                            entries.push_back({col_kp, -rz});
+
+                        // Front neighbor (i, jp, k)
+                        int col_jp = i * nx[1] * nx[2] + jp * nx[2] + k;
+                        if(col_jp != row)
+                            entries.push_back({col_jp, -ry});
+
+                        // Right neighbor (ip, j, k)
+                        int col_ip = ip * nx[1] * nx[2] + j * nx[2] + k;
+                        if(col_ip != row)
+                            entries.push_back({col_ip, -rx});
+
+                        // Sort by column index
+                        std::sort(entries.begin(), entries.end());
+
+                        // Add to CSR (0-based indexing)
+                        for(const auto& e: entries)
+                        {
+                            mat.col_idx.push_back(e.first);  // 0-based
+                            mat.values.push_back(e.second);
+                            nnz_count++;
+                        }
+                    }
+                }
+            }
+            mat.row_ptr[n_grid] = nnz_count;
+            mat.nnz = nnz_count;
+        }
+
+        mat.built = true;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverSDC::sparse_matvec(const SparseMatrixCSR& mat, const double* x, double* y)
+{
+    // Compute y = A * x using CSR format (0-based indexing)
+    const int n = mat.n;
+    #pragma omp parallel for
+    for(int i = 0; i < n; i++)
+    {
+        double sum = 0.0;
+        for(MKL_INT j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; j++)
+        {
+            sum += mat.values[j] * x[mat.col_idx[j]];
+        }
+        y[i] = sum;
+    }
+}
+
+void CpuSolverSDC::sparse_solve(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
+{
+    try
+    {
+        SparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
+        const int n = mat.n;
+
+        // Build matrix if not yet done
+        if(!mat.built)
+        {
+            build_sparse_matrix(sub_interval, monomer_type);
+        }
+
+        // Preconditioned Conjugate Gradient (PCG) with Jacobi preconditioner
+        // Solve A * q_out = q_in where A is SPD
+        //
+        // Algorithm:
+        //   r0 = b - A*x0 (with x0 = 0, r0 = b)
+        //   z0 = M^{-1} * r0 (Jacobi: z = r .* diag_inv)
+        //   p0 = z0
+        //   for k = 0, 1, 2, ...
+        //       alpha_k = (r_k, z_k) / (p_k, A*p_k)
+        //       x_{k+1} = x_k + alpha_k * p_k
+        //       r_{k+1} = r_k - alpha_k * A*p_k
+        //       if ||r_{k+1}|| < tol: break
+        //       z_{k+1} = M^{-1} * r_{k+1}
+        //       beta_k = (r_{k+1}, z_{k+1}) / (r_k, z_k)
+        //       p_{k+1} = z_{k+1} + beta_k * p_k
+
+        // Initial guess: x0 = 0, so r0 = b = q_in
+        #pragma omp parallel for
+        for(int i = 0; i < n; i++)
+        {
+            q_out[i] = 0.0;
+            pcg_r[i] = q_in[i];
+            pcg_z[i] = pcg_r[i] * mat.diag_inv[i];  // Jacobi preconditioner
+            pcg_p[i] = pcg_z[i];
+        }
+
+        // rz_old = (r, z)
+        double rz_old = 0.0;
+        #pragma omp parallel for reduction(+:rz_old)
+        for(int i = 0; i < n; i++)
+        {
+            rz_old += pcg_r[i] * pcg_z[i];
+        }
+
+        for(int iter = 0; iter < pcg_max_iter; iter++)
+        {
+            // Ap = A * p
+            sparse_matvec(mat, pcg_p, pcg_Ap);
+
+            // pAp = (p, Ap)
+            double pAp = 0.0;
+            #pragma omp parallel for reduction(+:pAp)
+            for(int i = 0; i < n; i++)
+            {
+                pAp += pcg_p[i] * pcg_Ap[i];
+            }
+
+            double alpha = rz_old / pAp;
+
+            // x_{k+1} = x_k + alpha * p
+            // r_{k+1} = r_k - alpha * Ap
+            #pragma omp parallel for
+            for(int i = 0; i < n; i++)
+            {
+                q_out[i] += alpha * pcg_p[i];
+                pcg_r[i] -= alpha * pcg_Ap[i];
+            }
+
+            // Check convergence: ||r||
+            double r_norm_sq = 0.0;
+            #pragma omp parallel for reduction(+:r_norm_sq)
+            for(int i = 0; i < n; i++)
+            {
+                r_norm_sq += pcg_r[i] * pcg_r[i];
+            }
+
+            if(std::sqrt(r_norm_sq) < pcg_tol)
+                break;
+
+            // z_{k+1} = M^{-1} * r_{k+1}
+            #pragma omp parallel for
+            for(int i = 0; i < n; i++)
+            {
+                pcg_z[i] = pcg_r[i] * mat.diag_inv[i];
+            }
+
+            // rz_new = (r_{k+1}, z_{k+1})
+            double rz_new = 0.0;
+            #pragma omp parallel for reduction(+:rz_new)
+            for(int i = 0; i < n; i++)
+            {
+                rz_new += pcg_r[i] * pcg_z[i];
+            }
+
+            double beta = rz_new / rz_old;
+
+            // p_{k+1} = z_{k+1} + beta * p_k
+            #pragma omp parallel for
+            for(int i = 0; i < n; i++)
+            {
+                pcg_p[i] = pcg_z[i] + beta * pcg_p[i];
+            }
+
+            rz_old = rz_new;
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CpuSolverSDC::direct_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
+{
+    // Solve using PCG (no ADI splitting error)
+    sparse_solve(sub_interval, q_in, q_out, monomer_type);
 }
 
 void CpuSolverSDC::advance_propagator(

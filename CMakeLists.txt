@@ -203,10 +203,12 @@ IF(CMAKE_BUILD_TYPE STREQUAL Release)
     TARGET_COMPILE_OPTIONS(_core PRIVATE -ffast-math)
 ENDIF()
 
-TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE 
+TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     factory
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,cuda,>
     $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
+    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
+    $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>

@@ -8,6 +8,8 @@
 
 #include <iostream>
 #include <cmath>
+#include <algorithm>
+#include <utility>
 
 #include "CudaSolverSDC.h"
 #include "CudaSolverCNADI.h"
@@ -171,6 +173,123 @@ __global__ void copy_array_kernel(double* d_out, const double* d_in, int n_grid)
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx >= n_grid) return;
     d_out[idx] = d_in[idx];
+}
+
+// PCG kernels for sparse matrix solve
+__global__ void sparse_matvec_kernel(
+    const int* __restrict__ d_row_ptr,
+    const int* __restrict__ d_col_idx,
+    const double* __restrict__ d_values,
+    const double* __restrict__ d_x,
+    double* __restrict__ d_y,
+    int n)
+{
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if(row >= n) return;
+
+    double sum = 0.0;
+    int row_start = d_row_ptr[row];
+    int row_end = d_row_ptr[row + 1];
+    for(int j = row_start; j < row_end; j++)
+    {
+        sum += d_values[j] * d_x[d_col_idx[j]];
+    }
+    d_y[row] = sum;
+}
+
+// PCG initialization: r = b, z = diag_inv * r, p = z, x = 0
+__global__ void pcg_init_kernel(
+    double* __restrict__ d_x,
+    double* __restrict__ d_r,
+    double* __restrict__ d_z,
+    double* __restrict__ d_p,
+    const double* __restrict__ d_b,
+    const double* __restrict__ d_diag_inv,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_x[idx] = 0.0;
+    d_r[idx] = d_b[idx];
+    d_z[idx] = d_r[idx] * d_diag_inv[idx];
+    d_p[idx] = d_z[idx];
+}
+
+// PCG update: x = x + alpha*p, r = r - alpha*Ap
+__global__ void pcg_update_xr_kernel(
+    double* __restrict__ d_x,
+    double* __restrict__ d_r,
+    const double* __restrict__ d_p,
+    const double* __restrict__ d_Ap,
+    double alpha,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_x[idx] += alpha * d_p[idx];
+    d_r[idx] -= alpha * d_Ap[idx];
+}
+
+// PCG preconditioner: z = diag_inv * r
+__global__ void pcg_precond_kernel(
+    double* __restrict__ d_z,
+    const double* __restrict__ d_r,
+    const double* __restrict__ d_diag_inv,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_z[idx] = d_r[idx] * d_diag_inv[idx];
+}
+
+// PCG direction update: p = z + beta*p
+__global__ void pcg_update_p_kernel(
+    double* __restrict__ d_p,
+    const double* __restrict__ d_z,
+    double beta,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_p[idx] = d_z[idx] + beta * d_p[idx];
+}
+
+// Reduction kernels for dot product (using shared memory)
+__global__ void dot_product_kernel(
+    const double* __restrict__ d_a,
+    const double* __restrict__ d_b,
+    double* __restrict__ d_result,
+    int n)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load and multiply
+    double val = (idx < n) ? d_a[idx] * d_b[idx] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce within block
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+        {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Write block result
+    if(tid == 0)
+    {
+        atomicAdd(d_result, sdata[0]);
+    }
 }
 
 __global__ void sdc_spectral_integral_kernel(
@@ -412,6 +531,41 @@ CudaSolverSDC::CudaSolverSDC(
             gpu_error_check(cudaMemcpy(d_offset, offset, sizeof(int), cudaMemcpyHostToDevice));
         }
 
+        // Initialize sparse matrices and PCG workspace for 2D/3D
+        if(DIM >= 2)
+        {
+            // Initialize sparse matrices
+            sparse_matrices.resize(M - 1);
+            for(int m = 0; m < M - 1; m++)
+            {
+                for(const auto& item: molecules->get_bond_lengths())
+                {
+                    std::string monomer_type = item.first;
+                    CudaSparseMatrixCSR& mat = sparse_matrices[m][monomer_type];
+                    mat.d_row_ptr = nullptr;
+                    mat.d_col_idx = nullptr;
+                    mat.d_values = nullptr;
+                    mat.d_diag_inv = nullptr;
+                    mat.n = n_grid;
+                    mat.nnz = 0;
+                    mat.built = false;
+                }
+            }
+
+            // Allocate PCG workspace for each stream
+            for(int s = 0; s < n_streams; s++)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_pcg_r[s], sizeof(double) * n_grid));
+                gpu_error_check(cudaMalloc((void**)&d_pcg_z[s], sizeof(double) * n_grid));
+                gpu_error_check(cudaMalloc((void**)&d_pcg_p[s], sizeof(double) * n_grid));
+                gpu_error_check(cudaMalloc((void**)&d_pcg_Ap[s], sizeof(double) * n_grid));
+            }
+
+            // PCG parameters
+            pcg_max_iter = 1000;
+            pcg_tol = 1e-10;
+        }
+
         // Initialize Laplacian operator
         update_laplacian_operator();
     }
@@ -423,6 +577,30 @@ CudaSolverSDC::CudaSolverSDC(
 
 CudaSolverSDC::~CudaSolverSDC()
 {
+    // Free PCG resources (2D/3D only)
+    if(dim >= 2)
+    {
+        for(int m = 0; m < M - 1; m++)
+        {
+            for(auto& item: sparse_matrices[m])
+            {
+                CudaSparseMatrixCSR& mat = item.second;
+                if(mat.d_row_ptr) cudaFree(mat.d_row_ptr);
+                if(mat.d_col_idx) cudaFree(mat.d_col_idx);
+                if(mat.d_values) cudaFree(mat.d_values);
+                if(mat.d_diag_inv) cudaFree(mat.d_diag_inv);
+            }
+        }
+
+        for(int s = 0; s < n_streams; s++)
+        {
+            cudaFree(d_pcg_r[s]);
+            cudaFree(d_pcg_z[s]);
+            cudaFree(d_pcg_p[s]);
+            cudaFree(d_pcg_Ap[s]);
+        }
+    }
+
     // Free integration matrix
     cudaFree(d_S);
 
@@ -599,7 +777,8 @@ void CudaSolverSDC::update_laplacian_operator()
                 double h_yl[nx[1]], h_yd[nx[1]], h_yh[nx[1]];
                 double h_zl[nx[2]], h_zd[nx[2]], h_zh[nx[2]];
 
-                FiniteDifference::get_laplacian_matrix(
+                // Use Backward Euler matrix (not Crank-Nicolson) for SDC
+                FiniteDifference::get_backward_euler_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
                     h_xl, h_xd, h_xh,
@@ -735,12 +914,15 @@ void CudaSolverSDC::adi_step(int STREAM, int sub_interval,
 {
     std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
 
-    if(dim == 3)
-        adi_step_3d(STREAM, sub_interval, bc, d_q_in, d_q_out, monomer_type);
-    else if(dim == 2)
-        adi_step_2d(STREAM, sub_interval, bc, d_q_in, d_q_out, monomer_type);
-    else if(dim == 1)
+    if(dim >= 2)
+    {
+        // Use direct sparse solver for 2D/3D to avoid ADI splitting error
+        direct_solve_step(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
+    }
+    else // dim == 1
+    {
         adi_step_1d(STREAM, sub_interval, bc, d_q_in, d_q_out, monomer_type);
+    }
 }
 
 void CudaSolverSDC::adi_step_3d(int STREAM, int sub_interval,
@@ -760,21 +942,14 @@ void CudaSolverSDC::adi_step_3d(int STREAM, int sub_interval,
     double *_d_zd = d_zd[sub_interval][monomer_type];
     double *_d_zh = d_zh[sub_interval][monomer_type];
 
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    // For Backward Euler ADI: sequential tridiagonal solves without CN RHS transformation
+    // X-sweep: (I - dt*Dx) q* = q_in
+    // Y-sweep: (I - dt*Dy) q** = q*
+    // Z-sweep: (I - dt*Dz) q_out = q**
 
-    // Save input before X-sweep overwrites d_temp (which might be d_q_in)
-    // This fixes the bug where Y/Z-sweeps used X-sweep result instead of original input
-    gpu_error_check(cudaMemcpyAsync(d_q_in_saved[STREAM], d_q_in, sizeof(double) * n_grid,
+    // Step 1: X-sweep - copy input directly (no CN transformation)
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
                                     cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    // Step 1: X-sweep
-    compute_crank_3d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[0], bc[1], bc[2], bc[3], bc[4], bc[5],
-        _d_xl, _d_xd, _d_xh, nx[0],
-        _d_yl, _d_yd, _d_yh, nx[1],
-        _d_zl, _d_zd, _d_zh, nx[2],
-        d_q_star[STREAM], d_q_in_saved[STREAM], n_grid);
 
     if(bc[0] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<nx[1] * nx[2], nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
@@ -785,11 +960,9 @@ void CudaSolverSDC::adi_step_3d(int STREAM, int sub_interval,
             _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
             d_q_star[STREAM], d_temp[STREAM], d_offset_yz, nx[1] * nx[2], nx[1] * nx[2], nx[0]);
 
-    // Step 2: Y-sweep - use saved input for correction terms
-    compute_crank_3d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[2], bc[3],
-        _d_yl, _d_yd, _d_yh, nx[1], nx[2],
-        d_q_star[STREAM], d_temp[STREAM], d_q_in_saved[STREAM], n_grid);
+    // Step 2: Y-sweep - use result of X-sweep directly
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_temp[STREAM], sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
     if(bc[2] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<nx[0] * nx[2], nx[1], sizeof(double) * 3 * nx[1], streams[STREAM][0]>>>(
@@ -800,11 +973,9 @@ void CudaSolverSDC::adi_step_3d(int STREAM, int sub_interval,
             _d_yl, _d_yd, _d_yh, d_c_star[STREAM],
             d_q_star[STREAM], d_q_dstar[STREAM], d_offset_xz, nx[0] * nx[2], nx[2], nx[1]);
 
-    // Step 3: Z-sweep - use saved input for correction terms
-    compute_crank_3d_step_3<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[4], bc[5],
-        _d_zl, _d_zd, _d_zh, nx[1], nx[2],
-        d_q_star[STREAM], d_q_dstar[STREAM], d_q_in_saved[STREAM], n_grid);
+    // Step 3: Z-sweep - use result of Y-sweep directly
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_dstar[STREAM], sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
     if(bc[4] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<nx[0] * nx[1], nx[2], sizeof(double) * 3 * nx[2], streams[STREAM][0]>>>(
@@ -830,20 +1001,13 @@ void CudaSolverSDC::adi_step_2d(int STREAM, int sub_interval,
     double *_d_yd = d_yd[sub_interval][monomer_type];
     double *_d_yh = d_yh[sub_interval][monomer_type];
 
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    // For Backward Euler ADI: sequential tridiagonal solves without CN RHS transformation
+    // X-sweep: (I - dt*Dx) q* = q_in
+    // Y-sweep: (I - dt*Dy) q_out = q*
 
-    // Save input before X-sweep overwrites d_temp (which might be d_q_in)
-    // This fixes the bug where Y-sweep used X-sweep result instead of original input
-    gpu_error_check(cudaMemcpyAsync(d_q_in_saved[STREAM], d_q_in, sizeof(double) * n_grid,
+    // Step 1: X-sweep - copy input directly (no CN transformation)
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
                                     cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    // Step 1: X-sweep
-    compute_crank_2d_step_1<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[0], bc[1], bc[2], bc[3],
-        _d_xl, _d_xd, _d_xh, nx[0],
-        _d_yl, _d_yd, _d_yh, nx[1],
-        d_q_star[STREAM], d_q_in_saved[STREAM], n_grid);
 
     if(bc[0] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<nx[1], nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
@@ -854,11 +1018,9 @@ void CudaSolverSDC::adi_step_2d(int STREAM, int sub_interval,
             _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
             d_q_star[STREAM], d_temp[STREAM], d_offset_y, nx[1], nx[1], nx[0]);
 
-    // Step 2: Y-sweep - use saved input for correction terms
-    compute_crank_2d_step_2<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[2], bc[3],
-        _d_yl, _d_yd, _d_yh, nx[1],
-        d_q_star[STREAM], d_temp[STREAM], d_q_in_saved[STREAM], n_grid);
+    // Step 2: Y-sweep - use result of X-sweep directly
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_temp[STREAM], sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
     if(bc[2] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<nx[0], nx[1], sizeof(double) * 3 * nx[1], streams[STREAM][0]>>>(
@@ -881,13 +1043,10 @@ void CudaSolverSDC::adi_step_1d(int STREAM, int sub_interval,
     double *_d_xd = d_xd[sub_interval][monomer_type];
     double *_d_xh = d_xh[sub_interval][monomer_type];
 
-    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-
-    compute_crank_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-        bc[0], bc[1],
-        _d_xl, _d_xd, _d_xh,
-        d_q_star[STREAM], d_q_in, n_grid);
+    // For Backward Euler: solve A * q_out = q_in directly
+    // No CN transformation of RHS - just copy input to q_star
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
     if(bc[0] == BoundaryCondition::PERIODIC)
         tridiagonal_periodic<<<1, nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
@@ -897,6 +1056,318 @@ void CudaSolverSDC::adi_step_1d(int STREAM, int sub_interval,
         tridiagonal<<<1, nx[0], sizeof(double) * 2 * nx[0], streams[STREAM][0]>>>(
             _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
             d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
+}
+
+// Helper functions for max/min
+static int host_max_of_two(int x, int y) { return (x > y) ? x : y; }
+static int host_min_of_two(int x, int y) { return (x < y) ? x : y; }
+
+void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_type)
+{
+    try
+    {
+        const int n_grid = this->cb->get_total_grid();
+        const std::vector<int> nx = this->cb->get_nx();
+        const std::vector<double> dx = this->cb->get_dx();
+        const std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
+        const double ds = this->molecules->get_ds();
+
+        double bond_length = this->molecules->get_bond_lengths().at(monomer_type);
+        double bond_length_sq = bond_length * bond_length;
+        const double D = bond_length_sq / 6.0;
+        double dtau = (tau[sub_interval + 1] - tau[sub_interval]) * ds;
+
+        CudaSparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
+
+        // Build A = I - dtau * D * ∇² in CSR format (0-based indexing for PCG)
+        int stencil_size = (dim == 2) ? 5 : 7;
+        int max_nnz = n_grid * stencil_size;
+
+        std::vector<int> h_row_ptr(n_grid + 1);
+        std::vector<int> h_col_idx;
+        std::vector<double> h_values;
+        std::vector<double> h_diag_inv(n_grid);  // For Jacobi preconditioner
+        h_col_idx.reserve(max_nnz);
+        h_values.reserve(max_nnz);
+
+        if(dim == 2)
+        {
+            double rx = D * dtau / (dx[0] * dx[0]);
+            double ry = D * dtau / (dx[1] * dx[1]);
+
+            int nnz_count = 0;
+            for(int i = 0; i < nx[0]; i++)
+            {
+                int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : host_max_of_two(0, i - 1);
+                int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : host_min_of_two(nx[0] - 1, i + 1);
+
+                for(int j = 0; j < nx[1]; j++)
+                {
+                    int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : host_max_of_two(0, j - 1);
+                    int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : host_min_of_two(nx[1] - 1, j + 1);
+
+                    int row = i * nx[1] + j;
+                    h_row_ptr[row] = nnz_count;
+
+                    // Store entries in column order
+                    std::vector<std::pair<int, double>> entries;
+
+                    int col_im = im * nx[1] + j;
+                    if(col_im != row)
+                        entries.push_back({col_im, -rx});
+
+                    int col_jm = i * nx[1] + jm;
+                    if(col_jm != row)
+                        entries.push_back({col_jm, -ry});
+
+                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
+                    if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                        diag_val -= rx;
+                    if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                        diag_val -= rx;
+                    if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                        diag_val -= ry;
+                    if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                        diag_val -= ry;
+                    entries.push_back({row, diag_val});
+
+                    // Store inverse diagonal for Jacobi preconditioner
+                    h_diag_inv[row] = 1.0 / diag_val;
+
+                    int col_jp = i * nx[1] + jp;
+                    if(col_jp != row)
+                        entries.push_back({col_jp, -ry});
+
+                    int col_ip = ip * nx[1] + j;
+                    if(col_ip != row)
+                        entries.push_back({col_ip, -rx});
+
+                    std::sort(entries.begin(), entries.end());
+
+                    for(const auto& e: entries)
+                    {
+                        h_col_idx.push_back(e.first);
+                        h_values.push_back(e.second);
+                        nnz_count++;
+                    }
+                }
+            }
+            h_row_ptr[n_grid] = nnz_count;
+            mat.nnz = nnz_count;
+        }
+        else // dim == 3
+        {
+            double rx = D * dtau / (dx[0] * dx[0]);
+            double ry = D * dtau / (dx[1] * dx[1]);
+            double rz = D * dtau / (dx[2] * dx[2]);
+
+            int nnz_count = 0;
+            for(int i = 0; i < nx[0]; i++)
+            {
+                int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : host_max_of_two(0, i - 1);
+                int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : host_min_of_two(nx[0] - 1, i + 1);
+
+                for(int j = 0; j < nx[1]; j++)
+                {
+                    int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : host_max_of_two(0, j - 1);
+                    int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : host_min_of_two(nx[1] - 1, j + 1);
+
+                    for(int k = 0; k < nx[2]; k++)
+                    {
+                        int km = (bc[4] == BoundaryCondition::PERIODIC) ? (nx[2] + k - 1) % nx[2] : host_max_of_two(0, k - 1);
+                        int kp = (bc[5] == BoundaryCondition::PERIODIC) ? (k + 1) % nx[2] : host_min_of_two(nx[2] - 1, k + 1);
+
+                        int row = i * nx[1] * nx[2] + j * nx[2] + k;
+                        h_row_ptr[row] = nnz_count;
+
+                        std::vector<std::pair<int, double>> entries;
+
+                        int col_im = im * nx[1] * nx[2] + j * nx[2] + k;
+                        if(col_im != row)
+                            entries.push_back({col_im, -rx});
+
+                        int col_jm = i * nx[1] * nx[2] + jm * nx[2] + k;
+                        if(col_jm != row)
+                            entries.push_back({col_jm, -ry});
+
+                        int col_km = i * nx[1] * nx[2] + j * nx[2] + km;
+                        if(col_km != row)
+                            entries.push_back({col_km, -rz});
+
+                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+                        if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                            diag_val -= rx;
+                        if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                            diag_val -= rx;
+                        if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                            diag_val -= ry;
+                        if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                            diag_val -= ry;
+                        if(bc[4] != BoundaryCondition::PERIODIC && k == 0)
+                            diag_val -= rz;
+                        if(bc[5] != BoundaryCondition::PERIODIC && k == nx[2] - 1)
+                            diag_val -= rz;
+                        entries.push_back({row, diag_val});
+
+                        // Store inverse diagonal for Jacobi preconditioner
+                        h_diag_inv[row] = 1.0 / diag_val;
+
+                        int col_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
+                        if(col_kp != row)
+                            entries.push_back({col_kp, -rz});
+
+                        int col_jp = i * nx[1] * nx[2] + jp * nx[2] + k;
+                        if(col_jp != row)
+                            entries.push_back({col_jp, -ry});
+
+                        int col_ip = ip * nx[1] * nx[2] + j * nx[2] + k;
+                        if(col_ip != row)
+                            entries.push_back({col_ip, -rx});
+
+                        std::sort(entries.begin(), entries.end());
+
+                        for(const auto& e: entries)
+                        {
+                            h_col_idx.push_back(e.first);
+                            h_values.push_back(e.second);
+                            nnz_count++;
+                        }
+                    }
+                }
+            }
+            h_row_ptr[n_grid] = nnz_count;
+            mat.nnz = nnz_count;
+        }
+
+        // Allocate and copy to device
+        gpu_error_check(cudaMalloc((void**)&mat.d_row_ptr, sizeof(int) * (n_grid + 1)));
+        gpu_error_check(cudaMalloc((void**)&mat.d_col_idx, sizeof(int) * mat.nnz));
+        gpu_error_check(cudaMalloc((void**)&mat.d_values, sizeof(double) * mat.nnz));
+        gpu_error_check(cudaMalloc((void**)&mat.d_diag_inv, sizeof(double) * n_grid));
+
+        gpu_error_check(cudaMemcpy(mat.d_row_ptr, h_row_ptr.data(), sizeof(int) * (n_grid + 1), cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(mat.d_col_idx, h_col_idx.data(), sizeof(int) * mat.nnz, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(mat.d_values, h_values.data(), sizeof(double) * mat.nnz, cudaMemcpyHostToDevice));
+        gpu_error_check(cudaMemcpy(mat.d_diag_inv, h_diag_inv.data(), sizeof(double) * n_grid, cudaMemcpyHostToDevice));
+
+        mat.built = true;
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CudaSolverSDC::sparse_matvec(const CudaSparseMatrixCSR& mat, const double* d_x,
+                                   double* d_y, cudaStream_t stream)
+{
+    int n_blocks = (mat.n + 255) / 256;
+    sparse_matvec_kernel<<<n_blocks, 256, 0, stream>>>(
+        mat.d_row_ptr, mat.d_col_idx, mat.d_values, d_x, d_y, mat.n);
+}
+
+void CudaSolverSDC::sparse_solve(int STREAM, int sub_interval,
+                                  double* d_q_in, double* d_q_out, std::string monomer_type)
+{
+    try
+    {
+        CudaSparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
+
+        // Build matrix if not yet done
+        if(!mat.built)
+        {
+            build_sparse_matrix(sub_interval, monomer_type);
+        }
+
+        const int n = mat.n;
+        cudaStream_t stream = streams[STREAM][0];
+        int n_blocks = (n + 255) / 256;
+
+        // PCG with Jacobi preconditioner
+        // Solve A * q_out = q_in where A is SPD
+
+        // Use d_temp as scalar reduction buffer (just need one double)
+        double* d_scalar = d_temp[STREAM];
+
+        // Initialize: x = 0, r = b, z = M^{-1}*r, p = z
+        pcg_init_kernel<<<n_blocks, 256, 0, stream>>>(
+            d_q_out, d_pcg_r[STREAM], d_pcg_z[STREAM], d_pcg_p[STREAM],
+            d_q_in, mat.d_diag_inv, n);
+
+        // rz_old = (r, z)
+        gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
+        dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
+            d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalar, n);
+
+        double rz_old;
+        gpu_error_check(cudaMemcpyAsync(&rz_old, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
+        gpu_error_check(cudaStreamSynchronize(stream));
+
+        for(int iter = 0; iter < pcg_max_iter; iter++)
+        {
+            // Ap = A * p
+            sparse_matvec(mat, d_pcg_p[STREAM], d_pcg_Ap[STREAM], stream);
+
+            // pAp = (p, Ap)
+            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
+            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
+                d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalar, n);
+
+            double pAp;
+            gpu_error_check(cudaMemcpyAsync(&pAp, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
+            gpu_error_check(cudaStreamSynchronize(stream));
+
+            double alpha = rz_old / pAp;
+
+            // x = x + alpha*p, r = r - alpha*Ap
+            pcg_update_xr_kernel<<<n_blocks, 256, 0, stream>>>(
+                d_q_out, d_pcg_r[STREAM], d_pcg_p[STREAM], d_pcg_Ap[STREAM], alpha, n);
+
+            // ||r||^2
+            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
+            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
+                d_pcg_r[STREAM], d_pcg_r[STREAM], d_scalar, n);
+
+            double r_norm_sq;
+            gpu_error_check(cudaMemcpyAsync(&r_norm_sq, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
+            gpu_error_check(cudaStreamSynchronize(stream));
+
+            if(std::sqrt(r_norm_sq) < pcg_tol)
+                break;
+
+            // z = M^{-1} * r
+            pcg_precond_kernel<<<n_blocks, 256, 0, stream>>>(
+                d_pcg_z[STREAM], d_pcg_r[STREAM], mat.d_diag_inv, n);
+
+            // rz_new = (r, z)
+            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
+            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
+                d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalar, n);
+
+            double rz_new;
+            gpu_error_check(cudaMemcpyAsync(&rz_new, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
+            gpu_error_check(cudaStreamSynchronize(stream));
+
+            double beta = rz_new / rz_old;
+
+            // p = z + beta*p
+            pcg_update_p_kernel<<<n_blocks, 256, 0, stream>>>(
+                d_pcg_p[STREAM], d_pcg_z[STREAM], beta, n);
+
+            rz_old = rz_new;
+        }
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+void CudaSolverSDC::direct_solve_step(int STREAM, int sub_interval,
+                                       double* d_q_in, double* d_q_out, std::string monomer_type)
+{
+    // Solve using PCG (no ADI splitting error)
+    sparse_solve(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
 }
 
 void CudaSolverSDC::advance_propagator(
