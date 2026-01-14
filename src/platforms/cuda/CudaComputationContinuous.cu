@@ -49,6 +49,7 @@
 #include "CudaSolverPseudoRQM4.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
+#include "CudaSolverSDC.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -100,9 +101,18 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
-                bool use_4th_order = (numerical_method == "cn-adi4");
-                this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
+                if (numerical_method == "sdc")
+                {
+                    // SDC (Spectral Deferred Correction) with Gauss-Lobatto nodes
+                    // Default: M=3 nodes, K=2 correction iterations
+                    this->propagator_solver = new CudaSolverSDC(cb, molecules, this->n_streams, this->streams, 3, 2);
+                }
+                else
+                {
+                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
+                    bool use_4th_order = (numerical_method == "cn-adi4");
+                    this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
+                }
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

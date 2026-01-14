@@ -80,6 +80,7 @@ class PropagatorSolver:
         - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
         - "cn-adi4": Real-space with 4th-order CN-ADI (Richardson extrapolation)
+        - "sdc": Real-space with SDC (Spectral Deferred Correction, Gauss-Lobatto)
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
     reduce_memory_usage : bool
@@ -136,7 +137,7 @@ class PropagatorSolver:
 
     # Map numerical methods to solver types
     _PSEUDO_METHODS = {"rqm4", "etdrk4"}
-    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4", "cn-adi4-g"}
+    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4", "cn-adi4-g", "sdc"}
 
     def __init__(
         self,
