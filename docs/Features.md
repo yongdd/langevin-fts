@@ -44,7 +44,7 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 - CN-ADI2 (2nd-order, default) or CN-ADI4 (4th-order) selectable at runtime
 - Supports only continuous chain model
 - Supports periodic, reflecting, and absorbing boundaries
-- See [RealSpaceSolver.md](RealSpaceSolver.md) for details
+- See [RealSpaceMethod.md](RealSpaceMethod.md) for details
 
 For detailed performance benchmarks and method comparisons, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
