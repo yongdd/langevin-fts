@@ -13,7 +13,6 @@ Methods tested:
 - Real-Space (CN-ADI based):
   - cn-adi2: 2nd-order Crank-Nicolson ADI
   - cn-adi4: 4th-order CN-ADI with per-step Richardson extrapolation
-  - cn-adi4-g: 4th-order CN-ADI with Global Richardson
 
 The convergence order p is determined from the error scaling: error ∝ ds^p
 
@@ -71,7 +70,7 @@ def benchmark_method(platform, numerical_method, nx, lx, ds, chi_n=12.0, n_warmu
     molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
     # Use periodic BC for real-space methods
-    if numerical_method in ["cn-adi2", "cn-adi4", "cn-adi4-g"]:
+    if numerical_method in ["cn-adi2", "cn-adi4"]:
         bc = ["periodic"] * (2 * len(nx))
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=bc)
     else:
@@ -151,8 +150,7 @@ def run_benchmark(platform="cuda"):
         "rqm4": "RQM4 (Pseudo-Spectral, 4th order)",
         "etdrk4": "ETDRK4 (Pseudo-Spectral, 4th order)",
         "cn-adi2": "CN-ADI2 (Real-Space, 2nd order)",
-        "cn-adi4": "CN-ADI4 (Real-Space, 4th order per-step)",
-        "cn-adi4-g": "CN-ADI4-G (Real-Space, Global Richardson)"
+        "cn-adi4": "CN-ADI4 (Real-Space, 4th order per-step)"
     }
 
     results = {}
@@ -213,8 +211,7 @@ def run_benchmark(platform="cuda"):
         "rqm4": 4.0,
         "etdrk4": 4.0,
         "cn-adi2": 2.0,
-        "cn-adi4": 4.0,
-        "cn-adi4-g": 4.0
+        "cn-adi4": 4.0
     }
 
     for method in methods:
@@ -296,12 +293,10 @@ Key findings:
 2. REAL-SPACE METHODS:
    - cn-adi2: 2nd-order, fastest per step but needs smaller ds for accuracy
    - cn-adi4: 4th-order via per-step Richardson, 3x cost of cn-adi2
-   - cn-adi4-g: 4th-order Global Richardson, 3x cost of cn-adi2
 
 3. RECOMMENDATIONS:
    - For periodic systems: Use rqm4 (default) or etdrk4
-   - For non-periodic BC: Use cn-adi4-g for best accuracy/cost ratio
-   - cn-adi4-g achieves 4th-order accuracy with same cost as cn-adi4
+   - For non-periodic BC: Use cn-adi4 for 4th-order accuracy
 """)
 
     return results
