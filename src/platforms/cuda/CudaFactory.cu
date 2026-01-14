@@ -103,7 +103,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         std::string solver_type;
         if (numerical_method == "rqm4" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
-        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr" || numerical_method == "sdc")
+        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr" || numerical_method.substr(0, 4) == "sdc-")
             solver_type = "realspace";
         else if (numerical_method == "cn-adi4-gr")
             solver_type = "realspace-global-richardson";

@@ -101,11 +101,17 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                if (numerical_method == "sdc")
+                if (numerical_method.substr(0, 4) == "sdc-")
                 {
                     // SDC (Spectral Deferred Correction) with Gauss-Lobatto nodes
-                    // Default: M=3 nodes, K=2 correction iterations
-                    this->propagator_solver = new CudaSolverSDC(cb, molecules, this->n_streams, this->streams, 3, 2);
+                    // Parse order N from "sdc-N", compute M and K
+                    int order = std::stoi(numerical_method.substr(4));
+                    if (order < 2 || order > 10)
+                        throw_with_line_number("SDC order must be 2-10, got: " + std::to_string(order));
+                    // For order N: M = ceil((N+2)/2), K = N-1
+                    int M = (order + 3) / 2;  // ceil((order+2)/2)
+                    int K = order - 1;
+                    this->propagator_solver = new CudaSolverSDC(cb, molecules, this->n_streams, this->streams, M, K);
                 }
                 else
                 {

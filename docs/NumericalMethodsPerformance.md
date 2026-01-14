@@ -19,6 +19,7 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 |--------|-------|-------------|
 | **CN-ADI2** | 2nd | Crank-Nicolson Alternating Direction Implicit |
 | **CN-ADI4** | 4th | CN-ADI with Richardson extrapolation |
+| **SDC-N** | Nth | Spectral Deferred Correction (N=2-10) |
 
 ### Usage Example
 
@@ -30,7 +31,7 @@ params = {
     "lx": [3.3, 3.3, 3.3],
     "ds": 0.01,
     "chain_model": "continuous",
-    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr"
+    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr", "sdc-N" (N=2-10)
     # ... other parameters
 }
 
@@ -115,6 +116,7 @@ calculation = scft.SCFT(params=params)
 | **ETDRK4** | 4th ✓ | 1.3x faster | Same accuracy as RQM4, 2x slower |
 | **CN-ADI2** | 2nd ✓ | baseline | Supports non-periodic BC |
 | **CN-ADI4** | 4th ✓ | 3.0x slower | High accuracy with non-periodic BC |
+| **SDC-N** | Nth ✓ | varies | Configurable order (N=2-10) with non-periodic BC |
 
 ### Key Findings
 
@@ -131,6 +133,7 @@ calculation = scft.SCFT(params=params)
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest, 4th-order accurate |
 | Non-periodic boundaries | **CN-ADI2** | Supports absorbing/reflecting BC |
 | High-precision confined systems | **CN-ADI4** | 4th-order with non-periodic BC |
+| Configurable high-order (non-periodic) | **SDC-N** | Nth-order (N=2-10) with non-periodic BC |
 
 ### ETDRK4 vs RQM4
 

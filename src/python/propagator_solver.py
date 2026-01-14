@@ -80,7 +80,7 @@ class PropagatorSolver:
         - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
         - "cn-adi4-lr": Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
-        - "sdc": Real-space with SDC (Spectral Deferred Correction, Gauss-Lobatto)
+        - "sdc-N": Real-space with Nth-order SDC (Spectral Deferred Correction), N=2-10
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
     reduce_memory_usage : bool
@@ -137,7 +137,19 @@ class PropagatorSolver:
 
     # Map numerical methods to solver types
     _PSEUDO_METHODS = {"rqm4", "etdrk4"}
-    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4-lr", "cn-adi4-gr", "sdc"}
+    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4-lr", "cn-adi4-gr"}
+    _SDC_ORDER_RANGE = range(2, 11)  # sdc-2 through sdc-10
+
+    @staticmethod
+    def _is_sdc_method(method: str) -> bool:
+        """Check if method is sdc-N format with valid N."""
+        if method.startswith("sdc-"):
+            try:
+                order = int(method[4:])
+                return order in PropagatorSolver._SDC_ORDER_RANGE
+            except ValueError:
+                return False
+        return False
 
     def __init__(
         self,
@@ -183,12 +195,13 @@ class PropagatorSolver:
         numerical_method = numerical_method.lower()
         if numerical_method in self._PSEUDO_METHODS:
             self.method = "pseudospectral"
-        elif numerical_method in self._REALSPACE_METHODS:
+        elif numerical_method in self._REALSPACE_METHODS or self._is_sdc_method(numerical_method):
             self.method = "realspace"
         else:
+            valid_sdc = [f"sdc-{n}" for n in self._SDC_ORDER_RANGE]
             raise ValueError(
                 f"Unknown numerical_method '{numerical_method}'. "
-                f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS}"
+                f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS} or {valid_sdc}"
             )
         self.numerical_method = numerical_method
 

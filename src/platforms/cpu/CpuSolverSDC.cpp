@@ -233,9 +233,39 @@ void CpuSolverSDC::compute_gauss_lobatto_nodes()
         tau[3] = 0.5 + std::sqrt(21.0) / 14.0;
         tau[4] = 1.0;
     }
+    else if(M == 6)
+    {
+        // Exact Gauss-Lobatto nodes for M=6
+        // Interior nodes are roots of P'_5(x) where P_5 is Legendre polynomial
+        // x^2 = (7 ± 2*sqrt(7))/21, transformed to [0,1]
+        double x1 = std::sqrt((7.0 + 2.0 * std::sqrt(7.0)) / 21.0);
+        double x2 = std::sqrt((7.0 - 2.0 * std::sqrt(7.0)) / 21.0);
+        tau[0] = 0.0;
+        tau[1] = 0.5 * (1.0 - x1);
+        tau[2] = 0.5 * (1.0 - x2);
+        tau[3] = 0.5 * (1.0 + x2);
+        tau[4] = 0.5 * (1.0 + x1);
+        tau[5] = 1.0;
+    }
+    else if(M == 7)
+    {
+        // Exact Gauss-Lobatto nodes for M=7
+        // Interior nodes are roots of P'_6(x) = x * (polynomial)
+        // One root is x=0, others from: x^2 = (15 ± 2*sqrt(15))/33
+        double x1 = std::sqrt((15.0 + 2.0 * std::sqrt(15.0)) / 33.0);
+        double x2 = std::sqrt((15.0 - 2.0 * std::sqrt(15.0)) / 33.0);
+        tau[0] = 0.0;
+        tau[1] = 0.5 * (1.0 - x1);
+        tau[2] = 0.5 * (1.0 - x2);
+        tau[3] = 0.5;  // x = 0 maps to tau = 0.5
+        tau[4] = 0.5 * (1.0 + x2);
+        tau[5] = 0.5 * (1.0 + x1);
+        tau[6] = 1.0;
+    }
     else
     {
         // General formula using Chebyshev nodes of second kind
+        // Good approximation for large M
         for(int j = 0; j < M; j++)
         {
             tau[j] = 0.5 * (1.0 - std::cos(std::numbers::pi * j / (M - 1)));
