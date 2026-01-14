@@ -18,7 +18,8 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 | Method | Order | Description |
 |--------|-------|-------------|
 | **CN-ADI2** | 2nd | Crank-Nicolson Alternating Direction Implicit |
-| **CN-ADI4** | 4th | CN-ADI with Richardson extrapolation |
+| **CN-ADI4-LR** | 4th | CN-ADI with Local Richardson extrapolation |
+| **CN-ADI4-GR** | 4th | CN-ADI with Global Richardson extrapolation |
 | **SDC-N** | Nth | Spectral Deferred Correction (N=2-10) |
 
 ### Usage Example
@@ -31,7 +32,7 @@ params = {
     "lx": [3.3, 3.3, 3.3],
     "ds": 0.01,
     "chain_model": "continuous",
-    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr", "sdc-N" (N=2-10)
+    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr", "cn-adi4-gr", "sdc-N" (N=2-10)
     # ... other parameters
 }
 
@@ -54,16 +55,17 @@ calculation = scft.SCFT(params=params)
 
 ![Contour Convergence](figures/figure1_song2018.png)
 
-**(a)** Pseudo-spectral methods (RQM4, ETDRK4) show 4th-order convergence. **(b)** CN-ADI methods: CN-ADI2 shows 2nd-order convergence, CN-ADI4 shows 4th-order convergence. Note: CN-ADI uses a different reference free energy (F_ref = -0.47935) due to finite-difference spatial discretization. **(c)** Execution time comparison for all methods.
+**(a)** Pseudo-spectral methods (RQM4, ETDRK4) show 4th-order convergence. **(b)** Real-space methods: CN-ADI2 shows 2nd-order convergence, CN-ADI4-LR and CN-ADI4-GR both show 4th-order convergence. Note: CN-ADI uses a different reference free energy (F_ref = -0.47935) due to finite-difference spatial discretization. **(c)** Execution time comparison for all methods.
 
 ### Execution Time vs Contour Steps (Ns)
 
-| Method | Ns=100 | Ns=200 | Ns=400 | Ns=1000 | Ns=4000 |
-|--------|--------|--------|--------|---------|---------|
-| **RQM4** | 7.6 s | 14.5 s | 28.3 s | 70.6 s | 281.9 s |
-| **ETDRK4** | 15.4 s | 30.1 s | 59.7 s | 148.0 s | 598.6 s |
-| **CN-ADI2** | 19.1 s | 38.0 s | 76.1 s | 191.3 s | 766.1 s |
-| **CN-ADI4** | 57.4 s | 113.5 s | 228.4 s | 570.4 s | 2289.4 s |
+| Method | Ns=40 | Ns=80 | Ns=160 | Ns=320 | Ns=640 | Ns=1000 |
+|--------|-------|-------|--------|--------|--------|---------|
+| **RQM4** | 4.3 s | 8.2 s | 15.7 s | 30.7 s | 60.7 s | 94.3 s |
+| **ETDRK4** | 8.7 s | 16.7 s | 32.6 s | 64.7 s | 128.4 s | 199.8 s |
+| **CN-ADI2** | 11.8 s | 22.9 s | 45.5 s | 90.3 s | 180.1 s | 282.0 s |
+| **CN-ADI4-LR** | 35.4 s | 68.7 s | 136.5 s | 270.9 s | 540.3 s | 846.0 s |
+| **CN-ADI4-GR** | 34.6 s | 68.3 s | 135.8 s | 271.2 s | 541.2 s | 844.9 s |
 
 ### Free Energy vs Contour Steps (Ns)
 
@@ -72,7 +74,9 @@ calculation = scft.SCFT(params=params)
 | **RQM4** | -0.47701093 | -0.47697737 | -0.47697436 | -0.47697413 | -0.47697411 | -0.47697411 |
 | **ETDRK4** | -0.47693550 | -0.47697152 | -0.47697394 | -0.47697410 | -0.47697411 | -0.47697411 |
 | **CN-ADI2** | -0.47773363 | -0.47895081 | -0.47925127 | -0.47932631 | -0.47934509 | -0.47934879 |
-| **CN-ADI4** | -0.47936255 | -0.47935202 | -0.47935137 | -0.47935135 | -0.47935135 | -0.47935135 |
+| **CN-ADI4-LR** | -0.47936255 | -0.47935202 | -0.47935137 | -0.47935135 | -0.47935135 | -0.47935135 |
+| **CN-ADI4-GR** | -0.47934960 | -0.47935095 | -0.47935129 | -0.47935135 | -0.47935135 | -0.47935135 |
+| **SDC-4** | -0.47933271 | - | - | - | - | - |
 
 ### Error vs Contour Steps (|F - F_ref|, F_ref = -0.47697411)
 
@@ -85,10 +89,11 @@ calculation = scft.SCFT(params=params)
 
 | Method | Speedup |
 |--------|---------|
-| **RQM4** | **2.7x faster** |
-| **ETDRK4** | 1.3x faster |
+| **RQM4** | **3.0x faster** |
+| **ETDRK4** | 1.4x faster |
 | **CN-ADI2** | 1.0x (baseline) |
-| **CN-ADI4** | 3.0x slower |
+| **CN-ADI4-LR** | 3.0x slower |
+| **CN-ADI4-GR** | 3.0x slower |
 
 ### Convergence Order Analysis
 
@@ -115,14 +120,16 @@ calculation = scft.SCFT(params=params)
 | **RQM4** | 4th ✓ | **2.7x faster** | Recommended for most applications |
 | **ETDRK4** | 4th ✓ | 1.3x faster | Same accuracy as RQM4, 2x slower |
 | **CN-ADI2** | 2nd ✓ | baseline | Supports non-periodic BC |
-| **CN-ADI4** | 4th ✓ | 3.0x slower | High accuracy with non-periodic BC |
-| **SDC-N** | Nth ✓ | varies | Configurable order (N=2-10) with non-periodic BC |
+| **CN-ADI4-LR** | 4th ✓ | 3.0x slower | Local Richardson extrapolation |
+| **CN-ADI4-GR** | 4th ✓ | 3.0x slower | Global Richardson extrapolation |
+| **SDC-4** | 4th ✓ | ~7x slower | Configurable order; slower in 3D due to PCG |
 
 ### Key Findings
 
 1. **RQM4 is the fastest pseudo-spectral method** - 2x faster than ETDRK4 per iteration
 2. **RQM4 and ETDRK4 achieve identical 4th-order convergence** - both converge to F = -0.47697411
-3. **CN-ADI methods** support non-periodic boundary conditions but converge to a different free energy (F = -0.47935) due to finite-difference spatial discretization error
+3. **CN-ADI4-LR and CN-ADI4-GR have similar performance** - both achieve 4th-order convergence with ~3x cost of CN-ADI2
+4. **CN-ADI methods** support non-periodic boundary conditions but converge to a different free energy (F = -0.47935) due to finite-difference spatial discretization error
 
 ## Method Recommendations
 
@@ -131,9 +138,9 @@ calculation = scft.SCFT(params=params)
 | Use Case | Recommended Method | Reason |
 |----------|-------------------|--------|
 | Standard SCFT/FTS (periodic BC) | **RQM4** | Fastest, 4th-order accurate |
-| Non-periodic boundaries | **CN-ADI2** | Supports absorbing/reflecting BC |
-| High-precision confined systems | **CN-ADI4** | 4th-order with non-periodic BC |
-| Configurable high-order (non-periodic) | **SDC-N** | Nth-order (N=2-10) with non-periodic BC |
+| Non-periodic boundaries (2nd-order) | **CN-ADI2** | Fast, supports absorbing/reflecting BC |
+| Non-periodic boundaries (4th-order) | **CN-ADI4-LR** or **CN-ADI4-GR** | 4th-order with non-periodic BC |
+| Higher than 4th-order accuracy | **SDC-N** | Nth-order (N=2-10), but slower in 2D/3D |
 
 ### ETDRK4 vs RQM4
 
@@ -148,6 +155,15 @@ Both methods achieve **4th-order convergence** with comparable accuracy. The imp
 
 **Recommendation**: Use **RQM4** for standard simulations due to its speed advantage. **ETDRK4** (Krogstad scheme) achieves similar accuracy with slightly smaller error coefficients but requires more computation per step.
 
+### CN-ADI4-LR vs CN-ADI4-GR
+
+Both methods achieve 4th-order convergence with similar computational cost (~3x CN-ADI2). The key difference:
+
+- **CN-ADI4-LR**: Local Richardson extrapolation at each step. Simpler, lower memory.
+- **CN-ADI4-GR**: Global Richardson extrapolation at quadrature level. True 4th-order in 1D.
+
+For implementation details, see [RealSpaceSolver.md](RealSpaceSolver.md#cn-adi4-lr-vs-cn-adi4-gr).
+
 ## References
 
 1. A. Ranjan, J. Qin, and D. C. Morse, **"Linear Response and Stability of Ordered Phases of Block Copolymer Melts"**, *Macromolecules*, **2008**, 41, 942-954.
@@ -161,6 +177,30 @@ Both methods achieve **4th-order convergence** with comparable accuracy. The imp
 
 4. P. Stasiak and M. W. Matsen, **"Efficiency of pseudo-spectral algorithms with Anderson mixing for the SCFT of periodic block-copolymer phases"**, *Eur. Phys. J. E*, **2011**, 34, 110.
    - Convergence analysis methodology
+
+## SDC Method Performance Notes
+
+The Spectral Deferred Correction (SDC) method provides Nth-order temporal accuracy (N=2-10) for real-space problems with non-periodic boundary conditions. However, it has significantly higher computational cost than other methods, especially in 3D.
+
+### SDC Computational Characteristics
+
+| Dimension | Solver Type | Performance |
+|-----------|-------------|-------------|
+| 1D | Tridiagonal (direct) | Fast |
+| 2D/3D | PCG (iterative) | **~30x slower than RQM4** |
+
+**Benchmark Result** (32³ grid, χN=18, f=0.375):
+- **SDC-4** at Ns=40: 134.7 s (382 iterations)
+- **RQM4** at Ns=40: 4.3 s (380 iterations)
+- **Slowdown**: ~31x
+
+### Why SDC is Slower in 3D
+
+1. **Implicit solver at each substep**: SDC uses M substeps (M=4 for SDC-4) per contour step, each requiring a Newton iteration
+2. **PCG iterations**: Each Newton step requires PCG (Preconditioned Conjugate Gradient) solver for the 3D sparse system
+3. **Typical iteration count**: PCG runs ~10-50 iterations per solve, with ~50 solves per propagator step
+
+**Recommendation**: For 3D periodic systems, use **RQM4** or **ETDRK4** which are 30x faster. SDC is intended for non-periodic boundary conditions where pseudo-spectral methods are not applicable.
 
 ## Notes on Pseudo-Spectral vs Real-Space Discrepancy
 
