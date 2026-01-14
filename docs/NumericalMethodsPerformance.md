@@ -162,7 +162,7 @@ Both methods achieve 4th-order convergence with similar computational cost (~3x 
 - **CN-ADI4-LR**: Local Richardson extrapolation at each step. Simpler, lower memory.
 - **CN-ADI4-GR**: Global Richardson extrapolation at quadrature level. True 4th-order in 1D.
 
-For implementation details, see [RealSpaceSolver.md](RealSpaceSolver.md#cn-adi4-lr-vs-cn-adi4-gr).
+For implementation details, see [RealSpaceMethod.md](RealSpaceMethod.md#cn-adi4-lr-vs-cn-adi4-gr).
 
 ## References
 
