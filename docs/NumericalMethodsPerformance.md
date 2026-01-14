@@ -30,7 +30,7 @@ params = {
     "lx": [3.3, 3.3, 3.3],
     "ds": 0.01,
     "chain_model": "continuous",
-    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4"
+    "numerical_method": "rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr"
     # ... other parameters
 }
 

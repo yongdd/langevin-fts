@@ -109,8 +109,8 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
                 }
                 else
                 {
-                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
-                    bool use_4th_order = (numerical_method == "cn-adi4");
+                    // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
+                    bool use_4th_order = (numerical_method == "cn-adi4-lr");
                     this->propagator_solver = new CudaSolverCNADI(cb, molecules, this->n_streams, this->streams, false, use_4th_order);
                 }
             }

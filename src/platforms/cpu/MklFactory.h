@@ -127,7 +127,7 @@ public :
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Computation scheduler
      * @param numerical_method                "rqm4", "etdrk4" (pseudo-spectral) or
-     *                                        "cn-adi2", "cn-adi4" (real-space)
+     *                                        "cn-adi2", "cn-adi4-lr" (real-space)
      * @return CPU propagator solver
      */
     PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;

@@ -54,7 +54,7 @@
  * @param method                         "pseudospectral" or "realspace"
  * @param numerical_method               Numerical algorithm:
  *                                       - For pseudospectral: "rqm4" or "etdrk4"
- *                                       - For realspace: "cn-adi2" or "cn-adi4"
+ *                                       - For realspace: "cn-adi2" or "cn-adi4-lr"
  */
 template <typename T>
 CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
@@ -87,8 +87,8 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
-                bool use_4th_order = (numerical_method == "cn-adi4");
+                // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
+                bool use_4th_order = (numerical_method == "cn-adi4-lr");
                 this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
             }
             else

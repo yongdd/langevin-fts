@@ -8,7 +8,7 @@
  *
  * **Global Richardson at Quadrature Level:**
  *
- * Unlike per-step Richardson (cn-adi4) which applies extrapolation at every step,
+ * Unlike per-step Richardson (cn-adi4-lr) which applies extrapolation at every step,
  * this method:
  * 1. Maintains TWO independent propagator chains:
  *    - Full-step chain: q_full[0..N] advanced with step size ds
@@ -28,7 +28,7 @@
  *
  * - Full-step chain: N steps
  * - Half-step chain: 2N steps
- * - Total: 3N ADI steps per propagator (vs 3N for cn-adi4 per-step)
+ * - Total: 3N ADI steps per propagator (vs 3N for cn-adi4-lr per-step)
  *
  * **Accuracy:**
  *
@@ -106,30 +106,47 @@ private:
     double* d_q_unity;               ///< Unity array
     double* d_q_mask;                ///< Mask for impenetrable regions
     double* d_phi;                   ///< Temporary phi
+    double* d_phi_full;              ///< Temp buffer for full-step phi (for Richardson)
     double* d_q_half_temp[MAX_STREAMS];  ///< Temp buffer for half-step (per stream)
     /// @}
 
     /**
      * @brief Segment pairs for partition function calculation.
-     * Tuple: (polymer_idx, d_q_richardson_left, d_q_richardson_right, n_aggregated)
+     * Tuple: (polymer_idx, d_q_full_left, d_q_full_right, d_q_half_left, d_q_half_right, n_aggregated)
+     * Q is computed as: Q_rich = (4*Q_half - Q_full) / 3
      */
-    std::vector<std::tuple<int, double*, double*, int>> partition_segment_info;
+    std::vector<std::tuple<int, double*, double*, double*, double*, int>> partition_segment_info;
 
     #ifndef NDEBUG
     std::map<std::string, bool*> propagator_finished;  ///< Debug: tracks completed segments
     #endif
 
     /**
-     * @brief Calculate concentration using Richardson-extrapolated propagators.
+     * @brief Calculate concentration with Richardson extrapolation of phi.
      *
-     * Integrates: φ = Σ simpson_coeff[n] * q_rich_1 * q_rich_2
+     * Computes φ_full and φ_half separately using full/half-step propagators,
+     * each normalized by their respective Q values:
+     *   φ_full = (norm / Q_full) * integral_full
+     *   φ_half = (norm / Q_half) * integral_half
+     * Then applies Richardson extrapolation: φ_rich = (4*φ_half - φ_full) / 3
+     *
+     * @param d_phi Output concentration array (device)
+     * @param d_q_1_full, d_q_2_full Full-step propagators (device)
+     * @param d_q_1_half, d_q_2_half Half-step propagators (device)
+     * @param N_LEFT, N_RIGHT Segment counts
+     * @param Q_full Partition function from full-step chain
+     * @param Q_half Partition function from half-step chain
+     * @param norm Base normalization factor (ds * vf / alpha * n_repeated)
      */
     void calculate_phi_one_block(
         double* d_phi,
-        double** d_q_1_richardson,
-        double** d_q_2_richardson,
+        double** d_q_1_full, double** d_q_2_full,
+        double** d_q_1_half, double** d_q_2_half,
         const int N_LEFT,
-        const int N_RIGHT
+        const int N_RIGHT,
+        const double Q_full,
+        const double Q_half,
+        const double norm
     );
 
 public:

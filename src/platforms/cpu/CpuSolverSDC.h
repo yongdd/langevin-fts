@@ -21,17 +21,19 @@
  * - M=3: [0, 0.5, 1]
  * - M=5: [0, 0.5-√21/14, 0.5, 0.5+√21/14, 1]
  *
- * **Expected Accuracy:**
+ * **Order of Accuracy:**
  *
- * With forward Euler predictor:
- * - M=3, K=2: ~3rd order accuracy
- * - M=5, K=4: ~5th-8th order accuracy (may saturate due to ADI splitting error)
+ * - 1D: High order (up to 2K+1 with K corrections) - implicit solves are exact
+ * - 2D/3D: Limited to 2nd-order due to O(ds²) ADI splitting error
+ *
+ * With IMEX predictor (Backward Euler) and K corrections, the theoretical order
+ * is 2K+1 for 1D problems. However, in 2D/3D, the ADI splitting error dominates.
  *
  * **Limitations:**
  *
- * ADI implicit solves introduce O(ds²) splitting error that does not decrease
- * with more SDC corrections. This limits achievable accuracy in 2D/3D.
- * For higher accuracy, use Richardson extrapolation (cn-adi4-g) instead.
+ * ADI splitting solves (I - dt*Dx)(I - dt*Dy)q = RHS instead of (I - dt*(Dx+Dy))q = RHS.
+ * The O(dt²*Dx*Dy) difference is an irreducible splitting error that persists
+ * regardless of the number of SDC corrections. This limits 2D/3D to 2nd-order accuracy.
  *
  * **References:**
  *

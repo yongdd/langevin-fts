@@ -30,7 +30,7 @@ def load_results():
 
 def print_summary(results):
     """Print summary tables."""
-    methods = ['rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4']
+    methods = ['rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr']
 
     # Get all Ns values
     all_ns = set()

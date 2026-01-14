@@ -1,0 +1,15 @@
+{
+  "method": "cn-adi4-gr",
+  "ds": 0.001,
+  "N": 1000,
+  "chi_n": 20.0,
+  "f": 0.45,
+  "nx": 32,
+  "lx": 3.8,
+  "dim": 3,
+  "phase": "gyroid",
+  "free_energy": -0.9139235347588568,
+  "error_level": 8.947418766019214e-09,
+  "iterations": 279,
+  "converged": true
+}

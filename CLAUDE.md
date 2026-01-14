@@ -136,8 +136,8 @@ Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
 - **Continuous chains**: Pseudo-spectral method with RQM4 or ETDRK4 solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
-- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order) or CN-ADI4 (4th-order)
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), or `"cn-adi4"` (CN-ADI4)
+- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order), CN-ADI4 (4th-order), or SDC (Spectral Deferred Correction)
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), `"cn-adi4-lr"` (CN-ADI4-LR), or `"sdc"` (SDC)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -222,7 +222,8 @@ Simulations are configured via Python dictionaries with keys:
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
-  - `"cn-adi4"`: CN-ADI4 - Real-space with 4th-order CN-ADI (Richardson extrapolation)
+  - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
+  - `"sdc"`: SDC - Real-space with Spectral Deferred Correction (Gauss-Lobatto)
 
 ### Common Issues and Solutions
 
@@ -283,6 +284,104 @@ $$\hat{g}(\mathbf{k}) = \exp\left( -\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} \right
 - **Discrete**: Bond function (Fourier transform of Gaussian bond distribution)
 
 **Reference**: Park et al., *J. Chem. Phys.* **2019**, 150, 234901
+
+## Numerical Methods
+
+This library provides multiple numerical methods for solving the modified diffusion equation, each with different accuracy-performance tradeoffs.
+
+### Pseudo-Spectral Methods (Fourier Space)
+
+#### RQM4 (4th-order Richardson Extrapolation)
+The default method combining operator splitting with Richardson extrapolation:
+1. Split the operator: diffusion (Fourier space) + reaction (real space)
+2. Apply Strang splitting with half-steps
+3. Richardson extrapolation: $q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$ for 4th-order accuracy
+
+**Order of accuracy**: 4th-order in ds (convergence order ≈ 4.0)
+
+**Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
+
+#### ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
+Direct integration using matrix exponentials:
+1. Transform to Fourier space
+2. Solve using exponential integrating factor
+3. 4th-order Runge-Kutta for the nonlinear term
+
+**Order of accuracy**: 4th-order in ds
+
+**Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
+
+### Real-Space Methods (Finite Difference)
+
+#### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
+Alternating Direction Implicit method with Crank-Nicolson time stepping:
+1. Split 2D/3D problem into sequence of 1D problems
+2. Each direction solved implicitly with tridiagonal system
+3. 2nd-order accurate in space and time
+
+**Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
+
+#### CN-ADI4-LR (4th-order Local Richardson Extrapolation)
+Richardson extrapolation applied to CN-ADI2 at each contour step:
+$$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
+
+**Order of accuracy**: 4th-order in ds
+
+"LR" stands for "Local Richardson" - the extrapolation is applied independently at each step.
+
+#### SDC (Spectral Deferred Correction)
+
+SDC is an iterative method that uses spectral quadrature to achieve high-order accuracy. The implementation uses **Gauss-Lobatto collocation nodes** and **IMEX (Implicit-Explicit) splitting**.
+
+**Algorithm per contour step:**
+
+1. **Discretize** the interval $[s_n, s_{n+1}]$ using $M$ Gauss-Lobatto nodes $\tau_m \in [0, 1]$:
+   - For $M=3$: $\tau = [0, 0.5, 1]$
+   - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
+
+2. **Predictor** (Backward Euler at each sub-interval):
+   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2) X^{[0]}_{m+1} = e^{-w\Delta\tau} X^{[0]}_m$
+   - Uses ADI for multi-dimensional cases
+
+3. **Corrector** ($K$ iterations):
+   - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
+   - Apply spectral integral: $X^{[k+1]}_{m+1} = X^{[k]}_m + \int_0^{\tau_{m+1}} L(F^{[k]}) d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$
+   - where $L$ is Lagrange interpolation through the $F$ values
+
+**Spectral Integration Matrix:**
+
+The integration is performed using the matrix $S$ where $S_{m,j}$ gives the contribution of $F_j$ to the integral from $\tau_0$ to $\tau_m$:
+$$\int_0^{\tau_m} \sum_j L_j(\tau') F_j \, d\tau' = \sum_j S_{m,j} F_j$$
+
+**Order of Accuracy:**
+
+- **1D**: The method achieves high order (up to order $2K+1$ with $K$ corrections) because the implicit solves are exact
+- **2D/3D**: **Limited to 2nd-order** due to $O(\Delta s^2)$ splitting error from ADI
+
+The ADI splitting introduces an irreducible $O(\Delta s^2)$ error in 2D/3D that does not decrease with more SDC corrections. This is because ADI solves:
+$$(I - \Delta\tau D_x)(I - \Delta\tau D_y) q = \text{RHS}$$
+instead of the exact:
+$$(I - \Delta\tau (D_x + D_y)) q = \text{RHS}$$
+
+The difference is $O(\Delta\tau^2 D_x D_y)$, which persists regardless of the number of corrections.
+
+**Configuration:**
+- `M`: Number of Gauss-Lobatto nodes (default: 3)
+- `K`: Number of correction iterations (default: 2)
+
+**References:**
+- Dutt, Greengard, Rokhlin, *BIT Numerical Mathematics* **2000**, 40, 241
+- Minion, *Commun. Math. Sci.* **2003**, 1, 471
+
+### Method Selection Guidelines
+
+| Method | Order | Best For | Limitations |
+|--------|-------|----------|-------------|
+| RQM4 | 4th | General use, moderate accuracy | Requires periodic BCs |
+| ETDRK4 | 4th | High accuracy pseudo-spectral | Requires periodic BCs |
+| CN-ADI2 | 2nd | Non-periodic BCs, fast | Lower accuracy |
+| CN-ADI4-LR | 4th | Non-periodic BCs, accuracy | 2× cost of CN-ADI2 |
+| SDC | 2nd* | Experimental | *Limited by ADI in 2D/3D |
 
 ## Units and Conventions
 
@@ -387,3 +486,4 @@ The implementation is based on these publications:
 - RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
 - ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
+- SDC method: *BIT Numerical Mathematics* **2000**, 40, 241 (Dutt, Greengard, Rokhlin); *Commun. Math. Sci.* **2003**, 1, 471 (Minion)

@@ -63,7 +63,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
 | `etdrk4` | Pseudo-spectral | Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
-| `cn-adi4` | Real-space | 4th-order CN-ADI |
+| `cn-adi4-lr` | Real-space | 4th-order CN-ADI (Local Richardson) |
 
 **Note**: `rqm4` is the default for `scft.py`, `lfts.py`, and `clfts.py`. See [benchmarks](docs/NumericalMethodsPerformance.md) for performance comparisons.
 

@@ -119,7 +119,7 @@ public:
      * // Create solver with specific numerical method
      * auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "rqm4");
      * // Or for real-space methods:
-     * // auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "cn-adi4");
+     * // auto* solver = factory->create_propagator_computation(cb, mols, optimizer, "cn-adi4-lr");
      * @endcode
      */
     static AbstractFactory<double>* create_factory_real(

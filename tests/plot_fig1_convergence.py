@@ -49,7 +49,7 @@ def main():
         'rqm4': {'color': '#1f77b4', 'marker': 'o', 'label': 'RQM4', 'linestyle': '-'},
         'etdrk4': {'color': '#ff7f0e', 'marker': 's', 'label': 'ETDRK4', 'linestyle': '-'},
         'cn-adi2': {'color': '#2ca02c', 'marker': '^', 'label': 'CN-ADI2', 'linestyle': '-'},
-        'cn-adi4': {'color': '#d62728', 'marker': 'v', 'label': 'CN-ADI4', 'linestyle': '-'},
+        'cn-adi4-lr': {'color': '#d62728', 'marker': 'v', 'label': 'CN-ADI4', 'linestyle': '-'},
     }
 
     # Create figure with three subplots
@@ -95,7 +95,7 @@ def main():
     ax2.set_ylabel('|F - F$_{ref}$|', fontsize=12)
     ax2.set_title('(b) CN-ADI Convergence', fontsize=12)
 
-    for method in ['cn-adi2', 'cn-adi4']:
+    for method in ['cn-adi2', 'cn-adi4-lr']:
         if method in results:
             ns_vals = sorted(results[method].keys())
             # Filter to Ns <= 400
@@ -130,7 +130,7 @@ def main():
     ax3.set_ylabel('Time (s)', fontsize=12)
     ax3.set_title('(c) Execution Time', fontsize=12)
 
-    for method in ['rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4']:
+    for method in ['rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr']:
         if method in results:
             ns_vals = sorted(results[method].keys())
             times = [results[method][ns]['run_time_s'] for ns in ns_vals]

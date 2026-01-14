@@ -191,7 +191,7 @@ public :
      *                                        - "rqm4": 4th-order Richardson (pseudo-spectral)
      *                                        - "etdrk4": Exponential time differencing RK4 (pseudo-spectral)
      *                                        - "cn-adi2": 2nd-order Crank-Nicolson ADI (real-space)
-     *                                        - "cn-adi4": 4th-order CN-ADI (real-space)
+     *                                        - "cn-adi4-lr": 4th-order CN-ADI, Local Richardson (real-space)
      * @return Platform-specific PropagatorComputation solver
      *
      * @note Real-space methods (cn-adi*) support non-periodic boundary conditions

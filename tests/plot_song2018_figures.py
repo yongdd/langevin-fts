@@ -37,10 +37,10 @@ def plot_figure1(results_dir='.'):
     """Plot Figure 1: Convergence in Ns."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    methods = ['rqm4', 'etdrk4', 'cn-adi4', 'cn-adi2']
-    colors = {'etdrk4': 'C0', 'rqm4': 'C1', 'cn-adi2': 'C2', 'cn-adi4': 'C3'}
-    markers = {'etdrk4': 'o', 'rqm4': 's', 'cn-adi2': '^', 'cn-adi4': 'v'}
-    labels = {'etdrk4': 'ETDRK4', 'rqm4': 'RQM4', 'cn-adi2': 'CN-ADI2', 'cn-adi4': 'CN-ADI4'}
+    methods = ['rqm4', 'etdrk4', 'cn-adi4-lr', 'cn-adi2']
+    colors = {'etdrk4': 'C0', 'rqm4': 'C1', 'cn-adi2': 'C2', 'cn-adi4-lr': 'C3'}
+    markers = {'etdrk4': 'o', 'rqm4': 's', 'cn-adi2': '^', 'cn-adi4-lr': 'v'}
+    labels = {'etdrk4': 'ETDRK4', 'rqm4': 'RQM4', 'cn-adi2': 'CN-ADI2', 'cn-adi4-lr': 'CN-ADI4'}
 
     for method in methods:
         filepath = os.path.join(results_dir, f'benchmark_fig1_{method}_results.json')
@@ -107,10 +107,10 @@ def plot_figure2(results_dir='.'):
     """Plot Figure 2: Convergence in Nx."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    methods = ['rqm4', 'etdrk4', 'cn-adi4', 'cn-adi2']
-    colors = {'etdrk4': 'C0', 'rqm4': 'C1', 'cn-adi2': 'C2', 'cn-adi4': 'C3'}
-    markers = {'etdrk4': 'o', 'rqm4': 's', 'cn-adi2': '^', 'cn-adi4': 'v'}
-    labels = {'etdrk4': 'ETDRK4', 'rqm4': 'RQM4', 'cn-adi2': 'CN-ADI2', 'cn-adi4': 'CN-ADI4'}
+    methods = ['rqm4', 'etdrk4', 'cn-adi4-lr', 'cn-adi2']
+    colors = {'etdrk4': 'C0', 'rqm4': 'C1', 'cn-adi2': 'C2', 'cn-adi4-lr': 'C3'}
+    markers = {'etdrk4': 'o', 'rqm4': 's', 'cn-adi2': '^', 'cn-adi4-lr': 'v'}
+    labels = {'etdrk4': 'ETDRK4', 'rqm4': 'RQM4', 'cn-adi2': 'CN-ADI2', 'cn-adi4-lr': 'CN-ADI4'}
 
     chi_n_values = [40.0, 80.0]
 

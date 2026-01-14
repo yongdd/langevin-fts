@@ -17,7 +17,7 @@ Example usage:
         bond_lengths={"A": 1.0},
         bc=["reflecting", "reflecting"],
         chain_model="continuous",
-        numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4"
+        numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr"
         platform="cpu-mkl",
         reduce_memory_usage=False
     )
@@ -79,7 +79,7 @@ class PropagatorSolver:
         - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation
         - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
-        - "cn-adi4": Real-space with 4th-order CN-ADI (Richardson extrapolation)
+        - "cn-adi4-lr": Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
         - "sdc": Real-space with SDC (Spectral Deferred Correction, Gauss-Lobatto)
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
@@ -129,7 +129,7 @@ class PropagatorSolver:
     ...     bond_lengths={"A": 1.0},
     ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     chain_model="continuous",
-    ...     numerical_method="cn-adi4",
+    ...     numerical_method="cn-adi4-lr",
     ...     platform="cuda",
     ...     reduce_memory_usage=False
     ... )
@@ -137,7 +137,7 @@ class PropagatorSolver:
 
     # Map numerical methods to solver types
     _PSEUDO_METHODS = {"rqm4", "etdrk4"}
-    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4", "cn-adi4-g", "sdc"}
+    _REALSPACE_METHODS = {"cn-adi2", "cn-adi4-lr", "cn-adi4-gr", "sdc"}
 
     def __init__(
         self,
