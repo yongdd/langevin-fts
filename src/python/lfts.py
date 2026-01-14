@@ -182,13 +182,13 @@ class LFTS:
             Computational backend (auto-selected if not specified).
         - reduce_memory_usage : bool, optional
             Enable memory-saving mode.
-        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4', 'sdc'}, optional
+        - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr', 'sdc'}, optional
             Numerical algorithm for propagator computation (default: 'rqm4'):
 
             - 'rqm4': Pseudo-spectral with 4th-order Richardson extrapolation
             - 'etdrk4': Pseudo-spectral with ETDRK4 exponential integrator
             - 'cn-adi2': Real-space with 2nd-order Crank-Nicolson ADI
-            - 'cn-adi4': Real-space with 4th-order CN-ADI (Richardson extrapolation)
+            - 'cn-adi4-lr': Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
             - 'sdc': Real-space with SDC (Spectral Deferred Correction, Gauss-Lobatto)
 
         **Advanced Options:**

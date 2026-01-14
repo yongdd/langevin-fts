@@ -337,7 +337,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Song 2018 SCFT benchmark")
     parser.add_argument("test_type", choices=["fig1", "fig2"], help="Test type")
-    parser.add_argument("method", choices=["rqm4", "etdrk4", "cn-adi2", "cn-adi4"], help="Numerical method")
+    parser.add_argument("method", choices=["rqm4", "etdrk4", "cn-adi2", "cn-adi4-lr"], help="Numerical method")
     parser.add_argument("--Ns", type=int, default=None, help="Single Ns value for fig1")
     parser.add_argument("--Nx", type=int, default=None, help="Single Nx value for fig2")
     parser.add_argument("--chi_n", type=float, default=None, help="Single chi_n value for fig2")

@@ -107,11 +107,13 @@ CpuComputationGlobalRichardson::CpuComputationGlobalRichardson(
                               propagator_computation_optimizer->get_computation_block(key).n_repeated;
             int n_segment_left = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
-            // Store info for Richardson propagators (computed after advancing chains)
+            // Store info for full and half propagators (Q computed via Richardson extrapolation)
             partition_segment_info.push_back(std::make_tuple(
                 p,
-                propagator_richardson[key_left][n_segment_left],  // Richardson: q at end
-                propagator_richardson[key_right][0],               // Richardson: q_dagger at start
+                propagator_full[key_left][n_segment_left],   // q_full at end
+                propagator_full[key_right][0],                // q†_full at start
+                propagator_half[key_left][n_segment_left],   // q_half at end
+                propagator_half[key_right][0],                // q†_half at start
                 n_aggregated
             ));
             current_p++;
@@ -367,17 +369,24 @@ void CpuComputationGlobalRichardson::compute_propagators(
             }
         }
 
-        // Compute partition functions using Richardson propagators
+        // Compute partition functions using Richardson extrapolation: Q_rich = (4*Q_half - Q_full) / 3
         for (const auto& segment_info : partition_segment_info)
         {
             int p = std::get<0>(segment_info);
-            double* q_rich_left = std::get<1>(segment_info);
-            double* q_rich_right = std::get<2>(segment_info);
-            int n_aggregated = std::get<3>(segment_info);
+            double* q_full_left = std::get<1>(segment_info);
+            double* q_full_right = std::get<2>(segment_info);
+            double* q_half_left = std::get<3>(segment_info);
+            double* q_half_right = std::get<4>(segment_info);
+            int n_aggregated = std::get<5>(segment_info);
 
-            // Partition function from Richardson propagators
-            single_polymer_partitions[p] = cb->inner_product(q_rich_left, q_rich_right) /
-                                          (n_aggregated * cb->get_volume());
+            // Q_full and Q_half from respective propagators
+            double Q_full = cb->inner_product(q_full_left, q_full_right) /
+                           (n_aggregated * cb->get_volume());
+            double Q_half = cb->inner_product(q_half_left, q_half_right) /
+                           (n_aggregated * cb->get_volume());
+
+            // Richardson extrapolation of Q
+            single_polymer_partitions[p] = (4.0 * Q_half - Q_full) / 3.0;
         }
     }
     catch (std::exception& exc)
@@ -392,8 +401,8 @@ void CpuComputationGlobalRichardson::compute_concentrations()
     {
         const int M = cb->get_total_grid();
 
-        // Calculate segment concentrations using Richardson-extrapolated propagators
-        // φ = ds * Σ simpson_coeff[n] * q_rich_1[N_LEFT-n] * q_rich_2[n]
+        // Calculate segment concentrations using Richardson extrapolation
+        // Each chain (full/half) is normalized by its own Q before Richardson extrapolation
         #pragma omp parallel for num_threads(n_streams)
         for (size_t b = 0; b < phi_block.size(); b++)
         {
@@ -416,21 +425,32 @@ void CpuComputationGlobalRichardson::compute_concentrations()
                 continue;
             }
 
-            // Compute φ using pre-computed Richardson propagators
+            // Compute Q_full and Q_half for this block
+            double Q_full = cb->inner_product(
+                propagator_full[key_left][n_segment_left],
+                propagator_full[key_right][0]) / cb->get_volume();
+            double Q_half = cb->inner_product(
+                propagator_half[key_left][n_segment_left],
+                propagator_half[key_right][0]) / cb->get_volume();
+
+            // Base normalization factor (without Q)
+            Polymer& pc = molecules->get_polymer(p);
+            double norm = molecules->get_ds() * pc.get_volume_fraction() / pc.get_alpha() * n_repeated;
+
+            // Compute φ using Richardson extrapolation with proper normalization
+            // φ_full = (norm / Q_full) * integral_full
+            // φ_half = (norm / Q_half) * integral_half
+            // φ_rich = (4*φ_half - φ_full) / 3
             calculate_phi_one_block(
                 block->second,
-                propagator_richardson[key_left],
-                propagator_richardson[key_right],
+                propagator_full[key_left], propagator_full[key_right],
+                propagator_half[key_left], propagator_half[key_right],
                 n_segment_left,
-                n_segment_right
+                n_segment_right,
+                Q_full,
+                Q_half,
+                norm
             );
-
-            // Normalize by Richardson-extrapolated Q
-            Polymer& pc = molecules->get_polymer(p);
-            double norm = (molecules->get_ds() * pc.get_volume_fraction() / pc.get_alpha() * n_repeated) /
-                         single_polymer_partitions[p];
-            for (int i = 0; i < M; i++)
-                block->second[i] *= norm;
         }
 
         // Solvent concentrations not yet implemented
@@ -447,19 +467,41 @@ void CpuComputationGlobalRichardson::compute_concentrations()
 
 void CpuComputationGlobalRichardson::calculate_phi_one_block(
     double* phi,
-    double** q_1_richardson,
-    double** q_2_richardson,
+    double** q_1_full, double** q_2_full,
+    double** q_1_half, double** q_2_half,
     const int N_LEFT,
-    const int N_RIGHT)
+    const int N_RIGHT,
+    const double Q_full,
+    const double Q_half,
+    const double norm)
 {
     try
     {
         const int M = cb->get_total_grid();
         std::vector<double> simpson_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
-        // Compute φ using pre-computed Richardson-extrapolated propagators:
-        // φ = Σ simpson_coeff[n] * q_rich_1[N_LEFT-n] * q_rich_2[n]
+        // Normalization factors for each chain
+        double norm_full = norm / Q_full;
+        double norm_half = norm / Q_half;
 
+        // Compute φ_full using full-step propagators (normalized by Q_full):
+        // φ_full = (norm / Q_full) * Σ simpson_coeff[n] * q_full_1[N_LEFT-n] * q_full_2[n]
+        std::vector<double> phi_full(M, 0.0);
+        for (int n = 0; n <= N_RIGHT; n++)
+        {
+            int idx_1 = N_LEFT - n;
+            int idx_2 = n;
+
+            for (int i = 0; i < M; i++)
+            {
+                phi_full[i] += simpson_coeff[n] * q_1_full[idx_1][i] * q_2_full[idx_2][i];
+            }
+        }
+        for (int i = 0; i < M; i++)
+            phi_full[i] *= norm_full;
+
+        // Compute φ_half using half-step propagators (normalized by Q_half):
+        // φ_half = (norm / Q_half) * Σ simpson_coeff[n] * q_half_1[N_LEFT-n] * q_half_2[n]
         for (int i = 0; i < M; i++)
             phi[i] = 0.0;
 
@@ -470,8 +512,16 @@ void CpuComputationGlobalRichardson::calculate_phi_one_block(
 
             for (int i = 0; i < M; i++)
             {
-                phi[i] += simpson_coeff[n] * q_1_richardson[idx_1][i] * q_2_richardson[idx_2][i];
+                phi[i] += simpson_coeff[n] * q_1_half[idx_1][i] * q_2_half[idx_2][i];
             }
+        }
+        for (int i = 0; i < M; i++)
+            phi[i] *= norm_half;
+
+        // Apply Richardson extrapolation: φ_rich = (4*φ_half - φ_full) / 3
+        for (int i = 0; i < M; i++)
+        {
+            phi[i] = (4.0 * phi[i] - phi_full[i]) / 3.0;
         }
     }
     catch (std::exception& exc)

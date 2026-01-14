@@ -69,7 +69,7 @@ from polymerfts import PropagatorSolver
 solver = PropagatorSolver(..., numerical_method="cn-adi2")
 
 # CN-ADI4 (more accurate, but may be unstable near absorbing boundaries)
-solver = PropagatorSolver(..., numerical_method="cn-adi4")
+solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
 ```
 
 **Note**: CN-ADI4 may become unstable when initial conditions are close to absorbing boundaries (see Stability Warning below).
@@ -271,7 +271,7 @@ params = {
            "reflecting", "reflecting",    # y-direction (low, high)
            "absorbing", "absorbing"],     # z-direction (low, high)
 
-    # Select real-space method: "cn-adi2" or "cn-adi4"
+    # Select real-space method: "cn-adi2" or "cn-adi4-lr"
     "numerical_method": "cn-adi2",
 
     # ... other parameters
@@ -310,7 +310,7 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0},
     bc=["absorbing", "absorbing"],  # Absorbing on both sides
     chain_model="continuous",
-    numerical_method="cn-adi2",     # or "cn-adi4" for 4th-order accuracy
+    numerical_method="cn-adi2",     # or "cn-adi4-lr" for 4th-order accuracy
     platform="cpu-mkl",
     reduce_memory_usage=False
 )

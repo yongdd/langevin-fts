@@ -1,0 +1,13 @@
+{
+  "method": "cn-adi2",
+  "ds": 0.0125,
+  "N": 80,
+  "chi_n": 20.0,
+  "f": 0.5,
+  "nx": 32,
+  "lx": 3.2,
+  "free_energy": -0.7042925736460219,
+  "error_level": 7.94114254567783e-11,
+  "iterations": 147,
+  "converged": true
+}

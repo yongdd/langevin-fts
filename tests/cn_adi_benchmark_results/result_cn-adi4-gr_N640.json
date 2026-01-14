@@ -1,0 +1,13 @@
+{
+  "method": "cn-adi4-gr",
+  "ds": 0.0015625,
+  "N": 640,
+  "chi_n": 20.0,
+  "f": 0.5,
+  "nx": 32,
+  "lx": 3.2,
+  "free_energy": -0.7046755630974353,
+  "error_level": 8.135819624311612e-11,
+  "iterations": 147,
+  "converged": true
+}

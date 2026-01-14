@@ -1,0 +1,13 @@
+{
+  "method": "cn-adi4-lr",
+  "ds": 0.003125,
+  "N": 320,
+  "chi_n": 20.0,
+  "f": 0.5,
+  "nx": 32,
+  "lx": 3.2,
+  "free_energy": -0.7046755643378222,
+  "error_level": 8.05911510424548e-11,
+  "iterations": 147,
+  "converged": true
+}

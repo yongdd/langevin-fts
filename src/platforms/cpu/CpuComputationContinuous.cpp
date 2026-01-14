@@ -55,7 +55,7 @@
  * @param molecules                      Polymer/solvent species definitions
  * @param propagator_computation_optimizer Optimized computation schedule
  * @param method                         "pseudospectral" or "realspace"
- * @param numerical_method               Numerical algorithm (e.g., "rqm4", "etdrk4", "cn-adi2", "cn-adi4")
+ * @param numerical_method               Numerical algorithm (e.g., "rqm4", "etdrk4", "cn-adi2", "cn-adi4-lr")
  */
 template <typename T>
 CpuComputationContinuous<T>::CpuComputationContinuous(
@@ -96,8 +96,8 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
                 }
                 else
                 {
-                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
-                    bool use_4th_order = (numerical_method == "cn-adi4");
+                    // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
+                    bool use_4th_order = (numerical_method == "cn-adi4-lr");
                     this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
                 }
             }

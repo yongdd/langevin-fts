@@ -27,7 +27,7 @@
  * 3. Intermediate propagators are used for φ integration where errors average out
  *
  * @see CpuComputationGlobalRichardson for the computation layer
- * @see CpuSolverCNADI for per-step Richardson (cn-adi4)
+ * @see CpuSolverCNADI for per-step Richardson (cn-adi4-lr)
  */
 
 #ifndef CPU_SOLVER_GLOBAL_RICHARDSON_BASE_H_

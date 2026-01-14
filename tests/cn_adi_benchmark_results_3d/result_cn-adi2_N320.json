@@ -1,0 +1,15 @@
+{
+  "method": "cn-adi2",
+  "ds": 0.003125,
+  "N": 320,
+  "chi_n": 20.0,
+  "f": 0.45,
+  "nx": 32,
+  "lx": 3.8,
+  "dim": 3,
+  "phase": "gyroid",
+  "free_energy": -0.9139042233712424,
+  "error_level": 6.311961388027652e-09,
+  "iterations": 279,
+  "converged": true
+}

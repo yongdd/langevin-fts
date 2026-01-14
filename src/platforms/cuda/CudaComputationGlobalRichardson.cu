@@ -117,11 +117,13 @@ CudaComputationGlobalRichardson::CudaComputationGlobalRichardson(
                               propagator_computation_optimizer->get_computation_block(key).n_repeated;
             int n_segment_left = propagator_computation_optimizer->get_computation_block(key).n_segment_left;
 
-            // Store info for Richardson propagators
+            // Store info for full and half propagators (Q computed via Richardson extrapolation)
             partition_segment_info.push_back(std::make_tuple(
                 p,
-                d_propagator_richardson[key_left][n_segment_left],
-                d_propagator_richardson[key_right][0],
+                d_propagator_full[key_left][n_segment_left],   // d_q_full at end
+                d_propagator_full[key_right][0],                // d_q†_full at start
+                d_propagator_half[key_left][n_segment_left],   // d_q_half at end
+                d_propagator_half[key_right][0],                // d_q†_half at start
                 n_aggregated
             ));
             current_p++;
@@ -156,6 +158,7 @@ CudaComputationGlobalRichardson::CudaComputationGlobalRichardson(
             d_q_mask = nullptr;
 
         gpu_error_check(cudaMalloc((void**)&d_phi, sizeof(double)*M));
+        gpu_error_check(cudaMalloc((void**)&d_phi_full, sizeof(double)*M));
 
         // Allocate per-stream temporary buffers for half-step advancement
         for (int i = 0; i < n_streams; i++)
@@ -210,6 +213,7 @@ CudaComputationGlobalRichardson::~CudaComputationGlobalRichardson()
     if (d_q_mask != nullptr)
         cudaFree(d_q_mask);
     cudaFree(d_phi);
+    cudaFree(d_phi_full);
 
     // Free per-stream temporary buffers
     for (int i = 0; i < n_streams; i++)
@@ -424,17 +428,24 @@ void CudaComputationGlobalRichardson::compute_propagators(
         }
         gpu_error_check(cudaDeviceSynchronize());
 
-        // Compute partition functions using Richardson propagators
+        // Compute partition functions using Richardson extrapolation: Q_rich = (4*Q_half - Q_full) / 3
         for (const auto& segment_info : partition_segment_info)
         {
             int p = std::get<0>(segment_info);
-            double* d_q_rich_left = std::get<1>(segment_info);
-            double* d_q_rich_right = std::get<2>(segment_info);
-            int n_aggregated = std::get<3>(segment_info);
+            double* d_q_full_left = std::get<1>(segment_info);
+            double* d_q_full_right = std::get<2>(segment_info);
+            double* d_q_half_left = std::get<3>(segment_info);
+            double* d_q_half_right = std::get<4>(segment_info);
+            int n_aggregated = std::get<5>(segment_info);
 
-            single_polymer_partitions[p] =
-                dynamic_cast<CudaComputationBox<double>*>(cb)->inner_product_device(
-                    d_q_rich_left, d_q_rich_right) / (n_aggregated * cb->get_volume());
+            // Q_full and Q_half from respective propagators
+            double Q_full = dynamic_cast<CudaComputationBox<double>*>(cb)->inner_product_device(
+                d_q_full_left, d_q_full_right) / (n_aggregated * cb->get_volume());
+            double Q_half = dynamic_cast<CudaComputationBox<double>*>(cb)->inner_product_device(
+                d_q_half_left, d_q_half_right) / (n_aggregated * cb->get_volume());
+
+            // Richardson extrapolation of Q
+            single_polymer_partitions[p] = (4.0 * Q_half - Q_full) / 3.0;
         }
     }
     catch (std::exception& exc)
@@ -447,11 +458,10 @@ void CudaComputationGlobalRichardson::compute_concentrations()
 {
     try
     {
-        const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-        const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = cb->get_total_grid();
 
-        // Calculate segment concentrations using Richardson-extrapolated propagators
+        // Calculate segment concentrations using Richardson extrapolation
+        // Each chain (full/half) is normalized by its own Q before Richardson extrapolation
         for (const auto& d_block : d_phi_block)
         {
             const auto& key = d_block.first;
@@ -469,21 +479,32 @@ void CudaComputationGlobalRichardson::compute_concentrations()
                 continue;
             }
 
-            // Compute φ using pre-computed Richardson propagators
+            // Compute Q_full and Q_half for this block
+            double Q_full = dynamic_cast<CudaComputationBox<double>*>(cb)->inner_product_device(
+                d_propagator_full[key_left][n_segment_left],
+                d_propagator_full[key_right][0]) / cb->get_volume();
+            double Q_half = dynamic_cast<CudaComputationBox<double>*>(cb)->inner_product_device(
+                d_propagator_half[key_left][n_segment_left],
+                d_propagator_half[key_right][0]) / cb->get_volume();
+
+            // Base normalization factor (without Q)
+            Polymer& pc = molecules->get_polymer(p);
+            double norm = molecules->get_ds() * pc.get_volume_fraction() / pc.get_alpha() * n_repeated;
+
+            // Compute φ using Richardson extrapolation with proper normalization
+            // φ_full = (norm / Q_full) * integral_full
+            // φ_half = (norm / Q_half) * integral_half
+            // φ_rich = (4*φ_half - φ_full) / 3
             calculate_phi_one_block(
                 d_block.second,
-                d_propagator_richardson[key_left],
-                d_propagator_richardson[key_right],
+                d_propagator_full[key_left], d_propagator_full[key_right],
+                d_propagator_half[key_left], d_propagator_half[key_right],
                 n_segment_left,
-                n_segment_right
+                n_segment_right,
+                Q_full,
+                Q_half,
+                norm
             );
-
-            // Normalize by Richardson-extrapolated Q
-            Polymer& pc = molecules->get_polymer(p);
-            double norm = (molecules->get_ds() * pc.get_volume_fraction() / pc.get_alpha() * n_repeated) /
-                         single_polymer_partitions[p];
-            ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
-            gpu_error_check(cudaPeekAtLastError());
         }
         gpu_error_check(cudaDeviceSynchronize());
 
@@ -501,10 +522,13 @@ void CudaComputationGlobalRichardson::compute_concentrations()
 
 void CudaComputationGlobalRichardson::calculate_phi_one_block(
     double* d_phi,
-    double** d_q_1_richardson,
-    double** d_q_2_richardson,
+    double** d_q_1_full, double** d_q_2_full,
+    double** d_q_1_half, double** d_q_2_half,
     const int N_LEFT,
-    const int N_RIGHT)
+    const int N_RIGHT,
+    const double Q_full,
+    const double Q_half,
+    const double norm)
 {
     try
     {
@@ -514,14 +538,34 @@ void CudaComputationGlobalRichardson::calculate_phi_one_block(
 
         std::vector<double> simpson_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
-        // Compute φ using pre-computed Richardson-extrapolated propagators:
-        // φ = Σ simpson_coeff[n] * q_rich_1[N_LEFT-n] * q_rich_2[n]
+        // Normalization factors for each chain
+        double norm_full = norm / Q_full;
+        double norm_half = norm / Q_half;
 
-        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1_richardson[N_LEFT], d_q_2_richardson[0], simpson_coeff[0], M);
+        // Compute φ_full using full-step propagators (normalized by Q_full):
+        // φ_full = (norm / Q_full) * Σ simpson_coeff[n] * q_full_1[N_LEFT-n] * q_full_2[n]
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi_full, d_q_1_full[N_LEFT], d_q_2_full[0], simpson_coeff[0], M);
         for (int n = 1; n <= N_RIGHT; n++)
         {
-            ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1_richardson[N_LEFT - n], d_q_2_richardson[n], simpson_coeff[n], M);
+            ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi_full, d_q_1_full[N_LEFT - n], d_q_2_full[n], simpson_coeff[n], M);
         }
+        // Apply normalization: φ_full *= norm_full
+        ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi_full, norm_full, d_phi_full, 0.0, d_phi_full, M);
+
+        // Compute φ_half using half-step propagators (normalized by Q_half):
+        // φ_half = (norm / Q_half) * Σ simpson_coeff[n] * q_half_1[N_LEFT-n] * q_half_2[n]
+        ker_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1_half[N_LEFT], d_q_2_half[0], simpson_coeff[0], M);
+        for (int n = 1; n <= N_RIGHT; n++)
+        {
+            ker_add_multi<<<N_BLOCKS, N_THREADS>>>(d_phi, d_q_1_half[N_LEFT - n], d_q_2_half[n], simpson_coeff[n], M);
+        }
+        // Apply normalization: φ_half *= norm_half
+        ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, norm_half, d_phi, 0.0, d_phi, M);
+
+        // Apply Richardson extrapolation: φ_rich = (4*φ_half - φ_full) / 3
+        // d_phi = (4*d_phi - d_phi_full) / 3 = (4/3)*d_phi - (1/3)*d_phi_full
+        ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_phi, 4.0/3.0, d_phi, -1.0/3.0, d_phi_full, M);
+
         gpu_error_check(cudaPeekAtLastError());
     }
     catch (std::exception& exc)

@@ -26,10 +26,16 @@
  * - M: Number of Gauss-Lobatto nodes (default: 3)
  * - K: Number of SDC correction iterations (default: 2)
  *
+ * **Order of Accuracy:**
+ *
+ * - 1D: High order (up to 2K+1 with K corrections) - implicit solves are exact
+ * - 2D/3D: Limited to 2nd-order due to O(ds²) ADI splitting error
+ *
  * **Limitations:**
  *
- * ADI implicit solves introduce O(ds²) splitting error that does not decrease
- * with more SDC corrections. This limits achievable accuracy in 2D/3D.
+ * ADI splitting solves (I - dt*Dx)(I - dt*Dy)q = RHS instead of (I - dt*(Dx+Dy))q = RHS.
+ * The O(dt²*Dx*Dy) difference is an irreducible splitting error that persists
+ * regardless of the number of SDC corrections. This limits 2D/3D to 2nd-order accuracy.
  *
  * @see CudaSolver for the abstract interface
  * @see CudaSolverCNADI for the underlying ADI solver

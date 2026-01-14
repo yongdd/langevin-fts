@@ -100,14 +100,14 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         std::string solver_type;
         if (numerical_method == "rqm4" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
-        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4" || numerical_method == "sdc")
+        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr" || numerical_method == "sdc")
             solver_type = "realspace";
-        else if (numerical_method == "cn-adi4-g")
+        else if (numerical_method == "cn-adi4-gr")
             solver_type = "realspace-global-richardson";
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
-        // Global Richardson at quadrature level (cn-adi4-g)
+        // Global Richardson at quadrature level (cn-adi4-gr)
         if (solver_type == "realspace-global-richardson")
         {
             if (chain_model == "discrete")

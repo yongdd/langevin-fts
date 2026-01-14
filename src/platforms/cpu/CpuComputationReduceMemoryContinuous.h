@@ -207,7 +207,7 @@ public:
      * @param method                          Solver method ("pseudospectral" or "realspace")
      * @param numerical_method                Numerical algorithm:
      *                                        - For pseudospectral: "rqm4" or "etdrk4"
-     *                                        - For realspace: "cn-adi2" or "cn-adi4"
+     *                                        - For realspace: "cn-adi2" or "cn-adi4-lr"
      */
     CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "");
 

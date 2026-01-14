@@ -184,7 +184,7 @@ def run_phase_benchmark(phase_name, nx, lx, f, chi_n, w_A, w_B,
     # Real-space methods
     print(f"\n--- Real-Space Methods ---")
 
-    for method in ["cn-adi2", "cn-adi4"]:
+    for method in ["cn-adi2", "cn-adi4-lr"]:
         print(f"\n  Testing {method.upper()}...", end=" ", flush=True)
         try:
             result = benchmark_method(
@@ -218,7 +218,7 @@ def print_comparison_table(phase_name, results):
         'rqm4': ('RQM4', 'Pseudo-Spectral'),
         'etdrk4': ('ETDRK4', 'Pseudo-Spectral'),
         'cn-adi2': ('CN-ADI2', 'Real-Space'),
-        'cn-adi4': ('CN-ADI4', 'Real-Space'),
+        'cn-adi4-lr': ('CN-ADI4', 'Real-Space'),
     }
 
     for method, (name, solver) in method_info.items():
