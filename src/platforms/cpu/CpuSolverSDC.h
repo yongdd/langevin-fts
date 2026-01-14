@@ -98,7 +98,8 @@ struct SparseMatrixCSR
  * - M: Number of Gauss-Lobatto nodes (default: 3)
  * - K: Number of correction iterations (default: 2)
  *
- * For M=3, K=2: Theoretical 4th order, but limited by ADI splitting error.
+ * For M=4, K=5: 6th order accuracy (default configuration).
+ * For M=3, K=2: 3rd order accuracy.
  */
 class CpuSolverSDC : public CpuSolver<double>
 {
@@ -263,10 +264,16 @@ public:
      *
      * @param cb Computation box with boundary conditions
      * @param molecules Molecules container with monomer types
-     * @param M Number of Gauss-Lobatto nodes (default: 3)
-     * @param K Number of SDC correction iterations (default: 2)
+     * @param M Number of Gauss-Lobatto nodes (default: 4 for 6th order quadrature)
+     * @param K Number of SDC correction iterations (default: 5 for 6th order accuracy)
+     *
+     * **Order of Accuracy:**
+     * The SDC order is min(K+1, 2M-2):
+     * - M=3, K=2: order 3
+     * - M=4, K=5: order 6 (default)
+     * - M=5, K=7: order 8
      */
-    CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int M = 3, int K = 2);
+    CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int M = 4, int K = 5);
 
     /**
      * @brief Destructor. Frees allocated arrays.

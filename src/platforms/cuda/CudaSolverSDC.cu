@@ -89,30 +89,34 @@ __global__ void compute_F_kernel_3d(
     int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        int i = idx / (nx_J * nx_K);
+        int j = (idx / nx_K) % nx_J;
+        int k = idx % nx_K;
 
-    int i = idx / (nx_J * nx_K);
-    int j = (idx / nx_K) % nx_J;
-    int k = idx % nx_K;
+        int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
+        int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
+        int jm = (bc_yl == BoundaryCondition::PERIODIC) ? (nx_J + j - 1) % nx_J : sdc_max_of_two(0, j - 1);
+        int jp = (bc_yh == BoundaryCondition::PERIODIC) ? (j + 1) % nx_J : sdc_min_of_two(nx_J - 1, j + 1);
+        int km = (bc_zl == BoundaryCondition::PERIODIC) ? (nx_K + k - 1) % nx_K : sdc_max_of_two(0, k - 1);
+        int kp = (bc_zh == BoundaryCondition::PERIODIC) ? (k + 1) % nx_K : sdc_min_of_two(nx_K - 1, k + 1);
 
-    int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
-    int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
-    int jm = (bc_yl == BoundaryCondition::PERIODIC) ? (nx_J + j - 1) % nx_J : sdc_max_of_two(0, j - 1);
-    int jp = (bc_yh == BoundaryCondition::PERIODIC) ? (j + 1) % nx_J : sdc_min_of_two(nx_J - 1, j + 1);
-    int km = (bc_zl == BoundaryCondition::PERIODIC) ? (nx_K + k - 1) % nx_K : sdc_max_of_two(0, k - 1);
-    int kp = (bc_zh == BoundaryCondition::PERIODIC) ? (k + 1) % nx_K : sdc_min_of_two(nx_K - 1, k + 1);
+        int idx_im = im * nx_J * nx_K + j * nx_K + k;
+        int idx_ip = ip * nx_J * nx_K + j * nx_K + k;
+        int idx_jm = i * nx_J * nx_K + jm * nx_K + k;
+        int idx_jp = i * nx_J * nx_K + jp * nx_K + k;
+        int idx_km = i * nx_J * nx_K + j * nx_K + km;
+        int idx_kp = i * nx_J * nx_K + j * nx_K + kp;
 
-    int idx_im = im * nx_J * nx_K + j * nx_K + k;
-    int idx_ip = ip * nx_J * nx_K + j * nx_K + k;
-    int idx_jm = i * nx_J * nx_K + jm * nx_K + k;
-    int idx_jp = i * nx_J * nx_K + jp * nx_K + k;
-    int idx_km = i * nx_J * nx_K + j * nx_K + km;
-    int idx_kp = i * nx_J * nx_K + j * nx_K + kp;
+        double Lx = alpha_x * (d_q[idx_im] + d_q[idx_ip] - 2.0 * d_q[idx]);
+        double Ly = alpha_y * (d_q[idx_jm] + d_q[idx_jp] - 2.0 * d_q[idx]);
+        double Lz = alpha_z * (d_q[idx_km] + d_q[idx_kp] - 2.0 * d_q[idx]);
+        d_F[idx] = Lx + Ly + Lz - d_w[idx] * d_q[idx];
 
-    double Lx = alpha_x * (d_q[idx_im] + d_q[idx_ip] - 2.0 * d_q[idx]);
-    double Ly = alpha_y * (d_q[idx_jm] + d_q[idx_jp] - 2.0 * d_q[idx]);
-    double Lz = alpha_z * (d_q[idx_km] + d_q[idx_kp] - 2.0 * d_q[idx]);
-    d_F[idx] = Lx + Ly + Lz - d_w[idx] * d_q[idx];
+        idx += stride;
+    }
 }
 
 __global__ void compute_F_kernel_2d(
@@ -124,24 +128,28 @@ __global__ void compute_F_kernel_2d(
     int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        int i = idx / nx_J;
+        int j = idx % nx_J;
 
-    int i = idx / nx_J;
-    int j = idx % nx_J;
+        int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
+        int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
+        int jm = (bc_yl == BoundaryCondition::PERIODIC) ? (nx_J + j - 1) % nx_J : sdc_max_of_two(0, j - 1);
+        int jp = (bc_yh == BoundaryCondition::PERIODIC) ? (j + 1) % nx_J : sdc_min_of_two(nx_J - 1, j + 1);
 
-    int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
-    int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
-    int jm = (bc_yl == BoundaryCondition::PERIODIC) ? (nx_J + j - 1) % nx_J : sdc_max_of_two(0, j - 1);
-    int jp = (bc_yh == BoundaryCondition::PERIODIC) ? (j + 1) % nx_J : sdc_min_of_two(nx_J - 1, j + 1);
+        int idx_im = im * nx_J + j;
+        int idx_ip = ip * nx_J + j;
+        int idx_jm = i * nx_J + jm;
+        int idx_jp = i * nx_J + jp;
 
-    int idx_im = im * nx_J + j;
-    int idx_ip = ip * nx_J + j;
-    int idx_jm = i * nx_J + jm;
-    int idx_jp = i * nx_J + jp;
+        double Lx = alpha_x * (d_q[idx_im] + d_q[idx_ip] - 2.0 * d_q[idx]);
+        double Ly = alpha_y * (d_q[idx_jm] + d_q[idx_jp] - 2.0 * d_q[idx]);
+        d_F[idx] = Lx + Ly - d_w[idx] * d_q[idx];
 
-    double Lx = alpha_x * (d_q[idx_im] + d_q[idx_ip] - 2.0 * d_q[idx]);
-    double Ly = alpha_y * (d_q[idx_jm] + d_q[idx_jp] - 2.0 * d_q[idx]);
-    d_F[idx] = Lx + Ly - d_w[idx] * d_q[idx];
+        idx += stride;
+    }
 }
 
 __global__ void compute_F_kernel_1d(
@@ -151,28 +159,56 @@ __global__ void compute_F_kernel_1d(
     int n_grid)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if(i >= n_grid) return;
+    int stride = blockDim.x * gridDim.x;
+    while(i < n_grid)
+    {
+        int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
+        int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
 
-    int im = (bc_xl == BoundaryCondition::PERIODIC) ? (nx_I + i - 1) % nx_I : sdc_max_of_two(0, i - 1);
-    int ip = (bc_xh == BoundaryCondition::PERIODIC) ? (i + 1) % nx_I : sdc_min_of_two(nx_I - 1, i + 1);
+        double Lx = alpha_x * (d_q[im] + d_q[ip] - 2.0 * d_q[i]);
+        d_F[i] = Lx - d_w[i] * d_q[i];
 
-    double Lx = alpha_x * (d_q[im] + d_q[ip] - 2.0 * d_q[i]);
-    d_F[i] = Lx - d_w[i] * d_q[i];
+        i += stride;
+    }
 }
 
 __global__ void apply_exp_dw_kernel(
     double* d_out, const double* d_in, const double* d_exp_dw, int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
-    d_out[idx] = d_exp_dw[idx] * d_in[idx];
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_out[idx] = d_exp_dw[idx] * d_in[idx];
+        idx += stride;
+    }
 }
 
 __global__ void copy_array_kernel(double* d_out, const double* d_in, int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
-    d_out[idx] = d_in[idx];
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_out[idx] = d_in[idx];
+        idx += stride;
+    }
+}
+
+// Fused kernel: copy two arrays in a single pass (reduces kernel launch overhead)
+__global__ void copy_two_arrays_kernel(
+    double* d_out1, const double* d_in1,
+    double* d_out2, const double* d_in2,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_out1[idx] = d_in1[idx];
+        d_out2[idx] = d_in2[idx];
+        idx += stride;
+    }
 }
 
 // PCG kernels for sparse matrix solve
@@ -258,6 +294,252 @@ __global__ void pcg_update_p_kernel(
     d_p[idx] = d_z[idx] + beta * d_p[idx];
 }
 
+// ============================================================
+// Device-side scalar computation kernels (avoid GPU-CPU sync)
+// Scalar layout: [0]=alpha, [1]=beta, [2]=rz_old, [3]=rz_new, [4]=pAp, [5]=r_norm_sq
+// ============================================================
+
+// Compute alpha = rz_old / pAp on GPU
+__global__ void pcg_compute_alpha_kernel(double* __restrict__ d_scalars)
+{
+    if(threadIdx.x == 0 && blockIdx.x == 0)
+        d_scalars[0] = d_scalars[2] / d_scalars[4];
+}
+
+// Compute beta = rz_new / rz_old, then update rz_old = rz_new
+__global__ void pcg_compute_beta_kernel(double* __restrict__ d_scalars)
+{
+    if(threadIdx.x == 0 && blockIdx.x == 0)
+    {
+        d_scalars[1] = d_scalars[3] / d_scalars[2];
+        d_scalars[2] = d_scalars[3];
+    }
+}
+
+// Update x and r using alpha from device memory
+__global__ void pcg_update_xr_dev_kernel(
+    double* __restrict__ d_x,
+    double* __restrict__ d_r,
+    const double* __restrict__ d_p,
+    const double* __restrict__ d_Ap,
+    const double* __restrict__ d_scalars,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+    double alpha = d_scalars[0];
+    d_x[idx] += alpha * d_p[idx];
+    d_r[idx] -= alpha * d_Ap[idx];
+}
+
+// Update p using beta from device memory
+__global__ void pcg_update_p_dev_kernel(
+    double* __restrict__ d_p,
+    const double* __restrict__ d_z,
+    const double* __restrict__ d_scalars,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+    d_p[idx] = d_z[idx] + d_scalars[1] * d_p[idx];
+}
+
+// ============================================================
+// Fused kernels for PCG optimization
+// These kernels combine dot product reduction with scalar computation
+// to reduce kernel launch overhead
+// ============================================================
+
+// Fused kernel: compute (p, Ap) and then alpha = rz_old / pAp
+// Uses two-phase reduction: first reduce within blocks, then final block computes alpha
+__global__ void pcg_fused_dot_alpha_kernel(
+    const double* __restrict__ d_p,
+    const double* __restrict__ d_Ap,
+    double* __restrict__ d_scalars,  // scalars[0]=alpha, scalars[2]=rz_old, scalars[4]=pAp
+    double* __restrict__ d_partial,  // partial sums from each block
+    int n,
+    int n_blocks_total)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load and multiply
+    double val = (idx < n) ? d_p[idx] * d_Ap[idx] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce within block
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // Write partial sum
+    if(tid == 0)
+        d_partial[blockIdx.x] = sdata[0];
+}
+
+// Second phase: reduce partial sums and compute alpha
+__global__ void pcg_fused_reduce_alpha_kernel(
+    double* __restrict__ d_scalars,
+    const double* __restrict__ d_partial,
+    int n_blocks)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+
+    // Load partial sums
+    double val = (tid < n_blocks) ? d_partial[tid] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // Thread 0 computes alpha = rz_old / pAp
+    if(tid == 0)
+    {
+        d_scalars[4] = sdata[0];  // pAp
+        d_scalars[0] = d_scalars[2] / sdata[0];  // alpha = rz_old / pAp
+    }
+}
+
+// Fused kernel: compute (r, z) and then beta = rz_new / rz_old
+__global__ void pcg_fused_dot_beta_kernel(
+    const double* __restrict__ d_r,
+    const double* __restrict__ d_z,
+    double* __restrict__ d_scalars,  // scalars[1]=beta, scalars[2]=rz_old, scalars[3]=rz_new
+    double* __restrict__ d_partial,
+    int n,
+    int n_blocks_total)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load and multiply
+    double val = (idx < n) ? d_r[idx] * d_z[idx] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce within block
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // Write partial sum
+    if(tid == 0)
+        d_partial[blockIdx.x] = sdata[0];
+}
+
+// Second phase: reduce partial sums and compute beta
+__global__ void pcg_fused_reduce_beta_kernel(
+    double* __restrict__ d_scalars,
+    const double* __restrict__ d_partial,
+    int n_blocks)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+
+    // Load partial sums
+    double val = (tid < n_blocks) ? d_partial[tid] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // Thread 0 computes beta = rz_new / rz_old, then updates rz_old
+    if(tid == 0)
+    {
+        double rz_new = sdata[0];
+        d_scalars[3] = rz_new;  // rz_new
+        d_scalars[1] = rz_new / d_scalars[2];  // beta = rz_new / rz_old
+        d_scalars[2] = rz_new;  // rz_old = rz_new for next iteration
+    }
+}
+
+// Second phase for initialization: only compute rz_old (no beta computation)
+__global__ void pcg_fused_reduce_rz_init_kernel(
+    double* __restrict__ d_scalars,
+    const double* __restrict__ d_partial,
+    int n_blocks)
+{
+    extern __shared__ double sdata[];
+
+    int tid = threadIdx.x;
+
+    // Load partial sums
+    double val = (tid < n_blocks) ? d_partial[tid] : 0.0;
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduce
+    for(int s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if(tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // Thread 0 stores rz_old only (no beta computation)
+    if(tid == 0)
+    {
+        d_scalars[2] = sdata[0];  // rz_old
+    }
+}
+
+// Fused kernel: update x, r, and apply preconditioner z in one pass
+// Combines: x += alpha*p, r -= alpha*Ap, z = M^{-1}*r
+// This reduces memory bandwidth by avoiding separate read/write of r
+__global__ void pcg_fused_update_xrz_kernel(
+    double* __restrict__ d_x,
+    double* __restrict__ d_r,
+    double* __restrict__ d_z,
+    const double* __restrict__ d_p,
+    const double* __restrict__ d_Ap,
+    const double* __restrict__ d_diag_inv,
+    const double* __restrict__ d_scalars,  // scalars[0]=alpha
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    double alpha = d_scalars[0];
+    d_x[idx] += alpha * d_p[idx];
+    double r_new = d_r[idx] - alpha * d_Ap[idx];
+    d_r[idx] = r_new;
+    d_z[idx] = r_new * d_diag_inv[idx];
+}
+
+// ============================================================
+// End fused kernels
+// ============================================================
+
+// ============================================================
+// End device-side scalar kernels
+// ============================================================
+
 // Reduction kernels for dot product (using shared memory)
 __global__ void dot_product_kernel(
     const double* __restrict__ d_a,
@@ -327,12 +609,16 @@ __global__ void sdc_rhs_kernel(
     int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
-    // For IMEX-SDC: rhs = X[m] + ∫F dt - dtau * D∇²q_old[m+1]
-    // Since F = D∇²q - wq, we have D∇²q = F + wq
-    // So: rhs = X[m] + ∫F dt - dtau * (F_old[m+1] + w * X_old[m+1])
-    double diff_term = d_F_mp1[idx] + d_w[idx] * d_X_old_mp1[idx];
-    d_rhs[idx] = d_X_m[idx] + d_integral[idx] - dtau * diff_term;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        // For IMEX-SDC: rhs = X[m] + ∫F dt - dtau * D∇²q_old[m+1]
+        // Since F = D∇²q - wq, we have D∇²q = F + wq
+        // So: rhs = X[m] + ∫F dt - dtau * (F_old[m+1] + w * X_old[m+1])
+        double diff_term = d_F_mp1[idx] + d_w[idx] * d_X_old_mp1[idx];
+        d_rhs[idx] = d_X_m[idx] + d_integral[idx] - dtau * diff_term;
+        idx += stride;
+    }
 }
 
 __global__ void accumulate_integral_kernel(
@@ -342,15 +628,23 @@ __global__ void accumulate_integral_kernel(
     int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
-    d_integral[idx] += weight * d_F[idx];
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_integral[idx] += weight * d_F[idx];
+        idx += stride;
+    }
 }
 
 __global__ void apply_mask_kernel(double* d_q, const double* d_mask, int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if(idx >= n_grid) return;
-    d_q[idx] *= d_mask[idx];
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_q[idx] *= d_mask[idx];
+        idx += stride;
+    }
 }
 
 // Constructor
@@ -552,6 +846,9 @@ CudaSolverSDC::CudaSolverSDC(
                 }
             }
 
+            // Calculate number of blocks for PCG
+            pcg_n_blocks = (n_grid + PCG_BLOCK_SIZE - 1) / PCG_BLOCK_SIZE;
+
             // Allocate PCG workspace for each stream
             for(int s = 0; s < n_streams; s++)
             {
@@ -559,6 +856,10 @@ CudaSolverSDC::CudaSolverSDC(
                 gpu_error_check(cudaMalloc((void**)&d_pcg_z[s], sizeof(double) * n_grid));
                 gpu_error_check(cudaMalloc((void**)&d_pcg_p[s], sizeof(double) * n_grid));
                 gpu_error_check(cudaMalloc((void**)&d_pcg_Ap[s], sizeof(double) * n_grid));
+                // Device-side scalars: [alpha, beta, rz_old, rz_new, pAp, r_norm_sq]
+                gpu_error_check(cudaMalloc((void**)&d_pcg_scalars[s], sizeof(double) * 6));
+                // Partial reduction buffer for fused kernels
+                gpu_error_check(cudaMalloc((void**)&d_pcg_partial[s], sizeof(double) * pcg_n_blocks));
             }
 
             // PCG parameters
@@ -598,6 +899,8 @@ CudaSolverSDC::~CudaSolverSDC()
             cudaFree(d_pcg_z[s]);
             cudaFree(d_pcg_p[s]);
             cudaFree(d_pcg_Ap[s]);
+            cudaFree(d_pcg_scalars[s]);
+            cudaFree(d_pcg_partial[s]);
         }
     }
 
@@ -700,8 +1003,34 @@ void CudaSolverSDC::compute_gauss_lobatto_nodes()
         tau[3] = 0.5 + std::sqrt(21.0) / 14.0;
         tau[4] = 1.0;
     }
+    else if(M == 6)
+    {
+        // Exact Gauss-Lobatto nodes for M=6
+        double x1 = std::sqrt((7.0 + 2.0 * std::sqrt(7.0)) / 21.0);
+        double x2 = std::sqrt((7.0 - 2.0 * std::sqrt(7.0)) / 21.0);
+        tau[0] = 0.0;
+        tau[1] = 0.5 * (1.0 - x1);
+        tau[2] = 0.5 * (1.0 - x2);
+        tau[3] = 0.5 * (1.0 + x2);
+        tau[4] = 0.5 * (1.0 + x1);
+        tau[5] = 1.0;
+    }
+    else if(M == 7)
+    {
+        // Exact Gauss-Lobatto nodes for M=7
+        double x1 = std::sqrt((15.0 + 2.0 * std::sqrt(15.0)) / 33.0);
+        double x2 = std::sqrt((15.0 - 2.0 * std::sqrt(15.0)) / 33.0);
+        tau[0] = 0.0;
+        tau[1] = 0.5 * (1.0 - x1);
+        tau[2] = 0.5 * (1.0 - x2);
+        tau[3] = 0.5;
+        tau[4] = 0.5 * (1.0 + x2);
+        tau[5] = 0.5 * (1.0 + x1);
+        tau[6] = 1.0;
+    }
     else
     {
+        // General formula using Chebyshev nodes of second kind
         for(int j = 0; j < M; j++)
             tau[j] = 0.5 * (1.0 - std::cos(M_PI * j / (M - 1)));
     }
@@ -1281,80 +1610,74 @@ void CudaSolverSDC::sparse_solve(int STREAM, int sub_interval,
 
         const int n = mat.n;
         cudaStream_t stream = streams[STREAM][0];
-        int n_blocks = (n + 255) / 256;
 
-        // PCG with Jacobi preconditioner
-        // Solve A * q_out = q_in where A is SPD
-
-        // Use d_temp as scalar reduction buffer (just need one double)
-        double* d_scalar = d_temp[STREAM];
+        // OPTIMIZED PCG with:
+        // 1. Fixed iterations (no convergence check - avoids GPU-CPU sync)
+        // 2. Fused kernels (dot product + scalar computation in single launch)
+        // 3. Device-side scalars (avoid memory transfers)
+        //
+        // Scalar layout: [0]=alpha, [1]=beta, [2]=rz_old, [3]=rz_new, [4]=pAp, [5]=r_norm_sq
+        double* d_scalars = d_pcg_scalars[STREAM];
+        double* d_partial = d_pcg_partial[STREAM];
 
         // Initialize: x = 0, r = b, z = M^{-1}*r, p = z
-        pcg_init_kernel<<<n_blocks, 256, 0, stream>>>(
+        pcg_init_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
             d_q_out, d_pcg_r[STREAM], d_pcg_z[STREAM], d_pcg_p[STREAM],
             d_q_in, mat.d_diag_inv, n);
 
-        // rz_old = (r, z)
-        gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
-        dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
-            d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalar, n);
+        // Compute the number of threads needed for final reduction (round up to power of 2)
+        int reduce_threads = 1;
+        while(reduce_threads < pcg_n_blocks) reduce_threads *= 2;
+        if(reduce_threads > 1024) reduce_threads = 1024;
 
-        double rz_old;
-        gpu_error_check(cudaMemcpyAsync(&rz_old, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
-        gpu_error_check(cudaStreamSynchronize(stream));
+        // rz_old = (r, z) -> store in d_scalars[2] using fused reduction
+        // Use the initialization kernel (not beta kernel) to avoid division by uninitialized memory
+        pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+            d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n, pcg_n_blocks);
+        pcg_fused_reduce_rz_init_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+            d_scalars, d_partial, pcg_n_blocks);
 
+        // PCG loop with convergence checking
+        // Uses fused kernels to minimize memory bandwidth and kernel launch overhead
         for(int iter = 0; iter < pcg_max_iter; iter++)
         {
-            // Ap = A * p
+            // 1. Ap = A * p
             sparse_matvec(mat, d_pcg_p[STREAM], d_pcg_Ap[STREAM], stream);
 
-            // pAp = (p, Ap)
-            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
-            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
-                d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalar, n);
+            // 2-3. Fused: pAp = (p, Ap), then alpha = rz_old / pAp
+            pcg_fused_dot_alpha_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, d_partial, n, pcg_n_blocks);
+            pcg_fused_reduce_alpha_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                d_scalars, d_partial, pcg_n_blocks);
 
-            double pAp;
-            gpu_error_check(cudaMemcpyAsync(&pAp, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
-            gpu_error_check(cudaStreamSynchronize(stream));
+            // 4-5. Fused: x += alpha*p, r -= alpha*Ap, z = M^{-1}*r
+            // This combines update and preconditioner in single pass to reduce memory bandwidth
+            pcg_fused_update_xrz_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_q_out, d_pcg_r[STREAM], d_pcg_z[STREAM],
+                d_pcg_p[STREAM], d_pcg_Ap[STREAM], mat.d_diag_inv, d_scalars, n);
 
-            double alpha = rz_old / pAp;
+            // 6-7. Fused: rz_new = (r, z), then beta = rz_new/rz_old, rz_old = rz_new
+            pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n, pcg_n_blocks);
+            pcg_fused_reduce_beta_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                d_scalars, d_partial, pcg_n_blocks);
 
-            // x = x + alpha*p, r = r - alpha*Ap
-            pcg_update_xr_kernel<<<n_blocks, 256, 0, stream>>>(
-                d_q_out, d_pcg_r[STREAM], d_pcg_p[STREAM], d_pcg_Ap[STREAM], alpha, n);
+            // Check convergence using rz_new (which approximates ||r||^2 for good preconditioner)
+            // Only check periodically to reduce GPU-CPU sync overhead
+            if((iter + 1) % PCG_CONV_CHECK_INTERVAL == 0 || iter == pcg_max_iter - 1)
+            {
+                double rz_new;
+                gpu_error_check(cudaMemcpyAsync(&rz_new, &d_scalars[3],
+                    sizeof(double), cudaMemcpyDeviceToHost, stream));
+                gpu_error_check(cudaStreamSynchronize(stream));
 
-            // ||r||^2
-            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
-            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
-                d_pcg_r[STREAM], d_pcg_r[STREAM], d_scalar, n);
+                if(std::sqrt(std::abs(rz_new)) < pcg_tol)
+                    break;
+            }
 
-            double r_norm_sq;
-            gpu_error_check(cudaMemcpyAsync(&r_norm_sq, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
-            gpu_error_check(cudaStreamSynchronize(stream));
-
-            if(std::sqrt(r_norm_sq) < pcg_tol)
-                break;
-
-            // z = M^{-1} * r
-            pcg_precond_kernel<<<n_blocks, 256, 0, stream>>>(
-                d_pcg_z[STREAM], d_pcg_r[STREAM], mat.d_diag_inv, n);
-
-            // rz_new = (r, z)
-            gpu_error_check(cudaMemsetAsync(d_scalar, 0, sizeof(double), stream));
-            dot_product_kernel<<<n_blocks, 256, 256 * sizeof(double), stream>>>(
-                d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalar, n);
-
-            double rz_new;
-            gpu_error_check(cudaMemcpyAsync(&rz_new, d_scalar, sizeof(double), cudaMemcpyDeviceToHost, stream));
-            gpu_error_check(cudaStreamSynchronize(stream));
-
-            double beta = rz_new / rz_old;
-
-            // p = z + beta*p
-            pcg_update_p_kernel<<<n_blocks, 256, 0, stream>>>(
-                d_pcg_p[STREAM], d_pcg_z[STREAM], beta, n);
-
-            rz_old = rz_new;
+            // 8. p = z + beta*p (reads beta from device memory)
+            pcg_update_p_dev_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_p[STREAM], d_pcg_z[STREAM], d_scalars, n);
         }
     }
     catch(std::exception& exc)
@@ -1413,12 +1736,11 @@ void CudaSolverSDC::advance_propagator(
                 compute_F_device(STREAM, d_X[STREAM][m], d_w, d_F[STREAM][m], monomer_type);
             }
 
-            // Store old values
+            // Store old values (fused kernel reduces launch overhead)
             for(int m = 0; m < M; m++)
             {
-                copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-                    d_X_old[STREAM][m], d_X[STREAM][m], n_grid);
-                copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    d_X_old[STREAM][m], d_X[STREAM][m],
                     d_F_old[STREAM][m], d_F[STREAM][m], n_grid);
             }
 

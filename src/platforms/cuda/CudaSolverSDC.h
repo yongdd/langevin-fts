@@ -23,19 +23,22 @@
  *
  * **Configuration:**
  *
- * - M: Number of Gauss-Lobatto nodes (default: 3)
- * - K: Number of SDC correction iterations (default: 2)
+ * - M: Number of Gauss-Lobatto nodes (default: 4)
+ * - K: Number of SDC correction iterations (default: 5)
  *
  * **Order of Accuracy:**
  *
- * - 1D: High order (up to 2K+1 with K corrections) - implicit solves are exact
- * - 2D/3D: Limited to 2nd-order due to O(ds²) ADI splitting error
+ * The SDC order is min(K+1, 2M-2):
+ * - M=3, K=2: order 3
+ * - M=4, K=5: order 6 (default)
+ * - M=5, K=7: order 8
+ *
+ * With PCG solver (no ADI splitting), high-order accuracy is achieved in all dimensions.
  *
  * **Limitations:**
  *
- * ADI splitting solves (I - dt*Dx)(I - dt*Dy)q = RHS instead of (I - dt*(Dx+Dy))q = RHS.
- * The O(dt²*Dx*Dy) difference is an irreducible splitting error that persists
- * regardless of the number of SDC corrections. This limits 2D/3D to 2nd-order accuracy.
+ * - Stress computation is not yet implemented for SDC method
+ * - Only supports continuous chain model
  *
  * @see CudaSolver for the abstract interface
  * @see CudaSolverCNADI for the underlying ADI solver
@@ -49,8 +52,6 @@
 #include <map>
 
 #include <cuda_runtime.h>
-#include <cusparse.h>
-#include <cusolverSp.h>
 
 #include "Exception.h"
 #include "Molecules.h"
@@ -60,7 +61,7 @@
 
 /**
  * @struct CudaSparseMatrixCSR
- * @brief CSR sparse matrix for PCG solver.
+ * @brief CSR sparse matrix for PCG solver with Jacobi preconditioner.
  */
 struct CudaSparseMatrixCSR
 {
@@ -222,6 +223,17 @@ private:
     int pcg_max_iter;                    ///< Maximum PCG iterations
     double pcg_tol;                      ///< PCG convergence tolerance
 
+    // Device-side scalars for PCG (avoid GPU-CPU sync per iteration)
+    // Layout: [0]=alpha, [1]=beta, [2]=rz_old, [3]=rz_new, [4]=pAp, [5]=r_norm_sq
+    double* d_pcg_scalars[MAX_STREAMS];
+    double* d_pcg_partial[MAX_STREAMS];  ///< Partial reduction buffer for fused kernels
+    int pcg_n_blocks;                     ///< Number of blocks for PCG reductions
+
+    // PCG optimization parameters
+    static constexpr int PCG_FIXED_ITER = 50;           ///< Fixed iterations (increased for larger 3D grids)
+    static constexpr int PCG_BLOCK_SIZE = 256;          ///< Block size for PCG kernels
+    static constexpr int PCG_CONV_CHECK_INTERVAL = 10;  ///< Check convergence every N iterations (reduces GPU-CPU sync)
+
     /**
      * @brief Compute Gauss-Lobatto nodes on [0, 1].
      */
@@ -308,12 +320,18 @@ public:
      * @param molecules Molecules container
      * @param n_streams Number of parallel streams
      * @param streams Pre-created CUDA streams
-     * @param M Number of Gauss-Lobatto nodes (default: 3)
-     * @param K Number of SDC correction iterations (default: 2)
+     * @param M Number of Gauss-Lobatto nodes (default: 4 for 6th order quadrature)
+     * @param K Number of SDC correction iterations (default: 5 for 6th order accuracy)
+     *
+     * **Order of Accuracy:**
+     * The SDC order is min(K+1, 2M-2):
+     * - M=3, K=2: order 3
+     * - M=4, K=5: order 6 (default)
+     * - M=5, K=7: order 8
      */
     CudaSolverSDC(ComputationBox<double>* cb, Molecules *molecules,
         int n_streams, cudaStream_t streams[MAX_STREAMS][2],
-        int M = 3, int K = 2);
+        int M = 4, int K = 5);
 
     /**
      * @brief Destructor. Frees GPU resources.
