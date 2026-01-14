@@ -122,26 +122,26 @@ The following results compare the partition function Q computed with different m
 
 #### Partition Function Q vs Contour Discretization
 
-| N (ds=1/N) | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 | CN-ADI4-G |
-|------------|------|--------|---------|---------|-----------|
-| 20 | 12.6459485262 | 12.6442520116 | 13.1269150396 | 13.1395511288 | 13.1395041815 |
-| 40 | 12.6453957351 | 12.6452747926 | 13.1363568960 | 13.1395065418 | 13.1395028985 |
-| 80 | 12.6453556945 | 12.6453476063 | 13.1387163979 | 13.1395030750 | 13.1395028175 |
-| 160 | 12.6453529997 | 12.6453524766 | 13.1393062126 | 13.1395028297 | 13.1395028125 |
-| 320 | 12.6453528250 | 12.6453527917 | 13.1394536625 | 13.1395028133 | 13.1395028122 |
-| 640 | 12.6453528138 | 12.6453528117 | 13.1394905247 | 13.1395028122 | 13.1395028121 |
+| N (ds=1/N) | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
+|------------|------|--------|---------|---------|
+| 20 | 12.6459485262 | 12.6442520116 | 13.1269150396 | 13.1395511288 |
+| 40 | 12.6453957351 | 12.6452747926 | 13.1363568960 | 13.1395065418 |
+| 80 | 12.6453556945 | 12.6453476063 | 13.1387163979 | 13.1395030750 |
+| 160 | 12.6453529997 | 12.6453524766 | 13.1393062126 | 13.1395028297 |
+| 320 | 12.6453528250 | 12.6453527917 | 13.1394536625 | 13.1395028133 |
+| 640 | 12.6453528138 | 12.6453528117 | 13.1394905247 | 13.1395028122 |
 
 **Note**: Pseudo-spectral (RQM4, ETDRK4) and real-space (CN-ADI) methods converge to different Q values because they use different spatial discretization schemes.
 
 #### Error |Q - Q_ref| (Q_ref = value at N=640)
 
-| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 | CN-ADI4-G |
-|---|------|--------|---------|---------|-----------|
-| 20 | 5.96e-04 | 1.10e-03 | 1.26e-02 | 4.83e-05 | 1.37e-06 |
-| 40 | 4.29e-05 | 7.80e-05 | 3.13e-03 | 3.73e-06 | 8.64e-08 |
-| 80 | 2.88e-06 | 5.21e-06 | 7.74e-04 | 2.63e-07 | 5.40e-09 |
-| 160 | 1.86e-07 | 3.35e-07 | 1.84e-04 | 1.75e-08 | 3.25e-10 |
-| 320 | 1.11e-08 | 2.00e-08 | 3.69e-05 | 1.06e-09 | 1.46e-11 |
+| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
+|---|------|--------|---------|---------|
+| 20 | 5.96e-04 | 1.10e-03 | 1.26e-02 | 4.83e-05 |
+| 40 | 4.29e-05 | 7.80e-05 | 3.13e-03 | 3.73e-06 |
+| 80 | 2.88e-06 | 5.21e-06 | 7.74e-04 | 2.63e-07 |
+| 160 | 1.86e-07 | 3.35e-07 | 1.84e-04 | 1.75e-08 |
+| 320 | 1.11e-08 | 2.00e-08 | 3.69e-05 | 1.06e-09 |
 
 #### Measured Convergence Order
 
@@ -151,32 +151,29 @@ The following results compare the partition function Q computed with different m
 | ETDRK4 (Pseudo-Spectral) | **p ≈ 3.94** | 4.0 |
 | CN-ADI2 (Real-Space) | **p ≈ 2.10** | 2.0 |
 | CN-ADI4 (Real-Space, per-step Richardson) | **p ≈ 3.87** | 4.0 |
-| CN-ADI4-G (Real-Space, Global Richardson) | **p ≈ 4.13** | 4.0 |
 
 #### Computation Time (ms) on CUDA
 
-| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 | CN-ADI4-G |
-|---|------|--------|---------|---------|-----------|
-| 20 | 2.5 | 5.2 | 7.4 | 22.0 | 22.1 |
-| 40 | 4.8 | 10.2 | 14.7 | 43.9 | 44.2 |
-| 80 | 9.5 | 20.3 | 29.3 | 87.9 | 88.1 |
-| 160 | 18.9 | 40.1 | 58.6 | 175.3 | 175.8 |
-| 320 | 37.6 | 80.5 | 117.0 | 350.4 | 351.5 |
-| 640 | 75.2 | 160.8 | 233.8 | 700.7 | 702.8 |
+| N | RQM4 | ETDRK4 | CN-ADI2 | CN-ADI4 |
+|---|------|--------|---------|---------|
+| 20 | 2.5 | 5.2 | 7.4 | 22.0 |
+| 40 | 4.8 | 10.2 | 14.7 | 43.9 |
+| 80 | 9.5 | 20.3 | 29.3 | 87.9 |
+| 160 | 18.9 | 40.1 | 58.6 | 175.3 |
+| 320 | 37.6 | 80.5 | 117.0 | 350.4 |
+| 640 | 75.2 | 160.8 | 233.8 | 700.7 |
 
 ### Key Findings
 
 1. **All 4th-order methods achieve expected accuracy**: The measured convergence orders confirm that:
    - RQM4, ETDRK4: p ≈ 3.9-4.0 (pseudo-spectral)
-   - CN-ADI4, CN-ADI4-G: p ≈ 3.9-4.1 (real-space)
+   - CN-ADI4: p ≈ 3.9 (real-space)
 
-2. **Global Richardson (CN-ADI4-G) slightly more accurate than per-step (CN-ADI4)**: At the same N, CN-ADI4-G has ~10-30× smaller error than CN-ADI4, likely due to better error cancellation in the Richardson extrapolation.
+2. **CN-ADI2 converges as expected**: Shows clear $O(\Delta s^2)$ convergence with error decreasing by ~4× when $\Delta s$ is halved.
 
-3. **CN-ADI2 converges as expected**: Shows clear $O(\Delta s^2)$ convergence with error decreasing by ~4× when $\Delta s$ is halved.
+3. **Systematic difference between methods**: Real-space and pseudo-spectral methods converge to different Q values (~4% difference) due to different spatial discretization (finite difference vs spectral).
 
-4. **Systematic difference between methods**: Real-space and pseudo-spectral methods converge to different Q values (~4% difference) due to different spatial discretization (finite difference vs spectral).
-
-5. **Performance**: All 4th-order real-space methods (CN-ADI4, CN-ADI4-G) have similar computation time, approximately 3× slower than CN-ADI2 due to the 3 ADI solves per step.
+4. **Performance**: CN-ADI4 is approximately 3× slower than CN-ADI2 due to the 3 ADI solves per step.
 
 ### Grafted Brush Validation (Absorbing Boundaries)
 
@@ -352,12 +349,8 @@ Q = solver.get_partition_function(polymer=0)
 |------|-------------|
 | `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4 solver |
 | `src/platforms/cpu/CpuSolverCNADI.h` | CPU header |
-| `src/platforms/cpu/CpuSolverCNADIG.cpp` | CPU CN-ADI4-G solver |
-| `src/platforms/cpu/CpuSolverCNADIG.h` | CPU header |
 | `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4 solver |
 | `src/platforms/cuda/CudaSolverCNADI.h` | CUDA header |
-| `src/platforms/cuda/CudaSolverCNADIG.cu` | CUDA CN-ADI4-G solver |
-| `src/platforms/cuda/CudaSolverCNADIG.h` | CUDA header |
 | `src/common/FiniteDifference.cpp` | Tridiagonal coefficient generation |
 
 ### Tridiagonal Solvers

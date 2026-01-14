@@ -39,7 +39,6 @@
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
-#include "CpuSolverCNADIG.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -88,17 +87,9 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                if (numerical_method == "cn-adi4-g")
-                {
-                    // Global Richardson: two independent evolutions combined at the end
-                    this->propagator_solver = new CpuSolverCNADIG(cb, molecules);
-                }
-                else
-                {
-                    // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
-                    bool use_4th_order = (numerical_method == "cn-adi4");
-                    this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
-                }
+                // Per-step Richardson (cn-adi4) or 2nd order (cn-adi2)
+                bool use_4th_order = (numerical_method == "cn-adi4");
+                this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");
