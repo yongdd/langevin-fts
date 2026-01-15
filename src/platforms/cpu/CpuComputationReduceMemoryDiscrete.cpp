@@ -396,7 +396,7 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
-                            std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
+                            throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
                         for(int i=0; i<M; i++)
                             q_pair[0][i] = q_init[g][i]*_exp_dw[i];
                     }
