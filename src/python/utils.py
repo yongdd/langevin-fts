@@ -248,7 +248,8 @@ def draw_polymer_architecture(
     ds: float,
     dict_color: Dict[str, Any],
     output_file: Optional[str] = None,
-    figsize: Tuple[int, int] = (20, 20)
+    figsize: Tuple[int, int] = (8, 8),
+    dpi: int = 100
 ) -> None:
     """Draw polymer chain architecture as a graph.
 
@@ -265,7 +266,9 @@ def draw_polymer_architecture(
     output_file : str, optional
         Output filename. Defaults to "polymer_{id}.png".
     figsize : tuple of int
-        Figure size in inches. Defaults to (20, 20).
+        Figure size in inches. Defaults to (8, 8).
+    dpi : int
+        Resolution in dots per inch. Defaults to 100.
     """
     # Make a graph
     G = nx.Graph()
@@ -303,7 +306,7 @@ def draw_polymer_architecture(
 
     if output_file is None:
         output_file = f"polymer_{polymer_id:01d}.png"
-    plt.savefig(output_file)
+    plt.savefig(output_file, dpi=dpi, bbox_inches='tight')
     plt.close()
 
 
