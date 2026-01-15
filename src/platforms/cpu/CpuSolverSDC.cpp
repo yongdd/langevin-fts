@@ -27,6 +27,7 @@
 #include <numbers>
 #include <algorithm>
 #include <utility>
+#include <omp.h>
 
 #include "CpuSolverSDC.h"
 #include "FiniteDifference.h"
@@ -101,6 +102,10 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
 
         // Initialize sparse matrices and PCG workspace for 2D/3D
         const int DIM = cb->get_dim();
+
+        // Get number of threads for per-thread workspace allocation
+        n_threads = omp_get_max_threads();
+
         if(DIM >= 2)
         {
             sparse_matrices.resize(M - 1);
@@ -115,35 +120,49 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
                 }
             }
 
-            // Allocate PCG workspace arrays
-            pcg_r = new double[n_grid];
-            pcg_z = new double[n_grid];
-            pcg_p = new double[n_grid];
-            pcg_Ap = new double[n_grid];
+            // Allocate PCG workspace arrays per thread
+            pcg_r.resize(n_threads);
+            pcg_z.resize(n_threads);
+            pcg_p.resize(n_threads);
+            pcg_Ap.resize(n_threads);
+            for(int t = 0; t < n_threads; t++)
+            {
+                pcg_r[t] = new double[n_grid];
+                pcg_z[t] = new double[n_grid];
+                pcg_p[t] = new double[n_grid];
+                pcg_Ap[t] = new double[n_grid];
+            }
             pcg_max_iter = 1000;  // Maximum iterations
             pcg_tol = 1e-10;      // Convergence tolerance
         }
-        else
-        {
-            pcg_r = nullptr;
-            pcg_z = nullptr;
-            pcg_p = nullptr;
-            pcg_Ap = nullptr;
-        }
 
-        // Allocate workspace arrays for GL node solutions
-        X.resize(M);
-        F_diff.resize(M);
-        F_react.resize(M);
-        for(int m = 0; m < M; m++)
-        {
-            X[m] = new double[n_grid];
-            F_diff[m] = new double[n_grid];
-            F_react[m] = new double[n_grid];
-        }
+        // Allocate workspace arrays for GL node solutions per thread
+        X.resize(n_threads);
+        X_old.resize(n_threads);
+        F_diff.resize(n_threads);
+        F_old.resize(n_threads);
+        F_react.resize(n_threads);
+        temp_array.resize(n_threads);
+        rhs_array.resize(n_threads);
 
-        temp_array = new double[n_grid];
-        rhs_array = new double[n_grid];
+        for(int t = 0; t < n_threads; t++)
+        {
+            X[t].resize(M);
+            X_old[t].resize(M);
+            F_diff[t].resize(M);
+            F_old[t].resize(M);
+            F_react[t].resize(M);
+            for(int m = 0; m < M; m++)
+            {
+                X[t][m] = new double[n_grid];
+                X_old[t][m] = new double[n_grid];
+                F_diff[t][m] = new double[n_grid];
+                F_old[t][m] = new double[n_grid];
+                F_react[t][m] = new double[n_grid];
+            }
+            temp_array[t] = new double[n_grid];
+            rhs_array[t] = new double[n_grid];
+        }
 
         // Initialize Laplacian operator
         update_laplacian_operator();
@@ -160,10 +179,13 @@ CpuSolverSDC::~CpuSolverSDC()
     const int DIM = cb->get_dim();
     if(DIM >= 2)
     {
-        delete[] pcg_r;
-        delete[] pcg_z;
-        delete[] pcg_p;
-        delete[] pcg_Ap;
+        for(int t = 0; t < n_threads; t++)
+        {
+            delete[] pcg_r[t];
+            delete[] pcg_z[t];
+            delete[] pcg_p[t];
+            delete[] pcg_Ap[t];
+        }
     }
 
     // Free tridiagonal coefficients
@@ -191,16 +213,20 @@ CpuSolverSDC::~CpuSolverSDC()
             delete[] item.second;
     }
 
-    // Free workspace
-    for(int m = 0; m < M; m++)
+    // Free per-thread workspace
+    for(int t = 0; t < n_threads; t++)
     {
-        delete[] X[m];
-        delete[] F_diff[m];
-        delete[] F_react[m];
+        for(int m = 0; m < M; m++)
+        {
+            delete[] X[t][m];
+            delete[] X_old[t][m];
+            delete[] F_diff[t][m];
+            delete[] F_old[t][m];
+            delete[] F_react[t][m];
+        }
+        delete[] temp_array[t];
+        delete[] rhs_array[t];
     }
-
-    delete[] temp_array;
-    delete[] rhs_array;
 }
 
 void CpuSolverSDC::compute_gauss_lobatto_nodes()
@@ -1036,105 +1062,88 @@ void CpuSolverSDC::sparse_solve(int sub_interval, double* q_in, double* q_out, s
     try
     {
         SparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
-        const int n = mat.n;
 
-        // Build matrix if not yet done
+        // Build matrix if not yet done (MUST be done BEFORE accessing mat.n)
         if(!mat.built)
         {
             build_sparse_matrix(sub_interval, monomer_type);
         }
 
+        const int n = mat.n;
+
+        // Get thread-local workspace (this function is called from parallel region)
+        int tid = omp_get_thread_num();
+        double* _pcg_r = pcg_r[tid];
+        double* _pcg_z = pcg_z[tid];
+        double* _pcg_p = pcg_p[tid];
+        double* _pcg_Ap = pcg_Ap[tid];
+
         // Preconditioned Conjugate Gradient (PCG) with Jacobi preconditioner
         // Solve A * q_out = q_in where A is SPD
-        //
-        // Algorithm:
-        //   r0 = b - A*x0 (with x0 = 0, r0 = b)
-        //   z0 = M^{-1} * r0 (Jacobi: z = r .* diag_inv)
-        //   p0 = z0
-        //   for k = 0, 1, 2, ...
-        //       alpha_k = (r_k, z_k) / (p_k, A*p_k)
-        //       x_{k+1} = x_k + alpha_k * p_k
-        //       r_{k+1} = r_k - alpha_k * A*p_k
-        //       if ||r_{k+1}|| < tol: break
-        //       z_{k+1} = M^{-1} * r_{k+1}
-        //       beta_k = (r_{k+1}, z_{k+1}) / (r_k, z_k)
-        //       p_{k+1} = z_{k+1} + beta_k * p_k
+        // Note: No nested OpenMP since this is already called from parallel region
 
         // Initial guess: x0 = 0, so r0 = b = q_in
-        #pragma omp parallel for
+        double rz_old = 0.0;
         for(int i = 0; i < n; i++)
         {
             q_out[i] = 0.0;
-            pcg_r[i] = q_in[i];
-            pcg_z[i] = pcg_r[i] * mat.diag_inv[i];  // Jacobi preconditioner
-            pcg_p[i] = pcg_z[i];
-        }
-
-        // rz_old = (r, z)
-        double rz_old = 0.0;
-        #pragma omp parallel for reduction(+:rz_old)
-        for(int i = 0; i < n; i++)
-        {
-            rz_old += pcg_r[i] * pcg_z[i];
+            _pcg_r[i] = q_in[i];
+            _pcg_z[i] = _pcg_r[i] * mat.diag_inv[i];  // Jacobi preconditioner
+            _pcg_p[i] = _pcg_z[i];
+            rz_old += _pcg_r[i] * _pcg_z[i];
         }
 
         for(int iter = 0; iter < pcg_max_iter; iter++)
         {
-            // Ap = A * p
-            sparse_matvec(mat, pcg_p, pcg_Ap);
+            // Ap = A * p (no nested OMP)
+            for(int i = 0; i < n; i++)
+            {
+                double sum = 0.0;
+                for(MKL_INT j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; j++)
+                {
+                    sum += mat.values[j] * _pcg_p[mat.col_idx[j]];
+                }
+                _pcg_Ap[i] = sum;
+            }
 
             // pAp = (p, Ap)
             double pAp = 0.0;
-            #pragma omp parallel for reduction(+:pAp)
             for(int i = 0; i < n; i++)
             {
-                pAp += pcg_p[i] * pcg_Ap[i];
+                pAp += _pcg_p[i] * _pcg_Ap[i];
             }
 
             double alpha = rz_old / pAp;
 
             // x_{k+1} = x_k + alpha * p
             // r_{k+1} = r_k - alpha * Ap
-            #pragma omp parallel for
+            double r_norm_sq = 0.0;
             for(int i = 0; i < n; i++)
             {
-                q_out[i] += alpha * pcg_p[i];
-                pcg_r[i] -= alpha * pcg_Ap[i];
+                q_out[i] += alpha * _pcg_p[i];
+                _pcg_r[i] -= alpha * _pcg_Ap[i];
+                r_norm_sq += _pcg_r[i] * _pcg_r[i];
             }
 
             // Check convergence: ||r||
-            double r_norm_sq = 0.0;
-            #pragma omp parallel for reduction(+:r_norm_sq)
-            for(int i = 0; i < n; i++)
-            {
-                r_norm_sq += pcg_r[i] * pcg_r[i];
-            }
-
             if(std::sqrt(r_norm_sq) < pcg_tol)
                 break;
 
             // z_{k+1} = M^{-1} * r_{k+1}
-            #pragma omp parallel for
-            for(int i = 0; i < n; i++)
-            {
-                pcg_z[i] = pcg_r[i] * mat.diag_inv[i];
-            }
-
             // rz_new = (r_{k+1}, z_{k+1})
             double rz_new = 0.0;
-            #pragma omp parallel for reduction(+:rz_new)
             for(int i = 0; i < n; i++)
             {
-                rz_new += pcg_r[i] * pcg_z[i];
+                _pcg_z[i] = _pcg_r[i] * mat.diag_inv[i];
+                rz_new += _pcg_r[i] * _pcg_z[i];
             }
 
             double beta = rz_new / rz_old;
 
             // p_{k+1} = z_{k+1} + beta * p_k
-            #pragma omp parallel for
             for(int i = 0; i < n; i++)
             {
-                pcg_p[i] = pcg_z[i] + beta * pcg_p[i];
+                _pcg_p[i] = _pcg_z[i] + beta * _pcg_p[i];
             }
 
             rz_old = rz_new;
@@ -1161,60 +1170,60 @@ void CpuSolverSDC::advance_propagator(
         const int n_grid = this->cb->get_total_grid();
         const double ds = this->molecules->get_ds();
 
-        // Get stored w field for this monomer type
-        // We need the w field to compute F = D∇²q - wq
-        // The w field is implicitly stored via exp_dw_sub
-        // We need to recover it: w = -log(exp_dw_sub) / dtau
-        // For simplicity, we'll use a temporary approach
+        // Get thread-local workspace (this function may be called from parallel region)
+        int tid = omp_get_thread_num();
+        std::vector<double*>& _X = X[tid];
+        std::vector<double*>& _X_old = X_old[tid];
+        std::vector<double*>& _F_diff = F_diff[tid];
+        std::vector<double*>& _F_old = F_old[tid];
+        double* _temp_array = temp_array[tid];
+        double* _rhs_array = rhs_array[tid];
 
-        // Initialize X[0] = q_in
+        // Get stored w field for this monomer type
+        const std::vector<double>& w_field = w_field_store[monomer_type];
+
+        // Initialize _X[0] = q_in
         for(int i = 0; i < n_grid; i++)
-            X[0][i] = q_in[i];
+            _X[0][i] = q_in[i];
 
         //=================================================================
         // Predictor: Backward Euler for diffusion, explicit for reaction
         //=================================================================
         for(int m = 0; m < M - 1; m++)
         {
-            // Apply reaction term explicitly: temp = exp(-w*dtau) * X[m]
+            // Apply reaction term explicitly: temp = exp(-w*dtau) * _X[m]
             const std::vector<double>& exp_dw_vec = exp_dw_sub[m][monomer_type];
             for(int i = 0; i < n_grid; i++)
-                temp_array[i] = exp_dw_vec[i] * X[m][i];
+                _temp_array[i] = exp_dw_vec[i] * _X[m][i];
 
             // Apply diffusion implicitly using ADI
-            adi_step(m, temp_array, X[m + 1], monomer_type);
+            adi_step(m, _temp_array, _X[m + 1], monomer_type);
         }
 
         //=================================================================
         // SDC Corrections (K iterations)
         //=================================================================
-        // Use directly stored w field (like CUDA) to avoid numerical errors
-        // from recovering w via -log(exp(-w*dtau))/dtau
-        const std::vector<double>& w_field = w_field_store[monomer_type];
-
         for(int k_iter = 0; k_iter < K; k_iter++)
         {
             // Compute F at all GL nodes: F = D∇²q - wq
             for(int m = 0; m < M; m++)
             {
-                compute_F(X[m], w_field.data(), F_diff[m], monomer_type);
+                compute_F(_X[m], w_field.data(), _F_diff[m], monomer_type);
             }
 
-            // Store old X values
-            double X_old[M][n_grid];
-            double F_diff_old[M][n_grid];
+            // Store old X and F values
             for(int m = 0; m < M; m++)
             {
                 for(int i = 0; i < n_grid; i++)
                 {
-                    X_old[m][i] = X[m][i];
-                    F_diff_old[m][i] = F_diff[m][i];
+                    _X_old[m][i] = _X[m][i];
+                    _F_old[m][i] = _F_diff[m][i];
                 }
             }
 
-            // Reset X[0]
+            // Reset _X[0]
             for(int i = 0; i < n_grid; i++)
-                X[0][i] = q_in[i];
+                _X[0][i] = q_in[i];
 
             // SDC correction sweep
             for(int m = 0; m < M - 1; m++)
@@ -1222,36 +1231,27 @@ void CpuSolverSDC::advance_propagator(
                 double dtau = (tau[m + 1] - tau[m]) * ds;
 
                 // Compute spectral integral: ∫ F dt
-                // F_diff_old contains FULL F = D∇²q - wq
-                // For IMEX-SDC, we need:
-                //   rhs = X[m] + ∫F dt - dtau * D∇²q_old[m+1]
-                // Since F = D∇²q - wq, we have: D∇²q = F + wq
-                // So: rhs = X[m] + ∫F dt - dtau * (F_old[m+1] + w*X_old[m+1])
-                //         = X[m] + ∫F dt - dtau * F_old[m+1] - dtau * w * X_old[m+1]
-                // But we want the reaction term in the RHS, so:
-                //   rhs = X[m] + ∫F dt - dtau * D∇²q_old[m+1]
-                //       = X[m] + ∫F dt - dtau * (F_old[m+1] + w * X_old[m+1])
                 for(int i = 0; i < n_grid; i++)
                 {
                     double integral = 0.0;
                     for(int j = 0; j < M; j++)
                     {
-                        integral += S[m][j] * F_diff_old[j][i] * ds;
+                        integral += S[m][j] * _F_old[j][i] * ds;
                     }
-                    // Note: F_diff_old = D∇²q - wq, so D∇²q = F_diff_old + w*q
+                    // Note: F_old = D∇²q - wq, so D∇²q = F_old + w*q
                     // We subtract only the diffusion part: dtau * D∇²q_old[m+1]
-                    double diff_term = F_diff_old[m + 1][i] + w_field[i] * X_old[m + 1][i];
-                    rhs_array[i] = X[m][i] + integral - dtau * diff_term;
+                    double diff_term = _F_old[m + 1][i] + w_field[i] * _X_old[m + 1][i];
+                    _rhs_array[i] = _X[m][i] + integral - dtau * diff_term;
                 }
 
                 // Semi-implicit SDC: solve (I - dtau*D∇²) X[m+1] = rhs
-                adi_step(m, rhs_array, X[m + 1], monomer_type);
+                adi_step(m, _rhs_array, _X[m + 1], monomer_type);
             }
         }
 
         // Output is the final GL node
         for(int i = 0; i < n_grid; i++)
-            q_out[i] = X[M - 1][i];
+            q_out[i] = _X[M - 1][i];
 
         // Apply mask if provided
         if(q_mask != nullptr)
