@@ -10,7 +10,7 @@ The real-space methods use finite difference discretization to solve the modifie
 
 $$\frac{\partial q}{\partial s} = \frac{b^2}{6} \nabla^2 q - w(\mathbf{r}) q$$
 
-Unlike the pseudo-spectral method which requires periodic boundary conditions, the real-space method supports:
+Both pseudo-spectral and real-space methods support the following boundary conditions:
 
 | Boundary Condition | Description | Mathematical Form |
 |-------------------|-------------|-------------------|
@@ -71,9 +71,9 @@ $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delt
 | **cn-adi2** | 2nd | Standard Crank-Nicolson ADI |
 | **cn-adi4-lr** | 4th | CN-ADI with Local Richardson extrapolation |
 | **cn-adi4-gr** | 4th | CN-ADI with Global Richardson extrapolation |
-| **sdc** | High* | Spectral Deferred Correction (Gauss-Lobatto) |
+| **sdc-N** | Nth | Spectral Deferred Correction (N=2-10) |
 
-*SDC achieves up to $(2K+1)$-order accuracy with $K$ corrections. Uses PCG solver (no ADI splitting error).
+SDC uses PCG solver (no ADI splitting error). Specify order as `sdc-3`, `sdc-5`, `sdc-7`, etc.
 
 ### Richardson Extrapolation for 4th-Order Accuracy
 
@@ -88,26 +88,26 @@ This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 Both methods achieve 4th-order convergence but differ in where Richardson extrapolation is applied:
 
 **CN-ADI4-LR (Local Richardson)** - Extrapolation at each propagator step:
-```
-for each step n:
+```python
+for n in range(N_steps):
     q_full[n+1] = advance(q[n], ds)
     q_half_temp = advance(q[n], ds/2)
     q_half[n+1] = advance(q_half_temp, ds/2)
-    q[n+1] = (4·q_half[n+1] - q_full[n+1]) / 3
+    q[n+1] = (4*q_half[n+1] - q_full[n+1]) / 3
 ```
 
 **CN-ADI4-GR (Global Richardson)** - Extrapolation at quadrature level:
-```
+```python
 # Advance two independent chains with different step sizes
-for each step n:
+for n in range(N_steps):
     q_full[n+1] = advance(q_full[n], ds)
 
-for each half-step:
+for n in range(2*N_steps):
     q_half[n+1] = advance(q_half[n], ds/2)
 
 # Richardson extrapolation applied to final quantities
-Q_rich = (4·Q_half - Q_full) / 3
-φ_rich = (4·φ_half - φ_full) / 3
+Q_rich = (4*Q_half - Q_full) / 3
+phi_rich = (4*phi_half - phi_full) / 3
 ```
 
 | Factor | CN-ADI4-LR | CN-ADI4-GR |
@@ -143,15 +143,12 @@ SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) t
 
 With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
-| Parameters | Order |
-|------------|-------|
-| $K=1$ | 3rd |
-| $K=2$ | 5th |
-| $K=3$ | 7th |
-
-**Configuration** (in C++ solver):
-- `M`: Number of Gauss-Lobatto nodes (default: 3)
-- `K`: Number of correction iterations (default: 2)
+| Method | K | Order |
+|--------|---|-------|
+| `sdc-3` | 1 | 3rd |
+| `sdc-5` | 2 | 5th |
+| `sdc-7` | 3 | 7th |
+| `sdc-9` | 4 | 9th |
 
 ### Runtime Selection
 
@@ -167,8 +164,8 @@ solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
 # CN-ADI4 with global Richardson (highest accuracy in 1D)
 solver = PropagatorSolver(..., numerical_method="cn-adi4-gr")
 
-# SDC (Spectral Deferred Correction)
-solver = PropagatorSolver(..., numerical_method="sdc")
+# SDC (Spectral Deferred Correction) - specify order as sdc-N (N=2-10)
+solver = PropagatorSolver(..., numerical_method="sdc-5")  # 5th order
 ```
 
 ## Usage
@@ -279,7 +276,7 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 | **cn-adi2** | Fast prototyping, coarse grids |
 | **cn-adi4-lr** | General use, good accuracy/speed tradeoff |
 | **cn-adi4-gr** | High accuracy with memory overhead |
-| **sdc** | Highest accuracy (no ADI splitting error) |
+| **sdc-N** | Highest accuracy (no ADI splitting error) |
 
 ### Use Pseudo-Spectral (RQM4/ETDRK4) When:
 - Stress calculations are needed for box optimization

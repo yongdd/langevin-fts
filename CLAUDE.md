@@ -137,7 +137,7 @@ Key concepts:
 - **Continuous chains**: Pseudo-spectral method with RQM4 or ETDRK4 solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
 - **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order), CN-ADI4 (4th-order), or SDC (Spectral Deferred Correction)
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), `"cn-adi4-lr"` (CN-ADI4-LR), or `"sdc"` (SDC)
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), `"cn-adi4-lr"` (CN-ADI4-LR), or `"sdc-N"` (SDC with Nth order, e.g., `"sdc-5"`)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -223,7 +223,7 @@ Simulations are configured via Python dictionaries with keys:
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
   - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
-  - `"sdc"`: SDC - Real-space with Spectral Deferred Correction (Gauss-Lobatto)
+  - `"sdc-N"`: SDC - Real-space with Spectral Deferred Correction (e.g., `"sdc-5"` for 5th order)
 
 ### Common Issues and Solutions
 
@@ -369,15 +369,12 @@ $$\int_0^{\tau_m} \sum_j L_j(\tau') F_j \, d\tau' = \sum_j S_{m,j} F_j$$
 
 With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
-| Parameters | Order |
-|------------|-------|
-| $K=1$ | 3rd |
-| $K=2$ | 5th |
-| $K=3$ | 7th |
-
-**Configuration:**
-- `M`: Number of Gauss-Lobatto nodes (default: 3)
-- `K`: Number of correction iterations (default: 2)
+| Method | K | Order |
+|--------|---|-------|
+| `sdc-3` | 1 | 3rd |
+| `sdc-5` | 2 | 5th |
+| `sdc-7` | 3 | 7th |
+| `sdc-9` | 4 | 9th |
 
 **References:**
 - Dutt, Greengard, Rokhlin, *BIT Numerical Mathematics* **2000**, 40, 241
@@ -391,7 +388,7 @@ With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unli
 | ETDRK4 | 4th | High accuracy pseudo-spectral | Slightly slower than RQM4 |
 | CN-ADI2 | 2nd | Fast, lower accuracy acceptable | Lower accuracy |
 | CN-ADI4-LR | 4th | Real-space alternative to pseudo-spectral | 2× cost of CN-ADI2 |
-| SDC | High | Highest accuracy real-space (no ADI splitting error) | Slower (uses PCG) |
+| SDC-N | Nth | Highest accuracy real-space (no ADI splitting error) | Slower (uses PCG) |
 
 All methods support periodic, reflecting, and absorbing boundary conditions.
 
