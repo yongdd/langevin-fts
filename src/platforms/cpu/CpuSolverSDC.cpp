@@ -437,10 +437,26 @@ void CpuSolverSDC::compute_F(const double* q, const double* w, double* F_out, st
 
         for(int i = 0; i < nx[0]; i++)
         {
-            int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : max_of_two(0, i - 1);
-            int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : min_of_two(nx[0] - 1, i + 1);
+            // Get neighbor values with proper BC handling
+            double q_im, q_ip;
 
-            double Lx = alpha_x * (q[im] + q[ip] - 2.0 * q[i]);
+            // Lower neighbor
+            if(bc[0] == BoundaryCondition::PERIODIC)
+                q_im = q[(nx[0] + i - 1) % nx[0]];
+            else if(bc[0] == BoundaryCondition::ABSORBING && i == 0)
+                q_im = 0.0;  // Ghost point is zero for absorbing BC
+            else
+                q_im = q[max_of_two(0, i - 1)];  // Reflecting: clamp index
+
+            // Upper neighbor
+            if(bc[1] == BoundaryCondition::PERIODIC)
+                q_ip = q[(i + 1) % nx[0]];
+            else if(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1)
+                q_ip = 0.0;  // Ghost point is zero for absorbing BC
+            else
+                q_ip = q[min_of_two(nx[0] - 1, i + 1)];  // Reflecting: clamp index
+
+            double Lx = alpha_x * (q_im + q_ip - 2.0 * q[i]);
             F_out[i] = Lx - w[i] * q[i];
         }
     }
@@ -451,22 +467,44 @@ void CpuSolverSDC::compute_F(const double* q, const double* w, double* F_out, st
 
         for(int i = 0; i < nx[0]; i++)
         {
-            int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : max_of_two(0, i - 1);
-            int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : min_of_two(nx[0] - 1, i + 1);
-
             for(int j = 0; j < nx[1]; j++)
             {
-                int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : max_of_two(0, j - 1);
-                int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : min_of_two(nx[1] - 1, j + 1);
-
                 int idx = i * nx[1] + j;
-                int idx_im = im * nx[1] + j;
-                int idx_ip = ip * nx[1] + j;
-                int idx_jm = i * nx[1] + jm;
-                int idx_jp = i * nx[1] + jp;
 
-                double Lx = alpha_x * (q[idx_im] + q[idx_ip] - 2.0 * q[idx]);
-                double Ly = alpha_y * (q[idx_jm] + q[idx_jp] - 2.0 * q[idx]);
+                // Get neighbor values with proper BC handling for x-direction
+                double q_im, q_ip;
+                if(bc[0] == BoundaryCondition::PERIODIC)
+                    q_im = q[((nx[0] + i - 1) % nx[0]) * nx[1] + j];
+                else if(bc[0] == BoundaryCondition::ABSORBING && i == 0)
+                    q_im = 0.0;
+                else
+                    q_im = q[max_of_two(0, i - 1) * nx[1] + j];
+
+                if(bc[1] == BoundaryCondition::PERIODIC)
+                    q_ip = q[((i + 1) % nx[0]) * nx[1] + j];
+                else if(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1)
+                    q_ip = 0.0;
+                else
+                    q_ip = q[min_of_two(nx[0] - 1, i + 1) * nx[1] + j];
+
+                // Get neighbor values with proper BC handling for y-direction
+                double q_jm, q_jp;
+                if(bc[2] == BoundaryCondition::PERIODIC)
+                    q_jm = q[i * nx[1] + (nx[1] + j - 1) % nx[1]];
+                else if(bc[2] == BoundaryCondition::ABSORBING && j == 0)
+                    q_jm = 0.0;
+                else
+                    q_jm = q[i * nx[1] + max_of_two(0, j - 1)];
+
+                if(bc[3] == BoundaryCondition::PERIODIC)
+                    q_jp = q[i * nx[1] + (j + 1) % nx[1]];
+                else if(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1)
+                    q_jp = 0.0;
+                else
+                    q_jp = q[i * nx[1] + min_of_two(nx[1] - 1, j + 1)];
+
+                double Lx = alpha_x * (q_im + q_ip - 2.0 * q[idx]);
+                double Ly = alpha_y * (q_jm + q_jp - 2.0 * q[idx]);
                 F_out[idx] = Lx + Ly - w[idx] * q[idx];
             }
         }
@@ -479,30 +517,63 @@ void CpuSolverSDC::compute_F(const double* q, const double* w, double* F_out, st
 
         for(int i = 0; i < nx[0]; i++)
         {
-            int im = (bc[0] == BoundaryCondition::PERIODIC) ? (nx[0] + i - 1) % nx[0] : max_of_two(0, i - 1);
-            int ip = (bc[1] == BoundaryCondition::PERIODIC) ? (i + 1) % nx[0] : min_of_two(nx[0] - 1, i + 1);
-
             for(int j = 0; j < nx[1]; j++)
             {
-                int jm = (bc[2] == BoundaryCondition::PERIODIC) ? (nx[1] + j - 1) % nx[1] : max_of_two(0, j - 1);
-                int jp = (bc[3] == BoundaryCondition::PERIODIC) ? (j + 1) % nx[1] : min_of_two(nx[1] - 1, j + 1);
-
                 for(int k = 0; k < nx[2]; k++)
                 {
-                    int km = (bc[4] == BoundaryCondition::PERIODIC) ? (nx[2] + k - 1) % nx[2] : max_of_two(0, k - 1);
-                    int kp = (bc[5] == BoundaryCondition::PERIODIC) ? (k + 1) % nx[2] : min_of_two(nx[2] - 1, k + 1);
-
                     int idx = i * nx[1] * nx[2] + j * nx[2] + k;
-                    int idx_im = im * nx[1] * nx[2] + j * nx[2] + k;
-                    int idx_ip = ip * nx[1] * nx[2] + j * nx[2] + k;
-                    int idx_jm = i * nx[1] * nx[2] + jm * nx[2] + k;
-                    int idx_jp = i * nx[1] * nx[2] + jp * nx[2] + k;
-                    int idx_km = i * nx[1] * nx[2] + j * nx[2] + km;
-                    int idx_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
 
-                    double Lx = alpha_x * (q[idx_im] + q[idx_ip] - 2.0 * q[idx]);
-                    double Ly = alpha_y * (q[idx_jm] + q[idx_jp] - 2.0 * q[idx]);
-                    double Lz = alpha_z * (q[idx_km] + q[idx_kp] - 2.0 * q[idx]);
+                    // Get neighbor values with proper BC handling for x-direction
+                    double q_im, q_ip;
+                    if(bc[0] == BoundaryCondition::PERIODIC)
+                        q_im = q[((nx[0] + i - 1) % nx[0]) * nx[1] * nx[2] + j * nx[2] + k];
+                    else if(bc[0] == BoundaryCondition::ABSORBING && i == 0)
+                        q_im = 0.0;
+                    else
+                        q_im = q[max_of_two(0, i - 1) * nx[1] * nx[2] + j * nx[2] + k];
+
+                    if(bc[1] == BoundaryCondition::PERIODIC)
+                        q_ip = q[((i + 1) % nx[0]) * nx[1] * nx[2] + j * nx[2] + k];
+                    else if(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1)
+                        q_ip = 0.0;
+                    else
+                        q_ip = q[min_of_two(nx[0] - 1, i + 1) * nx[1] * nx[2] + j * nx[2] + k];
+
+                    // Get neighbor values with proper BC handling for y-direction
+                    double q_jm, q_jp;
+                    if(bc[2] == BoundaryCondition::PERIODIC)
+                        q_jm = q[i * nx[1] * nx[2] + ((nx[1] + j - 1) % nx[1]) * nx[2] + k];
+                    else if(bc[2] == BoundaryCondition::ABSORBING && j == 0)
+                        q_jm = 0.0;
+                    else
+                        q_jm = q[i * nx[1] * nx[2] + max_of_two(0, j - 1) * nx[2] + k];
+
+                    if(bc[3] == BoundaryCondition::PERIODIC)
+                        q_jp = q[i * nx[1] * nx[2] + ((j + 1) % nx[1]) * nx[2] + k];
+                    else if(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1)
+                        q_jp = 0.0;
+                    else
+                        q_jp = q[i * nx[1] * nx[2] + min_of_two(nx[1] - 1, j + 1) * nx[2] + k];
+
+                    // Get neighbor values with proper BC handling for z-direction
+                    double q_km, q_kp;
+                    if(bc[4] == BoundaryCondition::PERIODIC)
+                        q_km = q[i * nx[1] * nx[2] + j * nx[2] + (nx[2] + k - 1) % nx[2]];
+                    else if(bc[4] == BoundaryCondition::ABSORBING && k == 0)
+                        q_km = 0.0;
+                    else
+                        q_km = q[i * nx[1] * nx[2] + j * nx[2] + max_of_two(0, k - 1)];
+
+                    if(bc[5] == BoundaryCondition::PERIODIC)
+                        q_kp = q[i * nx[1] * nx[2] + j * nx[2] + (k + 1) % nx[2]];
+                    else if(bc[5] == BoundaryCondition::ABSORBING && k == nx[2] - 1)
+                        q_kp = 0.0;
+                    else
+                        q_kp = q[i * nx[1] * nx[2] + j * nx[2] + min_of_two(nx[2] - 1, k + 1)];
+
+                    double Lx = alpha_x * (q_im + q_ip - 2.0 * q[idx]);
+                    double Ly = alpha_y * (q_jm + q_jp - 2.0 * q[idx]);
+                    double Lz = alpha_z * (q_km + q_kp - 2.0 * q[idx]);
                     F_out[idx] = Lx + Ly + Lz - w[idx] * q[idx];
                 }
             }
