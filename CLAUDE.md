@@ -141,7 +141,7 @@ Key concepts:
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
-Manages simulation grid, FFT operations, and boundary conditions. Handles 1D/2D/3D simulations with periodic boundaries (pseudo-spectral) or periodic/reflecting/absorbing boundaries (real-space).
+Manages simulation grid, FFT operations, and boundary conditions. Handles 1D/2D/3D simulations with periodic, reflecting, or absorbing boundary conditions. All numerical methods support all boundary condition types.
 
 #### Polymer and Molecules (`src/common/Polymer.h`, `src/common/Molecules.h`)
 Define polymer chain architectures:
@@ -291,6 +291,13 @@ This library provides multiple numerical methods for solving the modified diffus
 
 ### Pseudo-Spectral Methods (Fourier Space)
 
+Pseudo-spectral methods use spectral transforms to solve the diffusion operator efficiently. The transform type depends on boundary conditions:
+- **Periodic BC**: Fast Fourier Transform (FFT)
+- **Reflecting BC**: Discrete Cosine Transform (DCT-II)
+- **Absorbing BC**: Discrete Sine Transform (DST-II)
+
+All pseudo-spectral methods use **cell-centered grids** where grid points are at $x_i = (i + 0.5) \cdot dx$ for $i = 0, 1, ..., N-1$, with boundaries at cell faces (not grid points).
+
 #### RQM4 (4th-order Richardson Extrapolation)
 The default method combining operator splitting with Richardson extrapolation:
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
@@ -312,6 +319,10 @@ Direct integration using matrix exponentials:
 **Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
 
 ### Real-Space Methods (Finite Difference)
+
+Real-space methods use **cell-centered grids** (same as pseudo-spectral methods) for consistent boundary condition handling:
+- **Reflecting BC**: Symmetric ghost cell ($q_{-1} = q_0$)
+- **Absorbing BC**: Antisymmetric ghost cell ($q_{-1} = -q_0$)
 
 #### CN-ADI2 (Crank-Nicolson ADI, 2nd-order)
 Alternating Direction Implicit method with Crank-Nicolson time stepping:
@@ -341,7 +352,8 @@ SDC is an iterative method that uses spectral quadrature to achieve high-order a
 
 2. **Predictor** (Backward Euler at each sub-interval):
    - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2) X^{[0]}_{m+1} = e^{-w\Delta\tau} X^{[0]}_m$
-   - Uses ADI for multi-dimensional cases
+   - 1D: Tridiagonal solver (Thomas algorithm)
+   - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
 
 3. **Corrector** ($K$ iterations):
    - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
@@ -355,15 +367,13 @@ $$\int_0^{\tau_m} \sum_j L_j(\tau') F_j \, d\tau' = \sum_j S_{m,j} F_j$$
 
 **Order of Accuracy:**
 
-- **1D**: The method achieves high order (up to order $2K+1$ with $K$ corrections) because the implicit solves are exact
-- **2D/3D**: **Limited to 2nd-order** due to $O(\Delta s^2)$ splitting error from ADI
+With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
-The ADI splitting introduces an irreducible $O(\Delta s^2)$ error in 2D/3D that does not decrease with more SDC corrections. This is because ADI solves:
-$$(I - \Delta\tau D_x)(I - \Delta\tau D_y) q = \text{RHS}$$
-instead of the exact:
-$$(I - \Delta\tau (D_x + D_y)) q = \text{RHS}$$
-
-The difference is $O(\Delta\tau^2 D_x D_y)$, which persists regardless of the number of corrections.
+| Parameters | Order |
+|------------|-------|
+| $K=1$ | 3rd |
+| $K=2$ | 5th |
+| $K=3$ | 7th |
 
 **Configuration:**
 - `M`: Number of Gauss-Lobatto nodes (default: 3)
@@ -377,11 +387,13 @@ The difference is $O(\Delta\tau^2 D_x D_y)$, which persists regardless of the nu
 
 | Method | Order | Best For | Limitations |
 |--------|-------|----------|-------------|
-| RQM4 | 4th | General use, moderate accuracy | Requires periodic BCs |
-| ETDRK4 | 4th | High accuracy pseudo-spectral | Requires periodic BCs |
-| CN-ADI2 | 2nd | Non-periodic BCs, fast | Lower accuracy |
-| CN-ADI4-LR | 4th | Non-periodic BCs, accuracy | 2× cost of CN-ADI2 |
-| SDC | 2nd* | Experimental | *Limited by ADI in 2D/3D |
+| RQM4 | 4th | General use, default choice | None |
+| ETDRK4 | 4th | High accuracy pseudo-spectral | Slightly slower than RQM4 |
+| CN-ADI2 | 2nd | Fast, lower accuracy acceptable | Lower accuracy |
+| CN-ADI4-LR | 4th | Real-space alternative to pseudo-spectral | 2× cost of CN-ADI2 |
+| SDC | High | Highest accuracy real-space (no ADI splitting error) | Slower (uses PCG) |
+
+All methods support periodic, reflecting, and absorbing boundary conditions.
 
 ## Units and Conventions
 
