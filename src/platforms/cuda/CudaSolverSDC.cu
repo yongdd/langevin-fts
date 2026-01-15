@@ -1513,35 +1513,53 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
                     // Store entries in column order
                     std::vector<std::pair<int, double>> entries;
 
-                    int col_im = im * nx[1] + j;
-                    if(col_im != row)
-                        entries.push_back({col_im, -rx});
+                    // Left neighbor - skip if absorbing BC at left boundary
+                    if(!(bc[0] == BoundaryCondition::ABSORBING && i == 0))
+                    {
+                        int col_im = im * nx[1] + j;
+                        if(col_im != row)
+                            entries.push_back({col_im, -rx});
+                    }
 
-                    int col_jm = i * nx[1] + jm;
-                    if(col_jm != row)
-                        entries.push_back({col_jm, -ry});
+                    // Bottom neighbor - skip if absorbing BC at bottom boundary
+                    if(!(bc[2] == BoundaryCondition::ABSORBING && j == 0))
+                    {
+                        int col_jm = i * nx[1] + jm;
+                        if(col_jm != row)
+                            entries.push_back({col_jm, -ry});
+                    }
 
                     double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
-                    if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                    // Adjust for boundaries - ONLY for reflecting BC (Neumann: ghost mirrors interior)
+                    // For absorbing BC (Dirichlet: ghost = 0), diagonal stays full
+                    if(bc[0] == BoundaryCondition::REFLECTING && i == 0)
                         diag_val -= rx;
-                    if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                    if(bc[1] == BoundaryCondition::REFLECTING && i == nx[0] - 1)
                         diag_val -= rx;
-                    if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                    if(bc[2] == BoundaryCondition::REFLECTING && j == 0)
                         diag_val -= ry;
-                    if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                    if(bc[3] == BoundaryCondition::REFLECTING && j == nx[1] - 1)
                         diag_val -= ry;
                     entries.push_back({row, diag_val});
 
                     // Store inverse diagonal for Jacobi preconditioner
                     h_diag_inv[row] = 1.0 / diag_val;
 
-                    int col_jp = i * nx[1] + jp;
-                    if(col_jp != row)
-                        entries.push_back({col_jp, -ry});
+                    // Top neighbor - skip if absorbing BC at top boundary
+                    if(!(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1))
+                    {
+                        int col_jp = i * nx[1] + jp;
+                        if(col_jp != row)
+                            entries.push_back({col_jp, -ry});
+                    }
 
-                    int col_ip = ip * nx[1] + j;
-                    if(col_ip != row)
-                        entries.push_back({col_ip, -rx});
+                    // Right neighbor - skip if absorbing BC at right boundary
+                    if(!(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1))
+                    {
+                        int col_ip = ip * nx[1] + j;
+                        if(col_ip != row)
+                            entries.push_back({col_ip, -rx});
+                    }
 
                     std::sort(entries.begin(), entries.end());
 
@@ -1583,47 +1601,73 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
 
                         std::vector<std::pair<int, double>> entries;
 
-                        int col_im = im * nx[1] * nx[2] + j * nx[2] + k;
-                        if(col_im != row)
-                            entries.push_back({col_im, -rx});
+                        // Left neighbor - skip if absorbing BC at left boundary
+                        if(!(bc[0] == BoundaryCondition::ABSORBING && i == 0))
+                        {
+                            int col_im = im * nx[1] * nx[2] + j * nx[2] + k;
+                            if(col_im != row)
+                                entries.push_back({col_im, -rx});
+                        }
 
-                        int col_jm = i * nx[1] * nx[2] + jm * nx[2] + k;
-                        if(col_jm != row)
-                            entries.push_back({col_jm, -ry});
+                        // Back neighbor - skip if absorbing BC at back boundary
+                        if(!(bc[2] == BoundaryCondition::ABSORBING && j == 0))
+                        {
+                            int col_jm = i * nx[1] * nx[2] + jm * nx[2] + k;
+                            if(col_jm != row)
+                                entries.push_back({col_jm, -ry});
+                        }
 
-                        int col_km = i * nx[1] * nx[2] + j * nx[2] + km;
-                        if(col_km != row)
-                            entries.push_back({col_km, -rz});
+                        // Bottom neighbor - skip if absorbing BC at bottom boundary
+                        if(!(bc[4] == BoundaryCondition::ABSORBING && k == 0))
+                        {
+                            int col_km = i * nx[1] * nx[2] + j * nx[2] + km;
+                            if(col_km != row)
+                                entries.push_back({col_km, -rz});
+                        }
 
                         double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
-                        if(bc[0] != BoundaryCondition::PERIODIC && i == 0)
+                        // Adjust for boundaries - ONLY for reflecting BC (Neumann: ghost mirrors interior)
+                        // For absorbing BC (Dirichlet: ghost = 0), diagonal stays full
+                        if(bc[0] == BoundaryCondition::REFLECTING && i == 0)
                             diag_val -= rx;
-                        if(bc[1] != BoundaryCondition::PERIODIC && i == nx[0] - 1)
+                        if(bc[1] == BoundaryCondition::REFLECTING && i == nx[0] - 1)
                             diag_val -= rx;
-                        if(bc[2] != BoundaryCondition::PERIODIC && j == 0)
+                        if(bc[2] == BoundaryCondition::REFLECTING && j == 0)
                             diag_val -= ry;
-                        if(bc[3] != BoundaryCondition::PERIODIC && j == nx[1] - 1)
+                        if(bc[3] == BoundaryCondition::REFLECTING && j == nx[1] - 1)
                             diag_val -= ry;
-                        if(bc[4] != BoundaryCondition::PERIODIC && k == 0)
+                        if(bc[4] == BoundaryCondition::REFLECTING && k == 0)
                             diag_val -= rz;
-                        if(bc[5] != BoundaryCondition::PERIODIC && k == nx[2] - 1)
+                        if(bc[5] == BoundaryCondition::REFLECTING && k == nx[2] - 1)
                             diag_val -= rz;
                         entries.push_back({row, diag_val});
 
                         // Store inverse diagonal for Jacobi preconditioner
                         h_diag_inv[row] = 1.0 / diag_val;
 
-                        int col_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
-                        if(col_kp != row)
-                            entries.push_back({col_kp, -rz});
+                        // Top neighbor - skip if absorbing BC at top boundary
+                        if(!(bc[5] == BoundaryCondition::ABSORBING && k == nx[2] - 1))
+                        {
+                            int col_kp = i * nx[1] * nx[2] + j * nx[2] + kp;
+                            if(col_kp != row)
+                                entries.push_back({col_kp, -rz});
+                        }
 
-                        int col_jp = i * nx[1] * nx[2] + jp * nx[2] + k;
-                        if(col_jp != row)
-                            entries.push_back({col_jp, -ry});
+                        // Front neighbor - skip if absorbing BC at front boundary
+                        if(!(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1))
+                        {
+                            int col_jp = i * nx[1] * nx[2] + jp * nx[2] + k;
+                            if(col_jp != row)
+                                entries.push_back({col_jp, -ry});
+                        }
 
-                        int col_ip = ip * nx[1] * nx[2] + j * nx[2] + k;
-                        if(col_ip != row)
-                            entries.push_back({col_ip, -rx});
+                        // Right neighbor - skip if absorbing BC at right boundary
+                        if(!(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1))
+                        {
+                            int col_ip = ip * nx[1] * nx[2] + j * nx[2] + k;
+                            if(col_ip != row)
+                                entries.push_back({col_ip, -rx});
+                        }
 
                         std::sort(entries.begin(), entries.end());
 
