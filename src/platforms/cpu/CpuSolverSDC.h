@@ -138,18 +138,23 @@ private:
     // Indexed by [sub_interval][monomer_type]
     std::vector<std::map<std::string, SparseMatrixCSR>> sparse_matrices;
 
-    // Workspace arrays
-    std::vector<double*> X;        ///< Solution at GL nodes: X[m] of size n_grid
-    std::vector<double*> F_diff;   ///< Diffusion term D∇²q at GL nodes
-    std::vector<double*> F_react;  ///< Reaction term -wq at GL nodes
-    double* temp_array;            ///< Temporary workspace
-    double* rhs_array;             ///< RHS for implicit solves
+    // Number of threads for workspace allocation
+    int n_threads;
 
-    // PCG workspace arrays (allocated for 2D/3D)
-    double* pcg_r;                 ///< Residual vector
-    double* pcg_z;                 ///< Preconditioned residual
-    double* pcg_p;                 ///< Search direction
-    double* pcg_Ap;                ///< Matrix-vector product A*p
+    // Workspace arrays - indexed by [thread][m] for GL nodes
+    std::vector<std::vector<double*>> X;        ///< Solution at GL nodes: X[thread][m] of size n_grid
+    std::vector<std::vector<double*>> X_old;    ///< Old solution for SDC corrections
+    std::vector<std::vector<double*>> F_diff;   ///< Diffusion term D∇²q at GL nodes
+    std::vector<std::vector<double*>> F_old;    ///< Old F for SDC corrections
+    std::vector<std::vector<double*>> F_react;  ///< Reaction term -wq at GL nodes
+    std::vector<double*> temp_array;            ///< Temporary workspace per thread
+    std::vector<double*> rhs_array;             ///< RHS for implicit solves per thread
+
+    // PCG workspace arrays (allocated for 2D/3D) - indexed by thread
+    std::vector<double*> pcg_r;                 ///< Residual vector per thread
+    std::vector<double*> pcg_z;                 ///< Preconditioned residual per thread
+    std::vector<double*> pcg_p;                 ///< Search direction per thread
+    std::vector<double*> pcg_Ap;                ///< Matrix-vector product A*p per thread
     int pcg_max_iter;              ///< Maximum PCG iterations
     double pcg_tol;                ///< PCG convergence tolerance
 
