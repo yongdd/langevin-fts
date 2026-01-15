@@ -1,12 +1,12 @@
-# Real-Space Solver Documentation
+# Real-Space Method Documentation
 
-This document describes the real-space finite difference solver for continuous chain propagators, including its numerical methods, boundary condition support, and usage.
+This document describes the real-space finite difference methods for continuous chain propagators, including CN-ADI and SDC solvers, boundary condition support, and usage.
 
 For performance benchmarks and comparison with pseudo-spectral methods, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
 ## Overview
 
-The real-space solver uses the **CN-ADI** (Crank-Nicolson Alternating Direction Implicit) method to solve the modified diffusion equation:
+The real-space methods use finite difference discretization to solve the modified diffusion equation:
 
 $$\frac{\partial q}{\partial s} = \frac{b^2}{6} \nabla^2 q - w(\mathbf{r}) q$$
 
@@ -18,7 +18,25 @@ Unlike the pseudo-spectral method which requires periodic boundary conditions, t
 | **Reflecting** | Neumann (zero flux) | $\partial q / \partial n = 0$ |
 | **Absorbing** | Dirichlet (zero value) | $q = 0$ at boundary |
 
-## Numerical Method
+## Grid Discretization
+
+The real-space methods use a **cell-centered grid** where grid points are located at cell centers:
+
+$$x_i = \left(i + \frac{1}{2}\right) \Delta x, \quad i = 0, 1, \ldots, N-1$$
+
+Boundaries are at cell faces ($x = 0$ and $x = L$), not at grid points.
+
+**Boundary condition implementation using ghost cells:**
+
+| BC Type | Ghost Cell Value | Effect on Laplacian |
+|---------|------------------|---------------------|
+| **Periodic** | $q_{-1} = q_{N-1}$ | Cyclic tridiagonal system |
+| **Reflecting** | $q_{-1} = q_0$ (symmetric) | Diagonal += off-diagonal |
+| **Absorbing** | $q_{-1} = -q_0$ (antisymmetric) | Diagonal -= off-diagonal |
+
+The antisymmetric ghost for absorbing BC enforces $q = 0$ at the cell face (halfway between ghost and first cell).
+
+## Numerical Methods
 
 ### Crank-Nicolson Scheme
 
@@ -53,6 +71,9 @@ $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delt
 | **cn-adi2** | 2nd | Standard Crank-Nicolson ADI |
 | **cn-adi4-lr** | 4th | CN-ADI with Local Richardson extrapolation |
 | **cn-adi4-gr** | 4th | CN-ADI with Global Richardson extrapolation |
+| **sdc** | High* | Spectral Deferred Correction (Gauss-Lobatto) |
+
+*SDC achieves up to $(2K+1)$-order accuracy with $K$ corrections. Uses PCG solver (no ADI splitting error).
 
 ### Richardson Extrapolation for 4th-Order Accuracy
 
@@ -98,6 +119,40 @@ Q_rich = (4·Q_half - Q_full) / 3
 
 **Recommendation**: Both methods have similar computational cost. CN-ADI4-GR achieves true 4th-order convergence but requires more memory. For most applications, CN-ADI4-LR is sufficient.
 
+### Spectral Deferred Correction (SDC)
+
+SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) to achieve high-order accuracy. The implementation uses **IMEX (Implicit-Explicit) splitting**: diffusion is treated implicitly, potential term explicitly.
+
+**Algorithm per contour step:**
+
+1. **Discretize** the interval $[s_n, s_{n+1}]$ using $M$ Gauss-Lobatto nodes $\tau_m \in [0, 1]$:
+   - For $M=3$: $\tau = [0, 0.5, 1]$
+   - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
+
+2. **Predictor** (Backward Euler at each sub-interval):
+   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2) X^{[0]}_{m+1} = e^{-w\Delta\tau} X^{[0]}_m$
+   - 1D: Tridiagonal solver (Thomas algorithm)
+   - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
+
+3. **Corrector** ($K$ iterations):
+   - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
+   - Apply spectral integral using Lagrange interpolation
+   - Update solution at each node
+
+**Order of Accuracy:**
+
+With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
+
+| Parameters | Order |
+|------------|-------|
+| $K=1$ | 3rd |
+| $K=2$ | 5th |
+| $K=3$ | 7th |
+
+**Configuration** (in C++ solver):
+- `M`: Number of Gauss-Lobatto nodes (default: 3)
+- `K`: Number of correction iterations (default: 2)
+
 ### Runtime Selection
 
 ```python
@@ -111,6 +166,9 @@ solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
 
 # CN-ADI4 with global Richardson (highest accuracy in 1D)
 solver = PropagatorSolver(..., numerical_method="cn-adi4-gr")
+
+# SDC (Spectral Deferred Correction)
+solver = PropagatorSolver(..., numerical_method="sdc")
 ```
 
 ## Usage
@@ -163,6 +221,8 @@ Different boundary conditions can be specified for each direction:
 | `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4-LR solver |
 | `src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp` | CPU CN-ADI4-GR base solver |
 | `src/platforms/cuda/CudaSolverGlobalRichardsonBase.cu` | CUDA CN-ADI4-GR base solver |
+| `src/platforms/cpu/CpuSolverSDC.cpp` | CPU SDC solver |
+| `src/platforms/cuda/CudaSolverSDC.cu` | CUDA SDC solver |
 
 ### Tridiagonal Systems
 
@@ -203,21 +263,32 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 
 ## When to Use Real-Space vs Pseudo-Spectral
 
-| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI) |
-|-----------|------------------------------|---------------------|
-| **Boundary conditions** | Periodic only | Periodic, reflecting, absorbing |
+| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI/SDC) |
+|-----------|------------------------------|-------------------------|
+| **Boundary conditions** | Periodic, reflecting, absorbing | Periodic, reflecting, absorbing |
 | **Performance** | Fastest (~3x faster) | Slower |
 | **Stress calculation** | Supported | Not yet implemented |
 | **Spatial accuracy** | Spectral (exponential) | O(Δx²) |
 
-### Use Real-Space (CN-ADI) When:
-- Non-periodic boundary conditions are required (confined films, grafted polymers)
-- Absorbing or reflecting boundaries are needed
+**Note:** Both pseudo-spectral and real-space methods now support all boundary condition types. Pseudo-spectral methods use DCT (reflecting) and DST (absorbing) transforms, while real-space methods use modified tridiagonal matrices.
 
-### Use Pseudo-Spectral (RQM4) When:
-- Periodic boundary conditions are acceptable
+### Choosing Between Real-Space Methods
+
+| Method | Best For |
+|--------|----------|
+| **cn-adi2** | Fast prototyping, coarse grids |
+| **cn-adi4-lr** | General use, good accuracy/speed tradeoff |
+| **cn-adi4-gr** | High accuracy with memory overhead |
+| **sdc** | Highest accuracy (no ADI splitting error) |
+
+### Use Pseudo-Spectral (RQM4/ETDRK4) When:
 - Stress calculations are needed for box optimization
 - Maximum performance is required
+- Spectral accuracy is desired
+
+### Use Real-Space (CN-ADI) When:
+- Stress calculations are not needed
+- Comparing with finite difference implementations
 
 ## References
 
@@ -226,3 +297,7 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 2. **ADI Method**: D. W. Peaceman and H. H. Rachford, *J. Soc. Indust. Appl. Math.*, **1955**, 3, 28-41.
 
 3. **Richardson Extrapolation**: L. F. Richardson, *Phil. Trans. R. Soc. A*, **1911**, 210, 307-357.
+
+4. **SDC Method**: A. Dutt, L. Greengard, and V. Rokhlin, *BIT Numerical Mathematics*, **2000**, 40, 241-266.
+
+5. **IMEX-SDC**: M. L. Minion, *Commun. Math. Sci.*, **2003**, 1, 471-500.

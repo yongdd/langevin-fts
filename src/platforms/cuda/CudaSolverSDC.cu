@@ -97,50 +97,53 @@ __global__ void compute_F_kernel_3d(
         int k = idx % nx_K;
 
         // Get neighbor values with proper BC handling for x-direction
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_im, q_ip;
         if(bc_xl == BoundaryCondition::PERIODIC)
             q_im = d_q[((nx_I + i - 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
         else if(bc_xl == BoundaryCondition::ABSORBING && i == 0)
-            q_im = 0.0;
+            q_im = -d_q[idx];  // Antisymmetric ghost
         else
             q_im = d_q[sdc_max_of_two(0, i - 1) * nx_J * nx_K + j * nx_K + k];
 
         if(bc_xh == BoundaryCondition::PERIODIC)
             q_ip = d_q[((i + 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
         else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1)
-            q_ip = 0.0;
+            q_ip = -d_q[idx];  // Antisymmetric ghost
         else
             q_ip = d_q[sdc_min_of_two(nx_I - 1, i + 1) * nx_J * nx_K + j * nx_K + k];
 
         // Get neighbor values with proper BC handling for y-direction
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_jm, q_jp;
         if(bc_yl == BoundaryCondition::PERIODIC)
             q_jm = d_q[i * nx_J * nx_K + ((nx_J + j - 1) % nx_J) * nx_K + k];
         else if(bc_yl == BoundaryCondition::ABSORBING && j == 0)
-            q_jm = 0.0;
+            q_jm = -d_q[idx];  // Antisymmetric ghost
         else
             q_jm = d_q[i * nx_J * nx_K + sdc_max_of_two(0, j - 1) * nx_K + k];
 
         if(bc_yh == BoundaryCondition::PERIODIC)
             q_jp = d_q[i * nx_J * nx_K + ((j + 1) % nx_J) * nx_K + k];
         else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1)
-            q_jp = 0.0;
+            q_jp = -d_q[idx];  // Antisymmetric ghost
         else
             q_jp = d_q[i * nx_J * nx_K + sdc_min_of_two(nx_J - 1, j + 1) * nx_K + k];
 
         // Get neighbor values with proper BC handling for z-direction
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_km, q_kp;
         if(bc_zl == BoundaryCondition::PERIODIC)
             q_km = d_q[i * nx_J * nx_K + j * nx_K + (nx_K + k - 1) % nx_K];
         else if(bc_zl == BoundaryCondition::ABSORBING && k == 0)
-            q_km = 0.0;
+            q_km = -d_q[idx];  // Antisymmetric ghost
         else
             q_km = d_q[i * nx_J * nx_K + j * nx_K + sdc_max_of_two(0, k - 1)];
 
         if(bc_zh == BoundaryCondition::PERIODIC)
             q_kp = d_q[i * nx_J * nx_K + j * nx_K + (k + 1) % nx_K];
         else if(bc_zh == BoundaryCondition::ABSORBING && k == nx_K - 1)
-            q_kp = 0.0;
+            q_kp = -d_q[idx];  // Antisymmetric ghost
         else
             q_kp = d_q[i * nx_J * nx_K + j * nx_K + sdc_min_of_two(nx_K - 1, k + 1)];
 
@@ -169,34 +172,36 @@ __global__ void compute_F_kernel_2d(
         int j = idx % nx_J;
 
         // Get neighbor values with proper BC handling for x-direction
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_im, q_ip;
         if(bc_xl == BoundaryCondition::PERIODIC)
             q_im = d_q[((nx_I + i - 1) % nx_I) * nx_J + j];
         else if(bc_xl == BoundaryCondition::ABSORBING && i == 0)
-            q_im = 0.0;
+            q_im = -d_q[idx];  // Antisymmetric ghost
         else
             q_im = d_q[sdc_max_of_two(0, i - 1) * nx_J + j];
 
         if(bc_xh == BoundaryCondition::PERIODIC)
             q_ip = d_q[((i + 1) % nx_I) * nx_J + j];
         else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1)
-            q_ip = 0.0;
+            q_ip = -d_q[idx];  // Antisymmetric ghost
         else
             q_ip = d_q[sdc_min_of_two(nx_I - 1, i + 1) * nx_J + j];
 
         // Get neighbor values with proper BC handling for y-direction
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_jm, q_jp;
         if(bc_yl == BoundaryCondition::PERIODIC)
             q_jm = d_q[i * nx_J + (nx_J + j - 1) % nx_J];
         else if(bc_yl == BoundaryCondition::ABSORBING && j == 0)
-            q_jm = 0.0;
+            q_jm = -d_q[idx];  // Antisymmetric ghost
         else
             q_jm = d_q[i * nx_J + sdc_max_of_two(0, j - 1)];
 
         if(bc_yh == BoundaryCondition::PERIODIC)
             q_jp = d_q[i * nx_J + (j + 1) % nx_J];
         else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1)
-            q_jp = 0.0;
+            q_jp = -d_q[idx];  // Antisymmetric ghost
         else
             q_jp = d_q[i * nx_J + sdc_min_of_two(nx_J - 1, j + 1)];
 
@@ -219,23 +224,24 @@ __global__ void compute_F_kernel_1d(
     while(i < n_grid)
     {
         // Get neighbor values with proper BC handling
+        // (cell-centered: antisymmetric ghost for absorbing BC)
         double q_im, q_ip;
 
         // Lower neighbor
         if(bc_xl == BoundaryCondition::PERIODIC)
             q_im = d_q[(nx_I + i - 1) % nx_I];
         else if(bc_xl == BoundaryCondition::ABSORBING && i == 0)
-            q_im = 0.0;  // Ghost point is zero for absorbing BC
+            q_im = -d_q[i];  // Antisymmetric ghost: q_{-1} = -q_0
         else
-            q_im = d_q[sdc_max_of_two(0, i - 1)];  // Reflecting: clamp index
+            q_im = d_q[sdc_max_of_two(0, i - 1)];  // Reflecting: symmetric ghost (clamp index)
 
         // Upper neighbor
         if(bc_xh == BoundaryCondition::PERIODIC)
             q_ip = d_q[(i + 1) % nx_I];
         else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1)
-            q_ip = 0.0;  // Ghost point is zero for absorbing BC
+            q_ip = -d_q[i];  // Antisymmetric ghost: q_{N} = -q_{N-1}
         else
-            q_ip = d_q[sdc_min_of_two(nx_I - 1, i + 1)];  // Reflecting: clamp index
+            q_ip = d_q[sdc_min_of_two(nx_I - 1, i + 1)];  // Reflecting: symmetric ghost (clamp index)
 
         double Lx = alpha_x * (q_im + q_ip - 2.0 * d_q[i]);
         d_F[i] = Lx - d_w[i] * d_q[i];
@@ -1530,16 +1536,25 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
                     }
 
                     double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
-                    // Adjust for boundaries - ONLY for reflecting BC (Neumann: ghost mirrors interior)
-                    // For absorbing BC (Dirichlet: ghost = 0), diagonal stays full
+                    // Cell-centered boundary modifications using ghost cells:
+                    // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
+                    // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
                     if(bc[0] == BoundaryCondition::REFLECTING && i == 0)
                         diag_val -= rx;
+                    else if(bc[0] == BoundaryCondition::ABSORBING && i == 0)
+                        diag_val += rx;
                     if(bc[1] == BoundaryCondition::REFLECTING && i == nx[0] - 1)
                         diag_val -= rx;
+                    else if(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1)
+                        diag_val += rx;
                     if(bc[2] == BoundaryCondition::REFLECTING && j == 0)
                         diag_val -= ry;
+                    else if(bc[2] == BoundaryCondition::ABSORBING && j == 0)
+                        diag_val += ry;
                     if(bc[3] == BoundaryCondition::REFLECTING && j == nx[1] - 1)
                         diag_val -= ry;
+                    else if(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1)
+                        diag_val += ry;
                     entries.push_back({row, diag_val});
 
                     // Store inverse diagonal for Jacobi preconditioner
@@ -1626,20 +1641,33 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
                         }
 
                         double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
-                        // Adjust for boundaries - ONLY for reflecting BC (Neumann: ghost mirrors interior)
-                        // For absorbing BC (Dirichlet: ghost = 0), diagonal stays full
+                        // Cell-centered boundary modifications using ghost cells:
+                        // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
+                        // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
                         if(bc[0] == BoundaryCondition::REFLECTING && i == 0)
                             diag_val -= rx;
+                        else if(bc[0] == BoundaryCondition::ABSORBING && i == 0)
+                            diag_val += rx;
                         if(bc[1] == BoundaryCondition::REFLECTING && i == nx[0] - 1)
                             diag_val -= rx;
+                        else if(bc[1] == BoundaryCondition::ABSORBING && i == nx[0] - 1)
+                            diag_val += rx;
                         if(bc[2] == BoundaryCondition::REFLECTING && j == 0)
                             diag_val -= ry;
+                        else if(bc[2] == BoundaryCondition::ABSORBING && j == 0)
+                            diag_val += ry;
                         if(bc[3] == BoundaryCondition::REFLECTING && j == nx[1] - 1)
                             diag_val -= ry;
+                        else if(bc[3] == BoundaryCondition::ABSORBING && j == nx[1] - 1)
+                            diag_val += ry;
                         if(bc[4] == BoundaryCondition::REFLECTING && k == 0)
                             diag_val -= rz;
+                        else if(bc[4] == BoundaryCondition::ABSORBING && k == 0)
+                            diag_val += rz;
                         if(bc[5] == BoundaryCondition::REFLECTING && k == nx[2] - 1)
                             diag_val -= rz;
+                        else if(bc[5] == BoundaryCondition::ABSORBING && k == nx[2] - 1)
+                            diag_val += rz;
                         entries.push_back({row, diag_val});
 
                         // Store inverse diagonal for Jacobi preconditioner

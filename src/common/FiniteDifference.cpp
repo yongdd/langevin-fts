@@ -15,11 +15,19 @@
  *     L[i,i-1] = L[i,i+1] = factor = b²ds/(6dx²)
  *     L[i,i] = -2·factor
  *
- * **Boundary Condition Modifications:**
+ * **Cell-Centered Grid:**
+ *
+ * Grid points are at cell centers: x_i = (i + 0.5) * dx for i = 0, 1, ..., N-1.
+ * Boundaries are at x = 0 and x = L (cell faces, not grid points).
+ *
+ * **Boundary Condition Modifications (using ghost cells):**
  *
  * - PERIODIC: No modification (handled by cyclic tridiagonal solver)
- * - REFLECTING: Add off-diagonal to diagonal, zero off-diagonal
- * - ABSORBING: Zero off-diagonal only
+ * - REFLECTING: Symmetric ghost (q_{-1} = q_0) → diagonal += off-diagonal
+ * - ABSORBING: Antisymmetric ghost (q_{-1} = -q_0) → diagonal -= off-diagonal
+ *
+ * The antisymmetric ghost for absorbing BC enforces q = 0 at the cell face
+ * (halfway between ghost cell and first cell).
  */
 
 #include <iostream>
@@ -114,23 +122,32 @@ void FiniteDifference::get_laplacian_matrix(
             _xh = zh;
         }
 
+        // Cell-centered boundary modifications using ghost cells:
+        // - Reflecting: symmetric ghost (q_{-1} = q_0)
+        //   L*q_0 = (q_{-1} - 2*q_0 + q_1)/dx² = (-q_0 + q_1)/dx²
+        //   → diagonal coefficient reduced by factor of off-diagonal
+        // - Absorbing: antisymmetric ghost (q_{-1} = -q_0)
+        //   L*q_0 = (-q_0 - 2*q_0 + q_1)/dx² = (-3*q_0 + q_1)/dx²
+        //   → diagonal coefficient increased by factor of off-diagonal
         if(bcl == BoundaryCondition::REFLECTING)
         {
-            _xd[0] += _xl[0];
+            _xd[0] += _xl[0];  // Symmetric ghost: subtract |xl| from diagonal
             _xl[0] = 0.0;
         }
         else if(bcl == BoundaryCondition::ABSORBING)
         {
+            _xd[0] -= _xl[0];  // Antisymmetric ghost: add |xl| to diagonal
             _xl[0] = 0.0;
         }
 
         if(bch == BoundaryCondition::REFLECTING)
         {
-            _xd[_nx_max] += _xh[_nx_max];
+            _xd[_nx_max] += _xh[_nx_max];  // Symmetric ghost
             _xh[_nx_max] = 0.0;
         }
         else if(bch == BoundaryCondition::ABSORBING)
         {
+            _xd[_nx_max] -= _xh[_nx_max];  // Antisymmetric ghost
             _xh[_nx_max] = 0.0;
         }
     }
@@ -191,7 +208,7 @@ void FiniteDifference::get_backward_euler_matrix(
         }
     }
 
-    // Apply boundary condition modifications (same as CN)
+    // Apply boundary condition modifications (cell-centered, same as CN)
     for(int d=0; d<DIM; d++)
     {
         const int _nx_max = nx[d]-1;
@@ -220,23 +237,26 @@ void FiniteDifference::get_backward_euler_matrix(
             _xh = zh;
         }
 
+        // Cell-centered boundary modifications using ghost cells
         if(bcl == BoundaryCondition::REFLECTING)
         {
-            _xd[0] += _xl[0];
+            _xd[0] += _xl[0];  // Symmetric ghost
             _xl[0] = 0.0;
         }
         else if(bcl == BoundaryCondition::ABSORBING)
         {
+            _xd[0] -= _xl[0];  // Antisymmetric ghost
             _xl[0] = 0.0;
         }
 
         if(bch == BoundaryCondition::REFLECTING)
         {
-            _xd[_nx_max] += _xh[_nx_max];
+            _xd[_nx_max] += _xh[_nx_max];  // Symmetric ghost
             _xh[_nx_max] = 0.0;
         }
         else if(bch == BoundaryCondition::ABSORBING)
         {
+            _xd[_nx_max] -= _xh[_nx_max];  // Antisymmetric ghost
             _xh[_nx_max] = 0.0;
         }
     }
