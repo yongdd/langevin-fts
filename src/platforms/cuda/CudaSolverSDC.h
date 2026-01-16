@@ -286,7 +286,7 @@ private:
      * @param mat Sparse matrix in CSR format
      * @param d_x Input vector (device)
      * @param d_y Output vector (device)
-     * @param stream CUDA stream for async execution
+     * @param stream CUDA stream for asynchronous execution
      */
     void sparse_matvec(const CudaSparseMatrixCSR& mat, const double* d_x,
                        double* d_y, cudaStream_t stream);

@@ -1170,6 +1170,11 @@ void CudaSolverSDC::update_laplacian_operator()
         const double ds = this->molecules->get_ds();
         const std::vector<int> nx = this->cb->get_nx();
 
+        // Get dimensions safely - use 1 for unused dimensions
+        int nx_x = nx[0];
+        int nx_y = (dim >= 2) ? nx[1] : 1;
+        int nx_z = (dim == 3) ? nx[2] : 1;
+
         for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
@@ -1179,37 +1184,37 @@ void CudaSolverSDC::update_laplacian_operator()
             {
                 double dtau = (tau[m + 1] - tau[m]) * ds;
 
-                // Compute coefficients on host
-                double h_xl[nx[0]], h_xd[nx[0]], h_xh[nx[0]];
-                double h_yl[nx[1]], h_yd[nx[1]], h_yh[nx[1]];
-                double h_zl[nx[2]], h_zd[nx[2]], h_zh[nx[2]];
+                // Compute coefficients on host - use std::vector to avoid VLA issues
+                std::vector<double> h_xl(nx_x), h_xd(nx_x), h_xh(nx_x);
+                std::vector<double> h_yl(nx_y), h_yd(nx_y), h_yh(nx_y);
+                std::vector<double> h_zl(nx_z), h_zd(nx_z), h_zh(nx_z);
 
                 // Use Backward Euler matrix (not Crank-Nicolson) for SDC
                 FiniteDifference::get_backward_euler_matrix(
                     this->cb->get_boundary_conditions(),
                     this->cb->get_nx(), this->cb->get_dx(),
-                    h_xl, h_xd, h_xh,
-                    h_yl, h_yd, h_yh,
-                    h_zl, h_zd, h_zh,
+                    h_xl.data(), h_xd.data(), h_xh.data(),
+                    h_yl.data(), h_yd.data(), h_yh.data(),
+                    h_zl.data(), h_zd.data(), h_zh.data(),
                     bond_length_sq, dtau);
 
                 // Copy to device
-                gpu_error_check(cudaMemcpy(d_xl[m][monomer_type], h_xl, sizeof(double) * nx[0], cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_xd[m][monomer_type], h_xd, sizeof(double) * nx[0], cudaMemcpyHostToDevice));
-                gpu_error_check(cudaMemcpy(d_xh[m][monomer_type], h_xh, sizeof(double) * nx[0], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xl[m][monomer_type], h_xl.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xd[m][monomer_type], h_xd.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xh[m][monomer_type], h_xh.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
 
                 if(dim >= 2)
                 {
-                    gpu_error_check(cudaMemcpy(d_yl[m][monomer_type], h_yl, sizeof(double) * nx[1], cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(d_yd[m][monomer_type], h_yd, sizeof(double) * nx[1], cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(d_yh[m][monomer_type], h_yh, sizeof(double) * nx[1], cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_yl[m][monomer_type], h_yl.data(), sizeof(double) * nx_y, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_yd[m][monomer_type], h_yd.data(), sizeof(double) * nx_y, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_yh[m][monomer_type], h_yh.data(), sizeof(double) * nx_y, cudaMemcpyHostToDevice));
                 }
 
                 if(dim == 3)
                 {
-                    gpu_error_check(cudaMemcpy(d_zl[m][monomer_type], h_zl, sizeof(double) * nx[2], cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(d_zd[m][monomer_type], h_zd, sizeof(double) * nx[2], cudaMemcpyHostToDevice));
-                    gpu_error_check(cudaMemcpy(d_zh[m][monomer_type], h_zh, sizeof(double) * nx[2], cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_zl[m][monomer_type], h_zl.data(), sizeof(double) * nx_z, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_zd[m][monomer_type], h_zd.data(), sizeof(double) * nx_z, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_zh[m][monomer_type], h_zh.data(), sizeof(double) * nx_z, cudaMemcpyHostToDevice));
                 }
             }
         }
@@ -1278,6 +1283,7 @@ void CudaSolverSDC::compute_F_device(int STREAM, const double* d_q, const double
 
     const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
     const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    cudaStream_t stream = streams[STREAM][0];
 
     if(dim == 3)
     {
@@ -1285,7 +1291,7 @@ void CudaSolverSDC::compute_F_device(int STREAM, const double* d_q, const double
         double alpha_y = D / (dx[1] * dx[1]);
         double alpha_z = D / (dx[2] * dx[2]);
 
-        compute_F_kernel_3d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        compute_F_kernel_3d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_q, d_w, d_F,
             alpha_x, alpha_y, alpha_z,
             nx[0], nx[1], nx[2],
@@ -1297,7 +1303,7 @@ void CudaSolverSDC::compute_F_device(int STREAM, const double* d_q, const double
         double alpha_x = D / (dx[0] * dx[0]);
         double alpha_y = D / (dx[1] * dx[1]);
 
-        compute_F_kernel_2d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        compute_F_kernel_2d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_q, d_w, d_F,
             alpha_x, alpha_y,
             nx[0], nx[1],
@@ -1308,7 +1314,7 @@ void CudaSolverSDC::compute_F_device(int STREAM, const double* d_q, const double
     {
         double alpha_x = D / (dx[0] * dx[0]);
 
-        compute_F_kernel_1d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        compute_F_kernel_1d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_q, d_w, d_F,
             alpha_x, nx[0],
             bc[0], bc[1],
@@ -1849,9 +1855,10 @@ void CudaSolverSDC::advance_propagator(
 
         const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+        cudaStream_t stream = streams[STREAM][0];
 
         // Initialize X[0] = q_in
-        copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_X[STREAM][0], d_q_in, n_grid);
 
         //=================================================================
@@ -1860,7 +1867,7 @@ void CudaSolverSDC::advance_propagator(
         for(int m = 0; m < M - 1; m++)
         {
             // Apply reaction term: temp = exp(-w*dtau) * X[m]
-            apply_exp_dw_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            apply_exp_dw_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_temp[STREAM], d_X[STREAM][m], d_exp_dw_sub[m][monomer_type], n_grid);
 
             // Apply diffusion implicitly using ADI
@@ -1883,13 +1890,13 @@ void CudaSolverSDC::advance_propagator(
             // Store old values (fused kernel reduces launch overhead)
             for(int m = 0; m < M; m++)
             {
-                copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_X_old[STREAM][m], d_X[STREAM][m],
                     d_F_old[STREAM][m], d_F[STREAM][m], n_grid);
             }
 
             // Reset X[0]
-            copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_X[STREAM][0], d_q_in, n_grid);
 
             // SDC correction sweep
@@ -1898,19 +1905,19 @@ void CudaSolverSDC::advance_propagator(
                 double dtau = (tau[m + 1] - tau[m]) * ds;
 
                 // Initialize integral to zero
-                gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, streams[STREAM][0]));
+                gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, stream));
 
                 // Accumulate spectral integral: ∫ F dt = Σ S[m][j] * F[j] * ds
                 for(int j = 0; j < M; j++)
                 {
                     double weight = S[m][j] * ds;
-                    accumulate_integral_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                    accumulate_integral_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                         d_rhs[STREAM], d_F_old[STREAM][j], weight, n_grid);
                 }
 
                 // Complete RHS: X[m] + integral - dtau * (F_old[m+1] + w * X_old[m+1])
                 // This ensures we only subtract the diffusion term, not the reaction term
-                sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                     d_temp[STREAM], d_X[STREAM][m], d_rhs[STREAM], dtau, d_F_old[STREAM][m + 1],
                     d_w, d_X_old[STREAM][m + 1], n_grid);
 
@@ -1920,15 +1927,18 @@ void CudaSolverSDC::advance_propagator(
         }
 
         // Output is the final GL node
-        copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+        copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_q_out, d_X[STREAM][M - 1], n_grid);
 
         // Apply mask if provided
         if(d_q_mask != nullptr)
         {
-            apply_mask_kernel<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+            apply_mask_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
                 d_q_out, d_q_mask, n_grid);
         }
+
+        // Synchronize stream to ensure all operations complete before returning
+        gpu_error_check(cudaStreamSynchronize(stream));
     }
     catch(std::exception& exc)
     {
