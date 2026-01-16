@@ -571,7 +571,7 @@ solver.set_cell_averaged_bond(False)
 Cell-averaging is recommended when:
 - Using coarse grids where aliasing may cause negative bond function values
 - Physical non-negativity of the bond function is important for the application
-- Simulating grafted polymer brush systems where absorbing boundary conditions are used at the grafting surface
+- Simulating grafted polymer brush systems where grafting points are represented as Dirac delta functions
 
 Cell-averaging is **not needed** when:
 - Using fine grids (large $N$) where aliasing is negligible
