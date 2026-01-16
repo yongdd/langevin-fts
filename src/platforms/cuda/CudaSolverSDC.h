@@ -261,7 +261,7 @@ private:
     /**
      * @brief Implicit diffusion solve for a specific sub-interval on GPU.
      *
-     * Solves (I - dtau * D∇²) q_out = rhs.
+     * Solves (I - dtau * D∇² + dtau*w) q_out = rhs.
      * - 1D: Uses tridiagonal solver (exact)
      * - 2D/3D: Uses PCG sparse solver (no splitting error)
      */
@@ -316,7 +316,7 @@ private:
     /**
      * @brief PCG solve step for 2D/3D on GPU.
      *
-     * Solves (I - dtau * D∇²) q_out = q_in using PCG sparse solver.
+     * Solves (I - dtau * D∇² + dtau*w) q_out = q_in using PCG sparse solver.
      * This avoids splitting errors that would occur with ADI methods.
      */
     void pcg_solve_step(int STREAM, int sub_interval,

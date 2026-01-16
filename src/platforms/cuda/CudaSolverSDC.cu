@@ -1680,7 +1680,7 @@ void CudaSolverSDC::tridiagonal_solve_1d(int STREAM, int sub_interval,
             _d_xl, _d_xd, _d_xh, d_c_star[STREAM], d_q_sparse[STREAM],
             d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
     else
-        tridiagonal<<<1, nx[0], sizeof(double) * 2 * nx[0], streams[STREAM][0]>>>(
+        tridiagonal<<<1, nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
             _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
             d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
 }
@@ -2135,7 +2135,7 @@ void CudaSolverSDC::matvec_free_solve(int STREAM, int sub_interval,
         double* d_scalars = d_pcg_scalars[STREAM];
         double* d_partial = d_pcg_partial[STREAM];
 
-        // Warm-start: use RHS as initial guess (x0 = b)
+        // Initial guess: use RHS
         gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * n_grid,
             cudaMemcpyDeviceToDevice, stream));
 
@@ -2266,7 +2266,6 @@ void CudaSolverSDC::advance_propagator(
         //=================================================================
         for(int m = 0; m < M - 1; m++)
         {
-            // Fully implicit solve: matrix includes both diffusion and reaction
             implicit_solve_step(STREAM, m, d_X[STREAM][m], d_X[STREAM][m + 1], monomer_type);
         }
 
