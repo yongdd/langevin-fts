@@ -682,19 +682,15 @@ __global__ void sdc_rhs_kernel(
     const double* d_integral,
     double dtau,
     const double* d_F_mp1,
-    const double* d_w,
-    const double* d_X_old_mp1,
     int n_grid)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
     while(idx < n_grid)
     {
-        // For IMEX-SDC: rhs = X[m] + ∫F dt - dtau * D∇²q_old[m+1]
-        // Since F = D∇²q - wq, we have D∇²q = F + wq
-        // So: rhs = X[m] + ∫F dt - dtau * (F_old[m+1] + w * X_old[m+1])
-        double diff_term = d_F_mp1[idx] + d_w[idx] * d_X_old_mp1[idx];
-        d_rhs[idx] = d_X_m[idx] + d_integral[idx] - dtau * diff_term;
+        // For fully implicit SDC: rhs = X[m] + ∫F dt - dtau * F_old[m+1]
+        // The implicit solve handles both diffusion and reaction: (I - dtau*D∇² + dtau*w)
+        d_rhs[idx] = d_X_m[idx] + d_integral[idx] - dtau * d_F_mp1[idx];
         idx += stride;
     }
 }
@@ -786,6 +782,7 @@ CudaSolverSDC::CudaSolverSDC(
         // Allocate tridiagonal coefficients for each sub-interval
         d_xl.resize(M - 1);
         d_xd.resize(M - 1);
+        d_xd_base.resize(M - 1);  // Base diagonal (diffusion only, for 1D)
         d_xh.resize(M - 1);
         d_yl.resize(M - 1);
         d_yd.resize(M - 1);
@@ -793,7 +790,7 @@ CudaSolverSDC::CudaSolverSDC(
         d_zl.resize(M - 1);
         d_zd.resize(M - 1);
         d_zh.resize(M - 1);
-        d_exp_dw_sub.resize(M - 1);
+        dtau_sub.resize(M - 1);  // Sub-interval time steps
 
         for(int m = 0; m < M - 1; m++)
         {
@@ -803,6 +800,7 @@ CudaSolverSDC::CudaSolverSDC(
 
                 gpu_error_check(cudaMalloc((void**)&d_xl[m][monomer_type], sizeof(double) * nx[0]));
                 gpu_error_check(cudaMalloc((void**)&d_xd[m][monomer_type], sizeof(double) * nx[0]));
+                gpu_error_check(cudaMalloc((void**)&d_xd_base[m][monomer_type], sizeof(double) * nx[0]));  // For 1D
                 gpu_error_check(cudaMalloc((void**)&d_xh[m][monomer_type], sizeof(double) * nx[0]));
 
                 gpu_error_check(cudaMalloc((void**)&d_yl[m][monomer_type], sizeof(double) * nx[1]));
@@ -812,8 +810,6 @@ CudaSolverSDC::CudaSolverSDC(
                 gpu_error_check(cudaMalloc((void**)&d_zl[m][monomer_type], sizeof(double) * nx[2]));
                 gpu_error_check(cudaMalloc((void**)&d_zd[m][monomer_type], sizeof(double) * nx[2]));
                 gpu_error_check(cudaMalloc((void**)&d_zh[m][monomer_type], sizeof(double) * nx[2]));
-
-                gpu_error_check(cudaMalloc((void**)&d_exp_dw_sub[m][monomer_type], sizeof(double) * n_grid));
             }
         }
 
@@ -849,7 +845,7 @@ CudaSolverSDC::CudaSolverSDC(
             gpu_error_check(cudaMalloc((void**)&d_q_in_saved[s], sizeof(double) * n_grid));
         }
 
-        // Allocate offset arrays for ADI
+        // Allocate offset arrays for tridiagonal solver (1D only)
         if(DIM == 3)
         {
             int offset_xy[nx[0] * nx[1]];
@@ -992,6 +988,8 @@ CudaSolverSDC::~CudaSolverSDC()
             cudaFree(item.second);
         for(const auto& item: d_xd[m])
             cudaFree(item.second);
+        for(const auto& item: d_xd_base[m])
+            cudaFree(item.second);
         for(const auto& item: d_xh[m])
             cudaFree(item.second);
         for(const auto& item: d_yl[m])
@@ -1005,8 +1003,6 @@ CudaSolverSDC::~CudaSolverSDC()
         for(const auto& item: d_zd[m])
             cudaFree(item.second);
         for(const auto& item: d_zh[m])
-            cudaFree(item.second);
-        for(const auto& item: d_exp_dw_sub[m])
             cudaFree(item.second);
     }
 
@@ -1175,6 +1171,12 @@ void CudaSolverSDC::update_laplacian_operator()
         int nx_y = (dim >= 2) ? nx[1] : 1;
         int nx_z = (dim == 3) ? nx[2] : 1;
 
+        // Store sub-interval time steps
+        for(int m = 0; m < M - 1; m++)
+        {
+            dtau_sub[m] = (tau[m + 1] - tau[m]) * ds;
+        }
+
         for(const auto& item: this->molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
@@ -1182,7 +1184,7 @@ void CudaSolverSDC::update_laplacian_operator()
 
             for(int m = 0; m < M - 1; m++)
             {
-                double dtau = (tau[m + 1] - tau[m]) * ds;
+                double dtau = dtau_sub[m];
 
                 // Compute coefficients on host - use std::vector to avoid VLA issues
                 std::vector<double> h_xl(nx_x), h_xd(nx_x), h_xh(nx_x);
@@ -1202,6 +1204,12 @@ void CudaSolverSDC::update_laplacian_operator()
                 gpu_error_check(cudaMemcpy(d_xl[m][monomer_type], h_xl.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
                 gpu_error_check(cudaMemcpy(d_xd[m][monomer_type], h_xd.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
                 gpu_error_check(cudaMemcpy(d_xh[m][monomer_type], h_xh.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
+
+                // Store base diagonal (diffusion only) for 1D fully implicit update
+                if(dim == 1)
+                {
+                    gpu_error_check(cudaMemcpy(d_xd_base[m][monomer_type], h_xd.data(), sizeof(double) * nx_x, cudaMemcpyHostToDevice));
+                }
 
                 if(dim >= 2)
                 {
@@ -1228,7 +1236,7 @@ void CudaSolverSDC::update_laplacian_operator()
 void CudaSolverSDC::update_dw(std::string device, std::map<std::string, const double*> w_input)
 {
     const int n_grid = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
+    const std::vector<int> nx = this->cb->get_nx();
 
     for(const auto& item: w_input)
     {
@@ -1242,29 +1250,53 @@ void CudaSolverSDC::update_dw(std::string device, std::map<std::string, const do
             gpu_error_check(cudaMemcpy(d_w_field[monomer_type], w, sizeof(double) * n_grid, cudaMemcpyDeviceToDevice));
         }
 
-        // Compute exp(-w * dtau) for each sub-interval on host then copy
-        std::vector<double> h_exp_dw(n_grid);
-        std::vector<double> h_w(n_grid);
-
-        if(device == "host")
+        // For 1D: Add dtau*w to the tridiagonal diagonal
+        // This creates the fully implicit matrix: (I - dtau*D∇² + dtau*w)
+        if(dim == 1)
         {
-            for(int i = 0; i < n_grid; i++)
-                h_w[i] = w[i];
+            // Get w on host for updating diagonal
+            std::vector<double> h_w(n_grid);
+            if(device == "host")
+            {
+                for(int i = 0; i < n_grid; i++)
+                    h_w[i] = w[i];
+            }
+            else
+            {
+                gpu_error_check(cudaMemcpy(h_w.data(), w, sizeof(double) * n_grid, cudaMemcpyDeviceToHost));
+            }
+
+            // Get base diagonal on host
+            std::vector<double> h_xd_base(nx[0]);
+            std::vector<double> h_xd(nx[0]);
+
+            for(int m = 0; m < M - 1; m++)
+            {
+                double dtau = dtau_sub[m];
+
+                // Get base diagonal
+                gpu_error_check(cudaMemcpy(h_xd_base.data(), d_xd_base[m][monomer_type],
+                    sizeof(double) * nx[0], cudaMemcpyDeviceToHost));
+
+                // Add dtau*w to diagonal: xd = xd_base + dtau * w
+                for(int i = 0; i < nx[0]; i++)
+                {
+                    h_xd[i] = h_xd_base[i] + dtau * h_w[i];
+                }
+
+                // Copy updated diagonal to device
+                gpu_error_check(cudaMemcpy(d_xd[m][monomer_type], h_xd.data(),
+                    sizeof(double) * nx[0], cudaMemcpyHostToDevice));
+            }
         }
+        // For 2D/3D: Mark sparse matrices as needing rebuild
+        // The w contribution will be included when the matrix is rebuilt
         else
         {
-            gpu_error_check(cudaMemcpy(h_w.data(), w, sizeof(double) * n_grid, cudaMemcpyDeviceToHost));
-        }
-
-        for(int m = 0; m < M - 1; m++)
-        {
-            double dtau = (tau[m + 1] - tau[m]) * ds;
-
-            for(int i = 0; i < n_grid; i++)
-                h_exp_dw[i] = std::exp(-h_w[i] * dtau);
-
-            gpu_error_check(cudaMemcpy(d_exp_dw_sub[m][monomer_type], h_exp_dw.data(),
-                sizeof(double) * n_grid, cudaMemcpyHostToDevice));
+            for(int m = 0; m < M - 1; m++)
+            {
+                sparse_matrices[m][monomer_type].built = false;
+            }
         }
     }
 }
@@ -1322,130 +1354,24 @@ void CudaSolverSDC::compute_F_device(int STREAM, const double* d_q, const double
     }
 }
 
-void CudaSolverSDC::adi_step(int STREAM, int sub_interval,
-                              double* d_q_in, double* d_q_out, std::string monomer_type)
+void CudaSolverSDC::implicit_solve_step(int STREAM, int sub_interval,
+                                        double* d_q_in, double* d_q_out, std::string monomer_type)
 {
     std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
 
     if(dim >= 2)
     {
-        // Use direct sparse solver for 2D/3D to avoid ADI splitting error
-        direct_solve_step(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
+        // Use PCG sparse solver for 2D/3D (no splitting error)
+        pcg_solve_step(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
     }
     else // dim == 1
     {
-        adi_step_1d(STREAM, sub_interval, bc, d_q_in, d_q_out, monomer_type);
+        // Use tridiagonal solver for 1D (exact)
+        tridiagonal_solve_1d(STREAM, sub_interval, bc, d_q_in, d_q_out, monomer_type);
     }
 }
 
-void CudaSolverSDC::adi_step_3d(int STREAM, int sub_interval,
-    std::vector<BoundaryCondition> bc,
-    double* d_q_in, double* d_q_out, std::string monomer_type)
-{
-    const int n_grid = this->cb->get_total_grid();
-    const std::vector<int> nx = this->cb->get_nx();
-
-    double *_d_xl = d_xl[sub_interval][monomer_type];
-    double *_d_xd = d_xd[sub_interval][monomer_type];
-    double *_d_xh = d_xh[sub_interval][monomer_type];
-    double *_d_yl = d_yl[sub_interval][monomer_type];
-    double *_d_yd = d_yd[sub_interval][monomer_type];
-    double *_d_yh = d_yh[sub_interval][monomer_type];
-    double *_d_zl = d_zl[sub_interval][monomer_type];
-    double *_d_zd = d_zd[sub_interval][monomer_type];
-    double *_d_zh = d_zh[sub_interval][monomer_type];
-
-    // For Backward Euler ADI: sequential tridiagonal solves without CN RHS transformation
-    // X-sweep: (I - dt*Dx) q* = q_in
-    // Y-sweep: (I - dt*Dy) q** = q*
-    // Z-sweep: (I - dt*Dz) q_out = q**
-
-    // Step 1: X-sweep - copy input directly (no CN transformation)
-    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
-                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    if(bc[0] == BoundaryCondition::PERIODIC)
-        tridiagonal_periodic<<<nx[1] * nx[2], nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
-            _d_xl, _d_xd, _d_xh, d_c_star[STREAM], d_q_sparse[STREAM],
-            d_q_star[STREAM], d_temp[STREAM], d_offset_yz, nx[1] * nx[2], nx[1] * nx[2], nx[0]);
-    else
-        tridiagonal<<<nx[1] * nx[2], nx[0], sizeof(double) * 2 * nx[0], streams[STREAM][0]>>>(
-            _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
-            d_q_star[STREAM], d_temp[STREAM], d_offset_yz, nx[1] * nx[2], nx[1] * nx[2], nx[0]);
-
-    // Step 2: Y-sweep - use result of X-sweep directly
-    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_temp[STREAM], sizeof(double) * n_grid,
-                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    if(bc[2] == BoundaryCondition::PERIODIC)
-        tridiagonal_periodic<<<nx[0] * nx[2], nx[1], sizeof(double) * 3 * nx[1], streams[STREAM][0]>>>(
-            _d_yl, _d_yd, _d_yh, d_c_star[STREAM], d_q_sparse[STREAM],
-            d_q_star[STREAM], d_q_dstar[STREAM], d_offset_xz, nx[0] * nx[2], nx[2], nx[1]);
-    else
-        tridiagonal<<<nx[0] * nx[2], nx[1], sizeof(double) * 2 * nx[1], streams[STREAM][0]>>>(
-            _d_yl, _d_yd, _d_yh, d_c_star[STREAM],
-            d_q_star[STREAM], d_q_dstar[STREAM], d_offset_xz, nx[0] * nx[2], nx[2], nx[1]);
-
-    // Step 3: Z-sweep - use result of Y-sweep directly
-    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_dstar[STREAM], sizeof(double) * n_grid,
-                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    if(bc[4] == BoundaryCondition::PERIODIC)
-        tridiagonal_periodic<<<nx[0] * nx[1], nx[2], sizeof(double) * 3 * nx[2], streams[STREAM][0]>>>(
-            _d_zl, _d_zd, _d_zh, d_c_star[STREAM], d_q_sparse[STREAM],
-            d_q_star[STREAM], d_q_out, d_offset_xy, nx[0] * nx[1], 1, nx[2]);
-    else
-        tridiagonal<<<nx[0] * nx[1], nx[2], sizeof(double) * 2 * nx[2], streams[STREAM][0]>>>(
-            _d_zl, _d_zd, _d_zh, d_c_star[STREAM],
-            d_q_star[STREAM], d_q_out, d_offset_xy, nx[0] * nx[1], 1, nx[2]);
-}
-
-void CudaSolverSDC::adi_step_2d(int STREAM, int sub_interval,
-    std::vector<BoundaryCondition> bc,
-    double* d_q_in, double* d_q_out, std::string monomer_type)
-{
-    const int n_grid = this->cb->get_total_grid();
-    const std::vector<int> nx = this->cb->get_nx();
-
-    double *_d_xl = d_xl[sub_interval][monomer_type];
-    double *_d_xd = d_xd[sub_interval][monomer_type];
-    double *_d_xh = d_xh[sub_interval][monomer_type];
-    double *_d_yl = d_yl[sub_interval][monomer_type];
-    double *_d_yd = d_yd[sub_interval][monomer_type];
-    double *_d_yh = d_yh[sub_interval][monomer_type];
-
-    // For Backward Euler ADI: sequential tridiagonal solves without CN RHS transformation
-    // X-sweep: (I - dt*Dx) q* = q_in
-    // Y-sweep: (I - dt*Dy) q_out = q*
-
-    // Step 1: X-sweep - copy input directly (no CN transformation)
-    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
-                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    if(bc[0] == BoundaryCondition::PERIODIC)
-        tridiagonal_periodic<<<nx[1], nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
-            _d_xl, _d_xd, _d_xh, d_c_star[STREAM], d_q_sparse[STREAM],
-            d_q_star[STREAM], d_temp[STREAM], d_offset_y, nx[1], nx[1], nx[0]);
-    else
-        tridiagonal<<<nx[1], nx[0], sizeof(double) * 2 * nx[0], streams[STREAM][0]>>>(
-            _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
-            d_q_star[STREAM], d_temp[STREAM], d_offset_y, nx[1], nx[1], nx[0]);
-
-    // Step 2: Y-sweep - use result of X-sweep directly
-    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_temp[STREAM], sizeof(double) * n_grid,
-                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-    if(bc[2] == BoundaryCondition::PERIODIC)
-        tridiagonal_periodic<<<nx[0], nx[1], sizeof(double) * 3 * nx[1], streams[STREAM][0]>>>(
-            _d_yl, _d_yd, _d_yh, d_c_star[STREAM], d_q_sparse[STREAM],
-            d_q_star[STREAM], d_q_out, d_offset_x, nx[0], 1, nx[1]);
-    else
-        tridiagonal<<<nx[0], nx[1], sizeof(double) * 2 * nx[1], streams[STREAM][0]>>>(
-            _d_yl, _d_yd, _d_yh, d_c_star[STREAM],
-            d_q_star[STREAM], d_q_out, d_offset_x, nx[0], 1, nx[1]);
-}
-
-void CudaSolverSDC::adi_step_1d(int STREAM, int sub_interval,
+void CudaSolverSDC::tridiagonal_solve_1d(int STREAM, int sub_interval,
     std::vector<BoundaryCondition> bc,
     double* d_q_in, double* d_q_out, std::string monomer_type)
 {
@@ -1490,9 +1416,15 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
         const double D = bond_length_sq / 6.0;
         double dtau = (tau[sub_interval + 1] - tau[sub_interval]) * ds;
 
+        // Get w field on host for fully implicit scheme
+        std::vector<double> h_w(n_grid);
+        gpu_error_check(cudaMemcpy(h_w.data(), d_w_field.at(monomer_type),
+            sizeof(double) * n_grid, cudaMemcpyDeviceToHost));
+
         CudaSparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
 
-        // Build A = I - dtau * D * ∇² in CSR format (0-based indexing for PCG)
+        // Build A = I - dtau * D * ∇² + dtau * w in CSR format (0-based indexing for PCG)
+        // Fully implicit scheme: includes both diffusion and reaction terms
         int stencil_size = (dim == 2) ? 5 : 7;
         int max_nnz = n_grid * stencil_size;
 
@@ -1541,7 +1473,8 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
                             entries.push_back({col_jm, -ry});
                     }
 
-                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
+                    // Fully implicit: includes diffusion and reaction terms
+                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + dtau * h_w[row];
                     // Cell-centered boundary modifications using ghost cells:
                     // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
                     // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
@@ -1646,7 +1579,8 @@ void CudaSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_ty
                                 entries.push_back({col_km, -rz});
                         }
 
-                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+                        // Fully implicit: includes diffusion and reaction terms
+                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz + dtau * h_w[row];
                         // Cell-centered boundary modifications using ghost cells:
                         // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
                         // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
@@ -1836,10 +1770,10 @@ void CudaSolverSDC::sparse_solve(int STREAM, int sub_interval,
     }
 }
 
-void CudaSolverSDC::direct_solve_step(int STREAM, int sub_interval,
-                                       double* d_q_in, double* d_q_out, std::string monomer_type)
+void CudaSolverSDC::pcg_solve_step(int STREAM, int sub_interval,
+                                    double* d_q_in, double* d_q_out, std::string monomer_type)
 {
-    // Solve using PCG (no ADI splitting error)
+    // Solve using PCG (no splitting error)
     sparse_solve(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
 }
 
@@ -1862,16 +1796,13 @@ void CudaSolverSDC::advance_propagator(
             d_X[STREAM][0], d_q_in, n_grid);
 
         //=================================================================
-        // Predictor: Backward Euler for diffusion, explicit for reaction
+        // Predictor: Fully implicit Backward Euler for both diffusion and reaction
+        // Solve: (I - dtau*D∇² + dtau*w) X[m+1] = X[m]
         //=================================================================
         for(int m = 0; m < M - 1; m++)
         {
-            // Apply reaction term: temp = exp(-w*dtau) * X[m]
-            apply_exp_dw_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                d_temp[STREAM], d_X[STREAM][m], d_exp_dw_sub[m][monomer_type], n_grid);
-
-            // Apply diffusion implicitly using ADI
-            adi_step(STREAM, m, d_temp[STREAM], d_X[STREAM][m + 1], monomer_type);
+            // Fully implicit solve: matrix includes both diffusion and reaction
+            implicit_solve_step(STREAM, m, d_X[STREAM][m], d_X[STREAM][m + 1], monomer_type);
         }
 
         //=================================================================
@@ -1902,7 +1833,7 @@ void CudaSolverSDC::advance_propagator(
             // SDC correction sweep
             for(int m = 0; m < M - 1; m++)
             {
-                double dtau = (tau[m + 1] - tau[m]) * ds;
+                double dtau = dtau_sub[m];
 
                 // Initialize integral to zero
                 gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, stream));
@@ -1915,14 +1846,13 @@ void CudaSolverSDC::advance_propagator(
                         d_rhs[STREAM], d_F_old[STREAM][j], weight, n_grid);
                 }
 
-                // Complete RHS: X[m] + integral - dtau * (F_old[m+1] + w * X_old[m+1])
-                // This ensures we only subtract the diffusion term, not the reaction term
+                // Fully implicit RHS: X[m] + integral - dtau * F_old[m+1]
+                // Subtract full F (both diffusion and reaction) since implicit solve handles both
                 sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                    d_temp[STREAM], d_X[STREAM][m], d_rhs[STREAM], dtau, d_F_old[STREAM][m + 1],
-                    d_w, d_X_old[STREAM][m + 1], n_grid);
+                    d_temp[STREAM], d_X[STREAM][m], d_rhs[STREAM], dtau, d_F_old[STREAM][m + 1], n_grid);
 
-                // Semi-implicit SDC: solve (I - dtau*D∇²) X[m+1] = rhs
-                adi_step(STREAM, m, d_temp[STREAM], d_X[STREAM][m + 1], monomer_type);
+                // Fully implicit SDC: solve (I - dtau*D∇² + dtau*w) X[m+1] = rhs
+                implicit_solve_step(STREAM, m, d_temp[STREAM], d_X[STREAM][m + 1], monomer_type);
             }
         }
 

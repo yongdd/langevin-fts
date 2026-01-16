@@ -6,13 +6,13 @@
  * produces consistent results with CN-ADI2 for various boundary conditions
  * in 1D, 2D, and 3D.
  *
- * The test compares partition functions between SDC-3 and CN-ADI2 methods.
+ * The test compares partition functions between SDC-2 and CN-ADI2 methods.
  * Both are real-space methods with similar accuracy, so results should be
  * within a few percent.
  *
  * Testing Guidelines compliance:
  * - Uses field amplitudes with std ~ 5 (range [-9, 9])
- * - Calls check_total_partition() for CN-ADI2 (SDC has inherent ~1e-6 discrepancy)
+ * - Calls check_total_partition() for both CN-ADI2 and SDC methods
  * - Uses ds=1/64 for accuracy with strong fields
  */
 
@@ -82,14 +82,21 @@ bool run_test(const std::string& platform_name,
     delete solver1;
     delete cb1;
 
-    // SDC-3
-    // Note: SDC has inherent forward-backward partition discrepancy (~1e-6)
-    // due to the iterative correction nature of the algorithm. We skip
-    // check_total_partition() and rely on comparison with CN-ADI2 for validation.
+    // SDC-2
+    // The fully implicit SDC scheme conserves material (forward == backward partition)
     ComputationBox<double>* cb2 = new ComputationBox<double>(nx, lx, bc);
     ComputationContinuous<double>* solver2 = new ComputationContinuous<double>(
-        cb2, molecules, prop_opt, "realspace", "sdc-3");
+        cb2, molecules, prop_opt, "realspace", "sdc-2");
     solver2->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
+
+    // Verify partition function consistency for SDC (per Testing Guidelines)
+    if (solver2->check_total_partition() == false)
+    {
+        std::cout << platform_name << " FAILED (SDC-2 partition check failed)" << std::endl;
+        delete solver2;
+        delete cb2;
+        return false;
+    }
 
     double Q2 = solver2->get_total_partition(0);
     delete solver2;
@@ -120,7 +127,7 @@ int main()
     {
         bool all_passed = true;
         const double ds = 1.0 / 64.0;
-        const double tolerance = 0.02;  // 2% relative error
+        const double tolerance = 0.015;  // 1.5% relative error
 
         // Setup molecules
         std::map<std::string, double> bond_lengths = {{"A", 1.0}, {"B", 1.0}};
@@ -131,7 +138,7 @@ int main()
         PropagatorComputationOptimizer prop_opt(&molecules, false);
 
         std::cout << "==================================================================" << std::endl;
-        std::cout << "Testing SDC-3 solver with various boundary conditions" << std::endl;
+        std::cout << "Testing SDC-2 solver with various boundary conditions" << std::endl;
         std::cout << "==================================================================" << std::endl;
 
         //=======================================================================

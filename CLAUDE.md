@@ -113,6 +113,32 @@ sbatch slurm_run.sh
 - CN-ADI2 convergence order ≈ 2.0
 - CPU vs CUDA results identical within machine precision (~10⁻¹³)
 
+### Testing Guidelines for Numerical Methods
+
+When testing propagator solvers or numerical methods, always follow these requirements:
+
+1. **Verify material conservation**: Check that total monomer concentration is conserved (sum of all species concentrations equals 1.0). This catches normalization errors in propagator computations.
+
+2. **Call `check_total_partition()`**: Always verify the total partition function during tests. This validates that forward and backward propagators are consistent and the chain statistics are computed correctly.
+
+3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 10. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
+
+4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
+
+Example test setup:
+```python
+# Generate test fields with std ~ 5
+w = np.random.normal(0.0, 5.0, size=nx)
+
+# After computing propagators, verify:
+# 1. Material conservation
+total_phi = sum(phi_species)
+np.mean(total_phi)  # Should be ~1.0
+
+# 2. Partition function consistency
+solver.check_total_partition()  # Should pass without error
+```
+
 ## Code Architecture
 
 ### Platform Abstraction (Abstract Factory Pattern)
@@ -342,7 +368,14 @@ $$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
 
 #### SDC (Spectral Deferred Correction)
 
-SDC is an iterative method that uses spectral quadrature to achieve high-order accuracy. The implementation uses **Gauss-Lobatto collocation nodes** and **IMEX (Implicit-Explicit) splitting**.
+SDC is an iterative method that uses spectral quadrature to achieve high-order accuracy. The implementation uses **Gauss-Lobatto collocation nodes** and a **fully implicit scheme** for material conservation.
+
+**Fully Implicit Formulation:**
+
+The implicit matrix includes both diffusion and reaction terms:
+$$(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) q^{n+1} = q^n$$
+
+This ensures **material conservation**: forward and backward partition functions are equal to machine precision (~10⁻¹⁵).
 
 **Algorithm per contour step:**
 
@@ -351,30 +384,25 @@ SDC is an iterative method that uses spectral quadrature to achieve high-order a
    - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
 
 2. **Predictor** (Backward Euler at each sub-interval):
-   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2) X^{[0]}_{m+1} = e^{-w\Delta\tau} X^{[0]}_m$
-   - 1D: Tridiagonal solver (Thomas algorithm)
+   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) X^{[0]}_{m+1} = X^{[0]}_m$
+   - 1D: Tridiagonal solver (Thomas algorithm) with $w$ in diagonal
    - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
 
 3. **Corrector** ($K$ iterations):
    - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
-   - Apply spectral integral: $X^{[k+1]}_{m+1} = X^{[k]}_m + \int_0^{\tau_{m+1}} L(F^{[k]}) d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$
-   - where $L$ is Lagrange interpolation through the $F$ values
-
-**Spectral Integration Matrix:**
-
-The integration is performed using the matrix $S$ where $S_{m,j}$ gives the contribution of $F_j$ to the integral from $\tau_0$ to $\tau_m$:
-$$\int_0^{\tau_m} \sum_j L_j(\tau') F_j \, d\tau' = \sum_j S_{m,j} F_j$$
+   - Apply spectral integral: $X^{[k+1]}_{m+1} = X^{[k]}_m + \int_{\tau_m}^{\tau_{m+1}} F^{[k]}(\tau') d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$
+   - Solve implicit system at each node
 
 **Order of Accuracy:**
 
-With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
+The SDC order is $\min(K+1, 2M-2)$. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
-| Method | K | Order |
-|--------|---|-------|
-| `sdc-3` | 1 | 3rd |
-| `sdc-5` | 2 | 5th |
-| `sdc-7` | 3 | 7th |
-| `sdc-9` | 4 | 9th |
+| Method | M | K | Order |
+|--------|---|---|-------|
+| `sdc-2` | 3 | 1 | 2nd |
+| `sdc-3` | 3 | 2 | 3rd |
+| `sdc-5` | 4 | 4 | 5th |
+| `sdc-7` | 5 | 6 | 7th |
 
 **References:**
 - Dutt, Greengard, Rokhlin, *BIT Numerical Mathematics* **2000**, 40, 241
