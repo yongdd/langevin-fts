@@ -491,6 +491,471 @@ __global__ void matvec_free_kernel_2d(
     d_y[idx] = diag * x_c - rx * (x_im + x_ip) - ry * (x_jm + x_jp);
 }
 
+//=============================================================================
+// IMEX: Diffusion-only matvec kernels (no w term) for IMEX mode
+//=============================================================================
+
+// Diffusion-only matvec for 3D: y = (I - dtau*D*∇²)*x (no w term)
+__global__ void matvec_diff_only_kernel_3d(
+    const double* __restrict__ d_x,
+    double* __restrict__ d_y,
+    double rx, double ry, double rz,
+    int nx_I, int nx_J, int nx_K,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / (nx_J * nx_K);
+    int j = (idx / nx_K) % nx_J;
+    int k = idx % nx_K;
+
+    double x_c = d_x[idx];
+
+    // Base diagonal: 1 + 2*rx + 2*ry + 2*rz (no w term)
+    double diag = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+
+    // X-direction neighbors
+    double x_im, x_ip;
+    if(bc_xl == BoundaryCondition::PERIODIC)
+        x_im = d_x[((nx_I + i - 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) {
+        x_im = 0.0;
+        diag += rx;
+    } else if(bc_xl == BoundaryCondition::REFLECTING && i == 0) {
+        x_im = 0.0;
+        diag -= rx;
+    } else
+        x_im = d_x[(i - 1) * nx_J * nx_K + j * nx_K + k];
+
+    if(bc_xh == BoundaryCondition::PERIODIC)
+        x_ip = d_x[((i + 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) {
+        x_ip = 0.0;
+        diag += rx;
+    } else if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) {
+        x_ip = 0.0;
+        diag -= rx;
+    } else
+        x_ip = d_x[(i + 1) * nx_J * nx_K + j * nx_K + k];
+
+    // Y-direction neighbors
+    double x_jm, x_jp;
+    if(bc_yl == BoundaryCondition::PERIODIC)
+        x_jm = d_x[i * nx_J * nx_K + ((nx_J + j - 1) % nx_J) * nx_K + k];
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) {
+        x_jm = 0.0;
+        diag += ry;
+    } else if(bc_yl == BoundaryCondition::REFLECTING && j == 0) {
+        x_jm = 0.0;
+        diag -= ry;
+    } else
+        x_jm = d_x[i * nx_J * nx_K + (j - 1) * nx_K + k];
+
+    if(bc_yh == BoundaryCondition::PERIODIC)
+        x_jp = d_x[i * nx_J * nx_K + ((j + 1) % nx_J) * nx_K + k];
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) {
+        x_jp = 0.0;
+        diag += ry;
+    } else if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) {
+        x_jp = 0.0;
+        diag -= ry;
+    } else
+        x_jp = d_x[i * nx_J * nx_K + (j + 1) * nx_K + k];
+
+    // Z-direction neighbors
+    double x_km, x_kp;
+    if(bc_zl == BoundaryCondition::PERIODIC)
+        x_km = d_x[i * nx_J * nx_K + j * nx_K + (nx_K + k - 1) % nx_K];
+    else if(bc_zl == BoundaryCondition::ABSORBING && k == 0) {
+        x_km = 0.0;
+        diag += rz;
+    } else if(bc_zl == BoundaryCondition::REFLECTING && k == 0) {
+        x_km = 0.0;
+        diag -= rz;
+    } else
+        x_km = d_x[i * nx_J * nx_K + j * nx_K + k - 1];
+
+    if(bc_zh == BoundaryCondition::PERIODIC)
+        x_kp = d_x[i * nx_J * nx_K + j * nx_K + (k + 1) % nx_K];
+    else if(bc_zh == BoundaryCondition::ABSORBING && k == nx_K - 1) {
+        x_kp = 0.0;
+        diag += rz;
+    } else if(bc_zh == BoundaryCondition::REFLECTING && k == nx_K - 1) {
+        x_kp = 0.0;
+        diag -= rz;
+    } else
+        x_kp = d_x[i * nx_J * nx_K + j * nx_K + k + 1];
+
+    // y = diag*x - rx*(x_im + x_ip) - ry*(x_jm + x_jp) - rz*(x_km + x_kp)
+    d_y[idx] = diag * x_c - rx * (x_im + x_ip) - ry * (x_jm + x_jp) - rz * (x_km + x_kp);
+}
+
+// Diffusion-only matvec for 2D: y = (I - dtau*D*∇²)*x (no w term)
+__global__ void matvec_diff_only_kernel_2d(
+    const double* __restrict__ d_x,
+    double* __restrict__ d_y,
+    double rx, double ry,
+    int nx_I, int nx_J,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / nx_J;
+    int j = idx % nx_J;
+
+    double x_c = d_x[idx];
+
+    // Base diagonal: 1 + 2*rx + 2*ry (no w term)
+    double diag = 1.0 + 2.0 * rx + 2.0 * ry;
+
+    // X-direction neighbors
+    double x_im, x_ip;
+    if(bc_xl == BoundaryCondition::PERIODIC)
+        x_im = d_x[((nx_I + i - 1) % nx_I) * nx_J + j];
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) {
+        x_im = 0.0;
+        diag += rx;
+    } else if(bc_xl == BoundaryCondition::REFLECTING && i == 0) {
+        x_im = 0.0;
+        diag -= rx;
+    } else
+        x_im = d_x[(i - 1) * nx_J + j];
+
+    if(bc_xh == BoundaryCondition::PERIODIC)
+        x_ip = d_x[((i + 1) % nx_I) * nx_J + j];
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) {
+        x_ip = 0.0;
+        diag += rx;
+    } else if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) {
+        x_ip = 0.0;
+        diag -= rx;
+    } else
+        x_ip = d_x[(i + 1) * nx_J + j];
+
+    // Y-direction neighbors
+    double x_jm, x_jp;
+    if(bc_yl == BoundaryCondition::PERIODIC)
+        x_jm = d_x[i * nx_J + (nx_J + j - 1) % nx_J];
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) {
+        x_jm = 0.0;
+        diag += ry;
+    } else if(bc_yl == BoundaryCondition::REFLECTING && j == 0) {
+        x_jm = 0.0;
+        diag -= ry;
+    } else
+        x_jm = d_x[i * nx_J + j - 1];
+
+    if(bc_yh == BoundaryCondition::PERIODIC)
+        x_jp = d_x[i * nx_J + (j + 1) % nx_J];
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) {
+        x_jp = 0.0;
+        diag += ry;
+    } else if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) {
+        x_jp = 0.0;
+        diag -= ry;
+    } else
+        x_jp = d_x[i * nx_J + j + 1];
+
+    // y = diag*x - rx*(x_im + x_ip) - ry*(x_jm + x_jp)
+    d_y[idx] = diag * x_c - rx * (x_im + x_ip) - ry * (x_jm + x_jp);
+}
+
+// Diffusion-only diagonal inverse for 3D (no w term)
+__global__ void compute_diag_inv_diff_only_kernel_3d(
+    double* __restrict__ d_diag_inv,
+    double rx, double ry, double rz,
+    int nx_I, int nx_J, int nx_K,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / (nx_J * nx_K);
+    int j = (idx / nx_K) % nx_J;
+    int k = idx % nx_K;
+
+    double diag = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+
+    // Boundary modifications
+    if(bc_xl == BoundaryCondition::REFLECTING && i == 0) diag -= rx;
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) diag += rx;
+    if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) diag -= rx;
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) diag += rx;
+    if(bc_yl == BoundaryCondition::REFLECTING && j == 0) diag -= ry;
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) diag += ry;
+    if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) diag -= ry;
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) diag += ry;
+    if(bc_zl == BoundaryCondition::REFLECTING && k == 0) diag -= rz;
+    else if(bc_zl == BoundaryCondition::ABSORBING && k == 0) diag += rz;
+    if(bc_zh == BoundaryCondition::REFLECTING && k == nx_K - 1) diag -= rz;
+    else if(bc_zh == BoundaryCondition::ABSORBING && k == nx_K - 1) diag += rz;
+
+    d_diag_inv[idx] = 1.0 / diag;
+}
+
+// Diffusion-only diagonal inverse for 2D (no w term)
+__global__ void compute_diag_inv_diff_only_kernel_2d(
+    double* __restrict__ d_diag_inv,
+    double rx, double ry,
+    int nx_I, int nx_J,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / nx_J;
+    int j = idx % nx_J;
+
+    double diag = 1.0 + 2.0 * rx + 2.0 * ry;
+
+    // Boundary modifications
+    if(bc_xl == BoundaryCondition::REFLECTING && i == 0) diag -= rx;
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) diag += rx;
+    if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) diag -= rx;
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) diag += rx;
+    if(bc_yl == BoundaryCondition::REFLECTING && j == 0) diag -= ry;
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) diag += ry;
+    if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) diag -= ry;
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) diag += ry;
+
+    d_diag_inv[idx] = 1.0 / diag;
+}
+
+//=============================================================================
+// IMEX: Finite-difference Laplacian kernels for F_diff = D∇²q
+//=============================================================================
+
+// Compute F_diff = D∇²q using finite differences (3D)
+__global__ void compute_F_diff_fd_kernel_3d(
+    const double* __restrict__ d_q,
+    double* __restrict__ d_F_diff,
+    double alpha_x, double alpha_y, double alpha_z,
+    int nx_I, int nx_J, int nx_K,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    BoundaryCondition bc_zl, BoundaryCondition bc_zh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / (nx_J * nx_K);
+    int j = (idx / nx_K) % nx_J;
+    int k = idx % nx_K;
+
+    double q_c = d_q[idx];
+
+    // X-direction: D * d²q/dx² = alpha_x * (q_{i-1} - 2*q_i + q_{i+1})
+    double q_im, q_ip;
+    double diag_x = -2.0 * alpha_x;
+    if(bc_xl == BoundaryCondition::PERIODIC)
+        q_im = d_q[((nx_I + i - 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) {
+        q_im = -q_c;  // Ghost: q_{-1} = -q_0
+        diag_x += alpha_x;  // Modified: -2 + 1 = -1
+    } else if(bc_xl == BoundaryCondition::REFLECTING && i == 0) {
+        q_im = q_c;  // Ghost: q_{-1} = q_0
+        diag_x -= alpha_x;  // Modified: -2 - 1 = -3
+    } else
+        q_im = d_q[(i - 1) * nx_J * nx_K + j * nx_K + k];
+
+    if(bc_xh == BoundaryCondition::PERIODIC)
+        q_ip = d_q[((i + 1) % nx_I) * nx_J * nx_K + j * nx_K + k];
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) {
+        q_ip = -q_c;
+        diag_x += alpha_x;
+    } else if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) {
+        q_ip = q_c;
+        diag_x -= alpha_x;
+    } else
+        q_ip = d_q[(i + 1) * nx_J * nx_K + j * nx_K + k];
+
+    // Y-direction
+    double q_jm, q_jp;
+    double diag_y = -2.0 * alpha_y;
+    if(bc_yl == BoundaryCondition::PERIODIC)
+        q_jm = d_q[i * nx_J * nx_K + ((nx_J + j - 1) % nx_J) * nx_K + k];
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) {
+        q_jm = -q_c;
+        diag_y += alpha_y;
+    } else if(bc_yl == BoundaryCondition::REFLECTING && j == 0) {
+        q_jm = q_c;
+        diag_y -= alpha_y;
+    } else
+        q_jm = d_q[i * nx_J * nx_K + (j - 1) * nx_K + k];
+
+    if(bc_yh == BoundaryCondition::PERIODIC)
+        q_jp = d_q[i * nx_J * nx_K + ((j + 1) % nx_J) * nx_K + k];
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) {
+        q_jp = -q_c;
+        diag_y += alpha_y;
+    } else if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) {
+        q_jp = q_c;
+        diag_y -= alpha_y;
+    } else
+        q_jp = d_q[i * nx_J * nx_K + (j + 1) * nx_K + k];
+
+    // Z-direction
+    double q_km, q_kp;
+    double diag_z = -2.0 * alpha_z;
+    if(bc_zl == BoundaryCondition::PERIODIC)
+        q_km = d_q[i * nx_J * nx_K + j * nx_K + (nx_K + k - 1) % nx_K];
+    else if(bc_zl == BoundaryCondition::ABSORBING && k == 0) {
+        q_km = -q_c;
+        diag_z += alpha_z;
+    } else if(bc_zl == BoundaryCondition::REFLECTING && k == 0) {
+        q_km = q_c;
+        diag_z -= alpha_z;
+    } else
+        q_km = d_q[i * nx_J * nx_K + j * nx_K + k - 1];
+
+    if(bc_zh == BoundaryCondition::PERIODIC)
+        q_kp = d_q[i * nx_J * nx_K + j * nx_K + (k + 1) % nx_K];
+    else if(bc_zh == BoundaryCondition::ABSORBING && k == nx_K - 1) {
+        q_kp = -q_c;
+        diag_z += alpha_z;
+    } else if(bc_zh == BoundaryCondition::REFLECTING && k == nx_K - 1) {
+        q_kp = q_c;
+        diag_z -= alpha_z;
+    } else
+        q_kp = d_q[i * nx_J * nx_K + j * nx_K + k + 1];
+
+    // F_diff = D∇²q = alpha_x*(q_{i-1} + q_{i+1}) + diag_x*q
+    //               + alpha_y*(q_{j-1} + q_{j+1}) + diag_y*q
+    //               + alpha_z*(q_{k-1} + q_{k+1}) + diag_z*q
+    d_F_diff[idx] = alpha_x * (q_im + q_ip) + alpha_y * (q_jm + q_jp) + alpha_z * (q_km + q_kp)
+                  + (diag_x + diag_y + diag_z) * q_c;
+}
+
+// Compute F_diff = D∇²q using finite differences (2D)
+__global__ void compute_F_diff_fd_kernel_2d(
+    const double* __restrict__ d_q,
+    double* __restrict__ d_F_diff,
+    double alpha_x, double alpha_y,
+    int nx_I, int nx_J,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    BoundaryCondition bc_yl, BoundaryCondition bc_yh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx / nx_J;
+    int j = idx % nx_J;
+
+    double q_c = d_q[idx];
+
+    // X-direction
+    double q_im, q_ip;
+    double diag_x = -2.0 * alpha_x;
+    if(bc_xl == BoundaryCondition::PERIODIC)
+        q_im = d_q[((nx_I + i - 1) % nx_I) * nx_J + j];
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) {
+        q_im = -q_c;
+        diag_x += alpha_x;
+    } else if(bc_xl == BoundaryCondition::REFLECTING && i == 0) {
+        q_im = q_c;
+        diag_x -= alpha_x;
+    } else
+        q_im = d_q[(i - 1) * nx_J + j];
+
+    if(bc_xh == BoundaryCondition::PERIODIC)
+        q_ip = d_q[((i + 1) % nx_I) * nx_J + j];
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) {
+        q_ip = -q_c;
+        diag_x += alpha_x;
+    } else if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) {
+        q_ip = q_c;
+        diag_x -= alpha_x;
+    } else
+        q_ip = d_q[(i + 1) * nx_J + j];
+
+    // Y-direction
+    double q_jm, q_jp;
+    double diag_y = -2.0 * alpha_y;
+    if(bc_yl == BoundaryCondition::PERIODIC)
+        q_jm = d_q[i * nx_J + (nx_J + j - 1) % nx_J];
+    else if(bc_yl == BoundaryCondition::ABSORBING && j == 0) {
+        q_jm = -q_c;
+        diag_y += alpha_y;
+    } else if(bc_yl == BoundaryCondition::REFLECTING && j == 0) {
+        q_jm = q_c;
+        diag_y -= alpha_y;
+    } else
+        q_jm = d_q[i * nx_J + j - 1];
+
+    if(bc_yh == BoundaryCondition::PERIODIC)
+        q_jp = d_q[i * nx_J + (j + 1) % nx_J];
+    else if(bc_yh == BoundaryCondition::ABSORBING && j == nx_J - 1) {
+        q_jp = -q_c;
+        diag_y += alpha_y;
+    } else if(bc_yh == BoundaryCondition::REFLECTING && j == nx_J - 1) {
+        q_jp = q_c;
+        diag_y -= alpha_y;
+    } else
+        q_jp = d_q[i * nx_J + j + 1];
+
+    // F_diff = D∇²q
+    d_F_diff[idx] = alpha_x * (q_im + q_ip) + alpha_y * (q_jm + q_jp)
+                  + (diag_x + diag_y) * q_c;
+}
+
+// Compute F_diff = D∇²q using finite differences (1D)
+__global__ void compute_F_diff_fd_kernel_1d(
+    const double* __restrict__ d_q,
+    double* __restrict__ d_F_diff,
+    double alpha_x,
+    int nx_I,
+    BoundaryCondition bc_xl, BoundaryCondition bc_xh,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n_grid) return;
+
+    int i = idx;
+    double q_c = d_q[idx];
+
+    // X-direction
+    double q_im, q_ip;
+    double diag_x = -2.0 * alpha_x;
+    if(bc_xl == BoundaryCondition::PERIODIC)
+        q_im = d_q[(nx_I + i - 1) % nx_I];
+    else if(bc_xl == BoundaryCondition::ABSORBING && i == 0) {
+        q_im = -q_c;
+        diag_x += alpha_x;
+    } else if(bc_xl == BoundaryCondition::REFLECTING && i == 0) {
+        q_im = q_c;
+        diag_x -= alpha_x;
+    } else
+        q_im = d_q[i - 1];
+
+    if(bc_xh == BoundaryCondition::PERIODIC)
+        q_ip = d_q[(i + 1) % nx_I];
+    else if(bc_xh == BoundaryCondition::ABSORBING && i == nx_I - 1) {
+        q_ip = -q_c;
+        diag_x += alpha_x;
+    } else if(bc_xh == BoundaryCondition::REFLECTING && i == nx_I - 1) {
+        q_ip = q_c;
+        diag_x -= alpha_x;
+    } else
+        q_ip = d_q[i + 1];
+
+    // F_diff = D∇²q
+    d_F_diff[idx] = alpha_x * (q_im + q_ip) + diag_x * q_c;
+}
+
 // Compute diagonal inverse for Jacobi preconditioner (matrix-free version)
 __global__ void compute_diag_inv_kernel_3d(
     const double* __restrict__ d_w,
@@ -1311,6 +1776,19 @@ CudaSolverSDC::CudaSolverSDC(
                 }
             }
 
+            // Initialize IMEX diffusion-only diagonal inverse storage (for non-periodic BC)
+            d_diag_inv_diff_only_.resize(M - 1);
+            diag_inv_diff_only_built_.resize(M - 1);
+            for(int m = 0; m < M - 1; m++)
+            {
+                for(const auto& item: molecules->get_bond_lengths())
+                {
+                    std::string monomer_type = item.first;
+                    d_diag_inv_diff_only_[m][monomer_type] = nullptr;
+                    diag_inv_diff_only_built_[m][monomer_type] = false;
+                }
+            }
+
             // Calculate number of blocks for PCG
             pcg_n_blocks = (n_grid + PCG_BLOCK_SIZE - 1) / PCG_BLOCK_SIZE;
 
@@ -1420,7 +1898,9 @@ CudaSolverSDC::CudaSolverSDC(
                 plan_forward_[s] = 0;
                 plan_backward_[s] = 0;
                 d_qk_[s] = nullptr;
-                d_laplacian_q_[s] = nullptr;
+                // Always allocate d_laplacian_q_ as workspace
+                // (may be used by IMEX mode, which is enabled later via set_imex_mode)
+                gpu_error_check(cudaMalloc((void**)&d_laplacian_q_[s], sizeof(double) * n_grid));
             }
             n_complex_ = 0;
         }
@@ -1451,6 +1931,11 @@ CudaSolverSDC::~CudaSolverSDC()
             }
             // Free matrix-free diagonal inverse storage
             for(auto& item: d_diag_inv_free[m])
+            {
+                if(item.second) cudaFree(item.second);
+            }
+            // Free IMEX diffusion-only diagonal inverse storage
+            for(auto& item: d_diag_inv_diff_only_[m])
             {
                 if(item.second) cudaFree(item.second);
             }
@@ -1559,6 +2044,14 @@ CudaSolverSDC::~CudaSolverSDC()
         for(auto& item: d_spectral_laplacian_)
         {
             if(item.second) cudaFree(item.second);
+        }
+    }
+    else
+    {
+        // Free d_laplacian_q_ allocated for non-periodic/1D case
+        for(int s = 0; s < n_streams; s++)
+        {
+            if(d_laplacian_q_[s]) cudaFree(d_laplacian_q_[s]);
         }
     }
 }
@@ -2785,6 +3278,235 @@ void CudaSolverSDC::apply_fft_preconditioner(int STREAM, int sub_interval,
         throw_with_line_number("cuFFT backward transform failed in apply_fft_preconditioner");
 }
 
+//=============================================================================
+// IMEX: Diffusion-only solve functions for non-periodic BC
+//=============================================================================
+
+void CudaSolverSDC::diffusion_solve_pcg(int STREAM, int sub_interval,
+                                         double* d_q_in, double* d_q_out, std::string monomer_type)
+{
+    // Solve (I - dtau*D∇²) q_out = q_in using PCG with Jacobi preconditioner
+    // This is for IMEX mode with non-periodic BC in 2D/3D
+
+    const int n_grid = this->cb->get_total_grid();
+    const std::vector<int> nx = this->cb->get_nx();
+    const std::vector<double> dx = this->cb->get_dx();
+    const std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
+
+    double bond_length = this->molecules->get_bond_lengths().at(monomer_type);
+    double bond_length_sq = bond_length * bond_length;
+    const double D = bond_length_sq / 6.0;
+    double dtau = dtau_sub[sub_interval];
+
+    cudaStream_t stream = streams[STREAM][0];
+
+    // Compute diffusion coefficients
+    double rx = D * dtau / (dx[0] * dx[0]);
+    double ry = (dim >= 2) ? D * dtau / (dx[1] * dx[1]) : 0.0;
+    double rz = (dim == 3) ? D * dtau / (dx[2] * dx[2]) : 0.0;
+
+    // Get boundary conditions
+    BoundaryCondition bc_xl = bc[0];
+    BoundaryCondition bc_xh = bc[1];
+    BoundaryCondition bc_yl = (dim >= 2) ? bc[2] : BoundaryCondition::PERIODIC;
+    BoundaryCondition bc_yh = (dim >= 2) ? bc[3] : BoundaryCondition::PERIODIC;
+    BoundaryCondition bc_zl = (dim == 3) ? bc[4] : BoundaryCondition::PERIODIC;
+    BoundaryCondition bc_zh = (dim == 3) ? bc[5] : BoundaryCondition::PERIODIC;
+
+    // Allocate diffusion-only diagonal inverse if needed
+    if(d_diag_inv_diff_only_[sub_interval].find(monomer_type) == d_diag_inv_diff_only_[sub_interval].end() ||
+       d_diag_inv_diff_only_[sub_interval][monomer_type] == nullptr)
+    {
+        gpu_error_check(cudaMalloc((void**)&d_diag_inv_diff_only_[sub_interval][monomer_type],
+            sizeof(double) * n_grid));
+        diag_inv_diff_only_built_[sub_interval][monomer_type] = false;
+    }
+
+    double* d_diag_inv = d_diag_inv_diff_only_[sub_interval][monomer_type];
+
+    // Compute diffusion-only diagonal inverse (only needs to be done once)
+    if(!diag_inv_diff_only_built_[sub_interval][monomer_type])
+    {
+        if(dim == 3)
+        {
+            compute_diag_inv_diff_only_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_diag_inv, rx, ry, rz, nx[0], nx[1], nx[2],
+                bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh, n_grid);
+        }
+        else // dim == 2
+        {
+            compute_diag_inv_diff_only_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_diag_inv, rx, ry, nx[0], nx[1],
+                bc_xl, bc_xh, bc_yl, bc_yh, n_grid);
+        }
+        diag_inv_diff_only_built_[sub_interval][monomer_type] = true;
+    }
+
+    // PCG setup
+    double* d_scalars = d_pcg_scalars[STREAM];
+    double* d_partial = d_pcg_partial[STREAM];
+
+    int reduce_threads = 1;
+    while(reduce_threads < pcg_n_blocks) reduce_threads *= 2;
+    if(reduce_threads > 1024) reduce_threads = 1024;
+
+    // Initial guess: x = b (RHS)
+    gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * n_grid,
+        cudaMemcpyDeviceToDevice, stream));
+
+    // Compute Ax0 using diffusion-only matvec
+    if(dim == 3)
+    {
+        matvec_diff_only_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+            d_q_out, d_pcg_Ap[STREAM], rx, ry, rz, nx[0], nx[1], nx[2],
+            bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh, n_grid);
+    }
+    else // dim == 2
+    {
+        matvec_diff_only_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+            d_q_out, d_pcg_Ap[STREAM], rx, ry, nx[0], nx[1],
+            bc_xl, bc_xh, bc_yl, bc_yh, n_grid);
+    }
+
+    // r = b - Ax0
+    pcg_init_r_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+        d_pcg_r[STREAM], d_q_in, d_pcg_Ap[STREAM], n_grid);
+
+    // z = M^{-1} r (Jacobi preconditioner)
+    pcg_precond_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+        d_pcg_z[STREAM], d_pcg_r[STREAM], d_diag_inv, n_grid);
+
+    // p = z
+    pcg_copy_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+        d_pcg_p[STREAM], d_pcg_z[STREAM], n_grid);
+
+    // rz_old = (r, z)
+    pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+        d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+    pcg_fused_reduce_rz_init_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+        d_scalars, d_partial, pcg_n_blocks);
+
+    // PCG iterations - diffusion-only matrix converges faster than full implicit
+    const int diff_pcg_max_iter = 30;  // Fewer iterations needed for diffusion-only
+    for(int iter = 0; iter < diff_pcg_max_iter; iter++)
+    {
+        // 1. Ap = A * p (diffusion-only matvec)
+        if(dim == 3)
+        {
+            matvec_diff_only_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_p[STREAM], d_pcg_Ap[STREAM], rx, ry, rz, nx[0], nx[1], nx[2],
+                bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh, n_grid);
+        }
+        else // dim == 2
+        {
+            matvec_diff_only_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_p[STREAM], d_pcg_Ap[STREAM], rx, ry, nx[0], nx[1],
+                bc_xl, bc_xh, bc_yl, bc_yh, n_grid);
+        }
+
+        // 2-3. pAp, alpha = rz_old / pAp
+        pcg_fused_dot_alpha_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+            d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+        pcg_fused_reduce_alpha_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+            d_scalars, d_partial, pcg_n_blocks);
+
+        // 4. x += alpha*p, r -= alpha*Ap
+        pcg_fused_update_xr_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+            d_q_out, d_pcg_r[STREAM], d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, n_grid);
+
+        // 5. z = M^{-1}*r
+        pcg_precond_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+            d_pcg_z[STREAM], d_pcg_r[STREAM], d_diag_inv, n_grid);
+
+        // 6-7. rz_new, beta = rz_new/rz_old
+        pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+            d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+        pcg_fused_reduce_beta_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+            d_scalars, d_partial, pcg_n_blocks);
+
+        // 8. p = z + beta*p
+        pcg_update_p_dev_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+            d_pcg_p[STREAM], d_pcg_z[STREAM], d_scalars, n_grid);
+    }
+}
+
+void CudaSolverSDC::diffusion_solve_tridiag_1d(int STREAM, int sub_interval,
+                                                std::vector<BoundaryCondition> bc,
+                                                double* d_q_in, double* d_q_out, std::string monomer_type)
+{
+    // Solve (I - dtau*D∇²) q_out = q_in using tridiagonal solver for 1D
+    // Uses the base diagonal coefficients (diffusion only, no w term)
+
+    const int n_grid = this->cb->get_total_grid();
+    const std::vector<int> nx = this->cb->get_nx();
+
+    double *_d_xl = d_xl[sub_interval][monomer_type];
+    double *_d_xd = d_xd_base[sub_interval][monomer_type];  // Use base diagonal (diffusion only)
+    double *_d_xh = d_xh[sub_interval][monomer_type];
+
+    // Copy input to q_star
+    gpu_error_check(cudaMemcpyAsync(d_q_star[STREAM], d_q_in, sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+
+    if(bc[0] == BoundaryCondition::PERIODIC)
+        tridiagonal_periodic<<<1, nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
+            _d_xl, _d_xd, _d_xh, d_c_star[STREAM], d_q_sparse[STREAM],
+            d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
+    else
+        tridiagonal<<<1, nx[0], sizeof(double) * 3 * nx[0], streams[STREAM][0]>>>(
+            _d_xl, _d_xd, _d_xh, d_c_star[STREAM],
+            d_q_star[STREAM], d_q_out, d_offset, 1, 1, nx[0]);
+}
+
+void CudaSolverSDC::compute_F_diff_fd(int STREAM, const double* d_q,
+                                       double* d_F_diff, std::string monomer_type)
+{
+    // Compute F_diff = D∇²q using finite differences
+    // Used for IMEX SDC corrections with non-periodic BC
+
+    const int n_grid = this->cb->get_total_grid();
+    const std::vector<int> nx = this->cb->get_nx();
+    const std::vector<double> dx = this->cb->get_dx();
+    const std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
+
+    double bond_length = this->molecules->get_bond_lengths().at(monomer_type);
+    double bond_length_sq = bond_length * bond_length;
+    const double D = bond_length_sq / 6.0;
+
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    cudaStream_t stream = streams[STREAM][0];
+
+    if(dim == 3)
+    {
+        double alpha_x = D / (dx[0] * dx[0]);
+        double alpha_y = D / (dx[1] * dx[1]);
+        double alpha_z = D / (dx[2] * dx[2]);
+
+        compute_F_diff_fd_kernel_3d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_q, d_F_diff, alpha_x, alpha_y, alpha_z,
+            nx[0], nx[1], nx[2],
+            bc[0], bc[1], bc[2], bc[3], bc[4], bc[5], n_grid);
+    }
+    else if(dim == 2)
+    {
+        double alpha_x = D / (dx[0] * dx[0]);
+        double alpha_y = D / (dx[1] * dx[1]);
+
+        compute_F_diff_fd_kernel_2d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_q, d_F_diff, alpha_x, alpha_y,
+            nx[0], nx[1],
+            bc[0], bc[1], bc[2], bc[3], n_grid);
+    }
+    else // dim == 1
+    {
+        double alpha_x = D / (dx[0] * dx[0]);
+
+        compute_F_diff_fd_kernel_1d<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+            d_q, d_F_diff, alpha_x, nx[0], bc[0], bc[1], n_grid);
+    }
+}
+
 void CudaSolverSDC::compute_spectral_laplacian(std::string monomer_type)
 {
     // Compute -D*|k|² for spectral Laplacian (D∇² in Fourier space)
@@ -2947,15 +3669,23 @@ void CudaSolverSDC::advance_propagator(
         copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_X[STREAM][0], d_q_in, n_grid);
 
-        // IMEX SDC with Strang splitting (FFT-based) for periodic BC in 2D/3D
+        // IMEX SDC with Strang splitting
         // IMEX treats diffusion implicitly and reaction explicitly, which is faster.
-        if(imex_mode_enabled_ && is_periodic_ && dim >= 2)
+        // Diffusion solve method depends on BC and dimension:
+        // - Periodic BC in 2D/3D: FFT-based direct solve
+        // - Non-periodic BC in 2D/3D: PCG with Jacobi preconditioner
+        // - 1D (all BCs): Tridiagonal solver
+        if(imex_mode_enabled_)
         {
             //=============================================================
             // IMEX SDC with Strang splitting
-            // Diffusion: implicit FFT-based solve
+            // Diffusion: implicit solve (FFT, PCG, or tridiagonal)
             // Reaction: symmetric Boltzmann factors exp(-w*dt/2)
             //=============================================================
+
+            // Determine which diffusion solver and F_diff computation to use
+            bool use_fft = is_periodic_ && dim >= 2;
+            std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
 
             //-------------------------------------------------------------
             // Predictor: Strang splitting for symmetric operator handling
@@ -2973,7 +3703,12 @@ void CudaSolverSDC::advance_propagator(
                     d_temp[STREAM], d_X[STREAM][m], d_w, dtau, n_grid);
 
                 // Step 2: Full diffusion solve: (I - dtau*D∇²) rhs = temp
-                diffusion_solve_fft(STREAM, m, d_temp[STREAM], d_rhs[STREAM], monomer_type);
+                if(use_fft)
+                    diffusion_solve_fft(STREAM, m, d_temp[STREAM], d_rhs[STREAM], monomer_type);
+                else if(dim >= 2)
+                    diffusion_solve_pcg(STREAM, m, d_temp[STREAM], d_rhs[STREAM], monomer_type);
+                else  // dim == 1
+                    diffusion_solve_tridiag_1d(STREAM, m, bc, d_temp[STREAM], d_rhs[STREAM], monomer_type);
 
                 // Step 3: Half-step reaction: X[m+1] = exp(-dtau*w/2) * rhs
                 strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
@@ -2990,7 +3725,10 @@ void CudaSolverSDC::advance_propagator(
                 // Compute F_diff = D∇²q at all GL nodes (diffusion part only)
                 for(int m = 0; m < M; m++)
                 {
-                    compute_F_diff_spectral(STREAM, d_X[STREAM][m], d_F[STREAM][m], monomer_type);
+                    if(use_fft)
+                        compute_F_diff_spectral(STREAM, d_X[STREAM][m], d_F[STREAM][m], monomer_type);
+                    else
+                        compute_F_diff_fd(STREAM, d_X[STREAM][m], d_F[STREAM][m], monomer_type);
                 }
 
                 // Store old values
@@ -3031,7 +3769,12 @@ void CudaSolverSDC::advance_propagator(
                         d_F_old[STREAM][m + 1], n_grid);
 
                     // Step 5: Solve diffusion only: (I - dtau*D∇²) result = rhs
-                    diffusion_solve_fft(STREAM, m, d_laplacian_q_[STREAM], d_rhs[STREAM], monomer_type);
+                    if(use_fft)
+                        diffusion_solve_fft(STREAM, m, d_laplacian_q_[STREAM], d_rhs[STREAM], monomer_type);
+                    else if(dim >= 2)
+                        diffusion_solve_pcg(STREAM, m, d_laplacian_q_[STREAM], d_rhs[STREAM], monomer_type);
+                    else  // dim == 1
+                        diffusion_solve_tridiag_1d(STREAM, m, bc, d_laplacian_q_[STREAM], d_rhs[STREAM], monomer_type);
 
                     // Step 6: Half-step Boltzmann: X[m+1] = exp(-dtau*w/2) * result
                     strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
@@ -3042,7 +3785,7 @@ void CudaSolverSDC::advance_propagator(
         else
         {
             //=============================================================
-            // Fully Implicit SDC (original method for non-periodic or 1D)
+            // Fully Implicit SDC (when IMEX mode is disabled)
             //=============================================================
 
             //-------------------------------------------------------------
