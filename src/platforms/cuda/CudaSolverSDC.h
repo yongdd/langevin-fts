@@ -219,6 +219,10 @@ private:
     // Sparse matrices for PCG solve (2D/3D only)
     std::vector<std::map<std::string, CudaSparseMatrixCSR>> sparse_matrices;
 
+    // Matrix-free PCG: diagonal inverse storage [sub_interval][monomer_type]
+    std::vector<std::map<std::string, double*>> d_diag_inv_free;
+    std::vector<std::map<std::string, bool>> diag_inv_built;
+
     // PCG workspace arrays (per stream, allocated for 2D/3D)
     double* d_pcg_r[MAX_STREAMS];        ///< Residual vector
     double* d_pcg_z[MAX_STREAMS];        ///< Preconditioned residual
@@ -317,6 +321,16 @@ private:
      */
     void pcg_solve_step(int STREAM, int sub_interval,
                         double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief Matrix-free PCG solve for 2D/3D on GPU.
+     *
+     * Solves (I - dtau * D∇² + dtau*w) q_out = q_in using PCG with
+     * matrix-free matvec (no sparse matrix storage needed).
+     * Better memory efficiency and cache utilization for large grids.
+     */
+    void matvec_free_solve(int STREAM, int sub_interval,
+                           double* d_q_in, double* d_q_out, std::string monomer_type);
 
 public:
     /**
