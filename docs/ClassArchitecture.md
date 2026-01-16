@@ -82,7 +82,7 @@ auto factory = PlatformSelector::create_factory("auto", reduce_memory_usage);
 | `create_computation_box(nx, lx, bc)` | `ComputationBox<T>*` | Simulation grid with boundary conditions |
 | `create_computation_box(nx, lx, bc, mask)` | `ComputationBox<T>*` | Grid with impenetrable mask regions |
 | `create_molecules_information(model, ds, bond_lengths)` | `Molecules*` | Polymer/solvent container |
-| `create_propagator_computation(box, molecules, optimizer, method)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, etdrk4, cn-adi2, cn-adi4-lr) |
+| `create_propagator_computation(box, molecules, optimizer, method)` | `PropagatorComputation<T>*` | Propagator solver (method: rqm4, etdrk4, cn-adi2, cn-adi4-lr, cn-adi4-gr, sdc-N) |
 | `create_anderson_mixing(n_var, max_hist, ...)` | `AndersonMixing<T>*` | Field update accelerator |
 
 ---
@@ -558,7 +558,7 @@ solver = PropagatorSolver(
     bond_lengths={"A": 1.0},
     bc=["reflecting", "reflecting"],
     chain_model="continuous",
-    numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr"
+    numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr", "cn-adi4-gr", "sdc-N"
     platform="cpu-mkl",
     reduce_memory_usage=False
 )

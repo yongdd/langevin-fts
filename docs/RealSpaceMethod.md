@@ -285,8 +285,22 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 | **Performance** | Fastest (~3x faster) | Slower |
 | **Stress calculation** | Supported | Not yet implemented |
 | **Spatial accuracy** | Spectral (exponential) | O(Δx²) |
+| **Material conservation** | RQM4: Exact, ETDRK4: Approximate | All: Exact |
 
 **Note:** Both pseudo-spectral and real-space methods now support all boundary condition types. Pseudo-spectral methods use DCT (reflecting) and DST (absorbing) transforms, while real-space methods use modified tridiagonal matrices.
+
+### Material Conservation
+
+Material conservation requires that forward and backward partition functions are equal (Q_forward = Q_backward). This is ensured when the evolution operator U satisfies the Hermiticity condition (VU)† = VU. See Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312 for the theoretical foundation.
+
+| Method | Conservation | Mechanism |
+|--------|--------------|-----------|
+| **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: exp(-w·ds/2)·exp(L·ds)·exp(-w·ds/2) |
+| **ETDRK4** | Approximate (~10⁻⁹) | Asymmetric Krogstad RK4 stages break Hermiticity |
+| **CN-ADI** | Exact (~10⁻¹⁵) | Symmetric Crank-Nicolson time stepping |
+| **SDC** | Exact (~10⁻¹³) | Fully implicit scheme with (I - Δτ·D∇² + Δτ·w) |
+
+**Note:** For applications requiring exact material conservation, use RQM4, CN-ADI, or SDC. The ETDRK4 conservation error (~10⁻⁹) is acceptable for most SCFT applications.
 
 ### Choosing Between Real-Space Methods
 
@@ -297,12 +311,13 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 | **cn-adi4-gr** | High accuracy with memory overhead |
 | **sdc-N** | Highest accuracy (no ADI splitting error) |
 
-### Use Pseudo-Spectral (RQM4/ETDRK4) When:
+### Use Pseudo-Spectral (RQM4) When:
 - Stress calculations are needed for box optimization
 - Maximum performance is required
 - Spectral accuracy is desired
+- Material conservation is important (use RQM4, not ETDRK4)
 
-### Use Real-Space (CN-ADI) When:
+### Use Real-Space (CN-ADI/SDC) When:
 - Stress calculations are not needed
 - Comparing with finite difference implementations
 
@@ -317,3 +332,5 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 4. **SDC Method**: A. Dutt, L. Greengard, and V. Rokhlin, *BIT Numerical Mathematics*, **2000**, 40, 241-266.
 
 5. **Semi-implicit SDC**: M. L. Minion, *Commun. Math. Sci.*, **2003**, 1, 471-500.
+
+6. **Material Conservation**: D. Yong and J. U. Kim, *Phys. Rev. E*, **2017**, 96, 063312.

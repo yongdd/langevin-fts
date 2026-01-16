@@ -249,6 +249,7 @@ Simulations are configured via Python dictionaries with keys:
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
   - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
+  - `"cn-adi4-gr"`: CN-ADI4-GR - Real-space with 4th-order CN-ADI (Global Richardson extrapolation)
   - `"sdc-N"`: SDC - Real-space with Spectral Deferred Correction (e.g., `"sdc-5"` for 5th order)
 
 ### Common Issues and Solutions
@@ -342,6 +343,8 @@ Direct integration using matrix exponentials:
 
 **Order of accuracy**: 4th-order in ds
 
+**Material Conservation**: ETDRK4 does **not** conserve material exactly. The Krogstad scheme treats the potential term N(q)=-w·q asymmetrically across RK4 stages, breaking the Hermiticity condition (VU)†=VU required for exact conservation. Typical conservation errors |mean(φ)-1| are ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material conservation, use RQM4 or SDC instead.
+
 **Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
 
 ### Real-Space Methods (Finite Difference)
@@ -365,6 +368,16 @@ $$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
 **Order of accuracy**: 4th-order in ds
 
 "LR" stands for "Local Richardson" - the extrapolation is applied independently at each step.
+
+#### CN-ADI4-GR (4th-order Global Richardson Extrapolation)
+Richardson extrapolation applied at the quadrature level rather than at each step:
+1. Compute full propagator chain with step size ds
+2. Compute full propagator chain with step size ds/2
+3. Apply Richardson extrapolation: $Q^{(4)} = \frac{4 Q_{ds/2} - Q_{ds}}{3}$
+
+**Order of accuracy**: True 4th-order in ds
+
+"GR" stands for "Global Richardson" - achieves true 4th-order convergence but requires storing two independent propagator chains (higher memory).
 
 #### SDC (Spectral Deferred Correction)
 
@@ -410,15 +423,18 @@ The SDC order is $\min(K+1, 2M-2)$. Unlike CN-ADI methods which use ADI splittin
 
 ### Method Selection Guidelines
 
-| Method | Order | Best For | Limitations |
-|--------|-------|----------|-------------|
-| RQM4 | 4th | General use, default choice | None |
-| ETDRK4 | 4th | High accuracy pseudo-spectral | Slightly slower than RQM4 |
-| CN-ADI2 | 2nd | Fast, lower accuracy acceptable | Lower accuracy |
-| CN-ADI4-LR | 4th | Real-space alternative to pseudo-spectral | 2× cost of CN-ADI2 |
-| SDC-N | Nth | Highest accuracy real-space (no ADI splitting error) | Slower (uses PCG) |
+| Method | Order | Material Conservation | Best For | Limitations |
+|--------|-------|----------------------|----------|-------------|
+| RQM4 | 4th | Exact (~10⁻¹⁶) | General use, default choice | None |
+| ETDRK4 | 4th | Approximate (~10⁻⁹) | Benchmarking, SCFT | Inexact conservation |
+| CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
+| CN-ADI4-LR | 4th | Exact (~10⁻¹⁵) | Real-space alternative | 2× cost of CN-ADI2 |
+| CN-ADI4-GR | 4th | Exact (~10⁻¹⁵) | True 4th-order convergence | Higher memory |
+| SDC-N | Nth | Exact (~10⁻¹³) | Highest accuracy (no splitting error) | Slower (uses PCG) |
 
 All methods support periodic, reflecting, and absorbing boundary conditions.
+
+**Note on Material Conservation**: Methods with "Exact" conservation satisfy (VU)†=VU where V is the volume matrix and U is the evolution operator. This ensures forward and backward partition functions are equal to machine precision. See Yong & Kim, *Phys. Rev. E* **2017**, 96, 063312 for the theoretical foundation.
 
 ## Units and Conventions
 
@@ -524,3 +540,4 @@ The implementation is based on these publications:
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
 - ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
 - SDC method: *BIT Numerical Mathematics* **2000**, 40, 241 (Dutt, Greengard, Rokhlin); *Commun. Math. Sci.* **2003**, 1, 471 (Minion)
+- Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)
