@@ -845,12 +845,13 @@ CudaSolverSDC::CudaSolverSDC(
             gpu_error_check(cudaMalloc((void**)&d_q_in_saved[s], sizeof(double) * n_grid));
         }
 
-        // Allocate offset arrays for tridiagonal solver (1D only)
+        // Allocate offset arrays for tridiagonal solver
+        // Use std::vector instead of VLAs to avoid stack overflow and undefined behavior
         if(DIM == 3)
         {
-            int offset_xy[nx[0] * nx[1]];
-            int offset_yz[nx[1] * nx[2]];
-            int offset_xz[nx[0] * nx[2]];
+            std::vector<int> offset_xy(nx[0] * nx[1]);
+            std::vector<int> offset_yz(nx[1] * nx[2]);
+            std::vector<int> offset_xz(nx[0] * nx[2]);
             int count;
 
             count = 0;
@@ -872,14 +873,14 @@ CudaSolverSDC::CudaSolverSDC(
             gpu_error_check(cudaMalloc((void**)&d_offset_yz, sizeof(int) * nx[1] * nx[2]));
             gpu_error_check(cudaMalloc((void**)&d_offset_xz, sizeof(int) * nx[0] * nx[2]));
 
-            gpu_error_check(cudaMemcpy(d_offset_xy, offset_xy, sizeof(int) * nx[0] * nx[1], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_offset_yz, offset_yz, sizeof(int) * nx[1] * nx[2], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_offset_xz, offset_xz, sizeof(int) * nx[0] * nx[2], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset_xy, offset_xy.data(), sizeof(int) * nx[0] * nx[1], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset_yz, offset_yz.data(), sizeof(int) * nx[1] * nx[2], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset_xz, offset_xz.data(), sizeof(int) * nx[0] * nx[2], cudaMemcpyHostToDevice));
         }
         else if(DIM == 2)
         {
-            int offset_x[nx[0]];
-            int offset_y[nx[1]];
+            std::vector<int> offset_x(nx[0]);
+            std::vector<int> offset_y(nx[1]);
 
             for(int i = 0; i < nx[0]; i++)
                 offset_x[i] = i * nx[1];
@@ -889,14 +890,14 @@ CudaSolverSDC::CudaSolverSDC(
             gpu_error_check(cudaMalloc((void**)&d_offset_x, sizeof(int) * nx[0]));
             gpu_error_check(cudaMalloc((void**)&d_offset_y, sizeof(int) * nx[1]));
 
-            gpu_error_check(cudaMemcpy(d_offset_x, offset_x, sizeof(int) * nx[0], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_offset_y, offset_y, sizeof(int) * nx[1], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset_x, offset_x.data(), sizeof(int) * nx[0], cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset_y, offset_y.data(), sizeof(int) * nx[1], cudaMemcpyHostToDevice));
         }
         else if(DIM == 1)
         {
-            int offset[1] = {0};
+            std::vector<int> offset(1, 0);
             gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(int)));
-            gpu_error_check(cudaMemcpy(d_offset, offset, sizeof(int), cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_offset, offset.data(), sizeof(int), cudaMemcpyHostToDevice));
         }
 
         // Initialize sparse matrices and PCG workspace for 2D/3D
