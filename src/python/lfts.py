@@ -191,6 +191,12 @@ class LFTS:
             - 'cn-adi4-lr': Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
             - 'sdc': Real-space with SDC (Spectral Deferred Correction, Gauss-Lobatto)
 
+        - sdc_imex_mode : bool, optional
+            Enable IMEX (Implicit-Explicit) mode for SDC solver (default: False).
+            IMEX treats diffusion implicitly and reaction explicitly, which is
+            faster for periodic BC in 2D/3D. Only applicable when using 'sdc-N'
+            numerical methods.
+
         **Advanced Options:**
 
         - aggregate_propagator_computation : bool, optional
@@ -453,6 +459,19 @@ class LFTS:
 
         # Initialize the solver (creates propagator optimizer and propagator computation)
         self.prop_solver._initialize_solver()
+
+        # Enable IMEX mode for SDC solver if requested
+        # IMEX is faster for periodic BC in 2D/3D
+        sdc_imex_mode = params.get("sdc_imex_mode", False)
+        if sdc_imex_mode:
+            if numerical_method.startswith("sdc-"):
+                success = self.prop_solver._propagator_computation.set_sdc_imex_mode(True)
+                if success:
+                    logger.info("SDC IMEX mode enabled for L-FTS")
+                else:
+                    logger.warning("Failed to enable SDC IMEX mode (solver may not support it)")
+            else:
+                logger.warning("sdc_imex_mode ignored: only applicable for 'sdc-N' numerical methods")
 
         # Set aggregate_propagator_computation option
         if "aggregate_propagator_computation" in params:

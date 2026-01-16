@@ -174,6 +174,17 @@ public:
      * @param phi Output concentration array (host)
      */
     void get_solvent_concentration(int s, T *phi) override;
+
+    /**
+     * @brief Enable or disable IMEX mode for SDC solver.
+     *
+     * IMEX (Implicit-Explicit) SDC treats diffusion implicitly and reaction
+     * explicitly, which is faster for periodic BC in 2D/3D.
+     *
+     * @param enabled True to enable IMEX mode, false for fully implicit
+     * @return True if IMEX mode was successfully set (solver is SDC), false otherwise
+     */
+    bool set_sdc_imex_mode(bool enabled);
 };
 
 #endif

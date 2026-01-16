@@ -598,6 +598,32 @@ __global__ void pcg_init_warmstart_kernel(
     d_p[idx] = z_val;
 }
 
+// PCG initialization for FFT preconditioner: only compute r = b - Ax0
+// The preconditioner z = M^{-1}*r is applied separately via FFT
+__global__ void pcg_init_r_kernel(
+    double* __restrict__ d_r,
+    const double* __restrict__ d_b,
+    const double* __restrict__ d_Ax0,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_r[idx] = d_b[idx] - d_Ax0[idx];
+}
+
+// Simple copy kernel: p = z
+__global__ void pcg_copy_kernel(
+    double* __restrict__ d_dst,
+    const double* __restrict__ d_src,
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    d_dst[idx] = d_src[idx];
+}
+
 // PCG update: x = x + alpha*p, r = r - alpha*Ap
 __global__ void pcg_update_xr_kernel(
     double* __restrict__ d_x,
@@ -878,6 +904,24 @@ __global__ void pcg_fused_update_xrz_kernel(
     d_z[idx] = r_new * d_diag_inv[idx];
 }
 
+// Fused update for FFT preconditioner: x += alpha*p, r -= alpha*Ap
+// Preconditioner z = M^{-1}*r is applied separately via FFT
+__global__ void pcg_fused_update_xr_kernel(
+    double* __restrict__ d_x,
+    double* __restrict__ d_r,
+    const double* __restrict__ d_p,
+    const double* __restrict__ d_Ap,
+    const double* __restrict__ d_scalars,  // scalars[0]=alpha
+    int n)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx >= n) return;
+
+    double alpha = d_scalars[0];
+    d_x[idx] += alpha * d_p[idx];
+    d_r[idx] -= alpha * d_Ap[idx];
+}
+
 // ============================================================
 // End fused kernels
 // ============================================================
@@ -963,6 +1007,68 @@ __global__ void sdc_rhs_kernel(
     }
 }
 
+// Strang splitting half-step kernel: out = exp(-dtau*w/2) * in
+// Used for symmetric operator splitting (Strang splitting)
+__global__ void strang_half_step_kernel(
+    double* d_out,
+    const double* d_in,
+    const double* d_w,
+    double dtau,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        // Half-step Boltzmann factor: exp(-dtau*w/2)
+        d_out[idx] = d_in[idx] * exp(-0.5 * dtau * d_w[idx]);
+        idx += stride;
+    }
+}
+
+// IMEX corrector RHS kernel: rhs = (X[m] + integral - dtau*F_old[m+1]) - dtau*w*X_old[m+1]
+__global__ void imex_corrector_rhs_kernel(
+    double* d_rhs,
+    const double* d_X_m,
+    const double* d_integral,
+    double dtau,
+    const double* d_F_mp1,
+    const double* d_w,
+    const double* d_X_old_mp1,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        // IMEX corrector: subtract explicit reaction term from X_old[m+1]
+        // rhs = X[m] + integral - dtau*F_old[m+1] - dtau*w*X_old[m+1]
+        // Since F = D∇²q - w*q, we have:
+        // rhs = X[m] + integral - dtau*(D∇²X_old - w*X_old) - dtau*w*X_old
+        //     = X[m] + integral - dtau*D∇²X_old
+        d_rhs[idx] = d_X_m[idx] + d_integral[idx] - dtau * d_F_mp1[idx] - dtau * d_w[idx] * d_X_old_mp1[idx];
+        idx += stride;
+    }
+}
+
+// IMEX predictor kernel: apply Boltzmann factor for explicit reaction
+// out = exp(-dtau*w) * in
+__global__ void imex_predictor_rhs_kernel(
+    double* d_out,
+    const double* d_in,
+    const double* d_w,
+    double dtau,
+    int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    while(idx < n_grid)
+    {
+        d_out[idx] = d_in[idx] * exp(-dtau * d_w[idx]);
+        idx += stride;
+    }
+}
+
 __global__ void accumulate_integral_kernel(
     double* d_integral,
     const double* d_F,
@@ -1019,6 +1125,9 @@ CudaSolverSDC::CudaSolverSDC(
         const int n_grid = cb->get_total_grid();
         const int DIM = cb->get_dim();
         this->dim = DIM;
+
+        // IMEX mode disabled by default
+        this->imex_mode_enabled_ = false;
 
         std::vector<int> nx(DIM);
         if(DIM == 3)
@@ -1223,6 +1332,99 @@ CudaSolverSDC::CudaSolverSDC(
             pcg_tol = 1e-10;
         }
 
+        // Check if all BCs are periodic (for IMEX FFT-based solve)
+        auto bc_vec = cb->get_boundary_conditions();
+        is_periodic_ = true;
+        for(const auto& b : bc_vec)
+        {
+            if(b != BoundaryCondition::PERIODIC)
+            {
+                is_periodic_ = false;
+                break;
+            }
+        }
+
+        // Initialize FFT for IMEX (periodic BC only, 2D/3D)
+        if(is_periodic_ && DIM >= 2)
+        {
+            // Calculate complex array size for R2C/C2R transforms
+            if(DIM == 3)
+                n_complex_ = nx[0] * nx[1] * (nx[2] / 2 + 1);
+            else // DIM == 2
+                n_complex_ = nx[0] * (nx[1] / 2 + 1);
+
+            // Create cuFFT plans and allocate workspace for each stream
+            for(int s = 0; s < n_streams; s++)
+            {
+                // Allocate Fourier space workspace
+                gpu_error_check(cudaMalloc((void**)&d_qk_[s], sizeof(cufftDoubleComplex) * n_complex_));
+
+                // Create FFT plans
+                if(DIM == 3)
+                {
+                    cufftResult result;
+                    result = cufftPlan3d(&plan_forward_[s], nx[0], nx[1], nx[2], CUFFT_D2Z);
+                    if(result != CUFFT_SUCCESS)
+                        throw_with_line_number("cuFFT plan creation failed for forward 3D FFT");
+                    result = cufftPlan3d(&plan_backward_[s], nx[0], nx[1], nx[2], CUFFT_Z2D);
+                    if(result != CUFFT_SUCCESS)
+                        throw_with_line_number("cuFFT plan creation failed for backward 3D FFT");
+                }
+                else // DIM == 2
+                {
+                    cufftResult result;
+                    result = cufftPlan2d(&plan_forward_[s], nx[0], nx[1], CUFFT_D2Z);
+                    if(result != CUFFT_SUCCESS)
+                        throw_with_line_number("cuFFT plan creation failed for forward 2D FFT");
+                    result = cufftPlan2d(&plan_backward_[s], nx[0], nx[1], CUFFT_Z2D);
+                    if(result != CUFFT_SUCCESS)
+                        throw_with_line_number("cuFFT plan creation failed for backward 2D FFT");
+                }
+
+                // Associate plans with streams
+                cufftSetStream(plan_forward_[s], streams[s][0]);
+                cufftSetStream(plan_backward_[s], streams[s][0]);
+            }
+
+            // Allocate diffusion inverse arrays for each sub-interval and monomer type
+            d_diffusion_inv_.resize(M - 1);
+            for(int m = 0; m < M - 1; m++)
+            {
+                for(const auto& item: molecules->get_bond_lengths())
+                {
+                    std::string monomer_type = item.first;
+                    gpu_error_check(cudaMalloc((void**)&d_diffusion_inv_[m][monomer_type],
+                        sizeof(double) * n_complex_));
+                }
+            }
+
+            // Allocate spectral Laplacian operator for each monomer type
+            for(const auto& item: molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                gpu_error_check(cudaMalloc((void**)&d_spectral_laplacian_[monomer_type],
+                    sizeof(double) * n_complex_));
+            }
+
+            // Allocate workspace for spectral F computation (per stream)
+            for(int s = 0; s < n_streams; s++)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_laplacian_q_[s], sizeof(double) * n_grid));
+            }
+        }
+        else
+        {
+            // Initialize FFT pointers to null for non-periodic or 1D
+            for(int s = 0; s < n_streams; s++)
+            {
+                plan_forward_[s] = 0;
+                plan_backward_[s] = 0;
+                d_qk_[s] = nullptr;
+                d_laplacian_q_[s] = nullptr;
+            }
+            n_complex_ = 0;
+        }
+
         // Initialize Laplacian operator
         update_laplacian_operator();
     }
@@ -1331,6 +1533,33 @@ CudaSolverSDC::~CudaSolverSDC()
     else if(dim == 1)
     {
         cudaFree(d_offset);
+    }
+
+    // Free FFT resources (IMEX, periodic BC, 2D/3D only)
+    if(is_periodic_ && dim >= 2)
+    {
+        for(int s = 0; s < n_streams; s++)
+        {
+            if(plan_forward_[s]) cufftDestroy(plan_forward_[s]);
+            if(plan_backward_[s]) cufftDestroy(plan_backward_[s]);
+            if(d_qk_[s]) cudaFree(d_qk_[s]);
+            if(d_laplacian_q_[s]) cudaFree(d_laplacian_q_[s]);
+        }
+
+        // Free diffusion inverse arrays
+        for(int m = 0; m < M - 1; m++)
+        {
+            for(auto& item: d_diffusion_inv_[m])
+            {
+                if(item.second) cudaFree(item.second);
+            }
+        }
+
+        // Free spectral Laplacian arrays
+        for(auto& item: d_spectral_laplacian_)
+        {
+            if(item.second) cudaFree(item.second);
+        }
     }
 }
 
@@ -1462,6 +1691,24 @@ void CudaSolverSDC::update_laplacian_operator()
         for(int m = 0; m < M - 1; m++)
         {
             dtau_sub[m] = (tau[m + 1] - tau[m]) * ds;
+        }
+
+        // Compute IMEX operators for periodic BC in 2D/3D
+        if(is_periodic_ && dim >= 2)
+        {
+            for(const auto& item: this->molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+
+                // Compute diffusion inverse for each sub-interval
+                for(int m = 0; m < M - 1; m++)
+                {
+                    compute_diffusion_inverse(m, monomer_type);
+                }
+
+                // Compute spectral Laplacian for F computation
+                compute_spectral_laplacian(monomer_type);
+            }
         }
 
         for(const auto& item: this->molecules->get_bond_lengths())
@@ -2098,89 +2345,44 @@ void CudaSolverSDC::matvec_free_solve(int STREAM, int sub_interval,
         BoundaryCondition bc_zl = (dim == 3) ? bc[4] : BoundaryCondition::PERIODIC;
         BoundaryCondition bc_zh = (dim == 3) ? bc[5] : BoundaryCondition::PERIODIC;
 
-        // Allocate and compute diagonal inverse if not already done
-        // Note: Check for nullptr since constructor initializes entries to nullptr
-        if(d_diag_inv_free[sub_interval][monomer_type] == nullptr)
-        {
-            gpu_error_check(cudaMalloc((void**)&d_diag_inv_free[sub_interval][monomer_type],
-                sizeof(double) * n_grid));
-            diag_inv_built[sub_interval][monomer_type] = false;
-        }
-
-        double* d_diag_inv = d_diag_inv_free[sub_interval][monomer_type];
-
-        // Compute diagonal inverse (must be done when w changes)
-        if(!diag_inv_built[sub_interval][monomer_type])
-        {
-            if(dim == 3)
-            {
-                compute_diag_inv_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                    d_w_field[monomer_type], d_diag_inv,
-                    rx, ry, rz, nx[0], nx[1], nx[2],
-                    bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
-                    dtau, n_grid);
-            }
-            else // dim == 2
-            {
-                compute_diag_inv_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                    d_w_field[monomer_type], d_diag_inv,
-                    rx, ry, nx[0], nx[1],
-                    bc_xl, bc_xh, bc_yl, bc_yh,
-                    dtau, n_grid);
-            }
-            diag_inv_built[sub_interval][monomer_type] = true;
-        }
-
         // PCG solve using matrix-free matvec
         double* d_scalars = d_pcg_scalars[STREAM];
         double* d_partial = d_pcg_partial[STREAM];
-
-        // Initial guess: use RHS
-        gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * n_grid,
-            cudaMemcpyDeviceToDevice, stream));
-
-        // Compute Ax0 using matrix-free matvec
-        if(dim == 3)
-        {
-            matvec_free_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
-                rx, ry, rz, nx[0], nx[1], nx[2],
-                bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
-                dtau, n_grid);
-        }
-        else // dim == 2
-        {
-            matvec_free_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
-                rx, ry, nx[0], nx[1],
-                bc_xl, bc_xh, bc_yl, bc_yh,
-                dtau, n_grid);
-        }
-
-        // Initialize: r = b - Ax0, z = M^{-1}*r, p = z
-        pcg_init_warmstart_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-            d_pcg_r[STREAM], d_pcg_z[STREAM], d_pcg_p[STREAM],
-            d_q_in, d_pcg_Ap[STREAM], d_diag_inv, n_grid);
 
         // Compute the number of threads needed for final reduction
         int reduce_threads = 1;
         while(reduce_threads < pcg_n_blocks) reduce_threads *= 2;
         if(reduce_threads > 1024) reduce_threads = 1024;
 
-        // rz_old = (r, z)
-        pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
-            d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
-        pcg_fused_reduce_rz_init_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
-            d_scalars, d_partial, pcg_n_blocks);
+        // Use FFT-based preconditioner for periodic BC (much faster convergence)
+        // M^{-1} = (I - dtau*D∇²)^{-1} ≈ A^{-1} for A = (I - dtau*D∇² + dtau*w)
+        // Preconditioned system converges in 1-5 iterations instead of 30-50
+        bool use_fft_precond = is_periodic_ && dim >= 2;
 
-        // PCG loop
-        for(int iter = 0; iter < pcg_max_iter; iter++)
+        if(use_fft_precond)
         {
-            // 1. Ap = A * p (matrix-free)
+            // Ensure diffusion inverse is computed for FFT preconditioner
+            if(d_diffusion_inv_[sub_interval].find(monomer_type) == d_diffusion_inv_[sub_interval].end() ||
+               d_diffusion_inv_[sub_interval][monomer_type] == nullptr)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_diffusion_inv_[sub_interval][monomer_type],
+                    sizeof(double) * n_complex_));
+                compute_diffusion_inverse(sub_interval, monomer_type);
+            }
+
+            //=================================================================
+            // FFT-preconditioned PCG (fast convergence for periodic BC)
+            //=================================================================
+
+            // Initial guess: use RHS
+            gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * n_grid,
+                cudaMemcpyDeviceToDevice, stream));
+
+            // Compute Ax0 using matrix-free matvec
             if(dim == 3)
             {
                 matvec_free_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                    d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                    d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
                     rx, ry, rz, nx[0], nx[1], nx[2],
                     bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
                     dtau, n_grid);
@@ -2188,44 +2390,205 @@ void CudaSolverSDC::matvec_free_solve(int STREAM, int sub_interval,
             else // dim == 2
             {
                 matvec_free_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                    d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                    d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
                     rx, ry, nx[0], nx[1],
                     bc_xl, bc_xh, bc_yl, bc_yh,
                     dtau, n_grid);
             }
 
-            // 2-3. Fused: pAp = (p, Ap), then alpha = rz_old / pAp
-            pcg_fused_dot_alpha_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
-                d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
-            pcg_fused_reduce_alpha_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
-                d_scalars, d_partial, pcg_n_blocks);
+            // Initialize: r = b - Ax0
+            pcg_init_r_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_r[STREAM], d_q_in, d_pcg_Ap[STREAM], n_grid);
 
-            // 4-5. Fused: x += alpha*p, r -= alpha*Ap, z = M^{-1}*r
-            pcg_fused_update_xrz_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                d_q_out, d_pcg_r[STREAM], d_pcg_z[STREAM],
-                d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_diag_inv, d_scalars, n_grid);
+            // Apply FFT preconditioner: z = M^{-1}*r
+            apply_fft_preconditioner(STREAM, sub_interval, d_pcg_r[STREAM], d_pcg_z[STREAM], monomer_type);
 
-            // 6-7. Fused: rz_new = (r, z), then beta = rz_new/rz_old, rz_old = rz_new
+            // p = z
+            pcg_copy_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_p[STREAM], d_pcg_z[STREAM], n_grid);
+
+            // rz_old = (r, z)
             pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
                 d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
-            pcg_fused_reduce_beta_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+            pcg_fused_reduce_rz_init_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
                 d_scalars, d_partial, pcg_n_blocks);
 
-            // Check convergence periodically
-            if((iter + 1) % PCG_CONV_CHECK_INTERVAL == 0 || iter == pcg_max_iter - 1)
+            // PCG loop with FFT preconditioner
+            // Use fixed iteration count to avoid convergence check overhead
+            // For strong fields (std ~ 5), 10 iterations provides good convergence
+            const int fft_pcg_max_iter = 10;  // Fixed iterations for FFT preconditioner
+            for(int iter = 0; iter < fft_pcg_max_iter; iter++)
             {
-                double rz_new;
-                gpu_error_check(cudaMemcpyAsync(&rz_new, &d_scalars[3],
-                    sizeof(double), cudaMemcpyDeviceToHost, stream));
-                gpu_error_check(cudaStreamSynchronize(stream));
+                // 1. Ap = A * p (matrix-free)
+                if(dim == 3)
+                {
+                    matvec_free_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                        rx, ry, rz, nx[0], nx[1], nx[2],
+                        bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
+                        dtau, n_grid);
+                }
+                else // dim == 2
+                {
+                    matvec_free_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                        rx, ry, nx[0], nx[1],
+                        bc_xl, bc_xh, bc_yl, bc_yh,
+                        dtau, n_grid);
+                }
 
-                if(std::sqrt(std::abs(rz_new)) < pcg_tol)
-                    break;
+                // 2-3. Fused: pAp = (p, Ap), then alpha = rz_old / pAp
+                pcg_fused_dot_alpha_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                    d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+                pcg_fused_reduce_alpha_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                    d_scalars, d_partial, pcg_n_blocks);
+
+                // 4. Update x and r: x += alpha*p, r -= alpha*Ap
+                pcg_fused_update_xr_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_q_out, d_pcg_r[STREAM], d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, n_grid);
+
+                // 5. Apply FFT preconditioner: z = M^{-1}*r
+                apply_fft_preconditioner(STREAM, sub_interval, d_pcg_r[STREAM], d_pcg_z[STREAM], monomer_type);
+
+                // 6-7. Fused: rz_new = (r, z), then beta = rz_new/rz_old, rz_old = rz_new
+                pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                    d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+                pcg_fused_reduce_beta_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                    d_scalars, d_partial, pcg_n_blocks);
+
+                // Skip convergence check - using fixed iterations for FFT preconditioner
+                // This avoids GPU-CPU sync overhead (major bottleneck)
+
+                // 8. p = z + beta*p
+                pcg_update_p_dev_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_pcg_p[STREAM], d_pcg_z[STREAM], d_scalars, n_grid);
+            }
+        }
+        else
+        {
+            //=================================================================
+            // Jacobi-preconditioned PCG (for non-periodic BC)
+            //=================================================================
+
+            // Allocate and compute diagonal inverse if not already done
+            if(d_diag_inv_free[sub_interval][monomer_type] == nullptr)
+            {
+                gpu_error_check(cudaMalloc((void**)&d_diag_inv_free[sub_interval][monomer_type],
+                    sizeof(double) * n_grid));
+                diag_inv_built[sub_interval][monomer_type] = false;
             }
 
-            // 8. p = z + beta*p
-            pcg_update_p_dev_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
-                d_pcg_p[STREAM], d_pcg_z[STREAM], d_scalars, n_grid);
+            double* d_diag_inv = d_diag_inv_free[sub_interval][monomer_type];
+
+            // Compute diagonal inverse (must be done when w changes)
+            if(!diag_inv_built[sub_interval][monomer_type])
+            {
+                if(dim == 3)
+                {
+                    compute_diag_inv_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_w_field[monomer_type], d_diag_inv,
+                        rx, ry, rz, nx[0], nx[1], nx[2],
+                        bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
+                        dtau, n_grid);
+                }
+                else // dim == 2
+                {
+                    compute_diag_inv_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_w_field[monomer_type], d_diag_inv,
+                        rx, ry, nx[0], nx[1],
+                        bc_xl, bc_xh, bc_yl, bc_yh,
+                        dtau, n_grid);
+                }
+                diag_inv_built[sub_interval][monomer_type] = true;
+            }
+
+            // Initial guess: use RHS
+            gpu_error_check(cudaMemcpyAsync(d_q_out, d_q_in, sizeof(double) * n_grid,
+                cudaMemcpyDeviceToDevice, stream));
+
+            // Compute Ax0 using matrix-free matvec
+            if(dim == 3)
+            {
+                matvec_free_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                    rx, ry, rz, nx[0], nx[1], nx[2],
+                    bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
+                    dtau, n_grid);
+            }
+            else // dim == 2
+            {
+                matvec_free_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_q_out, d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                    rx, ry, nx[0], nx[1],
+                    bc_xl, bc_xh, bc_yl, bc_yh,
+                    dtau, n_grid);
+            }
+
+            // Initialize: r = b - Ax0, z = M^{-1}*r, p = z
+            pcg_init_warmstart_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                d_pcg_r[STREAM], d_pcg_z[STREAM], d_pcg_p[STREAM],
+                d_q_in, d_pcg_Ap[STREAM], d_diag_inv, n_grid);
+
+            // rz_old = (r, z)
+            pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+            pcg_fused_reduce_rz_init_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                d_scalars, d_partial, pcg_n_blocks);
+
+            // PCG loop with Jacobi preconditioner
+            for(int iter = 0; iter < pcg_max_iter; iter++)
+            {
+                // 1. Ap = A * p (matrix-free)
+                if(dim == 3)
+                {
+                    matvec_free_kernel_3d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                        rx, ry, rz, nx[0], nx[1], nx[2],
+                        bc_xl, bc_xh, bc_yl, bc_yh, bc_zl, bc_zh,
+                        dtau, n_grid);
+                }
+                else // dim == 2
+                {
+                    matvec_free_kernel_2d<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                        d_pcg_p[STREAM], d_w_field[monomer_type], d_pcg_Ap[STREAM],
+                        rx, ry, nx[0], nx[1],
+                        bc_xl, bc_xh, bc_yl, bc_yh,
+                        dtau, n_grid);
+                }
+
+                // 2-3. Fused: pAp = (p, Ap), then alpha = rz_old / pAp
+                pcg_fused_dot_alpha_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                    d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+                pcg_fused_reduce_alpha_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                    d_scalars, d_partial, pcg_n_blocks);
+
+                // 4-5. Fused: x += alpha*p, r -= alpha*Ap, z = M^{-1}*r
+                pcg_fused_update_xrz_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_q_out, d_pcg_r[STREAM], d_pcg_z[STREAM],
+                    d_pcg_p[STREAM], d_pcg_Ap[STREAM], d_diag_inv, d_scalars, n_grid);
+
+                // 6-7. Fused: rz_new = (r, z), then beta = rz_new/rz_old, rz_old = rz_new
+                pcg_fused_dot_beta_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, PCG_BLOCK_SIZE * sizeof(double), stream>>>(
+                    d_pcg_r[STREAM], d_pcg_z[STREAM], d_scalars, d_partial, n_grid, pcg_n_blocks);
+                pcg_fused_reduce_beta_kernel<<<1, reduce_threads, reduce_threads * sizeof(double), stream>>>(
+                    d_scalars, d_partial, pcg_n_blocks);
+
+                // Check convergence periodically
+                if((iter + 1) % PCG_CONV_CHECK_INTERVAL == 0 || iter == pcg_max_iter - 1)
+                {
+                    double rz_new;
+                    gpu_error_check(cudaMemcpyAsync(&rz_new, &d_scalars[3],
+                        sizeof(double), cudaMemcpyDeviceToHost, stream));
+                    gpu_error_check(cudaStreamSynchronize(stream));
+
+                    if(std::sqrt(std::abs(rz_new)) < pcg_tol)
+                        break;
+                }
+
+                // 8. p = z + beta*p
+                pcg_update_p_dev_kernel<<<pcg_n_blocks, PCG_BLOCK_SIZE, 0, stream>>>(
+                    d_pcg_p[STREAM], d_pcg_z[STREAM], d_scalars, n_grid);
+            }
         }
     }
     catch(std::exception& exc)
@@ -2242,6 +2605,327 @@ void CudaSolverSDC::pcg_solve_step(int STREAM, int sub_interval,
     matvec_free_solve(STREAM, sub_interval, d_q_in, d_q_out, monomer_type);
 }
 
+//=============================================================================
+// IMEX SDC: FFT-based diffusion solve for periodic BC
+//=============================================================================
+
+// Kernel: Apply diffusion inverse in Fourier space and normalize
+// q_out_k = q_in_k * diffusion_inv / n_grid (normalization for IFFT)
+__global__ void apply_diffusion_inv_kernel(
+    cufftDoubleComplex* d_qk, const double* d_diffusion_inv,
+    double norm_factor, int n_complex)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n_complex)
+    {
+        double inv = d_diffusion_inv[idx] * norm_factor;
+        d_qk[idx].x *= inv;
+        d_qk[idx].y *= inv;
+    }
+}
+
+// Kernel: Apply spectral Laplacian in Fourier space
+// Computes: d_qk *= -D*|k|² / n_grid (normalization for IFFT)
+// Result after IFFT is D∇²q
+__global__ void apply_spectral_laplacian_kernel(
+    cufftDoubleComplex* d_qk, const double* d_spectral_laplacian,
+    double norm_factor, int n_complex)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n_complex)
+    {
+        // d_spectral_laplacian contains -D*|k|²
+        // We want D∇²q which is IFFT(-D*|k|² * FFT(q))
+        double laplacian_k = d_spectral_laplacian[idx] * norm_factor;
+        d_qk[idx].x *= laplacian_k;
+        d_qk[idx].y *= laplacian_k;
+    }
+}
+
+// Kernel: Compute F = D∇²q - w*q from pre-computed D∇²q
+__global__ void compute_F_from_laplacian_kernel(
+    double* d_F, const double* d_laplacian_q, const double* d_q,
+    const double* d_w, int n_grid)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n_grid)
+    {
+        // F = D∇²q - w*q
+        d_F[idx] = d_laplacian_q[idx] - d_w[idx] * d_q[idx];
+    }
+}
+
+void CudaSolverSDC::compute_diffusion_inverse(int sub_interval, std::string monomer_type)
+{
+    // Compute 1/(1 + dtau*D*|k|²) for this sub-interval and monomer type
+    // This is done on CPU and uploaded to GPU
+
+    const std::vector<int> nx_vec = cb->get_nx();
+    const std::vector<double> dx = cb->get_dx();
+    const double bond_length = molecules->get_bond_lengths().at(monomer_type);
+    const double bond_length_sq = bond_length * bond_length;
+    const double D = bond_length_sq / 6.0;
+    const double dtau = dtau_sub[sub_interval];
+
+    // Allocate host array
+    std::vector<double> diffusion_inv(n_complex_);
+
+    // Compute wave numbers and diffusion inverse
+    // For R2C transform, the last dimension is halved: nx[dim-1]/2 + 1
+    if(dim == 3)
+    {
+        int nx0 = nx_vec[0], nx1 = nx_vec[1], nx2 = nx_vec[2];
+        int nk2 = nx2 / 2 + 1;
+        double kx_factor = 4.0 * M_PI * M_PI / (dx[0] * dx[0] * nx0 * nx0);
+        double ky_factor = 4.0 * M_PI * M_PI / (dx[1] * dx[1] * nx1 * nx1);
+        double kz_factor = 4.0 * M_PI * M_PI / (dx[2] * dx[2] * nx2 * nx2);
+
+        for(int i = 0; i < nx0; i++)
+        {
+            int ki = (i <= nx0/2) ? i : i - nx0;
+            double kx2 = ki * ki * kx_factor;
+            for(int j = 0; j < nx1; j++)
+            {
+                int kj = (j <= nx1/2) ? j : j - nx1;
+                double ky2 = kj * kj * ky_factor;
+                for(int k = 0; k < nk2; k++)
+                {
+                    double kz2 = k * k * kz_factor;
+                    double k2 = kx2 + ky2 + kz2;
+                    int idx = i * nx1 * nk2 + j * nk2 + k;
+                    diffusion_inv[idx] = 1.0 / (1.0 + dtau * D * k2);
+                }
+            }
+        }
+    }
+    else // dim == 2
+    {
+        int nx0 = nx_vec[0], nx1 = nx_vec[1];
+        int nk1 = nx1 / 2 + 1;
+        double kx_factor = 4.0 * M_PI * M_PI / (dx[0] * dx[0] * nx0 * nx0);
+        double ky_factor = 4.0 * M_PI * M_PI / (dx[1] * dx[1] * nx1 * nx1);
+
+        for(int i = 0; i < nx0; i++)
+        {
+            int ki = (i <= nx0/2) ? i : i - nx0;
+            double kx2 = ki * ki * kx_factor;
+            for(int j = 0; j < nk1; j++)
+            {
+                double ky2 = j * j * ky_factor;
+                double k2 = kx2 + ky2;
+                int idx = i * nk1 + j;
+                diffusion_inv[idx] = 1.0 / (1.0 + dtau * D * k2);
+            }
+        }
+    }
+
+    // Upload to GPU
+    gpu_error_check(cudaMemcpy(d_diffusion_inv_[sub_interval][monomer_type],
+        diffusion_inv.data(), sizeof(double) * n_complex_, cudaMemcpyHostToDevice));
+}
+
+void CudaSolverSDC::diffusion_solve_fft(int STREAM, int sub_interval,
+                                         double* d_q_in, double* d_q_out, std::string monomer_type)
+{
+    // Solve (I - dtau*D∇²) q_out = q_in using FFT
+    // q_out = IFFT( FFT(q_in) / (1 + dtau*D*|k|²) )
+
+    const int n_grid = cb->get_total_grid();
+    cudaStream_t stream = streams[STREAM][0];
+
+    // Forward FFT: d_q_in -> d_qk_
+    cufftResult result = cufftExecD2Z(plan_forward_[STREAM], d_q_in, d_qk_[STREAM]);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT forward transform failed");
+
+    // Apply diffusion inverse in Fourier space (with normalization for IFFT)
+    double norm_factor = 1.0 / n_grid;
+    int n_blocks = (n_complex_ + 255) / 256;
+    apply_diffusion_inv_kernel<<<n_blocks, 256, 0, stream>>>(
+        d_qk_[STREAM], d_diffusion_inv_[sub_interval][monomer_type], norm_factor, n_complex_);
+
+    // Backward FFT: d_qk_ -> d_q_out
+    result = cufftExecZ2D(plan_backward_[STREAM], d_qk_[STREAM], d_q_out);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT backward transform failed");
+}
+
+void CudaSolverSDC::apply_fft_preconditioner(int STREAM, int sub_interval,
+                                              double* d_r, double* d_z, std::string monomer_type)
+{
+    // Apply FFT-based preconditioner: z = (I - dtau*D∇²)^{-1} * r
+    // This approximates the full operator A = (I - dtau*D∇² + dtau*w)
+    // Preconditioned system: M^{-1}A ≈ I + O(dtau*w), converges quickly
+    //
+    // z = IFFT( FFT(r) / (1 + dtau*D*|k|²) )
+    //
+    // Note: cuFFT may corrupt the input for D2Z transforms, so we copy to temp first
+
+    const int n_grid = cb->get_total_grid();
+    cudaStream_t stream = streams[STREAM][0];
+
+    // Copy r to temp buffer (d_laplacian_q_ is available as workspace)
+    gpu_error_check(cudaMemcpyAsync(d_laplacian_q_[STREAM], d_r, sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, stream));
+
+    // Forward FFT: r -> r_k
+    cufftResult result = cufftExecD2Z(plan_forward_[STREAM], d_laplacian_q_[STREAM], d_qk_[STREAM]);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT forward transform failed in apply_fft_preconditioner");
+
+    // Apply diffusion inverse in Fourier space (with normalization for IFFT)
+    double norm_factor = 1.0 / n_grid;
+    int n_blocks = (n_complex_ + 255) / 256;
+    apply_diffusion_inv_kernel<<<n_blocks, 256, 0, stream>>>(
+        d_qk_[STREAM], d_diffusion_inv_[sub_interval][monomer_type], norm_factor, n_complex_);
+
+    // Backward FFT: r_k -> z
+    result = cufftExecZ2D(plan_backward_[STREAM], d_qk_[STREAM], d_z);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT backward transform failed in apply_fft_preconditioner");
+}
+
+void CudaSolverSDC::compute_spectral_laplacian(std::string monomer_type)
+{
+    // Compute -D*|k|² for spectral Laplacian (D∇² in Fourier space)
+    // This is independent of sub-interval (unlike diffusion_inverse)
+
+    const std::vector<int> nx_vec = cb->get_nx();
+    const std::vector<double> dx = cb->get_dx();
+    const double bond_length = molecules->get_bond_lengths().at(monomer_type);
+    const double bond_length_sq = bond_length * bond_length;
+    const double D = bond_length_sq / 6.0;
+
+    // Allocate host array
+    std::vector<double> spectral_laplacian(n_complex_);
+
+    // Compute wave numbers and -D*|k|²
+    if(dim == 3)
+    {
+        int nx0 = nx_vec[0], nx1 = nx_vec[1], nx2 = nx_vec[2];
+        int nk2 = nx2 / 2 + 1;
+        double kx_factor = 4.0 * M_PI * M_PI / (dx[0] * dx[0] * nx0 * nx0);
+        double ky_factor = 4.0 * M_PI * M_PI / (dx[1] * dx[1] * nx1 * nx1);
+        double kz_factor = 4.0 * M_PI * M_PI / (dx[2] * dx[2] * nx2 * nx2);
+
+        for(int i = 0; i < nx0; i++)
+        {
+            int ki = (i <= nx0/2) ? i : i - nx0;
+            double kx2 = ki * ki * kx_factor;
+            for(int j = 0; j < nx1; j++)
+            {
+                int kj = (j <= nx1/2) ? j : j - nx1;
+                double ky2 = kj * kj * ky_factor;
+                for(int k = 0; k < nk2; k++)
+                {
+                    double kz2 = k * k * kz_factor;
+                    double k2 = kx2 + ky2 + kz2;
+                    int idx = i * nx1 * nk2 + j * nk2 + k;
+                    // -D*|k|² gives D∇² when applied to FFT coefficients
+                    spectral_laplacian[idx] = -D * k2;
+                }
+            }
+        }
+    }
+    else // dim == 2
+    {
+        int nx0 = nx_vec[0], nx1 = nx_vec[1];
+        int nk1 = nx1 / 2 + 1;
+        double kx_factor = 4.0 * M_PI * M_PI / (dx[0] * dx[0] * nx0 * nx0);
+        double ky_factor = 4.0 * M_PI * M_PI / (dx[1] * dx[1] * nx1 * nx1);
+
+        for(int i = 0; i < nx0; i++)
+        {
+            int ki = (i <= nx0/2) ? i : i - nx0;
+            double kx2 = ki * ki * kx_factor;
+            for(int j = 0; j < nk1; j++)
+            {
+                double ky2 = j * j * ky_factor;
+                double k2 = kx2 + ky2;
+                int idx = i * nk1 + j;
+                spectral_laplacian[idx] = -D * k2;
+            }
+        }
+    }
+
+    // Upload to device
+    gpu_error_check(cudaMemcpy(d_spectral_laplacian_[monomer_type],
+        spectral_laplacian.data(), sizeof(double) * n_complex_, cudaMemcpyHostToDevice));
+}
+
+void CudaSolverSDC::compute_F_spectral(int STREAM, const double* d_q, const double* d_w,
+                                        double* d_F, std::string monomer_type)
+{
+    // Compute F = D∇²q - w*q using spectral Laplacian (FFT-based)
+    // 1. FFT(q) -> d_qk_
+    // 2. Multiply by -D*|k|² and normalize -> still in d_qk_
+    // 3. IFFT -> d_laplacian_q_ = D∇²q
+    // 4. F = D∇²q - w*q
+
+    const int n_grid = cb->get_total_grid();
+    cudaStream_t stream = streams[STREAM][0];
+
+    // Need to copy input since cuFFT may corrupt it (documented behavior for D2Z/Z2D)
+    gpu_error_check(cudaMemcpyAsync(d_temp[STREAM], d_q, sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, stream));
+
+    // Forward FFT: d_q (via d_temp) -> d_qk_
+    cufftResult result = cufftExecD2Z(plan_forward_[STREAM], d_temp[STREAM], d_qk_[STREAM]);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT forward transform failed in compute_F_spectral");
+
+    // Apply spectral Laplacian: multiply by -D*|k|² and normalize for IFFT
+    double norm_factor = 1.0 / n_grid;
+    int n_blocks = (n_complex_ + 255) / 256;
+    apply_spectral_laplacian_kernel<<<n_blocks, 256, 0, stream>>>(
+        d_qk_[STREAM], d_spectral_laplacian_[monomer_type], norm_factor, n_complex_);
+
+    // Backward FFT: d_qk_ -> d_laplacian_q_ (result is D∇²q)
+    result = cufftExecZ2D(plan_backward_[STREAM], d_qk_[STREAM], d_laplacian_q_[STREAM]);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT backward transform failed in compute_F_spectral");
+
+    // Compute F = D∇²q - w*q
+    const int N_BLOCKS = CudaCommon::get_instance().get_n_blocks();
+    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
+    compute_F_from_laplacian_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+        d_F, d_laplacian_q_[STREAM], d_q, d_w, n_grid);
+}
+
+// Compute F_diff = D∇²q (diffusion part only) using spectral Laplacian
+// Used for Strang splitting where reaction is handled via Boltzmann factors
+void CudaSolverSDC::compute_F_diff_spectral(int STREAM, const double* d_q,
+                                             double* d_F_diff, std::string monomer_type)
+{
+    // Compute F_diff = D∇²q using spectral Laplacian (FFT-based)
+    // 1. FFT(q) -> d_qk_
+    // 2. Multiply by -D*|k|² and normalize -> still in d_qk_
+    // 3. IFFT -> d_F_diff = D∇²q
+
+    const int n_grid = cb->get_total_grid();
+    cudaStream_t stream = streams[STREAM][0];
+
+    // Need to copy input since cuFFT may corrupt it (documented behavior for D2Z/Z2D)
+    gpu_error_check(cudaMemcpyAsync(d_temp[STREAM], d_q, sizeof(double) * n_grid,
+                                    cudaMemcpyDeviceToDevice, stream));
+
+    // Forward FFT: d_q (via d_temp) -> d_qk_
+    cufftResult result = cufftExecD2Z(plan_forward_[STREAM], d_temp[STREAM], d_qk_[STREAM]);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT forward transform failed in compute_F_diff_spectral");
+
+    // Apply spectral Laplacian: multiply by -D*|k|² and normalize for IFFT
+    double norm_factor = 1.0 / n_grid;
+    int n_blocks = (n_complex_ + 255) / 256;
+    apply_spectral_laplacian_kernel<<<n_blocks, 256, 0, stream>>>(
+        d_qk_[STREAM], d_spectral_laplacian_[monomer_type], norm_factor, n_complex_);
+
+    // Backward FFT: d_qk_ -> d_F_diff (result is D∇²q)
+    result = cufftExecZ2D(plan_backward_[STREAM], d_qk_[STREAM], d_F_diff);
+    if(result != CUFFT_SUCCESS)
+        throw_with_line_number("cuFFT backward transform failed in compute_F_diff_spectral");
+}
+
 void CudaSolverSDC::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
@@ -2256,67 +2940,166 @@ void CudaSolverSDC::advance_propagator(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         cudaStream_t stream = streams[STREAM][0];
 
+        // Get potential field
+        double* d_w = d_w_field[monomer_type];
+
         // Initialize X[0] = q_in
         copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
             d_X[STREAM][0], d_q_in, n_grid);
 
-        //=================================================================
-        // Predictor: Fully implicit Backward Euler for both diffusion and reaction
-        // Solve: (I - dtau*D∇² + dtau*w) X[m+1] = X[m]
-        //=================================================================
-        for(int m = 0; m < M - 1; m++)
+        // IMEX SDC with Strang splitting (FFT-based) for periodic BC in 2D/3D
+        // IMEX treats diffusion implicitly and reaction explicitly, which is faster.
+        if(imex_mode_enabled_ && is_periodic_ && dim >= 2)
         {
-            implicit_solve_step(STREAM, m, d_X[STREAM][m], d_X[STREAM][m + 1], monomer_type);
-        }
+            //=============================================================
+            // IMEX SDC with Strang splitting
+            // Diffusion: implicit FFT-based solve
+            // Reaction: symmetric Boltzmann factors exp(-w*dt/2)
+            //=============================================================
 
-        //=================================================================
-        // SDC Corrections (K iterations)
-        //=================================================================
-        double* d_w = d_w_field[monomer_type];
-
-        for(int k_iter = 0; k_iter < K; k_iter++)
-        {
-            // Compute F at all GL nodes
-            for(int m = 0; m < M; m++)
-            {
-                compute_F_device(STREAM, d_X[STREAM][m], d_w, d_F[STREAM][m], monomer_type);
-            }
-
-            // Store old values (fused kernel reduces launch overhead)
-            for(int m = 0; m < M; m++)
-            {
-                copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                    d_X_old[STREAM][m], d_X[STREAM][m],
-                    d_F_old[STREAM][m], d_F[STREAM][m], n_grid);
-            }
-
-            // Reset X[0]
-            copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                d_X[STREAM][0], d_q_in, n_grid);
-
-            // SDC correction sweep
+            //-------------------------------------------------------------
+            // Predictor: Strang splitting for symmetric operator handling
+            // Preserves forward/backward partition symmetry
+            // Step 1: exp(-dtau*w/2) * X[m]
+            // Step 2: solve (I - dtau*D∇²) temp = step1
+            // Step 3: X[m+1] = exp(-dtau*w/2) * temp
+            //-------------------------------------------------------------
             for(int m = 0; m < M - 1; m++)
             {
                 double dtau = dtau_sub[m];
 
-                // Initialize integral to zero
-                gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, stream));
+                // Step 1: Half-step reaction: temp = exp(-dtau*w/2) * X[m]
+                strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_temp[STREAM], d_X[STREAM][m], d_w, dtau, n_grid);
 
-                // Accumulate spectral integral: ∫ F dt = Σ S[m][j] * F[j] * ds
-                for(int j = 0; j < M; j++)
+                // Step 2: Full diffusion solve: (I - dtau*D∇²) rhs = temp
+                diffusion_solve_fft(STREAM, m, d_temp[STREAM], d_rhs[STREAM], monomer_type);
+
+                // Step 3: Half-step reaction: X[m+1] = exp(-dtau*w/2) * rhs
+                strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_X[STREAM][m + 1], d_rhs[STREAM], d_w, dtau, n_grid);
+            }
+
+            //-------------------------------------------------------------
+            // SDC Corrections (K iterations) - Strang splitting version
+            // Uses F_diff = D∇²q for spectral integral (diffusion only)
+            // Reaction handled entirely via Boltzmann factors
+            //-------------------------------------------------------------
+            for(int k_iter = 0; k_iter < K; k_iter++)
+            {
+                // Compute F_diff = D∇²q at all GL nodes (diffusion part only)
+                for(int m = 0; m < M; m++)
                 {
-                    double weight = S[m][j] * ds;
-                    accumulate_integral_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                        d_rhs[STREAM], d_F_old[STREAM][j], weight, n_grid);
+                    compute_F_diff_spectral(STREAM, d_X[STREAM][m], d_F[STREAM][m], monomer_type);
                 }
 
-                // Fully implicit RHS: X[m] + integral - dtau * F_old[m+1]
-                // Subtract full F (both diffusion and reaction) since implicit solve handles both
-                sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
-                    d_temp[STREAM], d_X[STREAM][m], d_rhs[STREAM], dtau, d_F_old[STREAM][m + 1], n_grid);
+                // Store old values
+                for(int m = 0; m < M; m++)
+                {
+                    copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_X_old[STREAM][m], d_X[STREAM][m],
+                        d_F_old[STREAM][m], d_F[STREAM][m], n_grid);
+                }
 
-                // Fully implicit SDC: solve (I - dtau*D∇² + dtau*w) X[m+1] = rhs
-                implicit_solve_step(STREAM, m, d_temp[STREAM], d_X[STREAM][m + 1], monomer_type);
+                // Reset X[0]
+                copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_X[STREAM][0], d_q_in, n_grid);
+
+                // SDC correction sweep with Strang splitting
+                for(int m = 0; m < M - 1; m++)
+                {
+                    double dtau = dtau_sub[m];
+
+                    // Step 1: Half-step Boltzmann: temp = exp(-dtau*w/2) * X[m]
+                    strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_temp[STREAM], d_X[STREAM][m], d_w, dtau, n_grid);
+
+                    // Step 2: Initialize integral to zero
+                    gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, stream));
+
+                    // Step 3: Accumulate spectral integral of F_diff: ∫ D∇²q dt
+                    for(int j = 0; j < M; j++)
+                    {
+                        double weight = S[m][j] * ds;
+                        accumulate_integral_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                            d_rhs[STREAM], d_F_old[STREAM][j], weight, n_grid);
+                    }
+
+                    // Step 4: Diffusion correction RHS: rhs = temp + integral - dtau*F_diff_old[m+1]
+                    sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_laplacian_q_[STREAM], d_temp[STREAM], d_rhs[STREAM], dtau,
+                        d_F_old[STREAM][m + 1], n_grid);
+
+                    // Step 5: Solve diffusion only: (I - dtau*D∇²) result = rhs
+                    diffusion_solve_fft(STREAM, m, d_laplacian_q_[STREAM], d_rhs[STREAM], monomer_type);
+
+                    // Step 6: Half-step Boltzmann: X[m+1] = exp(-dtau*w/2) * result
+                    strang_half_step_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_X[STREAM][m + 1], d_rhs[STREAM], d_w, dtau, n_grid);
+                }
+            }
+        }
+        else
+        {
+            //=============================================================
+            // Fully Implicit SDC (original method for non-periodic or 1D)
+            //=============================================================
+
+            //-------------------------------------------------------------
+            // Predictor: Fully implicit Backward Euler
+            // Solve: (I - dtau*D∇² + dtau*w) X[m+1] = X[m]
+            //-------------------------------------------------------------
+            for(int m = 0; m < M - 1; m++)
+            {
+                implicit_solve_step(STREAM, m, d_X[STREAM][m], d_X[STREAM][m + 1], monomer_type);
+            }
+
+            //-------------------------------------------------------------
+            // SDC Corrections (K iterations) - Fully implicit
+            //-------------------------------------------------------------
+            for(int k_iter = 0; k_iter < K; k_iter++)
+            {
+                // Compute F at all GL nodes
+                for(int m = 0; m < M; m++)
+                {
+                    compute_F_device(STREAM, d_X[STREAM][m], d_w, d_F[STREAM][m], monomer_type);
+                }
+
+                // Store old values
+                for(int m = 0; m < M; m++)
+                {
+                    copy_two_arrays_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_X_old[STREAM][m], d_X[STREAM][m],
+                        d_F_old[STREAM][m], d_F[STREAM][m], n_grid);
+                }
+
+                // Reset X[0]
+                copy_array_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                    d_X[STREAM][0], d_q_in, n_grid);
+
+                // SDC correction sweep
+                for(int m = 0; m < M - 1; m++)
+                {
+                    double dtau = dtau_sub[m];
+
+                    // Initialize integral to zero
+                    gpu_error_check(cudaMemsetAsync(d_rhs[STREAM], 0, sizeof(double) * n_grid, stream));
+
+                    // Accumulate spectral integral: ∫ F dt = Σ S[m][j] * F[j] * ds
+                    for(int j = 0; j < M; j++)
+                    {
+                        double weight = S[m][j] * ds;
+                        accumulate_integral_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                            d_rhs[STREAM], d_F_old[STREAM][j], weight, n_grid);
+                    }
+
+                    // Fully implicit RHS: X[m] + integral - dtau * F_old[m+1]
+                    sdc_rhs_kernel<<<N_BLOCKS, N_THREADS, 0, stream>>>(
+                        d_temp[STREAM], d_X[STREAM][m], d_rhs[STREAM], dtau, d_F_old[STREAM][m + 1], n_grid);
+
+                    // Fully implicit SDC: solve (I - dtau*D∇² + dtau*w) X[m+1] = rhs
+                    implicit_solve_step(STREAM, m, d_temp[STREAM], d_X[STREAM][m + 1], monomer_type);
+                }
             }
         }
 
