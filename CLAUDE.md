@@ -408,14 +408,7 @@ This ensures **material conservation**: forward and backward partition functions
 
 **Order of Accuracy:**
 
-The SDC order is $\min(K+1, 2M-2)$. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
-
-| Method | M | K | Order |
-|--------|---|---|-------|
-| `sdc-2` | 3 | 1 | 2nd |
-| `sdc-3` | 3 | 2 | 3rd |
-| `sdc-5` | 4 | 4 | 5th |
-| `sdc-7` | 5 | 6 | 7th |
+Use `sdc-N` for Nth-order accuracy (e.g., `sdc-6` for 6th order). Valid orders: 2-10. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
 **References:**
 - Dutt, Greengard, Rokhlin, *BIT Numerical Mathematics* **2000**, 40, 241
@@ -456,6 +449,8 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
   done
   ```
   See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
+
+- **Split large computations into smaller jobs**: When running tests or benchmarks, prefer smaller problem sizes (e.g., 32³ instead of 64³) or fewer iterations to get quick feedback. Split parameter sweeps across multiple smaller jobs rather than one long job. This allows faster iteration and avoids blocking on slow computations.
 
 ### When Modifying C++ Code
 
