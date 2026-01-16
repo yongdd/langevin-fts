@@ -21,7 +21,6 @@
 
 #include "CudaComputationBase.h"
 #include "CudaComputationBox.h"
-#include "CudaSolverSDC.h"
 
 template <typename T>
 CudaComputationBase<T>::CudaComputationBase(
@@ -249,30 +248,6 @@ void CudaComputationBase<T>::get_solvent_concentration(int s, T *phi)
             throw_with_line_number("Index (" + std::to_string(s) + ") must be in range [0, " + std::to_string(S-1) + "]");
 
         gpu_error_check(cudaMemcpy(phi, d_phi_solvent[s], sizeof(T)*M, cudaMemcpyDeviceToHost));
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-template <typename T>
-bool CudaComputationBase<T>::set_sdc_imex_mode(bool enabled)
-{
-    try
-    {
-        // Only CudaSolverSDC supports IMEX mode
-        // Use dynamic_cast to check if the solver is SDC
-        if constexpr (std::is_same<T, double>::value)
-        {
-            CudaSolverSDC* sdc_solver = dynamic_cast<CudaSolverSDC*>(propagator_solver);
-            if(sdc_solver != nullptr)
-            {
-                sdc_solver->set_imex_mode(enabled);
-                return true;
-            }
-        }
-        return false;
     }
     catch(std::exception& exc)
     {

@@ -428,10 +428,6 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
         .def("check_total_partition", &PropagatorComputation<T>::check_total_partition)
-        .def("set_sdc_imex_mode", &PropagatorComputation<T>::set_sdc_imex_mode,
-             "Enable/disable IMEX mode for SDC solver. "
-             "IMEX treats diffusion implicitly and reaction explicitly, faster for periodic BC in 2D/3D.",
-             py::arg("enabled"))
         .def("set_cell_averaged_bond", &PropagatorComputation<T>::set_cell_averaged_bond,
              "Enable/disable cell-averaged bond function. "
              "Cell-averaging applies sinc filtering to ensure non-negativity of bond function in real space.",

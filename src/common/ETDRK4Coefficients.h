@@ -32,7 +32,7 @@
  * Hermiticity condition (VU)†=VU required for exact conservation (see Yong & Kim,
  * Phys. Rev. E 96, 063312, 2017). Typical conservation errors |mean(φ)-1| are
  * ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material
- * conservation, use RQM4 or SDC instead.
+ * conservation, use RQM4 or CN-ADI instead.
  *
  * **References:**
  * - Krogstad, Topics in Numerical Lie Group Integration, PhD thesis (2003)

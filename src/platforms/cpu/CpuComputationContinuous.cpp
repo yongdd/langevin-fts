@@ -41,7 +41,6 @@
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
-#include "CpuSolverSDC.h"
 #include "SimpsonRule.h"
 #include "PropagatorCode.h"
 
@@ -88,24 +87,9 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         {
             if constexpr (std::is_same<T, double>::value)
             {
-                if (numerical_method.substr(0, 4) == "sdc-")
-                {
-                    // SDC (Spectral Deferred Correction) with Gauss-Lobatto nodes
-                    // Parse order N from "sdc-N", compute M and K
-                    int order = std::stoi(numerical_method.substr(4));
-                    if (order < 2 || order > 10)
-                        throw_with_line_number("SDC order must be 2-10, got: " + std::to_string(order));
-                    // For order N: M = ceil((N+2)/2), K = N-1
-                    int M = (order + 3) / 2;  // ceil((order+2)/2)
-                    int K = order - 1;
-                    this->propagator_solver = new CpuSolverSDC(cb, molecules, M, K);
-                }
-                else
-                {
-                    // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
-                    bool use_4th_order = (numerical_method == "cn-adi4-lr");
-                    this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
-                }
+                // Local Richardson (cn-adi4-lr) or 2nd order (cn-adi2)
+                bool use_4th_order = (numerical_method == "cn-adi4-lr");
+                this->propagator_solver = new CpuSolverCNADI(cb, molecules, use_4th_order);
             }
             else
                 throw_with_line_number("Currently, the realspace method is only available for double precision.");

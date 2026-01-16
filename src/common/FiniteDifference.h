@@ -121,29 +121,5 @@ public:
         double *zl, double *zd, double *zh,
         double bond_length_sq, double ds);
 
-    /**
-     * @brief Construct Backward Euler Laplacian matrix coefficients.
-     *
-     * Similar to get_laplacian_matrix but for Backward Euler discretization
-     * instead of Crank-Nicolson. Used by SDC solver.
-     *
-     * **Backward Euler Discretization:**
-     *   (I - ds * L) q^{n+1} = q^n
-     *
-     * The matrix coefficients are:
-     * - Off-diagonals: -r  (where r = b²*ds/(6*dx²))
-     * - Diagonal: 1 + 2*r
-     *
-     * Compared to CN which uses:
-     * - Off-diagonals: -r/2
-     * - Diagonal: 1 + r
-     */
-    static void get_backward_euler_matrix(
-        std::vector<BoundaryCondition> bc,
-        std::vector<int> nx, std::vector<double> dx,
-        double *xl, double *xd, double *xh,
-        double *yl, double *yd, double *yh,
-        double *zl, double *zd, double *zh,
-        double bond_length_sq, double ds);
 };
 #endif
