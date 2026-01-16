@@ -179,6 +179,13 @@ public:
      */
     std::vector<T> compute_single_segment_stress(
         T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length) override;
+
+    /**
+     * @brief Enable or disable cell-averaged bond function.
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     */
+    void set_cell_averaged_bond(bool enabled);
 };
 
 #endif

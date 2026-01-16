@@ -185,6 +185,13 @@ public:
      * @return True if IMEX mode was successfully set (solver is SDC), false otherwise
      */
     bool set_sdc_imex_mode(bool enabled);
+
+    /**
+     * @brief Enable or disable cell-averaged bond function.
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     */
+    void set_cell_averaged_bond(bool enabled) override;
 };
 
 #endif

@@ -182,5 +182,15 @@ public:
      * added via add_ds_value(), then uploads all Boltzmann factors to GPU.
      */
     void finalize_ds_values() override;
+
+    /**
+     * @brief Enable or disable cell-averaged bond function.
+     *
+     * Overrides base class to re-upload Boltzmann factors to GPU
+     * after the base class updates them.
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     */
+    void set_cell_averaged_bond(bool enabled) override;
 };
 #endif

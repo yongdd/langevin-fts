@@ -363,5 +363,22 @@ public:
      */
     virtual bool set_sdc_imex_mode(bool /*enabled*/) { return false; }
 
+    /**
+     * @brief Enable or disable cell-averaged bond function (sinc filtering).
+     *
+     * When enabled, applies sinc filtering to the Boltzmann bond factor:
+     * boltz_bond_filtered[k] = boltz_bond[k] × sinc(kx·dx/2) × sinc(ky·dy/2) × ...
+     *
+     * This ensures non-negativity of the bond function in real space,
+     * following the cell-averaging approach from Park et al.,
+     * J. Chem. Phys. 150, 234901 (2019).
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     *
+     * @note Only applicable for pseudo-spectral solvers. Real-space solvers
+     *       ignore this setting. Default implementation does nothing.
+     */
+    virtual void set_cell_averaged_bond(bool /*enabled*/) {}
+
 };
 #endif

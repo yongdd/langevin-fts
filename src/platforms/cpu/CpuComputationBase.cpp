@@ -235,6 +235,19 @@ void CpuComputationBase<T>::get_solvent_concentration(int s, T *phi)
     }
 }
 
+template <typename T>
+void CpuComputationBase<T>::set_cell_averaged_bond(bool enabled)
+{
+    try
+    {
+        propagator_solver->set_cell_averaged_bond(enabled);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
 // Explicit template instantiation
 #include "TemplateInstantiations.h"
 INSTANTIATE_CLASS(CpuComputationBase);

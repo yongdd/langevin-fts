@@ -278,6 +278,15 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     }
 }
 
+//------------------------------------------------------------------------------
+// Set cell-averaged bond function
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoBase<T>::set_cell_averaged_bond(bool enabled)
+{
+    pseudo->set_cell_averaged_bond(enabled);
+}
+
 // Explicit template instantiation
 #include "TemplateInstantiations.h"
 INSTANTIATE_CLASS(CpuSolverPseudoBase);
