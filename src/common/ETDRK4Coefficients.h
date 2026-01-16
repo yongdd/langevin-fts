@@ -25,6 +25,15 @@
  * - Avoids catastrophic cancellation for small eigenvalues
  * - 32-point contour with radius 1.0 provides ~15 digits accuracy
  *
+ * **Material Conservation Warning:**
+ *
+ * ETDRK4 does NOT conserve material exactly. The Krogstad scheme treats the
+ * potential term N(q)=-w*q asymmetrically across RK4 stages, breaking the
+ * Hermiticity condition (VU)†=VU required for exact conservation (see Yong & Kim,
+ * Phys. Rev. E 96, 063312, 2017). Typical conservation errors |mean(φ)-1| are
+ * ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material
+ * conservation, use RQM4 or SDC instead.
+ *
  * **References:**
  * - Krogstad, Topics in Numerical Lie Group Integration, PhD thesis (2003)
  * - Kassam & Trefethen, SIAM J. Sci. Comput. 26, 1214-1233 (2005)
