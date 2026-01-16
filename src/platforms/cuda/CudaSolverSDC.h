@@ -225,6 +225,10 @@ private:
     std::vector<std::map<std::string, double*>> d_diag_inv_free;
     std::vector<std::map<std::string, bool>> diag_inv_built;
 
+    // IMEX: Diffusion-only diagonal inverse for non-periodic BC
+    std::vector<std::map<std::string, double*>> d_diag_inv_diff_only_;
+    std::vector<std::map<std::string, bool>> diag_inv_diff_only_built_;
+
     // PCG workspace arrays (per stream, allocated for 2D/3D)
     double* d_pcg_r[MAX_STREAMS];        ///< Residual vector
     double* d_pcg_z[MAX_STREAMS];        ///< Preconditioned residual
@@ -409,6 +413,36 @@ private:
      */
     void apply_fft_preconditioner(int STREAM, int sub_interval,
                                    double* d_r, double* d_z, std::string monomer_type);
+
+    /**
+     * @brief IMEX diffusion solve using PCG for non-periodic BC.
+     *
+     * Solves (I - dtau * D∇²) q_out = q_in using PCG with Jacobi preconditioner.
+     * This is used for IMEX SDC where diffusion is treated implicitly
+     * and reaction explicitly, for non-periodic boundary conditions in 2D/3D.
+     */
+    void diffusion_solve_pcg(int STREAM, int sub_interval,
+                             double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief IMEX diffusion solve using tridiagonal solver for 1D.
+     *
+     * Solves (I - dtau * D∇²) q_out = q_in using tridiagonal solver.
+     * Uses the base diagonal coefficients (diffusion only, no w term).
+     */
+    void diffusion_solve_tridiag_1d(int STREAM, int sub_interval,
+                                     std::vector<BoundaryCondition> bc,
+                                     double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief Compute F_diff = D∇²q (diffusion part only) using finite differences.
+     *
+     * Used for IMEX SDC corrections with non-periodic BC where FFT cannot be used.
+     * The Laplacian is computed using 2nd-order central differences with
+     * appropriate ghost cell handling for boundary conditions.
+     */
+    void compute_F_diff_fd(int STREAM, const double* d_q,
+                           double* d_F_diff, std::string monomer_type);
 
 public:
     /**
