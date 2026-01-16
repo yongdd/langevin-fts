@@ -1,16 +1,21 @@
 /**
  * @file TestCNADI4MixedBC.cpp
- * @brief Test CN-ADI4 solvers with absorbing and mixed boundary conditions.
+ * @brief Test CN-ADI4 solvers with various boundary conditions.
  *
  * This test verifies that the CN-ADI4 (4th-order Crank-Nicolson ADI) solvers
- * produce consistent results with CN-ADI2 for absorbing boundary conditions
- * in 2D and 3D.
+ * produce consistent results with CN-ADI2 for various boundary conditions
+ * in 1D, 2D, and 3D.
  *
  * The test compares partition functions between CN-ADI4 variants and CN-ADI2:
  * - CN-ADI4-LR: Local Richardson extrapolation (applied at each contour step)
  * - CN-ADI4-GR: Global Richardson extrapolation (applied across full chain)
  *
  * Results should be within a few percent for these test cases.
+ *
+ * Testing Guidelines compliance:
+ * - Uses field amplitudes with std ~ 5 (range [-9, 9])
+ * - Calls check_total_partition() for CN-ADI2 reference method
+ * - Uses ds=1/64 for accuracy with strong fields
  */
 
 #include <iostream>
@@ -50,13 +55,14 @@ bool run_test(const std::string& platform_name,
     int M = 1;
     for (auto n : nx) M *= n;
 
-    // Generate random fields
+    // Generate random fields with moderate amplitude (per Testing Guidelines)
+    // Range [-9, 9] gives std ~ 5.2
     std::vector<double> w_A(M), w_B(M);
     unsigned int seed = 42;
     for (int i = 0; i < M; ++i)
     {
         seed = seed * 1103515245 + 12345;
-        w_A[i] = ((seed >> 16) & 0x7FFF) / 32768.0 * 0.2 - 0.1;
+        w_A[i] = ((seed >> 16) & 0x7FFF) / 32768.0 * 18.0 - 9.0;
         w_B[i] = -w_A[i];
     }
 
@@ -65,15 +71,29 @@ bool run_test(const std::string& platform_name,
     ComputationContinuous<double>* solver1 = new ComputationContinuous<double>(
         cb1, molecules, prop_opt, "realspace", "cn-adi2");
     solver1->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
+
+    // Verify partition function consistency (per Testing Guidelines)
+    if (solver1->check_total_partition() == false)
+    {
+        std::cout << platform_name << " FAILED (CN-ADI2 partition check failed)" << std::endl;
+        delete solver1;
+        delete cb1;
+        return false;
+    }
+
     double Q1 = solver1->get_total_partition(0);
     delete solver1;
     delete cb1;
 
     // CN-ADI4 (LR or GR)
+    // Note: CN-ADI4 may have inherent forward-backward partition discrepancy
+    // due to Richardson extrapolation. We skip check_total_partition() and
+    // rely on the comparison with CN-ADI2 for validation.
     ComputationBox<double>* cb2 = new ComputationBox<double>(nx, lx, bc);
     ComputationContinuous<double>* solver2 = new ComputationContinuous<double>(
         cb2, molecules, prop_opt, "realspace", method_name);
     solver2->compute_propagators({{"A", w_A.data()}, {"B", w_B.data()}}, {});
+
     double Q2 = solver2->get_total_partition(0);
     delete solver2;
     delete cb2;
@@ -103,7 +123,55 @@ bool run_method_tests(const std::string& platform_name,
 {
     bool all_passed = true;
 
-    // Test 1: 2D All Absorbing
+    // Test 1: 1D Periodic
+    {
+        std::vector<int> nx = {64};
+        std::vector<double> lx = {4.0};
+        std::vector<std::string> bc = {"periodic", "periodic"};
+
+        std::cout << "    1D Periodic:       ";
+        if (!run_test<ComputationBox, ComputationContinuous>(
+                "", method_name, nx, lx, bc, molecules, prop_opt, tolerance))
+            all_passed = false;
+    }
+
+    // Test 2: 1D Reflecting
+    {
+        std::vector<int> nx = {64};
+        std::vector<double> lx = {4.0};
+        std::vector<std::string> bc = {"reflecting", "reflecting"};
+
+        std::cout << "    1D Reflecting:     ";
+        if (!run_test<ComputationBox, ComputationContinuous>(
+                "", method_name, nx, lx, bc, molecules, prop_opt, tolerance))
+            all_passed = false;
+    }
+
+    // Test 3: 1D Absorbing
+    {
+        std::vector<int> nx = {64};
+        std::vector<double> lx = {4.0};
+        std::vector<std::string> bc = {"absorbing", "absorbing"};
+
+        std::cout << "    1D Absorbing:      ";
+        if (!run_test<ComputationBox, ComputationContinuous>(
+                "", method_name, nx, lx, bc, molecules, prop_opt, tolerance))
+            all_passed = false;
+    }
+
+    // Test 4: 2D Periodic
+    {
+        std::vector<int> nx = {24, 24};
+        std::vector<double> lx = {3.0, 3.0};
+        std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic"};
+
+        std::cout << "    2D Periodic:       ";
+        if (!run_test<ComputationBox, ComputationContinuous>(
+                "", method_name, nx, lx, bc, molecules, prop_opt, tolerance))
+            all_passed = false;
+    }
+
+    // Test 5: 2D All Absorbing
     {
         std::vector<int> nx = {24, 24};
         std::vector<double> lx = {3.0, 3.0};
@@ -115,7 +183,7 @@ bool run_method_tests(const std::string& platform_name,
             all_passed = false;
     }
 
-    // Test 2: 2D Mixed (X:Absorbing, Y:Reflecting)
+    // Test 6: 2D Mixed (X:Absorbing, Y:Reflecting)
     {
         std::vector<int> nx = {24, 24};
         std::vector<double> lx = {3.0, 3.0};
@@ -127,7 +195,19 @@ bool run_method_tests(const std::string& platform_name,
             all_passed = false;
     }
 
-    // Test 3: 3D All Absorbing
+    // Test 7: 3D Periodic
+    {
+        std::vector<int> nx = {12, 12, 12};
+        std::vector<double> lx = {2.4, 2.4, 2.4};
+        std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic", "periodic", "periodic"};
+
+        std::cout << "    3D Periodic:       ";
+        if (!run_test<ComputationBox, ComputationContinuous>(
+                "", method_name, nx, lx, bc, molecules, prop_opt, tolerance))
+            all_passed = false;
+    }
+
+    // Test 8: 3D All Absorbing
     {
         std::vector<int> nx = {12, 12, 12};
         std::vector<double> lx = {2.4, 2.4, 2.4};
@@ -139,7 +219,7 @@ bool run_method_tests(const std::string& platform_name,
             all_passed = false;
     }
 
-    // Test 4: 3D Mixed (X/Y:Reflecting, Z:Absorbing)
+    // Test 9: 3D Mixed (X/Y:Reflecting, Z:Absorbing)
     {
         std::vector<int> nx = {12, 12, 12};
         std::vector<double> lx = {2.4, 2.4, 2.4};
@@ -163,7 +243,7 @@ int main()
     try
     {
         bool all_passed = true;
-        const double ds = 1.0 / 16.0;
+        const double ds = 1.0 / 64.0;
         const double tolerance = 0.02;  // 2% relative error
 
         // Setup molecules
@@ -175,7 +255,7 @@ int main()
         PropagatorComputationOptimizer prop_opt(&molecules, false);
 
         std::cout << "==================================================================" << std::endl;
-        std::cout << "Testing CN-ADI4 solvers with absorbing boundary conditions" << std::endl;
+        std::cout << "Testing CN-ADI4 solvers with various boundary conditions" << std::endl;
         std::cout << "==================================================================" << std::endl;
 
         //=======================================================================
@@ -222,12 +302,12 @@ int main()
         std::cout << "\n==================================================================" << std::endl;
         if (all_passed)
         {
-            std::cout << "All CN-ADI4 absorbing BC tests PASSED!" << std::endl;
+            std::cout << "All CN-ADI4 boundary condition tests PASSED!" << std::endl;
             return 0;
         }
         else
         {
-            std::cout << "Some CN-ADI4 absorbing BC tests FAILED!" << std::endl;
+            std::cout << "Some CN-ADI4 boundary condition tests FAILED!" << std::endl;
             return -1;
         }
     }
