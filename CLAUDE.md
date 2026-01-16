@@ -162,8 +162,8 @@ Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
 - **Continuous chains**: Pseudo-spectral method with RQM4 or ETDRK4 solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
-- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order), CN-ADI4 (4th-order), or SDC (Spectral Deferred Correction)
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), `"cn-adi4-lr"` (CN-ADI4-LR), or `"sdc-N"` (SDC with Nth order, e.g., `"sdc-5"`)
+- **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order) or CN-ADI4-LR (4th-order with Local Richardson extrapolation)
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), or `"cn-adi4-lr"` (CN-ADI4-LR)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -249,8 +249,6 @@ Simulations are configured via Python dictionaries with keys:
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
   - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
-  - `"cn-adi4-gr"`: CN-ADI4-GR - Real-space with 4th-order CN-ADI (Global Richardson extrapolation)
-  - `"sdc-N"`: SDC - Real-space with Spectral Deferred Correction (e.g., `"sdc-5"` for 5th order)
 
 ### Common Issues and Solutions
 
@@ -343,7 +341,7 @@ Direct integration using matrix exponentials:
 
 **Order of accuracy**: 4th-order in ds
 
-**Material Conservation**: ETDRK4 does **not** conserve material exactly. The Krogstad scheme treats the potential term N(q)=-w·q asymmetrically across RK4 stages, breaking the Hermiticity condition (VU)†=VU required for exact conservation. Typical conservation errors |mean(φ)-1| are ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material conservation, use RQM4 or SDC instead.
+**Material Conservation**: ETDRK4 does **not** conserve material exactly. The Krogstad scheme treats the potential term N(q)=-w·q asymmetrically across RK4 stages, breaking the Hermiticity condition (VU)†=VU required for exact conservation. Typical conservation errors |mean(φ)-1| are ~10⁻⁹ to 10⁻¹² in SCFT simulations. For applications requiring exact material conservation, use RQM4 or CN-ADI methods instead.
 
 **Reference**: Song, Liu, Zhang, *Chinese J. Polym. Sci.* **2018**, 36, 488
 
@@ -369,51 +367,6 @@ $$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
 
 "LR" stands for "Local Richardson" - the extrapolation is applied independently at each step.
 
-#### CN-ADI4-GR (4th-order Global Richardson Extrapolation)
-Richardson extrapolation applied at the quadrature level rather than at each step:
-1. Compute full propagator chain with step size ds
-2. Compute full propagator chain with step size ds/2
-3. Apply Richardson extrapolation: $Q^{(4)} = \frac{4 Q_{ds/2} - Q_{ds}}{3}$
-
-**Order of accuracy**: True 4th-order in ds
-
-"GR" stands for "Global Richardson" - achieves true 4th-order convergence but requires storing two independent propagator chains (higher memory).
-
-#### SDC (Spectral Deferred Correction)
-
-SDC is an iterative method that uses spectral quadrature to achieve high-order accuracy. The implementation uses **Gauss-Lobatto collocation nodes** and a **fully implicit scheme** for material conservation.
-
-**Fully Implicit Formulation:**
-
-The implicit matrix includes both diffusion and reaction terms:
-$$(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) q^{n+1} = q^n$$
-
-This ensures **material conservation**: forward and backward partition functions are equal to machine precision (~10⁻¹⁵).
-
-**Algorithm per contour step:**
-
-1. **Discretize** the interval $[s_n, s_{n+1}]$ using $M$ Gauss-Lobatto nodes $\tau_m \in [0, 1]$:
-   - For $M=3$: $\tau = [0, 0.5, 1]$
-   - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
-
-2. **Predictor** (Backward Euler at each sub-interval):
-   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) X^{[0]}_{m+1} = X^{[0]}_m$
-   - 1D: Tridiagonal solver (Thomas algorithm) with $w$ in diagonal
-   - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
-
-3. **Corrector** ($K$ iterations):
-   - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
-   - Apply spectral integral: $X^{[k+1]}_{m+1} = X^{[k]}_m + \int_{\tau_m}^{\tau_{m+1}} F^{[k]}(\tau') d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$
-   - Solve implicit system at each node
-
-**Order of Accuracy:**
-
-Use `sdc-N` for Nth-order accuracy (e.g., `sdc-6` for 6th order). Valid orders: 2-10. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
-
-**References:**
-- Dutt, Greengard, Rokhlin, *BIT Numerical Mathematics* **2000**, 40, 241
-- Minion, *Commun. Math. Sci.* **2003**, 1, 471
-
 ### Method Selection Guidelines
 
 | Method | Order | Material Conservation | Best For | Limitations |
@@ -422,8 +375,6 @@ Use `sdc-N` for Nth-order accuracy (e.g., `sdc-6` for 6th order). Valid orders: 
 | ETDRK4 | 4th | Approximate (~10⁻⁹) | Benchmarking, SCFT | Inexact conservation |
 | CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
 | CN-ADI4-LR | 4th | Exact (~10⁻¹⁵) | Real-space alternative | 2× cost of CN-ADI2 |
-| CN-ADI4-GR | 4th | Exact (~10⁻¹⁵) | True 4th-order convergence | Higher memory |
-| SDC-N | Nth | Exact (~10⁻¹³) | Highest accuracy (no splitting error) | Slower (uses PCG) |
 
 All methods support periodic, reflecting, and absorbing boundary conditions.
 
@@ -534,5 +485,4 @@ The implementation is based on these publications:
 - RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
 - ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
-- SDC method: *BIT Numerical Mathematics* **2000**, 40, 241 (Dutt, Greengard, Rokhlin); *Commun. Math. Sci.* **2003**, 1, 471 (Minion)
 - Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)

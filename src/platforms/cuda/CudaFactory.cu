@@ -43,8 +43,6 @@
 #include "CudaComputationDiscrete.h"
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationReduceMemoryDiscrete.h"
-#include "CudaComputationGlobalRichardson.h"
-#include "CudaComputationReduceMemoryGlobalRichardson.h"
 #include "CudaAndersonMixing.h"
 #include "CudaAndersonMixingReduceMemory.h"
 #include "CudaFactory.h"
@@ -103,28 +101,10 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         std::string solver_type;
         if (numerical_method == "rqm4" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
-        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr" || numerical_method.substr(0, 4) == "sdc-")
+        else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr")
             solver_type = "realspace";
-        else if (numerical_method == "cn-adi4-gr")
-            solver_type = "realspace-global-richardson";
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
-
-        // Global Richardson at quadrature level (cn-adi4-gr)
-        if (solver_type == "realspace-global-richardson")
-        {
-            if (chain_model == "discrete")
-                throw_with_line_number("Global Richardson does not support discrete chain model.");
-            if constexpr (std::is_same<T, double>::value)
-            {
-                if (!this->reduce_memory_usage)
-                    return new CudaComputationGlobalRichardson(cb, molecules, propagator_computation_optimizer);
-                else
-                    return new CudaComputationReduceMemoryGlobalRichardson(cb, molecules, propagator_computation_optimizer);
-            }
-            else
-                throw_with_line_number("Global Richardson only supports double precision.");
-        }
 
         // Real-space solver
         if (solver_type == "realspace")

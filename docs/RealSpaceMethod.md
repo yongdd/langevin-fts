@@ -1,6 +1,6 @@
 # Real-Space Method Documentation
 
-This document describes the real-space finite difference methods for continuous chain propagators, including CN-ADI and SDC solvers, boundary condition support, and usage.
+This document describes the real-space finite difference methods for continuous chain propagators, including CN-ADI solvers, boundary condition support, and usage.
 
 For performance benchmarks and comparison with pseudo-spectral methods, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
@@ -70,10 +70,6 @@ $$q^{n+1} = e^{-w \Delta s/2} \cdot \text{Diffusion}(\Delta s) \cdot e^{-w \Delt
 |--------|-------|-------------|
 | **cn-adi2** | 2nd | Standard Crank-Nicolson ADI |
 | **cn-adi4-lr** | 4th | CN-ADI with Local Richardson extrapolation |
-| **cn-adi4-gr** | 4th | CN-ADI with Global Richardson extrapolation |
-| **sdc-N** | Nth | Spectral Deferred Correction (N=2-10) |
-
-SDC uses PCG solver (no ADI splitting error). Specify order as `sdc-3`, `sdc-5`, `sdc-7`, etc.
 
 ### Richardson Extrapolation for 4th-Order Accuracy
 
@@ -83,11 +79,10 @@ $$q_{\text{out}} = \frac{4 \cdot q_{\text{half}} - q_{\text{full}}}{3}$$
 
 This cancels the $O(\Delta s^2)$ error term, yielding $O(\Delta s^4)$ accuracy.
 
-### CN-ADI4-LR vs CN-ADI4-GR
+### CN-ADI4-LR (Local Richardson)
 
-Both methods achieve 4th-order convergence but differ in where Richardson extrapolation is applied:
+CN-ADI4-LR applies Richardson extrapolation at each propagator step:
 
-**CN-ADI4-LR (Local Richardson)** - Extrapolation at each propagator step:
 ```python
 for n in range(N_steps):
     q_full[n+1] = advance(q[n], ds)
@@ -96,78 +91,7 @@ for n in range(N_steps):
     q[n+1] = (4*q_half[n+1] - q_full[n+1]) / 3
 ```
 
-**CN-ADI4-GR (Global Richardson)** - Extrapolation at quadrature level:
-```python
-# Advance two independent chains with different step sizes
-for n in range(N_steps):
-    q_full[n+1] = advance(q_full[n], ds)
-
-for n in range(2*N_steps):
-    q_half[n+1] = advance(q_half[n], ds/2)
-
-# Richardson extrapolation applied to final quantities
-Q_rich = (4*Q_half - Q_full) / 3
-phi_rich = (4*phi_half - phi_full) / 3
-```
-
-| Factor | CN-ADI4-LR | CN-ADI4-GR |
-|--------|------------|------------|
-| Convergence (1D) | ~3.5 order | True 4th order |
-| Convergence (3D) | ~3.7 order | ~4th order (limited by spatial error) |
-| Memory | Lower | Higher (stores two chains) |
-| ADI steps per N | 3N | 3N |
-
-**Recommendation**: Both methods have similar computational cost. CN-ADI4-GR achieves true 4th-order convergence but requires more memory. For most applications, CN-ADI4-LR is sufficient.
-
-### Spectral Deferred Correction (SDC)
-
-SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) to achieve high-order accuracy. The implementation uses a **fully implicit scheme** where both diffusion and reaction terms are included in the implicit matrix, ensuring material conservation.
-
-**Fully Implicit Formulation:**
-
-The implicit matrix includes both diffusion and reaction terms:
-
-$$(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) q^{n+1} = q^n$$
-
-This is in contrast to IMEX splitting which would apply the reaction term explicitly:
-
-$$(I - \Delta\tau \cdot D\nabla^2) q^{n+1} = e^{-w\Delta\tau} q^n \quad \text{(IMEX - not used)}$$
-
-The fully implicit scheme ensures **material conservation**: the forward and backward partition functions are equal to machine precision (~10⁻¹⁵), which is required for accurate SCFT calculations.
-
-**Algorithm per contour step:**
-
-1. **Discretize** the interval $[s_n, s_{n+1}]$ using $M$ Gauss-Lobatto nodes $\tau_m \in [0, 1]$:
-   - For $M=3$: $\tau = [0, 0.5, 1]$
-   - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
-
-2. **Predictor** (Backward Euler at each sub-interval):
-   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) X^{[0]}_{m+1} = X^{[0]}_m$
-   - 1D: Tridiagonal solver (Thomas algorithm) with $w$ in diagonal
-   - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
-
-3. **Corrector** ($K$ iterations):
-   - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
-   - Apply spectral integral using Lagrange interpolation:
-     $$X^{[k+1]}_{m+1} = X^{[k]}_m + \int_{\tau_m}^{\tau_{m+1}} F^{[k]}(\tau') d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$$
-   - Solve implicit system at each node
-
-**Order of Accuracy:**
-
-The SDC order is $\min(K+1, 2M-2)$ where $M$ is the number of Gauss-Lobatto nodes and $K$ is the number of correction iterations. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
-
-| Method | M | K | Order |
-|--------|---|---|-------|
-| `sdc-2` | 3 | 1 | 2nd |
-| `sdc-3` | 3 | 2 | 3rd |
-| `sdc-5` | 4 | 4 | 5th |
-| `sdc-7` | 5 | 6 | 7th |
-
-**Material Conservation:**
-
-The fully implicit scheme satisfies the Hermiticity condition $(VU)^\dagger = VU$ where $V$ is the volume matrix and $U$ is the evolution operator. This ensures:
-- Forward partition function = Backward partition function
-- Partition function differences ~10⁻¹⁵ (machine precision)
+This achieves approximately 4th-order convergence by canceling the leading $O(\Delta s^2)$ error term.
 
 ### Runtime Selection
 
@@ -177,14 +101,8 @@ from polymerfts import PropagatorSolver
 # CN-ADI2 (default - faster)
 solver = PropagatorSolver(..., numerical_method="cn-adi2")
 
-# CN-ADI4 with local Richardson (good balance)
+# CN-ADI4 with local Richardson (good accuracy/speed balance)
 solver = PropagatorSolver(..., numerical_method="cn-adi4-lr")
-
-# CN-ADI4 with global Richardson (highest accuracy in 1D)
-solver = PropagatorSolver(..., numerical_method="cn-adi4-gr")
-
-# SDC (Spectral Deferred Correction) - specify order as sdc-N (N=2-10)
-solver = PropagatorSolver(..., numerical_method="sdc-5")  # 5th order
 ```
 
 ## Usage
@@ -235,10 +153,6 @@ Different boundary conditions can be specified for each direction:
 | `src/common/FiniteDifference.cpp` | Tridiagonal matrix coefficient generation |
 | `src/platforms/cpu/CpuSolverCNADI.cpp` | CPU CN-ADI2/CN-ADI4-LR solver |
 | `src/platforms/cuda/CudaSolverCNADI.cu` | CUDA CN-ADI2/CN-ADI4-LR solver |
-| `src/platforms/cpu/CpuSolverGlobalRichardsonBase.cpp` | CPU CN-ADI4-GR base solver |
-| `src/platforms/cuda/CudaSolverGlobalRichardsonBase.cu` | CUDA CN-ADI4-GR base solver |
-| `src/platforms/cpu/CpuSolverSDC.cpp` | CPU SDC solver |
-| `src/platforms/cuda/CudaSolverSDC.cu` | CUDA SDC solver |
 
 ### Tridiagonal Systems
 
@@ -279,7 +193,7 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 
 ## When to Use Real-Space vs Pseudo-Spectral
 
-| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI/SDC) |
+| Criterion | Pseudo-Spectral (RQM4/ETDRK4) | Real-Space (CN-ADI) |
 |-----------|------------------------------|-------------------------|
 | **Boundary conditions** | Periodic, reflecting, absorbing | Periodic, reflecting, absorbing |
 | **Performance** | Fastest (~3x faster) | Slower |
@@ -298,9 +212,8 @@ Material conservation requires that forward and backward partition functions are
 | **RQM4** | Exact (~10⁻¹⁶) | Symmetric splitting: exp(-w·ds/2)·exp(L·ds)·exp(-w·ds/2) |
 | **ETDRK4** | Approximate (~10⁻⁹) | Asymmetric Krogstad RK4 stages break Hermiticity |
 | **CN-ADI** | Exact (~10⁻¹⁵) | Symmetric Crank-Nicolson time stepping |
-| **SDC** | Exact (~10⁻¹³) | Fully implicit scheme with (I - Δτ·D∇² + Δτ·w) |
 
-**Note:** For applications requiring exact material conservation, use RQM4, CN-ADI, or SDC. The ETDRK4 conservation error (~10⁻⁹) is acceptable for most SCFT applications.
+**Note:** For applications requiring exact material conservation, use RQM4 or CN-ADI. The ETDRK4 conservation error (~10⁻⁹) is acceptable for most SCFT applications.
 
 ### Choosing Between Real-Space Methods
 
@@ -308,8 +221,6 @@ Material conservation requires that forward and backward partition functions are
 |--------|----------|
 | **cn-adi2** | Fast prototyping, coarse grids |
 | **cn-adi4-lr** | General use, good accuracy/speed tradeoff |
-| **cn-adi4-gr** | High accuracy with memory overhead |
-| **sdc-N** | Highest accuracy (no ADI splitting error) |
 
 ### Use Pseudo-Spectral (RQM4) When:
 - Stress calculations are needed for box optimization
@@ -317,7 +228,7 @@ Material conservation requires that forward and backward partition functions are
 - Spectral accuracy is desired
 - Material conservation is important (use RQM4, not ETDRK4)
 
-### Use Real-Space (CN-ADI/SDC) When:
+### Use Real-Space (CN-ADI) When:
 - Stress calculations are not needed
 - Comparing with finite difference implementations
 
@@ -329,8 +240,4 @@ Material conservation requires that forward and backward partition functions are
 
 3. **Richardson Extrapolation**: L. F. Richardson, *Phil. Trans. R. Soc. A*, **1911**, 210, 307-357.
 
-4. **SDC Method**: A. Dutt, L. Greengard, and V. Rokhlin, *BIT Numerical Mathematics*, **2000**, 40, 241-266.
-
-5. **Semi-implicit SDC**: M. L. Minion, *Commun. Math. Sci.*, **2003**, 1, 471-500.
-
-6. **Material Conservation**: D. Yong and J. U. Kim, *Phys. Rev. E*, **2017**, 96, 063312.
+4. **Material Conservation**: D. Yong and J. U. Kim, *Phys. Rev. E*, **2017**, 96, 063312.

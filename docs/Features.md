@@ -30,8 +30,6 @@ Runtime selection of numerical algorithms via `numerical_method` parameter:
 | `etdrk4` | Pseudo-spectral | ETDRK4: Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | CN-ADI2: 2nd-order Crank-Nicolson ADI |
 | `cn-adi4-lr` | Real-space | CN-ADI4-LR: 4th-order CN-ADI (Local Richardson) |
-| `cn-adi4-gr` | Real-space | CN-ADI4-GR: 4th-order CN-ADI (Global Richardson) |
-| `sdc-N` | Real-space | SDC: Nth-order Spectral Deferred Correction (N=2-10) |
 
 #### Pseudo-Spectral Method
 - RQM4 or ETDRK4 for continuous chains
