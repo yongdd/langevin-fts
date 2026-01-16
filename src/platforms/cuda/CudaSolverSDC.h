@@ -17,7 +17,8 @@
  *
  * **GPU Parallelization:**
  *
- * - ADI sweeps use parallel tridiagonal solvers
+ * - 1D: Parallel tridiagonal solvers
+ * - 2D/3D: PCG sparse solver with GPU kernels
  * - F computation uses element-wise GPU kernels
  * - Spectral integration uses parallel reductions
  *
@@ -33,7 +34,7 @@
  * - M=4, K=5: order 6 (default)
  * - M=5, K=7: order 8
  *
- * With PCG solver (no ADI splitting), high-order accuracy is achieved in all dimensions.
+ * With PCG solver (no splitting error), high-order accuracy is achieved in all dimensions.
  *
  * **Limitations:**
  *
@@ -41,7 +42,7 @@
  * - Only supports continuous chain model
  *
  * @see CudaSolver for the abstract interface
- * @see CudaSolverCNADI for the underlying ADI solver
+ * @see CudaSolverCNADI for tridiagonal solvers (1D only)
  */
 
 #ifndef CUDA_SOLVER_SDC_H_
@@ -129,7 +130,7 @@ __global__ void sdc_spectral_integral_kernel(
     int n_grid);
 
 /**
- * @brief CUDA kernel: Apply Boltzmann factor and prepare for ADI.
+ * @brief CUDA kernel: Apply Boltzmann factor.
  */
 __global__ void apply_exp_dw_kernel(
     double* d_out, const double* d_in, const double* d_exp_dw, int n_grid);
@@ -144,11 +145,13 @@ __global__ void copy_array_kernel(double* d_out, const double* d_in, int n_grid)
  * @brief GPU solver using SDC (Spectral Deferred Correction) with Gauss-Lobatto nodes.
  *
  * Implements the SDC scheme for solving the modified diffusion equation on GPU.
- * Uses parallel ADI solvers for implicit diffusion at each sub-interval.
+ * Uses tridiagonal solvers (1D) or PCG sparse solver (2D/3D) for implicit diffusion.
  *
  * **Algorithm per contour step:**
  *
- * 1. Predictor: Backward Euler at each sub-interval using ADI
+ * 1. Predictor: Backward Euler at each sub-interval
+ *    - 1D: Parallel tridiagonal solve (exact)
+ *    - 2D/3D: PCG sparse solve (no splitting error)
  * 2. Corrections (K iterations):
  *    - Compute F = D∇²q - wq at all GL nodes
  *    - Apply SDC update using spectral integration matrix S
@@ -173,6 +176,7 @@ private:
     // Tridiagonal coefficients for each sub-interval (device memory)
     std::vector<std::map<std::string, double*>> d_xl;
     std::vector<std::map<std::string, double*>> d_xd;
+    std::vector<std::map<std::string, double*>> d_xd_base;  ///< Base diagonal (diffusion only, for 1D)
     std::vector<std::map<std::string, double*>> d_xh;
 
     std::vector<std::map<std::string, double*>> d_yl;
@@ -183,8 +187,8 @@ private:
     std::vector<std::map<std::string, double*>> d_zd;
     std::vector<std::map<std::string, double*>> d_zh;
 
-    // Boltzmann factors for sub-intervals (device memory)
-    std::vector<std::map<std::string, double*>> d_exp_dw_sub;
+    // Sub-interval time steps (stored for use in update_dw)
+    std::vector<double> dtau_sub;
 
     // Potential field storage (device memory)
     std::map<std::string, double*> d_w_field;
@@ -197,14 +201,14 @@ private:
     double* d_temp[MAX_STREAMS];                  ///< Temporary workspace
     double* d_rhs[MAX_STREAMS];                   ///< RHS for implicit solves
 
-    // ADI workspace (per stream)
+    // Tridiagonal workspace (per stream, 1D only)
     double* d_q_star[MAX_STREAMS];
     double* d_q_dstar[MAX_STREAMS];
     double* d_c_star[MAX_STREAMS];
     double* d_q_sparse[MAX_STREAMS];
-    double* d_q_in_saved[MAX_STREAMS];  ///< Saved input for ADI (fixes Y-direction bug)
+    double* d_q_in_saved[MAX_STREAMS];  ///< Saved input for tridiagonal solve
 
-    // Offset arrays for ADI
+    // Offset arrays for tridiagonal solve (1D only)
     int* d_offset_xy;
     int* d_offset_yz;
     int* d_offset_xz;
@@ -251,20 +255,19 @@ private:
                           double* d_F, std::string monomer_type);
 
     /**
-     * @brief ADI step for a specific sub-interval on GPU.
+     * @brief Implicit diffusion solve for a specific sub-interval on GPU.
+     *
+     * Solves (I - dtau * D∇²) q_out = rhs.
+     * - 1D: Uses tridiagonal solver (exact)
+     * - 2D/3D: Uses PCG sparse solver (no splitting error)
      */
-    void adi_step(int STREAM, int sub_interval,
-                  double* d_q_in, double* d_q_out, std::string monomer_type);
+    void implicit_solve_step(int STREAM, int sub_interval,
+                             double* d_q_in, double* d_q_out, std::string monomer_type);
 
-    void adi_step_3d(int STREAM, int sub_interval,
-        std::vector<BoundaryCondition> bc,
-        double* d_q_in, double* d_q_out, std::string monomer_type);
-
-    void adi_step_2d(int STREAM, int sub_interval,
-        std::vector<BoundaryCondition> bc,
-        double* d_q_in, double* d_q_out, std::string monomer_type);
-
-    void adi_step_1d(int STREAM, int sub_interval,
+    /**
+     * @brief Tridiagonal solve in 1D on GPU.
+     */
+    void tridiagonal_solve_1d(int STREAM, int sub_interval,
         std::vector<BoundaryCondition> bc,
         double* d_q_in, double* d_q_out, std::string monomer_type);
 
@@ -307,10 +310,13 @@ private:
                       double* d_q_in, double* d_q_out, std::string monomer_type);
 
     /**
-     * @brief Direct solve step for 2D/3D (replaces ADI).
+     * @brief PCG solve step for 2D/3D on GPU.
+     *
+     * Solves (I - dtau * D∇²) q_out = q_in using PCG sparse solver.
+     * This avoids splitting errors that would occur with ADI methods.
      */
-    void direct_solve_step(int STREAM, int sub_interval,
-                           double* d_q_in, double* d_q_out, std::string monomer_type);
+    void pcg_solve_step(int STREAM, int sub_interval,
+                        double* d_q_in, double* d_q_out, std::string monomer_type);
 
 public:
     /**

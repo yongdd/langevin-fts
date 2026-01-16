@@ -11,6 +11,8 @@
  *
  * 1. Discretize contour [0, ds] using M Gauss-Lobatto nodes
  * 2. Predictor: Backward Euler for diffusion, explicit for reaction
+ *    - 1D: Tridiagonal solver (exact)
+ *    - 2D/3D: PCG sparse solver (no splitting error)
  * 3. K correction iterations using spectral integration matrix
  *
  * **Integration Matrix:**
@@ -19,7 +21,7 @@
  * Gauss quadrature (16 points) for accurate Lagrange polynomial
  * integration over each sub-interval.
  *
- * @see CpuSolverCNADI for ADI tridiagonal solvers
+ * @see CpuSolverCNADI for tridiagonal solvers (1D only)
  */
 
 #include <iostream>
@@ -61,6 +63,7 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
         // Allocate tridiagonal coefficient arrays for each sub-interval
         xl.resize(M - 1);
         xd.resize(M - 1);
+        xd_base.resize(M - 1);  // Base diagonal (diffusion only)
         xh.resize(M - 1);
         yl.resize(M - 1);
         yd.resize(M - 1);
@@ -69,7 +72,8 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
         zd.resize(M - 1);
         zh.resize(M - 1);
 
-        exp_dw_sub.resize(M - 1);
+        // Allocate dtau_sub storage
+        dtau_sub.resize(M - 1);
 
         for(int m = 0; m < M - 1; m++)
         {
@@ -79,6 +83,7 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
 
                 xl[m][monomer_type] = new double[n_grid];
                 xd[m][monomer_type] = new double[n_grid];
+                xd_base[m][monomer_type] = new double[n_grid];  // Base diagonal
                 xh[m][monomer_type] = new double[n_grid];
 
                 yl[m][monomer_type] = new double[n_grid];
@@ -88,8 +93,6 @@ CpuSolverSDC::CpuSolverSDC(ComputationBox<double>* cb, Molecules *molecules, int
                 zl[m][monomer_type] = new double[n_grid];
                 zd[m][monomer_type] = new double[n_grid];
                 zh[m][monomer_type] = new double[n_grid];
-
-                exp_dw_sub[m][monomer_type].resize(n_grid);
             }
         }
 
@@ -194,6 +197,8 @@ CpuSolverSDC::~CpuSolverSDC()
         for(const auto& item: xl[m])
             delete[] item.second;
         for(const auto& item: xd[m])
+            delete[] item.second;
+        for(const auto& item: xd_base[m])
             delete[] item.second;
         for(const auto& item: xh[m])
             delete[] item.second;
@@ -381,7 +386,14 @@ void CpuSolverSDC::update_laplacian_operator()
 {
     try
     {
+        const int n_grid = this->cb->get_total_grid();
         const double ds = this->molecules->get_ds();
+
+        // Store sub-interval time steps
+        for(int m = 0; m < M - 1; m++)
+        {
+            dtau_sub[m] = (tau[m + 1] - tau[m]) * ds;
+        }
 
         for(const auto& item: this->molecules->get_bond_lengths())
         {
@@ -392,7 +404,7 @@ void CpuSolverSDC::update_laplacian_operator()
             // Use Backward Euler matrix (not Crank-Nicolson) for SDC
             for(int m = 0; m < M - 1; m++)
             {
-                double dtau = (tau[m + 1] - tau[m]) * ds;
+                double dtau = dtau_sub[m];
 
                 FiniteDifference::get_backward_euler_matrix(
                     this->cb->get_boundary_conditions(),
@@ -401,6 +413,12 @@ void CpuSolverSDC::update_laplacian_operator()
                     yl[m][monomer_type], yd[m][monomer_type], yh[m][monomer_type],
                     zl[m][monomer_type], zd[m][monomer_type], zh[m][monomer_type],
                     bond_length_sq, dtau);
+
+                // Store base diagonal (diffusion only, without w) for use in update_dw
+                for(int i = 0; i < n_grid; i++)
+                {
+                    xd_base[m][monomer_type][i] = xd[m][monomer_type][i];
+                }
             }
         }
     }
@@ -412,30 +430,47 @@ void CpuSolverSDC::update_laplacian_operator()
 
 void CpuSolverSDC::update_dw(std::map<std::string, const double*> w_input)
 {
+    const int DIM = this->cb->get_dim();
     const int n_grid = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
 
     for(const auto& item: w_input)
     {
         const std::string& monomer_type = item.first;
         const double* w = item.second;
 
-        // Store w directly for SDC corrections (like CUDA)
+        // Store w directly for SDC corrections
         std::vector<double>& w_store = w_field_store[monomer_type];
         for(int i = 0; i < n_grid; i++)
         {
             w_store[i] = w[i];
         }
 
-        // Compute exp(-w * dtau) for each sub-interval
-        for(int m = 0; m < M - 1; m++)
+        // For 1D: Add dtau*w to the tridiagonal diagonal
+        // This creates the fully implicit matrix: (I - dtau*D∇² + dtau*w)
+        if(DIM == 1)
         {
-            double dtau = (tau[m + 1] - tau[m]) * ds;
-            std::vector<double>& exp_dw_vec = exp_dw_sub[m][monomer_type];
-
-            for(int i = 0; i < n_grid; i++)
+            for(int m = 0; m < M - 1; m++)
             {
-                exp_dw_vec[i] = std::exp(-w[i] * dtau);
+                double dtau = dtau_sub[m];
+                double* _xd = xd[m][monomer_type];
+                double* _xd_base = xd_base[m][monomer_type];
+
+                for(int i = 0; i < n_grid; i++)
+                {
+                    // xd = xd_base + dtau * w
+                    // xd_base contains: 1 + dtau * D * (2/dx²) (diffusion contribution)
+                    // Adding dtau*w makes it fully implicit for the reaction term
+                    _xd[i] = _xd_base[i] + dtau * w[i];
+                }
+            }
+        }
+        // For 2D/3D: Mark sparse matrices as needing rebuild
+        // The sparse_matvec will add dtau*w*x contribution during solve
+        else
+        {
+            for(int m = 0; m < M - 1; m++)
+            {
+                sparse_matrices[m][monomer_type].built = false;
             }
         }
     }
@@ -612,177 +647,24 @@ void CpuSolverSDC::compute_F(const double* q, const double* w, double* F_out, st
     }
 }
 
-void CpuSolverSDC::adi_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
+void CpuSolverSDC::implicit_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
 {
     const int DIM = this->cb->get_dim();
     std::vector<BoundaryCondition> bc = this->cb->get_boundary_conditions();
 
     if(DIM >= 2)
     {
-        // Use direct sparse solver for 2D/3D to avoid ADI splitting error
-        direct_solve_step(sub_interval, q_in, q_out, monomer_type);
+        // Use PCG sparse solver for 2D/3D (no splitting error)
+        pcg_solve_step(sub_interval, q_in, q_out, monomer_type);
     }
     else // DIM == 1
     {
-        adi_step_1d(sub_interval, bc, q_in, q_out, monomer_type);
+        // Use tridiagonal solver for 1D (exact)
+        tridiagonal_solve_1d(sub_interval, bc, q_in, q_out, monomer_type);
     }
 }
 
-void CpuSolverSDC::adi_step_3d(int sub_interval,
-    std::vector<BoundaryCondition> bc,
-    double* q_in, double* q_out, std::string monomer_type)
-{
-    try
-    {
-        const int n_grid = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-        double q_star[n_grid];
-        double q_dstar[n_grid];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
-        double temp3[nx[2]];
-
-        double *_xl = xl[sub_interval][monomer_type];
-        double *_xd = xd[sub_interval][monomer_type];
-        double *_xh = xh[sub_interval][monomer_type];
-
-        double *_yl = yl[sub_interval][monomer_type];
-        double *_yd = yd[sub_interval][monomer_type];
-        double *_yh = yh[sub_interval][monomer_type];
-
-        double *_zl = zl[sub_interval][monomer_type];
-        double *_zd = zd[sub_interval][monomer_type];
-        double *_zh = zh[sub_interval][monomer_type];
-
-        // Backward Euler ADI: Solve (I - dt*Dx)(I - dt*Dy)(I - dt*Dz) q = rhs
-        // Step 1: Solve (I - dt*Dx) q_star = q_in along x-direction
-        // Step 2: Solve (I - dt*Dy) q_dstar = q_star along y-direction
-        // Step 3: Solve (I - dt*Dz) q_out = q_dstar along z-direction
-
-        // X-sweep: solve A_x * q_star = q_in for each (j,k) pencil
-        for(int j = 0; j < nx[1]; j++)
-        {
-            for(int k = 0; k < nx[2]; k++)
-            {
-                for(int i = 0; i < nx[0]; i++)
-                {
-                    int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    temp1[i] = q_in[i_j_k];
-                }
-
-                int j_k = j * nx[2] + k;
-                if(bc[0] == BoundaryCondition::PERIODIC)
-                    CpuSolverCNADI::tridiagonal_periodic(_xl, _xd, _xh, &q_star[j_k], nx[1] * nx[2], temp1, nx[0]);
-                else
-                    CpuSolverCNADI::tridiagonal(_xl, _xd, _xh, &q_star[j_k], nx[1] * nx[2], temp1, nx[0]);
-            }
-        }
-
-        // Y-sweep: solve A_y * q_dstar = q_star for each (i,k) pencil
-        for(int i = 0; i < nx[0]; i++)
-        {
-            for(int k = 0; k < nx[2]; k++)
-            {
-                for(int j = 0; j < nx[1]; j++)
-                {
-                    int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    temp2[j] = q_star[i_j_k];
-                }
-
-                int i_k = i * nx[1] * nx[2] + k;
-                if(bc[2] == BoundaryCondition::PERIODIC)
-                    CpuSolverCNADI::tridiagonal_periodic(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
-                else
-                    CpuSolverCNADI::tridiagonal(_yl, _yd, _yh, &q_dstar[i_k], nx[2], temp2, nx[1]);
-            }
-        }
-
-        // Z-sweep: solve A_z * q_out = q_dstar for each (i,j) pencil
-        for(int i = 0; i < nx[0]; i++)
-        {
-            for(int j = 0; j < nx[1]; j++)
-            {
-                for(int k = 0; k < nx[2]; k++)
-                {
-                    int i_j_k = i * nx[1] * nx[2] + j * nx[2] + k;
-                    temp3[k] = q_dstar[i_j_k];
-                }
-
-                int i_j = i * nx[1] * nx[2] + j * nx[2];
-                if(bc[4] == BoundaryCondition::PERIODIC)
-                    CpuSolverCNADI::tridiagonal_periodic(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
-                else
-                    CpuSolverCNADI::tridiagonal(_zl, _zd, _zh, &q_out[i_j], 1, temp3, nx[2]);
-            }
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-void CpuSolverSDC::adi_step_2d(int sub_interval,
-    std::vector<BoundaryCondition> bc,
-    double* q_in, double* q_out, std::string monomer_type)
-{
-    try
-    {
-        const int n_grid = this->cb->get_total_grid();
-        const std::vector<int> nx = this->cb->get_nx();
-        double q_star[n_grid];
-        double temp1[nx[0]];
-        double temp2[nx[1]];
-
-        double *_xl = xl[sub_interval][monomer_type];
-        double *_xd = xd[sub_interval][monomer_type];
-        double *_xh = xh[sub_interval][monomer_type];
-
-        double *_yl = yl[sub_interval][monomer_type];
-        double *_yd = yd[sub_interval][monomer_type];
-        double *_yh = yh[sub_interval][monomer_type];
-
-        // Backward Euler ADI: Solve (I - dt*Dx)(I - dt*Dy) q = rhs
-        // Step 1: Solve (I - dt*Dx) q_star = rhs along x-direction
-        // Step 2: Solve (I - dt*Dy) q_out = q_star along y-direction
-
-        // X-sweep: solve A_x * q_star = q_in for each row
-        for(int j = 0; j < nx[1]; j++)
-        {
-            for(int i = 0; i < nx[0]; i++)
-            {
-                int i_j = i * nx[1] + j;
-                temp1[i] = q_in[i_j];
-            }
-
-            if(bc[0] == BoundaryCondition::PERIODIC)
-                CpuSolverCNADI::tridiagonal_periodic(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
-            else
-                CpuSolverCNADI::tridiagonal(_xl, _xd, _xh, &q_star[j], nx[1], temp1, nx[0]);
-        }
-
-        // Y-sweep: solve A_y * q_out = q_star for each column
-        for(int i = 0; i < nx[0]; i++)
-        {
-            for(int j = 0; j < nx[1]; j++)
-            {
-                int i_j = i * nx[1] + j;
-                temp2[j] = q_star[i_j];
-            }
-
-            if(bc[2] == BoundaryCondition::PERIODIC)
-                CpuSolverCNADI::tridiagonal_periodic(_yl, _yd, _yh, &q_out[i * nx[1]], 1, temp2, nx[1]);
-            else
-                CpuSolverCNADI::tridiagonal(_yl, _yd, _yh, &q_out[i * nx[1]], 1, temp2, nx[1]);
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
-}
-
-void CpuSolverSDC::adi_step_1d(int sub_interval,
+void CpuSolverSDC::tridiagonal_solve_1d(int sub_interval,
     std::vector<BoundaryCondition> bc,
     double* q_in, double* q_out, std::string monomer_type)
 {
@@ -794,8 +676,7 @@ void CpuSolverSDC::adi_step_1d(int sub_interval,
         double *_xd = xd[sub_interval][monomer_type];
         double *_xh = xh[sub_interval][monomer_type];
 
-        // For Backward Euler: solve A * q_out = q_in directly
-        // No transformation of RHS (unlike Crank-Nicolson)
+        // Solve (I - dtau * D∇²) q_out = q_in using tridiagonal solver
         if(bc[0] == BoundaryCondition::PERIODIC)
             CpuSolverCNADI::tridiagonal_periodic(_xl, _xd, _xh, q_out, 1, q_in, nx[0]);
         else
@@ -823,9 +704,13 @@ void CpuSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_typ
         const double D = bond_length_sq / 6.0;
         double dtau = (tau[sub_interval + 1] - tau[sub_interval]) * ds;
 
+        // Get w field for this monomer type (for fully implicit scheme)
+        const std::vector<double>& w_field = w_field_store.at(monomer_type);
+
         SparseMatrixCSR& mat = sparse_matrices[sub_interval][monomer_type];
 
-        // Build A = I - dtau * D * ∇² in CSR format (0-based indexing for MKL sparse BLAS)
+        // Build A = I - dtau * D * ∇² + dtau * w in CSR format (0-based indexing for MKL sparse BLAS)
+        // The fully implicit scheme includes the reaction term (w) in the matrix
         // For 2D: 5-point stencil (1 diagonal + 4 off-diagonals)
         // For 3D: 7-point stencil (1 diagonal + 6 off-diagonals)
         int stencil_size = (DIM == 2) ? 5 : 7;
@@ -877,7 +762,8 @@ void CpuSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_typ
                     }
 
                     // Diagonal (i, j)
-                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry;
+                    // Fully implicit: includes diffusion and reaction terms
+                    double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + dtau * w_field[row];
                     // Cell-centered boundary modifications using ghost cells:
                     // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
                     // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
@@ -986,7 +872,8 @@ void CpuSolverSDC::build_sparse_matrix(int sub_interval, std::string monomer_typ
                         }
 
                         // Diagonal (i, j, k)
-                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz;
+                        // Fully implicit: includes diffusion and reaction terms
+                        double diag_val = 1.0 + 2.0 * rx + 2.0 * ry + 2.0 * rz + dtau * w_field[row];
                         // Cell-centered boundary modifications using ghost cells:
                         // - Reflecting: symmetric ghost (q_{-1} = q_0) → diagonal decreases
                         // - Absorbing: antisymmetric ghost (q_{-1} = -q_0) → diagonal increases
@@ -1182,9 +1069,10 @@ void CpuSolverSDC::sparse_solve(int sub_interval, double* q_in, double* q_out, s
     }
 }
 
-void CpuSolverSDC::direct_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
+void CpuSolverSDC::pcg_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type)
 {
-    // Solve using PCG (no ADI splitting error)
+    // Solve (I - dtau*D∇² + dtau*w) q_out = q_in using PCG
+    // Fully implicit scheme: includes both diffusion and reaction terms
     sparse_solve(sub_interval, q_in, q_out, monomer_type);
 }
 
@@ -1214,17 +1102,13 @@ void CpuSolverSDC::advance_propagator(
             _X[0][i] = q_in[i];
 
         //=================================================================
-        // Predictor: Backward Euler for diffusion, explicit for reaction
+        // Predictor: Fully implicit Backward Euler for both diffusion and reaction
+        // Solve: (I - dtau*D∇² + dtau*w) X[m+1] = X[m]
         //=================================================================
         for(int m = 0; m < M - 1; m++)
         {
-            // Apply reaction term explicitly: temp = exp(-w*dtau) * _X[m]
-            const std::vector<double>& exp_dw_vec = exp_dw_sub[m][monomer_type];
-            for(int i = 0; i < n_grid; i++)
-                _temp_array[i] = exp_dw_vec[i] * _X[m][i];
-
-            // Apply diffusion implicitly using ADI
-            adi_step(m, _temp_array, _X[m + 1], monomer_type);
+            // Fully implicit solve: matrix includes both diffusion and reaction
+            implicit_solve_step(m, _X[m], _X[m + 1], monomer_type);
         }
 
         //=================================================================
@@ -1255,9 +1139,10 @@ void CpuSolverSDC::advance_propagator(
             // SDC correction sweep
             for(int m = 0; m < M - 1; m++)
             {
-                double dtau = (tau[m + 1] - tau[m]) * ds;
+                double dtau = dtau_sub[m];
 
                 // Compute spectral integral: ∫ F dt
+                // Fully implicit RHS: subtract the full F_old[m+1] (both diffusion and reaction)
                 for(int i = 0; i < n_grid; i++)
                 {
                     double integral = 0.0;
@@ -1265,14 +1150,13 @@ void CpuSolverSDC::advance_propagator(
                     {
                         integral += S[m][j] * _F_old[j][i] * ds;
                     }
-                    // Note: F_old = D∇²q - wq, so D∇²q = F_old + w*q
-                    // We subtract only the diffusion part: dtau * D∇²q_old[m+1]
-                    double diff_term = _F_old[m + 1][i] + w_field[i] * _X_old[m + 1][i];
-                    _rhs_array[i] = _X[m][i] + integral - dtau * diff_term;
+                    // Fully implicit: subtract full F_old (not just diffusion part)
+                    // since the implicit solve handles both D∇² and w terms
+                    _rhs_array[i] = _X[m][i] + integral - dtau * _F_old[m + 1][i];
                 }
 
-                // Semi-implicit SDC: solve (I - dtau*D∇²) X[m+1] = rhs
-                adi_step(m, _rhs_array, _X[m + 1], monomer_type);
+                // Fully implicit SDC: solve (I - dtau*D∇² + dtau*w) X[m+1] = rhs
+                implicit_solve_step(m, _rhs_array, _X[m + 1], monomer_type);
             }
         }
 

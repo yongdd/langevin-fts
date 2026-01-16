@@ -121,7 +121,19 @@ phi_rich = (4*phi_half - phi_full) / 3
 
 ### Spectral Deferred Correction (SDC)
 
-SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) to achieve high-order accuracy. The implementation uses **IMEX (Implicit-Explicit) splitting**: diffusion is treated implicitly, potential term explicitly.
+SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) to achieve high-order accuracy. The implementation uses a **fully implicit scheme** where both diffusion and reaction terms are included in the implicit matrix, ensuring material conservation.
+
+**Fully Implicit Formulation:**
+
+The implicit matrix includes both diffusion and reaction terms:
+
+$$(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) q^{n+1} = q^n$$
+
+This is in contrast to IMEX splitting which would apply the reaction term explicitly:
+
+$$(I - \Delta\tau \cdot D\nabla^2) q^{n+1} = e^{-w\Delta\tau} q^n \quad \text{(IMEX - not used)}$$
+
+The fully implicit scheme ensures **material conservation**: the forward and backward partition functions are equal to machine precision (~10⁻¹⁵), which is required for accurate SCFT calculations.
 
 **Algorithm per contour step:**
 
@@ -130,25 +142,32 @@ SDC is an iterative method that uses spectral quadrature (Gauss-Lobatto nodes) t
    - For $M=4$: $\tau = [0, 0.276..., 0.724..., 1]$
 
 2. **Predictor** (Backward Euler at each sub-interval):
-   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2) X^{[0]}_{m+1} = e^{-w\Delta\tau} X^{[0]}_m$
-   - 1D: Tridiagonal solver (Thomas algorithm)
+   - Solve implicitly: $(I - \Delta\tau \cdot D\nabla^2 + \Delta\tau \cdot w) X^{[0]}_{m+1} = X^{[0]}_m$
+   - 1D: Tridiagonal solver (Thomas algorithm) with $w$ in diagonal
    - 2D/3D: **Preconditioned Conjugate Gradient (PCG)** with Jacobi preconditioner
 
 3. **Corrector** ($K$ iterations):
    - Compute $F_m = D\nabla^2 q_m - w \cdot q_m$ at all nodes
-   - Apply spectral integral using Lagrange interpolation
-   - Update solution at each node
+   - Apply spectral integral using Lagrange interpolation:
+     $$X^{[k+1]}_{m+1} = X^{[k]}_m + \int_{\tau_m}^{\tau_{m+1}} F^{[k]}(\tau') d\tau' - \Delta\tau \cdot F^{[k]}_{m+1}$$
+   - Solve implicit system at each node
 
 **Order of Accuracy:**
 
-With $K$ correction iterations, SDC achieves up to $(2K+1)$-order accuracy. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
+The SDC order is $\min(K+1, 2M-2)$ where $M$ is the number of Gauss-Lobatto nodes and $K$ is the number of correction iterations. Unlike CN-ADI methods which use ADI splitting (introducing $O(\Delta s^2)$ error in 2D/3D), SDC uses PCG to solve the full implicit system directly, avoiding splitting errors.
 
-| Method | K | Order |
-|--------|---|-------|
-| `sdc-3` | 1 | 3rd |
-| `sdc-5` | 2 | 5th |
-| `sdc-7` | 3 | 7th |
-| `sdc-9` | 4 | 9th |
+| Method | M | K | Order |
+|--------|---|---|-------|
+| `sdc-2` | 3 | 1 | 2nd |
+| `sdc-3` | 3 | 2 | 3rd |
+| `sdc-5` | 4 | 4 | 5th |
+| `sdc-7` | 5 | 6 | 7th |
+
+**Material Conservation:**
+
+The fully implicit scheme satisfies the Hermiticity condition $(VU)^\dagger = VU$ where $V$ is the volume matrix and $U$ is the evolution operator. This ensures:
+- Forward partition function = Backward partition function
+- Partition function differences ~10⁻¹⁵ (machine precision)
 
 ### Runtime Selection
 
@@ -297,4 +316,4 @@ CUDA parallelizes across systems, solving thousands of tridiagonal systems simul
 
 4. **SDC Method**: A. Dutt, L. Greengard, and V. Rokhlin, *BIT Numerical Mathematics*, **2000**, 40, 241-266.
 
-5. **IMEX-SDC**: M. L. Minion, *Commun. Math. Sci.*, **2003**, 1, 471-500.
+5. **Semi-implicit SDC**: M. L. Minion, *Commun. Math. Sci.*, **2003**, 1, 471-500.

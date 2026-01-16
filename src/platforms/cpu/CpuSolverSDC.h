@@ -24,7 +24,7 @@
  * **Order of Accuracy:**
  *
  * - 1D: High order (up to 2K+1 with K corrections) - tridiagonal solve is exact
- * - 2D/3D: High order using MKL PARDISO direct sparse solver (no ADI splitting)
+ * - 2D/3D: High order using PCG sparse solver (no splitting error)
  *
  * With IMEX predictor (Backward Euler) and K corrections, the theoretical order
  * is 2K+1 for problems where the implicit solve is exact.
@@ -32,9 +32,9 @@
  * **Implementation Details:**
  *
  * - 1D: Uses tridiagonal solver (exact, fast)
- * - 2D/3D: Uses MKL PARDISO direct sparse solver to avoid ADI splitting error
- *   The sparse matrix A = I - dtau * L is built in CSR format and factorized once
- *   per sub-interval per monomer type. The factorization is reused for all solves.
+ * - 2D/3D: Uses PCG (Preconditioned Conjugate Gradient) sparse solver to solve
+ *   the full implicit system directly without splitting error. The sparse matrix
+ *   A = I - dtau * L is built in CSR format with Jacobi preconditioner.
  *
  * **References:**
  *
@@ -44,7 +44,7 @@
  *   ordinary differential equations." Comm. Math. Sci. 1(3), 471-500.
  *
  * @see CpuSolver for the abstract interface
- * @see CpuSolverCNADI for the underlying ADI solver (1D only)
+ * @see CpuSolverCNADI for tridiagonal solvers (1D only)
  */
 
 #ifndef CPU_SOLVER_SDC_H_
@@ -65,7 +65,7 @@
 
 /**
  * @struct SparseMatrixCSR
- * @brief CSR (Compressed Sparse Row) format sparse matrix for PCG solver.
+ * @brief CSR (Compressed Sparse Row) format sparse matrix for PCG solver (2D/3D).
  */
 struct SparseMatrixCSR
 {
@@ -83,12 +83,14 @@ struct SparseMatrixCSR
  * @brief CPU solver using SDC (Spectral Deferred Correction) with Gauss-Lobatto nodes.
  *
  * Implements the SDC scheme for solving the modified diffusion equation.
- * Uses CpuSolverCNADI internally for implicit diffusion solves at each
- * sub-interval within a contour step.
+ * Uses tridiagonal solvers (1D) or PCG sparse solver (2D/3D) for implicit
+ * diffusion solves at each sub-interval within a contour step.
  *
  * **Algorithm per contour step:**
  *
- * 1. Predictor: Backward Euler at each sub-interval using ADI
+ * 1. Predictor: Backward Euler at each sub-interval
+ *    - 1D: Tridiagonal solve (exact)
+ *    - 2D/3D: PCG sparse solve (no splitting error)
  * 2. Corrections (K iterations):
  *    - Compute F = D∇²q - wq at all GL nodes
  *    - Apply SDC update using spectral integration matrix S
@@ -116,8 +118,11 @@ private:
     // Tridiagonal coefficients for sub-intervals (indexed by sub-interval)
     // For sub-interval m: dtau[m] = (tau[m+1] - tau[m]) * ds
     std::vector<std::map<std::string, double*>> xl;  ///< Lower diagonal per sub-interval
-    std::vector<std::map<std::string, double*>> xd;  ///< Main diagonal per sub-interval
+    std::vector<std::map<std::string, double*>> xd;  ///< Main diagonal per sub-interval (includes w)
     std::vector<std::map<std::string, double*>> xh;  ///< Upper diagonal per sub-interval
+
+    // Base diagonal (diffusion only, without w) for updating when w changes
+    std::vector<std::map<std::string, double*>> xd_base;  ///< Base diagonal (diffusion only)
 
     std::vector<std::map<std::string, double*>> yl;  ///< Y-direction lower
     std::vector<std::map<std::string, double*>> yd;  ///< Y-direction main
@@ -127,9 +132,8 @@ private:
     std::vector<std::map<std::string, double*>> zd;  ///< Z-direction main
     std::vector<std::map<std::string, double*>> zh;  ///< Z-direction upper
 
-    // Boltzmann factors for sub-intervals
-    // exp_dw_sub[m] = exp(-w * dtau[m]) for reaction term
-    std::vector<std::map<std::string, std::vector<double>>> exp_dw_sub;
+    // Sub-interval time steps (stored for use in update_dw)
+    std::vector<double> dtau_sub;  ///< dtau[m] = (tau[m+1] - tau[m]) * ds
 
     // Store w field directly for SDC corrections (like CUDA)
     std::map<std::string, std::vector<double>> w_field_store;
@@ -181,35 +185,25 @@ private:
     void compute_F(const double* q, const double* w, double* F_out, std::string monomer_type);
 
     /**
-     * @brief ADI step for a specific sub-interval.
+     * @brief Implicit diffusion solve for a specific sub-interval.
      *
-     * Solves (I - dtau * D∇²) q_out = rhs using ADI.
+     * Solves (I - dtau * D∇²) q_out = rhs.
+     * - 1D: Uses tridiagonal solver (exact)
+     * - 2D/3D: Uses PCG sparse solver (no splitting error)
      *
      * @param sub_interval Index of sub-interval (0 to M-2)
      * @param q_in Input propagator
      * @param q_out Output propagator
      * @param monomer_type Monomer type
      */
-    void adi_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
+    void implicit_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
 
     /**
-     * @brief ADI step in 3D.
+     * @brief Tridiagonal solve in 1D.
+     *
+     * Solves (I - dtau * D∇²) q_out = q_in using tridiagonal solver.
      */
-    void adi_step_3d(int sub_interval,
-        std::vector<BoundaryCondition> bc,
-        double* q_in, double* q_out, std::string monomer_type);
-
-    /**
-     * @brief ADI step in 2D.
-     */
-    void adi_step_2d(int sub_interval,
-        std::vector<BoundaryCondition> bc,
-        double* q_in, double* q_out, std::string monomer_type);
-
-    /**
-     * @brief ADI step in 1D.
-     */
-    void adi_step_1d(int sub_interval,
+    void tridiagonal_solve_1d(int sub_interval,
         std::vector<BoundaryCondition> bc,
         double* q_in, double* q_out, std::string monomer_type);
 
@@ -247,11 +241,12 @@ private:
     void sparse_solve(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
 
     /**
-     * @brief Iterative solve step for 2D/3D (replaces ADI).
+     * @brief PCG solve step for 2D/3D.
      *
-     * Uses PCG solver instead of ADI splitting to avoid O(dt²) error.
+     * Solves (I - dtau * D∇²) q_out = q_in using PCG sparse solver.
+     * This avoids splitting errors that would occur with ADI methods.
      */
-    void direct_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
+    void pcg_solve_step(int sub_interval, double* q_in, double* q_out, std::string monomer_type);
 
     /**
      * @brief Return maximum of two integers.
