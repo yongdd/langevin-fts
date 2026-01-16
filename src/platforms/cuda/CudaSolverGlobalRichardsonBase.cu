@@ -178,12 +178,10 @@ CudaSolverGlobalRichardsonBase::CudaSolverGlobalRichardsonBase(
                 gpu_error_check(cudaMalloc((void**)&d_temp[i], sizeof(double) * M));
             }
 
-            int offset[nx[0]];
-            for (int i = 0; i < nx[0]; i++)
-                offset[i] = i;
-
-            gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(int) * nx[0]));
-            gpu_error_check(cudaMemcpy(d_offset, offset, sizeof(int) * nx[0], cudaMemcpyHostToDevice));
+            // For 1D case, there is only 1 system starting at offset 0
+            int offset[1] = {0};
+            gpu_error_check(cudaMalloc((void**)&d_offset, sizeof(int) * 1));
+            gpu_error_check(cudaMemcpy(d_offset, offset, sizeof(int) * 1, cudaMemcpyHostToDevice));
         }
 
         update_laplacian_operator();
@@ -671,20 +669,20 @@ void CudaSolverGlobalRichardsonBase::advance_propagator_1d_step(
             d_temp[STREAM], d_q_in, M);
         gpu_error_check(cudaPeekAtLastError());
 
-        // Solve tridiagonal system
+        // Solve tridiagonal system (1 system of size M for 1D case)
         if (bc[0] == BoundaryCondition::PERIODIC)
         {
             tridiagonal_periodic<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_q_sparse[STREAM], d_temp[STREAM], d_q_out,
-                d_offset, M, 1, M);
+                d_offset, 1, 1, M);
         }
         else
         {
             tridiagonal<<<N_BLOCKS, N_THREADS, shmem_x, streams[STREAM][0]>>>(
                 _d_xl, _d_xd, _d_xh,
                 d_c_star[STREAM], d_temp[STREAM], d_q_out,
-                d_offset, M, 1, M);
+                d_offset, 1, 1, M);
         }
         gpu_error_check(cudaPeekAtLastError());
     }
