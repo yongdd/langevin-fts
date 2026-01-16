@@ -519,6 +519,13 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
     }
 }
 
+//----------------- Set cell-averaged bond -------------------------
+template <typename T>
+void CudaSolverPseudoDiscrete<T>::set_cell_averaged_bond(bool enabled)
+{
+    pseudo->set_cell_averaged_bond(enabled);
+}
+
 // Explicit template instantiation
 
 template class CudaSolverPseudoDiscrete<double>;

@@ -220,5 +220,15 @@ public:
      */
     virtual std::vector<T> compute_single_segment_stress(
         T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) = 0;
+
+    /**
+     * @brief Enable or disable cell-averaged bond function.
+     *
+     * Only applicable for pseudo-spectral solvers. Real-space solvers
+     * ignore this setting.
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     */
+    virtual void set_cell_averaged_bond([[maybe_unused]] bool enabled) {}
 };
 #endif

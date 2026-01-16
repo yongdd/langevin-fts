@@ -13,6 +13,7 @@ This document provides the mathematical derivation of the pseudo-spectral method
 7. [ETDRK4: Alternative 4th-Order Method](#7-etdrk4-alternative-4th-order-method)
 8. [Stress Tensor Calculation](#8-stress-tensor-calculation)
 9. [Crystal System Constraints](#9-crystal-system-constraints)
+10. [Cell-Averaged Bond Function](#10-cell-averaged-bond-function)
 
 ---
 
@@ -490,6 +491,96 @@ All cross-terms may be non-zero.
 **Constraints:**
 - All 6 parameters ($L_a$, $L_b$, $L_c$, $\alpha$, $\beta$, $\gamma$) are independent
 - All off-diagonal stress components may be non-zero
+
+---
+
+## 10. Cell-Averaged Bond Function
+
+### 10.1 Motivation
+
+The standard Gaussian bond function in the discrete chain model is strictly positive in Fourier space:
+
+$$\hat{g}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$$
+
+However, when this is transformed to real space on a finite grid, the resulting bond function can have **negative values** near grid points far from the origin due to aliasing effects. This is physically problematic since the bond function represents a probability density and should be non-negative.
+
+### 10.2 Cell-Averaging Approach
+
+To ensure non-negativity, we apply **cell-averaging** (also called **sinc filtering**) to the bond function. Instead of evaluating the bond function at discrete grid points, we average over each grid cell. This is equivalent to multiplying the Fourier-space bond function by a sinc filter:
+
+**For periodic boundary conditions:**
+
+$$\hat{g}_{avg}(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \prod_{d=1}^{D} \text{sinc}\left(\frac{\pi n_d}{N_d}\right)$$
+
+where $\text{sinc}(x) = \sin(x)/x$, $n_d$ is the Fourier mode index, and $N_d$ is the number of grid points in dimension $d$.
+
+**For mixed boundary conditions (reflecting or absorbing):**
+
+$$\hat{g}_{avg}(\mathbf{k}) = \hat{g}(\mathbf{k}) \cdot \prod_{d=1}^{D} \text{sinc}\left(\frac{\pi n_d}{2N_d}\right)$$
+
+The factor of 2 in the denominator accounts for the implicit doubling of the domain in DCT/DST transforms.
+
+### 10.3 End-to-End Distance Correction
+
+A naive application of the sinc filter changes the chain statistics. The sinc filter adds variance $\Delta x^2/12$ per dimension to the bond distribution (where $\Delta x = L/N$ is the grid spacing). This inflates the end-to-end distance:
+
+$$\langle R^2 \rangle_{naive} = N b^2 + \frac{N \cdot L^2}{12 N^2} \cdot D = N b^2 + \frac{D L^2}{12 N}$$
+
+For coarse grids, this can cause errors exceeding 60%.
+
+**Correction:** To preserve the correct chain statistics, we modify the Gaussian exponent to compensate for the sinc filter's contribution:
+
+$$\hat{g}_{corrected}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6} + \sum_{d=1}^{D} \frac{\pi^2 n_d^2}{6 N_d^2}\right) \cdot \prod_{d=1}^{D} \text{sinc}\left(\frac{\pi n_d}{N_d}\right)$$
+
+The correction term $+\pi^2 n_d^2/(6 N_d^2)$ exactly cancels the variance added by the sinc filter, preserving:
+
+$$\langle R^2 \rangle = N b^2$$
+
+### 10.4 Mathematical Derivation
+
+The variance of the sinc-averaged Gaussian in 1D is:
+
+$$\langle \Delta x^2 \rangle = \frac{b^2 \Delta s}{3} + \frac{\Delta x^2}{12}$$
+
+To recover the original variance $b^2 \Delta s/3$, we use an effective segment length:
+
+$$b_{eff}^2 = b^2 - \frac{\Delta x^2}{4 \Delta s}$$
+
+In Fourier space with $k = 2\pi n/L$, this corresponds to adding:
+
+$$\frac{b^2 k^2 \Delta s}{6} \to \frac{b^2 k^2 \Delta s}{6} - \frac{\pi^2 n^2}{6 N^2}$$
+
+The negative sign in the exponent becomes a positive correction term.
+
+### 10.5 API Usage
+
+Cell-averaging can be toggled at runtime:
+
+```python
+# Enable cell-averaged bond function
+solver.set_cell_averaged_bond(True)
+
+# Disable (return to standard bond function)
+solver.set_cell_averaged_bond(False)
+```
+
+**Default:** Cell-averaging is **disabled** by default to maintain backward compatibility.
+
+### 10.6 When to Use Cell-Averaging
+
+Cell-averaging is recommended when:
+- Using coarse grids where aliasing may cause negative bond function values
+- Physical non-negativity of the bond function is important for the application
+- Simulating grafted polymer brush systems where absorbing boundary conditions are used at the grafting surface
+
+Cell-averaging is **not needed** when:
+- Using fine grids (large $N$) where aliasing is negligible
+- Only the partition function and concentrations are needed (not the real-space bond function itself)
+
+### 10.7 References
+
+The cell-averaging approach for discrete chain models is discussed in:
+- Park, S. J., Yong, D., Kim, Y. & Kim, J. U. "Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains." *J. Chem. Phys.* **150**, 234901 (2019).
 
 ---
 

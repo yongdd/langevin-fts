@@ -74,6 +74,20 @@ protected:
     double ds;                               ///< Contour step size
 
     /**
+     * @brief Enable cell-averaged bond function (sinc filtering).
+     *
+     * When enabled, the Boltzmann bond factor is multiplied by sinc factors:
+     * boltz_bond_filtered[k] = boltz_bond[k] × sinc(kx·dx/2) × sinc(ky·dy/2) × ...
+     *
+     * This corresponds to the cell-averaging approach from Park et al.,
+     * J. Chem. Phys. 150, 234901 (2019), which ensures non-negativity of
+     * the bond function in real space.
+     *
+     * Default: false (use standard analytical bond function)
+     */
+    bool use_cell_averaged_bond_;
+
+    /**
      * @brief Reciprocal metric tensor for wavenumber calculation.
      *
      * G*_ij = e*_i · e*_j where e* are reciprocal basis vectors.
@@ -305,6 +319,29 @@ public:
      * @brief Get boundary conditions.
      */
     const std::vector<BoundaryCondition>& get_boundary_conditions() const { return bc; }
+
+    /**
+     * @brief Enable or disable cell-averaged bond function.
+     *
+     * When enabled, applies sinc filtering to the Boltzmann bond factor:
+     * boltz_bond_filtered[k] = boltz_bond[k] × sinc(kx·dx/2) × sinc(ky·dy/2) × ...
+     *
+     * This ensures non-negativity of the bond function in real space,
+     * following the cell-averaging approach from Park et al.,
+     * J. Chem. Phys. 150, 234901 (2019).
+     *
+     * @param enabled True to enable cell-averaging, false for standard bond function
+     *
+     * @note After calling this method, call update() or finalize_ds_values()
+     *       to recompute the Boltzmann factors with the new setting.
+     */
+    virtual void set_cell_averaged_bond(bool enabled);
+
+    /**
+     * @brief Check if cell-averaged bond function is enabled.
+     * @return True if cell-averaging is enabled
+     */
+    bool is_cell_averaged_bond() const { return use_cell_averaged_bond_; }
 
     /**
      * @brief Update all arrays after parameter changes.
