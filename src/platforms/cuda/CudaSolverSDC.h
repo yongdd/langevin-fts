@@ -51,8 +51,10 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <complex>
 
 #include <cuda_runtime.h>
+#include <cufft.h>
 
 #include "Exception.h"
 #include "Molecules.h"
@@ -242,6 +244,27 @@ private:
     static constexpr int PCG_BLOCK_SIZE = 256;          ///< Block size for PCG kernels
     static constexpr int PCG_CONV_CHECK_INTERVAL = 10;  ///< Check convergence every N iterations (reduces GPU-CPU sync)
 
+    // IMEX SDC: FFT-based diffusion solve for periodic BC
+    bool is_periodic_;                                  ///< True if all BCs are periodic (use FFT)
+    cufftHandle plan_forward_[MAX_STREAMS];             ///< Forward FFT plans (D2Z)
+    cufftHandle plan_backward_[MAX_STREAMS];            ///< Backward FFT plans (Z2D)
+    cufftDoubleComplex* d_qk_[MAX_STREAMS];             ///< Fourier space workspace
+    int n_complex_;                                      ///< Size of complex array for FFT
+
+    // Diffusion operator inverse in Fourier space: 1/(1 + dtau*D*|k|²)
+    // [sub_interval][monomer_type] -> device array
+    std::vector<std::map<std::string, double*>> d_diffusion_inv_;
+
+    // Spectral Laplacian operator: -D*|k|² for computing F = D∇²q - wq
+    // [monomer_type] -> device array (independent of sub-interval)
+    std::map<std::string, double*> d_spectral_laplacian_;
+
+    // Workspace for spectral F computation
+    double* d_laplacian_q_[MAX_STREAMS];  ///< D∇²q result from spectral computation
+
+    // IMEX mode flag for faster computation with periodic BC in 2D/3D
+    bool imex_mode_enabled_;  ///< When true, use IMEX SDC for periodic BC in 2D/3D
+
     /**
      * @brief Compute Gauss-Lobatto nodes on [0, 1].
      */
@@ -253,10 +276,33 @@ private:
     void compute_integration_matrix();
 
     /**
-     * @brief Compute F(q) = D∇²q - wq on GPU.
+     * @brief Compute F(q) = D∇²q - wq on GPU using finite differences.
      */
     void compute_F_device(int STREAM, const double* d_q, const double* d_w,
                           double* d_F, std::string monomer_type);
+
+    /**
+     * @brief Compute F(q) = D∇²q - wq using spectral Laplacian (FFT-based).
+     *
+     * For periodic BC, computes D∇²q in Fourier space:
+     * D∇²q = IFFT(-D*|k|² * FFT(q))
+     */
+    void compute_F_spectral(int STREAM, const double* d_q, const double* d_w,
+                            double* d_F, std::string monomer_type);
+
+    /**
+     * @brief Compute F_diff = D∇²q (diffusion part only) using spectral Laplacian.
+     *
+     * Used for Strang splitting where reaction is handled via Boltzmann factors.
+     * The diffusion operator is computed spectrally for consistency with FFT-based solve.
+     */
+    void compute_F_diff_spectral(int STREAM, const double* d_q,
+                                  double* d_F_diff, std::string monomer_type);
+
+    /**
+     * @brief Compute spectral Laplacian operator -D*|k|² for a monomer type.
+     */
+    void compute_spectral_laplacian(std::string monomer_type);
 
     /**
      * @brief Implicit diffusion solve for a specific sub-interval on GPU.
@@ -332,6 +378,38 @@ private:
     void matvec_free_solve(int STREAM, int sub_interval,
                            double* d_q_in, double* d_q_out, std::string monomer_type);
 
+    /**
+     * @brief IMEX diffusion solve using FFT for periodic BC.
+     *
+     * Solves (I - dtau * D∇²) q_out = q_in using FFT-based direct solve.
+     * This is used for IMEX SDC where diffusion is treated implicitly
+     * and reaction explicitly.
+     *
+     * For periodic BC: q_out = IFFT( FFT(q_in) / (1 + dtau*D*|k|²) )
+     */
+    void diffusion_solve_fft(int STREAM, int sub_interval,
+                             double* d_q_in, double* d_q_out, std::string monomer_type);
+
+    /**
+     * @brief Compute diffusion operator inverse in Fourier space.
+     *
+     * Computes 1/(1 + dtau*D*|k|²) for each sub-interval and monomer type.
+     */
+    void compute_diffusion_inverse(int sub_interval, std::string monomer_type);
+
+    /**
+     * @brief Apply FFT-based preconditioner for PCG.
+     *
+     * Computes z = (I - dtau*D∇²)^{-1} * r using FFT.
+     * This is a much better preconditioner than Jacobi for periodic BC
+     * since it captures the diffusion operator structure exactly.
+     *
+     * M^{-1} ≈ (I - dtau*D∇²)^{-1} for full operator A = (I - dtau*D∇² + dtau*w)
+     * Preconditioned system: M^{-1}A ≈ I + O(dtau*w), converges in 1-3 iterations.
+     */
+    void apply_fft_preconditioner(int STREAM, int sub_interval,
+                                   double* d_r, double* d_z, std::string monomer_type);
+
 public:
     /**
      * @brief Construct GPU SDC solver.
@@ -399,5 +477,20 @@ public:
      * @brief Get the number of SDC correction iterations.
      */
     int get_K() const { return K; }
+
+    /**
+     * @brief Enable or disable IMEX mode.
+     *
+     * IMEX (Implicit-Explicit) SDC treats diffusion implicitly and reaction
+     * explicitly, which is faster for periodic BC in 2D/3D.
+     *
+     * @param enabled True to enable IMEX mode, false to use fully implicit
+     */
+    void set_imex_mode(bool enabled) { imex_mode_enabled_ = enabled; }
+
+    /**
+     * @brief Check if IMEX mode is enabled.
+     */
+    bool get_imex_mode() const { return imex_mode_enabled_; }
 };
 #endif

@@ -350,5 +350,18 @@ public:
      */
     virtual bool check_total_partition() = 0;
 
+    /**
+     * @brief Enable or disable IMEX mode for SDC solver.
+     *
+     * IMEX (Implicit-Explicit) SDC treats diffusion implicitly and reaction
+     * explicitly, which is faster for periodic BC in 2D/3D.
+     *
+     * @param enabled True to enable IMEX mode, false for fully implicit
+     * @return True if IMEX mode was set (solver is SDC), false otherwise
+     *
+     * @note Default implementation returns false (non-SDC solvers).
+     */
+    virtual bool set_sdc_imex_mode(bool /*enabled*/) { return false; }
+
 };
 #endif
