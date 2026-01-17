@@ -15,6 +15,7 @@
 #include <numbers>
 #include <array>
 #include <complex>
+#include <utility>
 #include "Pseudo.h"
 
 //------------------------------------------------------------------------------
@@ -783,6 +784,34 @@ void Pseudo<T>::finalize_ds_values()
 }
 
 //------------------------------------------------------------------------------
+// Compute cell-averaged bond function at n=1 for a single dimension (periodic BC)
+// Used for root-finding sinc correction
+// Returns both full-bond and half-bond values
+//------------------------------------------------------------------------------
+static std::pair<double, double> compute_cell_avg_bond_at_n1_periodic(
+    int N,           // grid points in this dimension
+    int n_mom,       // momentum truncation
+    double prefactor // -b²(2π)²ds/6 * G_dd
+)
+{
+    const double PI = std::numbers::pi;
+    double sum_full = 0.0;
+    double sum_half = 0.0;
+
+    // n=1 case: compute Σ_m exp(prefactor * (1-2mN)²) * sinc(π(1-2mN)/N)
+    for (int m = -n_mom; m <= n_mom; m++)
+    {
+        int n_shifted = 1 - 2 * m * N;
+        double mag_q2 = prefactor * n_shifted * n_shifted;
+        double sinc_arg = PI * n_shifted / static_cast<double>(N);
+        double sinc_val = sinc(sinc_arg);
+        sum_full += std::exp(mag_q2) * sinc_val;
+        sum_half += std::exp(mag_q2 / 2.0) * sinc_val;
+    }
+    return {sum_full, sum_half};
+}
+
+//------------------------------------------------------------------------------
 // Update Boltzmann factors for a specific ds_index (periodic BC)
 //------------------------------------------------------------------------------
 template <typename T>
@@ -817,29 +846,9 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
 
     // Determine whether to use multi-momentum summation
     // n_cell_average_momentum_ > 0: use multi-momentum summation (Park et al. 2019, Eq. 30)
-    // n_cell_average_momentum_ = 0: use single sinc with correction (current default)
+    // n_cell_average_momentum_: number of aliased copies to sum (Park et al. 2019, Eq. 30)
+    // n=0: single sinc, n>=1: multi-momentum summation
     const int n_mom = n_cell_average_momentum_;
-    const bool use_multi_momentum = use_cell_averaged_bond_ && (n_mom > 0);
-
-    // Sinc correction factors (only used when n_cell_average_momentum_ = 0)
-    // The sinc filter adds variance dx²/12 per dimension, which corresponds to
-    // adding +k²·dx²/24 to the exponent. For periodic BC with k = 2πn/L and dx = L/N:
-    // Correction = +4π²n²/(L²) × (L/N)²/24 = +π²n²/(6N²)
-    // This correction is added when cell-averaging is enabled to preserve <R²> = Nb²
-    double sinc_corr_i = 0.0, sinc_corr_j = 0.0, sinc_corr_k = 0.0;
-    if (use_cell_averaged_bond_ && !use_multi_momentum)
-    {
-        // Correction factor: π²/(6N²) per dimension
-        sinc_corr_i = (DIM >= 1) ? PI * PI / (6.0 * tnx[0] * tnx[0]) : 0.0;
-        sinc_corr_j = (DIM >= 2) ? PI * PI / (6.0 * tnx[1] * tnx[1]) : 0.0;
-        sinc_corr_k = (DIM >= 3) ? PI * PI / (6.0 * tnx[2] * tnx[2]) : 0.0;
-        if (DIM == 1) {
-            sinc_corr_k = PI * PI / (6.0 * tnx[2] * tnx[2]);
-        } else if (DIM == 2) {
-            sinc_corr_j = PI * PI / (6.0 * tnx[1] * tnx[1]);
-            sinc_corr_k = PI * PI / (6.0 * tnx[2] * tnx[2]);
-        }
-    }
 
     for (const auto& item : bond_lengths)
     {
@@ -849,6 +858,41 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
         double* _boltz_bond_half = boltz_bond_half[ds_idx][monomer_type];
 
         double prefactor = -bond_length_sq * FOUR_PI_SQ * local_ds / 6.0;
+
+        // Compute sinc correction factors using root-finding approach
+        // For each dimension d: sinc_corr_d = target_d - ln(g_ca_d(1))
+        // where target_d = ln(ĝ_gaussian(1)) = prefactor * G_dd
+        double sinc_corr_i = 0.0, sinc_corr_j = 0.0, sinc_corr_k = 0.0;
+        double sinc_corr_half_i = 0.0, sinc_corr_half_j = 0.0, sinc_corr_half_k = 0.0;
+        if (use_cell_averaged_bond_)
+        {
+            // Compute cell-averaged bond at n=1 for each dimension
+            // Use prefactor * G_dd as the 1D prefactor for dimension d
+            if (tnx[0] > 1) {
+                double prefactor_i = prefactor * Gii;
+                auto [g_ca_i, g_ca_half_i] = compute_cell_avg_bond_at_n1_periodic(tnx[0], n_mom, prefactor_i);
+                double target_i = prefactor_i;  // ln(ĝ_gaussian(1)) = prefactor * Gii * 1²
+                double target_half_i = prefactor_i / 2.0;  // half-bond has half the exponent
+                sinc_corr_i = target_i - std::log(g_ca_i);
+                sinc_corr_half_i = target_half_i - std::log(g_ca_half_i);
+            }
+            if (tnx[1] > 1) {
+                double prefactor_j = prefactor * Gjj;
+                auto [g_ca_j, g_ca_half_j] = compute_cell_avg_bond_at_n1_periodic(tnx[1], n_mom, prefactor_j);
+                double target_j = prefactor_j;  // ln(ĝ_gaussian(1)) = prefactor * Gjj * 1²
+                double target_half_j = prefactor_j / 2.0;
+                sinc_corr_j = target_j - std::log(g_ca_j);
+                sinc_corr_half_j = target_half_j - std::log(g_ca_half_j);
+            }
+            if (tnx[2] > 1) {
+                double prefactor_k = prefactor * Gkk;
+                auto [g_ca_k, g_ca_half_k] = compute_cell_avg_bond_at_n1_periodic(tnx[2], n_mom, prefactor_k);
+                double target_k = prefactor_k;  // ln(ĝ_gaussian(1)) = prefactor * Gkk * 1²
+                double target_half_k = prefactor_k / 2.0;
+                sinc_corr_k = target_k - std::log(g_ca_k);
+                sinc_corr_half_k = target_half_k - std::log(g_ca_half_k);
+            }
+        }
 
         for (int i = 0; i < tnx[0]; i++)
         {
@@ -870,17 +914,15 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                         int k_signed = k;
                         int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
-                        if (use_multi_momentum)
+                        if (use_cell_averaged_bond_)
                         {
-                            // Multi-momentum summation (Park et al. 2019, Eq. 30)
-                            // Sum over aliased copies: m_i, m_j, m_k from -n_mom to +n_mom
+                            // Cell-averaged bond function (Park et al. 2019, Eq. 30)
+                            // Unified implementation for n_mom = 0 (single sinc) and n_mom >= 1 (multi-momentum)
                             double sum_full = 0.0;
                             double sum_half = 0.0;
 
                             for (int mi = -n_mom; mi <= n_mom; mi++)
                             {
-                                // Shifted wavenumber index: n_shifted = n - 2*m*N
-                                // (factor of 2 comes from the DCT/FFT periodicity, see Eq. A8)
                                 int i_shifted = i_signed - 2 * mi * tnx[0];
                                 double sinc_arg_i = PI * i_shifted / static_cast<double>(tnx[0]);
 
@@ -894,8 +936,6 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                                         int k_shifted = k_signed - 2 * mk * tnx[2];
                                         double sinc_arg_k = PI * k_shifted / static_cast<double>(tnx[2]);
 
-                                        // Compute |k_shifted|² using reciprocal metric tensor
-                                        // Note: For shifted indices, we need to use the actual (signed) values
                                         double mag_q2 = prefactor * (
                                             Gii * i_shifted * i_shifted +
                                             Gjj * j_shifted * j_shifted +
@@ -905,23 +945,30 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                                             2.0 * Gjk * j_shifted * k_shifted
                                         );
 
-                                        // Cell-averaging sinc factors: sinc(k_shifted * dx / 2)
-                                        // For periodic BC: k = 2π*n/L, dx = L/N
-                                        // So k*dx/2 = π*n/N
+                                        // Sinc filter is a spatial filter (independent of ds)
                                         double sinc_factor = sinc(sinc_arg_i) * sinc(sinc_arg_j) * sinc(sinc_arg_k);
 
                                         sum_full += std::exp(mag_q2) * sinc_factor;
+                                        // Half-bond uses same sinc filter but half the Gaussian exponent
                                         sum_half += std::exp(mag_q2 / 2.0) * sinc_factor;
                                     }
                                 }
                             }
 
-                            _boltz_bond[idx] = sum_full;
-                            _boltz_bond_half[idx] = sum_half;
+                            // Apply end-to-end distance correction as multiplicative factor
+                            double sinc_corr = sinc_corr_i * itemp * itemp +
+                                               sinc_corr_j * jtemp * jtemp +
+                                               sinc_corr_k * ktemp * ktemp;
+                            double sinc_corr_half = sinc_corr_half_i * itemp * itemp +
+                                                    sinc_corr_half_j * jtemp * jtemp +
+                                                    sinc_corr_half_k * ktemp * ktemp;
+
+                            _boltz_bond[idx] = sum_full * std::exp(sinc_corr);
+                            _boltz_bond_half[idx] = sum_half * std::exp(sinc_corr_half);
                         }
                         else
                         {
-                            // Single sinc with correction (original implementation)
+                            // No cell-averaging: standard Gaussian bond
                             double mag_q2 = prefactor * (
                                 Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
                                 2.0 * Gij * i_signed * j_signed +
@@ -929,22 +976,8 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                                 2.0 * Gjk * j_signed * k_signed
                             );
 
-                            double sinc_factor = 1.0;
-                            if (use_cell_averaged_bond_)
-                            {
-                                // Add sinc correction to preserve end-to-end distance
-                                mag_q2 += sinc_corr_i * itemp * itemp +
-                                          sinc_corr_j * jtemp * jtemp +
-                                          sinc_corr_k * ktemp * ktemp;
-
-                                // Sinc factors
-                                sinc_factor = sinc(PI * itemp / tnx[0]) *
-                                              sinc(PI * jtemp / tnx[1]) *
-                                              sinc(PI * ktemp / tnx[2]);
-                            }
-
-                            _boltz_bond[idx] = std::exp(mag_q2) * sinc_factor;
-                            _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0) * std::sqrt(sinc_factor);
+                            _boltz_bond[idx] = std::exp(mag_q2);
+                            _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                         }
                     }
                 }
@@ -956,9 +989,10 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                         int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
                         int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
 
-                        if (use_multi_momentum)
+                        if (use_cell_averaged_bond_)
                         {
-                            // Multi-momentum summation
+                            // Cell-averaged bond function (Park et al. 2019, Eq. 30)
+                            // Unified implementation for n_mom = 0 (single sinc) and n_mom >= 1 (multi-momentum)
                             double sum_full = 0.0;
                             double sum_half = 0.0;
 
@@ -986,19 +1020,30 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                                             2.0 * Gjk * j_shifted * k_shifted
                                         );
 
+                                        // Sinc filter is a spatial filter (independent of ds)
                                         double sinc_factor = sinc(sinc_arg_i) * sinc(sinc_arg_j) * sinc(sinc_arg_k);
 
                                         sum_full += std::exp(mag_q2) * sinc_factor;
+                                        // Half-bond uses same sinc filter but half the Gaussian exponent
                                         sum_half += std::exp(mag_q2 / 2.0) * sinc_factor;
                                     }
                                 }
                             }
 
-                            _boltz_bond[idx] = sum_full;
-                            _boltz_bond_half[idx] = sum_half;
+                            // Apply end-to-end distance correction as multiplicative factor
+                            double sinc_corr = sinc_corr_i * itemp * itemp +
+                                               sinc_corr_j * jtemp * jtemp +
+                                               sinc_corr_k * ktemp * ktemp;
+                            double sinc_corr_half = sinc_corr_half_i * itemp * itemp +
+                                                    sinc_corr_half_j * jtemp * jtemp +
+                                                    sinc_corr_half_k * ktemp * ktemp;
+
+                            _boltz_bond[idx] = sum_full * std::exp(sinc_corr);
+                            _boltz_bond_half[idx] = sum_half * std::exp(sinc_corr_half);
                         }
                         else
                         {
+                            // No cell-averaging: standard Gaussian bond
                             double mag_q2 = prefactor * (
                                 Gii * itemp * itemp + Gjj * jtemp * jtemp + Gkk * ktemp * ktemp +
                                 2.0 * Gij * i_signed * j_signed +
@@ -1006,26 +1051,45 @@ void Pseudo<T>::update_boltz_bond_periodic_for_ds_index(int ds_idx)
                                 2.0 * Gjk * j_signed * k_signed
                             );
 
-                            double sinc_factor = 1.0;
-                            if (use_cell_averaged_bond_)
-                            {
-                                mag_q2 += sinc_corr_i * itemp * itemp +
-                                          sinc_corr_j * jtemp * jtemp +
-                                          sinc_corr_k * ktemp * ktemp;
-
-                                sinc_factor = sinc(PI * itemp / tnx[0]) *
-                                              sinc(PI * jtemp / tnx[1]) *
-                                              sinc(PI * ktemp / tnx[2]);
-                            }
-
-                            _boltz_bond[idx] = std::exp(mag_q2) * sinc_factor;
-                            _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0) * std::sqrt(sinc_factor);
+                            _boltz_bond[idx] = std::exp(mag_q2);
+                            _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                         }
                     }
                 }
             }
         }
     }
+}
+
+//------------------------------------------------------------------------------
+// Compute cell-averaged bond function at n=1 for a single dimension (non-periodic BC)
+// Used for root-finding sinc correction
+// Returns both full-bond and half-bond values
+// For REFLECTING: k_n = πn/L, n = 0, 1, ..., N-1 → first non-zero is n=1
+// For ABSORBING: k_n = π(n+1)/L, n = 0, 1, ..., N-1 → first is n=0 (ki=1)
+//------------------------------------------------------------------------------
+static std::pair<double, double> compute_cell_avg_bond_at_n1_nonperiodic(
+    int N,           // grid points in this dimension
+    int n_mom,       // momentum truncation
+    double prefactor // -b²(π/L)²ds/6
+)
+{
+    const double PI = std::numbers::pi;
+    double sum_full = 0.0;
+    double sum_half = 0.0;
+
+    // For non-periodic BC, compute at ki=1 (first non-trivial wavenumber)
+    // k_shifted = 1 - 2*m*N, sinc_arg = π*k_shifted/(2N)
+    for (int m = -n_mom; m <= n_mom; m++)
+    {
+        int k_shifted = 1 - 2 * m * N;
+        double mag_q2 = prefactor * k_shifted * k_shifted;
+        double sinc_arg = PI * k_shifted / (2.0 * N);
+        double sinc_val = sinc(sinc_arg);
+        sum_full += std::exp(mag_q2) * sinc_val;
+        sum_half += std::exp(mag_q2 / 2.0) * sinc_val;
+    }
+    return {sum_full, sum_half};
 }
 
 //------------------------------------------------------------------------------
@@ -1051,23 +1115,9 @@ void Pseudo<T>::update_boltz_bond_mixed_for_ds_index(int ds_idx)
     }
 
     // Determine whether to use multi-momentum summation
+    // n_cell_average_momentum_: number of aliased copies to sum (Park et al. 2019, Eq. 30)
+    // n=0: single sinc, n>=1: multi-momentum summation
     const int n_mom = n_cell_average_momentum_;
-    const bool use_multi_momentum = use_cell_averaged_bond_ && (n_mom > 0);
-
-    // Sinc correction factors (only used when n_cell_average_momentum_ = 0)
-    // For PERIODIC: k = 2πn/L, dx = L/N, correction = π²n²/(6N²)
-    // For REFLECTING/ABSORBING: k = πn/L or π(n+1)/L, dx = L/N, correction = π²n²/(24N²)
-    double sinc_corr[3] = {0.0, 0.0, 0.0};
-    if (use_cell_averaged_bond_ && !use_multi_momentum)
-    {
-        for (int d = 0; d < 3; ++d)
-        {
-            if (tbc[d] == BoundaryCondition::PERIODIC)
-                sinc_corr[d] = PI * PI / (6.0 * tnx[d] * tnx[d]);
-            else
-                sinc_corr[d] = PI * PI / (24.0 * tnx[d] * tnx[d]);
-        }
-    }
 
     for (const auto& item : bond_lengths)
     {
@@ -1085,6 +1135,35 @@ void Pseudo<T>::update_boltz_bond_mixed_for_ds_index(int ds_idx)
                 xfactor[d] = -bond_length_sq * std::pow(2 * PI / L, 2) * local_ds / 6.0;
             else
                 xfactor[d] = -bond_length_sq * std::pow(PI / L, 2) * local_ds / 6.0;
+        }
+
+        // Compute sinc correction factors using root-finding approach
+        // For each dimension d: sinc_corr_d = target_d - ln(g_ca_d(1))
+        // where target_d = ln(ĝ_gaussian(1)) = xfactor[d] * 1²
+        double sinc_corr[3] = {0.0, 0.0, 0.0};
+        double sinc_corr_half[3] = {0.0, 0.0, 0.0};
+        if (use_cell_averaged_bond_)
+        {
+            for (int d = 0; d < 3; ++d)
+            {
+                if (tnx[d] <= 1) continue;
+
+                double g_ca, g_ca_half;
+                if (tbc[d] == BoundaryCondition::PERIODIC) {
+                    auto [full, half] = compute_cell_avg_bond_at_n1_periodic(tnx[d], n_mom, xfactor[d]);
+                    g_ca = full;
+                    g_ca_half = half;
+                } else {
+                    auto [full, half] = compute_cell_avg_bond_at_n1_nonperiodic(tnx[d], n_mom, xfactor[d]);
+                    g_ca = full;
+                    g_ca_half = half;
+                }
+
+                double target = xfactor[d];  // ln(ĝ_gaussian(1)) = xfactor[d] * 1²
+                double target_half = xfactor[d] / 2.0;  // half-bond has half the exponent
+                sinc_corr[d] = target - std::log(g_ca);
+                sinc_corr_half[d] = target_half - std::log(g_ca_half);
+            }
         }
 
         for (int i = 0; i < tnx[0]; ++i)
@@ -1119,24 +1198,21 @@ void Pseudo<T>::update_boltz_bond_mixed_for_ds_index(int ds_idx)
 
                     int idx = i * tnx[1] * tnx[2] + j * tnx[2] + k;
 
-                    if (use_multi_momentum)
+                    if (use_cell_averaged_bond_)
                     {
-                        // Multi-momentum summation (Park et al. 2019, Eq. 30)
-                        // For DCT (REFLECTING), the shift is (k - 2*m*N) per Eq. A8
-                        // For DST (ABSORBING), similar structure applies
+                        // Cell-averaged bond function (Park et al. 2019, Eq. 30)
+                        // Unified implementation for n_mom = 0 (single sinc) and n_mom >= 1 (multi-momentum)
                         double sum_full = 0.0;
                         double sum_half = 0.0;
 
                         for (int mi = -n_mom; mi <= n_mom; mi++)
                         {
-                            // Shifted wavenumber index for dimension i
                             int ki_shifted;
                             double sinc_arg_i;
                             if (tbc[0] == BoundaryCondition::PERIODIC) {
                                 ki_shifted = ki - 2 * mi * tnx[0];
                                 sinc_arg_i = PI * ki_shifted / static_cast<double>(tnx[0]);
                             } else {
-                                // For DCT/DST: shift is (ki - 2*m*N) per Eq. A8
                                 ki_shifted = ki - 2 * mi * tnx[0];
                                 sinc_arg_i = PI * ki_shifted / (2.0 * tnx[0]);
                             }
@@ -1165,57 +1241,38 @@ void Pseudo<T>::update_boltz_bond_mixed_for_ds_index(int ds_idx)
                                         sinc_arg_k = PI * kk_shifted / (2.0 * tnx[2]);
                                     }
 
-                                    // Compute mag_q2 using shifted wavenumber indices
                                     double mag_q2 = ki_shifted * ki_shifted * xfactor[0] +
                                                     kj_shifted * kj_shifted * xfactor[1] +
                                                     kk_shifted * kk_shifted * xfactor[2];
 
+                                    // Sinc filter is a spatial filter (independent of ds)
                                     double sinc_factor = sinc(sinc_arg_i) * sinc(sinc_arg_j) * sinc(sinc_arg_k);
 
                                     sum_full += std::exp(mag_q2) * sinc_factor;
+                                    // Half-bond uses same sinc filter but half the Gaussian exponent
                                     sum_half += std::exp(mag_q2 / 2.0) * sinc_factor;
                                 }
                             }
                         }
 
-                        _boltz_bond[idx] = sum_full;
-                        _boltz_bond_half[idx] = sum_half;
+                        // Apply end-to-end distance correction as multiplicative factor
+                        double sinc_corr_total = sinc_corr[0] * ki * ki +
+                                                 sinc_corr[1] * kj * kj +
+                                                 sinc_corr[2] * kk * kk;
+                        double sinc_corr_half_total = sinc_corr_half[0] * ki * ki +
+                                                      sinc_corr_half[1] * kj * kj +
+                                                      sinc_corr_half[2] * kk * kk;
+
+                        _boltz_bond[idx] = sum_full * std::exp(sinc_corr_total);
+                        _boltz_bond_half[idx] = sum_half * std::exp(sinc_corr_half_total);
                     }
                     else
                     {
-                        // Single sinc with correction (original implementation)
+                        // No cell-averaging: standard Gaussian bond
                         double mag_q2 = ki*ki*xfactor[0] + kj*kj*xfactor[1] + kk*kk*xfactor[2];
 
-                        double sinc_factor = 1.0;
-                        if (use_cell_averaged_bond_)
-                        {
-                            // Add sinc correction to preserve end-to-end distance
-                            mag_q2 += sinc_corr[0] * ki * ki +
-                                      sinc_corr[1] * kj * kj +
-                                      sinc_corr[2] * kk * kk;
-
-                            // Compute sinc factors for each direction based on BC
-                            double sinc_i, sinc_j, sinc_k;
-                            if (tbc[0] == BoundaryCondition::PERIODIC)
-                                sinc_i = sinc(PI * ki / tnx[0]);
-                            else
-                                sinc_i = sinc(PI * ki / (2.0 * tnx[0]));
-
-                            if (tbc[1] == BoundaryCondition::PERIODIC)
-                                sinc_j = sinc(PI * kj / tnx[1]);
-                            else
-                                sinc_j = sinc(PI * kj / (2.0 * tnx[1]));
-
-                            if (tbc[2] == BoundaryCondition::PERIODIC)
-                                sinc_k = sinc(PI * kk / tnx[2]);
-                            else
-                                sinc_k = sinc(PI * kk / (2.0 * tnx[2]));
-
-                            sinc_factor = sinc_i * sinc_j * sinc_k;
-                        }
-
-                        _boltz_bond[idx] = std::exp(mag_q2) * sinc_factor;
-                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0) * std::sqrt(sinc_factor);
+                        _boltz_bond[idx] = std::exp(mag_q2);
+                        _boltz_bond_half[idx] = std::exp(mag_q2 / 2.0);
                     }
                 }
             }
