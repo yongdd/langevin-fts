@@ -367,5 +367,22 @@ public:
      */
     virtual void set_cell_averaged_bond(bool /*enabled*/) {}
 
+    /**
+     * @brief Set the number of aliased momentum terms for cell-averaging.
+     *
+     * The cell-averaged bond function from Park et al. (2019) Eq. 30 sums
+     * over aliased copies to accurately represent the bond function on the
+     * discrete grid.
+     *
+     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
+     *          Will sum over n_x, n_y, n_z from -n to +n.
+     *          n=0 gives (2×0+1)³ = 1 term (only the primary copy)
+     *          n=5 gives (2×5+1)³ = 1331 terms (recommended for best accuracy)
+     *
+     * @note Only applicable for pseudo-spectral solvers. Real-space solvers
+     *       ignore this setting. Default implementation does nothing.
+     */
+    virtual void set_cell_average_momentum(int /*n*/) {}
+
 };
 #endif
