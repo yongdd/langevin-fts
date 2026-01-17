@@ -39,6 +39,8 @@ The initial condition is typically $q(\mathbf{r}, 0) = 1$ for a free chain end.
 
 The pseudo-spectral method solves the modified diffusion equation by operator splitting. The basic **Rasmussen-Kalosakas (RK) step** [2] for a contour step $\Delta s$ consists of:
 
+> **Note**: RK here refers to Rasmussen-Kalosakas, not Runge-Kutta.
+
 1. **Potential half-step** (real space):
    $$q^* = \exp\left(-\frac{w \Delta s}{2}\right) q^n$$
 
@@ -220,9 +222,9 @@ boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 
 **RQM4** (Ranjan-Qin-Morse 4th-order) is named after Ranjan, Qin, and Morse [6], who extended the Rasmussen-Kalosakas algorithm to 4th-order accuracy using Richardson extrapolation. This method combines the simplicity of the RK algorithm with higher-order temporal accuracy. A comprehensive benchmark comparing RQM4 with other pseudo-spectral algorithms is provided by Stasiak and Matsen [7].
 
-### 6.1 Rasmussen-Kalosakas (RK) Algorithm
+### 6.1 Rasmussen-Kalosakas (RK2) Algorithm
 
-The pseudo-spectral method described in Section 2.1 is known as the **Rasmussen-Kalosakas (RK) algorithm** [2]. For the modified diffusion equation with Hamiltonian operator:
+The pseudo-spectral method described in Section 2.1 is known as the **Rasmussen-Kalosakas (RK) algorithm** [2], available as `numerical_method="rk2"`. For the modified diffusion equation with Hamiltonian operator:
 
 $$\hat{H} = -\frac{b^2}{6}\nabla^2 + w(\mathbf{r})$$
 
@@ -238,6 +240,9 @@ This **symmetric Strang splitting** has several important properties:
 - The diffusion operator is applied in Fourier space (diagonal)
 - The potential operators are applied in real space (diagonal)
 - The symmetry makes the algorithm **time-reversible**
+- **2nd-order accuracy** in $\Delta s$ (convergence order ≈ 2.0)
+
+The RK2 algorithm uses only 2 FFTs per step, making it faster than RQM4 (6 FFTs per step), but with lower accuracy.
 
 ### 6.2 RQM4: Richardson Extrapolation for 4th-Order Accuracy
 

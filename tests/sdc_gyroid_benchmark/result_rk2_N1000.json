@@ -1,0 +1,17 @@
+{
+  "method": "rk2",
+  "ds": 0.001,
+  "N": 1000,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.476972400411139,
+  "error_level": 9.9e-10,
+  "iterations": 2000,
+  "converged": true,
+  "elapsed_time": 36.0
+}

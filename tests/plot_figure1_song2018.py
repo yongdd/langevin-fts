@@ -19,24 +19,26 @@ import matplotlib.pyplot as plt
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'sdc_gyroid_benchmark')
 
 # Methods to plot (only supported methods)
-PSEUDO_METHODS = ['rqm4', 'etdrk4']
+PSEUDO_4TH_METHODS = ['rqm4', 'etdrk4']
+PSEUDO_2ND_METHODS = ['rk2']
+PSEUDO_METHODS = PSEUDO_4TH_METHODS + PSEUDO_2ND_METHODS
 REALSPACE_METHODS = ['cn-adi2', 'cn-adi4-lr']
 
 # Reference free energies (converged values from Ns=1000)
-F_REF_PSEUDO = -0.476974113087715  # ETDRK4 at Ns=1000
+F_REF_PSEUDO = -0.476974113087715  # ETDRK4 at Ns=1000 (used for all pseudo-spectral methods)
 F_REF_REALSPACE = -0.479351354862727  # CN-ADI4-LR at Ns=1000
 
 # Plot styling
 COLORS = {
-    'rqm4': 'C1', 'etdrk4': 'C0',
+    'rqm4': 'C1', 'rk2': 'C4', 'etdrk4': 'C0',
     'cn-adi2': 'C2', 'cn-adi4-lr': 'C3'
 }
 MARKERS = {
-    'rqm4': 's', 'etdrk4': 'o',
+    'rqm4': 's', 'rk2': 'D', 'etdrk4': 'o',
     'cn-adi2': '^', 'cn-adi4-lr': 'v'
 }
 LABELS = {
-    'rqm4': 'RQM4', 'etdrk4': 'ETDRK4',
+    'rqm4': 'RQM4', 'rk2': 'RK2', 'etdrk4': 'ETDRK4',
     'cn-adi2': 'CN-ADI2', 'cn-adi4-lr': 'CN-ADI4-LR'
 }
 
@@ -66,19 +68,20 @@ def plot_figure():
 
     # (a) Pseudo-spectral error convergence
     ax = axes[0]
+    # All pseudo-spectral methods use same reference F_REF_PSEUDO
     for method in PSEUDO_METHODS:
         if method not in all_data:
             continue
         results = all_data[method]
-        # Exclude the reference point (last point used as F_ref)
-        Ns = [r['N'] for r in results[:-1]]
-        errors = [abs(r['free_energy'] - F_REF_PSEUDO) for r in results[:-1]]
+        Ns = [r['N'] for r in results]
+        errors = [abs(r['free_energy'] - F_REF_PSEUDO) for r in results]
         ax.loglog(Ns, errors, marker=MARKERS[method], color=COLORS[method],
                   label=LABELS[method], linewidth=2, markersize=8)
 
-    # Add reference slope
+    # Add reference slopes
     Ns_ref = np.array([40, 1000])
     ax.loglog(Ns_ref, 5e-5 * (Ns_ref/40)**(-4), 'k--', alpha=0.5, label='slope -4')
+    ax.loglog(Ns_ref, 2e-3 * (Ns_ref/40)**(-2), 'k:', alpha=0.5, label='slope -2')
 
     ax.set_xlabel(r'$N_s$ (contour steps)', fontsize=12)
     ax.set_ylabel(r'$|F - F_{ref}|$', fontsize=12)
@@ -86,7 +89,7 @@ def plot_figure():
     ax.legend(loc='lower left', fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(30, 1500)
-    ax.set_ylim(1e-10, 1e-4)
+    ax.set_ylim(1e-10, 1e-2)
 
     # (b) Real-space error convergence
     ax = axes[1]

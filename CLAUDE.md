@@ -246,7 +246,7 @@ Simulations are configured via Python dictionaries with keys:
 - `platform`: "cuda" or "cpu-mkl" (auto-selected by default: cuda for 2D/3D, cpu-mkl for 1D)
 - `numerical_method`: Algorithm for propagator computation
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
-  - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting (faster, recommended for absorbing BC)
+  - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
   - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
@@ -335,15 +335,13 @@ The default method combining operator splitting with Richardson extrapolation:
 **Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
 
 #### RK2 (2nd-order Rasmussen-Kalosakas)
-Simple operator splitting without Richardson extrapolation:
+Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen-Kalosakas, not Runge-Kutta):
 1. Split the operator: diffusion (Fourier space) + reaction (real space)
 2. Apply Strang splitting: $q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]$
 
 **Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
 
 **Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
-
-**Recommended for**: Grafted brush simulations.
 
 **Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
 
@@ -386,7 +384,7 @@ $$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
 | Method | Order | Material Conservation | Best For | Limitations |
 |--------|-------|----------------------|----------|-------------|
 | RQM4 | 4th | Exact (~10⁻¹⁶) | General use, default choice | None |
-| RK2 | 2nd | Exact (~10⁻¹⁶) | Grafted brushes, fast iterations | Lower accuracy |
+| RK2 | 2nd | Exact (~10⁻¹⁶) | Fast iterations | Lower accuracy |
 | ETDRK4 | 4th | Approximate (~10⁻⁹) | Benchmarking, SCFT | Inexact conservation |
 | CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
 | CN-ADI4-LR | 4th | Exact (~10⁻¹⁵) | Real-space alternative | 2× cost of CN-ADI2 |
@@ -416,7 +414,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
   ```
   See `tests/submit_fig1_benchmarks.sh` for a complete example of parallel job submission.
 
-- **Split large computations into smaller jobs**: When running tests or benchmarks, prefer smaller problem sizes (e.g., 32³ instead of 64³) or fewer iterations to get quick feedback. Split parameter sweeps across multiple smaller jobs rather than one long job. This allows faster iteration and avoids blocking on slow computations.
+- **Split large computations into smaller jobs**: For every computation, launch a separate SLURM job for each parameter value instead of queuing all parameters in a single job. This allows parallel execution and avoids blocking on slow computations.
 
 ### When Modifying C++ Code
 
