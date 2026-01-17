@@ -343,6 +343,8 @@ Simple operator splitting without Richardson extrapolation (note: RK = Rasmussen
 
 **Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
 
+**Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains (Park et al. 2019). Both use the same Boltzmann factor $e^{-b^2 k^2 \Delta s / 6}$ in Fourier space.
+
 **Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
 
 #### ETDRK4 (Exponential Time Differencing Runge-Kutta 4)

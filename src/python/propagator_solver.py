@@ -17,9 +17,18 @@ Example usage:
         bond_lengths={"A": 1.0},
         bc=["reflecting", "reflecting"],
         chain_model="continuous",
-        numerical_method="rqm4",  # or "etdrk4", "cn-adi2", "cn-adi4-lr"
-        platform="cpu-mkl",
-        reduce_memory_usage=False
+        numerical_method="rqm4",  # optional, defaults to "rqm4"
+        platform="cpu-mkl"
+    )
+
+    # For discrete chain model, numerical_method is not needed
+    # (discrete chain has its own solver)
+    solver_discrete = PropagatorSolver(
+        nx=[32, 32, 32], lx=[4.0, 4.0, 4.0],
+        ds=0.01,
+        bond_lengths={"A": 1.0, "B": 1.0},
+        bc=["periodic"] * 6,
+        chain_model="discrete"
     )
 
     # Add a homopolymer
@@ -74,12 +83,15 @@ class PropagatorSolver:
         Options: "periodic", "reflecting", "absorbing"
     chain_model : str
         Chain model type: "continuous" or "discrete".
-    numerical_method : str
-        Numerical algorithm for propagator computation (default: 'rqm4'):
+    numerical_method : str, optional
+        Numerical algorithm for propagator computation.
+        Only applicable for continuous chain model (default: 'rqm4'):
         - "rqm4": Pseudo-spectral with 4th-order Richardson extrapolation
+        - "rk2": Pseudo-spectral with 2nd-order operator splitting
         - "etdrk4": Pseudo-spectral with ETDRK4 exponential integrator
         - "cn-adi2": Real-space with 2nd-order Crank-Nicolson ADI
-        - "cn-adi4-lr": Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
+        - "cn-adi4-lr": Real-space with 4th-order CN-ADI
+        Note: Discrete chain model has its own solver; this parameter is ignored.
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
     reduce_memory_usage : bool
@@ -103,7 +115,7 @@ class PropagatorSolver:
 
     Examples
     --------
-    Simple 1D propagator with reflecting boundaries:
+    Simple 1D propagator with reflecting boundaries (continuous chain):
 
     >>> solver = PropagatorSolver(
     ...     nx=[64], lx=[4.0],
@@ -112,15 +124,24 @@ class PropagatorSolver:
     ...     bc=["reflecting", "reflecting"],
     ...     chain_model="continuous",
     ...     numerical_method="rqm4",
-    ...     platform="cpu-mkl",
-    ...     reduce_memory_usage=False
+    ...     platform="cpu-mkl"
     ... )
     >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
     >>> solver.compute_propagators({"A": np.zeros(64)})
     >>> q = solver.get_propagator(polymer=0, v=0, u=1, step=50)
     >>> Q = solver.get_partition_function(polymer=0)
 
-    2D thin film with real-space CN-ADI4 method:
+    Discrete chain model (numerical_method not needed):
+
+    >>> solver = PropagatorSolver(
+    ...     nx=[32, 32, 32], lx=[4.0, 4.0, 4.0],
+    ...     ds=0.01,
+    ...     bond_lengths={"A": 1.0, "B": 1.0},
+    ...     bc=["periodic"] * 6,
+    ...     chain_model="discrete"
+    ... )
+
+    2D thin film with real-space CN-ADI4 method (continuous only):
 
     >>> solver = PropagatorSolver(
     ...     nx=[32, 24], lx=[4.0, 3.0],
@@ -129,8 +150,7 @@ class PropagatorSolver:
     ...     bc=["reflecting", "reflecting", "absorbing", "absorbing"],
     ...     chain_model="continuous",
     ...     numerical_method="cn-adi4-lr",
-    ...     platform="cuda",
-    ...     reduce_memory_usage=False
+    ...     platform="cuda"
     ... )
     """
 
@@ -146,9 +166,9 @@ class PropagatorSolver:
         bond_lengths: Dict[str, float],
         bc: List[str],
         chain_model: str,
-        numerical_method: str,
-        platform: str,
-        reduce_memory_usage: bool,
+        numerical_method: Optional[str] = None,
+        platform: str = "auto",
+        reduce_memory_usage: bool = False,
         mask: Optional[NDArray[np.floating]] = None
     ) -> None:
         """Initialize the propagator solver."""
@@ -178,18 +198,30 @@ class PropagatorSolver:
         self.chain_model = chain_model.lower()
         self.bond_lengths = dict(bond_lengths)
 
-        # Validate and store numerical method
-        numerical_method = numerical_method.lower()
-        if numerical_method in self._PSEUDO_METHODS:
+        # Handle numerical method based on chain model
+        if self.chain_model == "discrete":
+            # Discrete chain model has its own solver, numerical_method is not used
+            if numerical_method is not None:
+                print(f"Note: numerical_method '{numerical_method}' is ignored for discrete chain model.")
             self.method = "pseudospectral"
-        elif numerical_method in self._REALSPACE_METHODS:
-            self.method = "realspace"
+            self.numerical_method = "rqm4"  # Placeholder, not actually used for discrete
         else:
-            raise ValueError(
-                f"Unknown numerical_method '{numerical_method}'. "
-                f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS}"
-            )
-        self.numerical_method = numerical_method
+            # Continuous chain model: validate and set numerical method
+            if numerical_method is None:
+                numerical_method = "rqm4"
+            else:
+                numerical_method = numerical_method.lower()
+
+            if numerical_method in self._PSEUDO_METHODS:
+                self.method = "pseudospectral"
+            elif numerical_method in self._REALSPACE_METHODS:
+                self.method = "realspace"
+            else:
+                raise ValueError(
+                    f"Unknown numerical_method '{numerical_method}'. "
+                    f"Valid options: {self._PSEUDO_METHODS | self._REALSPACE_METHODS}"
+                )
+            self.numerical_method = numerical_method
 
         # Determine platform
         if platform == "auto":
