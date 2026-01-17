@@ -39,6 +39,7 @@
 
 #include "CpuComputationContinuous.h"
 #include "CpuSolverPseudoRQM4.h"
+#include "CpuSolverPseudoRK2.h"
 #include "CpuSolverPseudoETDRK4.h"
 #include "CpuSolverCNADI.h"
 #include "SimpsonRule.h"
@@ -78,10 +79,12 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         {
             if (numerical_method == "" || numerical_method == "rqm4")
                 this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules);
+            else if (numerical_method == "rk2")
+                this->propagator_solver = new CpuSolverPseudoRK2<T>(cb, molecules);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules);
             else
-                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'etdrk4'.");
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4', 'rk2', or 'etdrk4'.");
         }
         else if(method == "realspace")
         {

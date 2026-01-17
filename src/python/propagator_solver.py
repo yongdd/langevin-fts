@@ -135,7 +135,7 @@ class PropagatorSolver:
     """
 
     # Map numerical methods to solver types
-    _PSEUDO_METHODS = {"rqm4", "etdrk4"}
+    _PSEUDO_METHODS = {"rqm4", "rk2", "etdrk4"}
     _REALSPACE_METHODS = {"cn-adi2", "cn-adi4-lr"}
 
     def __init__(

@@ -160,10 +160,10 @@ The central computational engine. Computes chain propagators using dynamic progr
 
 Key concepts:
 - **Chain propagators**: Solutions to modified diffusion equations (continuous) or recursive integral equations (discrete) representing polymer chain statistics
-- **Continuous chains**: Pseudo-spectral method with RQM4 or ETDRK4 solving the modified diffusion equation
+- **Continuous chains**: Pseudo-spectral method with RQM4, RK2, or ETDRK4 solving the modified diffusion equation
 - **Discrete chains**: Pseudo-spectral method using bond convolution based on Chapman-Kolmogorov equations (N-1 bond model from Park et al. 2019)
 - **Real-space method**: CN-ADI (Crank-Nicolson ADI) finite difference solver (beta feature, continuous chains only). CN-ADI2 (2nd-order) or CN-ADI4-LR (4th-order with Local Richardson extrapolation)
-- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), or `"cn-adi4-lr"` (CN-ADI4-LR)
+- **Numerical method selection**: Runtime selection via `numerical_method` parameter: `"rqm4"` (RQM4), `"rk2"` (RK2), `"etdrk4"` (ETDRK4), `"cn-adi2"` (CN-ADI2), or `"cn-adi4-lr"` (CN-ADI4-LR)
 - **Aggregation**: Automatic detection and reuse of equivalent propagator computations in branched/mixed polymer systems
 
 #### Computation Box (`src/common/ComputationBox.h`)
@@ -245,7 +245,8 @@ Simulations are configured via Python dictionaries with keys:
 - `distinct_polymers`: Polymer architectures and volume fractions
 - `platform`: "cuda" or "cpu-mkl" (auto-selected by default: cuda for 2D/3D, cpu-mkl for 1D)
 - `numerical_method`: Algorithm for propagator computation
-  - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation
+  - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
+  - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting (faster, recommended for absorbing BC)
   - `"etdrk4"`: ETDRK4 - Pseudo-spectral with Exponential Time Differencing RK4
   - `"cn-adi2"`: CN-ADI2 - Real-space with 2nd-order Crank-Nicolson ADI
   - `"cn-adi4-lr"`: CN-ADI4-LR - Real-space with 4th-order CN-ADI (Local Richardson extrapolation)
@@ -333,6 +334,19 @@ The default method combining operator splitting with Richardson extrapolation:
 
 **Reference**: Ranjan, Qin, Morse, *Macromolecules* **2008**, 41, 942
 
+#### RK2 (2nd-order Rasmussen-Kalosakas)
+Simple operator splitting without Richardson extrapolation:
+1. Split the operator: diffusion (Fourier space) + reaction (real space)
+2. Apply Strang splitting: $q(s+\Delta s) = e^{-w \Delta s/2} \cdot \mathcal{F}^{-1}[ e^{-k^2 b^2 \Delta s/6} \cdot \mathcal{F}[e^{-w \Delta s/2} \cdot q(s)] ]$
+
+**Order of accuracy**: 2nd-order in ds (convergence order ≈ 2.0)
+
+**Performance**: Faster than RQM4 (2 FFTs vs 6 FFTs per step) but lower accuracy.
+
+**Recommended for**: Grafted brush simulations.
+
+**Reference**: Rasmussen & Kalosakas, *J. Polym. Sci. B* **2002**, 40, 1777
+
 #### ETDRK4 (Exponential Time Differencing Runge-Kutta 4)
 Direct integration using matrix exponentials:
 1. Transform to Fourier space
@@ -372,6 +386,7 @@ $$q^{(4)} = \frac{4 q_{ds/2} - q_{ds}}{3}$$
 | Method | Order | Material Conservation | Best For | Limitations |
 |--------|-------|----------------------|----------|-------------|
 | RQM4 | 4th | Exact (~10⁻¹⁶) | General use, default choice | None |
+| RK2 | 2nd | Exact (~10⁻¹⁶) | Grafted brushes, fast iterations | Lower accuracy |
 | ETDRK4 | 4th | Approximate (~10⁻⁹) | Benchmarking, SCFT | Inexact conservation |
 | CN-ADI2 | 2nd | Exact (~10⁻¹⁵) | Fast prototyping | Lower accuracy |
 | CN-ADI4-LR | 4th | Exact (~10⁻¹⁵) | Real-space alternative | 2× cost of CN-ADI2 |
@@ -418,7 +433,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 ### Design Decisions
 
-**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4` and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
+**CPU Pseudo-Spectral Solver Hierarchy**: `CpuSolverPseudoRQM4`, `CpuSolverPseudoRK2`, and `CpuSolverPseudoDiscrete` share common functionality through the `CpuSolverPseudoBase` base class. The base class provides:
 - FFT object management (`init_shared`/`cleanup_shared`)
 - Transform dispatch (`transform_forward`/`transform_backward`)
 - Laplacian operator updates (`update_laplacian_operator`)
@@ -483,6 +498,7 @@ The implementation is based on these publications:
 - Field update methods: *J. Chem. Phys.* **2023**, 158, 114117
 - CUDA implementation: *Eur. Phys. J. E* **2020**, 43, 15
 - RQM4 method: *Macromolecules* **2008**, 41, 942 (Ranjan, Qin, Morse)
+- RK2 method: *J. Polym. Sci. B* **2002**, 40, 1777 (Rasmussen, Kalosakas)
 - Pseudo-spectral algorithm benchmarks: *Eur. Phys. J. E* **2011**, 34, 110 (Stasiak, Matsen)
 - ETDRK4 method: *Chinese J. Polym. Sci.* **2018**, 36, 488 (Song, Liu, Zhang)
 - Material conservation: *Phys. Rev. E* **2017**, 96, 063312 (Yong, Kim)
