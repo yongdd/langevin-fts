@@ -94,7 +94,16 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
     {
         std::string chain_model = molecules->get_model_name();
 
-        // Determine solver type from numerical method
+        // Discrete chain model has its own solver, numerical_method is not used
+        if (chain_model == "discrete")
+        {
+            if (!this->reduce_memory_usage)
+                return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+            else
+                return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+        }
+
+        // Continuous chain model: validate and use numerical_method
         std::string solver_type;
         if (numerical_method == "rqm4" || numerical_method == "rk2" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
@@ -103,25 +112,10 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
-        // Real-space solver
-        if (solver_type == "realspace")
-        {
-            if (chain_model == "discrete")
-                throw_with_line_number("The real-space solver does not support discrete chain model.");
-            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "realspace", numerical_method);
-        }
-
-        // Pseudo-spectral solver
-        if (chain_model == "continuous" && !this->reduce_memory_usage)
-            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
-        else if (chain_model == "continuous" && this->reduce_memory_usage)
-            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, "pseudospectral", numerical_method);
-        else if (chain_model == "discrete" && !this->reduce_memory_usage)
-            return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-        else if (chain_model == "discrete" && this->reduce_memory_usage)
-            return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
-
-        return nullptr;
+        if (!this->reduce_memory_usage)
+            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+        else
+            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
     }
     catch(std::exception& exc)
     {

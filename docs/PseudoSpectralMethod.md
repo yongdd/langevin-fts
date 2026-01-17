@@ -244,6 +244,8 @@ This **symmetric Strang splitting** has several important properties:
 
 The RK2 algorithm uses only 2 FFTs per step, making it faster than RQM4 (6 FFTs per step), but with lower accuracy.
 
+> **Note**: The RK2 operator splitting for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains described in Park et al. (2019) [5]. Both use the same Boltzmann factor $e^{-b^2 k^2 \Delta s / 6}$ in Fourier space, representing either the diffusion propagator (continuous) or the bond function (discrete).
+
 ### 6.2 RQM4: Richardson Extrapolation for 4th-Order Accuracy
 
 **RQM4** uses Richardson extrapolation to eliminate the leading-order error by combining results from different step sizes. For one full step from $s_n$ to $s_{n+1} = s_n + \Delta s$:

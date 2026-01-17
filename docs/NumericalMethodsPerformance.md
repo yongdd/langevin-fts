@@ -14,6 +14,8 @@ All numerical methods are selectable at runtime using the `numerical_method` par
 | **RK2** | 2nd | Rasmussen-Kalosakas operator splitting (no Richardson extrapolation) | *J. Polym. Sci. B* 40, 1777 (2002) |
 | **ETDRK4** | 4th | Exponential Time Differencing Runge-Kutta (Krogstad scheme) | *Chinese J. Polym. Sci.* 36, 488-496 (2018) |
 
+> **Note**: RK2 for continuous chains is mathematically equivalent to the **N-bond model** for discrete chains described in Park et al., *J. Chem. Phys.* 150, 234901 (2019).
+
 ### Real-Space Methods
 
 | Method | Order | Description |
