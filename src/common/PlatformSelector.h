@@ -104,6 +104,9 @@ public:
      * @param reduce_memory_usage Enable memory-saving mode.
      *                            Stores only propagator checkpoints to reduce
      *                            memory usage at the cost of recomputation.
+     * @param use_device_checkpoint_memory If true and reduce_memory_usage is true,
+     *                                     store checkpoints in GPU global memory
+     *                                     instead of pinned host memory (default: false)
      *
      * @return AbstractFactory<double>* pointer to the created factory
      *
@@ -123,7 +126,7 @@ public:
      * @endcode
      */
     static AbstractFactory<double>* create_factory_real(
-        std::string platform, bool reduce_memory_usage);
+        std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory = false);
 
     /**
      * @brief Create an AbstractFactory for complex-valued fields.
@@ -133,6 +136,9 @@ public:
      *
      * @param platform            Platform name: "cuda" or "cpu-mkl"
      * @param reduce_memory_usage Enable memory-saving mode
+     * @param use_device_checkpoint_memory If true and reduce_memory_usage is true,
+     *                                     store checkpoints in GPU global memory
+     *                                     instead of pinned host memory (default: false)
      *
      * @return AbstractFactory<std::complex<double>>* pointer to the created factory
      *
@@ -142,7 +148,7 @@ public:
      *       use real-valued fields via create_factory_real().
      */
     static AbstractFactory<std::complex<double>>* create_factory_complex(
-        std::string platform, bool reduce_memory_usage);
+        std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory = false);
 };
 
 #endif

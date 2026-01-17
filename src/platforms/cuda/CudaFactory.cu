@@ -52,11 +52,13 @@
  * @brief Construct CUDA factory with optional memory reduction.
  *
  * @param reduce_memory_usage Enable checkpointing mode
+ * @param use_device_checkpoint_memory Store checkpoints in GPU global memory
  */
 template <typename T>
-CudaFactory<T>::CudaFactory(bool reduce_memory_usage)
+CudaFactory<T>::CudaFactory(bool reduce_memory_usage, bool use_device_checkpoint_memory)
 {
     this->reduce_memory_usage = reduce_memory_usage;
+    this->use_device_checkpoint_memory = use_device_checkpoint_memory;
 }
 
 // Array* CudaFactory<T>::create_array(
@@ -103,7 +105,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
             if (!this->reduce_memory_usage)
                 return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
             else
-                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, this->use_device_checkpoint_memory);
         }
 
         // Continuous chain model: validate and use numerical_method
@@ -118,7 +120,7 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         if (!this->reduce_memory_usage)
             return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
         else
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, this->use_device_checkpoint_memory);
     }
     catch(std::exception& exc)
     {

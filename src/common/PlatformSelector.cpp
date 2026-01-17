@@ -67,12 +67,13 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
  * @param reduce_memory_usage Enable memory-saving mode
+ * @param use_device_checkpoint_memory Store checkpoints in GPU global memory
  *
  * @return Pointer to platform-specific AbstractFactory<double>
  * @throws Exception if platform not found or not compiled
  */
 AbstractFactory<double>* PlatformSelector::create_factory_real(
-    std::string platform, bool reduce_memory_usage)
+    std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
@@ -80,7 +81,7 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<double>(reduce_memory_usage);
+        return new CudaFactory<double>(reduce_memory_usage, use_device_checkpoint_memory);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;
@@ -95,12 +96,13 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
  *
  * @param platform            Platform name ("cpu-mkl" or "cuda")
  * @param reduce_memory_usage Enable memory-saving mode
+ * @param use_device_checkpoint_memory Store checkpoints in GPU global memory
  *
  * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
  * @throws Exception if platform not found or not compiled
  */
 AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
-    std::string platform, bool reduce_memory_usage)
+    std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
@@ -108,7 +110,7 @@ AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<std::complex<double>>(reduce_memory_usage);
+        return new CudaFactory<std::complex<double>>(reduce_memory_usage, use_device_checkpoint_memory);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;

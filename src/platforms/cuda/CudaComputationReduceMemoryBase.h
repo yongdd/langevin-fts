@@ -97,6 +97,39 @@ protected:
     std::vector<T*> q_recal;    ///< Recalculation temporary (size: checkpoint_interval+3)
     /// @}
 
+    /// @name Checkpoint Storage Mode
+    /// @{
+    /**
+     * @brief If true, store checkpoints in GPU global memory; otherwise use pinned host memory.
+     *
+     * When use_device_checkpoint_memory is true:
+     * - Checkpoints are stored in GPU global memory (cudaMalloc)
+     * - Faster access from GPU kernels, no host-device transfers needed
+     * - Uses more GPU memory
+     *
+     * When use_device_checkpoint_memory is false (default):
+     * - Checkpoints are stored in pinned host memory (cudaMallocHost)
+     * - Enables async transfers to overlap with computation
+     * - Uses less GPU memory at the cost of PCIe transfer overhead
+     */
+    bool use_device_checkpoint_memory;
+
+    /**
+     * @brief Allocate checkpoint memory (device or pinned based on use_device_checkpoint_memory).
+     *
+     * @param[out] ptr   Pointer to receive allocated memory
+     * @param[in]  count Number of elements to allocate
+     */
+    void alloc_checkpoint_memory(T** ptr, size_t count);
+
+    /**
+     * @brief Free checkpoint memory (device or pinned based on use_device_checkpoint_memory).
+     *
+     * @param[in] ptr Pointer to free
+     */
+    void free_checkpoint_memory(T* ptr);
+    /// @}
+
     /**
      * @brief Shared GPU workspace buffers (2×M each).
      *
@@ -148,9 +181,12 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer with dependency info
+     * @param use_device_checkpoint_memory    If true, store checkpoints in GPU global memory;
+     *                                        otherwise use pinned host memory (default: false)
      */
     CudaComputationReduceMemoryBase(ComputationBox<T>* cb, Molecules *molecules,
-                                    PropagatorComputationOptimizer* propagator_computation_optimizer);
+                                    PropagatorComputationOptimizer* propagator_computation_optimizer,
+                                    bool use_device_checkpoint_memory = false);
 
     /**
      * @brief Virtual destructor.

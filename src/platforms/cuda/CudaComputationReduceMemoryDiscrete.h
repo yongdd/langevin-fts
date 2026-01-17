@@ -132,14 +132,18 @@ public:
     /**
      * @brief Construct memory-efficient GPU computation for discrete chains.
      *
-     * Allocates minimal GPU workspace and pinned host buffers.
+     * Allocates minimal GPU workspace and checkpoint buffers (in pinned host
+     * or GPU global memory depending on use_device_checkpoint_memory).
      *
      * @param cb          Computation box
      * @param molecules   Molecules container
      * @param propagator_computation_optimizer Optimization strategy
+     * @param use_device_checkpoint_memory If true, store checkpoints in GPU global memory;
+     *                                     otherwise use pinned host memory (default: false)
      */
     CudaComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules,
-        PropagatorComputationOptimizer *propagator_computation_optimizer);
+        PropagatorComputationOptimizer *propagator_computation_optimizer,
+        bool use_device_checkpoint_memory = false);
 
     /** @brief Destructor. Frees GPU and pinned memory. */
     ~CudaComputationReduceMemoryDiscrete();
