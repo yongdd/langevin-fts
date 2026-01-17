@@ -188,20 +188,6 @@ public:
      * @param phi Output concentration array
      */
     void get_solvent_concentration(int s, T *phi) override;
-
-    /**
-     * @brief Enable or disable cell-averaged bond function.
-     *
-     * @param enabled True to enable cell-averaging, false for standard bond function
-     */
-    void set_cell_averaged_bond(bool enabled) override;
-
-    /**
-     * @brief Set the number of aliased momentum terms for cell-averaging.
-     *
-     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
-     */
-    void set_cell_average_momentum(int n) override;
 };
 
 #endif

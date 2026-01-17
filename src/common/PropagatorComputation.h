@@ -350,39 +350,5 @@ public:
      */
     virtual bool check_total_partition() = 0;
 
-    /**
-     * @brief Enable or disable cell-averaged bond function (sinc filtering).
-     *
-     * When enabled, applies sinc filtering to the Boltzmann bond factor:
-     * boltz_bond_filtered[k] = boltz_bond[k] × sinc(kx·dx/2) × sinc(ky·dy/2) × ...
-     *
-     * This ensures non-negativity of the bond function in real space,
-     * following the cell-averaging approach from Park et al.,
-     * J. Chem. Phys. 150, 234901 (2019).
-     *
-     * @param enabled True to enable cell-averaging, false for standard bond function
-     *
-     * @note Only applicable for pseudo-spectral solvers. Real-space solvers
-     *       ignore this setting. Default implementation does nothing.
-     */
-    virtual void set_cell_averaged_bond(bool /*enabled*/) {}
-
-    /**
-     * @brief Set the number of aliased momentum terms for cell-averaging.
-     *
-     * The cell-averaged bond function from Park et al. (2019) Eq. 30 sums
-     * over aliased copies to accurately represent the bond function on the
-     * discrete grid.
-     *
-     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
-     *          Will sum over n_x, n_y, n_z from -n to +n.
-     *          n=0 gives (2×0+1)³ = 1 term (only the primary copy)
-     *          n=5 gives (2×5+1)³ = 1331 terms (recommended for best accuracy)
-     *
-     * @note Only applicable for pseudo-spectral solvers. Real-space solvers
-     *       ignore this setting. Default implementation does nothing.
-     */
-    virtual void set_cell_average_momentum(int /*n*/) {}
-
 };
 #endif

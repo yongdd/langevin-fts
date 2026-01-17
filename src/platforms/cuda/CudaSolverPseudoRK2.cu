@@ -636,20 +636,6 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
     }
 }
 
-//----------------- Set cell-averaged bond -------------------------
-template <typename T>
-void CudaSolverPseudoRK2<T>::set_cell_averaged_bond(bool enabled)
-{
-    pseudo->set_cell_averaged_bond(enabled);
-}
-
-//----------------- Set cell-average momentum -------------------------
-template <typename T>
-void CudaSolverPseudoRK2<T>::set_cell_average_momentum(int n)
-{
-    pseudo->set_cell_average_momentum(n);
-}
-
 // Explicit template instantiation
 template class CudaSolverPseudoRK2<double>;
 template class CudaSolverPseudoRK2<std::complex<double>>;

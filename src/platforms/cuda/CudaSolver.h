@@ -141,25 +141,5 @@ public:
         const int STREAM,
         CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) = 0;
-
-    /**
-     * @brief Enable or disable cell-averaged bond function.
-     *
-     * Only applicable for pseudo-spectral solvers. Real-space solvers
-     * ignore this setting.
-     *
-     * @param enabled True to enable cell-averaging, false for standard bond function
-     */
-    virtual void set_cell_averaged_bond([[maybe_unused]] bool enabled) {}
-
-    /**
-     * @brief Set the number of aliased momentum terms for cell-averaging.
-     *
-     * Only applicable for pseudo-spectral solvers. Real-space solvers
-     * ignore this setting.
-     *
-     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
-     */
-    virtual void set_cell_average_momentum([[maybe_unused]] int n) {}
 };
 #endif
