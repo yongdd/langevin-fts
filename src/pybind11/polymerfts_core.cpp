@@ -431,7 +431,12 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("set_cell_averaged_bond", &PropagatorComputation<T>::set_cell_averaged_bond,
              "Enable/disable cell-averaged bond function. "
              "Cell-averaging applies sinc filtering to ensure non-negativity of bond function in real space.",
-             py::arg("enabled"));
+             py::arg("enabled"))
+        .def("set_cell_average_momentum", &PropagatorComputation<T>::set_cell_average_momentum,
+             "Set the number of aliased momentum terms for cell-averaging. "
+             "n=0 uses only the primary term (backward compatible). "
+             "n=5 is recommended for best accuracy following Park et al. (2019) Eq. 30.",
+             py::arg("n"));
 }
 
 /**

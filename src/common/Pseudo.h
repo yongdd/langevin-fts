@@ -88,6 +88,25 @@ protected:
     bool use_cell_averaged_bond_;
 
     /**
+     * @brief Number of aliased copies to include in cell-averaging.
+     *
+     * The cell-averaged bond function (Eq. 30 in Park et al. 2019) is:
+     * g̃_i = Σ_{n=-n_max}^{n_max} sinc(a·|k_shifted|) × sinc(k_shifted·dx/2)
+     *
+     * where k_shifted = k - 2πn/dx for periodic BC.
+     *
+     * - n_cell_average_momentum = 0: Only n=0 term (single sinc, legacy behavior)
+     * - n_cell_average_momentum = 1: Sum over n = -1 to +1 (default, sufficient for Gaussian bonds)
+     * - n_cell_average_momentum > 1: For non-Gaussian bond functions (e.g., freely-jointed chain)
+     *
+     * For Gaussian (bead-spring) bond functions, n=1 is sufficient because the
+     * exponential decay makes aliased copies beyond |m|=1 negligible.
+     *
+     * Default: 1
+     */
+    int n_cell_average_momentum_;
+
+    /**
      * @brief Reciprocal metric tensor for wavenumber calculation.
      *
      * G*_ij = e*_i · e*_j where e* are reciprocal basis vectors.
@@ -342,6 +361,29 @@ public:
      * @return True if cell-averaging is enabled
      */
     bool is_cell_averaged_bond() const { return use_cell_averaged_bond_; }
+
+    /**
+     * @brief Set the number of aliased momentum terms for cell-averaging.
+     *
+     * The cell-averaged bond function from Park et al. (2019) Eq. 30 sums
+     * over aliased copies to accurately represent the bond function on the
+     * discrete grid.
+     *
+     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
+     *          Will sum over n_x, n_y, n_z from -n to +n.
+     *          n=0 gives (2×0+1)³ = 1 term (only the primary copy)
+     *          n=5 gives (2×5+1)³ = 1331 terms (recommended for best accuracy)
+     *
+     * @note After calling this method, call finalize_ds_values() to recompute
+     *       the Boltzmann factors with the new setting.
+     */
+    virtual void set_cell_average_momentum(int n);
+
+    /**
+     * @brief Get the current number of aliased momentum terms.
+     * @return Current momentum parameter
+     */
+    int get_cell_average_momentum() const { return n_cell_average_momentum_; }
 
     /**
      * @brief Update all arrays after parameter changes.

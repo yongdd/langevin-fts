@@ -255,6 +255,17 @@ void CudaPseudo<T>::set_cell_averaged_bond(bool enabled)
     upload_boltz_bond();
 }
 
+//----------------- set_cell_average_momentum -----------------------------
+template <typename T>
+void CudaPseudo<T>::set_cell_average_momentum(int n)
+{
+    // Call base class to update host-side Boltzmann factors
+    Pseudo<T>::set_cell_average_momentum(n);
+
+    // Re-upload to GPU
+    upload_boltz_bond();
+}
+
 // Explicit template instantiation
 template class CudaPseudo<double>;
 template class CudaPseudo<std::complex<double>>;

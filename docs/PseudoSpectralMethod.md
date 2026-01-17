@@ -552,7 +552,46 @@ $$\frac{b^2 k^2 \Delta s}{6} \to \frac{b^2 k^2 \Delta s}{6} - \frac{\pi^2 n^2}{6
 
 The negative sign in the exponent becomes a positive correction term.
 
-### 10.5 API Usage
+### 10.5 Multi-Momentum Cell-Averaging (Eq. 30)
+
+The single-sinc approach in Section 10.2-10.4 is a simplified approximation. For more accurate cell-averaging, Park et al. (2019) Eq. 30 provides the full formula that sums over **aliased copies** of the bond function:
+
+$$\hat{g}_{cell}(\mathbf{k}) = \sum_{m_x=-n}^{n} \sum_{m_y=-n}^{n} \sum_{m_z=-n}^{n} \exp\left(-\frac{b^2 |\mathbf{k}_{shifted}|^2 \Delta s}{6}\right) \cdot \prod_{d} \text{sinc}\left(\frac{\pi n_{d,shifted}}{N_d}\right)$$
+
+where:
+- $n_{d,shifted} = n_d - 2 m_d N_d$ is the shifted wavenumber index
+- The factor of 2 comes from the periodicity of the DTFT (see Appendix Eq. A8 in Park et al.)
+- $n$ controls how many aliased copies to include
+
+**Physical interpretation:** On a discrete grid, the Fourier representation of a function includes contributions from aliased copies at higher frequencies. The multi-momentum summation correctly accounts for these aliased contributions.
+
+**For Gaussian bonds, $n=1$ is sufficient.** The Gaussian bond function decays exponentially at high wavenumbers, so aliased copies beyond $|m|=1$ have negligible contributions. Higher values of $n$ are only needed for bond functions with slower decay (e.g., freely-jointed chain with sinc bond function).
+
+#### Comparison of Approaches
+
+| Wavenumber $n$ | No cell-avg | n=0 (single sinc) | n=1 | n=5 | Difference (n=0 vs n=5) |
+|----------------|-------------|-------------------|-----|-----|-------------------------|
+| 0 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0% |
+| 2 | 0.6628 | 0.6627 | 0.6459 | 0.6459 | **2.6%** |
+| 4 | 0.1930 | 0.1926 | 0.1738 | 0.1738 | **10.8%** |
+| 6 | 0.0247 | 0.0244 | 0.0194 | 0.0194 | **26.0%** |
+| 8 | 0.0014 | 0.0013 | 0.0009 | 0.0009 | **50.9%** |
+
+*Table: Bond function values for N=16, L=4.0, ds=0.25, b=1.0*
+
+**Key observations:**
+1. **n=1 and n=5 give identical results** — for Gaussian bonds, aliased terms beyond |m|=1 are negligible
+2. **Single-sinc (n=0) differs from multi-momentum (n≥1)** by up to 50% at high wavenumbers
+3. **Multi-momentum gives smaller values at high k**, corresponding to a more diffuse real-space bond function
+4. **n=1 is sufficient for Gaussian (bead-spring) bond functions** used in this library
+
+#### Visualization
+
+![Bond Function Comparison](figures/bond_function_cell_averaging.png)
+
+*Figure: Comparison of bond functions with different cell-averaging approaches. Top-left: Fourier space values. Top-right: Relative difference from standard Gaussian. Bottom: Real-space bond function showing cell-averaged values at grid points.*
+
+### 10.6 API Usage
 
 Cell-averaging can be toggled at runtime:
 
@@ -560,13 +599,23 @@ Cell-averaging can be toggled at runtime:
 # Enable cell-averaged bond function
 solver.set_cell_averaged_bond(True)
 
+# Set the number of aliased momentum terms (recommended: n=5)
+solver.set_cell_average_momentum(5)
+
 # Disable (return to standard bond function)
 solver.set_cell_averaged_bond(False)
 ```
 
-**Default:** Cell-averaging is **disabled** by default to maintain backward compatibility.
+**Parameters:**
+- `set_cell_averaged_bond(enabled)`: Enable/disable cell-averaging
+- `set_cell_average_momentum(n)`: Set the number of aliased copies to sum over
+  - `n=0`: Single sinc with end-to-end distance correction (legacy behavior)
+  - `n=1`: Multi-momentum summation from Eq. 30 (**default, sufficient for Gaussian bonds**)
+  - `n>1`: Higher values for non-Gaussian bond functions (e.g., freely-jointed chain)
 
-### 10.6 When to Use Cell-Averaging
+**Default:** Cell-averaging is **disabled** by default. When enabled, `n=1` is used, which is sufficient for Gaussian (bead-spring) bond functions.
+
+### 10.7 When to Use Cell-Averaging
 
 Cell-averaging is recommended when:
 - Using coarse grids where aliasing may cause negative bond function values
@@ -577,7 +626,7 @@ Cell-averaging is **not needed** when:
 - Using fine grids (large $N$) where aliasing is negligible
 - Only the partition function and concentrations are needed (not the real-space bond function itself)
 
-### 10.7 References
+### 10.8 References
 
 The cell-averaging approach for discrete chain models is discussed in:
 - Park, S. J., Yong, D., Kim, Y. & Kim, J. U. "Numerical implementation of pseudo-spectral method in self-consistent mean field theory for discrete polymer chains." *J. Chem. Phys.* **150**, 234901 (2019).

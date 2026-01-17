@@ -526,6 +526,13 @@ void CudaSolverPseudoDiscrete<T>::set_cell_averaged_bond(bool enabled)
     pseudo->set_cell_averaged_bond(enabled);
 }
 
+//----------------- Set cell-average momentum -------------------------
+template <typename T>
+void CudaSolverPseudoDiscrete<T>::set_cell_average_momentum(int n)
+{
+    pseudo->set_cell_average_momentum(n);
+}
+
 // Explicit template instantiation
 
 template class CudaSolverPseudoDiscrete<double>;

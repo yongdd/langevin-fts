@@ -939,6 +939,13 @@ void CudaSolverPseudoETDRK4<T>::set_cell_averaged_bond(bool enabled)
     pseudo->set_cell_averaged_bond(enabled);
 }
 
+//----------------- Set cell-average momentum -------------------------
+template <typename T>
+void CudaSolverPseudoETDRK4<T>::set_cell_average_momentum(int n)
+{
+    pseudo->set_cell_average_momentum(n);
+}
+
 // Explicit template instantiation
 template class CudaSolverPseudoETDRK4<double>;
 template class CudaSolverPseudoETDRK4<std::complex<double>>;

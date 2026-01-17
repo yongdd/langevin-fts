@@ -287,6 +287,15 @@ void CpuSolverPseudoBase<T>::set_cell_averaged_bond(bool enabled)
     pseudo->set_cell_averaged_bond(enabled);
 }
 
+//------------------------------------------------------------------------------
+// Set cell-average momentum
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoBase<T>::set_cell_average_momentum(int n)
+{
+    pseudo->set_cell_average_momentum(n);
+}
+
 // Explicit template instantiation
 #include "TemplateInstantiations.h"
 INSTANTIATE_CLASS(CpuSolverPseudoBase);

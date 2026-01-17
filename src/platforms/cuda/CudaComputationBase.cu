@@ -268,6 +268,19 @@ void CudaComputationBase<T>::set_cell_averaged_bond(bool enabled)
     }
 }
 
+template <typename T>
+void CudaComputationBase<T>::set_cell_average_momentum(int n)
+{
+    try
+    {
+        propagator_solver->set_cell_average_momentum(n);
+    }
+    catch(std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
 // Explicit template instantiation
 template class CudaComputationBase<double>;
 template class CudaComputationBase<std::complex<double>>;
