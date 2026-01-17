@@ -140,6 +140,7 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaComputationBase.cu
         src/platforms/cuda/CudaComputationContinuous.cu
         src/platforms/cuda/CudaComputationDiscrete.cu
+        src/platforms/cuda/CudaComputationReduceMemoryBase.cu
         src/platforms/cuda/CudaComputationReduceMemoryContinuous.cu
         src/platforms/cuda/CudaComputationReduceMemoryDiscrete.cu
         src/platforms/cuda/CudaCircularBuffer.cu
