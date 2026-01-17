@@ -48,6 +48,7 @@
 #include "CudaComputationReduceMemoryContinuous.h"
 #include "CudaComputationBox.h"
 #include "CudaSolverPseudoRQM4.h"
+#include "CudaSolverPseudoRK2.h"
 #include "CudaSolverPseudoETDRK4.h"
 #include "CudaSolverCNADI.h"
 #include "SimpsonRule.h"
@@ -87,10 +88,12 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         {
             if (numerical_method == "" || numerical_method == "rqm4")
                 this->propagator_solver = new CudaSolverPseudoRQM4<T>(cb, molecules, n_streams, streams, false);
+            else if (numerical_method == "rk2")
+                this->propagator_solver = new CudaSolverPseudoRK2<T>(cb, molecules, n_streams, streams, false);
             else if (numerical_method == "etdrk4")
                 this->propagator_solver = new CudaSolverPseudoETDRK4<T>(cb, molecules, n_streams, streams, false);
             else
-                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4' or 'etdrk4'.");
+                throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4', 'rk2', or 'etdrk4'.");
         }
         else if(method == "realspace")
         {

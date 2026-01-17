@@ -96,7 +96,7 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
 
         // Determine solver type from numerical method
         std::string solver_type;
-        if (numerical_method == "rqm4" || numerical_method == "etdrk4")
+        if (numerical_method == "rqm4" || numerical_method == "rk2" || numerical_method == "etdrk4")
             solver_type = "pseudospectral";
         else if (numerical_method == "cn-adi2" || numerical_method == "cn-adi4-lr")
             solver_type = "realspace";
