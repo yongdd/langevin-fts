@@ -182,25 +182,5 @@ public:
      * added via add_ds_value(), then uploads all Boltzmann factors to GPU.
      */
     void finalize_ds_values() override;
-
-    /**
-     * @brief Enable or disable cell-averaged bond function.
-     *
-     * Overrides base class to re-upload Boltzmann factors to GPU
-     * after the base class updates them.
-     *
-     * @param enabled True to enable cell-averaging, false for standard bond function
-     */
-    void set_cell_averaged_bond(bool enabled) override;
-
-    /**
-     * @brief Set the number of aliased momentum terms for cell-averaging.
-     *
-     * Overrides base class to re-upload Boltzmann factors to GPU
-     * after the base class updates them.
-     *
-     * @param n Number of aliased copies in each direction (n = 0, 1, 2, ...)
-     */
-    void set_cell_average_momentum(int n) override;
 };
 #endif
