@@ -43,8 +43,9 @@ template <typename T>
 CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer)
-    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer)
+    PropagatorComputationOptimizer *propagator_computation_optimizer,
+    bool use_device_checkpoint_memory)
+    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, use_device_checkpoint_memory)
 {
     try
     {
@@ -92,12 +93,9 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             // Accumulate total segment count across all propagators
             this->total_max_n_segment += max_n_segment;
 
-            // Allocate checkpoint propagators in pinned memory
-            // Store at segment 1 (first valid segment for discrete chains)
-            gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, 1)], sizeof(T)*M));
-
-            // Store at final segment (max_n_segment) - for partition function and concentration
-            gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, max_n_segment)], sizeof(T)*M));
+            // Allocate checkpoint propagators at segment 1 and max_n_segment
+            this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, 1)], M);
+            this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, max_n_segment)], M);
 
             // Also store at dependency points (junction ends) if they exist
             for (int n : item.second.junction_ends)
@@ -105,22 +103,17 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
                 if (n != 1 && n != max_n_segment)  // Avoid duplicates
                 {
                     if (this->propagator_at_check_point.find(std::make_tuple(key, n)) == this->propagator_at_check_point.end())
-                        gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
+                        this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, n)], M);
                 }
             }
 
             // Allocate half-bond propagators at junction points
-            // Store at index 0 if there are dependencies (junction start)
             if (item.second.deps.size() > 0)
-            {
-                gpu_error_check(cudaMallocHost((void**)&propagator_half_steps_at_check_point[std::make_tuple(key, 0)], sizeof(T)*M));
-            }
+                this->alloc_checkpoint_memory(&propagator_half_steps_at_check_point[std::make_tuple(key, 0)], M);
 
             // Store half-bond at junction ends
             for (int n : item.second.junction_ends)
-            {
-                gpu_error_check(cudaMallocHost((void**)&propagator_half_steps_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
-            }
+                this->alloc_checkpoint_memory(&propagator_half_steps_at_check_point[std::make_tuple(key, n)], M);
 
             #ifndef NDEBUG
             this->propagator_finished[key] = new bool[max_n_segment+1];
@@ -148,18 +141,19 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             for(int n = this->checkpoint_interval; n < max_n_segment; n += this->checkpoint_interval)
             {
                 if(this->propagator_at_check_point.find(std::make_tuple(key, n)) == this->propagator_at_check_point.end())
-                {
-                    gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
-                }
+                    this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, n)], M);
             }
         }
 
-        // Allocate workspace for recalculation (only need k since we skip intermediate values)
-        const int workspace_size = this->checkpoint_interval;
-        for(int i=0; i<workspace_size; i++)
-            gpu_error_check(cudaMallocHost((void**)&this->q_recal.emplace_back(), sizeof(T)*M));
+        // Allocate workspace for recalculation
+        for(int i=0; i<this->checkpoint_interval; i++)
+        {
+            T* ptr;
+            this->alloc_checkpoint_memory(&ptr, M);
+            this->q_recal.push_back(ptr);
+        }
 
-        // Allocate ping-pong buffers
+        // Allocate ping-pong buffers (always pinned for host-side operations)
         gpu_error_check(cudaMallocHost((void**)&q_pair[0], sizeof(T)*M));
         gpu_error_check(cudaMallocHost((void**)&q_pair[1], sizeof(T)*M));
 
@@ -168,9 +162,12 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            this->phi_block[item.first] = nullptr;
-            gpu_error_check(cudaMallocHost((void**)&this->phi_block[item.first], sizeof(T)*M));
-            std::memset(this->phi_block[item.first], 0, sizeof(T)*M);  // Zero-initialize
+            this->alloc_checkpoint_memory(&this->phi_block[item.first], M);
+            if (this->use_device_checkpoint_memory) {
+                gpu_error_check(cudaMemset(this->phi_block[item.first], 0, sizeof(T)*M));
+            } else {
+                std::memset(this->phi_block[item.first], 0, sizeof(T)*M);
+            }
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -267,21 +264,19 @@ CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
     delete this->propagator_solver;
     delete this->sc;
 
-    // Free checkpoint propagators
+    // Free checkpoint memory (device or pinned based on use_device_checkpoint_memory)
     for(const auto& item: this->propagator_at_check_point)
-        cudaFreeHost(item.second);
+        this->free_checkpoint_memory(item.second);
     for(const auto& item: propagator_half_steps_at_check_point)
-        cudaFreeHost(item.second);
-
-    // Free recalculation workspace (must match constructor allocation)
-    const int workspace_size = this->checkpoint_interval;
-    for(int n=0; n<workspace_size; n++)
-        cudaFreeHost(this->q_recal[n]);
+        this->free_checkpoint_memory(item.second);
+    for(int n=0; n<this->checkpoint_interval; n++)
+        this->free_checkpoint_memory(this->q_recal[n]);
+    for(const auto& item: this->phi_block)
+        this->free_checkpoint_memory(item.second);
+    // Ping-pong buffers are always pinned
     cudaFreeHost(q_pair[0]);
     cudaFreeHost(q_pair[1]);
 
-    for(const auto& item: this->phi_block)
-        cudaFreeHost(item.second);
     for(const auto& item: this->phi_solvent)
         delete[] item;
 

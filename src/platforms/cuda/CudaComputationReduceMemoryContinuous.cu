@@ -60,8 +60,9 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method,
-    std::string numerical_method)
-    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer)
+    std::string numerical_method,
+    bool use_device_checkpoint_memory)
+    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, use_device_checkpoint_memory)
 {
     try{
         #ifndef NDEBUG
@@ -127,10 +128,12 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            this->phi_block[item.first] = nullptr;
-            // Allocate pinned memory
-            gpu_error_check(cudaMallocHost((void**)&this->phi_block[item.first], sizeof(T)*M));
-            std::memset(this->phi_block[item.first], 0, sizeof(T)*M);  // Zero-initialize
+            this->alloc_checkpoint_memory(&this->phi_block[item.first], M);
+            if (this->use_device_checkpoint_memory) {
+                gpu_error_check(cudaMemset(this->phi_block[item.first], 0, sizeof(T)*M));
+            } else {
+                std::memset(this->phi_block[item.first], 0, sizeof(T)*M);
+            }
         }
 
         // Allocate memory for check points
@@ -144,8 +147,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
             if(this->propagator_at_check_point.find(std::make_tuple(key, 0)) == this->propagator_at_check_point.end())
             {
-                this->propagator_at_check_point[std::make_tuple(key, 0)] = nullptr;
-                gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, 0)], sizeof(T)*M));
+                this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, 0)], M);
             }
 
             for(size_t d=0; d<deps.size(); d++)
@@ -155,8 +157,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
                 if(this->propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == this->propagator_at_check_point.end())
                 {
-                    this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)] = nullptr;
-                    gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)], sizeof(T)*M));
+                    this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)], M);
                 }
             }
 
@@ -193,8 +194,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
         this->q_recal.resize(workspace_size);
         for(int n=0; n<workspace_size; n++)
         {
-            this->q_recal[n] = nullptr;
-            gpu_error_check(cudaMallocHost((void**)&this->q_recal[n], sizeof(T)*M));
+            this->alloc_checkpoint_memory(&this->q_recal[n], M);
         }
 
         // Allocate checkpoints at sqrt(N) intervals for each propagator
@@ -208,8 +208,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
             {
                 if(this->propagator_at_check_point.find(std::make_tuple(key, n)) == this->propagator_at_check_point.end())
                 {
-                    this->propagator_at_check_point[std::make_tuple(key, n)] = nullptr;
-                    gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key, n)], sizeof(T)*M));
+                    this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key, n)], M);
                     #ifndef NDEBUG
                     std::cout << "Allocated checkpoint, " + key + ", " << n << std::endl;
                     #endif
@@ -236,8 +235,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
             if(this->propagator_at_check_point.find(std::make_tuple(key_left, n_segment_left)) == this->propagator_at_check_point.end())
             {
-                this->propagator_at_check_point[std::make_tuple(key_left, n_segment_left)] = nullptr;
-                gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key_left, n_segment_left)], sizeof(T)*M));
+                this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key_left, n_segment_left)], M);
                 #ifndef NDEBUG
                 std::cout << "Allocated, " + key_left + ", " << n_segment_left << std::endl;
                 #endif
@@ -245,8 +243,7 @@ CudaComputationReduceMemoryContinuous<T>::CudaComputationReduceMemoryContinuous(
 
             if(this->propagator_at_check_point.find(std::make_tuple(key_right, 0)) == this->propagator_at_check_point.end())
             {
-                this->propagator_at_check_point[std::make_tuple(key_right, 0)] = nullptr;
-                gpu_error_check(cudaMallocHost((void**)&this->propagator_at_check_point[std::make_tuple(key_right, 0)], sizeof(T)*M));
+                this->alloc_checkpoint_memory(&this->propagator_at_check_point[std::make_tuple(key_right, 0)], M);
                 #ifndef NDEBUG
                 std::cout << "Allocated, " + key_right + ", " << 0 << std::endl;
                 #endif
@@ -321,16 +318,13 @@ CudaComputationReduceMemoryContinuous<T>::~CudaComputationReduceMemoryContinuous
     delete this->propagator_solver;
     delete this->sc;
 
-    // Free workspace (must match constructor allocation)
-    const int workspace_size = this->checkpoint_interval;
-    for(int n=0; n<workspace_size; n++)
-        cudaFreeHost(this->q_recal[n]);
-
+    // Free checkpoint memory (device or pinned based on use_device_checkpoint_memory)
+    for(int n=0; n<this->checkpoint_interval; n++)
+        this->free_checkpoint_memory(this->q_recal[n]);
     for(const auto& item: this->propagator_at_check_point)
-        cudaFreeHost(item.second);
-
+        this->free_checkpoint_memory(item.second);
     for(const auto& item: this->phi_block)
-        cudaFreeHost(item.second);
+        this->free_checkpoint_memory(item.second);
     for(const auto& item: this->phi_solvent)
         delete[] item;
 
@@ -463,13 +457,14 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         prev = 0;
                         next = 1;
 
-                        // Copy memory from host to device
+                        // Copy memory from checkpoint to device
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
                         int sub_n_repeated  = std::get<2>(deps[0]);
 
                         T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
-                        gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][prev], _q_sub, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+                        gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][prev], _q_sub, sizeof(T)*M, memcpy_from_checkpoint));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -485,7 +480,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            // MEMORY STREAM: copy memory from host to device
+                            // MEMORY STREAM: copy memory from checkpoint to device
                             if (d < deps.size()-1)
                             {
                                 std::string sub_dep_next = std::get<0>(deps[d+1]);
@@ -494,7 +489,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep_next, sub_n_segment_next)];
                                 gpu_error_check(cudaMemcpyAsync(this->d_propagator_sub_dep[STREAM][next],
                                                 _q_sub, sizeof(T)*M,
-                                                cudaMemcpyHostToDevice, this->streams[STREAM][1]));
+                                                memcpy_from_checkpoint, this->streams[STREAM][1]));
                             }
 
                             // KERNEL STREAM: compute linear combination
@@ -519,13 +514,14 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         prev = 0;
                         next = 1;
 
-                        // Copy memory from host to device
+                        // Copy memory from checkpoint to device
                         std::string sub_dep = std::get<0>(deps[0]);
                         int sub_n_segment   = std::get<1>(deps[0]);
                         int sub_n_repeated  = std::get<2>(deps[0]);
 
                         T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
-                        gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][prev], _q_sub, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+                        gpu_error_check(cudaMemcpy(this->d_propagator_sub_dep[STREAM][prev], _q_sub, sizeof(T)*M, memcpy_from_checkpoint));
 
                         for(size_t d=0; d<deps.size(); d++)
                         {
@@ -541,7 +537,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 std::cout<< "Could not compute '" + key +  "', since '"+ sub_dep + std::to_string(sub_n_segment) + "' is not prepared." << std::endl;
                             #endif
 
-                            // MEMORY STREAM: copy memory from host to device
+                            // MEMORY STREAM: copy memory from checkpoint to device
                             if (d < deps.size()-1)
                             {
                                 std::string sub_dep_next = std::get<0>(deps[d+1]);
@@ -550,7 +546,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                                 T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep_next, sub_n_segment_next)];
                                 gpu_error_check(cudaMemcpyAsync(this->d_propagator_sub_dep[STREAM][next],
                                                 _q_sub, sizeof(T)*M,
-                                                cudaMemcpyHostToDevice, this->streams[STREAM][1]));
+                                                memcpy_from_checkpoint, this->streams[STREAM][1]));
                             }
 
                             // KERNEL STREAM: multiply
@@ -576,16 +572,18 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                 if (n_segment_from == 0 && this->d_q_mask != nullptr)
                     ker_multi<<<N_BLOCKS, N_THREADS>>>(this->d_q_one[STREAM][0], this->d_q_one[STREAM][0], this->d_q_mask, 1.0, M);
 
-                // Copy data between device and host
+                // Copy data between device and checkpoint
+                cudaMemcpyKind memcpy_to_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyDeviceToHost;
+                cudaMemcpyKind memcpy_from_checkpoint_sync = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
                 if (n_segment_from == 0)
                 {
                     T* _q_target = this->propagator_at_check_point[std::make_tuple(key, 0)];
-                    gpu_error_check(cudaMemcpy(_q_target, this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(_q_target, this->d_q_one[STREAM][0], sizeof(T)*M, memcpy_to_checkpoint));
                 }
                 else
                 {
                     T* _q_from = this->propagator_at_check_point[std::make_tuple(key, n_segment_from)];
-                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], _q_from, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], _q_from, sizeof(T)*M, memcpy_from_checkpoint_sync));
                 }
 
                 int prev, next;
@@ -624,14 +622,14 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                         monomer_type, this->d_q_mask, ds_index);
                     gpu_error_check(cudaEventRecord(kernel_done, this->streams[STREAM][0]));
 
-                    // MEMORY STREAM: copy memory from device to host
+                    // MEMORY STREAM: copy memory from device to checkpoint
                     if (n > n_segment_from && this->propagator_at_check_point.find(std::make_tuple(key, n)) != this->propagator_at_check_point.end())
                     {
                         T* _q_target =  this->propagator_at_check_point[std::make_tuple(key, n)];
                         gpu_error_check(cudaMemcpyAsync(
                             _q_target,
                             this->d_q_one[STREAM][prev],
-                            sizeof(T)*M, cudaMemcpyDeviceToHost, this->streams[STREAM][1]));
+                            sizeof(T)*M, memcpy_to_checkpoint, this->streams[STREAM][1]));
                         gpu_error_check(cudaEventRecord(memcpy_done, this->streams[STREAM][1]));
                     }
 
@@ -646,13 +644,13 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
                     #endif
                 }
 
-                // Copy memory from device 1 to device 0
+                // Copy memory from device to checkpoint
                 if (this->propagator_at_check_point.find(std::make_tuple(key, n_segment_to)) != this->propagator_at_check_point.end())
                 {
                     T* _q_target =  this->propagator_at_check_point[std::make_tuple(key, n_segment_to)];
                     gpu_error_check(cudaMemcpyAsync(
                         _q_target, this->d_q_one[STREAM][prev],
-                        sizeof(T)*M, cudaMemcpyDeviceToHost, this->streams[STREAM][1]));
+                        sizeof(T)*M, memcpy_to_checkpoint, this->streams[STREAM][1]));
                 }
 
                 gpu_error_check(cudaStreamSynchronize(this->streams[STREAM][0]));
@@ -672,8 +670,19 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
             T *propagator_right = std::get<2>(segment_info);
             int n_aggregated    = std::get<3>(segment_info);
 
-            this->single_polymer_partitions[p]= this->cb->inner_product(
-                propagator_left, propagator_right)/(n_aggregated*this->cb->get_volume());
+            if (this->use_device_checkpoint_memory)
+            {
+                // Checkpoints are in device memory, use device inner product
+                this->single_polymer_partitions[p] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(
+                    reinterpret_cast<CuDeviceData<T>*>(propagator_left),
+                    reinterpret_cast<CuDeviceData<T>*>(propagator_right))/(n_aggregated*this->cb->get_volume());
+            }
+            else
+            {
+                // Checkpoints are in host memory, use host inner product
+                this->single_polymer_partitions[p] = this->cb->inner_product(
+                    propagator_left, propagator_right)/(n_aggregated*this->cb->get_volume());
+            }
         }
     }
     catch(std::exception& exc)
@@ -862,12 +871,17 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
+        // Determine memory copy direction based on checkpoint storage location
+        cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+        cudaMemcpyKind memcpy_to_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyDeviceToHost;
+        cudaMemcpyKind memcpy_from_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+
         // Initialize to zero
         gpu_error_check(cudaMemset(this->d_phi, 0, sizeof(T)*M));
 
         // Initialize q_right at segment 0
         gpu_error_check(cudaMemcpy(d_q_right[0], this->propagator_at_check_point[std::make_tuple(key_right, 0)],
-            sizeof(T)*M, cudaMemcpyHostToDevice));
+            sizeof(T)*M, memcpy_from_checkpoint));
         int right_prev_idx = 0;
         int right_next_idx = 1;
         int current_n_right = 0;
@@ -908,7 +922,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             }
 
             // Skip from checkpoint to left_start (don't store intermediate values)
-            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, memcpy_from_checkpoint));
             for (int i = check_pos; i < left_start; i++)
             {
                 this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type, this->d_q_mask, ds_index);
@@ -916,11 +930,11 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             }
 
             // Store q_left from left_start to left_end
-            gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
+            gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, memcpy_to_recal));
             for (int i = 1; i <= left_end - left_start; i++)
             {
                 this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type, this->d_q_mask, ds_index);
-                gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, memcpy_to_recal));
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
             // Now this->q_recal[i] = q_left[left_start + i]
@@ -942,7 +956,7 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 int ws_idx = left_pos - left_start;
 
                 // Copy q_left to device
-                gpu_error_check(cudaMemcpy(d_q_left, this->q_recal[ws_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_left, this->q_recal[ws_idx], sizeof(T)*M, memcpy_from_recal));
 
                 CuDeviceData<T> norm;
                 if constexpr (std::is_same<T, double>::value)
@@ -955,8 +969,9 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             }
         }
 
-        // Copy propagators from device to host
-        gpu_error_check(cudaMemcpy(phi, this->d_phi, sizeof(T)*M, cudaMemcpyDeviceToHost));
+        // Copy result from device to phi_block storage
+        cudaMemcpyKind memcpy_to_phi = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyDeviceToHost;
+        gpu_error_check(cudaMemcpy(phi, this->d_phi, sizeof(T)*M, memcpy_to_phi));
     }
     catch(std::exception& exc)
     {
@@ -1052,11 +1067,16 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
             // Current position of q_right
             int current_n_right = -1;
 
+            // Determine memory copy direction based on checkpoint storage location
+            cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+            cudaMemcpyKind memcpy_to_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyDeviceToHost;
+            cudaMemcpyKind memcpy_from_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+
             // Initialize q_right at position 0
             auto it_right_0 = this->propagator_at_check_point.find(std::make_tuple(key_right, 0));
             if(it_right_0 != this->propagator_at_check_point.end())
             {
-                gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][M], it_right_0->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][M], it_right_0->second, sizeof(T)*M, memcpy_from_checkpoint));
                 current_n_right = 0;
             }
 
@@ -1090,7 +1110,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     continue;
 
                 // Load checkpoint to device and compute q_left positions
-                gpu_error_check(cudaMemcpy(this->d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(this->d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, memcpy_from_checkpoint));
                 int left_ping = 0;
                 int left_pong = 1;
 
@@ -1101,7 +1121,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, memcpy_from_checkpoint));
                     }
                     else
                     {
@@ -1113,7 +1133,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
 
                 // Now this->d_q_one[0][left_ping] contains q_left[left_start]
                 // Copy to this->q_recal[0] and compute remaining positions
-                gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[0][left_ping], sizeof(T)*M, memcpy_to_recal));
 
                 for(int idx = 1; idx < storage_count; idx++)
                 {
@@ -1121,15 +1141,19 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        for(int i=0; i<M; i++)
-                            this->q_recal[idx][i] = it->second[i];
-                        gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        if (this->use_device_checkpoint_memory) {
+                            gpu_error_check(cudaMemcpy(this->q_recal[idx], it->second, sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                        } else {
+                            for(int i=0; i<M; i++)
+                                this->q_recal[idx][i] = it->second[i];
+                        }
+                        gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, memcpy_from_checkpoint));
                     }
                     else
                     {
                         this->propagator_solver->advance_propagator(0, this->d_q_one[0][left_ping], this->d_q_one[0][left_pong], monomer_type, this->d_q_mask, ds_index);
                         cudaDeviceSynchronize();
-                        gpu_error_check(cudaMemcpy(this->q_recal[idx], this->d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                        gpu_error_check(cudaMemcpy(this->q_recal[idx], this->d_q_one[0][left_pong], sizeof(T)*M, memcpy_to_recal));
                     }
                     std::swap(left_ping, left_pong);
                 }
@@ -1141,7 +1165,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     auto it_right = this->propagator_at_check_point.find(std::make_tuple(key_right, n));
                     if(it_right != this->propagator_at_check_point.end())
                     {
-                        gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][M], it_right->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                        gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][M], it_right->second, sizeof(T)*M, memcpy_from_checkpoint));
                         current_n_right = n;
                     }
                     else
@@ -1160,7 +1184,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                     int storage_idx = left_pos - left_start;
 
                     // Copy q_left to device for stress computation
-                    gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][0], this->q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(&this->d_workspace[right_prev_idx][0], this->q_recal[storage_idx], sizeof(T)*M, memcpy_from_recal));
 
                     // Compute stress (this->d_workspace[idx] is contiguous 2×M buffer)
                     this->propagator_solver->compute_single_segment_stress(0, this->d_workspace[right_prev_idx], d_segment_stress, monomer_type, false);
@@ -1241,14 +1265,21 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
         if (n < 0 || n > max_n_segment)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(max_n_segment) + "]");
 
+        // Determine memory copy direction based on checkpoint storage location
+        cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+
         // Check if the requested segment is at a checkpoint
         auto checkpoint_key = std::make_tuple(dep, n);
         if (this->propagator_at_check_point.find(checkpoint_key) != this->propagator_at_check_point.end())
         {
             // Directly copy from checkpoint
             T *_q_from = this->propagator_at_check_point[checkpoint_key];
-            for(int i=0; i<M; i++)
-                q_out[i] = _q_from[i];
+            if (this->use_device_checkpoint_memory) {
+                gpu_error_check(cudaMemcpy(q_out, _q_from, sizeof(T)*M, cudaMemcpyDeviceToHost));
+            } else {
+                for(int i=0; i<M; i++)
+                    q_out[i] = _q_from[i];
+            }
         }
         else
         {
@@ -1271,7 +1302,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
 
             // Load checkpoint and advance to position n using ping-pong buffers
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(dep, check_pos)];
-            gpu_error_check(cudaMemcpy(this->d_q_one[0][0], q_checkpoint, sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(this->d_q_one[0][0], q_checkpoint, sizeof(T)*M, memcpy_from_checkpoint));
 
             int ping = 0;
             int pong = 1;
@@ -1281,7 +1312,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
                 auto it = this->propagator_at_check_point.find(std::make_tuple(dep, step + 1));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    gpu_error_check(cudaMemcpy(this->d_q_one[0][pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[0][pong], it->second, sizeof(T)*M, memcpy_from_checkpoint));
                 }
                 else
                 {
@@ -1291,7 +1322,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
                 std::swap(ping, pong);
             }
 
-            // Copy result from device to output
+            // Copy result from device to output (always DeviceToHost since q_out is host memory)
             gpu_error_check(cudaMemcpy(q_out, this->d_q_one[0][ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
         }
     }
@@ -1343,6 +1374,11 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
         CuDeviceData<T> *d_q_left = this->d_workspace[0];                           // first M of this->d_workspace[0]
         CuDeviceData<T> *d_q_right[2] = {this->d_workspace[0] + M, this->d_workspace[1]}; // ping-pong buffers
 
+        // Determine memory copy direction based on checkpoint storage location
+        cudaMemcpyKind memcpy_from_checkpoint = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+        cudaMemcpyKind memcpy_to_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyDeviceToHost;
+        cudaMemcpyKind memcpy_from_recal = this->use_device_checkpoint_memory ? cudaMemcpyDeviceToDevice : cudaMemcpyHostToDevice;
+
         // Pointers for q_right (ping-pong)
         int right_prev_idx = 0;
         int right_next_idx = 1;
@@ -1354,7 +1390,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
         auto it_right_0 = this->propagator_at_check_point.find(std::make_tuple(key_right, 0));
         if(it_right_0 != this->propagator_at_check_point.end())
         {
-            gpu_error_check(cudaMemcpy(d_q_right[right_prev_idx], it_right_0->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(d_q_right[right_prev_idx], it_right_0->second, sizeof(T)*M, memcpy_from_checkpoint));
             current_n_right = 0;
         }
 
@@ -1388,7 +1424,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 continue;
 
             // Load checkpoint to device and compute q_left positions
-            gpu_error_check(cudaMemcpy(this->d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMemcpy(this->d_q_one[0][0], it_checkpoint->second, sizeof(T)*M, memcpy_from_checkpoint));
             int left_ping = 0;
             int left_pong = 1;
 
@@ -1399,7 +1435,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, memcpy_from_checkpoint));
                 }
                 else
                 {
@@ -1410,7 +1446,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
             }
 
             // Copy to this->q_recal[0] and compute remaining positions
-            gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[0][left_ping], sizeof(T)*M, cudaMemcpyDeviceToHost));
+            gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[0][left_ping], sizeof(T)*M, memcpy_to_recal));
 
             for(int idx = 1; idx < storage_count; idx++)
             {
@@ -1418,15 +1454,19 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    for(int i=0; i<M; i++)
-                        this->q_recal[idx][i] = it->second[i];
-                    gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    if (this->use_device_checkpoint_memory) {
+                        gpu_error_check(cudaMemcpy(this->q_recal[idx], it->second, sizeof(T)*M, cudaMemcpyDeviceToDevice));
+                    } else {
+                        for(int i=0; i<M; i++)
+                            this->q_recal[idx][i] = it->second[i];
+                    }
+                    gpu_error_check(cudaMemcpy(this->d_q_one[0][left_pong], it->second, sizeof(T)*M, memcpy_from_checkpoint));
                 }
                 else
                 {
                     this->propagator_solver->advance_propagator(0, this->d_q_one[0][left_ping], this->d_q_one[0][left_pong], monomer_type, this->d_q_mask, ds_index);
                     cudaDeviceSynchronize();
-                    gpu_error_check(cudaMemcpy(this->q_recal[idx], this->d_q_one[0][left_pong], sizeof(T)*M, cudaMemcpyDeviceToHost));
+                    gpu_error_check(cudaMemcpy(this->q_recal[idx], this->d_q_one[0][left_pong], sizeof(T)*M, memcpy_to_recal));
                 }
                 std::swap(left_ping, left_pong);
             }
@@ -1438,7 +1478,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 auto it_right = this->propagator_at_check_point.find(std::make_tuple(key_right, n));
                 if(it_right != this->propagator_at_check_point.end())
                 {
-                    gpu_error_check(cudaMemcpy(d_q_right[right_prev_idx], it_right->second, sizeof(T)*M, cudaMemcpyHostToDevice));
+                    gpu_error_check(cudaMemcpy(d_q_right[right_prev_idx], it_right->second, sizeof(T)*M, memcpy_from_checkpoint));
                     current_n_right = n;
                 }
                 else
@@ -1457,7 +1497,7 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
                 int storage_idx = left_pos - left_start;
 
                 // Copy q_left to device for inner product
-                gpu_error_check(cudaMemcpy(d_q_left, this->q_recal[storage_idx], sizeof(T)*M, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_q_left, this->q_recal[storage_idx], sizeof(T)*M, memcpy_from_recal));
 
                 // Compute partition at this position
                 T total_partition = dynamic_cast<CudaComputationBox<T>*>(this->cb)->inner_product_device(

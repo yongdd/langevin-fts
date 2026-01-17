@@ -80,6 +80,9 @@
 template <typename T>
 class CudaFactory : public AbstractFactory<T>
 {
+private:
+    bool use_device_checkpoint_memory;  ///< Store checkpoints in GPU global memory instead of pinned host memory
+
 public :
     /**
      * @brief Construct a CUDA factory.
@@ -87,8 +90,11 @@ public :
      * @param reduce_memory_usage If true, use memory-saving mode that stores
      *                            propagators in pinned host memory with async
      *                            transfers (slower but uses less GPU memory)
+     * @param use_device_checkpoint_memory If true and reduce_memory_usage is true,
+     *                                     store checkpoints in GPU global memory
+     *                                     instead of pinned host memory (default: false)
      */
-    CudaFactory(bool reduce_memory_usage);
+    CudaFactory(bool reduce_memory_usage, bool use_device_checkpoint_memory = false);
 
     // Array* create_array(
     //     unsigned int size) override;
