@@ -68,11 +68,14 @@ def plot_figure():
 
     # (a) Pseudo-spectral error convergence
     ax = axes[0]
-    # All pseudo-spectral methods use same reference F_REF_PSEUDO
+    # All pseudo-spectral methods use same reference F_REF_PSEUDO (ETDRK4 at Ns=1000)
     for method in PSEUDO_METHODS:
         if method not in all_data:
             continue
         results = all_data[method]
+        # Exclude the reference point for ETDRK4 (the method that provides F_REF_PSEUDO)
+        if method == 'etdrk4':
+            results = results[:-1]  # Exclude Ns=1000 (reference point)
         Ns = [r['N'] for r in results]
         errors = [abs(r['free_energy'] - F_REF_PSEUDO) for r in results]
         ax.loglog(Ns, errors, marker=MARKERS[method], color=COLORS[method],
