@@ -134,23 +134,9 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         const T* _exp_dw = this->exp_dw[ds_idx][monomer_type].data();
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_idx);
 
-        // Forward transform
+        // Forward transform -> multiply by bond function ĝ(k) -> Backward transform
         this->transform_forward(q_in, k_q_in.data());
-
-        // Multiply by bond function ĝ(k) in Fourier space
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in[i] *= _boltz_bond[i];
-        }
-
-        // Backward transform
+        this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
         this->transform_backward(k_q_in.data(), q_out);
 
         // Evaluate exp(-w*ds) in real space and apply mask if provided
@@ -189,23 +175,9 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type);
 
-        // Forward transform
+        // Forward transform -> multiply by half-bond function ĝ^(1/2)(k) -> Backward transform
         this->transform_forward(q_in, k_q_in.data());
-
-        // Multiply by half-bond function ĝ^(1/2)(k) in Fourier space
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond_half[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in[i] *= _boltz_bond_half[i];
-        }
-
-        // Backward transform
+        this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond_half, M_COMPLEX);
         this->transform_backward(k_q_in.data(), q_out);
     }
     catch (std::exception& exc)

@@ -170,20 +170,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
             q_out1[i] = _exp_dw[i] * q_in[i];
 
         this->transform_forward(q_out1.data(), k_q_in1.data());
-
-        // Multiply by Boltzmann factor in Fourier space
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in1.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in1[i] *= _boltz_bond[i];
-        }
-
+        this->multiply_fourier_coeffs(k_q_in1.data(), _boltz_bond, M_COMPLEX);
         this->transform_backward(k_q_in1.data(), q_out1.data());
 
         for (int i = 0; i < M; ++i)
@@ -195,19 +182,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
             q_out2[i] = _exp_dw_half[i] * q_in[i];
 
         this->transform_forward(q_out2.data(), k_q_in2.data());
-
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in2.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond_half[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in2[i] *= _boltz_bond_half[i];
-        }
-
+        this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
         this->transform_backward(k_q_in2.data(), q_out2.data());
 
         for (int i = 0; i < M; ++i)
@@ -215,19 +190,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 
         // Second half step
         this->transform_forward(q_out2.data(), k_q_in2.data());
-
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in2.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond_half[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in2[i] *= _boltz_bond_half[i];
-        }
-
+        this->multiply_fourier_coeffs(k_q_in2.data(), _boltz_bond_half, M_COMPLEX);
         this->transform_backward(k_q_in2.data(), q_out2.data());
 
         for (int i = 0; i < M; ++i)

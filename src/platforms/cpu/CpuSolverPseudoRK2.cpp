@@ -62,8 +62,6 @@ CpuSolverPseudoRK2<T>::CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *mole
             {
                 std::string monomer_type = item.first;
                 this->exp_dw[ds_idx][monomer_type].resize(M);
-                // exp_dw_half not needed for RK2, but allocate for compatibility
-                this->exp_dw_half[ds_idx][monomer_type].resize(M);
             }
         }
 
@@ -163,23 +161,9 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         for (int i = 0; i < M; ++i)
             q_out[i] = _exp_dw[i] * q_in[i];
 
-        // Step 2: Forward FFT
+        // Step 2-4: Forward FFT -> multiply by Boltzmann factor -> Backward FFT
         this->transform_forward(q_out, k_q_in.data());
-
-        // Step 3: Multiply by Boltzmann factor in Fourier space
-        if (this->is_periodic_)
-        {
-            std::complex<double>* k_q_complex = reinterpret_cast<std::complex<double>*>(k_q_in.data());
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_complex[i] *= _boltz_bond[i];
-        }
-        else
-        {
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_q_in[i] *= _boltz_bond[i];
-        }
-
-        // Step 4: Backward FFT
+        this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
         this->transform_backward(k_q_in.data(), q_out);
 
         // Step 5: exp(-w·ds/2) * result
