@@ -107,6 +107,7 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuComputationBase.cpp
         src/platforms/cpu/CpuComputationContinuous.cpp
         src/platforms/cpu/CpuComputationDiscrete.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
         src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
         src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
         src/platforms/cpu/CpuAndersonMixing.cpp

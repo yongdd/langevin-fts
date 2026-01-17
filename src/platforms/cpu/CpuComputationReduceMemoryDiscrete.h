@@ -49,7 +49,7 @@
 #include "Polymer.h"
 #include "Molecules.h"
 #include "PropagatorComputationOptimizer.h"
-#include "PropagatorComputation.h"
+#include "CpuComputationReduceMemoryBase.h"
 #include "CpuSolver.h"
 #include "Scheduler.h"
 
@@ -94,60 +94,9 @@
  * @endcode
  */
 template <typename T>
-class CpuComputationReduceMemoryDiscrete : public PropagatorComputation<T>
+class CpuComputationReduceMemoryDiscrete : public CpuComputationReduceMemoryBase<T>
 {
 private:
-    CpuSolver<T> *propagator_solver;  ///< Discrete chain solver
-    Scheduler *sc;                     ///< Computation scheduler
-    int n_streams;                     ///< Number of parallel streams (always 1)
-
-    /**
-     * @brief Total sum of segments across all propagators.
-     *
-     * Used to determine checkpoint_interval = ceil(sqrt(total_max_n_segment)).
-     */
-    int total_max_n_segment;
-
-    /**
-     * @brief Interval between checkpoints.
-     *
-     * Set to ceil(sqrt(total_max_n_segment)) to minimize the product
-     * of storage and recomputation cost.
-     */
-    int checkpoint_interval;
-
-    /**
-     * @brief Workspace for propagator recomputation.
-     *
-     * Size: checkpoint_interval = O(sqrt(N))
-     * Storage for block values in calculate_phi_one_block().
-     */
-    std::vector<T*> q_recal;
-
-    /**
-     * @brief Ping-pong buffers for q_right propagator advancement.
-     *
-     * Two buffers alternated during sequential propagator computation.
-     */
-    std::array<T*,2> q_pair;
-
-    /**
-     * @brief Ping-pong buffers for skip phase in calculate_phi_one_block().
-     *
-     * Used to advance q_left from checkpoint to block start without storing.
-     */
-    std::array<T*,2> q_skip;
-
-    /**
-     * @brief Checkpointed propagator values.
-     *
-     * Key: (propagator_key, checkpoint_index)
-     * Value: Propagator array at checkpoint (size n_grid)
-     *
-     * Stores propagators only at checkpoint positions.
-     */
-    std::map<std::tuple<std::string, int>, T *> propagator_at_check_point;
-
     /**
      * @brief Half-bond step propagators at checkpoints.
      *
@@ -159,11 +108,6 @@ private:
     std::map<std::tuple<std::string, int>, T *> propagator_half_steps_at_check_point;
 
     #ifndef NDEBUG
-    /**
-     * @brief Debug: track computed propagators.
-     */
-    std::map<std::string, bool *> propagator_finished;
-
     /**
      * @brief Debug: track computed half-step propagators.
      */
@@ -177,16 +121,6 @@ private:
      * Includes monomer_type for proper Boltzmann factor weighting.
      */
     std::vector<std::tuple<int, T *, T *, std::string, int>> single_partition_segment;
-
-    /**
-     * @brief Block concentration fields.
-     */
-    std::map<std::tuple<int, std::string, std::string>, T *> phi_block;
-
-    /**
-     * @brief Solvent concentration fields.
-     */
-    std::vector<T *> phi_solvent;
 
     /**
      * @brief Calculate concentration for one block with recomputation.
@@ -234,11 +168,6 @@ public:
     ~CpuComputationReduceMemoryDiscrete();
 
     /**
-     * @brief Update solver for new box dimensions.
-     */
-    void update_laplacian_operator() override;
-
-    /**
      * @brief Compute propagators and store checkpoints.
      *
      * Only checkpoint values are stored, not full propagator history.
@@ -251,23 +180,11 @@ public:
         std::map<std::string, const T*> q_init = {}) override;
 
     /**
-     * @brief Advance propagator by one segment.
-     */
-    void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) override;
-
-    /**
      * @brief Calculate concentrations with on-the-fly recomputation.
      *
      * Recomputes propagator values from checkpoints as needed.
      */
     void compute_concentrations() override;
-
-    /**
-     * @brief Compute all statistics.
-     */
-    void compute_statistics(
-        std::map<std::string, const T*> w_block,
-        std::map<std::string, const T*> q_init = {}) override;
 
     /**
      * @brief Compute stress (requires recomputation).
@@ -283,21 +200,6 @@ public:
      * @brief Get propagator (requires recomputation).
      */
     void get_chain_propagator(T *q_out, int polymer, int v, int u, int n) override;
-
-    /// @name Canonical Ensemble Methods
-    /// @{
-    void get_total_concentration(std::string monomer_type, T *phi) override;
-    void get_total_concentration(int polymer, std::string monomer_type, T *phi) override;
-    void get_block_concentration(int polymer, T *phi) override;
-    /// @}
-
-    T get_solvent_partition(int s) override;
-    void get_solvent_concentration(int s, T *phi) override;
-
-    /// @name Grand Canonical Ensemble Methods
-    /// @{
-    void get_total_concentration_gce(double fugacity, int polymer, std::string monomer_type, T *phi) override;
-    /// @}
 
     /**
      * @brief Validate partition function.
