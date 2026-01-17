@@ -109,6 +109,105 @@ protected:
     void transform_backward(double* cdata, T* rdata) { fft_->backward(cdata, rdata); }
 
     /**
+     * @brief Multiply Fourier coefficients by a factor array.
+     *
+     * Handles both periodic BC (complex coefficients) and non-periodic BC
+     * (real coefficients from DCT/DST).
+     *
+     * @param k_data    Fourier coefficient array (modified in-place)
+     * @param factor    Multiplicative factor array
+     * @param n_complex Number of complex elements (M_COMPLEX)
+     */
+    void multiply_fourier_coeffs(double* k_data, const double* factor, int n_complex)
+    {
+        if (is_periodic_)
+        {
+            std::complex<double>* k_complex = reinterpret_cast<std::complex<double>*>(k_data);
+            for (int i = 0; i < n_complex; ++i)
+                k_complex[i] *= factor[i];
+        }
+        else
+        {
+            for (int i = 0; i < n_complex; ++i)
+                k_data[i] *= factor[i];
+        }
+    }
+
+    /**
+     * @brief Linear combination: k_out = a*k_in1 + b*k_in2
+     *
+     * Handles periodic (complex) and non-periodic (real) coefficient types.
+     */
+    void fourier_linear_combination_2(
+        double* k_out, const double* a, const double* k_in1,
+        const double* b, const double* k_in2, int n_complex)
+    {
+        if (is_periodic_)
+        {
+            std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
+            const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);
+            const std::complex<double>* in2 = reinterpret_cast<const std::complex<double>*>(k_in2);
+            for (int i = 0; i < n_complex; ++i)
+                out[i] = a[i] * in1[i] + b[i] * in2[i];
+        }
+        else
+        {
+            for (int i = 0; i < n_complex; ++i)
+                k_out[i] = a[i] * k_in1[i] + b[i] * k_in2[i];
+        }
+    }
+
+    /**
+     * @brief Linear combination: k_out = a*k_in1 + b*k_in2 + c*k_in3
+     *
+     * Handles periodic (complex) and non-periodic (real) coefficient types.
+     */
+    void fourier_linear_combination_3(
+        double* k_out, const double* a, const double* k_in1,
+        const double* b, const double* k_in2,
+        const double* c, const double* k_in3, int n_complex)
+    {
+        if (is_periodic_)
+        {
+            std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
+            const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);
+            const std::complex<double>* in2 = reinterpret_cast<const std::complex<double>*>(k_in2);
+            const std::complex<double>* in3 = reinterpret_cast<const std::complex<double>*>(k_in3);
+            for (int i = 0; i < n_complex; ++i)
+                out[i] = a[i] * in1[i] + b[i] * in2[i] + c[i] * in3[i];
+        }
+        else
+        {
+            for (int i = 0; i < n_complex; ++i)
+                k_out[i] = a[i] * k_in1[i] + b[i] * k_in2[i] + c[i] * k_in3[i];
+        }
+    }
+
+    /**
+     * @brief Linear combination: k_out += a*(k_in1 - k_in2)
+     *
+     * Handles periodic (complex) and non-periodic (real) coefficient types.
+     */
+    void fourier_add_scaled_diff(
+        double* k_out, const double* a,
+        const double* k_in1, const double* k_in2, int n_complex)
+    {
+        if (is_periodic_)
+        {
+            std::complex<double>* out = reinterpret_cast<std::complex<double>*>(k_out);
+            const std::complex<double>* in1 = reinterpret_cast<const std::complex<double>*>(k_in1);
+            const std::complex<double>* in2 = reinterpret_cast<const std::complex<double>*>(k_in2);
+            for (int i = 0; i < n_complex; ++i)
+                out[i] += a[i] * (in1[i] - in2[i]);
+        }
+        else
+        {
+            for (int i = 0; i < n_complex; ++i)
+                k_out[i] += a[i] * (k_in1[i] - k_in2[i]);
+        }
+    }
+
+    /**
      * @brief Initialize shared components in constructor.
      *
      * Sets up:

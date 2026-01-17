@@ -23,6 +23,7 @@
 #include <iostream>
 #include <cmath>
 #include <complex>
+#include <algorithm>
 
 #include "CpuSolverPseudoETDRK4.h"
 
@@ -169,111 +170,80 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         this->transform_forward(N_n.data(), k_N_n.data());
 
         // Krogstad ETDRK4 stages (Song et al. 2018)
+        // Uses base class helpers that handle periodic vs non-periodic automatically
+
+        // Stage a (Eq. 7a): a_hat = E2*q_hat + alpha*N_hat_n
+        this->fourier_linear_combination_2(k_a.data(), _E2, k_q.data(), _alpha, k_N_n.data(), M_COMPLEX);
+
+        // IFFT to get a, compute N_a = -w*a
+        this->transform_backward(k_a.data(), a.data());
+        for (int i = 0; i < M; ++i)
+            N_a[i] = -_w[i] * a[i];
+        this->transform_forward(N_a.data(), k_N_a.data());
+
+        // Stage b (Eq. 7b): b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
+        std::copy(k_a.begin(), k_a.end(), k_work.begin());
+        this->fourier_add_scaled_diff(k_work.data(), _phi2_half, k_N_a.data(), k_N_n.data(), M_COMPLEX);
+
+        // IFFT to get b, compute N_b = -w*b
+        this->transform_backward(k_work.data(), b.data());
+        for (int i = 0; i < M; ++i)
+            N_b[i] = -_w[i] * b[i];
+        this->transform_forward(N_b.data(), k_N_b.data());
+
+        // Stage c (Eq. 7c): c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
+        this->fourier_linear_combination_2(k_work.data(), _E, k_q.data(), _phi1, k_N_n.data(), M_COMPLEX);
+        // Add 2*phi2*(N_hat_b - N_hat_n) using scaled diff with factor 2
         if (this->is_periodic_)
         {
-            // Complex coefficients for periodic BC
-            std::complex<double>* k_q_c = reinterpret_cast<std::complex<double>*>(k_q.data());
-            std::complex<double>* k_N_n_c = reinterpret_cast<std::complex<double>*>(k_N_n.data());
-            std::complex<double>* k_N_a_c = reinterpret_cast<std::complex<double>*>(k_N_a.data());
-            std::complex<double>* k_N_b_c = reinterpret_cast<std::complex<double>*>(k_N_b.data());
-            std::complex<double>* k_N_c_c = reinterpret_cast<std::complex<double>*>(k_N_c.data());
-            std::complex<double>* k_a_c = reinterpret_cast<std::complex<double>*>(k_a.data());
             std::complex<double>* k_work_c = reinterpret_cast<std::complex<double>*>(k_work.data());
-
-            // Stage a (Eq. 7a): a_hat = E2*q_hat + alpha*N_hat_n
+            const std::complex<double>* k_N_b_c = reinterpret_cast<const std::complex<double>*>(k_N_b.data());
+            const std::complex<double>* k_N_n_c = reinterpret_cast<const std::complex<double>*>(k_N_n.data());
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_a_c[i] = _E2[i] * k_q_c[i] + _alpha[i] * k_N_n_c[i];
-
-            // IFFT to get a, compute N_a = -w*a
-            this->transform_backward(k_a.data(), a.data());
-            for (int i = 0; i < M; ++i)
-                N_a[i] = -_w[i] * a[i];
-            this->transform_forward(N_a.data(), k_N_a.data());
-
-            // Stage b (Eq. 7b): b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_work_c[i] = k_a_c[i] + _phi2_half[i] * (k_N_a_c[i] - k_N_n_c[i]);
-
-            // IFFT to get b, compute N_b = -w*b
-            this->transform_backward(k_work.data(), b.data());
-            for (int i = 0; i < M; ++i)
-                N_b[i] = -_w[i] * b[i];
-            this->transform_forward(N_b.data(), k_N_b.data());
-
-            // Stage c (Eq. 7c): c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_work_c[i] = _E[i] * k_q_c[i] + _phi1[i] * k_N_n_c[i]
-                            + 2.0 * _phi2[i] * (k_N_b_c[i] - k_N_n_c[i]);
-
-            // IFFT to get c, compute N_c = -w*c
-            this->transform_backward(k_work.data(), c.data());
-            for (int i = 0; i < M; ++i)
-                N_c[i] = -_w[i] * c[i];
-            this->transform_forward(N_c.data(), k_N_c.data());
-
-            // Final step (Eq. 7d): q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
-            //                                   + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
-            for (int i = 0; i < M_COMPLEX; ++i)
-            {
-                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];  // coefficient for N_n and N_c
-                k_work_c[i] = k_work_c[i]  // c_hat is already in k_work_c
-                            + coeff_nc * (k_N_n_c[i] + k_N_c_c[i])
-                            + 2.0 * _phi2[i] * k_N_a_c[i]
-                            - 4.0 * _phi3[i] * (k_N_a_c[i] + k_N_b_c[i]);
-            }
-
-            // IFFT to get final result
-            this->transform_backward(k_work.data(), q_out);
+                k_work_c[i] += 2.0 * _phi2[i] * (k_N_b_c[i] - k_N_n_c[i]);
         }
         else
         {
-            // Real coefficients for non-periodic BC (DCT/DST)
-
-            // Stage a (Eq. 7a): a_hat = E2*q_hat + alpha*N_hat_n
             for (int i = 0; i < M_COMPLEX; ++i)
-                k_a[i] = _E2[i] * k_q[i] + _alpha[i] * k_N_n[i];
+                k_work[i] += 2.0 * _phi2[i] * (k_N_b[i] - k_N_n[i]);
+        }
 
-            // IFFT to get a, compute N_a = -w*a
-            this->transform_backward(k_a.data(), a.data());
-            for (int i = 0; i < M; ++i)
-                N_a[i] = -_w[i] * a[i];
-            this->transform_forward(N_a.data(), k_N_a.data());
+        // IFFT to get c, compute N_c = -w*c
+        this->transform_backward(k_work.data(), c.data());
+        for (int i = 0; i < M; ++i)
+            N_c[i] = -_w[i] * c[i];
+        this->transform_forward(N_c.data(), k_N_c.data());
 
-            // Stage b (Eq. 7b): b_hat = a_hat + phi2_half*(N_hat_a - N_hat_n)
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_work[i] = k_a[i] + _phi2_half[i] * (k_N_a[i] - k_N_n[i]);
-
-            // IFFT to get b, compute N_b = -w*b
-            this->transform_backward(k_work.data(), b.data());
-            for (int i = 0; i < M; ++i)
-                N_b[i] = -_w[i] * b[i];
-            this->transform_forward(N_b.data(), k_N_b.data());
-
-            // Stage c (Eq. 7c): c_hat = E*q_hat + phi1*N_hat_n + 2*phi2*(N_hat_b - N_hat_n)
-            for (int i = 0; i < M_COMPLEX; ++i)
-                k_work[i] = _E[i] * k_q[i] + _phi1[i] * k_N_n[i]
-                          + 2.0 * _phi2[i] * (k_N_b[i] - k_N_n[i]);
-
-            // IFFT to get c, compute N_c = -w*c
-            this->transform_backward(k_work.data(), c.data());
-            for (int i = 0; i < M; ++i)
-                N_c[i] = -_w[i] * c[i];
-            this->transform_forward(N_c.data(), k_N_c.data());
-
-            // Final step (Eq. 7d): q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
-            //                                   + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
+        // Final step (Eq. 7d): q_{n+1}_hat = c_hat + (4*phi3 - phi2)*(N_hat_n + N_hat_c)
+        //                                   + 2*phi2*N_hat_a - 4*phi3*(N_hat_a + N_hat_b)
+        if (this->is_periodic_)
+        {
+            std::complex<double>* k_work_c = reinterpret_cast<std::complex<double>*>(k_work.data());
+            const std::complex<double>* k_N_n_c = reinterpret_cast<const std::complex<double>*>(k_N_n.data());
+            const std::complex<double>* k_N_a_c = reinterpret_cast<const std::complex<double>*>(k_N_a.data());
+            const std::complex<double>* k_N_b_c = reinterpret_cast<const std::complex<double>*>(k_N_b.data());
+            const std::complex<double>* k_N_c_c = reinterpret_cast<const std::complex<double>*>(k_N_c.data());
             for (int i = 0; i < M_COMPLEX; ++i)
             {
-                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];  // coefficient for N_n and N_c
-                k_work[i] = k_work[i]  // c_hat is already in k_work
-                          + coeff_nc * (k_N_n[i] + k_N_c[i])
-                          + 2.0 * _phi2[i] * k_N_a[i]
-                          - 4.0 * _phi3[i] * (k_N_a[i] + k_N_b[i]);
+                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];
+                k_work_c[i] += coeff_nc * (k_N_n_c[i] + k_N_c_c[i])
+                             + 2.0 * _phi2[i] * k_N_a_c[i]
+                             - 4.0 * _phi3[i] * (k_N_a_c[i] + k_N_b_c[i]);
             }
-
-            // IFFT to get final result
-            this->transform_backward(k_work.data(), q_out);
         }
+        else
+        {
+            for (int i = 0; i < M_COMPLEX; ++i)
+            {
+                double coeff_nc = 4.0 * _phi3[i] - _phi2[i];
+                k_work[i] += coeff_nc * (k_N_n[i] + k_N_c[i])
+                           + 2.0 * _phi2[i] * k_N_a[i]
+                           - 4.0 * _phi3[i] * (k_N_a[i] + k_N_b[i]);
+            }
+        }
+
+        // IFFT to get final result
+        this->transform_backward(k_work.data(), q_out);
 
         // Apply mask if provided
         if (q_mask != nullptr)
