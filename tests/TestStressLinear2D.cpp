@@ -7,6 +7,7 @@
 #include <string>
 #include <array>
 #include <chrono>
+#include <random>
 
 #include "Exception.h"
 #include "ComputationBox.h"
@@ -34,20 +35,21 @@ int main()
         std::streamsize default_precision = std::cout.precision();
 
         // -------------- Initialize ------------
-        int max_scft_iter = 500;
+        int max_scft_iter = 2000;
         double tolerance = 1e-9;
 
         double f = 0.36;
         double chi_n = 20.0;
         std::vector<int> nx = {33, 29};
         std::vector<double> lx = {3.2, 3.4};
+        std::vector<double> angles = {90.0, 90.0, 100.0};  // Non-orthogonal gamma (10° deviation) for 2D
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1];
         int am_max_hist = 20;
-        double am_start_error = 1e-1;
-        double am_mix_min = 0.1;
-        double am_mix_init = 0.1;
+        double am_start_error = 1e-2;
+        double am_mix_min = 0.02;
+        double am_mix_init = 0.02;
 
         const int M = nx[0]*nx[1];
 
@@ -89,7 +91,7 @@ int main()
                     factory->display_info();
 
                     // Create instances
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {});
+                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, angles);
                     Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
@@ -110,35 +112,19 @@ int main()
                         propagator_computation_optimizer->display_propagators();
                     }
 
-                    // Load pre-converged fields from file
-                    std::string line;
-                    std::ifstream input_field_file;
-                    if(molecules->get_model_name() == "continuous")
-                        input_field_file.open("Stress2D_ContinuousInput.txt");
-                    else if(molecules->get_model_name() == "discrete")
-                        input_field_file.open("Stress2D_DiscreteInput.txt");
-
-                    if (input_field_file.is_open())
+                    // Initialize with lamellar pattern along x-direction
+                    // This works for both orthogonal and non-orthogonal boxes
+                    // The pattern varies along the first lattice vector direction
+                    for(int i=0; i<nx[0]; i++)
                     {
-                        for(int i=0; i<2*M ; i++)
+                        double xx = (i+0.5)*2*PI/nx[0];  // Use cell-centered coordinate
+                        double phi_a_init = f + 0.3*std::cos(xx);  // Lamellar with f as mean
+                        double phi_b_init = 1.0 - phi_a_init;
+                        for(int j=0; j<nx[1]; j++)
                         {
-                            std::getline(input_field_file, line);
-                            w[i] = std::stod(line);
-                        }
-                        input_field_file.close();
-                    }
-                    else
-                    {
-                        // Initialize to lamellar-like pattern if no input file
-                        for(int i=0; i<nx[0]; i++)
-                        {
-                            double xx = (i+1)*2*PI/nx[0];
-                            for(int j=0; j<nx[1]; j++)
-                            {
-                                int idx = i*nx[1] + j;
-                                w[idx] = std::cos(xx);
-                                w[idx+M] = -std::cos(xx);
-                            }
+                            int idx = i*nx[1] + j;
+                            w[idx] = chi_n * phi_b_init;      // w_A ~ chi_n * phi_B
+                            w[idx+M] = chi_n * phi_a_init;    // w_B ~ chi_n * phi_A
                         }
                     }
 
@@ -197,10 +183,125 @@ int main()
                     std::cout << "  Aggregation=" << std::boolalpha << aggregate_propagator_computation;
                     std::cout << ", SCFT error=" << std::scientific << std::setprecision(2) << error_level;
                     std::cout << ", Stress[0]=" << std::setprecision(6) << stress[0];
-                    std::cout << ", Stress[1]=" << std::setprecision(6) << stress[1] << std::endl;
+                    std::cout << ", Stress[1]=" << std::setprecision(6) << stress[1];
+                    std::cout << ", Stress[2]=" << std::setprecision(6) << stress[2] << std::endl;
 
                     model_stress_list_0.push_back(stress[0]);
                     model_stress_list_1.push_back(stress[1]);
+
+                    // ============ NUMERICAL DERIVATIVE TESTS ============
+                    // Only run on first aggregation mode to avoid redundancy
+                    if (!aggregate_propagator_computation)
+                    {
+                        double dL = 0.0000001;
+                        double old_lx_val = lx[0];
+                        double old_ly_val = lx[1];
+
+                        // Test dF/dlx - stress[0]
+                        {
+                            std::cout << "  Testing dF/dlx..." << std::endl;
+                            lx[0] = old_lx_val + dL/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            lx[0] = old_lx_val - dL/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            lx[0] = old_lx_val;
+                            cb->set_lattice_parameters(lx, angles);
+                            double dh_dl = (energy_total_1-energy_total_2)/dL;
+                            std::cout << "    dH/dlx (numerical): " << dh_dl << ", Stress[0]: " << stress[0] << std::endl;
+                            double abs_err = std::abs(dh_dl-stress[0]);
+                            double rel_err = abs_err/(std::abs(stress[0])+1e-10);
+                            std::cout << "    Relative error: " << rel_err << std::endl;
+                            // Strict tolerance - stress computation should be accurate for non-orthogonal boxes
+                            bool pass = (rel_err < 1e-3) || (abs_err < 1e-6 && std::abs(stress[0]) < 1e-6);
+                            if (!std::isfinite(rel_err) || !pass) {
+                                std::cout << "ERROR: dF/dlx mismatch! rel_err=" << rel_err << std::endl;
+                                return -1;
+                            }
+                        }
+
+                        // Test dF/dly - stress[1]
+                        {
+                            std::cout << "  Testing dF/dly..." << std::endl;
+                            lx[1] = old_ly_val + dL/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            lx[1] = old_ly_val - dL/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            lx[1] = old_ly_val;
+                            cb->set_lattice_parameters(lx, angles);
+                            double dh_dl = (energy_total_1-energy_total_2)/dL;
+                            std::cout << "    dH/dly (numerical): " << dh_dl << ", Stress[1]: " << stress[1] << std::endl;
+                            double abs_err = std::abs(dh_dl-stress[1]);
+                            double rel_err = abs_err/(std::abs(stress[1])+1e-10);
+                            std::cout << "    Relative error: " << rel_err << std::endl;
+                            // Strict tolerance - stress computation should be accurate for non-orthogonal boxes
+                            bool pass = (rel_err < 1e-3) || (abs_err < 1e-6 && std::abs(stress[1]) < 1e-6);
+                            if (!std::isfinite(rel_err) || !pass) {
+                                std::cout << "ERROR: dF/dly mismatch! rel_err=" << rel_err << std::endl;
+                                return -1;
+                            }
+                        }
+
+                        // NOTE: Angle derivative tests (dF/dgamma vs σ_xy) are not included because
+                        // for non-orthogonal systems, ∂F/∂γ includes both shear strain and volume
+                        // change contributions, making the relationship with σ_xy non-trivial.
+                        // The length derivative tests above verify stress computation for non-orthogonal boxes.
+                    }
 
                     delete molecules;
                     delete propagator_computation_optimizer;
