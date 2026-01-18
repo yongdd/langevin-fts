@@ -675,7 +675,7 @@ int main()
         std::cout << "OK: ds_index values correctly shared" << std::endl;
 
         // Test propagator computation with all solver variants:
-        // - normal, aggregated, reduce_memory_usage, reduce_memory_usage+aggregated
+        // - normal, aggregated, use_checkpointing, use_checkpointing+aggregated
         std::cout << std::endl;
         std::cout << "Testing propagator computation for bottle-brush with all solver variants..." << std::endl;
 
@@ -693,8 +693,8 @@ int main()
         #ifdef USE_CPU_MKL
         solver_name_list_brush.push_back("cpu-mkl");
         solver_name_list_brush.push_back("cpu-mkl, aggregated");
-        solver_name_list_brush.push_back("cpu-mkl, reduce_memory_usage");
-        solver_name_list_brush.push_back("cpu-mkl, reduce_memory_usage, aggregated");
+        solver_name_list_brush.push_back("cpu-mkl, use_checkpointing");
+        solver_name_list_brush.push_back("cpu-mkl, use_checkpointing, aggregated");
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
@@ -712,8 +712,8 @@ int main()
         #ifdef USE_CUDA
         solver_name_list_brush.push_back("cuda");
         solver_name_list_brush.push_back("cuda, aggregated");
-        solver_name_list_brush.push_back("cuda, reduce_memory_usage");
-        solver_name_list_brush.push_back("cuda, reduce_memory_usage, aggregated");
+        solver_name_list_brush.push_back("cuda, use_checkpointing");
+        solver_name_list_brush.push_back("cuda, use_checkpointing, aggregated");
         cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));

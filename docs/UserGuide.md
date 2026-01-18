@@ -52,7 +52,7 @@ scft = SCFT(params)
 
 ## Performance Tips
 
-- **Memory saving**: Set `reduce_memory_usage=True` if memory is insufficient to run your simulation. However, the execution time increases by several times. The method is based on the idea used in [pscfplus](https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).
+- **Memory saving**: Set `use_checkpointing=True` if memory is insufficient to run your simulation. However, the execution time increases by several times. The method is based on the idea used in [pscfplus](https://github.com/qwcsu/pscfplus/blob/master/doc/notes/SavMem.pdf).
 
 - **CUDA multi-threading**: The CUDA version also uses multiple CPUs. Each CPU is responsible for a CUDA computation stream. Allocate as many CPUs as `OMP_NUM_THREADS` when submitting a job.
 
@@ -112,7 +112,7 @@ For AB diblock copolymers adopting the `Discrete` model, the results must be ide
 Results must be identical within machine precision regardless of:
 - Platform (CUDA or MKL)
 - Use of superposition (`aggregate_propagator_computation`)
-- Use of the memory saving option (`reduce_memory_usage`)
+- Use of the memory saving option (`use_checkpointing`)
 
 After changing these settings, run a few iterations with the same simulation parameters and verify identical results.
 
@@ -135,4 +135,4 @@ Simulations are configured via Python dictionaries with keys:
 | `distinct_polymers` | Polymer architectures and volume fractions |
 | `platform` | `"cuda"` or `"cpu-mkl"` (auto-selected by default) |
 | `numerical_method` | `"rqm4"`, `"rk2"`, `"etdrk4"`, `"cn-adi2"`, or `"cn-adi4-lr"` |
-| `reduce_memory_usage` | `True` to enable memory saving mode |
+| `use_checkpointing` | `True` to enable memory saving mode |

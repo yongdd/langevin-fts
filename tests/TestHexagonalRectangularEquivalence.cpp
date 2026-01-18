@@ -334,16 +334,16 @@ int main()
 
         for (const std::string& platform : avail_platforms)
         {
-            for (bool reduce_memory_usage : {false, true})
+            for (bool use_checkpointing : {false, true})
             {
             std::cout << "\n----------------------------------------" << std::endl;
             std::cout << "Platform: " << platform;
-            if (reduce_memory_usage)
+            if (use_checkpointing)
                 std::cout << " (memory-saving)";
             std::cout << std::endl;
             std::cout << "----------------------------------------" << std::endl;
 
-            AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+            AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
 
             //==================================================================
             // Test: Fixed Box SCFT - verify stress is small at optimal parameters
@@ -407,7 +407,7 @@ int main()
             std::cout << "  σ_xy (rect): " << result_rect.stress[2] << std::fixed << std::endl;
 
             delete factory;
-            }  // end reduce_memory_usage loop
+            }  // end use_checkpointing loop
         }  // end platform loop
 
         std::cout << "\n========================================" << std::endl;

@@ -140,7 +140,7 @@ langevin_nbar = 10000  # Invariant polymerization index
 langevin_max_step = 2000
 
 aggregate_propagator_computation = False
-reduce_memory_usage = False
+use_checkpointing = False
 
 # -------------- initialize ------------
 # calculate chain parameters, dict_a_n = [a_A, a_B]
@@ -153,7 +153,7 @@ if "cuda" in PlatformSelector.avail_platforms():
 else:
     platform = PlatformSelector.avail_platforms()[0]
 print("platform :", platform)
-factory = PlatformSelector.create_factory(platform, chain_model, reduce_memory_usage)
+factory = PlatformSelector.create_factory(platform, chain_model, use_checkpointing)
 
 # create instances
 cb = factory.create_computation_box(nx, lx)

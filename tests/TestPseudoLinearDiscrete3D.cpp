@@ -188,7 +188,7 @@ int main()
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl");
-        solver_name_list.push_back("cpu-mkl, reduce_memory_usage");
+        solver_name_list.push_back("cpu-mkl, use_checkpointing");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer));
@@ -197,7 +197,7 @@ int main()
         
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda");
-        solver_name_list.push_back("cuda, reduce_memory_usage");
+        solver_name_list.push_back("cuda, use_checkpointing");
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer));

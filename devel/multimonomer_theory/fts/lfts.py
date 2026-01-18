@@ -45,8 +45,8 @@ class LFTS:
             platform = avail_platforms[0]
 
         # (C++ class) Create a factory for given platform and chain_model
-        if "reduce_memory_usage" in params and platform == "cuda":
-            factory = PlatformSelector.create_factory(platform, params["reduce_memory_usage"])
+        if "use_checkpointing" in params and platform == "cuda":
+            factory = PlatformSelector.create_factory(platform, params["use_checkpointing"])
         else:
             factory = PlatformSelector.create_factory(platform, False)
         factory.display_info()

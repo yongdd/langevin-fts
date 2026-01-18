@@ -12,18 +12,18 @@
  * - Multiple CUDA streams for parallel propagator computation
  * - Asynchronous memory transfers to hide latency
  * - Supports both continuous and discrete chain models
- * - Memory-saving mode stores propagators in pinned host memory
+ * - Checkpointing mode stores propagators in pinned host memory
  *
  * **Performance Notes:**
  *
  * - Best for 2D and 3D simulations with large grids (> 32³)
  * - GPU memory can be a limiting factor for large systems
- * - Use reduce_memory_usage=true for large grids with limited GPU RAM
+ * - Use use_checkpointing=true for large grids with limited GPU RAM
  *
  * **Memory Modes:**
  *
  * - Standard mode: All propagators stored in GPU memory (fastest)
- * - Reduced memory: Propagators stored in pinned host memory with
+ * - Checkpointing mode: Propagators stored in pinned host memory with
  *   async transfers (2-4× slower but uses much less GPU memory)
  *
  * @see AbstractFactory for the factory interface
@@ -32,7 +32,7 @@
  *
  * @example
  * @code
- * // Create CUDA factory (reduce_memory_usage=false for speed)
+ * // Create CUDA factory (use_checkpointing=false for speed)
  * CudaFactory<double> factory(false);
  *
  * // Create simulation objects
@@ -71,7 +71,7 @@
  *
  * **Memory Management:**
  *
- * When reduce_memory_usage=true:
+ * When use_checkpointing=true:
  * - Uses CudaComputationReduceMemoryContinuous/Discrete
  * - Uses CudaAndersonMixingReduceMemory
  * - Stores propagator history in pinned host memory
@@ -81,20 +81,21 @@ template <typename T>
 class CudaFactory : public AbstractFactory<T>
 {
 private:
-    bool use_device_checkpoint_memory;  ///< Store checkpoints in GPU global memory instead of pinned host memory
+    bool checkpoint_on_host;  ///< If true, store checkpoints in pinned host memory; if false, use GPU global memory
 
 public :
     /**
      * @brief Construct a CUDA factory.
      *
-     * @param reduce_memory_usage If true, use memory-saving mode that stores
-     *                            propagators in pinned host memory with async
-     *                            transfers (slower but uses less GPU memory)
-     * @param use_device_checkpoint_memory If true and reduce_memory_usage is true,
-     *                                     store checkpoints in GPU global memory
-     *                                     instead of pinned host memory (default: false)
+     * @param use_checkpointing If true, use checkpointing mode that stores only
+     *                          propagator checkpoints instead of full histories,
+     *                          recomputing as needed (reduces memory, increases compute)
+     * @param checkpoint_on_host If true (default) and use_checkpointing is true,
+     *                           store checkpoints in pinned host memory.
+     *                           If false, store in GPU global memory for faster
+     *                           access but higher GPU memory usage.
      */
-    CudaFactory(bool reduce_memory_usage, bool use_device_checkpoint_memory = false);
+    CudaFactory(bool use_checkpointing, bool checkpoint_on_host = true);
 
     // Array* create_array(
     //     unsigned int size) override;
@@ -165,7 +166,7 @@ public :
      * @brief Create CUDA Anderson mixing optimizer.
      *
      * Creates CudaAndersonMixing or CudaAndersonMixingReduceMemory
-     * based on the reduce_memory_usage setting.
+     * based on the use_checkpointing setting.
      *
      * @param n_var      Number of field variables
      * @param max_hist   Maximum history length

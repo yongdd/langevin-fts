@@ -99,7 +99,7 @@ constexpr double PARTITION_TOLERANCE = 1e-7;
  * **Memory Management:**
  *
  * The class allocates internal storage for propagators and concentrations.
- * Memory can be reduced using the reduce_memory_usage option,
+ * Memory can be reduced using the use_checkpointing option,
  * which stores only checkpoints and recomputes on demand.
  *
  * **Parallel Computation:**

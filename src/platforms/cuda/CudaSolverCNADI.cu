@@ -42,7 +42,7 @@ CudaSolverCNADI::CudaSolverCNADI(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    bool reduce_memory_usage,
+    bool use_checkpointing,
     bool use_4th_order)
 {
     try{
@@ -50,7 +50,7 @@ CudaSolverCNADI::CudaSolverCNADI(
         this->molecules = molecules;
         this->chain_model = molecules->get_model_name();
         this->n_streams = n_streams;
-        this->reduce_memory_usage = reduce_memory_usage;
+        this->use_checkpointing = use_checkpointing;
         this->use_4th_order = use_4th_order;
 
         if(molecules->get_model_name() != "continuous")

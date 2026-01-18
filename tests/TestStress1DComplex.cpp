@@ -76,8 +76,8 @@ int main()
 
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    bool reduce_memory_usage = false;
-                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, reduce_memory_usage);
+                    bool use_checkpointing = false;
+                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, use_checkpointing);
 
                     // Create instances
                     ComputationBox<T>* cb = factory->create_computation_box(nx, lx, {});

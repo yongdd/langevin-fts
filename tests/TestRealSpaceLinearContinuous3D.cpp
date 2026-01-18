@@ -292,7 +292,7 @@ int main()
         // Real space method
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("real space, cpu-mkl");
-        solver_name_list.push_back("real space, cpu-mkl, reduce_memory_usage");
+        solver_name_list.push_back("real space, cpu-mkl, use_checkpointing");
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));
@@ -301,7 +301,7 @@ int main()
 
         #ifdef USE_CUDA
         solver_name_list.push_back("real space, cuda");
-        solver_name_list.push_back("real space, cuda, reduce_memory_usage");
+        solver_name_list.push_back("real space, cuda, use_checkpointing");
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));

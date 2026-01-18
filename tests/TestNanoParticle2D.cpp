@@ -119,7 +119,7 @@ int main()
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<bool> aggregate_propagator_computations = {false, true};
-        std::vector<bool> reduce_memory_usages = {false, true};
+        std::vector<bool> use_checkpointings = {false, true};
         for(std::string chain_model : chain_models)
         {
             std::vector<double> total_partition_list;
@@ -127,9 +127,9 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    for(bool reduce_memory_usage : reduce_memory_usages)
+                    for(bool use_checkpointing : use_checkpointings)
                     {
-                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
                         // factory->display_info();
 
                         // Create instances and assign to the variables of base classes for the dynamic binding
@@ -147,7 +147,7 @@ int main()
                         std::cout << std::endl << "Chain Model: " << molecules->get_model_name() << std::endl;
                         std::cout << "Platform: " << platform << std::endl;
                         std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
-                        std::cout << "Reduce Memory Usage: " << reduce_memory_usage << std::endl;
+                        std::cout << "Reduce Memory Usage: " << use_checkpointing << std::endl;
 
                         // // display branches
                         // PropagatorComputationOptimizer->display_blocks();
