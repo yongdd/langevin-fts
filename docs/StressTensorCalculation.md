@@ -7,13 +7,10 @@ This document describes the calculation of stress in self-consistent field theor
 ## Table of Contents
 
 1. [Theoretical Foundation](#1-theoretical-foundation)
-2. [Perturbation Theory for Partition Function](#2-perturbation-theory-for-partition-function)
-3. [Stress Definition and Array Convention](#3-stress-definition-and-array-convention)
-4. [Fourier-Space Implementation](#4-fourier-space-implementation)
-5. [Fourier Basis Arrays](#5-fourier-basis-arrays)
-6. [Non-Orthogonal Box Corrections](#6-non-orthogonal-box-corrections)
-7. [Chain Model Dependence](#7-chain-model-dependence)
-8. [Box Optimization Algorithm](#8-box-optimization-algorithm)
+2. [Unit Cell Geometry](#2-unit-cell-geometry)
+3. [Stress Formula](#3-stress-formula)
+4. [Implementation Details](#4-implementation-details)
+5. [Box Optimization Algorithm](#5-box-optimization-algorithm)
 
 ---
 
@@ -39,71 +36,131 @@ However, Tyler and Morse showed that at self-consistency, the functional derivat
 
 ---
 
-## 2. Perturbation Theory for Partition Function
+## 2. Unit Cell Geometry
 
-The partition function derivative is computed via first-order perturbation theory. The chain propagator $q(\mathbf{r}, s)$ satisfies the modified diffusion equation with Hamiltonian operator:
+To handle general unit cells (orthogonal, monoclinic, triclinic, etc.), we use the cell matrix and metric tensor formalism.
 
-$$\hat{H}_\alpha = -\frac{b_\alpha^2}{6} \nabla^2 + \omega_\alpha(\mathbf{r})$$
+### Cell Matrix
 
-where $b_\alpha$ is the statistical segment length for block $\alpha$.
+The unit cell is defined by a matrix $\mathbf{h} = [\mathbf{a}_1, \mathbf{a}_2, \mathbf{a}_3]$, where $\mathbf{a}_i$ are the Bravais lattice vectors (column vectors) with lengths $L_i = |\mathbf{a}_i|$.
 
-### Affine Deformation
+**Coordinate transformation:**
+$$\mathbf{r} = \mathbf{h} \tilde{\mathbf{r}}$$
 
-Under an affine deformation that changes the unit cell parameters while keeping $\omega(\tilde{\mathbf{r}})$ fixed in dimensionless coordinates, the Hamiltonian operator changes as:
+where $\tilde{\mathbf{r}} \in [0,1]^3$ is the fractional (scaled) coordinate vector.
 
-$$\delta \hat{H}_\alpha = -\frac{b_\alpha^2}{6} \delta \nabla^2$$
+**Volume:**
+$$V = \det(\mathbf{h})$$
 
-The potential term $\omega_\alpha(\mathbf{r})$ does not contribute because it is held fixed in the dimensionless representation.
+### Angle Conventions
 
-### Laplacian in Dimensionless Coordinates
+The angles between lattice vectors follow the standard crystallographic convention:
+- $\alpha$: angle between $\mathbf{a}_2$ and $\mathbf{a}_3$
+- $\beta$: angle between $\mathbf{a}_1$ and $\mathbf{a}_3$
+- $\gamma$: angle between $\mathbf{a}_1$ and $\mathbf{a}_2$
 
-The Laplacian in dimensionless coordinates $\tilde{\mathbf{r}}$ (where $\mathbf{r} = \sum_\mu \tilde{r}_\mu \mathbf{a}_\mu$ and $\mathbf{a}_\mu$ are Bravais lattice vectors) is:
+### Metric Tensor
 
-$$\nabla^2 = \sum_{\mu,\nu=1}^{3} \frac{\mathbf{b}_\mu \cdot \mathbf{b}_\nu}{(2\pi)^2} \frac{\partial^2}{\partial \tilde{r}_\mu \partial \tilde{r}_\nu}$$
+The **real-space metric tensor** encodes both lengths and angles:
 
-where $\mathbf{b}_\mu$ are reciprocal lattice vectors satisfying the orthonormality relation $\mathbf{a}_\lambda \cdot \mathbf{b}_\mu = 2\pi \delta_{\lambda\mu}$.
+$$g_{ij} = \mathbf{a}_i \cdot \mathbf{a}_j = (\mathbf{h}^T \mathbf{h})_{ij}$$
 
-### Perturbation of Partition Function
+For a general triclinic cell:
 
-The partition function can be expressed as a product of propagators (Green's functions):
+$$g = \begin{pmatrix} L_1^2 & L_1 L_2 \cos\gamma & L_1 L_3 \cos\beta \\ L_1 L_2 \cos\gamma & L_2^2 & L_2 L_3 \cos\alpha \\ L_1 L_3 \cos\beta & L_2 L_3 \cos\alpha & L_3^2 \end{pmatrix}$$
 
-$$Q = \langle 0 | \hat{G}_B(N_B) \hat{G}_{B-1}(N_{B-1}) \cdots \hat{G}_1(N_1) | 0 \rangle$$
+### Reciprocal Space
 
-where $|0\rangle$ represents the uniform initial condition and $\hat{G}_\alpha(s)$ is the propagator for block $\alpha$.
+The reciprocal lattice vectors are:
 
-The perturbation of $Q$ can be expressed as a sum over all blocks:
+$$\mathbf{k} = 2\pi (\mathbf{h}^{-1})^T \mathbf{m}$$
 
-$$\delta Q = \sum_{\alpha=1}^{B} \langle q^\dagger(s_\alpha) | \delta \hat{G}_\alpha(N_\alpha) | q(s_{\alpha-1}) \rangle$$
+where $\mathbf{m} = (m_1, m_2, m_3)$ are integer Miller indices.
 
-where $|q(s)\rangle$ and $|q^\dagger(s)\rangle$ are the forward and backward partition functions at contour position $s$.
+**Wavevector magnitude squared:**
 
-### Matrix Elements
+We define wavevector components $k_i = 2\pi m_i$ for convenience. The squared magnitude is:
 
-The perturbation of the propagator satisfies:
+$$k^2 = |\mathbf{k}|^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
 
-$$\left[ \frac{\partial}{\partial s} + \hat{H}_\alpha \right] \delta \hat{G}_\alpha = -\delta \hat{H}_\alpha \hat{G}_\alpha$$
+**Laplacian in scaled coordinates:**
 
-which yields:
+$$\nabla^2 = g^{-1}_{ij} \frac{\partial^2}{\partial \tilde{r}_i \partial \tilde{r}_j}$$
 
-$$\delta \hat{G}_\alpha(s) = -\int_0^s ds' \, \hat{G}_\alpha(s-s') \delta \hat{H}_\alpha \hat{G}_\alpha(s')$$
+### Orthogonal vs Non-Orthogonal Systems
 
-For eigenstates $|\psi_i^\alpha\rangle$ of $\hat{H}_\alpha$ with eigenvalues $E_i^\alpha$, the matrix elements are:
-
-$$\langle \psi_i^\alpha | \delta \hat{G}_\alpha(s) | \psi_j^\alpha \rangle = -\langle \psi_i^\alpha | \delta \hat{H}_\alpha | \psi_j^\alpha \rangle \frac{e^{-E_i^\alpha s} - e^{-E_j^\alpha s}}{E_j^\alpha - E_i^\alpha}$$
+| Feature | Orthogonal | Non-Orthogonal |
+|---------|------------|----------------|
+| Geometry | $L_1, L_2, L_3$ | Matrix $\mathbf{h}$ (3 lengths + 3 angles) |
+| Metric tensor | Diagonal: $\text{diag}(L_1^2, L_2^2, L_3^2)$ | Full symmetric matrix $g_{ij}$ |
+| Laplacian | $\partial_1^2 + \partial_2^2 + \partial_3^2$ | $g^{-1}_{ij} \partial_i \partial_j$ |
+| $k^2$ | $k_1^2/L_1^2 + k_2^2/L_2^2 + k_3^2/L_3^2$ | $g^{-1}_{ij} k_i k_j$ |
 
 ---
 
-## 3. Stress Definition and Array Convention
+## 3. Stress Formula
 
-We define stress components corresponding to derivatives with respect to lattice parameters:
+### General Formula in Fourier Space
 
-$$\sigma_i = -\frac{\partial (\beta F/n)}{\partial L_i}$$
+The partition function derivative with respect to any unit cell parameter $\theta$ is computed in Fourier space. We define:
+- $C = \frac{b^2 \Delta s}{6(2\pi)^3 V}$ (normalization constant)
+- $\Phi(k) = \exp(-b^2 k^2 \Delta s/6)$ (bond transition function for discrete chains)
+- $\text{Kern}(\mathbf{k}) = q(\mathbf{k}) q^\dagger(-\mathbf{k}) \Phi(k)$ (kernel function)
 
-where $L_i$ are the lattice lengths ($L_a$, $L_b$, $L_c$), and:
+**Discrete chain model:**
+$$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \, \frac{\partial k^2}{\partial\theta}$$
 
-$$\sigma_{ij} = -\frac{\partial (\beta F/n)}{\partial \gamma_{ij}}$$
+**Continuous chain model:**
+$$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\mathbf{k} \, q(\mathbf{k}, s) \, q^\dagger(\mathbf{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
-where $\gamma_{ij}$ are the lattice angles. Here $\beta F/n$ is the dimensionless free energy per reference chain.
+where $q(\mathbf{k})$ and $q^\dagger(-\mathbf{k})$ are Fourier transforms of the forward and backward propagators.
+
+### Derivatives with Respect to Lengths
+
+For the lattice lengths $L_1, L_2, L_3$:
+
+$$\frac{\partial(Q/V)}{\partial L_1} = -C \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \, \frac{\partial k^2}{\partial L_1}$$
+
+The derivative $\partial k^2 / \partial L_i$ depends on the specific form of the metric tensor.
+
+### Derivatives with Respect to Angles
+
+For the angles, the derivatives of $k^2$ take simple forms:
+
+$$\frac{\partial k^2}{\partial \alpha} = 2 k_2 k_3 (L_2 L_3 \sin\alpha)$$
+
+$$\frac{\partial k^2}{\partial \beta} = 2 k_1 k_3 (L_1 L_3 \sin\beta)$$
+
+$$\frac{\partial k^2}{\partial \gamma} = 2 k_1 k_2 (L_1 L_2 \sin\gamma)$$
+
+These can be rewritten using the Fourier basis cross-term arrays (see Section 4):
+
+$$\frac{\partial(Q/V)}{\partial \alpha} = -C L_2 L_3 \sin\alpha \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_2 k_3$$
+
+$$\frac{\partial(Q/V)}{\partial \beta} = -C L_1 L_3 \sin\beta \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_1 k_3$$
+
+$$\frac{\partial(Q/V)}{\partial \gamma} = -C L_1 L_2 \sin\gamma \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_1 k_2$$
+
+### Stress Parameters
+
+| Parameter $\theta$ | Physical Meaning | Derivative Term |
+|-------------------|------------------|-----------------|
+| $L_1$ | Length of $\mathbf{a}_1$ | $\partial k^2/\partial L_1$ |
+| $L_2$ | Length of $\mathbf{a}_2$ | $\partial k^2/\partial L_2$ |
+| $L_3$ | Length of $\mathbf{a}_3$ | $\partial k^2/\partial L_3$ |
+| $\gamma$ | Angle between $\mathbf{a}_1$ and $\mathbf{a}_2$ | $2 k_1 k_2 (L_1 L_2 \sin\gamma)$ |
+| $\beta$ | Angle between $\mathbf{a}_1$ and $\mathbf{a}_3$ | $2 k_1 k_3 (L_1 L_3 \sin\beta)$ |
+| $\alpha$ | Angle between $\mathbf{a}_2$ and $\mathbf{a}_3$ | $2 k_2 k_3 (L_2 L_3 \sin\alpha)$ |
+
+### Cell Matrix Update Rule
+
+$$\mathbf{h}^{\text{new}} = \mathbf{h}^{\text{old}} - \lambda \frac{\partial F}{\partial \mathbf{h}}$$
+
+To maintain a specific crystal symmetry (e.g., monoclinic), only the relevant components of $\mathbf{h}$ are updated.
+
+---
+
+## 4. Implementation Details
 
 ### Stress Array Convention
 
@@ -111,213 +168,88 @@ The stress is stored as a 6-component array following Voigt notation:
 
 | Index | Component | Drives Optimization of |
 |-------|-----------|------------------------|
-| 0 | $\sigma_a$ | $L_a$ (length a) |
-| 1 | $\sigma_b$ | $L_b$ (length b) |
-| 2 | $\sigma_c$ | $L_c$ (length c) |
-| 3 | $\sigma_{ab}$ | $\gamma$ (angle between a and b) |
-| 4 | $\sigma_{ac}$ | $\beta$ (angle between a and c) |
-| 5 | $\sigma_{bc}$ | $\alpha$ (angle between b and c) |
+| 0 | $\sigma_1$ | $L_1$ (length of $\mathbf{a}_1$) |
+| 1 | $\sigma_2$ | $L_2$ (length of $\mathbf{a}_2$) |
+| 2 | $\sigma_3$ | $L_3$ (length of $\mathbf{a}_3$) |
+| 3 | $\sigma_{12}$ | $\gamma$ (angle between $\mathbf{a}_1$ and $\mathbf{a}_2$) |
+| 4 | $\sigma_{13}$ | $\beta$ (angle between $\mathbf{a}_1$ and $\mathbf{a}_3$) |
+| 5 | $\sigma_{23}$ | $\alpha$ (angle between $\mathbf{a}_2$ and $\mathbf{a}_3$) |
 
-For 2D systems, only indices 0, 1, and 2 (for $\sigma_{ab}$) are used.
-For 1D systems, only index 0 is used.
+For 2D systems, only indices 0, 1, and 3 (for $\sigma_{12}$) are used. For 1D systems, only index 0 is used.
 
----
+### Fourier Basis Arrays
 
-## 4. Fourier-Space Implementation
+The code precomputes arrays that decompose $k^2$ into components. Using the definition $k_i = 2\pi m_i$:
 
-The partition function derivative with respect to box dimensions can be computed efficiently in Fourier space, following the formulation by Beardsley and Matsen [3].
+$$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
 
-### Theoretical Formula (Discrete Chain Model)
+**Diagonal basis arrays:**
 
-For a discrete chain with $N$ beads connected by $N-1$ bonds, the derivative of the single-chain partition function is given in real space as (Eq. 23 of [3]):
+$$\texttt{fourier\_basis\_x} = g^{-1}_{11} k_1^2$$
+$$\texttt{fourier\_basis\_y} = g^{-1}_{22} k_2^2$$
+$$\texttt{fourier\_basis\_z} = g^{-1}_{33} k_3^2$$
 
-$$\frac{\partial Q}{\partial L_\alpha} = -\frac{a^2}{3 V L_\alpha} \sum_{i=1}^{N-1} \int q_i(\mathbf{r}) \frac{\partial^2}{\partial \alpha^2} \frac{q_i^\dagger(\mathbf{r})}{h(\mathbf{r})} \, d\mathbf{r}$$
+**Cross-term basis arrays:**
 
-where $q_i(\mathbf{r})$ is the partial partition function for the first $i$ monomers, $q_i^\dagger(\mathbf{r})$ is the complementary partition function for the last $N+1-i$ monomers, $h(\mathbf{r})$ is the Boltzmann weight for the field energy, $a$ is the statistical segment length, and $V$ is the system volume.
+$$\texttt{fourier\_basis\_xy} = 2 g^{-1}_{12} k_1 k_2$$
+$$\texttt{fourier\_basis\_xz} = 2 g^{-1}_{13} k_1 k_3$$
+$$\texttt{fourier\_basis\_yz} = 2 g^{-1}_{23} k_2 k_3$$
 
-This can be evaluated more efficiently in Fourier space (Eq. 24 of [3]):
+The factor of 2 in cross-terms accounts for the symmetric sum. The cross-term arrays are directly used in the angle stress calculation:
 
-$$\frac{\partial Q}{\partial L_\alpha} = \frac{a^2}{3(2\pi)^3 V L_\alpha} \sum_{i=1}^{N-1} \int q_i(\mathbf{k}) \, k_\alpha^2 \, g(k) \, q_{i+1}^\dagger(-\mathbf{k}) \, d\mathbf{k}$$
+$$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot \texttt{fourier\_basis\_xy}$$
 
-where:
-- $q_i(\mathbf{k})$ is the Fourier transform of the forward propagator at segment $i$
-- $q_{i+1}^\dagger(-\mathbf{k})$ is the Fourier transform of the backward propagator at segment $i+1$
-- $g(k) = \exp\left(-\frac{a^2 k^2}{6}\right)$ is the Fourier transform of the Gaussian bond function
-- $k_\alpha$ is the wavevector component in direction $\alpha$
+### Boundary Condition Types
 
-### Physical Interpretation
+| Boundary Condition | Transform | Wavenumber Factor |
+|-------------------|-----------|-------------------|
+| Periodic | FFT | $(2\pi m/L)^2$ |
+| Reflecting (Neumann) | DCT-II | $(\pi m/L)^2$ |
+| Absorbing (Dirichlet) | DST-II | $(\pi m/L)^2$ |
 
-The sum runs over all $N-1$ **bonds** in the chain. Each bond connects segment $i$ to segment $i+1$, and the stress contribution from that bond involves:
-1. The forward propagator $q_i$ reaching segment $i$
-2. The backward propagator $q_{i+1}^\dagger$ reaching segment $i+1$
-3. The bond function $g(k)$ representing the connectivity between them
-4. The factor $k_\alpha^2$ arising from the spatial derivative of the bond stretching
+**Note:** Non-periodic boundary conditions currently require orthogonal grids.
 
-### Continuous Chain Analog
+### Chain Model Dependence
 
-For continuous chains, the sum over bonds becomes an integral over contour position $s$:
+The bond factor $\Phi(k)$ differs between chain models:
 
-$$\frac{\partial Q}{\partial L_\alpha} = \frac{b^2}{3(2\pi)^3 V L_\alpha} \int_0^1 ds \int q(\mathbf{k}, s) \, k_\alpha^2 \, q^\dagger(\mathbf{k}, s) \, d\mathbf{k}$$
+| Chain Model | Bond Factor $\Phi(k)$ | Reason |
+|-------------|----------------------|--------|
+| Continuous | $1$ | Diffusion propagator already in propagator computation |
+| Discrete | $\exp(-b^2 k^2 \Delta s/6)$ | Explicit bond connectivity |
+| Half-bond | $\exp(-b^2 k^2 \Delta s/12)$ | Chain ends or junctions |
 
-Note that for continuous chains, there is **no explicit bond function** $g(k)$ because the diffusion propagator is already incorporated into the propagator computation through the modified diffusion equation.
-
-### Implementation
-
-The code implements the Fourier-space formula in three steps:
+### Implementation Steps
 
 **Step 1: Per-Bond/Segment Contribution**
 
-For each bond (discrete) or contour position (continuous), compute:
+Compute the kernel product in Fourier space:
+$$\text{Kern}(\mathbf{k}) = q(\mathbf{k}) \cdot q^\dagger(-\mathbf{k}) \cdot \Phi(k)$$
 
-$$S_\alpha(i) = \sum_{\mathbf{k}} b^2 \cdot g(\mathbf{k}) \cdot \text{Re}\left[\hat{q}_i(\mathbf{k}) \cdot \hat{q}_{i+1}^{\dagger *}(\mathbf{k})\right] \cdot k_\alpha^2$$
+**Step 2: Stress Accumulation**
 
-where the Boltzmann bond factor $g(\mathbf{k})$ is:
-- $g(\mathbf{k}) = 1$ for continuous chains
-- $g(\mathbf{k}) = \exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ for discrete chains
+For each stress component, accumulate over all wavevectors:
+$$\sigma_i \propto \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot (\text{corresponding basis array})$$
 
-The term $k_\alpha^2$ is encoded in the "Fourier basis" arrays (see [Section 5](#5-fourier-basis-arrays)).
+**Step 3: Contour Integration** (Simpson's rule)
 
-For **real-valued fields**, the conjugate symmetry $\hat{q}(-\mathbf{k}) = \hat{q}^*(\mathbf{k})$ is exploited. For **complex-valued fields** (CL-FTS), the code maintains a mapping from $\mathbf{k}$ to $-\mathbf{k}$ indices.
-
-**Step 2: Contour Integration**
-
-The per-bond contributions are summed along the chain using **Simpson's rule**:
-
-$$\frac{\partial Q}{\partial L_\alpha} \propto \sum_{i} w_i \, S_\alpha(i)$$
+$$\frac{\partial Q}{\partial \theta} \propto \sum_{\text{segments}} w_i \, S_\theta(i)$$
 
 where $w_i$ are Simpson's rule weights.
 
-**Step 3: Normalization**
-
-The final stress is obtained by applying the normalization factor:
-
-$$\sigma_\alpha = -\frac{1}{3 L_\alpha M^2 / \Delta s} \cdot \left(\text{integrated sum}\right)$$
-
-where $M$ is the total number of grid points and $\Delta s$ is the contour step size. The factor of 3 comes from the $b^2/6$ coefficient in the diffusion equation (or bond function), combined with the factor of 2 from the derivative of $|\mathbf{k}|^2$ with respect to $L_\alpha$.
-
 ---
 
-## 5. Fourier Basis Arrays
-
-The code precomputes "Fourier basis" arrays that encode $\partial |\mathbf{k}|^2 / \partial \theta_i$. The wavevector magnitude squared is:
-
-$$|\mathbf{k}|^2 = (2\pi)^2 G^*_{ij} n_i n_j$$
-
-where $G^*_{ij}$ is the reciprocal metric tensor and $n_i$ are integer Miller indices.
-
-### Diagonal Basis Arrays (for length derivatives)
-
-$$\texttt{fourier\_basis\_x} = (2\pi)^2 G^*_{00} n_0^2$$
-$$\texttt{fourier\_basis\_y} = (2\pi)^2 G^*_{11} n_1^2$$
-$$\texttt{fourier\_basis\_z} = (2\pi)^2 G^*_{22} n_2^2$$
-
-### Cross-term Basis Arrays (for angle derivatives)
-
-$$\texttt{fourier\_basis\_xy} = 2(2\pi)^2 G^*_{01} n_0 n_1$$
-$$\texttt{fourier\_basis\_xz} = 2(2\pi)^2 G^*_{02} n_0 n_2$$
-$$\texttt{fourier\_basis\_yz} = 2(2\pi)^2 G^*_{12} n_1 n_2$$
-
-The factor of 2 in cross-terms accounts for the symmetric sum $G^*_{01} n_0 n_1 + G^*_{10} n_1 n_0 = 2 G^*_{01} n_0 n_1$.
-
-### Weight Factors for Real-to-Complex FFT
-
-For real-valued fields using half-complex storage (storing only $k_z \geq 0$), interior modes ($k_z \neq 0$ and $2k_z \neq N_z$) are multiplied by a weight factor of 2 to account for their conjugate partners.
-
-### Non-Periodic Boundary Conditions
-
-For non-periodic boundary conditions (reflecting or absorbing), the wavenumber factors are:
-
-$$\texttt{xfactor} = \left(\frac{\pi}{L}\right)^2$$
-
-instead of $(2\pi/L)^2$ for periodic boundaries. Cross-terms are zero since non-periodic systems must be orthogonal.
-
----
-
-## 6. Non-Orthogonal Box Corrections
-
-For non-orthogonal crystal systems, the derivative $\partial |\mathbf{k}|^2 / \partial L_a$ involves not only $G^*_{00}$ but also the cross-terms $G^*_{01}$ and $G^*_{02}$ (since these depend on $L_a$). This follows from the chain rule applied to the reciprocal metric tensor elements.
-
-### Derivative of Reciprocal Lattice Vectors
-
-To compute how the reciprocal metric changes with lattice parameters, Tyler and Morse [1] showed that the variation of reciprocal basis vectors is:
-
-$$\delta \mathbf{b}_\mu = -\frac{1}{2\pi} \sum_\nu (\mathbf{b}_\mu \cdot \delta \mathbf{a}_\nu) \mathbf{b}_\nu$$
-
-This leads to:
-
-$$\delta(\mathbf{b}_\mu \cdot \mathbf{b}_\nu) = \delta \mathbf{b}_\mu \cdot \mathbf{b}_\nu + \mathbf{b}_\mu \cdot \delta \mathbf{b}_\nu$$
-
-### 3D Stress Components
-
-For 3D non-orthogonal boxes, the stress components are computed as:
-
-$$\sigma_a \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_x} + \frac{1}{2}\texttt{fourier\_basis\_xy} + \frac{1}{2}\texttt{fourier\_basis\_xz} \right) \cdot (\cdots)$$
-
-$$\sigma_b \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_y} + \frac{1}{2}\texttt{fourier\_basis\_xy} + \frac{1}{2}\texttt{fourier\_basis\_yz} \right) \cdot (\cdots)$$
-
-$$\sigma_c \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_z} + \frac{1}{2}\texttt{fourier\_basis\_xz} + \frac{1}{2}\texttt{fourier\_basis\_yz} \right) \cdot (\cdots)$$
-
-### 2D Stress Components
-
-For 2D non-orthogonal boxes:
-
-$$\sigma_a \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_x} + \frac{1}{2}\texttt{fourier\_basis\_xy} \right) \cdot (\cdots)$$
-
-$$\sigma_b \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_y} + \frac{1}{2}\texttt{fourier\_basis\_xy} \right) \cdot (\cdots)$$
-
-### Correction Factor Explanation
-
-The factor of $\frac{1}{2}$ appears because the cross-term basis arrays already include a factor of 2 (see [Section 5](#5-fourier-basis-arrays)).
-
-### Shear Stress
-
-Shear stress (for angle optimization) uses the cross-term basis directly:
-
-$$\sigma_{ab} \propto \sum_{\mathbf{k}} \texttt{fourier\_basis\_xy} \cdot (\cdots)$$
-
-### Orthogonal Systems
-
-For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), all cross-terms vanish ($G^*_{01} = G^*_{02} = G^*_{12} = 0$), and the corrections are not needed. The stress components simplify to:
-
-$$\sigma_a \propto \sum_{\mathbf{k}} \texttt{fourier\_basis\_x} \cdot (\cdots)$$
-
----
-
-## 7. Chain Model Dependence
-
-The Boltzmann bond factor $B(\mathbf{k})$ differs between chain models:
-
-### Continuous Chain Model
-
-$$B(\mathbf{k}) = 1$$
-
-For continuous chains, the diffusion propagator $\exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ is already incorporated into the propagator computation through the modified diffusion equation. No additional bond factor is needed in the stress calculation.
-
-### Discrete Chain Model
-
-$$B(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$$
-
-For discrete chains, this is the Fourier transform of the Gaussian bond function:
-
-$$g(\mathbf{R}) = \left(\frac{3}{2\pi a^2}\right)^{3/2} \exp\left(-\frac{3|\mathbf{R}|^2}{2a^2}\right)$$
-
-The bond factor must be explicitly included in stress calculations because it represents the connectivity between discrete segments.
-
-### Half-Bond Length
-
-For stress calculations at chain ends or junctions where only half a bond contributes, the code uses:
-
-$$B_{1/2}(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{12}\right)$$
-
----
-
-## 8. Box Optimization Algorithm
+## 5. Box Optimization Algorithm
 
 During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
 
-$$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i$$
+**For lengths:**
+$$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i, \quad i = 1, 2, 3$$
 
-$$\gamma_{ij}^{(n+1)} = \gamma_{ij}^{(n)} - \eta \cdot \sigma_{ij}$$
+**For angles:**
+$$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{23}$$
+$$\beta^{(n+1)} = \beta^{(n)} - \eta \cdot \sigma_{13}$$
+$$\gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{12}$$
 
 where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish:
 
@@ -327,22 +259,27 @@ $$\sigma_i = 0, \quad \sigma_{ij} = 0$$
 
 Tyler and Morse [1] proposed iterating the unit cell parameters simultaneously with the SCFT equations, rather than using nested optimization loops. This approach:
 
-1. Adds the unit cell parameters $\theta_i$ to the unknowns
-2. Adds the zero-stress conditions $\partial \ln Q / \partial \theta_i = 0$ to the residual equations
+1. Adds the unit cell parameters $\theta$ (lengths and angles) to the unknowns
+2. Adds the zero-stress conditions $\partial \ln Q / \partial \theta = 0$ to the residual equations
 3. Updates both fields and unit cell parameters in each iteration
 
-This simultaneous iteration typically converges in approximately the same number of iterations as solving the SCFT equations in a fixed unit cell, making it highly efficient for finding equilibrium structures.
+This simultaneous iteration typically converges in approximately the same number of iterations as solving the SCFT equations in a fixed unit cell.
 
-### Implementation in This Code
-
-The stress is computed after propagator calculation using `compute_stress()` and retrieved via `get_stress()`. The box dimensions are then updated:
+### Code Example
 
 ```python
 # In SCFT iteration loop
 if box_is_altering:
     stress = propagator_solver.get_stress()
+    # Update lengths (indices 0, 1, 2)
     for i in range(dim):
         lx[i] -= scale_stress * stress[i]
+    # Update angles (indices 3, 4, 5 for gamma, beta, alpha)
+    if dim >= 2:
+        angles[0] -= scale_stress * stress[3]  # gamma
+    if dim == 3:
+        angles[1] -= scale_stress * stress[4]  # beta
+        angles[2] -= scale_stress * stress[5]  # alpha
 ```
 
 ---
