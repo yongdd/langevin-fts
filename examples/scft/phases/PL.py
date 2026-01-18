@@ -45,7 +45,7 @@ params = {
     "lx": lx_init,                  # Box size [a, b, c] in units of a_Ref * N_Ref^(1/2)
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: alpha=beta=90, gamma=120 degrees
 
-    "reduce_memory_usage": False,   # Reduce memory usage by storing only check points
+    "use_checkpointing": False,   # Reduce memory usage by storing only check points
     "box_is_altering": True,        # Optimize box size during iteration
     "chain_model": "continuous",    # "discrete" or "continuous" chain model
     "ds": 1/100,                    # Contour step interval = 1/N_Ref

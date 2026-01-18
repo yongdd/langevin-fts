@@ -26,7 +26,7 @@
  * @example
  * @code
  * // Create MKL factory
- * MklFactory<double> factory(false);  // reduce_memory_usage ignored for CPU
+ * MklFactory<double> factory(false);  // use_checkpointing=false for speed
  *
  * // Create simulation objects
  * auto* cb = factory.create_computation_box(nx, lx, bc);
@@ -64,7 +64,7 @@
  * - CpuComputationContinuous/Discrete: Propagator solvers
  * - CpuAndersonMixing: Iteration accelerator
  *
- * @note The reduce_memory_usage flag is accepted for API compatibility
+ * @note The use_checkpointing flag is accepted for API compatibility
  *       but currently has no effect on CPU implementations.
  */
 template <typename T>
@@ -73,9 +73,9 @@ class MklFactory : public AbstractFactory<T>
 public :
     /**
      * @brief Construct an MKL factory.
-     * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
+     * @param use_checkpointing Enable checkpointing mode (reduces memory, increases compute)
      */
-    MklFactory(bool reduce_memory_usage);
+    MklFactory(bool use_checkpointing);
 
     /**
      * @brief Create a CPU computation box.

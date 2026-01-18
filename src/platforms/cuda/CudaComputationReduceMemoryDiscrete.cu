@@ -44,8 +44,8 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
-    bool use_device_checkpoint_memory)
-    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, use_device_checkpoint_memory)
+    bool checkpoint_on_host)
+    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, checkpoint_on_host)
 {
     try
     {
@@ -163,7 +163,7 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
             this->alloc_checkpoint_memory(&this->phi_block[item.first], M);
-            if (this->use_device_checkpoint_memory) {
+            if (!this->checkpoint_on_host) {
                 gpu_error_check(cudaMemset(this->phi_block[item.first], 0, sizeof(T)*M));
             } else {
                 std::memset(this->phi_block[item.first], 0, sizeof(T)*M);
@@ -264,7 +264,7 @@ CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
     delete this->propagator_solver;
     delete this->sc;
 
-    // Free checkpoint memory (device or pinned based on use_device_checkpoint_memory)
+    // Free checkpoint memory (pinned host or device based on checkpoint_on_host)
     for(const auto& item: this->propagator_at_check_point)
         this->free_checkpoint_memory(item.second);
     for(const auto& item: propagator_half_steps_at_check_point)

@@ -68,7 +68,7 @@ int main()
         w_plus  = new double[M];
         w_minus = new double[M];
 
-        bool reduce_memory_usage = false;
+        bool use_checkpointing = false;
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
@@ -85,7 +85,7 @@ int main()
 
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
                     factory->display_info();
 
                     // Create instances

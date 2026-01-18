@@ -83,7 +83,7 @@ int main()
         w_plus  = new T[M];
         w_minus = new T[M];
 
-        bool reduce_memory_usage=false;
+        bool use_checkpointing=false;
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
@@ -95,7 +95,7 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, reduce_memory_usage);
+                    AbstractFactory<T> *factory = PlatformSelector::create_factory_complex(platform, use_checkpointing);
                     factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding

@@ -40,7 +40,7 @@ int main()
         std::map<int, std::string> chain_end_to_q_init = {{0,"G"}};
         const int M = nx[0]*nx[1]*nx[2];
 
-        bool reduce_memory_usage=false;
+        bool use_checkpointing=false;
 
         //-------------- Allocate array ------------
         double w[M];
@@ -58,7 +58,7 @@ int main()
             {
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory_usage);
+                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
                     // factory->display_info();
 
                     // Create instances and assign to the variables of base classes for the dynamic binding

@@ -118,7 +118,7 @@ public:
      * @brief Construct memory-efficient GPU computation.
      *
      * Allocates minimal GPU workspace and checkpoint buffers (in pinned host
-     * or GPU global memory depending on use_device_checkpoint_memory).
+     * or GPU global memory depending on checkpoint_on_host).
      *
      * @param cb          Computation box
      * @param pc          Molecules container
@@ -127,12 +127,12 @@ public:
      * @param numerical_method Numerical algorithm:
      *                         - For pseudospectral: "rqm4" or "etdrk4"
      *                         - For realspace: "cn-adi2" or "cn-adi4-lr"
-     * @param use_device_checkpoint_memory If true, store checkpoints in GPU global memory;
-     *                                     otherwise use pinned host memory (default: false)
+     * @param checkpoint_on_host If true (default), store checkpoints in pinned host memory;
+     *                           if false, use GPU global memory
      */
     CudaComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *pc,
         PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method,
-        std::string numerical_method = "", bool use_device_checkpoint_memory = false);
+        std::string numerical_method = "", bool checkpoint_on_host = true);
 
     /** @brief Destructor. Frees GPU and pinned memory. */
     ~CudaComputationReduceMemoryContinuous();

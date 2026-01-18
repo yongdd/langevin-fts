@@ -98,7 +98,7 @@ python Gyroid.py
 - **Start small**: Use small grid sizes (e.g., 32x32x32) for testing
 - **Box optimization**: Use `box_is_altering: True` to optimize box dimensions
 - **Convergence issues**: Reduce `mix_min` and `mix_init` in optimizer settings
-- **Memory**: Set `reduce_memory_usage: True` for large systems
+- **Memory**: Set `use_checkpointing: True` for large systems
 
 ## References
 

@@ -85,8 +85,8 @@
  *
  * @example
  * @code
- * // Enable via reduce_memory_usage parameter in factory
- * MklFactory<double> factory(true);  // reduce_memory_usage = true
+ * // Enable via use_checkpointing parameter in factory
+ * MklFactory<double> factory(true);  // use_checkpointing = true
  *
  * // Usage is identical to standard version
  * auto* comp = factory.create_discrete_solver(cb, molecules, optimizer);

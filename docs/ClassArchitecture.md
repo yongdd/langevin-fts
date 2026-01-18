@@ -69,10 +69,10 @@ AbstractFactory<T>                    [Abstract Base]
 #include "PlatformSelector.h"
 
 // Create factory for specific platform
-auto factory = PlatformSelector::create_factory("cuda", reduce_memory_usage);
+auto factory = PlatformSelector::create_factory("cuda", use_checkpointing);
 
 // Or use automatic selection (CUDA for 2D/3D, MKL for 1D)
-auto factory = PlatformSelector::create_factory("auto", reduce_memory_usage);
+auto factory = PlatformSelector::create_factory("auto", use_checkpointing);
 ```
 
 ### Factory Methods
@@ -560,7 +560,7 @@ solver = PropagatorSolver(
     chain_model="continuous",
     numerical_method="rqm4",  # or "rk2", "etdrk4", "cn-adi2", "cn-adi4-lr"
     platform="cpu-mkl",
-    reduce_memory_usage=False
+    use_checkpointing=False
 )
 
 # Add polymer

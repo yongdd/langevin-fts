@@ -121,9 +121,9 @@ public:
      * @param molecules           Molecules container
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
-     * @param reduce_memory_usage Memory saving mode (affects workspace allocation)
+     * @param use_checkpointing   Checkpointing mode (affects workspace allocation)
      */
-    CudaSolverPseudoRK2(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory_usage);
+    CudaSolverPseudoRK2(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool use_checkpointing);
 
     /**
      * @brief Destructor. Frees GPU memory and cuFFT plans.

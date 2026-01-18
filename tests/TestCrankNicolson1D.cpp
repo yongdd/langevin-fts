@@ -81,7 +81,7 @@ int main()
         #ifdef USE_CPU_MKL
         repeat += 2;
         solver_name_list.push_back("cpu-mkl, absorbing");
-        solver_name_list.push_back("cpu-mkl, absorbing, reduce_memory_usage");
+        solver_name_list.push_back("cpu-mkl, absorbing, use_checkpointing");
         solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         #endif
@@ -89,35 +89,35 @@ int main()
         #ifdef USE_CUDA
         repeat += 2;
         solver_name_list.push_back("cuda, absorbing");
-        solver_name_list.push_back("cuda, absorbing, reduce_memory_usage");
+        solver_name_list.push_back("cuda, absorbing, use_checkpointing");
         solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II}, {Lx}, bc_abs), molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl, reflecting");
-        solver_name_list.push_back("cpu-mkl, reflecting, reduce_memory_usage");
+        solver_name_list.push_back("cpu-mkl, reflecting, use_checkpointing");
         solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         #endif
         
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, reflecting");
-        solver_name_list.push_back("cuda, reflecting, reduce_memory_usage");
+        solver_name_list.push_back("cuda, reflecting, use_checkpointing");
         solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II}, {Lx}, bc_rfl), molecules, propagator_computation_optimizer, "realspace"));
         #endif
 
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("cpu-mkl, periodic");
-        solver_name_list.push_back("cpu-mkl, periodic, reduce_memory_usage");
+        solver_name_list.push_back("cpu-mkl, periodic, use_checkpointing");
         solver_list.push_back(new CpuComputationContinuous            <double>(new CpuComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CpuComputationReduceMemoryContinuous<double>(new CpuComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         #endif
         
         #ifdef USE_CUDA
         solver_name_list.push_back("cuda, periodic");
-        solver_name_list.push_back("cuda, periodic, reduce_memory_usage");
+        solver_name_list.push_back("cuda, periodic, use_checkpointing");
         solver_list.push_back(new CudaComputationContinuous            <double>(new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         solver_list.push_back(new CudaComputationReduceMemoryContinuous<double>(new CudaComputationBox<double>({II}, {Lx}, bc_prd), molecules, propagator_computation_optimizer, "realspace"));
         #endif

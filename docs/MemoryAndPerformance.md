@@ -6,17 +6,17 @@ For numerical method benchmarks (RQM4 vs CN-ADI2, convergence analysis), see [Nu
 
 ## Overview
 
-The library provides two memory modes controlled by the `reduce_memory_usage` parameter:
+The library provides two memory modes controlled by the `use_checkpointing` parameter:
 
 | Mode | Parameter | Description |
 |------|-----------|-------------|
-| **Standard** | `reduce_memory_usage=False` | Stores all propagators for maximum speed |
-| **Memory-Saving** | `reduce_memory_usage=True` | Stores only checkpoints, recomputes as needed |
+| **Standard** | `use_checkpointing=False` | Stores all propagators for maximum speed |
+| **Memory-Saving** | `use_checkpointing=True` | Stores only checkpoints, recomputes as needed |
 
 ```python
 params = {
     "platform": "cuda",  # or "cpu-mkl"
-    "reduce_memory_usage": True,  # Enable memory-saving mode
+    "use_checkpointing": True,  # Enable memory-saving mode
     # ... other parameters
 }
 ```
@@ -207,13 +207,13 @@ $$\text{Savings} \approx 1 - \frac{O(\sqrt{N})}{O(N)} = 1 - \frac{1}{\sqrt{N}} \
 
 ## Choosing the Right Mode
 
-### Use Standard Mode (`reduce_memory_usage=False`) when:
+### Use Standard Mode (`use_checkpointing=False`) when:
 - Memory is not a constraint
 - Maximum performance is required
 - Running small to medium grids ($\leq 96^3$ for N=500)
 - Short polymer chains (N < 200)
 
-### Use Memory-Saving Mode (`reduce_memory_usage=True`) when:
+### Use Memory-Saving Mode (`use_checkpointing=True`) when:
 - **CUDA**: GPU memory is limited but host RAM is available
 - **CPU**: System RAM is constrained
 - Large grids ($> 96^3$)
@@ -281,7 +281,7 @@ This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing 
 ### Out of GPU Memory
 ```python
 # Enable memory-saving mode
-params["reduce_memory_usage"] = True
+params["use_checkpointing"] = True
 ```
 
 ### Slow Performance with Memory-Saving

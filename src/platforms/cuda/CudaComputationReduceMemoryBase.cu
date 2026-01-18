@@ -20,7 +20,7 @@ CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
-    bool use_device_checkpoint_memory)
+    bool checkpoint_on_host)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer),
       propagator_solver(nullptr),
       sc(nullptr),
@@ -29,7 +29,7 @@ CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
       d_q_mask(nullptr),
       total_max_n_segment(0),
       checkpoint_interval(1),
-      use_device_checkpoint_memory(use_device_checkpoint_memory),
+      checkpoint_on_host(checkpoint_on_host),
       d_phi(nullptr)
 {
     // Initialize workspace pointers
@@ -50,20 +50,20 @@ template <typename T>
 void CudaComputationReduceMemoryBase<T>::alloc_checkpoint_memory(T** ptr, size_t count)
 {
     const size_t bytes = count * sizeof(T);
-    if (use_device_checkpoint_memory) {
-        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(ptr), bytes));
-    } else {
+    if (checkpoint_on_host) {
         gpu_error_check(cudaMallocHost(reinterpret_cast<void**>(ptr), bytes));
+    } else {
+        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(ptr), bytes));
     }
 }
 
 template <typename T>
 void CudaComputationReduceMemoryBase<T>::free_checkpoint_memory(T* ptr)
 {
-    if (use_device_checkpoint_memory) {
-        cudaFree(ptr);
-    } else {
+    if (checkpoint_on_host) {
         cudaFreeHost(ptr);
+    } else {
+        cudaFree(ptr);
     }
 }
 
@@ -135,7 +135,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(std::string mon
             phi[i] = 0.0;
 
         // For each block
-        if (use_device_checkpoint_memory)
+        if (!checkpoint_on_host)
         {
             // phi_block is in device memory, need to copy and accumulate
             std::vector<T> temp_phi(M);
@@ -199,7 +199,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(int p, std::str
             phi[i] = 0.0;
 
         // For each block
-        if (use_device_checkpoint_memory)
+        if (!checkpoint_on_host)
         {
             // phi_block is in device memory, need to copy and accumulate
             std::vector<T> temp_phi(M);
@@ -254,7 +254,7 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration_gce(double fuga
             phi[i] = 0.0;
 
         // For each block
-        if (use_device_checkpoint_memory)
+        if (!checkpoint_on_host)
         {
             // phi_block is in device memory, need to copy and accumulate
             std::vector<T> temp_phi(M);
@@ -322,7 +322,7 @@ void CudaComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
                 key_left.swap(key_right);
 
             T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
-            if (use_device_checkpoint_memory)
+            if (!checkpoint_on_host)
             {
                 gpu_error_check(cudaMemcpy(&phi[b*M], _essential_phi_block, sizeof(T)*M, cudaMemcpyDeviceToHost));
             }

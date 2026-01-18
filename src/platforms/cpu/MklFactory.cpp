@@ -13,9 +13,9 @@
  * - CpuComputationContinuous: Propagator computation (continuous chains)
  * - CpuComputationDiscrete: Propagator computation (discrete chains)
  *
- * **Memory Mode:**
+ * **Checkpointing Mode:**
  *
- * When reduce_memory_usage=true, creates CpuComputationReduceMemory* variants
+ * When use_checkpointing=true, creates CpuComputationReduceMemory* variants
  * that store only checkpoint propagators and recompute intermediate values.
  * This trades computation time for reduced memory footprint.
  *
@@ -45,14 +45,14 @@
 #include "MklFactory.h"
 
 /**
- * @brief Construct MKL factory with optional memory reduction.
+ * @brief Construct MKL factory with optional checkpointing.
  *
- * @param reduce_memory_usage Enable memory-saving mode (checkpointing)
+ * @param use_checkpointing Enable checkpointing mode (reduces memory, increases compute)
  */
 template <typename T>
-MklFactory<T>::MklFactory(bool reduce_memory_usage)
+MklFactory<T>::MklFactory(bool use_checkpointing)
 {
-    this->reduce_memory_usage = reduce_memory_usage;
+    this->use_checkpointing = use_checkpointing;
 }
 // template <typename T>
 // Array* MklFactory<T>::create_array(
@@ -97,7 +97,7 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         // Discrete chain model has its own solver, numerical_method is not used
         if (chain_model == "discrete")
         {
-            if (!this->reduce_memory_usage)
+            if (!this->use_checkpointing)
                 return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
             else
                 return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
@@ -112,7 +112,7 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
-        if (!this->reduce_memory_usage)
+        if (!this->use_checkpointing)
             return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
         else
             return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);

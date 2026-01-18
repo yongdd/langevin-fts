@@ -65,23 +65,23 @@ std::vector<std::string> PlatformSelector::avail_platforms()
  * Instantiates a platform-specific factory for simulations with
  * real-valued fields (standard SCFT/L-FTS with periodic boundaries).
  *
- * @param platform            Platform name ("cpu-mkl" or "cuda")
- * @param reduce_memory_usage Enable memory-saving mode
- * @param use_device_checkpoint_memory Store checkpoints in GPU global memory
+ * @param platform          Platform name ("cpu-mkl" or "cuda")
+ * @param use_checkpointing Enable checkpointing mode (reduces memory, increases compute)
+ * @param checkpoint_on_host Store checkpoints in host memory (true) or GPU memory (false)
  *
  * @return Pointer to platform-specific AbstractFactory<double>
  * @throws Exception if platform not found or not compiled
  */
 AbstractFactory<double>* PlatformSelector::create_factory_real(
-    std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory)
+    std::string platform, bool use_checkpointing, bool checkpoint_on_host)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<double>(reduce_memory_usage);
+        return new MklFactory<double>(use_checkpointing);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<double>(reduce_memory_usage, use_device_checkpoint_memory);
+        return new CudaFactory<double>(use_checkpointing, checkpoint_on_host);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;
@@ -94,23 +94,23 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
  * complex-valued fields (required for non-periodic boundaries or
  * certain field transformations).
  *
- * @param platform            Platform name ("cpu-mkl" or "cuda")
- * @param reduce_memory_usage Enable memory-saving mode
- * @param use_device_checkpoint_memory Store checkpoints in GPU global memory
+ * @param platform          Platform name ("cpu-mkl" or "cuda")
+ * @param use_checkpointing Enable checkpointing mode (reduces memory, increases compute)
+ * @param checkpoint_on_host Store checkpoints in host memory (true) or GPU memory (false)
  *
  * @return Pointer to platform-specific AbstractFactory<std::complex<double>>
  * @throws Exception if platform not found or not compiled
  */
 AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
-    std::string platform, bool reduce_memory_usage, bool use_device_checkpoint_memory)
+    std::string platform, bool use_checkpointing, bool checkpoint_on_host)
 {
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
-        return new MklFactory<std::complex<double>>(reduce_memory_usage);
+        return new MklFactory<std::complex<double>>(use_checkpointing);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")
-        return new CudaFactory<std::complex<double>>(reduce_memory_usage, use_device_checkpoint_memory);
+        return new CudaFactory<std::complex<double>>(use_checkpointing, checkpoint_on_host);
 #endif
     throw_with_line_number("Could not find platform '" + platform + "'");
     return nullptr;

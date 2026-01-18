@@ -189,7 +189,7 @@ int main()
         // Pseudo-spectral method
         #ifdef USE_CPU_MKL
         solver_name_list.push_back("pseudo, cpu-mkl");
-        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cpu-mkl, use_checkpointing");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous            <double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
@@ -198,7 +198,7 @@ int main()
 
         #ifdef USE_CUDA
         solver_name_list.push_back("pseudo, cuda");
-        solver_name_list.push_back("pseudo, cuda, reduce_memory_usage");
+        solver_name_list.push_back("pseudo, cuda, use_checkpointing");
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CudaComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CudaComputationContinuous            <double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));
