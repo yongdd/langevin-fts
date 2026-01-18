@@ -1,5 +1,7 @@
 # User Guide
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 This document provides guidance for using the polymer field theory simulation library.
 
 ## Getting Started

@@ -1,5 +1,7 @@
 # Developer Guide
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 This document provides guidance for developers who want to understand or contribute to the polymer field theory simulation library.
 
 For class hierarchies and design patterns, see [ClassArchitecture.md](ClassArchitecture.md).
