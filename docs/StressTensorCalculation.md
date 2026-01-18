@@ -8,7 +8,7 @@ This document describes the calculation of stress in self-consistent field theor
 
 1. [Theoretical Foundation](#1-theoretical-foundation)
 2. [Unit Cell Geometry](#2-unit-cell-geometry)
-3. [Stress Formula](#3-stress-formula)
+3. [Stress Derivation](#3-stress-derivation)
 4. [Implementation Details](#4-implementation-details)
 5. [Box Optimization Algorithm](#5-box-optimization-algorithm)
 
@@ -16,13 +16,13 @@ This document describes the calculation of stress in self-consistent field theor
 
 ## 1. Theoretical Foundation
 
+### Free Energy and Stress
+
 The stress tensor measures the response of the free energy to changes in lattice parameters. Tyler and Morse [1] showed that for a self-consistent solution of the SCFT equations, the derivative of the free energy with respect to any unit cell parameter $\theta_i$ takes a remarkably simple form:
 
 $$\frac{dF}{d\theta_i} = -k_B T \frac{\partial \ln Q}{\partial \theta_i}$$
 
 where $Q$ is the single-chain partition function and the partial derivative is evaluated under an **affine deformation** of the chemical potential fields (i.e., $\omega(\tilde{\mathbf{r}})$ is held fixed while the unit cell parameters change, where $\tilde{\mathbf{r}}$ is the dimensionless coordinate).
-
-### Why This Result is Non-Trivial
 
 The free energy in SCFT is a functional of the chemical potential fields $\omega$:
 
@@ -33,6 +33,20 @@ When differentiating with respect to a unit cell parameter $\theta_i$, one might
 2. The implicit dependence through changes in the $\omega$ fields
 
 However, Tyler and Morse showed that at self-consistency, the functional derivative $\delta F / \delta \omega = 0$ vanishes, eliminating the second contribution. The stress is thus determined entirely by how the partition function responds to geometric changes in the simulation box.
+
+### Gaussian Chain Propagator
+
+The polymer behavior is governed by the operator:
+
+$$\hat{H} = -\frac{b^2}{6} \nabla^2 + w(\mathbf{r})$$
+
+In Fourier space, the $\nabla^2$ operator simply becomes $-k^2$. The "bond transition" or "propagator" step between monomers involves a factor of:
+
+$$\exp\left(-\frac{b^2 \Delta s}{6} k^2\right)$$
+
+Whenever you change a unit cell parameter $\theta_i$ (length or angle), you are changing the "size" of the grid in reciprocal space, which changes the value of $k^2$. By the chain rule, the derivative of this propagator will always pull down the factor:
+
+$$-\frac{b^2 \Delta s}{6} \frac{\partial k^2}{\partial \theta_i}$$
 
 ---
 
@@ -45,11 +59,13 @@ To handle general unit cells (orthogonal, monoclinic, triclinic, etc.), we use t
 The unit cell is defined by a matrix $\mathbf{h} = [\mathbf{a}_1, \mathbf{a}_2, \mathbf{a}_3]$, where $\mathbf{a}_i$ are the Bravais lattice vectors (column vectors) with lengths $L_i = |\mathbf{a}_i|$.
 
 **Coordinate transformation:**
+
 $$\mathbf{r} = \mathbf{h} \tilde{\mathbf{r}}$$
 
 where $\tilde{\mathbf{r}} \in [0,1]^3$ is the fractional (scaled) coordinate vector.
 
 **Volume:**
+
 $$V = \det(\mathbf{h})$$
 
 ### Angle Conventions
@@ -98,7 +114,33 @@ $$\nabla^2 = g^{-1}_{ij} \frac{\partial^2}{\partial \tilde{r}_i \partial \tilde{
 
 ---
 
-## 3. Stress Formula
+## 3. Stress Derivation
+
+### Orthogonal Case (Proof)
+
+If we take $\theta_i$ to be the box length $L_x$ in a rectangular system, we have:
+
+$$k^2 = k_x^2 + k_y^2 + k_z^2 = \left(\frac{2\pi n_x}{L_x}\right)^2 + k_y^2 + k_z^2$$
+
+Now, let's calculate the derivative $\frac{\partial k^2}{\partial L_x}$:
+
+$$\frac{\partial k^2}{\partial L_x} = \frac{\partial}{\partial L_x}\left(\frac{2\pi n_x}{L_x}\right)^2 = 2\left(\frac{2\pi n_x}{L_x}\right)\left(-\frac{2\pi n_x}{L_x^2}\right) = -\frac{2}{L_x} k_x^2$$
+
+Plugging this into the expression:
+
+$$\left(-\frac{b^2 \Delta s}{6}\right)\left(-\frac{2}{L_x} k_x^2\right) = \frac{b^2 \Delta s}{3 L_x} k_x^2$$
+
+### Non-Orthogonal Case (Metric Tensor Approach)
+
+When the system is non-orthogonal, $k^2$ depends on the inverse metric tensor $g^{-1}_{ij}$. The wavevector magnitude is:
+
+$$k^2 = (2\pi)^2 \sum_{i,j} m_i \, g^{-1}_{ij} \, m_j$$
+
+Whether you are varying a length (which changes the diagonal elements of $g^{-1}_{ij}$) or an angle (which changes the off-diagonal elements), the logic is identical:
+
+1. Calculate how the unit cell change affects the metric $g^{-1}_{ij}$
+2. Calculate $\frac{\partial k^2}{\partial \theta_i}$
+3. Multiply by the Gaussian constant $-\frac{b^2 \Delta s}{6}$
 
 ### General Formula in Fourier Space
 
@@ -108,9 +150,11 @@ The partition function derivative with respect to any unit cell parameter $\thet
 - $\text{Kern}(\mathbf{k}) = q(\mathbf{k}) q^\dagger(-\mathbf{k}) \Phi(k)$ (kernel function)
 
 **Discrete chain model:**
+
 $$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \, \frac{\partial k^2}{\partial\theta}$$
 
 **Continuous chain model:**
+
 $$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\mathbf{k} \, q(\mathbf{k}, s) \, q^\dagger(\mathbf{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
 where $q(\mathbf{k})$ and $q^\dagger(-\mathbf{k})$ are Fourier transforms of the forward and backward propagators.
@@ -141,22 +185,16 @@ $$\frac{\partial(Q/V)}{\partial \beta} = -C L_1 L_3 \sin\beta \sum_{\text{bonds}
 
 $$\frac{\partial(Q/V)}{\partial \gamma} = -C L_1 L_2 \sin\gamma \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_1 k_2$$
 
-### Stress Parameters
+### Summary of Stress Parameters
 
-| Parameter $\theta$ | Physical Meaning | Derivative Term |
-|-------------------|------------------|-----------------|
-| $L_1$ | Length of $\mathbf{a}_1$ | $\partial k^2/\partial L_1$ |
-| $L_2$ | Length of $\mathbf{a}_2$ | $\partial k^2/\partial L_2$ |
-| $L_3$ | Length of $\mathbf{a}_3$ | $\partial k^2/\partial L_3$ |
-| $\gamma$ | Angle between $\mathbf{a}_1$ and $\mathbf{a}_2$ | $2 k_1 k_2 (L_1 L_2 \sin\gamma)$ |
-| $\beta$ | Angle between $\mathbf{a}_1$ and $\mathbf{a}_3$ | $2 k_1 k_3 (L_1 L_3 \sin\beta)$ |
-| $\alpha$ | Angle between $\mathbf{a}_2$ and $\mathbf{a}_3$ | $2 k_2 k_3 (L_2 L_3 \sin\alpha)$ |
-
-### Cell Matrix Update Rule
-
-$$\mathbf{h}^{\text{new}} = \mathbf{h}^{\text{old}} - \lambda \frac{\partial F}{\partial \mathbf{h}}$$
-
-To maintain a specific crystal symmetry (e.g., monoclinic), only the relevant components of $\mathbf{h}$ are updated.
+| Parameter $\theta_i$ | Influence on Metric Tensor $g$ | Derivative Term $\frac{\partial k^2}{\partial \theta_i}$ |
+|---------------------|-------------------------------|--------------------------------------------------------|
+| $L_1$ | Changes $g_{11}, g_{12}, g_{13}$ | $-2(k_1^2 L_1 + k_1 k_2 L_2 \cos\gamma + k_1 k_3 L_3 \cos\beta)$ |
+| $L_2$ | Changes $g_{22}, g_{12}, g_{23}$ | $-2(k_2^2 L_2 + k_1 k_2 L_1 \cos\gamma + k_2 k_3 L_3 \cos\alpha)$ |
+| $L_3$ | Changes $g_{33}, g_{13}, g_{23}$ | $-2(k_3^2 L_3 + k_1 k_3 L_1 \cos\beta + k_2 k_3 L_2 \cos\alpha)$ |
+| $\alpha$ (between $L_2, L_3$) | Changes off-diagonal $g_{23}$ | $2 k_2 k_3 L_2 L_3 \sin\alpha$ |
+| $\beta$ (between $L_1, L_3$) | Changes off-diagonal $g_{13}$ | $2 k_1 k_3 L_1 L_3 \sin\beta$ |
+| $\gamma$ (between $L_1, L_2$) | Changes off-diagonal $g_{12}$ | $2 k_1 k_2 L_1 L_2 \sin\gamma$ |
 
 ---
 
@@ -203,16 +241,6 @@ The factor of 2 in cross-terms accounts for the symmetric sum. The cross-term ar
 
 $$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot \text{fourier-basis-xy}$$
 
-### Boundary Condition Types
-
-| Boundary Condition | Transform | Wavenumber Factor |
-|-------------------|-----------|-------------------|
-| Periodic | FFT | $(2\pi m/L)^2$ |
-| Reflecting (Neumann) | DCT-II | $(\pi m/L)^2$ |
-| Absorbing (Dirichlet) | DST-II | $(\pi m/L)^2$ |
-
-**Note:** Non-periodic boundary conditions currently require orthogonal grids.
-
 ### Chain Model Dependence
 
 The bond factor $\Phi(k)$ differs between chain models:
@@ -223,16 +251,28 @@ The bond factor $\Phi(k)$ differs between chain models:
 | Discrete | $\exp(-b^2 k^2 \Delta s/6)$ | Explicit bond connectivity |
 | Half-bond | $\exp(-b^2 k^2 \Delta s/12)$ | Chain ends or junctions |
 
+### Boundary Condition Types
+
+| Boundary Condition | Transform | Wavenumber Factor |
+|-------------------|-----------|-------------------|
+| Periodic | FFT | $(2\pi m/L)^2$ |
+| Reflecting (Neumann) | DCT-II | $(\pi m/L)^2$ |
+| Absorbing (Dirichlet) | DST-II | $(\pi m/L)^2$ |
+
+**Note:** Non-periodic boundary conditions currently require orthogonal grids.
+
 ### Implementation Steps
 
 **Step 1: Per-Bond/Segment Contribution**
 
 Compute the kernel product in Fourier space:
+
 $$\text{Kern}(\mathbf{k}) = q(\mathbf{k}) \cdot q^\dagger(-\mathbf{k}) \cdot \Phi(k)$$
 
 **Step 2: Stress Accumulation**
 
 For each stress component, accumulate over all wavevectors:
+
 $$\sigma_i \propto \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot (\text{corresponding basis array})$$
 
 **Step 3: Contour Integration** (Simpson's rule)
@@ -248,16 +288,26 @@ where $w_i$ are Simpson's rule weights.
 During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
 
 **For lengths:**
+
 $$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i, \quad i = 1, 2, 3$$
 
 **For angles:**
+
 $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{23}$$
+
 $$\beta^{(n+1)} = \beta^{(n)} - \eta \cdot \sigma_{13}$$
+
 $$\gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{12}$$
 
 where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish:
 
 $$\sigma_i = 0, \quad \sigma_{ij} = 0$$
+
+### Cell Matrix Update Rule
+
+$$\mathbf{h}^{\text{new}} = \mathbf{h}^{\text{old}} - \lambda \frac{\partial F}{\partial \mathbf{h}}$$
+
+To maintain a specific crystal symmetry (e.g., monoclinic), only the relevant components of $\mathbf{h}$ are updated.
 
 ### Simultaneous Iteration
 
