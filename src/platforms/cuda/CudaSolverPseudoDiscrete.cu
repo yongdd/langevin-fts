@@ -71,6 +71,17 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             }
         }
 
+        // Check if all BCs are periodic
+        is_periodic_ = true;
+        for (const auto& bc : bc_vec)
+        {
+            if (bc != BoundaryCondition::PERIODIC)
+            {
+                is_periodic_ = false;
+                break;
+            }
+        }
+
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
@@ -142,11 +153,42 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
             cufftSetStream(plan_bak_two[i], streams[i][0]);
         }
 
+        // Create FFT objects for non-periodic BC (DCT/DST)
+        // Extract one BC per dimension
+        std::vector<BoundaryCondition> bc_per_dim;
+        for (int d = 0; d < dim; ++d)
+            bc_per_dim.push_back(bc_vec[2 * d]);
+
+        for(int i=0; i<n_streams; i++)
+        {
+            if (dim == 3)
+            {
+                std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
+                std::array<BoundaryCondition, 3> bc_arr = {bc_per_dim[0], bc_per_dim[1], bc_per_dim[2]};
+                fft_[i] = new CudaFFT<T, 3>(nx_arr, bc_arr);
+            }
+            else if (dim == 2)
+            {
+                std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
+                std::array<BoundaryCondition, 2> bc_arr = {bc_per_dim[0], bc_per_dim[1]};
+                fft_[i] = new CudaFFT<T, 2>(nx_arr, bc_arr);
+            }
+            else if (dim == 1)
+            {
+                std::array<int, 1> nx_arr = {cb->get_nx(0)};
+                std::array<BoundaryCondition, 1> bc_arr = {bc_per_dim[0]};
+                fft_[i] = new CudaFFT<T, 1>(nx_arr, bc_arr);
+            }
+        }
+
         // Allocate memory for pseudo-spectral: advance_propagator()
         for(int i=0; i<n_streams; i++)
-        {  
+        {
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_one[i], sizeof(cuDoubleComplex)*M_COMPLEX));
             gpu_error_check(cudaMalloc((void**)&d_qk_in_1_two[i], sizeof(cuDoubleComplex)*2*M_COMPLEX));
+            // Real-valued buffers for non-periodic BC stress calculation (DCT/DST)
+            gpu_error_check(cudaMalloc((void**)&d_rk_in_1_one[i], sizeof(double)*M_COMPLEX));
+            gpu_error_check(cudaMalloc((void**)&d_rk_in_2_one[i], sizeof(double)*M_COMPLEX));
         }
 
         for(int i=0; i<n_streams; i++)
@@ -197,6 +239,9 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
     {
         cudaFree(d_qk_in_1_one[i]);
         cudaFree(d_qk_in_1_two[i]);
+        cudaFree(d_rk_in_1_one[i]);
+        cudaFree(d_rk_in_2_one[i]);
+        delete fft_[i];
     }
 
     for(int i=0; i<n_streams; i++)
@@ -391,22 +436,52 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             _d_boltz_bond = pseudo->get_boltz_bond(monomer_type);
         }
 
-        // Execute a forward FFT
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
-        else
-            cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+        const int M = this->cb->get_total_grid();
 
-        // Multiply two propagators in the fourier spaces
-        if constexpr (std::is_same<T, double>::value)
-            ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
+        if (is_periodic_)
+        {
+            // Periodic BC: Execute a forward FFT using cuFFT (batched, two propagators)
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_two[STREAM], d_q_pair, d_qk_in_1_two[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
+
+            // Multiply two propagators in the fourier spaces
+            if constexpr (std::is_same<T, double>::value)
+                ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], &d_qk_in_1_two[STREAM][M_COMPLEX], M_COMPLEX);
+            else
+            {
+                ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_1_one[STREAM], 1.0, M_COMPLEX);
+            }
+            gpu_error_check(cudaPeekAtLastError());
+        }
         else
         {
-            ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], &d_qk_in_1_two[STREAM][M_COMPLEX], _d_negative_k_idx, M_COMPLEX);
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], &d_qk_in_1_two[STREAM][0], d_qk_in_1_one[STREAM], 1.0, M_COMPLEX);
+            // Non-periodic BC: use CudaFFT (DCT/DST)
+            if constexpr (!std::is_same<T, double>::value)
+            {
+                throw_with_line_number("Discrete chain stress computation with non-periodic BC is only supported for real fields (double).");
+            }
+            else
+            {
+                double* d_q1 = d_q_pair;
+                double* d_q2 = &d_q_pair[M];
+                double* rk_1 = d_rk_in_1_one[STREAM];
+                double* rk_2 = d_rk_in_2_one[STREAM];
+
+                // Transform each propagator separately using DCT/DST
+                fft_[STREAM]->forward(d_q1, rk_1);
+                fft_[STREAM]->forward(d_q2, rk_2);
+
+                // Multiply the two transforms element-wise (real coefficients)
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 1.0, M_COMPLEX);
+            }
+            gpu_error_check(cudaPeekAtLastError());
         }
-        gpu_error_check(cudaPeekAtLastError());
+
+        // Multiply by Boltzmann bond factor and bond length squared
         ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_q_multi[STREAM], _d_boltz_bond, bond_length_sq, M_COMPLEX);
         gpu_error_check(cudaPeekAtLastError());
         

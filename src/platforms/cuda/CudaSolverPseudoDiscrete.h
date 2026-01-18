@@ -43,6 +43,7 @@
 #include "Pseudo.h"
 #include "CudaSolver.h"
 #include "CudaCommon.h"
+#include "CudaFFT.h"
 
 /**
  * @class CudaSolverPseudoDiscrete
@@ -67,8 +68,10 @@ private:
     Molecules *molecules;         ///< Molecules container
     Pseudo<T> *pseudo;            ///< Pseudo-spectral utilities
     std::string chain_model;      ///< Chain model ("discrete")
+    bool is_periodic_;            ///< True if all BCs are periodic
 
     int n_streams;                ///< Number of parallel streams
+    FFT<T>* fft_[MAX_STREAMS];    ///< Spectral transform objects (per-stream, for non-periodic BC)
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams
 
@@ -95,6 +98,8 @@ private:
     cuDoubleComplex *d_qk_in_2_one[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_1_two[MAX_STREAMS];
     cuDoubleComplex *d_qk_in_2_two[MAX_STREAMS];
+    double *d_rk_in_1_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST)
+    double *d_rk_in_2_one[MAX_STREAMS];  ///< Real-valued FFT coefficients for non-periodic BC (DCT/DST)
     /// @}
 
     /// @name CUB Reduction Storage
