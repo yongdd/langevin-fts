@@ -1,5 +1,7 @@
 # Non-Monotonic Free Energy Convergence (Resolved)
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 This document describes a historical issue where SCFT free energy convergence became non-monotonic for certain values of the contour discretization parameter Ns. **This issue has been fixed** by using consistent local_ds values in both concentration normalization and Boltzmann factor computation.
 
 ## Historical Problem Description

@@ -1,5 +1,7 @@
 # Real-Space Method Documentation
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 This document describes the real-space finite difference methods for continuous chain propagators, including CN-ADI solvers, boundary condition support, and usage.
 
 For performance benchmarks and comparison with pseudo-spectral methods, see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).

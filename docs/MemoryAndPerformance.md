@@ -1,5 +1,7 @@
 # Memory Usage and Performance Guide
 
+> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+
 This document describes the memory management strategies and performance characteristics of the polymer field theory simulation library for both CUDA (GPU) and CPU-MKL platforms.
 
 For numerical method benchmarks (RQM4 vs CN-ADI2, convergence analysis), see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
