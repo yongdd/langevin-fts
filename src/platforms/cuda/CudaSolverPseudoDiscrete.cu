@@ -596,7 +596,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             // For non-orthogonal 2D boxes, the diagonal stress components need cross-term corrections:
             // stress[0] = coeff * (fourier_basis_x + 0.5 * fourier_basis_xy)
             // stress[1] = coeff * (fourier_basis_y + 0.5 * fourier_basis_xy)
-            // The factor 0.5 is because fourier_basis_xy = 2×(2π)²×G*_01×n₀n₁ already has factor of 2
+            // The factor 0.5 is because fourier_basis_xy = 2×(2π)²×g^{-1}_12×n₁n₂ already has factor of 2
             double cross_xy_to_x = 0.5;
             double cross_xy_to_y = 0.5;
 

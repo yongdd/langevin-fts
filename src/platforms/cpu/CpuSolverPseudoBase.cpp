@@ -180,15 +180,15 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
 
             // Get reciprocal metric tensor for non-orthogonal correction
-            // G*_ij layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+            // g^{-1}_ij layout: [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
             const auto& recip_metric = this->cb->get_recip_metric();
 
             if (DIM == 3)
             {
                 // For non-orthogonal 3D boxes:
                 // stress[i] = ∂H/∂L_i needs contributions from cross-terms
-                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ + G*_02×n₀n₂
-                //          = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
+                // ∂|k|²/∂L_1 ∝ g^{-1}_11×n₁² + g^{-1}_12×n₁n₂ + g^{-1}_13×n₁n₃
+                //            = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
                 // Correction factor is 0.5 for all cross-terms (because fourier_basis_xy already has factor of 2)
                 double cross_xy_to_x = 0.5;
                 double cross_xz_to_x = 0.5;
@@ -219,13 +219,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             else if (DIM == 2)
             {
                 // For non-orthogonal 2D boxes:
-                // stress[0] = ∂H/∂L_0 needs contribution from G*_01 term
-                // stress[1] = ∂H/∂L_1 needs contribution from G*_01 term
-                // ∂|k|²/∂a = (2π)² × (∂G*_00/∂a × n₀² + 2∂G*_01/∂a × n₀n₁)
-                //          = (2π)² × (-2G*_00/a × n₀² - 2G*_01/a × n₀n₁)
-                //          ∝ G*_00×n₀² + G*_01×n₀n₁
-                //          = fourier_basis_x + 0.5×fourier_basis_xy
-                // Similarly for ∂|k|²/∂b: ∝ G*_11×n₁² + G*_01×n₀n₁
+                // stress[0] = ∂H/∂L_1 needs contribution from g^{-1}_12 term
+                // stress[1] = ∂H/∂L_2 needs contribution from g^{-1}_12 term
+                // ∂|k|²/∂L_1 ∝ g^{-1}_11×n₁² + g^{-1}_12×n₁n₂
+                //            = fourier_basis_x + 0.5×fourier_basis_xy
+                // Similarly for ∂|k|²/∂L_2: ∝ g^{-1}_22×n₂² + g^{-1}_12×n₁n₂
                 double cross_xy_to_x = 0.5;  // Factor to convert fourier_basis_xy contribution
                 double cross_xy_to_y = 0.5;
 

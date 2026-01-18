@@ -413,28 +413,28 @@ void update_weighted_fourier_basis_periodic_impl(
     }
 
     // Calculate factors using reciprocal metric tensor
-    // For wavenumber magnitude: |k|² = (2π)² × G*_ij n_i n_j
-    // where G*_ij is the reciprocal metric tensor and n_i are integer Miller indices
-    // Storage layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+    // For wavenumber magnitude: |k|² = (2π)² × g^{-1}_ij n_i n_j
+    // where g^{-1}_ij is the reciprocal metric tensor and n_i are integer Miller indices
+    // Storage layout: [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
     const double FOUR_PI_SQ = 4.0 * PI * PI;
     double xfactor[3] = {0.0, 0.0, 0.0};
 
-    // Diagonal elements: (2π)² × G*_dd
+    // Diagonal elements: (2π)² × g^{-1}_ii
     if (DIM == 3) {
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
-        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × G*_11
-        xfactor[2] = FOUR_PI_SQ * recip_metric_[5];  // (2π)² × G*_22
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
+        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × g^{-1}_22
+        xfactor[2] = FOUR_PI_SQ * recip_metric_[5];  // (2π)² × g^{-1}_33
     } else if (DIM == 2) {
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
-        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × G*_11
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
+        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × g^{-1}_22
     } else { // DIM == 1
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
     }
 
-    // Off-diagonal (cross) factors: 2 × (2π)² × G*_ij
-    double cross_factor_01 = (DIM >= 2) ? 2.0 * FOUR_PI_SQ * recip_metric_[1] : 0.0;  // 2(2π)² × G*_01
-    double cross_factor_02 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[2] : 0.0;  // 2(2π)² × G*_02
-    double cross_factor_12 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[4] : 0.0;  // 2(2π)² × G*_12
+    // Off-diagonal (cross) factors: 2 × (2π)² × g^{-1}_ij
+    double cross_factor_01 = (DIM >= 2) ? 2.0 * FOUR_PI_SQ * recip_metric_[1] : 0.0;  // 2(2π)² × g^{-1}_12
+    double cross_factor_02 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[2] : 0.0;  // 2(2π)² × g^{-1}_13
+    double cross_factor_12 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[4] : 0.0;  // 2(2π)² × g^{-1}_23
 
     for (int i = 0; i < tnx[0]; i++)
     {
