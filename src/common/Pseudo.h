@@ -29,7 +29,7 @@
  *   150, 234901 (2019) for details.
  *
  * For non-orthogonal systems with periodic BC:
- * |k|² = G*_ij h_i h_j where G* is the reciprocal metric tensor.
+ * |k|² = g^{-1}_ij k_i k_j where g^{-1} is the reciprocal metric tensor.
  *
  * @see CpuSolverPseudoRQM4 for continuous chain solver
  * @see CpuSolverPseudoDiscrete for discrete chain solver
@@ -76,11 +76,11 @@ protected:
     /**
      * @brief Reciprocal metric tensor for wavenumber calculation.
      *
-     * G*_ij = e*_i · e*_j where e* are reciprocal basis vectors.
-     * Layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     * g^{-1}_ij = e*_i · e*_j where e* are reciprocal basis vectors.
+     * Layout: [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *
-     * For orthogonal systems: G*_ii = 1/L_i², cross terms = 0.
-     * Used to compute |k|² = G*_ij k_i k_j for non-orthogonal lattices.
+     * For orthogonal systems: g^{-1}_ii = 1/L_i², cross terms = 0.
+     * Used to compute |k|² = g^{-1}_ij k_i k_j for non-orthogonal lattices.
      * Only applicable for periodic boundary conditions.
      */
     std::array<double, 6> recip_metric_;
@@ -206,7 +206,7 @@ public:
      * @param dx          Grid spacings
      * @param ds          Contour step size
      * @param recip_metric Reciprocal metric tensor (only for periodic BC)
-     *                     [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     *                     [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
      */
     Pseudo(

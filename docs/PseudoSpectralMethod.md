@@ -154,11 +154,11 @@ $$G_{ij}^* = \mathbf{e}_i^* \cdot \mathbf{e}_j^*$$
 
 For practical computation, we use the symmetric storage:
 
-$$G^* = \begin{pmatrix} G_{00}^* & G_{01}^* & G_{02}^* \\ G_{01}^* & G_{11}^* & G_{12}^* \\ G_{02}^* & G_{12}^* & G_{22}^* \end{pmatrix}$$
+$$g^{-1} = \begin{pmatrix} g_{11}^* & g_{12}^* & g_{13}^* \\ g_{12}^* & g_{22}^* & g_{23}^* \\ g_{13}^* & g_{23}^* & g_{33}^* \end{pmatrix}$$
 
 The reciprocal metric is related to the inverse of the real-space metric:
 
-$$G^* = (2\pi)^2 G^{-1}$$
+$$g^{-1} = (2\pi)^2 G^{-1}$$
 
 ---
 
@@ -176,7 +176,7 @@ where $n_i$ are integers in the range $[-N_i/2, N_i/2)$.
 
 The squared magnitude of the wavevector is computed using the reciprocal metric tensor:
 
-$$|\mathbf{k}|^2 = G_{ij}^* n_i n_j = G_{00}^* n_1^2 + G_{11}^* n_2^2 + G_{22}^* n_3^2 + 2G_{01}^* n_1 n_2 + 2G_{02}^* n_1 n_3 + 2G_{12}^* n_2 n_3$$
+$$|\mathbf{k}|^2 = G_{ij}^* n_i n_j = g_{11}^* n_1^2 + g_{22}^* n_2^2 + g_{33}^* n_3^2 + 2g_{12}^* n_1 n_2 + 2g_{13}^* n_1 n_3 + 2g_{23}^* n_2 n_3$$
 
 For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), the cross-terms vanish:
 
@@ -209,10 +209,10 @@ where $|\mathbf{k}|^2$ is computed using the reciprocal metric tensor as shown a
 For each wavevector index $(n_1, n_2, n_3)$:
 
 ```
-k_sq = G*_00 * n1^2 + G*_11 * n2^2 + G*_22 * n3^2
-     + 2 * G*_01 * n1 * n2
-     + 2 * G*_02 * n1 * n3
-     + 2 * G*_12 * n2 * n3
+k_sq = g_inv_11 * n1^2 + g_inv_22 * n2^2 + g_inv_33 * n3^2
+     + 2 * g_inv_12 * n1 * n2
+     + 2 * g_inv_13 * n1 * n3
+     + 2 * g_inv_23 * n2 * n3
 
 boltz_bond[idx] = exp(-b^2 * k_sq * ds / 6)
 ```
@@ -438,7 +438,7 @@ Cross-terms in $|\mathbf{k}|^2$ vanish. Off-diagonal stress components are zero 
 
 $$\alpha = \beta = 90°, \quad \gamma = 120°$$
 
-Cross-term $G_{01}^*$ is non-zero.
+Cross-term $g_{12}^*$ is non-zero.
 
 **Constraints:**
 - $L_a = L_b \neq L_c$ (2 independent lengths)
@@ -448,7 +448,7 @@ Cross-term $G_{01}^*$ is non-zero.
 
 $$\alpha = \gamma = 90°, \quad \beta \neq 90°$$
 
-Cross-term $G_{02}^*$ is non-zero.
+Cross-term $g_{13}^*$ is non-zero.
 
 **Constraints:**
 - $L_a$, $L_b$, $L_c$ all independent (3 lengths)
