@@ -2,6 +2,8 @@
 
 > **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
+$\require{boldsymbol}$
+
 This document describes the calculation of stress in self-consistent field theory (SCFT), following the perturbation theory developed by Tyler and Morse [1]. The stress tensor is essential for optimizing the unit cell dimensions to find equilibrium periodic structures.
 
 ## Table of Contents
@@ -45,13 +47,11 @@ To handle general unit cells (orthogonal, monoclinic, triclinic, etc.), we use t
 The unit cell is defined by a matrix $\boldsymbol{h} = [\boldsymbol{a}_1, \boldsymbol{a}_2, \boldsymbol{a}_3]$, where $\boldsymbol{a}_i$ are the Bravais lattice vectors (column vectors) with lengths $L_i = |\boldsymbol{a}_i|$.
 
 **Coordinate transformation:**
-
 $$\boldsymbol{r} = \boldsymbol{h} \tilde{\boldsymbol{r}}$$
 
 where $\tilde{\boldsymbol{r}} \in [0,1]^3$ is the fractional (scaled) coordinate vector.
 
 **Volume:**
-
 $$V = \det(\boldsymbol{h})$$
 
 ### Angle Conventions
@@ -110,11 +110,9 @@ The partition function derivative with respect to any unit cell parameter $\thet
 - $\text{Kern}(\boldsymbol{k}) = q(\boldsymbol{k}) q^\dagger(-\boldsymbol{k}) \Phi(k)$ (kernel function)
 
 **Discrete chain model:**
-
 $$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\boldsymbol{k} \, \text{Kern}(\boldsymbol{k}) \, \frac{\partial k^2}{\partial\theta}$$
 
 **Continuous chain model:**
-
 $$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\boldsymbol{k} \, q(\boldsymbol{k}, s) \, q^\dagger(\boldsymbol{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
 where $q(\boldsymbol{k})$ and $q^\dagger(-\boldsymbol{k})$ are Fourier transforms of the forward and backward propagators.
@@ -187,25 +185,21 @@ The code precomputes arrays that decompose $k^2$ into components. With $k_i = 2\
 
 $$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
 
-**Diagonal basis arrays** — stored values include the $(2\pi)^2$ factor:
+**Diagonal basis arrays** (stored values include the $(2\pi)^2$ factor):
 
-| Array | Formula |
-|-------|---------|
-| `fourier_basis_x` | $(2\pi)^2 g^{-1}_{11} m_1^2 = g^{-1}_{11} k_1^2$ |
-| `fourier_basis_y` | $(2\pi)^2 g^{-1}_{22} m_2^2 = g^{-1}_{22} k_2^2$ |
-| `fourier_basis_z` | $(2\pi)^2 g^{-1}_{33} m_3^2 = g^{-1}_{33} k_3^2$ |
+$$\texttt{fourier\_basis\_x}[m] = (2\pi)^2 \, g^{-1}_{11} \, m_1^2 = g^{-1}_{11} k_1^2$$
+$$\texttt{fourier\_basis\_y}[m] = (2\pi)^2 \, g^{-1}_{22} \, m_2^2 = g^{-1}_{22} k_2^2$$
+$$\texttt{fourier\_basis\_z}[m] = (2\pi)^2 \, g^{-1}_{33} \, m_3^2 = g^{-1}_{33} k_3^2$$
 
 **Cross-term basis arrays:**
 
-| Array | Formula |
-|-------|---------|
-| `fourier_basis_xy` | $2(2\pi)^2 g^{-1}_{12} m_1 m_2 = 2 g^{-1}_{12} k_1 k_2$ |
-| `fourier_basis_xz` | $2(2\pi)^2 g^{-1}_{13} m_1 m_3 = 2 g^{-1}_{13} k_1 k_3$ |
-| `fourier_basis_yz` | $2(2\pi)^2 g^{-1}_{23} m_2 m_3 = 2 g^{-1}_{23} k_2 k_3$ |
+$$\texttt{fourier\_basis\_xy}[m] = 2 (2\pi)^2 \, g^{-1}_{12} \, m_1 m_2 = 2 g^{-1}_{12} k_1 k_2$$
+$$\texttt{fourier\_basis\_xz}[m] = 2 (2\pi)^2 \, g^{-1}_{13} \, m_1 m_3 = 2 g^{-1}_{13} k_1 k_3$$
+$$\texttt{fourier\_basis\_yz}[m] = 2 (2\pi)^2 \, g^{-1}_{23} \, m_2 m_3 = 2 g^{-1}_{23} k_2 k_3$$
 
 The factor of 2 in cross-terms accounts for the symmetric sum. The cross-term arrays are directly used in the angle stress calculation:
 
-$$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\boldsymbol{k}} \text{Kern}(\boldsymbol{k}) \cdot \text{fourier-basis-xy}$$
+$$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\boldsymbol{k}} \text{Kern}(\boldsymbol{k}) \cdot \texttt{fourier\_basis\_xy}$$
 
 ### Boundary Condition Types
 
@@ -232,16 +226,14 @@ The bond factor $\Phi(k)$ differs between chain models:
 **Step 1: Per-Bond/Segment Contribution**
 
 Compute the kernel product in Fourier space:
-
 $$\text{Kern}(\boldsymbol{k}) = q(\boldsymbol{k}) \cdot q^\dagger(-\boldsymbol{k}) \cdot \Phi(k)$$
 
 **Step 2: Stress Accumulation**
 
 For each stress component, accumulate over all wavevectors:
-
 $$\sigma_i \propto \sum_{\boldsymbol{k}} \text{Kern}(\boldsymbol{k}) \cdot (\text{corresponding basis array})$$
 
-**Step 3: Contour Integration** — Simpson's rule
+**Step 3: Contour Integration** (Simpson's rule)
 
 $$\frac{\partial Q}{\partial \theta} \propto \sum_{\text{segments}} w_i \, S_\theta(i)$$
 
@@ -254,11 +246,9 @@ where $w_i$ are Simpson's rule weights.
 During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
 
 **For lengths:**
-
 $$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i, \quad i = 1, 2, 3$$
 
 **For angles:**
-
 $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{23}$$
 $$\beta^{(n+1)} = \beta^{(n)} - \eta \cdot \sigma_{13}$$
 $$\gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{12}$$
