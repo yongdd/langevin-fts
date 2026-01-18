@@ -497,37 +497,61 @@ void CudaSolverPseudoRK2<T>::compute_single_segment_stress(
         const double* _d_fourier_basis_yz = pseudo->get_fourier_basis_yz();
         const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
-        // Execute a forward FFT (batched for 2 fields)
-        // Note: We need 2 input fields for stress computation, reuse d_qk_in_1/2
-        // Copy to workspace for batched FFT
-        gpu_error_check(cudaMemcpyAsync(d_q_step_1[STREAM], d_q_pair, sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-        gpu_error_check(cudaMemcpyAsync(d_q_step_2[STREAM], &d_q_pair[M], sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+        if (is_periodic_)
+        {
+            // Periodic BC: Execute a forward FFT (batched for 2 fields)
+            // Copy to workspace for batched FFT
+            gpu_error_check(cudaMemcpyAsync(d_q_step_1[STREAM], d_q_pair, sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
+            gpu_error_check(cudaMemcpyAsync(d_q_step_2[STREAM], &d_q_pair[M], sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
 
-        // Forward FFT for first field
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], d_q_step_1[STREAM], d_qk_in_1[STREAM]);
-        else
-            cufftExecZ2Z(plan_for_one[STREAM], d_q_step_1[STREAM], d_qk_in_1[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+            // Forward FFT for first field
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_one[STREAM], d_q_step_1[STREAM], d_qk_in_1[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_one[STREAM], d_q_step_1[STREAM], d_qk_in_1[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Forward FFT for second field
-        if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], d_q_step_2[STREAM], d_qk_in_2[STREAM]);
-        else
-            cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2[STREAM], d_qk_in_2[STREAM], CUFFT_FORWARD);
-        gpu_error_check(cudaPeekAtLastError());
+            // Forward FFT for second field
+            if constexpr (std::is_same<T, double>::value)
+                cufftExecD2Z(plan_for_one[STREAM], d_q_step_2[STREAM], d_qk_in_2[STREAM]);
+            else
+                cufftExecZ2Z(plan_for_one[STREAM], d_q_step_2[STREAM], d_qk_in_2[STREAM], CUFFT_FORWARD);
+            gpu_error_check(cudaPeekAtLastError());
 
-        // Multiply two propagators in the fourier spaces
-        if constexpr (std::is_same<T, double>::value)
-            ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_in_2[STREAM], M_COMPLEX);
+            // Multiply two propagators in the fourier spaces
+            if constexpr (std::is_same<T, double>::value)
+                ker_multi_complex_conjugate<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_in_2[STREAM], M_COMPLEX);
+            else
+            {
+                // For complex fields, need to handle conjugation properly
+                cuDoubleComplex* d_qk_conj = reinterpret_cast<cuDoubleComplex*>(d_qk_in_2[STREAM]);
+                ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj, d_qk_in_2[STREAM], _d_negative_k_idx, M_COMPLEX);
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_conj, 1.0, M_COMPLEX);
+            }
+            gpu_error_check(cudaPeekAtLastError());
+        }
         else
         {
-            // For complex fields, need to handle conjugation properly
-            cuDoubleComplex* d_qk_conj = reinterpret_cast<cuDoubleComplex*>(d_qk_in_2[STREAM]);
-            ker_copy_data_with_idx<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_conj, d_qk_in_2[STREAM], _d_negative_k_idx, M_COMPLEX);
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], d_qk_in_1[STREAM], d_qk_conj, 1.0, M_COMPLEX);
+            // Non-periodic BC: use CudaFFT (DCT/DST)
+            if constexpr (!std::is_same<T, double>::value)
+            {
+                throw_with_line_number("RK2 stress computation with non-periodic BC is only supported for real fields (double).");
+            }
+            else
+            {
+                double* d_q1 = d_q_pair;
+                double* d_q2 = &d_q_pair[M];
+                double* rk_1 = reinterpret_cast<double*>(d_qk_in_1[STREAM]);
+                double* rk_2 = reinterpret_cast<double*>(d_qk_in_2[STREAM]);
+
+                fft_[STREAM]->forward(d_q1, rk_1);
+                fft_[STREAM]->forward(d_q2, rk_2);
+
+                // Multiply (real coefficients for non-periodic BC)
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 1.0, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+            }
         }
-        gpu_error_check(cudaPeekAtLastError());
 
         if ( DIM == 3 )
         {

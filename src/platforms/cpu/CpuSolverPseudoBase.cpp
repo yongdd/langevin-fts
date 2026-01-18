@@ -262,28 +262,46 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         else
         {
             // For non-periodic BCs (real coefficients)
+            // Use the same structure as periodic BC for consistency
+            // Cross-terms are currently zero for non-periodic BC (orthogonal grids only)
             if (DIM == 3)
             {
+                double cross_xy_to_x = 0.5;
+                double cross_xz_to_x = 0.5;
+                double cross_xy_to_y = 0.5;
+                double cross_yz_to_y = 0.5;
+                double cross_xz_to_z = 0.5;
+                double cross_yz_to_z = 0.5;
+
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    stress[0] += coeff * _fourier_basis_x[i];   // xx
-                    stress[1] += coeff * _fourier_basis_y[i];   // yy
-                    stress[2] += coeff * _fourier_basis_z[i];   // zz
-                    // Cross-terms are zero for non-periodic (orthogonal only)
+                    // Diagonal components with cross-term corrections for non-orthogonal boxes
+                    stress[0] += coeff * (_fourier_basis_x[i] + cross_xy_to_x * _fourier_basis_xy[i] + cross_xz_to_x * _fourier_basis_xz[i]);
+                    stress[1] += coeff * (_fourier_basis_y[i] + cross_xy_to_y * _fourier_basis_xy[i] + cross_yz_to_y * _fourier_basis_yz[i]);
+                    stress[2] += coeff * (_fourier_basis_z[i] + cross_xz_to_z * _fourier_basis_xz[i] + cross_yz_to_z * _fourier_basis_yz[i]);
+                    // Cross-term components (shear stress)
+                    stress[3] += coeff * _fourier_basis_xy[i];
+                    stress[4] += coeff * _fourier_basis_xz[i];
+                    stress[5] += coeff * _fourier_basis_yz[i];
                 }
             }
             else if (DIM == 2)
             {
+                double cross_xy_to_x = 0.5;
+                double cross_xy_to_y = 0.5;
+
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    stress[0] += coeff * _fourier_basis_x[i];   // lx[0] dimension
-                    stress[1] += coeff * _fourier_basis_y[i];   // lx[1] dimension
+                    // Diagonal components with cross-term correction for non-orthogonal boxes
+                    stress[0] += coeff * (_fourier_basis_x[i] + cross_xy_to_x * _fourier_basis_xy[i]);
+                    stress[1] += coeff * (_fourier_basis_y[i] + cross_xy_to_y * _fourier_basis_xy[i]);
+                    stress[2] += coeff * _fourier_basis_xy[i];  // cross term (shear stress)
                 }
             }
             else if (DIM == 1)
@@ -293,7 +311,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    stress[0] += coeff * _fourier_basis_x[i];   // lx[0] dimension
+                    stress[0] += coeff * _fourier_basis_x[i];
                 }
             }
         }
