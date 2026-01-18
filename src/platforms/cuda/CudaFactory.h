@@ -18,7 +18,7 @@
  *
  * - Best for 2D and 3D simulations with large grids (> 32³)
  * - GPU memory can be a limiting factor for large systems
- * - Use use_checkpointing=true for large grids with limited GPU RAM
+ * - Use reduce_memory=true for large grids with limited GPU RAM
  *
  * **Memory Modes:**
  *
@@ -32,7 +32,7 @@
  *
  * @example
  * @code
- * // Create CUDA factory (use_checkpointing=false for speed)
+ * // Create CUDA factory (reduce_memory=false for speed)
  * CudaFactory<double> factory(false);
  *
  * // Create simulation objects
@@ -71,7 +71,7 @@
  *
  * **Memory Management:**
  *
- * When use_checkpointing=true:
+ * When reduce_memory=true:
  * - Uses CudaComputationReduceMemoryContinuous/Discrete
  * - Uses CudaAndersonMixingReduceMemory
  * - Stores propagator history in pinned host memory
@@ -80,22 +80,15 @@
 template <typename T>
 class CudaFactory : public AbstractFactory<T>
 {
-private:
-    bool checkpoint_on_host;  ///< If true, store checkpoints in pinned host memory; if false, use GPU global memory
-
 public :
     /**
      * @brief Construct a CUDA factory.
      *
-     * @param use_checkpointing If true, use checkpointing mode that stores only
+     * @param reduce_memory If true, use checkpointing mode that stores only
      *                          propagator checkpoints instead of full histories,
      *                          recomputing as needed (reduces memory, increases compute)
-     * @param checkpoint_on_host If true (default) and use_checkpointing is true,
-     *                           store checkpoints in pinned host memory.
-     *                           If false, store in GPU global memory for faster
-     *                           access but higher GPU memory usage.
      */
-    CudaFactory(bool use_checkpointing, bool checkpoint_on_host = true);
+    CudaFactory(bool reduce_memory);
 
     // Array* create_array(
     //     unsigned int size) override;
@@ -166,7 +159,7 @@ public :
      * @brief Create CUDA Anderson mixing optimizer.
      *
      * Creates CudaAndersonMixing or CudaAndersonMixingReduceMemory
-     * based on the use_checkpointing setting.
+     * based on the reduce_memory setting.
      *
      * @param n_var      Number of field variables
      * @param max_hist   Maximum history length

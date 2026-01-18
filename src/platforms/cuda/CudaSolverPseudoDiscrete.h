@@ -114,9 +114,9 @@ public:
      * @param molecules           Molecules container
      * @param n_streams           Number of parallel streams
      * @param streams             Pre-created CUDA streams
-     * @param use_checkpointing   Checkpointing mode
+     * @param reduce_memory   Checkpointing mode
      */
-    CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool use_checkpointing);
+    CudaSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, int n_streams, cudaStream_t streams[MAX_STREAMS][2], bool reduce_memory);
 
     /**
      * @brief Destructor. Frees GPU resources.

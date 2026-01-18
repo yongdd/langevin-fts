@@ -40,7 +40,7 @@ CudaSolverPseudoRK2<T>::CudaSolverPseudoRK2(
     Molecules *molecules,
     int n_streams,
     cudaStream_t streams[MAX_STREAMS][2],
-    [[maybe_unused]] bool use_checkpointing)
+    [[maybe_unused]] bool reduce_memory)
 {
     try{
         this->cb = cb;

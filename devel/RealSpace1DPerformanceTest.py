@@ -30,10 +30,10 @@ boundary_conditions = ["reflecting", "reflecting"]
 # boundary_conditions = ["absorbing", "absorbing"]
 
 aggregate_propagator_computation = False
-use_checkpointing = False
+reduce_memory = False
 
 # Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cpu-mkl", use_checkpointing)
+factory = PlatformSelector.create_factory("cpu-mkl", reduce_memory)
 factory.display_info()
 
 # Create an instance for computation box

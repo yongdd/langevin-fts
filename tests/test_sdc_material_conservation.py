@@ -43,7 +43,7 @@ def test_material_conservation(platform, nx, lx, bc, ds, method="sdc-3", field_s
         chain_model="continuous",
         numerical_method=method,
         platform=platform,
-        use_checkpointing=False
+        reduce_memory=False
     )
 
     # Add AB diblock polymer

@@ -72,7 +72,7 @@ solver = PropagatorSolver(
     chain_model="continuous",
     method="pseudospectral",
     platform="cpu-mkl",
-    use_checkpointing=False
+    reduce_memory=False
 )
 
 # Add polymer

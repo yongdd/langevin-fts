@@ -92,7 +92,7 @@ def get_gyroid_params(nx, ds, chi_n, f, numerical_method):
         "platform": "cuda",
         "nx": list(nx),
         "lx": [lx_base, lx_base, lx_base],
-        "use_checkpointing": False,
+        "reduce_memory": False,
         "box_is_altering": False,  # Fixed box size (stress computation not supported for CN-ADI)
         "chain_model": "continuous",
         "ds": ds,

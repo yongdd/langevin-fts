@@ -51,14 +51,12 @@
 /**
  * @brief Construct CUDA factory with optional checkpointing.
  *
- * @param use_checkpointing Enable checkpointing mode
- * @param checkpoint_on_host Store checkpoints in host memory (true) or GPU memory (false)
+ * @param reduce_memory Enable checkpointing mode
  */
 template <typename T>
-CudaFactory<T>::CudaFactory(bool use_checkpointing, bool checkpoint_on_host)
+CudaFactory<T>::CudaFactory(bool reduce_memory)
 {
-    this->use_checkpointing = use_checkpointing;
-    this->checkpoint_on_host = checkpoint_on_host;
+    this->reduce_memory = reduce_memory;
 }
 
 // Array* CudaFactory<T>::create_array(
@@ -102,10 +100,10 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         // Discrete chain model has its own solver, numerical_method is not used
         if (chain_model == "discrete")
         {
-            if (!this->use_checkpointing)
+            if (!this->reduce_memory)
                 return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
             else
-                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, this->checkpoint_on_host);
+                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
         }
 
         // Continuous chain model: validate and use numerical_method
@@ -117,10 +115,10 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
-        if (!this->use_checkpointing)
+        if (!this->reduce_memory)
             return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
         else
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, this->checkpoint_on_host);
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
     }
     catch(std::exception& exc)
     {
@@ -132,7 +130,7 @@ AndersonMixing<T>* CudaFactory<T>::create_anderson_mixing(
     int n_var, int max_hist, double start_error,
     double mix_min, double mix_init)
 {
-    if(this->use_checkpointing)
+    if(this->reduce_memory)
     {
         return new CudaAndersonMixingReduceMemory<T>(
             n_var, max_hist, start_error, mix_min, mix_init);

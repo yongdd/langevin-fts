@@ -32,7 +32,7 @@
  * from langevinfts import _core
  *
  * # Create platform factory
- * factory = _core.PlatformSelector.create_factory("cuda", use_checkpointing=False)
+ * factory = _core.PlatformSelector.create_factory("cuda", reduce_memory=False)
  *
  * # Create computation objects
  * cb = factory.create_computation_box(nx=[32,32,32], lx=[4.0,4.0,4.0])
@@ -712,8 +712,8 @@ PYBIND11_MODULE(_core, m)
     py::class_<PlatformSelector>(m, "PlatformSelector")
         .def(py::init<>())
         .def("avail_platforms", &PlatformSelector::avail_platforms)
-        .def_static("create_factory", [](std::string platform_name, bool use_checkpointing,
-                                         bool checkpoint_on_host, std::string type)
+        .def_static("create_factory", [](std::string platform_name, bool reduce_memory,
+                                         std::string type)
         {
             // Converting type to lowercase
             std::transform(type.begin(), type.end(), type.begin(),
@@ -721,15 +721,15 @@ PYBIND11_MODULE(_core, m)
 
             if (type == "real")
             {
-                return py::cast(PlatformSelector::create_factory_real(platform_name, use_checkpointing, checkpoint_on_host));
+                return py::cast(PlatformSelector::create_factory_real(platform_name, reduce_memory));
             }
             else if (type == "complex")
             {
-                return py::cast(PlatformSelector::create_factory_complex(platform_name, use_checkpointing, checkpoint_on_host));
+                return py::cast(PlatformSelector::create_factory_complex(platform_name, reduce_memory));
             }
             else {
                 throw std::runtime_error("Invalid type parameter. Must be either 'real' or 'complex'");
             }
-        }, py::arg("platform_name"), py::arg("use_checkpointing") = false,
-           py::arg("checkpoint_on_host") = true, py::arg("type") = "real");
+        }, py::arg("platform_name"), py::arg("reduce_memory") = false,
+           py::arg("type") = "real");
 }

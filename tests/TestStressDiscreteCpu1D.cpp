@@ -79,17 +79,17 @@ int main()
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::string chain_model = "Discrete";
         std::vector<bool> aggregate_propagator_computations = {false, true};
-        std::vector<bool> use_checkpointings = {false, true};
+        std::vector<bool> reduce_memorys = {false, true};
         for(std::string platform : avail_platforms)
         {
             if(platform != "cpu-mkl")
                 continue;
 
-            for(bool use_checkpointing : use_checkpointings)
+            for(bool reduce_memory : reduce_memorys)
             {
             for(bool aggregate_propagator_computation : aggregate_propagator_computations)
             {
-                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
+                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                 factory->display_info();
 
                 // Create instances and assign to the variables of base classes for the dynamic binding
@@ -106,7 +106,7 @@ int main()
                 // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                 // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                 std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
-                std::cout << "Reduce Memory Usage: " << use_checkpointing << std::endl;
+                std::cout << "Reduce Memory Usage: " << reduce_memory << std::endl;
                 std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
                 // Display polymer architecture and propagator info

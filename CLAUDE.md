@@ -209,7 +209,7 @@ CUDA code uses:
 - **Shared memory**: Tridiagonal solvers for real-space methods use shared memory for performance
 - **Pinned memory**: Host-device transfers use pinned circular buffers for efficiency
 
-The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `use_checkpointing=True` (stores only checkpoints, increases execution time 2-4x).
+The CUDA implementations are in `src/platforms/cuda/*.cu`. Memory-saving mode is available via `reduce_memory=True` (stores only checkpoints, increases execution time 2-4x).
 
 **cuFFT Input Corruption Warning**: cuFFT may corrupt the input buffer even for out-of-place transforms, particularly for Z2D (complex-to-real) and D2Z (real-to-complex) operations. This is documented NVIDIA behavior. **Always copy input data to a work buffer before calling cuFFT if the input must be preserved.** This issue was discovered in the ETDRK4 solver where Fourier coefficients were corrupted after IFFT operations. See `CudaSolverPseudoETDRK4.cu` for the correct pattern using `cudaMemcpyAsync` to preserve input data.
 
@@ -267,7 +267,7 @@ Simulations are configured via Python dictionaries with keys:
 
 **GPU architecture errors**: Edit `CMakeLists.txt:102` to remove unsupported compute capabilities from `CUDA_ARCHITECTURES`
 
-**Memory issues**: Set `"use_checkpointing": True` in parameters
+**Memory issues**: Set `"reduce_memory": True` in parameters
 
 **Single CPU core usage**: Set `os.environ["OMP_MAX_ACTIVE_LEVELS"]="0"` before imports
 

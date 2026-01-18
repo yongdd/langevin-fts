@@ -180,14 +180,10 @@ class LFTS:
 
         - platform : {'cuda', 'cpu-mkl'}, optional
             Computational backend (auto-selected if not specified).
-        - use_checkpointing : bool, optional
+        - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
             Reduces memory usage but increases computation time by 2-4x.
-        - checkpoint_on_host : bool, optional
-            If True (default) and use_checkpointing is True, store checkpoints
-            in pinned host memory. If False, store in GPU global memory for
-            faster access but higher GPU memory usage. Only affects CUDA platform.
         - numerical_method : {'rqm4', 'etdrk4', 'cn-adi2', 'cn-adi4-lr'}, optional
             Numerical algorithm for propagator computation (default: 'rqm4'):
 
@@ -376,9 +372,8 @@ class LFTS:
         else:
             platform = avail_platforms[0]
 
-        # Get checkpointing options
-        use_checkpointing = params.get("use_checkpointing", False)
-        checkpoint_on_host = params.get("checkpoint_on_host", True)
+        # Get checkpointing option
+        reduce_memory = params.get("reduce_memory", False)
 
         # Get boundary conditions
         bc = params.get("bc", None)
@@ -444,8 +439,7 @@ class LFTS:
             chain_model=params["chain_model"],
             numerical_method=numerical_method,
             platform=platform,
-            use_checkpointing=use_checkpointing,
-            checkpoint_on_host=checkpoint_on_host,
+            reduce_memory=reduce_memory,
         )
 
         # Set angles if provided

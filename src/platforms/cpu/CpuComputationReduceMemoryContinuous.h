@@ -79,8 +79,8 @@
  *
  * @example
  * @code
- * // Enable via use_checkpointing parameter in factory
- * MklFactory<double> factory(true);  // use_checkpointing = true
+ * // Enable via reduce_memory parameter in factory
+ * MklFactory<double> factory(true);  // reduce_memory = true
  *
  * // Usage is identical to standard version
  * auto* comp = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4");

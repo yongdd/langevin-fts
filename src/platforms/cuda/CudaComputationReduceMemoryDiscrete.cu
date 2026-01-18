@@ -43,9 +43,8 @@ template <typename T>
 CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer,
-    bool checkpoint_on_host)
-    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer, checkpoint_on_host)
+    PropagatorComputationOptimizer *propagator_computation_optimizer)
+    : CudaComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
     {
@@ -163,11 +162,7 @@ CudaComputationReduceMemoryDiscrete<T>::CudaComputationReduceMemoryDiscrete(
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
             this->alloc_checkpoint_memory(&this->phi_block[item.first], M);
-            if (!this->checkpoint_on_host) {
-                gpu_error_check(cudaMemset(this->phi_block[item.first], 0, sizeof(T)*M));
-            } else {
-                std::memset(this->phi_block[item.first], 0, sizeof(T)*M);
-            }
+            std::memset(this->phi_block[item.first], 0, sizeof(T)*M);
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -264,7 +259,7 @@ CudaComputationReduceMemoryDiscrete<T>::~CudaComputationReduceMemoryDiscrete()
     delete this->propagator_solver;
     delete this->sc;
 
-    // Free checkpoint memory (pinned host or device based on checkpoint_on_host)
+    // Free checkpoint memory (pinned host memory)
     for(const auto& item: this->propagator_at_check_point)
         this->free_checkpoint_memory(item.second);
     for(const auto& item: propagator_half_steps_at_check_point)
