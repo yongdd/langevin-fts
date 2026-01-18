@@ -189,19 +189,19 @@ $$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12}
 
 **Diagonal basis arrays** — stored values include the $(2\pi)^2$ factor:
 
-$$\texttt{fourier\_basis\_x}[m] = (2\pi)^2 \, g^{-1}_{11} \, m_1^2 = g^{-1}_{11} k_1^2$$
-$$\texttt{fourier\_basis\_y}[m] = (2\pi)^2 \, g^{-1}_{22} \, m_2^2 = g^{-1}_{22} k_2^2$$
-$$\texttt{fourier\_basis\_z}[m] = (2\pi)^2 \, g^{-1}_{33} \, m_3^2 = g^{-1}_{33} k_3^2$$
+- `fourier_basis_x[m]` $= (2\pi)^2 \, g^{-1}_{11} \, m_1^2 = g^{-1}_{11} k_1^2$
+- `fourier_basis_y[m]` $= (2\pi)^2 \, g^{-1}_{22} \, m_2^2 = g^{-1}_{22} k_2^2$
+- `fourier_basis_z[m]` $= (2\pi)^2 \, g^{-1}_{33} \, m_3^2 = g^{-1}_{33} k_3^2$
 
 **Cross-term basis arrays:**
 
-$$\texttt{fourier\_basis\_xy}[m] = 2 (2\pi)^2 \, g^{-1}_{12} \, m_1 m_2 = 2 g^{-1}_{12} k_1 k_2$$
-$$\texttt{fourier\_basis\_xz}[m] = 2 (2\pi)^2 \, g^{-1}_{13} \, m_1 m_3 = 2 g^{-1}_{13} k_1 k_3$$
-$$\texttt{fourier\_basis\_yz}[m] = 2 (2\pi)^2 \, g^{-1}_{23} \, m_2 m_3 = 2 g^{-1}_{23} k_2 k_3$$
+- `fourier_basis_xy[m]` $= 2 (2\pi)^2 \, g^{-1}_{12} \, m_1 m_2 = 2 g^{-1}_{12} k_1 k_2$
+- `fourier_basis_xz[m]` $= 2 (2\pi)^2 \, g^{-1}_{13} \, m_1 m_3 = 2 g^{-1}_{13} k_1 k_3$
+- `fourier_basis_yz[m]` $= 2 (2\pi)^2 \, g^{-1}_{23} \, m_2 m_3 = 2 g^{-1}_{23} k_2 k_3$
 
 The factor of 2 in cross-terms accounts for the symmetric sum. The cross-term arrays are directly used in the angle stress calculation:
 
-$$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\boldsymbol{k}} \text{Kern}(\boldsymbol{k}) \cdot \texttt{fourier\_basis\_xy}$$
+$$\sigma_{12} \propto L_1 L_2 \sin\gamma \cdot \sum_{\boldsymbol{k}} \text{Kern}(\boldsymbol{k}) \cdot \text{fourier-basis-xy}$$
 
 ### Boundary Condition Types
 
