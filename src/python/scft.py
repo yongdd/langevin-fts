@@ -741,7 +741,9 @@ class SCFT:
 
             # Auto-detect crystal system from angles for 2D non-orthogonal systems
             if "crystal_system" not in params and dim == 2 and "angles" in params:
-                gamma = params["angles"][2]  # gamma is the angle between a and b
+                # For 2D, angles can be [gamma] or [alpha, beta, gamma]
+                angles = params["angles"]
+                gamma = angles[0] if len(angles) == 1 else angles[2]
                 if abs(gamma - 120.0) < 1e-6:
                     # Hexagonal 2D: gamma = 120°, a = b
                     crystal_system = "Hexagonal2D"

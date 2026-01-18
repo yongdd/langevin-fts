@@ -42,7 +42,7 @@ int main()
         double chi_n = 20.0;
         std::vector<int> nx = {33, 29};
         std::vector<double> lx = {3.5, 3.5};  // Roughly square box for cylinders
-        std::vector<double> angles = {90.0, 90.0, 100.0};  // Non-orthogonal gamma (10° deviation)
+        double gamma = 100.0;  // Non-orthogonal gamma (10° deviation from 90°)
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1];
@@ -90,8 +90,8 @@ int main()
                     AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                     factory->display_info();
 
-                    // Create instances
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, angles);
+                    // Create instances (use single gamma for 2D)
+                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, {gamma});
                     Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
@@ -201,7 +201,7 @@ int main()
                         {
                             std::cout << "  Testing dF/dlx..." << std::endl;
                             lx[0] = old_lx_val + dL/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -217,7 +217,7 @@ int main()
                             }
 
                             lx[0] = old_lx_val - dL/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -233,7 +233,7 @@ int main()
                             }
 
                             lx[0] = old_lx_val;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             double dh_dl = (energy_total_1-energy_total_2)/dL;
                             std::cout << "    dH/dlx (numerical): " << dh_dl << ", Stress[0]: " << stress[0] << std::endl;
                             double abs_err = std::abs(dh_dl-stress[0]);
@@ -251,7 +251,7 @@ int main()
                         {
                             std::cout << "  Testing dF/dly..." << std::endl;
                             lx[1] = old_ly_val + dL/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -267,7 +267,7 @@ int main()
                             }
 
                             lx[1] = old_ly_val - dL/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -283,7 +283,7 @@ int main()
                             }
 
                             lx[1] = old_ly_val;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
                             double dh_dl = (energy_total_1-energy_total_2)/dL;
                             std::cout << "    dH/dly (numerical): " << dh_dl << ", Stress[1]: " << stress[1] << std::endl;
                             double abs_err = std::abs(dh_dl-stress[1]);
@@ -298,15 +298,12 @@ int main()
                         }
 
                         // Test dF/dgamma - stress[2] (shear stress)
-                        // For 2D: dF/dγ = V * σ_xy where V = lx * ly * sin(γ)
                         {
                             std::cout << "  Testing dF/dgamma..." << std::endl;
                             double dGamma = 0.001;  // Small angle change in degrees
-                            double old_gamma = angles[2];
-                            double gamma_rad = old_gamma * M_PI / 180.0;
+                            double gamma_rad = gamma * M_PI / 180.0;
 
-                            angles[2] = old_gamma + dGamma/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma + dGamma/2});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -321,8 +318,7 @@ int main()
                                 energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                             }
 
-                            angles[2] = old_gamma - dGamma/2;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma - dGamma/2});
                             solver->update_laplacian_operator();
                             solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
 
@@ -337,17 +333,11 @@ int main()
                                 energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
                             }
 
-                            angles[2] = old_gamma;
-                            cb->set_lattice_parameters(lx, angles);
+                            cb->set_lattice_parameters(lx, {gamma});
 
                             // dF/dγ in radians
                             double dGamma_rad = dGamma * M_PI / 180.0;
                             double dh_dgamma = (energy_total_1-energy_total_2)/dGamma_rad;
-
-                            // The relationship: dF/dγ = V * σ_xy where V = lx * ly * sin(γ)
-                            // stress[2] already includes the proper normalization
-                            double V = lx[0] * lx[1] * sin(gamma_rad);
-                            double analytical_dh_dgamma = V * stress[2];
 
                             // Compute conversion factor: dH/dgamma = -factor × stress[2]
                             double factor_gamma = -dh_dgamma / stress[2];

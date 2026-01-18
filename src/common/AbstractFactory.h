@@ -131,7 +131,10 @@ public :
      * @param nx     Grid points per dimension [Nx, Ny, Nz]
      * @param lx     Box lengths [Lx, Ly, Lz]
      * @param bc     Boundary conditions (e.g., "periodic", "reflecting")
-     * @param angles Lattice angles [alpha, beta, gamma] in degrees
+     * @param angles Lattice angles in degrees. Accepts dimension-appropriate input:
+     *               - Empty: orthogonal system (all angles 90°)
+     *               - 1 element: [gamma] for 2D (alpha=beta=90°)
+     *               - 3 elements: [alpha, beta, gamma] for full specification
      * @param mask   Optional mask for impenetrable regions
      * @return Pointer to created ComputationBox
      */

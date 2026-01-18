@@ -42,7 +42,7 @@ params = {
 
     "nx": [32, 32],                  # Simulation grid numbers
     "lx": [L, L],                    # Box size [a, b] - equal for hexagonal
-    "angles": [90.0, 90.0, 120.0],   # Hexagonal: alpha=beta=90, gamma=120 degrees
+    "angles": [120.0],   # Hexagonal: gamma=120° (alpha=beta=90° implicit for 2D)
 
     "reduce_memory": False,    # Reduce memory usage by storing only check points
     "box_is_altering": True,         # Find box size that minimizes the free energy
