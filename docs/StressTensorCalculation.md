@@ -125,31 +125,41 @@ For 1D systems, only index 0 is used.
 
 ## 4. Fourier-Space Implementation
 
-In the pseudo-spectral method, the stress calculation reduces to a sum over Fourier modes. For each contour segment connecting points with propagators $q_1$ and $q_2$, the contribution to stress is:
+The stress calculation in the pseudo-spectral method proceeds in three steps: (1) computing per-segment contributions in Fourier space, (2) integrating along the chain contour, and (3) applying normalization factors.
 
-$$\sigma_i = \sum_{\mathbf{k}} b^2 \cdot B(\mathbf{k}) \cdot \hat{q}_1(\mathbf{k}) \hat{q}_2(-\mathbf{k}) \cdot \mathcal{B}_i(\mathbf{k})$$
+### Step 1: Per-Segment Stress Contribution
+
+For each contour position $s$ along a polymer block, the code computes a Fourier-space sum using the forward propagator $q(\mathbf{r}, s)$ and backward propagator $q^\dagger(\mathbf{r}, s)$:
+
+$$S_i(s) = \sum_{\mathbf{k}} b^2 \cdot B(\mathbf{k}) \cdot \text{Re}\left[\hat{q}(\mathbf{k}, s) \cdot \hat{q}^{\dagger *}(\mathbf{k}, s)\right] \cdot \mathcal{B}_i(\mathbf{k})$$
 
 where:
-- $\hat{q}_1$, $\hat{q}_2$ are Fourier transforms of forward and backward propagators
+- $\hat{q}$, $\hat{q}^\dagger$ are Fourier transforms of forward and backward propagators
 - $B(\mathbf{k})$ is the Boltzmann bond factor (model-dependent, see [Section 7](#7-chain-model-dependence))
 - $b$ is the statistical segment length
-- $\mathcal{B}_i(\mathbf{k})$ is the "Fourier basis" encoding $\partial |\mathbf{k}|^2 / \partial \theta_i$
+- $\mathcal{B}_i(\mathbf{k})$ is the "Fourier basis" array (see [Section 5](#5-fourier-basis-arrays))
 
-### Connection to Perturbation Theory
+For **real-valued fields**, the conjugate symmetry $\hat{q}(-\mathbf{k}) = \hat{q}^*(\mathbf{k})$ is used. For **complex-valued fields**, the code maintains a mapping from $\mathbf{k}$ to $-\mathbf{k}$ indices.
 
-This formula follows from the perturbation theory by noting that for periodic basis functions (plane waves), the perturbation $\delta \hat{H}_\alpha$ is diagonal. The eigenvalue perturbation of the Laplacian for a plane wave with Miller indices $(n_0, n_1, n_2)$ is:
+### Step 2: Contour Integration
 
-$$\delta \lambda = \delta |\mathbf{G}|^2 = \sum_{\mu\nu} \tilde{G}_\mu \tilde{G}_\nu \delta(\mathbf{b}_\mu \cdot \mathbf{b}_\nu)$$
+The per-segment contributions are integrated along the chain contour using **Simpson's rule**:
 
-where $\mathbf{G} = \sum_\mu \tilde{G}_\mu \mathbf{b}_\mu$ is a reciprocal lattice vector with integer coefficients $\tilde{G}_\mu$.
+$$\frac{\partial Q}{\partial \theta_i} = \int_0^1 S_i(s) \, ds \approx \sum_{n=0}^{N} w_n \, S_i(s_n)$$
 
-### Implementation Notes
+where $w_n$ are Simpson's rule weights and $N$ is the number of contour steps.
 
-For **real-valued fields** (using real-to-complex FFT), the Fourier coefficients satisfy conjugate symmetry $\hat{q}(-\mathbf{k}) = \hat{q}^*(\mathbf{k})$, and the product becomes:
+### Step 3: Normalization
 
-$$\hat{q}_1(\mathbf{k}) \hat{q}_2(-\mathbf{k}) = \hat{q}_1(\mathbf{k}) \hat{q}_2^*(\mathbf{k}) \rightarrow \text{Re}\left[ \hat{q}_1(\mathbf{k}) \hat{q}_2^*(\mathbf{k}) \right]$$
+The final stress is obtained by normalizing the integrated result:
 
-For **complex-valued fields**, the code maintains a mapping from $\mathbf{k}$ to $-\mathbf{k}$ indices to compute the product directly.
+$$\sigma_i = -\frac{1}{3 L_i M^2 / \Delta s} \cdot \frac{\partial Q}{\partial \theta_i}$$
+
+where:
+- $L_i$ is the box dimension in direction $i$
+- $M$ is the total number of grid points
+- $\Delta s$ is the contour step size
+- The factor of 3 comes from the $b^2/6$ coefficient in the diffusion equation (combined with the factor of 2 from the derivative of $|\mathbf{k}|^2$)
 
 ---
 
