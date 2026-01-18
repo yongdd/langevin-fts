@@ -44,7 +44,7 @@ params = {
     "lx": [L, L],                    # Box size [a, b] - equal for hexagonal
     "angles": [90.0, 90.0, 120.0],   # Hexagonal: alpha=beta=90, gamma=120 degrees
 
-    "use_checkpointing": False,    # Reduce memory usage by storing only check points
+    "reduce_memory": False,    # Reduce memory usage by storing only check points
     "box_is_altering": True,         # Find box size that minimizes the free energy
     "chain_model": "continuous",     # "discrete" or "continuous" chain model
     "ds": 1/90,                      # Contour step interval = 1/N_Ref

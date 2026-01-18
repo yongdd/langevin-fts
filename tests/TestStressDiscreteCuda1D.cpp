@@ -73,7 +73,7 @@ int main()
             // w[i] = 0.0;
         }
 
-        bool use_checkpointing=false;
+        bool reduce_memory=false;
         std::vector<double> stress_list{};
 
         // Choose platform
@@ -87,7 +87,7 @@ int main()
 
             for(bool aggregate_propagator_computation : aggregate_propagator_computations)
             {
-                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
+                AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
                 factory->display_info();
 
                 // Create instances and assign to the variables of base classes for the dynamic binding

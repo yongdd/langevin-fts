@@ -81,8 +81,8 @@ class SCFT:
             platform = avail_platforms[0]
 
         # (C++ class) Create a factory for given platform and chain_model
-        if "use_checkpointing" in params and platform == "cuda":
-            factory = _core.PlatformSelector.create_factory(platform, params["use_checkpointing"], "real")
+        if "reduce_memory" in params and platform == "cuda":
+            factory = _core.PlatformSelector.create_factory(platform, params["reduce_memory"], "real")
         else:
             factory = _core.PlatformSelector.create_factory(platform, False, "real")
         factory.display_info()

@@ -147,12 +147,9 @@ class CLFTS:
 
           Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
         - platform : str, optional - "cuda" or "cpu-mkl"
-        - use_checkpointing : bool, optional
+        - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
-        - checkpoint_on_host : bool, optional
-            If True (default) and use_checkpointing is True, store checkpoints
-            in pinned host memory. If False, store in GPU global memory.
     random_seed : int, optional
         Random seed for reproducibility.
 
@@ -209,13 +206,12 @@ class CLFTS:
         else:
             platform = avail_platforms[0]
 
-        # Get checkpointing options
-        use_checkpointing = params.get("use_checkpointing", False)
-        checkpoint_on_host = params.get("checkpoint_on_host", True)
+        # Get checkpointing option
+        reduce_memory = params.get("reduce_memory", False)
 
         # (C++ class) Create a factory for given platform and chain_model
         # Use "complex" type for complex Langevin
-        factory = _core.PlatformSelector.create_factory(platform, use_checkpointing, checkpoint_on_host, "complex")
+        factory = _core.PlatformSelector.create_factory(platform, reduce_memory, "complex")
         factory.display_info()
 
         # (C++ class) Computation box

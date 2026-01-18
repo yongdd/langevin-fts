@@ -76,20 +76,20 @@ const std::vector<double> expected_q_out = {
  * Run DCT-2 propagator tests for a specific platform and memory mode.
  *
  * @param platform Platform name ("cuda" or "cpu-mkl")
- * @param use_checkpointing Enable memory-saving mode
+ * @param reduce_memory Enable memory-saving mode
  * @return 0 on success, -1 on failure
  */
-int run_tests(const std::string& platform, bool use_checkpointing)
+int run_tests(const std::string& platform, bool reduce_memory)
 {
     std::cout << std::fixed << std::setprecision(17);
 
     std::cout << "\n============================================================" << std::endl;
     std::cout << "Platform: " << platform << std::endl;
-    std::cout << "Memory saving mode: " << (use_checkpointing ? "ON" : "OFF") << std::endl;
+    std::cout << "Memory saving mode: " << (reduce_memory ? "ON" : "OFF") << std::endl;
     std::cout << "============================================================" << std::endl;
 
     // Create factory
-    AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
+    AbstractFactory<double>* factory = PlatformSelector::create_factory_real(platform, reduce_memory);
     factory->display_info();
 
     // Staggered grid (half-sample symmetric)
@@ -233,7 +233,7 @@ int run_tests(const std::string& platform, bool use_checkpointing)
     //=======================================================================
     std::cout << "\n------------------------------------------------------------" << std::endl;
     std::cout << "SUMMARY for " << platform;
-    if (use_checkpointing) std::cout << " (memory-saving)";
+    if (reduce_memory) std::cout << " (memory-saving)";
     std::cout << std::endl;
     std::cout << "------------------------------------------------------------" << std::endl;
     std::cout << "  Test (Homopolymer DCT-2): " << (test1_passed ? "PASSED" : "FAILED") << std::endl;

@@ -134,7 +134,7 @@ def test_grafted_brush_realspace():
                 chain_model="continuous",
                 method="realspace",
                 platform="cpu-mkl",
-                use_checkpointing=False
+                reduce_memory=False
             )
 
             # Add polymer with grafting point
@@ -248,7 +248,7 @@ def test_grafted_brush_pseudospectral():
                 chain_model="continuous",
                 method="pseudospectral",
                 platform="cpu-mkl",
-                use_checkpointing=False
+                reduce_memory=False
             )
 
             solver.add_polymer(
@@ -318,7 +318,7 @@ def compare_methods():
             chain_model="continuous",
             method="realspace",
             platform="cpu-mkl",
-            use_checkpointing=False
+            reduce_memory=False
         )
         solver_rs.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})
         solver_rs.compute_propagators({"A": np.zeros(nx)}, q_init={"G": q_init})
@@ -340,7 +340,7 @@ def compare_methods():
             chain_model="continuous",
             method="pseudospectral",
             platform="cpu-mkl",
-            use_checkpointing=False
+            reduce_memory=False
         )
         solver_ps.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})
         solver_ps.compute_propagators({"A": np.zeros(nx)}, q_init={"G": q_init})

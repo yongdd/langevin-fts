@@ -54,7 +54,7 @@ def get_segment_counts(f, Ns):
     return n_A, n_B
 
 
-def run_scft_1d(platform, use_checkpointing, Ns, f=0.375, chi_n=18.0):
+def run_scft_1d(platform, reduce_memory, Ns, f=0.375, chi_n=18.0):
     """Run 1D lamellar SCFT for given Ns value."""
     ds = 1.0 / Ns
 
@@ -62,7 +62,7 @@ def run_scft_1d(platform, use_checkpointing, Ns, f=0.375, chi_n=18.0):
         "platform": platform,
         "nx": [64],
         "lx": [4.0],
-        "use_checkpointing": use_checkpointing,
+        "reduce_memory": reduce_memory,
         "box_is_altering": True,
         "chain_model": "continuous",
         "ds": ds,

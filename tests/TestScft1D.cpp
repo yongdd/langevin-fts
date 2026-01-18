@@ -71,12 +71,12 @@ int main()
             {"B",1.0-f, 1, 2},
         };
 
-        bool use_checkpointing=false;
+        bool reduce_memory=false;
 
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms){
-            AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
+            AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
             factory->display_info();
 
             // Create instances and assign to the variables of base classes for the dynamic binding

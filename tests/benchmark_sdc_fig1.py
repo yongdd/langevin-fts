@@ -52,7 +52,7 @@ def main():
             ]
         }],
         "numerical_method": args.method,
-        "use_checkpointing": False,
+        "reduce_memory": False,
         "box_is_altering": False,
         "optimizer": {
             "name": "am",

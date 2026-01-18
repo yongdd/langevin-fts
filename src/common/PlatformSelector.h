@@ -101,13 +101,9 @@ public:
      * fields (standard SCFT and L-FTS calculations).
      *
      * @param platform          Platform name: "cuda" or "cpu-mkl"
-     * @param use_checkpointing If true, store only propagator checkpoints instead
+     * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *                          Reduces memory usage but increases computation time.
-     * @param checkpoint_on_host If true (default) and use_checkpointing is true,
-     *                           store checkpoints in pinned host memory.
-     *                           If false, store in GPU global memory for faster
-     *                           access but higher GPU memory usage.
      *
      * @return AbstractFactory<double>* pointer to the created factory
      *
@@ -127,7 +123,7 @@ public:
      * @endcode
      */
     static AbstractFactory<double>* create_factory_real(
-        std::string platform, bool use_checkpointing, bool checkpoint_on_host = true);
+        std::string platform, bool reduce_memory);
 
     /**
      * @brief Create an AbstractFactory for complex-valued fields.
@@ -136,11 +132,8 @@ public:
      * fields (certain advanced applications with complex order parameters).
      *
      * @param platform          Platform name: "cuda" or "cpu-mkl"
-     * @param use_checkpointing If true, store only propagator checkpoints instead
+     * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
-     * @param checkpoint_on_host If true (default) and use_checkpointing is true,
-     *                           store checkpoints in pinned host memory.
-     *                           If false, store in GPU global memory.
      *
      * @return AbstractFactory<std::complex<double>>* pointer to the created factory
      *
@@ -150,7 +143,7 @@ public:
      *       use real-valued fields via create_factory_real().
      */
     static AbstractFactory<std::complex<double>>* create_factory_complex(
-        std::string platform, bool use_checkpointing, bool checkpoint_on_host = true);
+        std::string platform, bool reduce_memory);
 };
 
 #endif

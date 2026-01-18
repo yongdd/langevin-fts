@@ -27,7 +27,7 @@ int main()
         std::vector<int> nx = {31,49,23};
         std::vector<double> lx = {4.0,3.0,2.0};
 
-        bool use_checkpointing = false;
+        bool reduce_memory = false;
         std::string chain_model = "continuous";
 
         const int M = nx[0]*nx[1]*nx[2];
@@ -58,7 +58,7 @@ int main()
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         for(std::string platform : avail_platforms)
         {
-            AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, use_checkpointing);
+            AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
             factory->display_info();
 
             // Create instances and assign to the variables of base classes for the dynamic binding

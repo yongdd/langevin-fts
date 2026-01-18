@@ -15,7 +15,7 @@
  *
  * **Checkpointing Mode:**
  *
- * When use_checkpointing=true, creates CpuComputationReduceMemory* variants
+ * When reduce_memory=true, creates CpuComputationReduceMemory* variants
  * that store only checkpoint propagators and recompute intermediate values.
  * This trades computation time for reduced memory footprint.
  *
@@ -47,12 +47,12 @@
 /**
  * @brief Construct MKL factory with optional checkpointing.
  *
- * @param use_checkpointing Enable checkpointing mode (reduces memory, increases compute)
+ * @param reduce_memory Enable checkpointing mode (reduces memory, increases compute)
  */
 template <typename T>
-MklFactory<T>::MklFactory(bool use_checkpointing)
+MklFactory<T>::MklFactory(bool reduce_memory)
 {
-    this->use_checkpointing = use_checkpointing;
+    this->reduce_memory = reduce_memory;
 }
 // template <typename T>
 // Array* MklFactory<T>::create_array(
@@ -97,7 +97,7 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         // Discrete chain model has its own solver, numerical_method is not used
         if (chain_model == "discrete")
         {
-            if (!this->use_checkpointing)
+            if (!this->reduce_memory)
                 return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
             else
                 return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
@@ -112,7 +112,7 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         else
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
-        if (!this->use_checkpointing)
+        if (!this->reduce_memory)
             return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
         else
             return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);

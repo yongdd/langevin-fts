@@ -19,8 +19,7 @@ template <typename T>
 CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer,
-    bool checkpoint_on_host)
+    PropagatorComputationOptimizer *propagator_computation_optimizer)
     : PropagatorComputation<T>(cb, molecules, propagator_computation_optimizer),
       propagator_solver(nullptr),
       sc(nullptr),
@@ -29,7 +28,6 @@ CudaComputationReduceMemoryBase<T>::CudaComputationReduceMemoryBase(
       d_q_mask(nullptr),
       total_max_n_segment(0),
       checkpoint_interval(1),
-      checkpoint_on_host(checkpoint_on_host),
       d_phi(nullptr)
 {
     // Initialize workspace pointers
@@ -50,21 +48,13 @@ template <typename T>
 void CudaComputationReduceMemoryBase<T>::alloc_checkpoint_memory(T** ptr, size_t count)
 {
     const size_t bytes = count * sizeof(T);
-    if (checkpoint_on_host) {
-        gpu_error_check(cudaMallocHost(reinterpret_cast<void**>(ptr), bytes));
-    } else {
-        gpu_error_check(cudaMalloc(reinterpret_cast<void**>(ptr), bytes));
-    }
+    gpu_error_check(cudaMallocHost(reinterpret_cast<void**>(ptr), bytes));
 }
 
 template <typename T>
 void CudaComputationReduceMemoryBase<T>::free_checkpoint_memory(T* ptr)
 {
-    if (checkpoint_on_host) {
-        cudaFreeHost(ptr);
-    } else {
-        cudaFree(ptr);
-    }
+    cudaFreeHost(ptr);
 }
 
 template <typename T>
@@ -134,35 +124,15 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(std::string mon
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // For each block
-        if (!checkpoint_on_host)
+        // For each block (phi_block is in pinned host memory)
+        for(const auto& block: phi_block)
         {
-            // phi_block is in device memory, need to copy and accumulate
-            std::vector<T> temp_phi(M);
-            for(const auto& block: phi_block)
+            std::string key_left = std::get<1>(block.first);
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    gpu_error_check(cudaMemcpy(temp_phi.data(), block.second, sizeof(T)*M, cudaMemcpyDeviceToHost));
-                    for(int i=0; i<M; i++)
-                        phi[i] += temp_phi[i];
-                }
-            }
-        }
-        else
-        {
-            // phi_block is in host memory, direct access
-            for(const auto& block: phi_block)
-            {
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    for(int i=0; i<M; i++)
-                        phi[i] += block.second[i];
-                }
+                for(int i=0; i<M; i++)
+                    phi[i] += block.second[i];
             }
         }
 
@@ -198,37 +168,16 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration(int p, std::str
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // For each block
-        if (!checkpoint_on_host)
+        // For each block (phi_block is in pinned host memory)
+        for(const auto& block: phi_block)
         {
-            // phi_block is in device memory, need to copy and accumulate
-            std::vector<T> temp_phi(M);
-            for(const auto& block: phi_block)
+            int polymer_idx = std::get<0>(block.first);
+            std::string key_left = std::get<1>(block.first);
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                int polymer_idx = std::get<0>(block.first);
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    gpu_error_check(cudaMemcpy(temp_phi.data(), block.second, sizeof(T)*M, cudaMemcpyDeviceToHost));
-                    for(int i=0; i<M; i++)
-                        phi[i] += temp_phi[i];
-                }
-            }
-        }
-        else
-        {
-            // phi_block is in host memory, direct access
-            for(const auto& block: phi_block)
-            {
-                int polymer_idx = std::get<0>(block.first);
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    for(int i=0; i<M; i++)
-                        phi[i] += block.second[i];
-                }
+                for(int i=0; i<M; i++)
+                    phi[i] += block.second[i];
             }
         }
     }
@@ -253,41 +202,18 @@ void CudaComputationReduceMemoryBase<T>::get_total_concentration_gce(double fuga
         for(int i=0; i<M; i++)
             phi[i] = 0.0;
 
-        // For each block
-        if (!checkpoint_on_host)
+        // For each block (phi_block is in pinned host memory)
+        for(const auto& block: phi_block)
         {
-            // phi_block is in device memory, need to copy and accumulate
-            std::vector<T> temp_phi(M);
-            for(const auto& block: phi_block)
+            int polymer_idx = std::get<0>(block.first);
+            std::string key_left = std::get<1>(block.first);
+            int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
+            if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
             {
-                int polymer_idx = std::get<0>(block.first);
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    Polymer& pc = this->molecules->get_polymer(p);
-                    T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
-                    gpu_error_check(cudaMemcpy(temp_phi.data(), block.second, sizeof(T)*M, cudaMemcpyDeviceToHost));
-                    for(int i=0; i<M; i++)
-                        phi[i] += temp_phi[i]*norm;
-                }
-            }
-        }
-        else
-        {
-            // phi_block is in host memory, direct access
-            for(const auto& block: phi_block)
-            {
-                int polymer_idx = std::get<0>(block.first);
-                std::string key_left = std::get<1>(block.first);
-                int n_segment_right = this->propagator_computation_optimizer->get_computation_block(block.first).n_segment_right;
-                if (polymer_idx == p && PropagatorCode::get_monomer_type_from_key(key_left) == monomer_type && n_segment_right != 0)
-                {
-                    Polymer& pc = this->molecules->get_polymer(p);
-                    T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
-                    for(int i=0; i<M; i++)
-                        phi[i] += block.second[i]*norm;
-                }
+                Polymer& pc = this->molecules->get_polymer(p);
+                T norm = fugacity/pc.get_volume_fraction()*pc.get_alpha()*this->single_polymer_partitions[p];
+                for(int i=0; i<M; i++)
+                    phi[i] += block.second[i]*norm;
             }
         }
     }
@@ -322,15 +248,9 @@ void CudaComputationReduceMemoryBase<T>::get_block_concentration(int p, T *phi)
                 key_left.swap(key_right);
 
             T* _essential_phi_block = phi_block[std::make_tuple(p, key_left, key_right)];
-            if (!checkpoint_on_host)
-            {
-                gpu_error_check(cudaMemcpy(&phi[b*M], _essential_phi_block, sizeof(T)*M, cudaMemcpyDeviceToHost));
-            }
-            else
-            {
-                for(int i=0; i<M; i++)
-                    phi[i+b*M] = _essential_phi_block[i];
-            }
+            // phi_block is in pinned host memory
+            for(int i=0; i<M; i++)
+                phi[i+b*M] = _essential_phi_block[i];
         }
     }
     catch(std::exception& exc)

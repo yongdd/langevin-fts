@@ -85,7 +85,7 @@ def main():
         chain_model="continuous",
         method="realspace",
         platform="cpu-mkl",
-        use_checkpointing=False
+        reduce_memory=False
     )
 
     # Add polymer

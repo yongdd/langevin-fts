@@ -84,7 +84,7 @@
  *
  * **Memory Usage:**
  *
- * The use_checkpointing flag enables checkpointing mode where only
+ * The reduce_memory flag enables checkpointing mode where only
  * propagator checkpoints are stored. This increases computation time
  * 2-4x but significantly reduces memory usage.
  *
@@ -94,7 +94,7 @@ template <typename T>
 class AbstractFactory
 {
 protected:
-    bool use_checkpointing;    ///< Enable checkpointing mode (reduces memory, increases compute)
+    bool reduce_memory;    ///< Enable checkpointing mode (reduces memory, increases compute)
 
 public :
     /**

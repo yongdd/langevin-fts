@@ -94,14 +94,10 @@ class PropagatorSolver:
         Note: Discrete chain model has its own solver; this parameter is ignored.
     platform : str
         Computational platform: "cpu-mkl" or "cuda".
-    use_checkpointing : bool
+    reduce_memory : bool
         If True, store only propagator checkpoints instead of full histories,
         recomputing propagators as needed. Reduces memory usage but increases
         computation time by 2-4x.
-    checkpoint_on_host : bool
-        If True and use_checkpointing is True, store checkpoints in pinned
-        host memory (default). If False, store in GPU global memory for faster
-        access but higher GPU memory usage. Only affects CUDA platform.
     mask : numpy.ndarray, optional
         Mask array defining accessible (1) and impenetrable (0) regions.
         After each propagation step, the propagator is multiplied by the mask.
@@ -173,8 +169,7 @@ class PropagatorSolver:
         chain_model: str,
         numerical_method: Optional[str] = None,
         platform: str = "auto",
-        use_checkpointing: bool = False,
-        checkpoint_on_host: bool = True,
+        reduce_memory: bool = False,
         mask: Optional[NDArray[np.floating]] = None
     ) -> None:
         """Initialize the propagator solver."""
@@ -251,9 +246,8 @@ class PropagatorSolver:
             self.method = "realspace"
             self.numerical_method = "cn-adi2"
 
-        # Store checkpointing options
-        self.use_checkpointing = use_checkpointing
-        self.checkpoint_on_host = checkpoint_on_host
+        # Store checkpointing option
+        self.reduce_memory = reduce_memory
 
         # Store and validate mask
         if mask is not None:
@@ -267,7 +261,7 @@ class PropagatorSolver:
 
         # Create factory
         self._factory = _core.PlatformSelector.create_factory(
-            self.platform, self.use_checkpointing, self.checkpoint_on_host
+            self.platform, self.reduce_memory
         )
 
         # Create molecules
