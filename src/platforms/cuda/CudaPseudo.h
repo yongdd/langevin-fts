@@ -108,7 +108,7 @@ public:
      * @param nx           Grid dimensions
      * @param dx           Grid spacing [dx, dy, dz]
      * @param ds           Contour step size
-     * @param recip_metric Reciprocal metric tensor [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+     * @param recip_metric Reciprocal metric tensor [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
      */
     CudaPseudo(

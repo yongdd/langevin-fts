@@ -175,7 +175,7 @@ The stress is stored as a 6-component array following Voigt notation:
 | 4 | $\sigma_{13}$ | $\beta$ (angle between $\mathbf{a}_1$ and $\mathbf{a}_3$) |
 | 5 | $\sigma_{23}$ | $\alpha$ (angle between $\mathbf{a}_2$ and $\mathbf{a}_3$) |
 
-For 2D systems, only indices 0, 1, and 3 (for $\sigma_{12}$) are used. For 1D systems, only index 0 is used.
+For 2D systems, the layout is [σ₁, σ₂, σ₁₂, 0, 0, 0], so indices 0, 1, and 2 are used. For 1D systems, only index 0 is used.
 
 ### Fourier Basis Arrays
 

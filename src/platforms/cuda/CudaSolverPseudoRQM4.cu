@@ -634,7 +634,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         }
 
         // Get reciprocal metric tensor for non-orthogonal correction
-        // G*_ij layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+        // g^{-1}_ij layout: [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
         const auto& recip_metric = this->cb->get_recip_metric();
         bool is_orthogonal = this->cb->is_orthogonal();
 
@@ -673,8 +673,8 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             else
             {
                 // Non-orthogonal box: use combined kernel with cross-term corrections (real type only)
-                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ + G*_02×n₀n₂
-                //          = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
+                // ∂|k|²/∂L_1 ∝ g^{-1}_11×n₁² + g^{-1}_12×n₁n₂ + g^{-1}_13×n₁n₃
+                //            = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
                 // Correction factor is 0.5 for all cross-terms (because fourier_basis_xy already has factor of 2)
                 double cross_xy_to_x = 0.5;
                 double cross_xz_to_x = 0.5;
@@ -780,7 +780,7 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
             else
             {
                 // Non-orthogonal box: use combined kernel with cross-term corrections (real type only)
-                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ = fourier_basis_x + 0.5×fourier_basis_xy
+                // ∂|k|²/∂L_1 ∝ g^{-1}_11×n₁² + g^{-1}_12×n₁n₂ = fourier_basis_x + 0.5×fourier_basis_xy
                 double cross_xy_to_x = 0.5;
                 double cross_xy_to_y = 0.5;
 
