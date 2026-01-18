@@ -243,6 +243,9 @@ __global__ void ker_multi(double* dst, const double* src1, const double* src2, d
 __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const double* src2, double a, const int M);
 __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double a, const int M);
 __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, cuDoubleComplex a, const int M);
+// Combined stress kernels for non-orthogonal boxes
+__global__ void ker_multi_stress_combined(double* dst, const double* src, const double* basis1, const double* basis2, double factor, double a, const int M);
+__global__ void ker_multi_stress_combined_3d(double* dst, const double* src, const double* basis1, const double* cross1, const double* cross2, double factor1, double factor2, double a, const int M);
 
 __global__ void ker_mutiple_multi(int n_comp, double* dst, const double* src1, const double* src2, double  a, const int M);
 __global__ void ker_mutiple_multi(int n_comp, cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, double  a, const int M);

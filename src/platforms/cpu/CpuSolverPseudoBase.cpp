@@ -179,8 +179,24 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             std::complex<double>* qk_2_complex = reinterpret_cast<std::complex<double>*>(qk_2.data());
             const int* _negative_k_idx = pseudo->get_negative_frequency_mapping();
 
+            // Get reciprocal metric tensor for non-orthogonal correction
+            // G*_ij layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+            const auto& recip_metric = this->cb->get_recip_metric();
+
             if (DIM == 3)
             {
+                // For non-orthogonal 3D boxes:
+                // stress[i] = ∂H/∂L_i needs contributions from cross-terms
+                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ + G*_02×n₀n₂
+                //          = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
+                // Correction factor is 0.5 for all cross-terms (because fourier_basis_xy already has factor of 2)
+                double cross_xy_to_x = 0.5;
+                double cross_xz_to_x = 0.5;
+                double cross_xy_to_y = 0.5;
+                double cross_yz_to_y = 0.5;
+                double cross_xz_to_z = 0.5;
+                double cross_yz_to_z = 0.5;
+
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     T coeff;
@@ -190,11 +206,11 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    // Diagonal components
-                    stress[0] += coeff * _fourier_basis_x[i];   // xx
-                    stress[1] += coeff * _fourier_basis_y[i];   // yy
-                    stress[2] += coeff * _fourier_basis_z[i];   // zz
-                    // Cross-term components
+                    // Diagonal components with cross-term corrections for non-orthogonal boxes
+                    stress[0] += coeff * (_fourier_basis_x[i] + cross_xy_to_x * _fourier_basis_xy[i] + cross_xz_to_x * _fourier_basis_xz[i]);
+                    stress[1] += coeff * (_fourier_basis_y[i] + cross_xy_to_y * _fourier_basis_xy[i] + cross_yz_to_y * _fourier_basis_yz[i]);
+                    stress[2] += coeff * (_fourier_basis_z[i] + cross_xz_to_z * _fourier_basis_xz[i] + cross_yz_to_z * _fourier_basis_yz[i]);
+                    // Cross-term components (shear stress)
                     stress[3] += coeff * _fourier_basis_xy[i];  // xy
                     stress[4] += coeff * _fourier_basis_xz[i];  // xz
                     stress[5] += coeff * _fourier_basis_yz[i];  // yz
@@ -202,6 +218,17 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             }
             else if (DIM == 2)
             {
+                // For non-orthogonal 2D boxes:
+                // stress[0] = ∂H/∂L_0 needs contribution from G*_01 term
+                // stress[1] = ∂H/∂L_1 needs contribution from G*_01 term
+                // ∂|k|²/∂a = (2π)² × (∂G*_00/∂a × n₀² + 2∂G*_01/∂a × n₀n₁)
+                //          = (2π)² × (-2G*_00/a × n₀² - 2G*_01/a × n₀n₁)
+                //          ∝ G*_00×n₀² + G*_01×n₀n₁
+                //          = fourier_basis_x + 0.5×fourier_basis_xy
+                // Similarly for ∂|k|²/∂b: ∝ G*_11×n₁² + G*_01×n₀n₁
+                double cross_xy_to_x = 0.5;  // Factor to convert fourier_basis_xy contribution
+                double cross_xy_to_y = 0.5;
+
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     T coeff;
@@ -211,9 +238,10 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    stress[0] += coeff * _fourier_basis_x[i];   // lx[0] dimension
-                    stress[1] += coeff * _fourier_basis_y[i];   // lx[1] dimension
-                    stress[2] += coeff * _fourier_basis_xy[i];  // cross term
+                    // Diagonal components with cross-term correction for non-orthogonal boxes
+                    stress[0] += coeff * (_fourier_basis_x[i] + cross_xy_to_x * _fourier_basis_xy[i]);
+                    stress[1] += coeff * (_fourier_basis_y[i] + cross_xy_to_y * _fourier_basis_xy[i]);
+                    stress[2] += coeff * _fourier_basis_xy[i];  // cross term (shear stress)
                 }
             }
             else if (DIM == 1)

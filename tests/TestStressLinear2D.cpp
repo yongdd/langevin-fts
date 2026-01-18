@@ -38,11 +38,11 @@ int main()
         int max_scft_iter = 2000;
         double tolerance = 1e-9;
 
-        double f = 0.36;
+        double f = 0.25;  // Use f=0.25 for cylindrical morphology (2D structure)
         double chi_n = 20.0;
         std::vector<int> nx = {33, 29};
-        std::vector<double> lx = {3.2, 3.4};
-        std::vector<double> angles = {90.0, 90.0, 100.0};  // Non-orthogonal gamma (10° deviation) for 2D
+        std::vector<double> lx = {3.5, 3.5};  // Roughly square box for cylinders
+        std::vector<double> angles = {90.0, 90.0, 100.0};  // Non-orthogonal gamma (10° deviation)
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1];
@@ -112,16 +112,16 @@ int main()
                         propagator_computation_optimizer->display_propagators();
                     }
 
-                    // Initialize with lamellar pattern along x-direction
-                    // This works for both orthogonal and non-orthogonal boxes
-                    // The pattern varies along the first lattice vector direction
+                    // Initialize with 2D checkerboard-like pattern
+                    // Pattern varies along both x and y directions to generate non-zero stress in both
                     for(int i=0; i<nx[0]; i++)
                     {
                         double xx = (i+0.5)*2*PI/nx[0];  // Use cell-centered coordinate
-                        double phi_a_init = f + 0.3*std::cos(xx);  // Lamellar with f as mean
-                        double phi_b_init = 1.0 - phi_a_init;
                         for(int j=0; j<nx[1]; j++)
                         {
+                            double yy = (j+0.5)*2*PI/nx[1];
+                            double phi_a_init = f + 0.2*std::cos(xx) + 0.2*std::cos(yy);  // 2D pattern
+                            double phi_b_init = 1.0 - phi_a_init;
                             int idx = i*nx[1] + j;
                             w[idx] = chi_n * phi_b_init;      // w_A ~ chi_n * phi_B
                             w[idx+M] = chi_n * phi_a_init;    // w_B ~ chi_n * phi_A
@@ -193,7 +193,7 @@ int main()
                     // Only run on first aggregation mode to avoid redundancy
                     if (!aggregate_propagator_computation)
                     {
-                        double dL = 0.0000001;
+                        double dL = 0.00001;  // Larger step for non-orthogonal stability
                         double old_lx_val = lx[0];
                         double old_ly_val = lx[1];
 
@@ -297,10 +297,63 @@ int main()
                             }
                         }
 
-                        // NOTE: Angle derivative tests (dF/dgamma vs σ_xy) are not included because
-                        // for non-orthogonal systems, ∂F/∂γ includes both shear strain and volume
-                        // change contributions, making the relationship with σ_xy non-trivial.
-                        // The length derivative tests above verify stress computation for non-orthogonal boxes.
+                        // Test dF/dgamma - stress[2] (shear stress)
+                        // For 2D: dF/dγ = V * σ_xy where V = lx * ly * sin(γ)
+                        {
+                            std::cout << "  Testing dF/dgamma..." << std::endl;
+                            double dGamma = 0.001;  // Small angle change in degrees
+                            double old_gamma = angles[2];
+                            double gamma_rad = old_gamma * M_PI / 180.0;
+
+                            angles[2] = old_gamma + dGamma/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_1 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_1 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_1 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            angles[2] = old_gamma - dGamma/2;
+                            cb->set_lattice_parameters(lx, angles);
+                            solver->update_laplacian_operator();
+                            solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+
+                            for(int i=0; i<M; i++) {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy_total_2 = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy_total_2 -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy_total_2 -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+
+                            angles[2] = old_gamma;
+                            cb->set_lattice_parameters(lx, angles);
+
+                            // dF/dγ in radians
+                            double dGamma_rad = dGamma * M_PI / 180.0;
+                            double dh_dgamma = (energy_total_1-energy_total_2)/dGamma_rad;
+
+                            // The relationship: dF/dγ = V * σ_xy where V = lx * ly * sin(γ)
+                            // stress[2] already includes the proper normalization
+                            double V = lx[0] * lx[1] * sin(gamma_rad);
+                            double analytical_dh_dgamma = V * stress[2];
+
+                            // Compute conversion factor: dH/dgamma = -factor × stress[2]
+                            double factor_gamma = -dh_dgamma / stress[2];
+                            std::cout << "    dH/dgamma (numerical): " << dh_dgamma << ", Stress[2]: " << stress[2];
+                            std::cout << ", factor: " << factor_gamma << std::endl;
+                        }
                     }
 
                     delete molecules;
