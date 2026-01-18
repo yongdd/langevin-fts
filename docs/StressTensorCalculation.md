@@ -125,41 +125,75 @@ For 1D systems, only index 0 is used.
 
 ## 4. Fourier-Space Implementation
 
-The stress calculation in the pseudo-spectral method proceeds in three steps: (1) computing per-segment contributions in Fourier space, (2) integrating along the chain contour, and (3) applying normalization factors.
+The partition function derivative with respect to box dimensions can be computed efficiently in Fourier space, following the formulation by Beardsley and Matsen [3].
 
-### Step 1: Per-Segment Stress Contribution
+### Theoretical Formula (Discrete Chain Model)
 
-For each contour position $s$ along a polymer block, the code computes a Fourier-space sum using the forward propagator $q(\mathbf{r}, s)$ and backward propagator $q^\dagger(\mathbf{r}, s)$:
+For a discrete chain with $N$ beads connected by $N-1$ bonds, the derivative of the single-chain partition function is given in real space as (Eq. 23 of [3]):
 
-$$S_i(s) = \sum_{\mathbf{k}} b^2 \cdot B(\mathbf{k}) \cdot \text{Re}\left[\hat{q}(\mathbf{k}, s) \cdot \hat{q}^{\dagger *}(\mathbf{k}, s)\right] \cdot \mathcal{B}_i(\mathbf{k})$$
+$$\frac{\partial Q}{\partial L_\alpha} = -\frac{a^2}{3 V L_\alpha} \sum_{i=1}^{N-1} \int q_i(\mathbf{r}) \frac{\partial^2}{\partial \alpha^2} \frac{q_i^\dagger(\mathbf{r})}{h(\mathbf{r})} \, d\mathbf{r}$$
 
-where:
-- $\hat{q}$, $\hat{q}^\dagger$ are Fourier transforms of forward and backward propagators
-- $B(\mathbf{k})$ is the Boltzmann bond factor (model-dependent, see [Section 7](#7-chain-model-dependence))
-- $b$ is the statistical segment length
-- $\mathcal{B}_i(\mathbf{k})$ is the "Fourier basis" array (see [Section 5](#5-fourier-basis-arrays))
+where $q_i(\mathbf{r})$ is the partial partition function for the first $i$ monomers, $q_i^\dagger(\mathbf{r})$ is the complementary partition function for the last $N+1-i$ monomers, $h(\mathbf{r})$ is the Boltzmann weight for the field energy, $a$ is the statistical segment length, and $V$ is the system volume.
 
-For **real-valued fields**, the conjugate symmetry $\hat{q}(-\mathbf{k}) = \hat{q}^*(\mathbf{k})$ is used. For **complex-valued fields**, the code maintains a mapping from $\mathbf{k}$ to $-\mathbf{k}$ indices.
+This can be evaluated more efficiently in Fourier space (Eq. 24 of [3]):
 
-### Step 2: Contour Integration
-
-The per-segment contributions are integrated along the chain contour using **Simpson's rule**:
-
-$$\frac{\partial Q}{\partial \theta_i} = \int_0^1 S_i(s) \, ds \approx \sum_{n=0}^{N} w_n \, S_i(s_n)$$
-
-where $w_n$ are Simpson's rule weights and $N$ is the number of contour steps.
-
-### Step 3: Normalization
-
-The final stress is obtained by normalizing the integrated result:
-
-$$\sigma_i = -\frac{1}{3 L_i M^2 / \Delta s} \cdot \frac{\partial Q}{\partial \theta_i}$$
+$$\frac{\partial Q}{\partial L_\alpha} = \frac{a^2}{3(2\pi)^3 V L_\alpha} \sum_{i=1}^{N-1} \int q_i(\mathbf{k}) \, k_\alpha^2 \, g(k) \, q_{i+1}^\dagger(-\mathbf{k}) \, d\mathbf{k}$$
 
 where:
-- $L_i$ is the box dimension in direction $i$
-- $M$ is the total number of grid points
-- $\Delta s$ is the contour step size
-- The factor of 3 comes from the $b^2/6$ coefficient in the diffusion equation (combined with the factor of 2 from the derivative of $|\mathbf{k}|^2$)
+- $q_i(\mathbf{k})$ is the Fourier transform of the forward propagator at segment $i$
+- $q_{i+1}^\dagger(-\mathbf{k})$ is the Fourier transform of the backward propagator at segment $i+1$
+- $g(k) = \exp\left(-\frac{a^2 k^2}{6}\right)$ is the Fourier transform of the Gaussian bond function
+- $k_\alpha$ is the wavevector component in direction $\alpha$
+
+### Physical Interpretation
+
+The sum runs over all $N-1$ **bonds** in the chain. Each bond connects segment $i$ to segment $i+1$, and the stress contribution from that bond involves:
+1. The forward propagator $q_i$ reaching segment $i$
+2. The backward propagator $q_{i+1}^\dagger$ reaching segment $i+1$
+3. The bond function $g(k)$ representing the connectivity between them
+4. The factor $k_\alpha^2$ arising from the spatial derivative of the bond stretching
+
+### Continuous Chain Analog
+
+For continuous chains, the sum over bonds becomes an integral over contour position $s$:
+
+$$\frac{\partial Q}{\partial L_\alpha} = \frac{b^2}{3(2\pi)^3 V L_\alpha} \int_0^1 ds \int q(\mathbf{k}, s) \, k_\alpha^2 \, q^\dagger(\mathbf{k}, s) \, d\mathbf{k}$$
+
+Note that for continuous chains, there is **no explicit bond function** $g(k)$ because the diffusion propagator is already incorporated into the propagator computation through the modified diffusion equation.
+
+### Implementation
+
+The code implements the Fourier-space formula in three steps:
+
+**Step 1: Per-Bond/Segment Contribution**
+
+For each bond (discrete) or contour position (continuous), compute:
+
+$$S_\alpha(i) = \sum_{\mathbf{k}} b^2 \cdot g(\mathbf{k}) \cdot \text{Re}\left[\hat{q}_i(\mathbf{k}) \cdot \hat{q}_{i+1}^{\dagger *}(\mathbf{k})\right] \cdot k_\alpha^2$$
+
+where the Boltzmann bond factor $g(\mathbf{k})$ is:
+- $g(\mathbf{k}) = 1$ for continuous chains
+- $g(\mathbf{k}) = \exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ for discrete chains
+
+The term $k_\alpha^2$ is encoded in the "Fourier basis" arrays (see [Section 5](#5-fourier-basis-arrays)).
+
+For **real-valued fields**, the conjugate symmetry $\hat{q}(-\mathbf{k}) = \hat{q}^*(\mathbf{k})$ is exploited. For **complex-valued fields** (CL-FTS), the code maintains a mapping from $\mathbf{k}$ to $-\mathbf{k}$ indices.
+
+**Step 2: Contour Integration**
+
+The per-bond contributions are summed along the chain using **Simpson's rule**:
+
+$$\frac{\partial Q}{\partial L_\alpha} \propto \sum_{i} w_i \, S_\alpha(i)$$
+
+where $w_i$ are Simpson's rule weights.
+
+**Step 3: Normalization**
+
+The final stress is obtained by applying the normalization factor:
+
+$$\sigma_\alpha = -\frac{1}{3 L_\alpha M^2 / \Delta s} \cdot \left(\text{integrated sum}\right)$$
+
+where $M$ is the total number of grid points and $\Delta s$ is the contour step size. The factor of 3 comes from the $b^2/6$ coefficient in the diffusion equation (or bond function), combined with the factor of 2 from the derivative of $|\mathbf{k}|^2$ with respect to $L_\alpha$.
 
 ---
 
@@ -318,3 +352,5 @@ if box_is_altering:
 1. Tyler, C. A. & Morse, D. C. "Stress in self-consistent-field theory." *Macromolecules* **36**, 8184-8188 (2003).
 
 2. Arora, A., Morse, D. C., Bates, F. S. & Dorfman, K. D. "Accelerating self-consistent field theory of block polymers in a variable unit cell." *J. Chem. Phys.* **146**, 244902 (2017).
+
+3. Beardsley, T. M. & Matsen, M. W. "Fluctuation correction for the order-disorder transition of diblock copolymer melts." *J. Chem. Phys.* **154**, 124902 (2021).
