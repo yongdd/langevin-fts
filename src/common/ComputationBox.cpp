@@ -45,6 +45,47 @@ namespace {
     constexpr double ANGLE_TOLERANCE = 1e-10;
     /// Minimum sin(gamma) value to avoid division by zero in lattice calculations
     constexpr double SIN_GAMMA_MIN = 1e-10;
+
+    /**
+     * @brief Expand dimension-appropriate angles to full 3-element array.
+     *
+     * Accepts angles based on dimensionality:
+     * - 1D: empty or {90} (no angles needed)
+     * - 2D: {gamma} (only gamma matters, alpha=beta=90°)
+     * - 3D: {alpha, beta, gamma}
+     *
+     * @param angles Input angles (0, 1, or 3 elements)
+     * @param dim    Simulation dimensionality (1, 2, or 3)
+     * @return Expanded 3-element angles array [alpha, beta, gamma]
+     */
+    std::vector<double> expand_angles(const std::vector<double>& angles, int dim)
+    {
+        std::vector<double> full_angles = {90.0, 90.0, 90.0};  // Default orthogonal
+
+        if (angles.empty())
+        {
+            // No angles specified: orthogonal system
+            return full_angles;
+        }
+        else if (angles.size() == 1)
+        {
+            // Single angle: gamma only (for 2D)
+            if (dim != 2)
+                throw_with_line_number("Single-angle specification is only valid for 2D systems")
+            full_angles[2] = angles[0];  // gamma
+            return full_angles;
+        }
+        else if (angles.size() == 3)
+        {
+            // Full specification
+            return angles;
+        }
+        else
+        {
+            throw_with_line_number("angles must have 0, 1 (gamma for 2D), or 3 elements, but got " +
+                std::to_string(angles.size()))
+        }
+    }
 }
 
 /**
@@ -209,16 +250,6 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
     validation::require_all_positive(new_nx, "nx");
     validation::require_all_positive(new_lx, "lx");
 
-    // Validate angles
-    if (angles.size() != 3)
-    {
-        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(angles.size()))
-    }
-    for (int i = 0; i < 3; i++) {
-        validation::require_in_range(angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
-            "angles[" + std::to_string(i) + "]");
-    }
-
     try
     {
         this->dim = new_nx.size();
@@ -227,11 +258,20 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
 
         const int DIM = this->dim;
 
+        // Expand angles to full 3-element array (handles 1-element gamma for 2D)
+        std::vector<double> full_angles = expand_angles(angles, DIM);
+
+        // Validate angles
+        for (int i = 0; i < 3; i++) {
+            validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
+                "angles[" + std::to_string(i) + "]");
+        }
+
         // Convert angles from degrees to radians and store
         angles_.resize(3);
         const double deg_to_rad = std::numbers::pi / 180.0;
         for (int d = 0; d < 3; d++)
-            angles_[d] = angles[d] * deg_to_rad;
+            angles_[d] = full_angles[d] * deg_to_rad;
 
         // Check if orthogonal (all angles are 90 degrees within tolerance)
         const double angle_tolerance = ANGLE_TOLERANCE;
@@ -651,13 +691,12 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     validation::require_same_size(new_lx.size(), (size_t)dim, "new lx", "dim");
     validation::require_all_positive(new_lx, "new lx");
 
+    // Expand angles to full 3-element array (handles 1-element gamma for 2D)
+    std::vector<double> full_angles = expand_angles(new_angles, dim);
+
     // Validate angles
-    if (new_angles.size() != 3)
-    {
-        throw_with_line_number("angles must have exactly 3 elements [alpha, beta, gamma], but got " + std::to_string(new_angles.size()))
-    }
     for (int i = 0; i < 3; i++) {
-        validation::require_in_range(new_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
+        validation::require_in_range(full_angles[i], 0.0 + 1e-10, 180.0 - 1e-10,
             "angles[" + std::to_string(i) + "]");
     }
 
@@ -666,7 +705,7 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
     // Convert angles from degrees to radians and store
     const double deg_to_rad = std::numbers::pi / 180.0;
     for (int d = 0; d < 3; d++)
-        angles_[d] = new_angles[d] * deg_to_rad;
+        angles_[d] = full_angles[d] * deg_to_rad;
 
     // Check if orthogonal
     const double angle_tolerance = ANGLE_TOLERANCE;

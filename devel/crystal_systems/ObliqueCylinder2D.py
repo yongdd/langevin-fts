@@ -39,7 +39,7 @@ params = {
     # Grid and box settings
     "nx": [32, 32],
     "lx": [L, L],
-    "angles": [90.0, 90.0, initial_gamma],  # Only gamma matters for 2D
+    "angles": [initial_gamma],  # Single gamma for 2D (alpha=beta=90° implicit)
 
     "crystal_system": "Oblique2D",  # Enable 2D angle optimization
     "box_is_altering": True,        # Optimize box size and angle

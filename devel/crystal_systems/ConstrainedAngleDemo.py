@@ -28,7 +28,7 @@ def run_scft_at_angle(lx, ly, gamma, max_iter=300):
     params = {
         "nx": [32, 32],
         "lx": [lx, ly],
-        "angles": [90.0, 90.0, gamma],
+        "angles": [gamma],  # Single gamma for 2D
         "crystal_system": "Oblique2D",
         "box_is_altering": False,
         "chain_model": "continuous",

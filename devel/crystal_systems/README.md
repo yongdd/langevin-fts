@@ -43,7 +43,8 @@ For 2D systems, only γ is relevant.
 ### Usage
 
 ```python
-params = {
+# 3D example with full angles
+params_3d = {
     "nx": [32, 32, 32],
     "lx": [2.0, 2.0, 2.0],
     "angles": [90.0, 90.0, 120.0],  # [α, β, γ] in degrees
@@ -51,6 +52,17 @@ params = {
     "crystal_system": "Hexagonal",  # Choose crystal system
     "box_is_altering": True,        # Enable box optimization
     "scale_stress": 0.3,            # Stress scaling factor
+    # ... other parameters
+}
+
+# 2D example with single gamma
+params_2d = {
+    "nx": [32, 32],
+    "lx": [2.0, 2.0],
+    "angles": [120.0],  # Single gamma for 2D (α=β=90° implicit)
+
+    "crystal_system": "Hexagonal2D",
+    "box_is_altering": True,
     # ... other parameters
 }
 ```
