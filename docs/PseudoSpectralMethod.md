@@ -399,56 +399,112 @@ params = {
 
 ### 8.1 Stress Definition
 
-The stress tensor measures the response of the free energy to deformation of the unit cell:
+In polymer field theory, the stress tensor measures the response of the free energy to changes in lattice parameters. We define stress components that directly correspond to the derivatives needed for box optimization:
 
-$$\sigma_{ij} = \frac{1}{V} \frac{\partial F}{\partial \epsilon_{ij}}$$
+$$\sigma_i = -\frac{\partial (\beta F/n)}{\partial L_i}$$
 
-where $\epsilon_{ij}$ is the strain tensor.
+where $L_i$ are the lattice lengths ($L_a$, $L_b$, $L_c$), and:
 
-### 8.2 Stress from Propagators
+$$\sigma_{ij} = -\frac{\partial (\beta F/n)}{\partial \gamma_{ij}}$$
 
-For polymer field theory, the stress contribution from chain statistics is computed in Fourier space. The stress tensor has 6 independent components (symmetric tensor):
+where $\gamma_{ij}$ are the lattice angles ($\gamma$, $\beta$, $\alpha$). Here $\beta F/n$ is the dimensionless free energy per reference chain.
 
-$$\sigma = \begin{pmatrix} \sigma_{xx} & \sigma_{xy} & \sigma_{xz} \\ \sigma_{xy} & \sigma_{yy} & \sigma_{yz} \\ \sigma_{xz} & \sigma_{yz} & \sigma_{zz} \end{pmatrix}$$
+### 8.2 Stress Array Convention
+
+The stress is stored as a 6-component array:
+
+| Index | Component | Drives Optimization of |
+|-------|-----------|------------------------|
+| 0 | $\sigma_a$ | $L_a$ (length a) |
+| 1 | $\sigma_b$ | $L_b$ (length b) |
+| 2 | $\sigma_c$ | $L_c$ (length c) |
+| 3 | $\sigma_{ab}$ | $\gamma$ (angle between a and b) |
+| 4 | $\sigma_{ac}$ | $\beta$ (angle between a and c) |
+| 5 | $\sigma_{bc}$ | $\alpha$ (angle between b and c) |
+
+For 2D systems, only indices 0, 1, and 2 (for $\sigma_{ab}$) are used.
 
 ### 8.3 Fourier-Space Stress Calculation
 
-The stress is computed from the chain propagators:
+The chain statistics contribution to stress is computed in Fourier space. For a single bond connecting segments with propagators $q_1$ and $q_2$:
 
-$$\sigma_{ij} = -\frac{b^2}{V} \sum_{\mathbf{k}} \mathcal{F}_{ij}(\mathbf{k}) \cdot \hat{q}_1(\mathbf{k}) \hat{q}_2(-\mathbf{k})$$
+$$\sigma_i = -\frac{b^2}{6} \sum_{\mathbf{k}} \frac{\partial |\mathbf{k}|^2}{\partial L_i} \cdot \hat{q}_1(\mathbf{k}) \hat{q}_2(-\mathbf{k}) \cdot B(\mathbf{k})$$
 
 where:
 - $\hat{q}_1$, $\hat{q}_2$ are Fourier transforms of forward and backward propagators
-- $\mathcal{F}_{ij}(\mathbf{k})$ is the Fourier basis for stress component $(i,j)$
+- $B(\mathbf{k})$ is the Boltzmann bond factor (model-dependent, see Section 8.6)
+- $b$ is the statistical segment length
 
 ### 8.4 Fourier Basis Arrays
 
-The Fourier basis arrays encode the derivative of $|\mathbf{k}|^2$ with respect to strain:
+The code precomputes "Fourier basis" arrays that encode $\partial |\mathbf{k}|^2 / \partial L_i$. The wavevector magnitude squared is:
 
-**Diagonal components:**
-$$\mathcal{F}_{xx} = k_x^2, \quad \mathcal{F}_{yy} = k_y^2, \quad \mathcal{F}_{zz} = k_z^2$$
+$$|\mathbf{k}|^2 = (2\pi)^2 G^*_{ij} n_i n_j$$
 
-**Off-diagonal components (cross-terms):**
-$$\mathcal{F}_{xy} = 2 k_x k_y, \quad \mathcal{F}_{xz} = 2 k_x k_z, \quad \mathcal{F}_{yz} = 2 k_y k_z$$
+where $G^*_{ij}$ is the reciprocal metric tensor and $n_i$ are integer Miller indices.
 
-Here, $k_x$, $k_y$, $k_z$ are the Cartesian components of the wavevector:
+**Diagonal basis arrays** (for length derivatives):
 
-$$k_x = n_1 a_x^* + n_2 b_x^* + n_3 c_x^*$$
+$$\texttt{fourier\_basis\_x} = (2\pi)^2 G^*_{00} n_0^2$$
+$$\texttt{fourier\_basis\_y} = (2\pi)^2 G^*_{11} n_1^2$$
+$$\texttt{fourier\_basis\_z} = (2\pi)^2 G^*_{22} n_2^2$$
 
-and similarly for $k_y$, $k_z$.
+**Cross-term basis arrays** (for angle derivatives):
 
-### 8.5 Stress Components and Box Optimization
+$$\texttt{fourier\_basis\_xy} = 2(2\pi)^2 G^*_{01} n_0 n_1$$
+$$\texttt{fourier\_basis\_xz} = 2(2\pi)^2 G^*_{02} n_0 n_2$$
+$$\texttt{fourier\_basis\_yz} = 2(2\pi)^2 G^*_{12} n_1 n_2$$
 
-The stress components drive optimization of different lattice parameters:
+The factor of 2 in cross-terms accounts for the symmetric sum $G^*_{01} n_0 n_1 + G^*_{10} n_1 n_0$.
 
-| Stress Component | Lattice Parameter |
-|------------------|-------------------|
-| $\sigma_{xx}$ | $L_a$ (length a) |
-| $\sigma_{yy}$ | $L_b$ (length b) |
-| $\sigma_{zz}$ | $L_c$ (length c) |
-| $\sigma_{xy}$ | $\gamma$ (angle between a and b) |
-| $\sigma_{xz}$ | $\beta$ (angle between a and c) |
-| $\sigma_{yz}$ | $\alpha$ (angle between b and c) |
+### 8.5 Non-Orthogonal Box Corrections
+
+For non-orthogonal crystal systems, the derivative $\partial |\mathbf{k}|^2 / \partial L_a$ involves not only $G^*_{00}$ but also the cross-terms $G^*_{01}$ and $G^*_{02}$ (since these depend on $L_a$). The stress components are computed as:
+
+**3D case:**
+$$\sigma_a \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_x} + \frac{1}{2}\texttt{fourier\_basis\_xy} + \frac{1}{2}\texttt{fourier\_basis\_xz} \right) \cdot (\cdots)$$
+
+$$\sigma_b \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_y} + \frac{1}{2}\texttt{fourier\_basis\_xy} + \frac{1}{2}\texttt{fourier\_basis\_yz} \right) \cdot (\cdots)$$
+
+$$\sigma_c \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_z} + \frac{1}{2}\texttt{fourier\_basis\_xz} + \frac{1}{2}\texttt{fourier\_basis\_yz} \right) \cdot (\cdots)$$
+
+**2D case:**
+$$\sigma_a \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_x} + \frac{1}{2}\texttt{fourier\_basis\_xy} \right) \cdot (\cdots)$$
+
+$$\sigma_b \propto \sum_{\mathbf{k}} \left( \texttt{fourier\_basis\_y} + \frac{1}{2}\texttt{fourier\_basis\_xy} \right) \cdot (\cdots)$$
+
+The factor of $\frac{1}{2}$ appears because the cross-term basis already includes a factor of 2.
+
+**Shear stress** (for angle optimization) uses the cross-term basis directly:
+$$\sigma_{ab} \propto \sum_{\mathbf{k}} \texttt{fourier\_basis\_xy} \cdot (\cdots)$$
+
+For **orthogonal systems** ($\alpha = \beta = \gamma = 90°$), all cross-terms vanish ($G^*_{01} = G^*_{02} = G^*_{12} = 0$), and the corrections are not needed.
+
+### 8.6 Chain Model Dependence
+
+The Boltzmann bond factor $B(\mathbf{k})$ differs between chain models:
+
+**Continuous chain model:**
+$$B(\mathbf{k}) = 1$$
+
+The diffusion propagator $\exp(-b^2 |\mathbf{k}|^2 \Delta s / 6)$ is already incorporated into the propagator computation.
+
+**Discrete chain model:**
+$$B(\mathbf{k}) = \exp\left(-\frac{b^2 |\mathbf{k}|^2 \Delta s}{6}\right)$$
+
+This is the Fourier transform of the Gaussian bond function, which must be explicitly included in stress calculations.
+
+### 8.7 Box Optimization Algorithm
+
+During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
+
+$$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i$$
+
+$$\gamma_{ij}^{(n+1)} = \gamma_{ij}^{(n)} - \eta \cdot \sigma_{ij}$$
+
+where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish:
+
+$$\sigma_i = 0, \quad \sigma_{ij} = 0$$
 
 ---
 
