@@ -179,21 +179,21 @@ For 2D systems, the layout is [σ₁, σ₂, σ₁₂, 0, 0, 0], so indices 0, 1
 
 ### Fourier Basis Arrays
 
-The code precomputes arrays that decompose $k^2$ into components. Using the definition $k_i = 2\pi m_i$:
+The code precomputes arrays that decompose $k^2$ into components. With $k_i = 2\pi m_i$ where $m_i$ are integer Miller indices:
 
 $$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
 
-**Diagonal basis arrays:**
+**Diagonal basis arrays** (stored values include the $(2\pi)^2$ factor):
 
-$$\texttt{fourier\_basis\_x} = g^{-1}_{11} k_1^2$$
-$$\texttt{fourier\_basis\_y} = g^{-1}_{22} k_2^2$$
-$$\texttt{fourier\_basis\_z} = g^{-1}_{33} k_3^2$$
+$$\texttt{fourier\_basis\_x}[m] = (2\pi)^2 \, g^{-1}_{11} \, m_1^2 = g^{-1}_{11} k_1^2$$
+$$\texttt{fourier\_basis\_y}[m] = (2\pi)^2 \, g^{-1}_{22} \, m_2^2 = g^{-1}_{22} k_2^2$$
+$$\texttt{fourier\_basis\_z}[m] = (2\pi)^2 \, g^{-1}_{33} \, m_3^2 = g^{-1}_{33} k_3^2$$
 
 **Cross-term basis arrays:**
 
-$$\texttt{fourier\_basis\_xy} = 2 g^{-1}_{12} k_1 k_2$$
-$$\texttt{fourier\_basis\_xz} = 2 g^{-1}_{13} k_1 k_3$$
-$$\texttt{fourier\_basis\_yz} = 2 g^{-1}_{23} k_2 k_3$$
+$$\texttt{fourier\_basis\_xy}[m] = 2 (2\pi)^2 \, g^{-1}_{12} \, m_1 m_2 = 2 g^{-1}_{12} k_1 k_2$$
+$$\texttt{fourier\_basis\_xz}[m] = 2 (2\pi)^2 \, g^{-1}_{13} \, m_1 m_3 = 2 g^{-1}_{13} k_1 k_3$$
+$$\texttt{fourier\_basis\_yz}[m] = 2 (2\pi)^2 \, g^{-1}_{23} \, m_2 m_3 = 2 g^{-1}_{23} k_2 k_3$$
 
 The factor of 2 in cross-terms accounts for the symmetric sum. The cross-term arrays are directly used in the angle stress calculation:
 
