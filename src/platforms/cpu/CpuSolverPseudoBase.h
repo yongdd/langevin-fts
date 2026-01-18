@@ -20,8 +20,14 @@
  * based on the dimensionality. This avoids maintaining separate fft_1d,
  * fft_2d, fft_3d pointers when only one is ever used per solver.
  *
+ * **Stress Array Convention (Voigt Notation):**
+ *
+ * - Index 0-2: Diagonal components (σ₁, σ₂, σ₃) for length optimization
+ * - Index 3-5: Off-diagonal components (σ₁₂, σ₁₃, σ₂₃) for angle optimization
+ *
  * @see CpuSolverPseudoRQM4 for continuous chain implementation
  * @see CpuSolverPseudoDiscrete for discrete chain implementation
+ * @see docs/StressTensorCalculation.md for detailed derivation
  */
 
 #ifndef CPU_SOLVER_PSEUDO_BASE_H_
@@ -266,15 +272,23 @@ public:
     /**
      * @brief Compute stress contribution from a single segment.
      *
-     * Common implementation that calls get_stress_boltz_bond() for
-     * chain-model-specific coefficient factor.
+     * Computes ∂ln(Q)/∂θ in Fourier space by multiplying forward and backward
+     * propagators with weighted basis functions. Cross-term corrections for
+     * non-orthogonal boxes are included.
+     *
+     * Chain model difference:
+     * - Continuous: Φ(k) = 1 (bond factor already in propagator)
+     * - Discrete: Φ(k) = exp(-b²k²Δs/6) or exp(-b²k²Δs/12) for half-bond
      *
      * @param q_1                Forward propagator
      * @param q_2                Backward propagator
      * @param monomer_type       Monomer type for segment length
      * @param is_half_bond_length Whether using half bond (discrete model)
      *
-     * @return Stress components [sigma_xx, sigma_yy, sigma_zz, sigma_xy, sigma_xz, sigma_yz]
+     * @return Stress components in Voigt notation:
+     *         [σ₁, σ₂, σ₃, σ₁₂, σ₁₃, σ₂₃] (6 components)
+     *         For 2D: [σ₁, σ₂, σ₁₂, 0, 0, 0]
+     *         For 1D: only index 0 is meaningful
      */
     std::vector<T> compute_single_segment_stress(
         T* q_1, T* q_2, std::string monomer_type, bool is_half_bond_length) override;

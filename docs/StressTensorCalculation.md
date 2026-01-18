@@ -95,9 +95,11 @@ where $\mathbf{m} = (m_1, m_2, m_3)$ are integer Miller indices.
 
 **Wavevector magnitude squared:**
 
-We define wavevector components $k_i = 2\pi m_i$ for convenience. The squared magnitude is:
+The squared magnitude using the inverse metric tensor is:
 
-$$k^2 = |\mathbf{k}|^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
+$$k^2 = (2\pi)^2 \mathbf{m}^T g^{-1} \mathbf{m} = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
+
+where we define $k_i = 2\pi m_i$ for convenience.
 
 **Laplacian in scaled coordinates:**
 
@@ -106,28 +108,6 @@ $$\nabla^2 = g^{-1}_{ij} \frac{\partial^2}{\partial \tilde{r}_i \partial \tilde{
 ---
 
 ## 3. Stress Derivation
-
-### Orthogonal Case (Proof)
-
-If we take $\theta_i$ to be the box length $L_x$ in a rectangular system, we have:
-
-$$k^2 = k_x^2 + k_y^2 + k_z^2 = \left(\frac{2\pi n_x}{L_x}\right)^2 + k_y^2 + k_z^2$$
-
-Now, let's calculate the derivative $\frac{\partial k^2}{\partial L_x}$:
-
-$$\frac{\partial k^2}{\partial L_x} = \frac{\partial}{\partial L_x}\left(\frac{2\pi n_x}{L_x}\right)^2 = 2\left(\frac{2\pi n_x}{L_x}\right)\left(-\frac{2\pi n_x}{L_x^2}\right) = -\frac{2}{L_x} k_x^2$$
-
-Plugging this into the expression:
-
-$$\left(-\frac{b^2 \Delta s}{6}\right)\left(-\frac{2}{L_x} k_x^2\right) = \frac{b^2 \Delta s}{3 L_x} k_x^2$$
-
-### Non-Orthogonal Case (Metric Tensor Approach)
-
-When the system is non-orthogonal, $k^2$ depends on the inverse metric tensor $g^{-1}_{ij}$ (see Section 2). Whether you are varying a length (which changes the diagonal elements of $g^{-1}_{ij}$) or an angle (which changes the off-diagonal elements), the logic is identical:
-
-1. Calculate how the unit cell change affects the metric $g^{-1}_{ij}$
-2. Calculate $\frac{\partial k^2}{\partial \theta_i}$
-3. Multiply by the Gaussian constant $-\frac{b^2 \Delta s}{6}$
 
 ### General Formula in Fourier Space
 
@@ -145,6 +125,54 @@ $$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\mathbf{k}
 $$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\mathbf{k} \, q(\mathbf{k}, s) \, q^\dagger(\mathbf{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
 where $q(\mathbf{k})$ and $q^\dagger(-\mathbf{k})$ are Fourier transforms of the forward and backward propagators.
+
+The key quantity to compute is $\frac{\partial k^2}{\partial \theta}$ for each unit cell parameter $\theta$.
+
+### Metric Tensor Approach
+
+When varying a unit cell parameter $\theta$ (length or angle), $k^2$ changes through the inverse metric tensor $g^{-1}_{ij}$. The procedure is:
+
+1. Calculate how the parameter change affects the metric tensor $g$
+2. Use $\frac{\partial g^{-1}}{\partial \theta} = -g^{-1} \frac{\partial g}{\partial \theta} g^{-1}$ to find how $g^{-1}$ changes
+3. Compute $\frac{\partial k^2}{\partial \theta}$ from the change in $g^{-1}$
+
+### Derivative with Respect to Length
+
+**Orthogonal case (example):**
+
+For a rectangular system with $\theta = L_x$:
+
+$$k^2 = k_x^2 + k_y^2 + k_z^2 = \left(\frac{2\pi n_x}{L_x}\right)^2 + k_y^2 + k_z^2$$
+
+The derivative is:
+
+$$\frac{\partial k^2}{\partial L_x} = \frac{\partial}{\partial L_x}\left(\frac{2\pi n_x}{L_x}\right)^2 = 2\left(\frac{2\pi n_x}{L_x}\right)\left(-\frac{2\pi n_x}{L_x^2}\right) = -\frac{2}{L_x} k_x^2$$
+
+**Non-orthogonal case:**
+
+For a general triclinic cell, varying $L_1$ affects $g_{11}$, $g_{12}$, and $g_{13}$:
+
+$$\frac{\partial k^2}{\partial L_1} = -2(k_1^2 L_1 + k_1 k_2 L_2 \cos\gamma + k_1 k_3 L_3 \cos\beta)$$
+
+### Derivative with Respect to Angle
+
+To find $\frac{\partial k^2}{\partial \gamma}$, we use the matrix identity for the derivative of an inverse:
+
+$$\frac{\partial g^{-1}}{\partial \gamma} = -g^{-1} \frac{\partial g}{\partial \gamma} g^{-1}$$
+
+Since $k^2 = (2\pi)^2 \mathbf{m}^T g^{-1} \mathbf{m}$, we have:
+
+$$\frac{\partial k^2}{\partial \gamma} = -(2\pi)^2 \mathbf{m}^T \left( g^{-1} \frac{\partial g}{\partial \gamma} g^{-1} \right) \mathbf{m}$$
+
+For the angle $\gamma$ between $\mathbf{a}_1$ and $\mathbf{a}_2$, only $g_{12} = L_1 L_2 \cos\gamma$ depends on $\gamma$:
+
+$$\frac{\partial g_{12}}{\partial \gamma} = -L_1 L_2 \sin\gamma$$
+
+Expanding the matrix product and letting $\mathbf{k} = 2\pi g^{-1} \mathbf{m}$ be the reciprocal wavevector:
+
+$$\frac{\partial k^2}{\partial \gamma} = 2 k_1 k_2 (L_1 L_2 \sin\gamma)$$
+
+**Note:** Here $k_1$ and $k_2$ are the components of the reciprocal vector $\mathbf{k}$ in the non-orthogonal basis.
 
 ### Summary of Stress Parameters
 

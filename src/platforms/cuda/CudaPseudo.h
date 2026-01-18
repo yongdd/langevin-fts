@@ -17,9 +17,20 @@
  * - d_fourier_basis_*: Weighted wavenumbers for stress calculation
  * - d_negative_k_idx: Index mapping for Hermitian symmetry
  *
+ * **Stress Array Convention (Voigt Notation):**
+ *
+ * The stress is stored as a 6-component array:
+ * - Index 0: σ₁ → drives L₁ optimization
+ * - Index 1: σ₂ → drives L₂ optimization
+ * - Index 2: σ₃ → drives L₃ optimization
+ * - Index 3: σ₁₂ → drives γ (angle between a₁ and a₂) optimization
+ * - Index 4: σ₁₃ → drives β (angle between a₁ and a₃) optimization
+ * - Index 5: σ₂₃ → drives α (angle between a₂ and a₃) optimization
+ *
  * @see Pseudo for the abstract interface
  * @see CudaSolverPseudoRQM4 for usage in continuous chains
  * @see CudaSolverPseudoDiscrete for usage in discrete chains
+ * @see docs/StressTensorCalculation.md for detailed derivation
  */
 
 #ifndef CUDA_PSEUDO_H_
@@ -66,17 +77,20 @@ class CudaPseudo : public Pseudo<T>
 {
 private:
     /// @name Stress Calculation Arrays (Diagonal)
+    /// Stores (2π)² × g^{-1}_ii × m_i² = g^{-1}_ii × k_i² in device memory.
     /// @{
-    double *d_fourier_basis_x;  ///< Weighted kx² in device memory
-    double *d_fourier_basis_y;  ///< Weighted ky² in device memory
-    double *d_fourier_basis_z;  ///< Weighted kz² in device memory
+    double *d_fourier_basis_x;  ///< g^{-1}_11 × k₁² in device memory
+    double *d_fourier_basis_y;  ///< g^{-1}_22 × k₂² in device memory
+    double *d_fourier_basis_z;  ///< g^{-1}_33 × k₃² in device memory
     /// @}
 
     /// @name Stress Calculation Arrays (Cross-terms for non-orthogonal)
+    /// Stores 2 × (2π)² × g^{-1}_ij × m_i m_j = 2 × g^{-1}_ij × k_i k_j.
+    /// Factor of 2 accounts for symmetric sum. Zero for orthogonal systems.
     /// @{
-    double *d_fourier_basis_xy;  ///< Weighted 2*kx*ky in device memory
-    double *d_fourier_basis_xz;  ///< Weighted 2*kx*kz in device memory
-    double *d_fourier_basis_yz;  ///< Weighted 2*ky*kz in device memory
+    double *d_fourier_basis_xy;  ///< 2 × g^{-1}_12 × k₁k₂ in device memory
+    double *d_fourier_basis_xz;  ///< 2 × g^{-1}_13 × k₁k₃ in device memory
+    double *d_fourier_basis_yz;  ///< 2 × g^{-1}_23 × k₂k₃ in device memory
     /// @}
 
     int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
