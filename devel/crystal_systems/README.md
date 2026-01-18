@@ -134,13 +134,13 @@ The stress is stored as a 6-component array with components defined as $\sigma_i
 
 | Index | Component | Drives Optimization of |
 |-------|-----------|------------------------|
-| 0 | $\sigma_a$ | $L_a$ (length a) |
-| 1 | $\sigma_b$ | $L_b$ (length b) |
-| 2 | $\sigma_c$ | $L_c$ (length c) |
-| 3 | $\sigma_{ab}$ | $\gamma$ (angle between a and b) |
-| 4 | $\sigma_{ac}$ | $\beta$ (angle between a and c) |
-| 5 | $\sigma_{bc}$ | $\alpha$ (angle between b and c) |
+| 0 | $\sigma_1$ | $L_1$ (length a) |
+| 1 | $\sigma_2$ | $L_2$ (length b) |
+| 2 | $\sigma_3$ | $L_3$ (length c) |
+| 3 | $\sigma_{12}$ | $\gamma$ (angle between a and b) |
+| 4 | $\sigma_{13}$ | $\beta$ (angle between a and c) |
+| 5 | $\sigma_{23}$ | $\alpha$ (angle between b and c) |
 
-For 2D systems, only indices 0, 1, and 2 (for $\sigma_{ab}$) are used.
+For 2D systems, only indices 0, 1, and 2 (for $\sigma_{12}$) are used.
 
 At equilibrium, all stress components vanish. The box optimization uses gradient descent with the `scale_stress` parameter controlling the step size.
