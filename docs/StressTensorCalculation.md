@@ -103,15 +103,6 @@ $$k^2 = |\mathbf{k}|^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3
 
 $$\nabla^2 = g^{-1}_{ij} \frac{\partial^2}{\partial \tilde{r}_i \partial \tilde{r}_j}$$
 
-### Orthogonal vs Non-Orthogonal Systems
-
-| Feature | Orthogonal | Non-Orthogonal |
-|---------|------------|----------------|
-| Geometry | $L_1, L_2, L_3$ | Matrix $\mathbf{h}$ (3 lengths + 3 angles) |
-| Metric tensor | Diagonal: $\text{diag}(L_1^2, L_2^2, L_3^2)$ | Full symmetric matrix $g_{ij}$ |
-| Laplacian | $\partial_1^2 + \partial_2^2 + \partial_3^2$ | $g^{-1}_{ij} \partial_i \partial_j$ |
-| $k^2$ | $k_1^2/L_1^2 + k_2^2/L_2^2 + k_3^2/L_3^2$ | $g^{-1}_{ij} k_i k_j$ |
-
 ---
 
 ## 3. Stress Derivation
@@ -132,11 +123,7 @@ $$\left(-\frac{b^2 \Delta s}{6}\right)\left(-\frac{2}{L_x} k_x^2\right) = \frac{
 
 ### Non-Orthogonal Case (Metric Tensor Approach)
 
-When the system is non-orthogonal, $k^2$ depends on the inverse metric tensor $g^{-1}_{ij}$. The wavevector magnitude is:
-
-$$k^2 = (2\pi)^2 \sum_{i,j} m_i \, g^{-1}_{ij} \, m_j$$
-
-Whether you are varying a length (which changes the diagonal elements of $g^{-1}_{ij}$) or an angle (which changes the off-diagonal elements), the logic is identical:
+When the system is non-orthogonal, $k^2$ depends on the inverse metric tensor $g^{-1}_{ij}$ (see Section 2). Whether you are varying a length (which changes the diagonal elements of $g^{-1}_{ij}$) or an angle (which changes the off-diagonal elements), the logic is identical:
 
 1. Calculate how the unit cell change affects the metric $g^{-1}_{ij}$
 2. Calculate $\frac{\partial k^2}{\partial \theta_i}$
@@ -158,32 +145,6 @@ $$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\mathbf{k}
 $$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\mathbf{k} \, q(\mathbf{k}, s) \, q^\dagger(\mathbf{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
 where $q(\mathbf{k})$ and $q^\dagger(-\mathbf{k})$ are Fourier transforms of the forward and backward propagators.
-
-### Derivatives with Respect to Lengths
-
-For the lattice lengths $L_1, L_2, L_3$:
-
-$$\frac{\partial(Q/V)}{\partial L_1} = -C \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \, \frac{\partial k^2}{\partial L_1}$$
-
-The derivative $\partial k^2 / \partial L_i$ depends on the specific form of the metric tensor.
-
-### Derivatives with Respect to Angles
-
-For the angles, the derivatives of $k^2$ take simple forms:
-
-$$\frac{\partial k^2}{\partial \alpha} = 2 k_2 k_3 (L_2 L_3 \sin\alpha)$$
-
-$$\frac{\partial k^2}{\partial \beta} = 2 k_1 k_3 (L_1 L_3 \sin\beta)$$
-
-$$\frac{\partial k^2}{\partial \gamma} = 2 k_1 k_2 (L_1 L_2 \sin\gamma)$$
-
-These can be rewritten using the Fourier basis cross-term arrays (see Section 4):
-
-$$\frac{\partial(Q/V)}{\partial \alpha} = -C L_2 L_3 \sin\alpha \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_2 k_3$$
-
-$$\frac{\partial(Q/V)}{\partial \beta} = -C L_1 L_3 \sin\beta \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_1 k_3$$
-
-$$\frac{\partial(Q/V)}{\partial \gamma} = -C L_1 L_2 \sin\gamma \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \cdot 2 k_1 k_2$$
 
 ### Summary of Stress Parameters
 
@@ -217,9 +178,7 @@ For 2D systems, the layout is [σ₁, σ₂, σ₁₂, 0, 0, 0], so indices 0, 1
 
 ### Fourier Basis Arrays
 
-The code precomputes arrays that decompose $k^2$ into components. With $k_i = 2\pi m_i$ where $m_i$ are integer Miller indices:
-
-$$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
+The code precomputes arrays that decompose $k^2$ into components (with $k_i = 2\pi m_i$).
 
 **Diagonal basis arrays** (`fourier_basis_x`, `fourier_basis_y`, `fourier_basis_z`) — stored values include the $(2\pi)^2$ factor:
 
@@ -302,12 +261,6 @@ $$\gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{12}$$
 where $\eta$ is the `scale_stress` parameter. At equilibrium, all stress components vanish:
 
 $$\sigma_i = 0, \quad \sigma_{ij} = 0$$
-
-### Cell Matrix Update Rule
-
-$$\mathbf{h}^{\text{new}} = \mathbf{h}^{\text{old}} - \lambda \frac{\partial F}{\partial \mathbf{h}}$$
-
-To maintain a specific crystal symmetry (e.g., monoclinic), only the relevant components of $\mathbf{h}$ are updated.
 
 ### Simultaneous Iteration
 
