@@ -116,13 +116,19 @@ Shows how different crystal systems constrain the optimization.
 | Tilted structures | Monoclinic or Triclinic |
 | Unknown structure | Triclinic (most general) |
 
-## Stress Tensor Components
+## Stress Array Components
 
-The stress tensor has 6 independent components:
-- Diagonal: σ_xx, σ_yy, σ_zz → drive box length changes
-- Off-diagonal: σ_xy, σ_xz, σ_yz → drive angle changes
+The stress is stored as a 6-component array with components defined as $\sigma_i = -\partial(\beta F/n)/\partial L_i$:
 
-The mapping from angles to stress components:
-- γ → σ_xy (angle between a and b)
-- β → σ_xz (angle between a and c)
-- α → σ_yz (angle between b and c)
+| Index | Component | Drives Optimization of |
+|-------|-----------|------------------------|
+| 0 | $\sigma_a$ | $L_a$ (length a) |
+| 1 | $\sigma_b$ | $L_b$ (length b) |
+| 2 | $\sigma_c$ | $L_c$ (length c) |
+| 3 | $\sigma_{ab}$ | $\gamma$ (angle between a and b) |
+| 4 | $\sigma_{ac}$ | $\beta$ (angle between a and c) |
+| 5 | $\sigma_{bc}$ | $\alpha$ (angle between b and c) |
+
+For 2D systems, only indices 0, 1, and 2 (for $\sigma_{ab}$) are used.
+
+At equilibrium, all stress components vanish. The box optimization uses gradient descent with the `scale_stress` parameter controlling the step size.
