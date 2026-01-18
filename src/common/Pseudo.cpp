@@ -412,23 +412,29 @@ void update_weighted_fourier_basis_periodic_impl(
         tdx = {1.0, 1.0, dx[0]};
     }
 
-    // Calculate factors
+    // Calculate factors using reciprocal metric tensor
+    // For wavenumber magnitude: |k|² = (2π)² × G*_ij n_i n_j
+    // where G*_ij is the reciprocal metric tensor and n_i are integer Miller indices
+    // Storage layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+    const double FOUR_PI_SQ = 4.0 * PI * PI;
     double xfactor[3] = {0.0, 0.0, 0.0};
-    double k_factor[3] = {0.0, 0.0, 0.0};
-    for (int d = 0; d < DIM; d++) {
-        double L = nx[d] * dx[d];
-        xfactor[d] = std::pow(2*PI/L, 2);
-        k_factor[d] = 2*PI/L;
+
+    // Diagonal elements: (2π)² × G*_dd
+    if (DIM == 3) {
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
+        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × G*_11
+        xfactor[2] = FOUR_PI_SQ * recip_metric_[5];  // (2π)² × G*_22
+    } else if (DIM == 2) {
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
+        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × G*_11
+    } else { // DIM == 1
+        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × G*_00
     }
 
-    // Cross factors
-    double Gstar_01 = (DIM >= 2) ? recip_metric_[1] : 0.0;
-    double Gstar_02 = (DIM >= 3) ? recip_metric_[2] : 0.0;
-    double Gstar_12 = (DIM >= 3) ? recip_metric_[4] : 0.0;
-
-    double cross_factor_01 = (DIM >= 2) ? 2.0 * k_factor[0] * k_factor[1] * Gstar_01 : 0.0;
-    double cross_factor_02 = (DIM >= 3) ? 2.0 * k_factor[0] * k_factor[2] * Gstar_02 : 0.0;
-    double cross_factor_12 = (DIM >= 3) ? 2.0 * k_factor[1] * k_factor[2] * Gstar_12 : 0.0;
+    // Off-diagonal (cross) factors: 2 × (2π)² × G*_ij
+    double cross_factor_01 = (DIM >= 2) ? 2.0 * FOUR_PI_SQ * recip_metric_[1] : 0.0;  // 2(2π)² × G*_01
+    double cross_factor_02 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[2] : 0.0;  // 2(2π)² × G*_02
+    double cross_factor_12 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[4] : 0.0;  // 2(2π)² × G*_12
 
     for (int i = 0; i < tnx[0]; i++)
     {
