@@ -26,9 +26,15 @@
  * - plan_for_two: Batched r2c (for half-step pairs)
  * - plan_bak_two: Batched c2r (for half-step pairs)
  *
+ * **Stress Array Convention (Voigt Notation):**
+ *
+ * - Index 0-2: Diagonal components (σ₁, σ₂, σ₃) for length optimization
+ * - Index 3-5: Off-diagonal components (σ₁₂, σ₁₃, σ₂₃) for angle optimization
+ *
  * @see CudaSolver for the abstract interface
  * @see CudaSolverPseudoDiscrete for discrete chain version
  * @see CpuSolverPseudoRQM4 for CPU version
+ * @see docs/StressTensorCalculation.md for detailed derivation
  */
 
 #ifndef CUDA_SOLVER_PSEUDO_RQM4_H_
@@ -172,13 +178,20 @@ public:
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
     /**
-     * @brief Compute stress from one segment.
+     * @brief Compute stress contribution from one segment.
      *
-     * @param STREAM           Stream index
-     * @param d_q_pair         Product of forward and backward propagators
-     * @param d_segment_stress Output stress contribution
-     * @param monomer_type     Monomer type
-     * @param is_half_bond_length Ignored for continuous
+     * Computes ∂ln(Q)/∂θ in Fourier space by multiplying forward and backward
+     * propagators with weighted basis functions. Cross-term corrections for
+     * non-orthogonal boxes are included.
+     *
+     * For continuous chains: Φ(k) = 1 (bond factor already in propagator).
+     *
+     * @param STREAM           Stream index for concurrent execution
+     * @param d_q_pair         Forward and backward propagators (device)
+     * @param d_segment_stress Output: stress in Voigt notation
+     *                         [σ₁, σ₂, σ₃, σ₁₂, σ₁₃, σ₂₃] (device, 6 components)
+     * @param monomer_type     Monomer type for segment length
+     * @param is_half_bond_length Ignored for continuous chains
      */
     void compute_single_segment_stress(
         const int STREAM,

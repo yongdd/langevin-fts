@@ -31,8 +31,21 @@
  * For non-orthogonal systems with periodic BC:
  * |k|² = g^{-1}_ij k_i k_j where g^{-1} is the reciprocal metric tensor.
  *
+ * **Stress Calculation (Voigt Notation):**
+ *
+ * The stress is stored as a 6-component array following Voigt notation:
+ * - Index 0: σ₁ → drives L₁ optimization
+ * - Index 1: σ₂ → drives L₂ optimization
+ * - Index 2: σ₃ → drives L₃ optimization
+ * - Index 3: σ₁₂ → drives γ (angle between a₁ and a₂) optimization
+ * - Index 4: σ₁₃ → drives β (angle between a₁ and a₃) optimization
+ * - Index 5: σ₂₃ → drives α (angle between a₂ and a₃) optimization
+ *
+ * For 2D: [σ₁, σ₂, σ₁₂, 0, 0, 0]. For 1D: only index 0 used.
+ *
  * @see CpuSolverPseudoRQM4 for continuous chain solver
  * @see CpuSolverPseudoDiscrete for discrete chain solver
+ * @see docs/StressTensorCalculation.md for detailed derivation
  */
 
 #ifndef PSEUDO_H_
@@ -122,6 +135,14 @@ protected:
 
     /**
      * @brief Fourier basis for stress calculation (diagonal terms).
+     *
+     * Stores weighted wavenumber components for stress tensor computation.
+     * The (2π)² factor is included in the stored values:
+     * - fourier_basis_x[m] = (2π)² × g^{-1}_11 × m₁² = g^{-1}_11 × k₁²
+     * - fourier_basis_y[m] = (2π)² × g^{-1}_22 × m₂² = g^{-1}_22 × k₂²
+     * - fourier_basis_z[m] = (2π)² × g^{-1}_33 × m₃² = g^{-1}_33 × k₃²
+     *
+     * For non-periodic BC, g^{-1}_ii = 1/L_i² and k = π*n/L.
      */
     double *fourier_basis_x;
     double *fourier_basis_y;
@@ -131,8 +152,13 @@ protected:
      * @brief Fourier basis for stress calculation (off-diagonal/cross terms).
      *
      * For non-orthogonal systems with periodic BC, cross-terms are needed
-     * for the full stress tensor. For non-periodic BC or orthogonal systems,
-     * these are zero.
+     * for the full stress tensor. Includes factor of 2 for symmetric sum:
+     * - fourier_basis_xy[m] = 2 × (2π)² × g^{-1}_12 × m₁m₂ = 2 × g^{-1}_12 × k₁k₂
+     * - fourier_basis_xz[m] = 2 × (2π)² × g^{-1}_13 × m₁m₃ = 2 × g^{-1}_13 × k₁k₃
+     * - fourier_basis_yz[m] = 2 × (2π)² × g^{-1}_23 × m₂m₃ = 2 × g^{-1}_23 × k₂k₃
+     *
+     * These are zero for non-periodic BC or orthogonal systems.
+     * Used for angle stress (σ_ij) and cross-term corrections to length stress.
      */
     double *fourier_basis_xy;
     double *fourier_basis_xz;
