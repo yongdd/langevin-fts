@@ -409,13 +409,9 @@ $$\frac{dF}{d\theta_i} = -k_B T \frac{\partial \ln Q}{\partial \theta_i}$$
 
 where the derivative is evaluated under affine deformation of the potential fields.
 
-### Fourier-Space Formula
+### Implementation
 
-In the pseudo-spectral method, the stress is computed as:
-
-$$\sigma_i = \sum_{\mathbf{k}} b^2 \cdot B(\mathbf{k}) \cdot \hat{q}_1(\mathbf{k}) \hat{q}_2(-\mathbf{k}) \cdot \mathcal{B}_i(\mathbf{k})$$
-
-where $\mathcal{B}_i(\mathbf{k})$ encodes derivatives of $|\mathbf{k}|^2$ with respect to lattice parameters.
+The stress is computed by: (1) evaluating Fourier-space sums of propagator products weighted by basis arrays $\mathcal{B}_i(\mathbf{k})$, (2) integrating along the chain contour using Simpson's rule, and (3) applying normalization factors. See the detailed document for the complete formulas.
 
 ### Box Optimization
 
