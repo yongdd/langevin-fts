@@ -45,11 +45,13 @@ To handle general unit cells (orthogonal, monoclinic, triclinic, etc.), we use t
 The unit cell is defined by a matrix $\mathbf{h} = [\mathbf{a}_1, \mathbf{a}_2, \mathbf{a}_3]$, where $\mathbf{a}_i$ are the Bravais lattice vectors (column vectors) with lengths $L_i = |\mathbf{a}_i|$.
 
 **Coordinate transformation:**
+
 $$\mathbf{r} = \mathbf{h} \tilde{\mathbf{r}}$$
 
 where $\tilde{\mathbf{r}} \in [0,1]^3$ is the fractional (scaled) coordinate vector.
 
 **Volume:**
+
 $$V = \det(\mathbf{h})$$
 
 ### Angle Conventions
@@ -108,9 +110,11 @@ The partition function derivative with respect to any unit cell parameter $\thet
 - $\text{Kern}(\mathbf{k}) = q(\mathbf{k}) q^\dagger(-\mathbf{k}) \Phi(k)$ (kernel function)
 
 **Discrete chain model:**
+
 $$\frac{\partial(Q/V)}{\partial\theta} = -C \sum_{\text{bonds}} \int d\mathbf{k} \, \text{Kern}(\mathbf{k}) \, \frac{\partial k^2}{\partial\theta}$$
 
 **Continuous chain model:**
+
 $$\frac{\partial(Q/V)}{\partial\theta} = -\frac{b^2}{6(2\pi)^3 V} \int_0^1 ds \int d\mathbf{k} \, q(\mathbf{k}, s) \, q^\dagger(\mathbf{k}, s) \, \frac{\partial k^2}{\partial\theta}$$
 
 where $q(\mathbf{k})$ and $q^\dagger(-\mathbf{k})$ are Fourier transforms of the forward and backward propagators.
@@ -183,7 +187,7 @@ The code precomputes arrays that decompose $k^2$ into components. With $k_i = 2\
 
 $$k^2 = g^{-1}_{11} k_1^2 + g^{-1}_{22} k_2^2 + g^{-1}_{33} k_3^2 + 2g^{-1}_{12} k_1 k_2 + 2g^{-1}_{13} k_1 k_3 + 2g^{-1}_{23} k_2 k_3$$
 
-**Diagonal basis arrays** (stored values include the $(2\pi)^2$ factor):
+**Diagonal basis arrays** — stored values include the $(2\pi)^2$ factor:
 
 $$\texttt{fourier\_basis\_x}[m] = (2\pi)^2 \, g^{-1}_{11} \, m_1^2 = g^{-1}_{11} k_1^2$$
 $$\texttt{fourier\_basis\_y}[m] = (2\pi)^2 \, g^{-1}_{22} \, m_2^2 = g^{-1}_{22} k_2^2$$
@@ -224,14 +228,16 @@ The bond factor $\Phi(k)$ differs between chain models:
 **Step 1: Per-Bond/Segment Contribution**
 
 Compute the kernel product in Fourier space:
+
 $$\text{Kern}(\mathbf{k}) = q(\mathbf{k}) \cdot q^\dagger(-\mathbf{k}) \cdot \Phi(k)$$
 
 **Step 2: Stress Accumulation**
 
 For each stress component, accumulate over all wavevectors:
+
 $$\sigma_i \propto \sum_{\mathbf{k}} \text{Kern}(\mathbf{k}) \cdot (\text{corresponding basis array})$$
 
-**Step 3: Contour Integration** (Simpson's rule)
+**Step 3: Contour Integration** — Simpson's rule
 
 $$\frac{\partial Q}{\partial \theta} \propto \sum_{\text{segments}} w_i \, S_\theta(i)$$
 
@@ -244,9 +250,11 @@ where $w_i$ are Simpson's rule weights.
 During SCFT iteration with `box_is_altering=True`, the lattice parameters are updated using gradient descent:
 
 **For lengths:**
+
 $$L_i^{(n+1)} = L_i^{(n)} - \eta \cdot \sigma_i, \quad i = 1, 2, 3$$
 
 **For angles:**
+
 $$\alpha^{(n+1)} = \alpha^{(n)} - \eta \cdot \sigma_{23}$$
 $$\beta^{(n+1)} = \beta^{(n)} - \eta \cdot \sigma_{13}$$
 $$\gamma^{(n+1)} = \gamma^{(n)} - \eta \cdot \sigma_{12}$$
