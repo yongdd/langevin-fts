@@ -606,40 +606,102 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         }
         gpu_error_check(cudaPeekAtLastError());
 
+        // Get reciprocal metric tensor for non-orthogonal correction
+        // G*_ij layout: [G*_00, G*_01, G*_02, G*_11, G*_12, G*_22]
+        const auto& recip_metric = this->cb->get_recip_metric();
+        bool is_orthogonal = this->cb->is_orthogonal();
+
         if ( DIM == 3 )
         {
-            // xx direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
-
-            // yy direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
-
-            // zz direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
-
-            // Skip cross-term stress computation for orthogonal systems (all angles = 90°)
-            // Cross-terms (xy, xz, yz) are always zero for orthogonal lattices
-            if (!this->cb->is_orthogonal())
+            if (is_orthogonal)
             {
-                // xy cross-term
+                // Orthogonal box: use simple kernel without cross-term corrections
+                // xx direction
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                gpu_error_check(cudaPeekAtLastError());
+
+                // yy direction
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                gpu_error_check(cudaPeekAtLastError());
+
+                // zz direction
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                gpu_error_check(cudaPeekAtLastError());
+            }
+            else
+            {
+                // Non-orthogonal box: use combined kernel with cross-term corrections (real type only)
+                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ + G*_02×n₀n₂
+                //          = fourier_basis_x + 0.5×fourier_basis_xy + 0.5×fourier_basis_xz
+                // Correction factor is 0.5 for all cross-terms (because fourier_basis_xy already has factor of 2)
+                double cross_xy_to_x = 0.5;
+                double cross_xz_to_x = 0.5;
+                double cross_xy_to_y = 0.5;
+                double cross_yz_to_y = 0.5;
+                double cross_xz_to_z = 0.5;
+                double cross_yz_to_z = 0.5;
+
+                if constexpr (std::is_same<T, double>::value)
+                {
+                    // xx direction with cross-term corrections
+                    ker_multi_stress_combined_3d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x,
+                        _d_fourier_basis_xy, _d_fourier_basis_xz, cross_xy_to_x, cross_xz_to_x, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    // yy direction with cross-term corrections
+                    ker_multi_stress_combined_3d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y,
+                        _d_fourier_basis_xy, _d_fourier_basis_yz, cross_xy_to_y, cross_yz_to_y, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    // zz direction with cross-term corrections
+                    ker_multi_stress_combined_3d<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z,
+                        _d_fourier_basis_xz, _d_fourier_basis_yz, cross_xz_to_z, cross_yz_to_z, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+                else
+                {
+                    // Complex type: fall back to simple kernel (cross-term correction not implemented for complex)
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_z, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+
+                // Cross-terms (shear stress)
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -648,7 +710,6 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
                     cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[3], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
-                // xz cross-term
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xz, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -657,7 +718,6 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
                     cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[4], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
                 gpu_error_check(cudaPeekAtLastError());
 
-                // yz cross-term
                 ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_yz, bond_length_sq, M_COMPLEX);
                 gpu_error_check(cudaPeekAtLastError());
                 if constexpr (std::is_same<T, double>::value)
@@ -669,25 +729,68 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
         }
         if ( DIM == 2 )
         {
-            // lx[0] direction (fourier_basis_x is remapped in Pseudo::update_weighted_fourier_basis)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
-            else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
+            if (is_orthogonal)
+            {
+                // Orthogonal box: use simple kernel
+                // lx[0] direction
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                gpu_error_check(cudaPeekAtLastError());
 
-            // lx[1] direction
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
-            gpu_error_check(cudaPeekAtLastError());
-            if constexpr (std::is_same<T, double>::value)
-                cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
+                // lx[1] direction
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                gpu_error_check(cudaPeekAtLastError());
+                if constexpr (std::is_same<T, double>::value)
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
+                else
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                gpu_error_check(cudaPeekAtLastError());
+            }
             else
-                cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
-            gpu_error_check(cudaPeekAtLastError());
+            {
+                // Non-orthogonal box: use combined kernel with cross-term corrections (real type only)
+                // ∂|k|²/∂a ∝ G*_00×n₀² + G*_01×n₀n₁ = fourier_basis_x + 0.5×fourier_basis_xy
+                double cross_xy_to_x = 0.5;
+                double cross_xy_to_y = 0.5;
 
-            // xy cross-term
+                if constexpr (std::is_same<T, double>::value)
+                {
+                    // lx[0] direction with cross-term correction
+                    ker_multi_stress_combined<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, _d_fourier_basis_xy,
+                        cross_xy_to_x, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    // lx[1] direction with cross-term correction
+                    ker_multi_stress_combined<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                        d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, _d_fourier_basis_xy,
+                        cross_xy_to_y, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+                else
+                {
+                    // Complex type: fall back to simple kernel (cross-term correction not implemented for complex)
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, bond_length_sq, M_COMPLEX);
+                    gpu_error_check(cudaPeekAtLastError());
+                    cub::DeviceReduce::Reduce(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[STREAM][0]);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
+            }
+
+            // xy cross-term (shear stress) - always computed for 2D
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, bond_length_sq, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)

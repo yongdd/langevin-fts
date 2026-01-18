@@ -266,6 +266,28 @@ __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, con
     }
 }
 
+// Combined stress kernel for non-orthogonal boxes: dst = a * src * (basis1 + factor * basis2)
+__global__ void ker_multi_stress_combined(double* dst, const double* src, const double* basis1, const double* basis2, double factor, double a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = a * src[i] * (basis1[i] + factor * basis2[i]);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
+// Combined stress kernel for non-orthogonal boxes with two cross-terms: dst = a * src * (basis1 + factor1 * cross1 + factor2 * cross2)
+__global__ void ker_multi_stress_combined_3d(double* dst, const double* src, const double* basis1, const double* cross1, const double* cross2, double factor1, double factor2, double a, const int M)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    while (i < M)
+    {
+        dst[i] = a * src[i] * (basis1[i] + factor1 * cross1[i] + factor2 * cross2[i]);
+        i += blockDim.x * gridDim.x;
+    }
+}
+
 __global__ void ker_multi(cuDoubleComplex* dst, const cuDoubleComplex* src1, const cuDoubleComplex* src2, cuDoubleComplex a, const int M)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
