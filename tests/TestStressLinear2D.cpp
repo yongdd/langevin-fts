@@ -41,8 +41,8 @@ int main()
         double f = 0.25;  // Use f=0.25 for cylindrical morphology (2D structure)
         double chi_n = 20.0;
         std::vector<int> nx = {33, 29};
-        std::vector<double> lx = {3.5, 3.5};  // Roughly square box for cylinders
-        double gamma = 100.0;  // Non-orthogonal gamma (10° deviation from 90°)
+        std::vector<double> lx = {3.2, 4.1};  // Asymmetric box
+        double gamma = 115.0;  // Non-orthogonal gamma (25° deviation from 90°)
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1];

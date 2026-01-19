@@ -76,21 +76,20 @@ template <typename T>
 class CudaPseudo : public Pseudo<T>
 {
 private:
-    /// @name Stress Calculation Arrays (Diagonal)
-    /// Stores (2π)² × g^{-1}_ii × m_i² = g^{-1}_ii × k_i² in device memory.
+    /// @name Stress Calculation Arrays (k⊗k Diagonal)
+    /// Stores Cartesian k⊗k dyad diagonal components in device memory.
     /// @{
-    double *d_fourier_basis_x;  ///< g^{-1}_11 × k₁² in device memory
-    double *d_fourier_basis_y;  ///< g^{-1}_22 × k₂² in device memory
-    double *d_fourier_basis_z;  ///< g^{-1}_33 × k₃² in device memory
+    double *d_fourier_basis_x;  ///< k_x² in device memory
+    double *d_fourier_basis_y;  ///< k_y² in device memory
+    double *d_fourier_basis_z;  ///< k_z² in device memory
     /// @}
 
-    /// @name Stress Calculation Arrays (Cross-terms for non-orthogonal)
-    /// Stores 2 × (2π)² × g^{-1}_ij × m_i m_j = 2 × g^{-1}_ij × k_i k_j.
-    /// Factor of 2 accounts for symmetric sum. Zero for orthogonal systems.
+    /// @name Stress Calculation Arrays (k⊗k Off-diagonal)
+    /// Stores Cartesian k⊗k dyad off-diagonal components in device memory.
     /// @{
-    double *d_fourier_basis_xy;  ///< 2 × g^{-1}_12 × k₁k₂ in device memory
-    double *d_fourier_basis_xz;  ///< 2 × g^{-1}_13 × k₁k₃ in device memory
-    double *d_fourier_basis_yz;  ///< 2 × g^{-1}_23 × k₂k₃ in device memory
+    double *d_fourier_basis_xy;  ///< k_x × k_y in device memory
+    double *d_fourier_basis_xz;  ///< k_x × k_z in device memory
+    double *d_fourier_basis_yz;  ///< k_y × k_z in device memory
     /// @}
 
     int *d_negative_k_idx;  ///< Index map for negative frequencies (device)
@@ -124,11 +123,14 @@ public:
      * @param ds           Contour step size
      * @param recip_metric Reciprocal metric tensor [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
+     * @param recip_vec    Reciprocal lattice vectors [a*|b*|c*] in column-major order
+     *                     for k⊗k computation. Default is Cartesian basis.
      */
     CudaPseudo(
         std::map<std::string, double> bond_lengths,
         std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0});
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
+        std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
     /**
      * @brief Destructor. Frees GPU memory.
@@ -182,12 +184,14 @@ public:
      * @param dx           New grid spacing
      * @param ds           Contour step
      * @param recip_metric Reciprocal metric tensor
+     * @param recip_vec    Reciprocal lattice vectors for k⊗k computation
      */
     void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
         std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0}) override;
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
+        std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}) override;
 
     /**
      * @brief Finalize ds values and allocate GPU memory.

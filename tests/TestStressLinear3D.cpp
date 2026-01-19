@@ -54,7 +54,7 @@ int main()
         double chi_n = 20.0;
         std::vector<int> nx = {23,27,25};
         std::vector<double> lx = {3.2,3.3,3.4};
-        std::vector<double> angles = {89.5, 90.5, 90.5};  // Slightly non-orthogonal: alpha, beta, gamma
+        std::vector<double> angles = {89.5, 90.5, 90.5};  // Near-orthogonal: alpha, beta, gamma
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B
