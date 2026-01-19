@@ -53,7 +53,7 @@ Two bugs caused the mismatch:
 
 The concentration (phi) computation used **global ds** for normalization:
 ```cpp
-norm = (molecules->get_ds() * volume_fraction / alpha) / Q;
+norm = (molecules->get_global_ds() * volume_fraction / alpha) / Q;
 ```
 
 While the propagator computation used **local_ds** (= contour_length / n_segment) for Boltzmann factors.
@@ -72,13 +72,25 @@ The fix addressed both bugs:
 
 ### Fix 1: Concentration Normalization
 
-Use local_ds (= alpha/n_segment_total) instead of global_ds (= 1/Ns):
+Use per-block `local_ds` instead of `global_ds`:
 
+**Before (incorrect):**
 ```cpp
-// Use local_ds = alpha/n_segment_total instead of global ds = 1/Ns
-Polymer& pc = this->molecules->get_polymer(p);
-T norm = (pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated)/this->single_polymer_partitions[p];
+// global_ds = 1/Ns (same for all blocks)
+T norm = (molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
 ```
+
+**After (correct):**
+```cpp
+// local_ds = contour_length / n_segment (per-block, from ds_index)
+double local_ds = mapping.get_local_ds(contour_length);
+T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
+```
+
+**Why this matters:**
+- Old formula uses `global_ds = 1/Ns` which assumes uniform discretization
+- New formula uses `local_ds = contour_length / n_segment` for each block
+- When rounding causes `n_segment ≠ round(contour_length × Ns)`, using `local_ds` gives correct per-segment weight
 
 ### Fix 2: Override update_laplacian_operator() in RQM4 Solvers
 
@@ -180,9 +192,9 @@ All cases where consecutive Ns values have the same segment counts now produce *
 ### Why This Works
 
 When total_segments ≠ Ns:
-1. Propagators are computed with local_ds = alpha/total_segments
-2. Boltzmann factors (boltz_bond) use the same local_ds
-3. Concentration is normalized with local_ds = alpha/total_segments
+1. Propagators are computed with per-block local_ds = contour_length / n_segment
+2. Boltzmann factors (boltz_bond) use the same per-block local_ds via ds_index
+3. Concentration is normalized with per-block local_ds = contour_length / n_segment
 4. All computations are now consistent, eliminating the mismatch
 
 The segment count calculation in `Polymer.cpp` remains unchanged (round-to-nearest).

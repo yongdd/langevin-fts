@@ -45,15 +45,27 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
         // Initialize shared components (FFT, Pseudo, etc.)
         this->init_shared(cb, molecules);
 
-        // For discrete chains, always use ds_index=1 (global ds)
-        const int ds_index = 1;
         const int M = cb->get_total_grid();
-        for (const auto& item : molecules->get_bond_lengths())
+
+        // Ensure ContourLengthMapping is finalized before using it
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create exp_dw vectors for each ds_index and monomer type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            this->exp_dw[ds_index][monomer_type].resize(M);
+            for (const auto& item : molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                this->exp_dw[ds_idx][monomer_type].resize(M);
+            }
         }
 
+        // update_laplacian_operator() handles registration of local_ds values
+        // and calls finalize_ds_values() to compute boltz_bond with correct local_ds
         this->update_laplacian_operator();
     }
     catch (std::exception& exc)
@@ -95,21 +107,29 @@ template <typename T>
 void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_global_ds();
-    const int ds_index = 1;  // Discrete chains always use ds_index=1
 
-    for (const auto& item : w_input)
+    // Get unique ds values from ContourLengthMapping
+    const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+    int n_unique_ds = mapping.get_n_unique_ds();
+
+    // Compute exp_dw for each ds_index and monomer type
+    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
     {
-        const std::string& monomer_type = item.first;
-        const T* w = item.second;
+        double local_ds = mapping.get_ds_from_index(ds_idx);
 
-        if (!this->exp_dw[ds_index].contains(monomer_type))
-            throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw.");
+        for (const auto& item : w_input)
+        {
+            const std::string& monomer_type = item.first;
+            const T* w = item.second;
 
-        std::vector<T>& exp_dw_vec = this->exp_dw[ds_index][monomer_type];
+            if (!this->exp_dw[ds_idx].contains(monomer_type))
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
 
-        for (int i = 0; i < M; ++i)
-            exp_dw_vec[i] = std::exp(-w[i] * ds);
+            std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
+
+            for (int i = 0; i < M; ++i)
+                exp_dw_vec[i] = std::exp(-w[i] * local_ds);
+        }
     }
 }
 
@@ -118,12 +138,10 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoDiscrete<T>::advance_propagator(
-    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int /*ds_index*/)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int ds_index)
 {
     try
     {
-        // Discrete chains always use ds_index=1
-        const int ds_idx = 1;
         const int M = this->cb->get_total_grid();
         const int M_COMPLEX = this->pseudo->get_total_complex_grid();
 
@@ -131,8 +149,9 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator(
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
-        const T* _exp_dw = this->exp_dw[ds_idx][monomer_type].data();
-        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_idx);
+        // Get Boltzmann factors for the correct ds_index
+        const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
+        const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
 
         // Forward transform -> multiply by bond function ĝ(k) -> Backward transform
         this->transform_forward(q_in, k_q_in.data());
@@ -179,6 +198,37 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         this->transform_forward(q_in, k_q_in.data());
         this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond_half, M_COMPLEX);
         this->transform_backward(k_q_in.data(), q_out);
+    }
+    catch (std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Update Laplacian operator and re-register local ds values
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoDiscrete<T>::update_laplacian_operator()
+{
+    try
+    {
+        // Call base class implementation (updates Pseudo with global_ds)
+        CpuSolverPseudoBase<T>::update_laplacian_operator();
+
+        // Re-register local_ds values for each block
+        // (base class's pseudo->update() resets ds_values[1] to global_ds)
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            this->pseudo->add_ds_value(ds_idx, local_ds);
+        }
+
+        // Finalize Pseudo to compute boltz_bond with correct local_ds
+        this->pseudo->finalize_ds_values();
     }
     catch (std::exception& exc)
     {

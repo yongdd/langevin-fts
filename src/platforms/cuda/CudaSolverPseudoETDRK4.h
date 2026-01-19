@@ -84,14 +84,14 @@ private:
 
     /// @name ETDRK4 Krogstad Coefficients
     /// @{
-    std::unique_ptr<ETDRK4Coefficients<T>> etdrk4_coefficients_;  ///< ETDRK4 coefficient arrays (host)
-    std::map<std::string, double*> d_etdrk4_E;         ///< exp(c*h) on device
-    std::map<std::string, double*> d_etdrk4_E2;        ///< exp(c*h/2) on device
-    std::map<std::string, double*> d_etdrk4_alpha;     ///< (h/2)*phi_1(c*h/2) on device - stage a
-    std::map<std::string, double*> d_etdrk4_phi2_half; ///< h*phi_2(c*h/2) on device - stage b
-    std::map<std::string, double*> d_etdrk4_phi1;      ///< h*phi_1(c*h) on device - stage c
-    std::map<std::string, double*> d_etdrk4_phi2;      ///< h*phi_2(c*h) on device - stages c, final
-    std::map<std::string, double*> d_etdrk4_phi3;      ///< h*phi_3(c*h) on device - final step
+    std::map<int, std::unique_ptr<ETDRK4Coefficients<T>>> etdrk4_coefficients_;  ///< ETDRK4 coefficient arrays (host), one per ds_index
+    std::map<int, std::map<std::string, double*>> d_etdrk4_E;         ///< exp(c*h) on device, [ds_index][monomer_type]
+    std::map<int, std::map<std::string, double*>> d_etdrk4_E2;        ///< exp(c*h/2) on device
+    std::map<int, std::map<std::string, double*>> d_etdrk4_alpha;     ///< (h/2)*phi_1(c*h/2) on device - stage a
+    std::map<int, std::map<std::string, double*>> d_etdrk4_phi2_half; ///< h*phi_2(c*h/2) on device - stage b
+    std::map<int, std::map<std::string, double*>> d_etdrk4_phi1;      ///< h*phi_1(c*h) on device - stage c
+    std::map<int, std::map<std::string, double*>> d_etdrk4_phi2;      ///< h*phi_2(c*h) on device - stages c, final
+    std::map<int, std::map<std::string, double*>> d_etdrk4_phi3;      ///< h*phi_3(c*h) on device - final step
     /// @}
 
     /// @name ETDRK4 Workspace Arrays (per stream)

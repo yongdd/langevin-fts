@@ -714,9 +714,17 @@ void CudaComputationReduceMemoryContinuous<T>::compute_concentrations()
                 std::cout << "Check point at " + key_right + "[" + std::to_string(0) + "] is missing. ";
             #endif
 
-            // Normalization constant
+            // Get local_ds for this block from ContourLengthMapping
             Polymer& pc = this->molecules->get_polymer(p);
-            T norm = (pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated)/this->single_polymer_partitions[p];
+            const auto& v_u = this->propagator_computation_optimizer->get_computation_block(key).v_u;
+            int v = std::get<0>(v_u[0]);
+            int u = std::get<1>(v_u[0]);
+            double contour_length = pc.get_block(v, u).contour_length;
+            const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+            double local_ds = mapping.get_local_ds(contour_length);
+
+            // Normalize concentration: local_ds * volume_fraction / alpha
+            T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
 
             // Calculate phi of one block (possibly multiple blocks when using aggregation)
             calculate_phi_one_block(
@@ -1216,24 +1224,60 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
                 for(int d=0; d<N_STRESS_TOTAL; d++)
                     this->dq_dl[p][d] += block_dq_dl[i][key][d];
         }
-        // Normalize stress components
+        // Get lattice parameters
+        double L1 = this->cb->get_lx(0);
+        double L2 = (DIM >= 2) ? this->cb->get_lx(1) : 1.0;
+        double L3 = (DIM >= 3) ? this->cb->get_lx(2) : 1.0;
+
+        // Get angles (radians)
+        std::vector<double> angles = this->cb->get_angles();
+        double cos_a = std::cos(angles[0]);  // alpha: between b and c
+        double cos_b = std::cos(angles[1]);  // beta: between a and c
+        double cos_g = std::cos(angles[2]);  // gamma: between a and b
+        double sin_a = std::sin(angles[0]);
+        double sin_b = std::sin(angles[1]);
+        double sin_g = std::sin(angles[2]);
+
+        // Normalization factor (from Boltzmann factor derivative)
         // Note: local_ds is already multiplied per-block in the stress loop above
+        double norm = -3.0 * M * M;
+
         for(int p=0; p<n_polymer_types; p++)
         {
-            // Diagonal components: xx, yy, zz
-            for(int d=0; d<DIM; d++)
-                this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M;
-            // Cross-term components for 3D: xy, xz, yz
-            if (DIM == 3)
-            {
-                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M;
-                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M;
-                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M;
+            // Get v⊗v sums (already in deformation vector basis from Pseudo)
+            T V_11 = this->dq_dl[p][0];
+            T V_22 = (DIM >= 2) ? this->dq_dl[p][1] : T(0.0);
+            T V_33 = T(0.0), V_12 = T(0.0), V_13 = T(0.0), V_23 = T(0.0);
+
+            if (DIM == 3) {
+                V_33 = this->dq_dl[p][2];
+                V_12 = this->dq_dl[p][3];
+                V_13 = this->dq_dl[p][4];
+                V_23 = this->dq_dl[p][5];
+            } else if (DIM == 2) {
+                V_12 = this->dq_dl[p][2];
             }
-            // Cross-term component for 2D: yz
-            else if (DIM == 2)
-            {
-                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M;
+
+            // Compute lattice parameter derivatives using metric tensor formulas
+            // The metric tensor g has: g₁₁ = L₁², g₁₂ = L₁L₂cosγ, etc.
+            // ∂|k|²/∂L₁ = Vᵢⱼ ∂gᵢⱼ/∂L₁, where ∂g₁₁/∂L₁ = 2L₁, ∂g₁₂/∂L₁ = L₂cosγ, etc.
+            // The factor of 2 from the metric is already absorbed in the normalization
+            this->dq_dl[p][0] = (L1*V_11 + L2*cos_g*V_12 + L3*cos_b*V_13) / norm;
+            if (DIM >= 2) {
+                this->dq_dl[p][1] = (L2*V_22 + L1*cos_g*V_12 + L3*cos_a*V_23) / norm;
+            }
+            if (DIM >= 3) {
+                this->dq_dl[p][2] = (L3*V_33 + L1*cos_b*V_13 + L2*cos_a*V_23) / norm;
+            }
+
+            // Compute angle derivatives using metric tensor formulas
+            // ∂g₁₂/∂γ = -L₁L₂sinγ, so ∂H/∂γ ∝ -L₁L₂sinγ·V₁₂
+            if (DIM == 3) {
+                this->dq_dl[p][3] = -L1 * L2 * sin_g * V_12 / norm;  // dH/dγ
+                this->dq_dl[p][4] = -L1 * L3 * sin_b * V_13 / norm;  // dH/dβ
+                this->dq_dl[p][5] = -L2 * L3 * sin_a * V_23 / norm;  // dH/dα
+            } else if (DIM == 2) {
+                this->dq_dl[p][2] = -L1 * L2 * sin_g * V_12 / norm;  // dH/dγ
             }
         }
     }

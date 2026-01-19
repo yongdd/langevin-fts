@@ -89,11 +89,12 @@ protected:
     std::map<std::string, std::vector<T>> w_field;
 
     /**
-     * @brief ETDRK4 coefficient arrays.
+     * @brief ETDRK4 coefficient arrays, one per ds_index.
      *
      * Created in constructor. Uses unique_ptr for automatic cleanup.
+     * Map key is ds_index (1-based).
      */
-    std::unique_ptr<ETDRK4Coefficients<T>> etdrk4_coefficients_;
+    std::map<int, std::unique_ptr<ETDRK4Coefficients<T>>> etdrk4_coefficients_;
 
     /**
      * @brief Get Boltzmann bond factor for stress computation.
@@ -156,5 +157,13 @@ public:
      * Empty implementation - continuous chains don't use half-bond steps.
      */
     void advance_propagator_half_bond_step(T *, T *, std::string) override {};
+
+    /**
+     * @brief Update Laplacian operator and re-create ETDRK4 coefficients.
+     *
+     * Overrides base class to create ETDRK4 coefficients for each unique
+     * local_ds value from ContourLengthMapping.
+     */
+    void update_laplacian_operator() override;
 };
 #endif
