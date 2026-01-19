@@ -232,6 +232,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             }
             else if (DIM == 1)
             {
+                // For periodic 1D: Miller index is mapped to m1, so stress is in fourier_basis_x
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     T coeff;
@@ -241,20 +242,25 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    stress[0] += coeff * kk_xx[i];  // σ_xx (only x-direction in 1D)
+                    stress[0] += coeff * kk_xx[i];  // σ_xx (Miller index maps to m1 for periodic)
                 }
             }
         }
         else
         {
-            // For non-periodic BCs (real coefficients)
+            // For non-periodic BCs (real coefficients from DCT/DST)
+            // Unlike FFT which has conjugate pairs (±m modes contributing 2× each),
+            // DCT/DST modes are purely real and each mode contributes once.
+            // The factor of 2 accounts for the Parseval relation for real transforms.
             // Cross-terms are zero for non-periodic BC (orthogonal grids only)
+            const double FACTOR = 2.0;
+
             if (DIM == 3)
             {
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
+                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
                     // Cartesian stress tensor components from k⊗k dyad
                     stress[0] += coeff * kk_xx[i];  // σ_xx
@@ -270,7 +276,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
+                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
                     // Cartesian stress tensor components for 2D
                     stress[0] += coeff * kk_xx[i];  // σ_xx
@@ -280,12 +286,14 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             }
             else if (DIM == 1)
             {
+                // Note: 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
+                // so the stress data is stored in fourier_basis_z (kk_zz)
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
-                    double coeff = bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
+                    double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    stress[0] += coeff * kk_xx[i];  // σ_xx (only x-direction in 1D)
+                    stress[0] += coeff * kk_zz[i];  // σ_xx (stored in z due to internal mapping)
                 }
             }
         }

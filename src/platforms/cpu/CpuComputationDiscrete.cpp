@@ -777,6 +777,17 @@ void CpuComputationDiscrete<T>::compute_stress()
         // if constexpr (std::is_same<T, std::complex<double>>::value)
         //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
+        // Check for absorbing BC - stress computation not supported yet
+        auto bc_vec = this->cb->get_boundary_conditions();
+        for (const auto& bc : bc_vec)
+        {
+            if (bc == BoundaryCondition::ABSORBING)
+            {
+                throw_with_line_number("Stress computation with absorbing boundary conditions "
+                    "is not supported yet. Use reflecting or periodic boundary conditions.");
+            }
+        }
+
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();

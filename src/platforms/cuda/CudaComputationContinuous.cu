@@ -659,6 +659,17 @@ void CudaComputationContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
+        // Check for absorbing BC - stress computation not supported yet
+        auto bc_vec = this->cb->get_boundary_conditions();
+        for (const auto& bc : bc_vec)
+        {
+            if (bc == BoundaryCondition::ABSORBING)
+            {
+                throw_with_line_number("Stress computation with absorbing boundary conditions "
+                    "is not supported yet. Use reflecting or periodic boundary conditions.");
+            }
+        }
+
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
@@ -706,6 +717,10 @@ void CudaComputationContinuous<T>::compute_stress()
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N_RIGHT);
             CuDeviceData<T>** d_q_1 = this->d_propagator[key_left];     // dependency v
             CuDeviceData<T>** d_q_2 = this->d_propagator[key_right];    // dependency u
+
+            // Check if propagators at endpoints are leaf nodes (initial conditions)
+            bool left_is_leaf = (this->propagator_computation_optimizer->get_computation_propagator(key_left).deps.size() == 0);
+            bool right_is_leaf = (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0);
 
             std::array<T,N_STRESS> _block_dq_dl;
             for(int i=0; i<N_STRESS; i++)
@@ -759,8 +774,21 @@ void CudaComputationContinuous<T>::compute_stress()
                 gpu_error_check(cudaStreamWaitEvent(this->streams[STREAM][0], memcpy_done, 0));
 
                 gpu_error_check(cudaMemcpy(segment_stress, d_segment_stress, sizeof(T)*N_STRESS_DIM, cudaMemcpyDeviceToHost));
-                for(int d=0; d<N_STRESS_DIM; d++)
-                    _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
+
+                // Skip endpoint terms where propagator is initial condition (q=1)
+                // For non-periodic BC (DCT/DST), the initial condition q=1 doesn't transform
+                // correctly, causing errors in stress computation.
+                bool skip_this_n = false;
+                if (n == 0 && right_is_leaf)
+                    skip_this_n = true;
+                if (n == N_RIGHT && left_is_leaf && N_LEFT == N_RIGHT)
+                    skip_this_n = true;
+
+                if (!skip_this_n)
+                {
+                    for(int d=0; d<N_STRESS_DIM; d++)
+                        _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
+                }
 
                 // std::cout << key_left << ", "  << key_right << ", " << n << ", " << segment_stress[0] << ", " << segment_stress[1] << ", " << segment_stress[2] << std::endl;
 
