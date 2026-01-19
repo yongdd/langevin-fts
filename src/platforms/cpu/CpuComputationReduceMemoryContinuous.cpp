@@ -585,7 +585,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
 
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-            T norm = (this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
+            T norm = (pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated)/this->single_polymer_partitions[p];
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }
@@ -1109,6 +1109,19 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                         _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
                 }
             }
+
+            // Multiply by local_ds for this block
+            int p_idx = std::get<0>(key);
+            Polymer& pc_stress = this->molecules->get_polymer(p_idx);
+            const auto& v_u_stress = this->propagator_computation_optimizer->get_computation_block(key).v_u;
+            int v_stress = std::get<0>(v_u_stress[0]);
+            int u_stress = std::get<1>(v_u_stress[0]);
+            double contour_length = pc_stress.get_block(v_stress, u_stress).contour_length;
+            const ContourLengthMapping& mapping_stress = this->molecules->get_contour_length_mapping();
+            double local_ds = mapping_stress.get_local_ds(contour_length);
+            for(int d=0; d<N_STRESS; d++)
+                _block_dq_dl[d] *= local_ds;
+
             block_dq_dl[key] = _block_dq_dl;
         }
 
@@ -1125,22 +1138,23 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }
         // Normalize stress components
+        // Note: local_ds is already multiplied per-block in the stress loop above
         for(int p=0; p<n_polymer_types; p++)
         {
             // Diagonal components: xx, yy, zz
             for(int d=0; d<DIM; d++)
-                this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M/this->molecules->get_global_ds();
+                this->dq_dl[p][d] /= -3.0*this->cb->get_lx(d)*M*M;
             // Cross-term components for 3D: xy, xz, yz
             if (DIM == 3)
             {
-                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_global_ds();
-                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M/this->molecules->get_global_ds();
-                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M/this->molecules->get_global_ds();
+                this->dq_dl[p][3] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M;
+                this->dq_dl[p][4] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(2))*M*M;
+                this->dq_dl[p][5] /= -3.0*std::sqrt(this->cb->get_lx(1)*this->cb->get_lx(2))*M*M;
             }
             // Cross-term component for 2D: yz
             else if (DIM == 2)
             {
-                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M/this->molecules->get_global_ds();
+                this->dq_dl[p][2] /= -3.0*std::sqrt(this->cb->get_lx(0)*this->cb->get_lx(1))*M*M;
             }
         }
     }
