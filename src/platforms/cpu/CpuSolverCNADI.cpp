@@ -176,7 +176,7 @@ void CpuSolverCNADI::update_laplacian_operator()
 {
     try
     {
-        const double ds = this->molecules->get_ds();
+        const double ds = this->molecules->get_global_ds();
 
         for(const auto& item: this->molecules->get_bond_lengths())
         {
@@ -210,7 +210,7 @@ void CpuSolverCNADI::update_laplacian_operator()
 void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
+    const double ds = this->molecules->get_global_ds();
     const int ds_index = 1;  // CN-ADI always uses ds_index=1
 
     for(const auto& item: w_input)

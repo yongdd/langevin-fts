@@ -38,7 +38,7 @@
  * // Query species
  * int n_poly = molecules.get_n_polymer_types();   // 1
  * int n_solv = molecules.get_n_solvent_types();   // 1
- * double ds = molecules.get_ds();                  // 0.01
+ * double ds = molecules.get_global_ds();           // 0.01
  * @endcode
  */
 
@@ -172,10 +172,11 @@ public:
     std::string get_model_name() const;
 
     /**
-     * @brief Get contour step size.
-     * @return ds value
+     * @brief Get global contour step size (= 1/N_Ref).
+     * @return Global ds value
+     * @note Use local_ds from ContourLengthMapping for per-block step sizes
      */
-    double get_ds() const;
+    double get_global_ds() const;
 
     /**
      * @brief Get bond lengths map.

@@ -276,7 +276,7 @@ void CudaComputationContinuous<T>::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_ds();
+        const double ds = this->molecules->get_global_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -565,7 +565,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
 
-            T _norm = (this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
+            T _norm = (this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
                 norm = _norm;
@@ -814,7 +814,7 @@ void CudaComputationContinuous<T>::compute_stress()
         double sin_g = std::sin(angles[2]);
 
         // Normalization factor (from Boltzmann factor derivative)
-        double norm = -3.0 * M * M / this->molecules->get_ds();
+        double norm = -3.0 * M * M / this->molecules->get_global_ds();
 
         for(int p=0; p<n_polymer_types; p++)
         {

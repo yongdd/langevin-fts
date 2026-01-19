@@ -353,7 +353,7 @@ void CudaSolverCNADI::update_laplacian_operator()
         {
             std::string monomer_type = item.first;
             double bond_length_sq = item.second*item.second;
-            double ds = this->molecules->get_ds();
+            double ds = this->molecules->get_global_ds();
 
             // Full-step coefficients
             FiniteDifference::get_laplacian_matrix(
@@ -410,7 +410,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_ds();
+        const double ds = this->molecules->get_global_ds();
 
         // CN-ADI uses only global ds (ds_index=1)
         const int ds_idx = 1;

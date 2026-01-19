@@ -57,7 +57,7 @@ CpuSolverPseudoETDRK4<T>::CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules
             cb->get_boundary_conditions(),
             cb->get_nx(),
             cb->get_dx(),
-            molecules->get_ds(),
+            molecules->get_global_ds(),
             cb->get_recip_metric()
         );
 
@@ -99,7 +99,7 @@ template <typename T>
 void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
+    const double ds = this->molecules->get_global_ds();
     const int ds_index = 1;  // ETDRK4 uses only global ds
 
     for (const auto& item : w_input)
