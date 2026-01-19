@@ -645,14 +645,17 @@ void CpuComputationContinuous<T>::compute_stress()
             for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }
-        // Transform Cartesian k⊗k sums to lattice parameter derivatives
-        // Using equations for derivatives of |k|² w.r.t. lattice parameters:
-        // dH/dL₁ ∝ -2(kx² L₁ + kx·ky L₂ cos γ + kx·kz L₃ cos β)
-        // dH/dL₂ ∝ -2(ky² L₂ + kx·ky L₁ cos γ + ky·kz L₃ cos α)
-        // dH/dL₃ ∝ -2(kz² L₃ + kx·kz L₁ cos β + ky·kz L₂ cos α)
-        // dH/dα ∝ 2 ky·kz L₂ L₃ sin α
-        // dH/dβ ∝ 2 kx·kz L₁ L₃ sin β
-        // dH/dγ ∝ 2 kx·ky L₁ L₂ sin γ
+        // ============ DEFORMATION VECTOR APPROACH ============
+        // The deformation vector v = h⁻¹k transforms k⊗k sums to a natural basis
+        // where the metric tensor g = hᵀh has simple derivatives:
+        //   g₁₁ = L₁², g₂₂ = L₂², g₃₃ = L₃²
+        //   g₁₂ = L₁L₂cosγ, g₁₃ = L₁L₃cosβ, g₂₃ = L₂L₃cosα
+        //
+        // |k|² = vᵀgv, so derivatives become:
+        //   ∂H/∂L₁ ∝ 2(L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃)
+        //   ∂H/∂γ  ∝ -2L₁L₂sinγ·V₁₂
+        //
+        // V = h⁻¹ S⁽ᵏ⁾ h⁻ᵀ (congruence transformation)
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);
@@ -668,14 +671,14 @@ void CpuComputationContinuous<T>::compute_stress()
         double sin_b = std::sin(angles[1]);
         double sin_g = std::sin(angles[2]);
 
-        // Normalization factor
+        // Normalization factor (from Boltzmann factor derivative)
         double norm = -3.0 * M * M / this->molecules->get_ds();
 
         for(int p=0; p<n_polymer_types; p++)
         {
-            // Get Cartesian k⊗k sums
-            T S_xx = this->dq_dl[p][0];  // Σ coeff × kx²
-            T S_yy = this->dq_dl[p][1];  // Σ coeff × ky²
+            // Get Cartesian k⊗k sums: S⁽ᵏ⁾
+            T S_xx = this->dq_dl[p][0];
+            T S_yy = this->dq_dl[p][1];
             T S_zz = 0.0, S_xy = 0.0, S_xz = 0.0, S_yz = 0.0;
 
             if (DIM == 3) {
@@ -687,31 +690,83 @@ void CpuComputationContinuous<T>::compute_stress()
                 S_xy = this->dq_dl[p][2];
             }
 
-            // Compute lattice length derivatives for non-orthogonal lattice
-            // For 2D with a=(L1,0), b=(L2*cos(γ), L2*sin(γ)):
-            // kx = 2π m1/L1, ky = 2π(-m1*cot(γ)/L1 + m2*csc(γ)/L2)
-            // The cross-term kx*ky contains m1*m2 which couples dH/dL1 and dH/dL2
-            this->dq_dl[p][0] = (S_xx/L1 - S_xy*cos_g/(L1*sin_g) - S_xz*cos_b/L1) / norm;
+            // Compute h⁻¹ for the lattice matrix h = [a|b|c]
+            // h = | L₁    L₂cosγ   c_x |
+            //     | 0     L₂sinγ   c_y |
+            //     | 0     0        c_z |
+            // h⁻¹ is upper triangular
+            double h_inv_11 = 1.0 / L1;
+            double h_inv_12 = -cos_g / (L1 * sin_g);
+            double h_inv_22 = 1.0 / (L2 * sin_g);
+
+            // For 3D, c vector components and h⁻¹ elements
+            double h_inv_13 = 0.0, h_inv_23 = 0.0, h_inv_33 = 1.0;
+            if (DIM == 3) {
+                double c_x = L3 * cos_b;
+                double c_y = L3 * (cos_a - cos_b * cos_g) / sin_g;
+                double c_z = L3 * std::sqrt(1.0 - cos_a*cos_a - cos_b*cos_b - cos_g*cos_g
+                                            + 2.0*cos_a*cos_b*cos_g) / sin_g;
+                h_inv_33 = 1.0 / c_z;
+                h_inv_23 = -c_y / (L2 * sin_g * c_z);
+                h_inv_13 = (c_y * cos_g / sin_g - c_x) / (L1 * c_z);
+            }
+
+            // Transform k⊗k sums to v⊗v sums: V = h⁻¹ S⁽ᵏ⁾ h⁻ᵀ
+            // For symmetric S, V is also symmetric
+            T V_11, V_22, V_33, V_12, V_13, V_23;
+
+            if (DIM == 1) {
+                // V = h⁻¹ S h⁻ᵀ for 1×1 case
+                // h = [L₁], h⁻¹ = [1/L₁], V₁₁ = (1/L₁)² S_xx
+                V_11 = h_inv_11*h_inv_11*S_xx;
+            } else if (DIM == 2) {
+                // V = h⁻¹ S h⁻ᵀ for 2×2 case
+                V_11 = h_inv_11*h_inv_11*S_xx + 2*h_inv_11*h_inv_12*S_xy + h_inv_12*h_inv_12*S_yy;
+                V_22 = h_inv_22*h_inv_22*S_yy;
+                V_12 = h_inv_11*h_inv_22*S_xy + h_inv_12*h_inv_22*S_yy;
+            } else if (DIM == 3) {
+                // V = h⁻¹ S h⁻ᵀ for 3×3 case (h⁻¹ is upper triangular, h⁻ᵀ is lower triangular)
+                // First compute T = S h⁻ᵀ, then V = h⁻¹ T
+                // h⁻ᵀ[k,j] = h⁻¹[j,k], nonzero only when k >= j
+                T T_11 = S_xx*h_inv_11 + S_xy*h_inv_12 + S_xz*h_inv_13;
+                T T_12 = S_xy*h_inv_22 + S_xz*h_inv_23;
+                T T_13 = S_xz*h_inv_33;
+                T T_21 = S_xy*h_inv_11 + S_yy*h_inv_12 + S_yz*h_inv_13;
+                T T_22 = S_yy*h_inv_22 + S_yz*h_inv_23;
+                T T_23 = S_yz*h_inv_33;
+                T T_31 = S_xz*h_inv_11 + S_yz*h_inv_12 + S_zz*h_inv_13;
+                T T_32 = S_yz*h_inv_22 + S_zz*h_inv_23;
+                T T_33 = S_zz*h_inv_33;
+
+                // V = h⁻¹ T
+                V_11 = h_inv_11*T_11 + h_inv_12*T_21 + h_inv_13*T_31;
+                V_12 = h_inv_11*T_12 + h_inv_12*T_22 + h_inv_13*T_32;
+                V_13 = h_inv_11*T_13 + h_inv_12*T_23 + h_inv_13*T_33;
+                V_22 = h_inv_22*T_22 + h_inv_23*T_32;
+                V_23 = h_inv_22*T_23 + h_inv_23*T_33;
+                V_33 = h_inv_33*T_33;
+            }
+
+            // Compute lattice parameter derivatives using metric tensor formulas
+            // The metric tensor g has: g₁₁ = L₁², g₁₂ = L₁L₂cosγ, etc.
+            // ∂|k|²/∂L₁ = Vᵢⱼ ∂gᵢⱼ/∂L₁, where ∂g₁₁/∂L₁ = 2L₁, ∂g₁₂/∂L₁ = L₂cosγ, etc.
+            // The factor of 2 from the metric is already absorbed in the normalization
+            this->dq_dl[p][0] = (L1*V_11 + L2*cos_g*V_12 + L3*cos_b*V_13) / norm;
             if (DIM >= 2) {
-                this->dq_dl[p][1] = (S_yy/L2 + S_xy*cos_g/(L2*sin_g) - S_yz*cos_a/L2) / norm;
+                this->dq_dl[p][1] = (L2*V_22 + L1*cos_g*V_12 + L3*cos_a*V_23) / norm;
             }
             if (DIM >= 3) {
-                this->dq_dl[p][2] = (S_zz/L3 - S_xz*cos_b/L3 - S_yz*cos_a/L3) / norm;
+                this->dq_dl[p][2] = (L3*V_33 + L1*cos_b*V_13 + L2*cos_a*V_23) / norm;
             }
 
-            // Compute angle derivatives
-            // For 2D: ∂(k²)/∂γ = 2kx·ky - 2ky²·cot(γ)
-            // For 3D: same structure, achieves ~1-2% accuracy
-            double cot_g = cos_g / sin_g;
-            double cot_a = cos_a / sin_a;
-            double cot_b = cos_b / sin_b;
-
+            // Compute angle derivatives using metric tensor formulas
+            // ∂g₁₂/∂γ = -L₁L₂sinγ, so ∂H/∂γ ∝ -L₁L₂sinγ·V₁₂
             if (DIM == 3) {
-                this->dq_dl[p][3] = (S_xy - S_yy*cot_g) / norm;  // dH/dγ
-                this->dq_dl[p][4] = (S_xz - S_zz*cot_b) / norm;  // dH/dβ
-                this->dq_dl[p][5] = (S_yz - S_zz*cot_a) / norm;  // dH/dα
+                this->dq_dl[p][3] = -L1 * L2 * sin_g * V_12 / norm;  // dH/dγ
+                this->dq_dl[p][4] = -L1 * L3 * sin_b * V_13 / norm;  // dH/dβ
+                this->dq_dl[p][5] = -L2 * L3 * sin_a * V_23 / norm;  // dH/dα
             } else if (DIM == 2) {
-                this->dq_dl[p][2] = (S_xy - S_yy*cot_g) / norm;  // dH/dγ
+                this->dq_dl[p][2] = -L1 * L2 * sin_g * V_12 / norm;  // dH/dγ
             }
         }
     }
