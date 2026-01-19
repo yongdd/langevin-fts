@@ -832,17 +832,25 @@ void CudaComputationDiscrete<T>::compute_concentrations()
                 n_segment_right
             );
             
-            // Normalize concentration
+            // Get local_ds for this block from ContourLengthMapping
             Polymer& pc = this->molecules->get_polymer(p);
+            const auto& v_u = this->propagator_computation_optimizer->get_computation_block(key).v_u;
+            int v = std::get<0>(v_u[0]);
+            int u = std::get<1>(v_u[0]);
+            double contour_length = pc.get_block(v, u).contour_length;
+            const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+            double local_ds = mapping.get_local_ds(contour_length);
+
+            // Normalize concentration: local_ds * volume_fraction / alpha
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
             {
-                norm = pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated;
+                norm = local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated;
                 norm = norm/this->single_polymer_partitions[p];
             }
             else
             {
-                norm = make_cuDoubleComplex(pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated, 0.0);
+                norm = make_cuDoubleComplex(local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated, 0.0);
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_polymer_partitions[p]));
             }
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
@@ -1098,16 +1106,21 @@ void CudaComputationDiscrete<T>::compute_stress()
                     this->dq_dl[p][d] += block_dq_dl[i][key][d];
         }
         // ============ DEFORMATION VECTOR APPROACH ============
-        // The deformation vector v = h⁻¹k transforms k⊗k sums to a natural basis
-        // where the metric tensor g = hᵀh has simple derivatives:
+        // The Pseudo class now computes v⊗v components directly, where
+        // v = 2π g⁻¹ m is the deformation vector (units: 1/L²).
+        //
+        // The accumulated sums are already in the deformation vector basis:
+        //   V₁₁ = Σ(kernel × v₁²), V₂₂ = Σ(kernel × v₂²), etc.
+        //
+        // The metric tensor g = hᵀh has simple derivatives:
         //   g₁₁ = L₁², g₂₂ = L₂², g₃₃ = L₃²
         //   g₁₂ = L₁L₂cosγ, g₁₃ = L₁L₃cosβ, g₂₃ = L₂L₃cosα
         //
-        // |k|² = vᵀgv, so derivatives become:
-        //   ∂H/∂L₁ ∝ 2(L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃)
-        //   ∂H/∂γ  ∝ -2L₁L₂sinγ·V₁₂
+        // Lattice parameter derivatives:
+        //   ∂H/∂L₁ ∝ L₁V₁₁ + L₂cosγ·V₁₂ + L₃cosβ·V₁₃
+        //   ∂H/∂γ  ∝ -L₁L₂sinγ·V₁₂
         //
-        // V = h⁻¹ S⁽ᵏ⁾ h⁻ᵀ (congruence transformation)
+        // @see docs/StressTensorCalculation.md for derivation
 
         // Get lattice parameters
         double L1 = this->cb->get_lx(0);
@@ -1129,75 +1142,18 @@ void CudaComputationDiscrete<T>::compute_stress()
 
         for(int p=0; p<n_polymer_types; p++)
         {
-            // Get Cartesian k⊗k sums: S⁽ᵏ⁾
-            T S_xx = this->dq_dl[p][0];
-            T S_yy = this->dq_dl[p][1];
-            T S_zz = 0.0, S_xy = 0.0, S_xz = 0.0, S_yz = 0.0;
+            // Get v⊗v sums (already in deformation vector basis from Pseudo)
+            T V_11 = this->dq_dl[p][0];
+            T V_22 = (DIM >= 2) ? this->dq_dl[p][1] : T(0.0);
+            T V_33 = T(0.0), V_12 = T(0.0), V_13 = T(0.0), V_23 = T(0.0);
 
             if (DIM == 3) {
-                S_zz = this->dq_dl[p][2];
-                S_xy = this->dq_dl[p][3];
-                S_xz = this->dq_dl[p][4];
-                S_yz = this->dq_dl[p][5];
+                V_33 = this->dq_dl[p][2];
+                V_12 = this->dq_dl[p][3];
+                V_13 = this->dq_dl[p][4];
+                V_23 = this->dq_dl[p][5];
             } else if (DIM == 2) {
-                S_xy = this->dq_dl[p][2];
-            }
-
-            // Compute h⁻¹ for the lattice matrix h = [a|b|c]
-            // h = | L₁    L₂cosγ   c_x |
-            //     | 0     L₂sinγ   c_y |
-            //     | 0     0        c_z |
-            // h⁻¹ is upper triangular
-            double h_inv_11 = 1.0 / L1;
-            double h_inv_12 = -cos_g / (L1 * sin_g);
-            double h_inv_22 = 1.0 / (L2 * sin_g);
-
-            // For 3D, c vector components and h⁻¹ elements
-            double h_inv_13 = 0.0, h_inv_23 = 0.0, h_inv_33 = 1.0;
-            if (DIM == 3) {
-                double c_x = L3 * cos_b;
-                double c_y = L3 * (cos_a - cos_b * cos_g) / sin_g;
-                double c_z = L3 * std::sqrt(1.0 - cos_a*cos_a - cos_b*cos_b - cos_g*cos_g
-                                            + 2.0*cos_a*cos_b*cos_g) / sin_g;
-                h_inv_33 = 1.0 / c_z;
-                h_inv_23 = -c_y / (L2 * sin_g * c_z);
-                h_inv_13 = (c_y * cos_g / sin_g - c_x) / (L1 * c_z);
-            }
-
-            // Transform k⊗k sums to v⊗v sums: V = h⁻¹ S⁽ᵏ⁾ h⁻ᵀ
-            // For symmetric S, V is also symmetric
-            T V_11, V_22, V_33, V_12, V_13, V_23;
-
-            if (DIM == 1) {
-                // V = h⁻¹ S h⁻ᵀ for 1×1 case
-                // h = [L₁], h⁻¹ = [1/L₁], V₁₁ = (1/L₁)² S_xx
-                V_11 = h_inv_11*h_inv_11*S_xx;
-            } else if (DIM == 2) {
-                // V = h⁻¹ S h⁻ᵀ for 2×2 case
-                V_11 = h_inv_11*h_inv_11*S_xx + 2*h_inv_11*h_inv_12*S_xy + h_inv_12*h_inv_12*S_yy;
-                V_22 = h_inv_22*h_inv_22*S_yy;
-                V_12 = h_inv_11*h_inv_22*S_xy + h_inv_12*h_inv_22*S_yy;
-            } else if (DIM == 3) {
-                // V = h⁻¹ S h⁻ᵀ for 3×3 case (h⁻¹ is upper triangular, h⁻ᵀ is lower triangular)
-                // First compute T = S h⁻ᵀ, then V = h⁻¹ T
-                // h⁻ᵀ[k,j] = h⁻¹[j,k], nonzero only when k >= j
-                T T_11 = S_xx*h_inv_11 + S_xy*h_inv_12 + S_xz*h_inv_13;
-                T T_12 = S_xy*h_inv_22 + S_xz*h_inv_23;
-                T T_13 = S_xz*h_inv_33;
-                T T_21 = S_xy*h_inv_11 + S_yy*h_inv_12 + S_yz*h_inv_13;
-                T T_22 = S_yy*h_inv_22 + S_yz*h_inv_23;
-                T T_23 = S_yz*h_inv_33;
-                T T_31 = S_xz*h_inv_11 + S_yz*h_inv_12 + S_zz*h_inv_13;
-                T T_32 = S_yz*h_inv_22 + S_zz*h_inv_23;
-                T T_33 = S_zz*h_inv_33;
-
-                // V = h⁻¹ T
-                V_11 = h_inv_11*T_11 + h_inv_12*T_21 + h_inv_13*T_31;
-                V_12 = h_inv_11*T_12 + h_inv_12*T_22 + h_inv_13*T_32;
-                V_13 = h_inv_11*T_13 + h_inv_12*T_23 + h_inv_13*T_33;
-                V_22 = h_inv_22*T_22 + h_inv_23*T_32;
-                V_23 = h_inv_22*T_23 + h_inv_23*T_33;
-                V_33 = h_inv_33*T_33;
+                V_12 = this->dq_dl[p][2];
             }
 
             // Compute lattice parameter derivatives using metric tensor formulas
