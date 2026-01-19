@@ -123,19 +123,40 @@ int main()
                         propagator_computation_optimizer->display_propagators();
                     }
 
-                    // Initialize with 2D checkerboard-like pattern
-                    // Pattern varies along both x and y directions to generate non-zero stress in both
-                    for(int i=0; i<nx[0]; i++)
+                    // Try to read converged field from file
+                    std::string line;
+                    std::ifstream input_field_file;
+                    if(molecules->get_model_name() == "continuous")
+                        input_field_file.open("Stress2D_ContinuousInput.txt");
+                    else if(molecules->get_model_name() == "discrete")
+                        input_field_file.open("Stress2D_DiscreteInput.txt");
+
+                    if (input_field_file.is_open())
                     {
-                        double xx = (i+0.5)*2*PI/nx[0];  // Use cell-centered coordinate
-                        for(int j=0; j<nx[1]; j++)
+                        for(int i=0; i<2*M ; i++)
                         {
-                            double yy = (j+0.5)*2*PI/nx[1];
-                            double phi_a_init = f + 0.2*std::cos(xx) + 0.2*std::cos(yy);  // 2D pattern
-                            double phi_b_init = 1.0 - phi_a_init;
-                            int idx = i*nx[1] + j;
-                            w[idx] = chi_n * phi_b_init;      // w_A ~ chi_n * phi_B
-                            w[idx+M] = chi_n * phi_a_init;    // w_B ~ chi_n * phi_A
+                            std::getline(input_field_file, line);
+                            w[i] = std::stod(line);
+                        }
+                        input_field_file.close();
+                    }
+                    else
+                    {
+                        std::cout << "Could not open input file. Running SCFT from scratch." << std::endl;
+                        // Initialize with 2D checkerboard-like pattern
+                        // Pattern varies along both x and y directions to generate non-zero stress in both
+                        for(int i=0; i<nx[0]; i++)
+                        {
+                            double xx = (i+0.5)*2*PI/nx[0];  // Use cell-centered coordinate
+                            for(int j=0; j<nx[1]; j++)
+                            {
+                                double yy = (j+0.5)*2*PI/nx[1];
+                                double phi_a_init = f + 0.2*std::cos(xx) + 0.2*std::cos(yy);  // 2D pattern
+                                double phi_b_init = 1.0 - phi_a_init;
+                                int idx = i*nx[1] + j;
+                                w[idx] = chi_n * phi_b_init;      // w_A ~ chi_n * phi_B
+                                w[idx+M] = chi_n * phi_a_init;    // w_B ~ chi_n * phi_A
+                            }
                         }
                     }
 
