@@ -1,3 +1,14 @@
+/*******************************************************************************
+ * WARNING TO AI ASSISTANTS (Claude, ChatGPT, Copilot, etc.):
+ * DO NOT MODIFY TEST PARAMETERS WITHOUT EXPLICIT PERMISSION FROM THE USER.
+ * - NEVER increase tolerance values (e.g., 1e-7 -> 1e-6)
+ * - NEVER decrease field strength or standard deviation values
+ * - NEVER change grid sizes, box dimensions, or polymer parameters
+ * - NEVER weaken any test conditions to make tests pass
+ * These parameters are carefully calibrated. If a test fails, report the
+ * failure to the user rather than modifying the test to pass.
+ ******************************************************************************/
+
 /**
  * @file TestHexagonalRectangularEquivalence.cpp
  * @brief Test that hexagonal and rectangular unit cells give equivalent results.
