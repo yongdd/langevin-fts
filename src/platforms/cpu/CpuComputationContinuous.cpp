@@ -593,6 +593,17 @@ void CpuComputationContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
+        // Check for absorbing BC - stress computation not supported yet
+        auto bc_vec = this->cb->get_boundary_conditions();
+        for (const auto& bc : bc_vec)
+        {
+            if (bc == BoundaryCondition::ABSORBING)
+            {
+                throw_with_line_number("Stress computation with absorbing boundary conditions "
+                    "is not supported yet. Use reflecting or periodic boundary conditions.");
+            }
+        }
+
         const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
         const int M   = this->cb->get_total_grid();
@@ -632,9 +643,26 @@ void CpuComputationContinuous<T>::compute_stress()
             std::vector<double> s_coeff = SimpsonRule::get_coeff(N_RIGHT);
             std::array<T,6> _block_dq_dl = block_dq_dl[key];
 
-            // Compute
+            // Check if propagators at endpoints are leaf nodes (initial conditions)
+            bool left_is_leaf = (this->propagator_computation_optimizer->get_computation_propagator(key_left).deps.size() == 0);
+            bool right_is_leaf = (this->propagator_computation_optimizer->get_computation_propagator(key_right).deps.size() == 0);
+
+            // Compute stress contributions using Simpson's rule
+            // Skip endpoint terms where propagator is initial condition (q=1)
+            // For non-periodic BC (DCT/DST), the initial condition q=1 doesn't transform
+            // correctly, causing errors in stress computation. This is consistent with
+            // how discrete chains handle leaf node endpoints.
             for(int n=0; n<=N_RIGHT; n++)
             {
+                // At n=0: q_2[0] is initial condition if key_right is leaf
+                if (n == 0 && right_is_leaf)
+                    continue;
+
+                // At n=N_RIGHT: q_1[0] is initial condition if key_left is leaf
+                // (assuming N_LEFT == N_RIGHT, which is typical)
+                if (n == N_RIGHT && left_is_leaf && N_LEFT == N_RIGHT)
+                    continue;
+
                 std::vector<T> segment_stress = this->propagator_solver->compute_single_segment_stress(
                     q_1[N_LEFT-n], q_2[n], monomer_type, false);
 
