@@ -593,19 +593,20 @@ void CpuComputationContinuous<T>::compute_stress()
         if (this->method == "realspace")
             throw_with_line_number("Currently, the real-space method does not support stress computation.");
 
-        // Check for absorbing BC - stress computation not supported yet
+        // Check for non-periodic BC - stress computation not supported
         auto bc_vec = this->cb->get_boundary_conditions();
         for (const auto& bc : bc_vec)
         {
-            if (bc == BoundaryCondition::ABSORBING)
+            if (bc != BoundaryCondition::PERIODIC)
             {
-                throw_with_line_number("Stress computation with absorbing boundary conditions "
-                    "is not supported yet. Use reflecting or periodic boundary conditions.");
+                throw_with_line_number("Stress computation with non-periodic boundary conditions "
+                    "is not supported yet. Use periodic boundary conditions.");
             }
         }
 
-        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int DIM = this->cb->get_dim();
+
+        const int N_STRESS = 6;  // Full stress tensor: xx, yy, zz, xy, xz, yz
         const int M   = this->cb->get_total_grid();
 
         std::map<std::tuple<int, std::string, std::string>, std::array<T,6>> block_dq_dl;
