@@ -41,11 +41,14 @@ CudaSolverGlobalRichardsonBase::CudaSolverGlobalRichardsonBase(
         else if (DIM == 1)
             nx = {cb->get_nx(0), 1, 1};
 
-        // Copy streams
-        for (int i = 0; i < n_streams; i++)
+        // Copy streams (nullptr allowed for reduce-memory mode)
+        if (streams != nullptr)
         {
-            this->streams[i][0] = streams[i][0];
-            this->streams[i][1] = streams[i][1];
+            for (int i = 0; i < n_streams; i++)
+            {
+                this->streams[i][0] = streams[i][0];
+                this->streams[i][1] = streams[i][1];
+            }
         }
 
         // Allocate coefficient arrays for each monomer type
