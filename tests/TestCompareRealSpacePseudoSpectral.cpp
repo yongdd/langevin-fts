@@ -190,7 +190,7 @@ bool run_comparison_test(
         q_rs = q_init;
         for (int step = 0; step < n_steps; ++step)
         {
-            solver_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
+            solver_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
             std::swap(q_rs, q_out);
         }
 
@@ -226,7 +226,7 @@ bool run_comparison_test(
         q_ps = q_init;
         for (int step = 0; step < n_steps; ++step)
         {
-            solver_ps->advance_propagator_single_segment(q_ps.data(), q_out.data(), "A");
+            solver_ps->advance_propagator_single_segment(q_ps.data(), q_out.data(), 0, 0, 1);
             std::swap(q_ps, q_out);
         }
 
@@ -235,7 +235,7 @@ bool run_comparison_test(
         q_rs = q_init;
         for (int step = 0; step < n_steps; ++step)
         {
-            solver_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
+            solver_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
             std::swap(q_rs, q_out);
         }
 
@@ -278,7 +278,7 @@ bool run_comparison_test(
         q_rs = q_init;
         for (int step = 0; step < n_steps; ++step)
         {
-            solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), "A");
+            solver_cuda_rs->advance_propagator_single_segment(q_rs.data(), q_out.data(), 0, 0, 1);
             std::swap(q_rs, q_out);
         }
 

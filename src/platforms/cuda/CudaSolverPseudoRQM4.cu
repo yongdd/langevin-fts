@@ -86,7 +86,7 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
+            cb->get_nx(), cb->get_dx(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
 
@@ -108,8 +108,6 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw and exp_dw_half for each ds_index and monomer_type
-        // NOTE: add_ds_value() is called later, after update_laplacian_operator(),
-        // because update() resets ds_values[1] to global_ds.
         for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
@@ -319,16 +317,15 @@ template <typename T>
 void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
 {
     try{
-        // Update Pseudo with global_ds (this resets ds_values[1] to global_ds)
+        // Update Pseudo Fourier basis arrays for new box dimensions
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_global_ds(),
+            this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
 
-        // Re-register local_ds values for each block
-        // (pseudo->update() resets ds_values[1] to global_ds)
+        // Register local_ds values for each block
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
@@ -338,7 +335,7 @@ void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
             pseudo->add_ds_value(ds_idx, local_ds);
         }
 
-        // Finalize Pseudo to compute boltz_bond with correct local_ds
+        // Finalize Pseudo to compute boltz_bond with local_ds values
         pseudo->finalize_ds_values();
     }
     catch(std::exception& exc)

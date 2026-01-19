@@ -250,17 +250,19 @@ public:
      * @param bc          Boundary conditions (can be mixed)
      * @param nx          Grid dimensions
      * @param dx          Grid spacings
-     * @param ds          Contour step size
      * @param recip_metric Reciprocal metric tensor (only for periodic BC)
      *                     [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
      * @param recip_vec   Reciprocal lattice vectors [a*|b*|c*] in column-major order
      *                     for k⊗k computation. Default is Cartesian basis.
+     *
+     * @note After construction, call add_ds_value() for each unique ds value,
+     *       then finalize_ds_values() to compute Boltzmann factors.
      */
     Pseudo(
         std::map<std::string, double> bond_lengths,
         std::vector<BoundaryCondition> bc,
-        std::vector<int> nx, std::vector<double> dx, double ds,
+        std::vector<int> nx, std::vector<double> dx,
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
@@ -282,16 +284,16 @@ public:
      * @param ds_index     1-based index for ds value (default: 1 for global ds)
      * @return Pointer to Boltzmann factor array
      */
-    virtual double* get_boltz_bond(std::string monomer_type, int ds_index = 1);
+    virtual double* get_boltz_bond(std::string monomer_type, int ds_index);
 
     /**
      * @brief Get Boltzmann factor for half step for given ds_index.
      *
      * @param monomer_type Monomer type (e.g., "A", "B")
-     * @param ds_index     1-based index for ds value (default: 1 for global ds)
+     * @param ds_index     1-based index for ds value
      * @return Pointer to Boltzmann factor array
      */
-    virtual double* get_boltz_bond_half(std::string monomer_type, int ds_index = 1);
+    virtual double* get_boltz_bond_half(std::string monomer_type, int ds_index);
 
     /**
      * @brief Add a ds value to be pre-computed.
@@ -358,17 +360,19 @@ public:
     /**
      * @brief Update all arrays after parameter changes.
      *
+     * Updates Fourier basis arrays and recomputes Boltzmann factors for
+     * all previously registered ds values.
+     *
      * @param bc           New boundary conditions
      * @param bond_lengths New segment lengths
      * @param dx           New grid spacings
-     * @param ds           New contour step (usually unchanged)
      * @param recip_metric New reciprocal metric tensor (for periodic BC)
      * @param recip_vec    New reciprocal lattice vectors for k⊗k computation
      */
     virtual void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
-        std::vector<double> dx, double ds,
+        std::vector<double> dx,
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 };

@@ -162,7 +162,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * Creates Python class "PropagatorComputation_{Real|Complex}" with methods:
  * - update_laplacian_operator(): Refresh operators after box change
  * - compute_propagators(w_input, q_init=None): Solve propagator equations
- * - advance_propagator_single_segment(q_in, monomer_type): Single step
+ * - advance_propagator_single_segment(q_in, p, v, u): Single step for block (v,u) of polymer p
  * - compute_concentrations(): Calculate segment densities
  * - compute_statistics(w_input, q_init=None): Full SCFT computation
  * - get_total_concentration(monomer_type): Total density by monomer
@@ -234,7 +234,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 throw_without_line_number(exc.what());
             }
         }, py::arg("w_input"), py::arg("q_init") = py::none())
-        .def("advance_propagator_single_segment", [](PropagatorComputation<T>& obj, py::array_t<T> q_in, const std::string monomer_type)
+        .def("advance_propagator_single_segment", [](PropagatorComputation<T>& obj, py::array_t<T> q_in, int p, int v, int u)
         {
             try{
                 // Request input buffer
@@ -254,7 +254,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 }
                 else
                 {
-                    obj.advance_propagator_single_segment(q_in_ptr, q_out_ptr, monomer_type);
+                    obj.advance_propagator_single_segment(q_in_ptr, q_out_ptr, p, v, u);
                 }
                 return q_out;
 

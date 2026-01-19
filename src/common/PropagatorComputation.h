@@ -202,11 +202,13 @@ public:
      *
      * @param q_init      Input propagator at contour position s
      * @param q_out       Output propagator at contour position s+ds
-     * @param monomer_type Monomer type determining segment length
+     * @param p           Polymer index
+     * @param v           Starting vertex of the block
+     * @param u           Ending vertex of the block
      *
      * @note Used internally by compute_propagators() and for testing.
      */
-    virtual void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) = 0;
+    virtual void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) = 0;
 
     /**
      * @brief Compute monomer concentrations from propagators.

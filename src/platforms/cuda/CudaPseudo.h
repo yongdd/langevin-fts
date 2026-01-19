@@ -114,21 +114,24 @@ public:
     /**
      * @brief Construct GPU pseudo-spectral utility.
      *
-     * Computes and uploads Boltzmann factors and Fourier basis to GPU.
+     * Computes and uploads Fourier basis to GPU. Boltzmann factors are
+     * allocated and computed when finalize_ds_values() is called.
      *
      * @param bond_lengths Statistical segment lengths squared by monomer type
      * @param bc           Boundary conditions
      * @param nx           Grid dimensions
      * @param dx           Grid spacing [dx, dy, dz]
-     * @param ds           Contour step size
      * @param recip_metric Reciprocal metric tensor [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
      * @param recip_vec    Reciprocal lattice vectors [a*|b*|c*] in column-major order
      *                     for k⊗k computation. Default is Cartesian basis.
+     *
+     * @note After construction, call add_ds_value() for each unique ds value,
+     *       then finalize_ds_values() to allocate GPU memory and compute Boltzmann factors.
      */
     CudaPseudo(
         std::map<std::string, double> bond_lengths,
-        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx, double ds,
+        std::vector<BoundaryCondition> bc, std::vector<int> nx, std::vector<double> dx,
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
@@ -143,7 +146,7 @@ public:
      * @param ds_index Index for ds value (1-based)
      * @return Device pointer to exp(-b²|k|²ds/6)
      */
-    double* get_boltz_bond(std::string monomer_type, int ds_index = 1) override { return d_boltz_bond[ds_index][monomer_type]; };
+    double* get_boltz_bond(std::string monomer_type, int ds_index) override { return d_boltz_bond[ds_index][monomer_type]; };
 
     /**
      * @brief Get half bond factor (device pointer).
@@ -151,7 +154,7 @@ public:
      * @param ds_index Index for ds value (1-based)
      * @return Device pointer to exp(-b²|k|²ds/12)
      */
-    double* get_boltz_bond_half(std::string monomer_type, int ds_index = 1) override { return d_boltz_bond_half[ds_index][monomer_type];};
+    double* get_boltz_bond_half(std::string monomer_type, int ds_index) override { return d_boltz_bond_half[ds_index][monomer_type];};
 
     /** @brief Get x-direction Fourier basis (device pointer). */
     const double* get_fourier_basis_x() override { return d_fourier_basis_x;};
@@ -178,18 +181,18 @@ public:
      * @brief Update operators for new box dimensions.
      *
      * Called when box size changes during stress relaxation.
+     * Recomputes Boltzmann factors for all registered ds values.
      *
      * @param bc           Boundary conditions
      * @param bond_lengths Segment lengths
      * @param dx           New grid spacing
-     * @param ds           Contour step
      * @param recip_metric Reciprocal metric tensor
      * @param recip_vec    Reciprocal lattice vectors for k⊗k computation
      */
     void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
-        std::vector<double> dx, double ds,
+        std::vector<double> dx,
         std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
         std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}) override;
 

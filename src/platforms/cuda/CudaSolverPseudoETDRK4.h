@@ -166,7 +166,7 @@ public:
     void advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask, int ds_index = 1) override;
+        std::string monomer_type, double *d_q_mask, int ds_index) override;
 
     /** @brief Half-bond step (empty for continuous chains). */
     void advance_propagator_half_bond_step(

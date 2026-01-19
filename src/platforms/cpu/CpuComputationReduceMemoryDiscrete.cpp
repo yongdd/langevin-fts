@@ -454,11 +454,12 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                         }
                         else
                         {
+                            // Discrete chains always use ds_index=1 (global ds)
                             this->propagator_solver->advance_propagator(
                                 this->q_pair[0],
                                 this->q_pair[0],
                                 monomer_type,
-                                q_mask);
+                                q_mask, 1);
                         }
 
                         #ifndef NDEBUG
@@ -562,10 +563,11 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
+                    // Discrete chains always use ds_index=1 (global ds)
                     this->propagator_solver->advance_propagator(
                             this->q_pair[prev],
                             this->q_pair[next],
-                            monomer_type, q_mask);
+                            monomer_type, q_mask, 1);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -750,7 +752,8 @@ std::vector<T*> CpuComputationReduceMemoryDiscrete<T>::recalculate_propagator(st
             else if (q_out[n-1] != nullptr)
             {
                 q_out[n] = this->q_recal[n];
-                this->propagator_solver->advance_propagator(q_out[n-1], q_out[n], monomer_type, q_mask);
+                // Discrete chains always use ds_index=1 (global ds)
+                this->propagator_solver->advance_propagator(q_out[n-1], q_out[n], monomer_type, q_mask, 1);
             }
         }
         return q_out;
@@ -858,7 +861,8 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                     }
                     else
                     {
-                        this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                        // Discrete chains always use ds_index=1 (global ds)
+                        this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, 1);
                     }
                     q_prev = q_curr;
                     ping_pong = 1 - ping_pong;
@@ -874,7 +878,8 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 }
                 else
                 {
-                    this->propagator_solver->advance_propagator(q_prev, this->q_recal[0], monomer_type, q_mask);
+                    // Discrete chains always use ds_index=1 (global ds)
+                    this->propagator_solver->advance_propagator(q_prev, this->q_recal[0], monomer_type, q_mask, 1);
                 }
                 q_prev = this->q_recal[0];
             }
@@ -893,7 +898,8 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 }
                 else
                 {
-                    this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                    // Discrete chains always use ds_index=1 (global ds)
+                    this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, 1);
                 }
                 q_prev = q_curr;
             }
@@ -910,7 +916,8 @@ void CpuComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 else if (n > 1 && q_right_prev != nullptr)
                 {
                     q_right_curr = this->q_pair[right_prev];
-                    this->propagator_solver->advance_propagator(q_right_prev, q_right_curr, monomer_type, q_mask);
+                    // Discrete chains always use ds_index=1 (global ds)
+                    this->propagator_solver->advance_propagator(q_right_prev, q_right_curr, monomer_type, q_mask, 1);
                     std::swap(right_prev, right_next);
                 }
                 else if (n == 1)
@@ -1085,7 +1092,8 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                                 }
                                 else
                                 {
-                                    this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                                    // Discrete chains always use ds_index=1 (global ds)
+                                    this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, 1);
                                 }
                                 q_prev_left = q_curr_left;
                                 ping_pong = 1 - ping_pong;
@@ -1100,7 +1108,8 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                             }
                             else
                             {
-                                this->propagator_solver->advance_propagator(q_prev_left, this->q_recal[0], monomer_type, q_mask);
+                                // Discrete chains always use ds_index=1 (global ds)
+                                this->propagator_solver->advance_propagator(q_prev_left, this->q_recal[0], monomer_type, q_mask, 1);
                             }
                             q_prev_left = this->q_recal[0];
                         }
@@ -1119,7 +1128,8 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                             }
                             else
                             {
-                                this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                                // Discrete chains always use ds_index=1 (global ds)
+                                this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, 1);
                             }
                             q_prev_left = q_curr_left;
                         }
@@ -1146,7 +1156,8 @@ void CpuComputationReduceMemoryDiscrete<T>::compute_stress()
                         while(current_n_right < n)
                         {
                             T* q_out = this->q_pair[right_next_idx];
-                            this->propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                            // Discrete chains always use ds_index=1 (global ds)
+                            this->propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask, 1);
                             q_right_prev = q_out;
                             q_right_curr = q_out;
                             std::swap(right_prev_idx, right_next_idx);
@@ -1376,7 +1387,8 @@ void CpuComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int p
                 else
                 {
                     T* q_curr = this->q_recal[ping_pong];
-                    this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask);
+                    // Discrete chains always use ds_index=1 (global ds)
+                    this->propagator_solver->advance_propagator(q_prev, q_curr, monomer_type, q_mask, 1);
                     q_prev = q_curr;
                     ping_pong = 1 - ping_pong;
                 }
@@ -1513,7 +1525,8 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                             }
                             else
                             {
-                                this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                                // Discrete chains always use ds_index=1 (global ds)
+                                this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, 1);
                             }
                             q_prev_left = q_curr_left;
                             ping_pong = 1 - ping_pong;
@@ -1528,7 +1541,8 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                         }
                         else
                         {
-                            this->propagator_solver->advance_propagator(q_prev_left, this->q_recal[0], monomer_type, q_mask);
+                            // Discrete chains always use ds_index=1 (global ds)
+                            this->propagator_solver->advance_propagator(q_prev_left, this->q_recal[0], monomer_type, q_mask, 1);
                         }
                         q_prev_left = this->q_recal[0];
                     }
@@ -1547,7 +1561,8 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                         }
                         else
                         {
-                            this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask);
+                            // Discrete chains always use ds_index=1 (global ds)
+                            this->propagator_solver->advance_propagator(q_prev_left, q_curr_left, monomer_type, q_mask, 1);
                         }
                         q_prev_left = q_curr_left;
                     }
@@ -1577,7 +1592,8 @@ bool CpuComputationReduceMemoryDiscrete<T>::check_total_partition()
                     while(current_n_right < n)
                     {
                         T* q_out = this->q_pair[right_next_idx];
-                        this->propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask);
+                        // Discrete chains always use ds_index=1 (global ds)
+                        this->propagator_solver->advance_propagator(q_right_prev, q_out, monomer_type, q_mask, 1);
                         q_right_prev = q_out;
                         q_right_curr = q_out;
                         std::swap(right_prev_idx, right_next_idx);

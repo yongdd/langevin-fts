@@ -180,7 +180,7 @@ public:
      * @endcode
      */
     virtual void advance_propagator(
-        T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) = 0;
+        T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index) = 0;
 
     /**
      * @brief Advance propagator by half bond step (discrete chain model).

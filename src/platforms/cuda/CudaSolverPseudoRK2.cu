@@ -78,7 +78,7 @@ CudaSolverPseudoRK2<T>::CudaSolverPseudoRK2(
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
+            cb->get_nx(), cb->get_dx(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
 
@@ -298,15 +298,15 @@ template <typename T>
 void CudaSolverPseudoRK2<T>::update_laplacian_operator()
 {
     try{
-        // Update Pseudo with global_ds
+        // Update Pseudo (without global_ds - all ds values come from ContourLengthMapping)
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_global_ds(),
+            this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
 
-        // Re-register local_ds values for each block
+        // Register local_ds values for each block
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 

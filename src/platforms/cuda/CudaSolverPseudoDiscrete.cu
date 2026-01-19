@@ -85,7 +85,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
+            cb->get_nx(), cb->get_dx(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
 
@@ -265,15 +265,15 @@ template <typename T>
 void CudaSolverPseudoDiscrete<T>::update_laplacian_operator()
 {
     try{
+        // Update Pseudo (without global_ds - all ds values come from ContourLengthMapping)
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_global_ds(),
+            this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
 
-        // Re-register local_ds values for each block
-        // (pseudo->update() resets ds_values[1] to global_ds)
+        // Register local_ds values for each block
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
@@ -402,7 +402,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         const int M = cb->get_total_grid();;
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type);
+        // Discrete chains always use ds_index=1 (global ds)
+        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, 1);
 
         // 3D fourier discrete transform, forward and inplace
         if constexpr (std::is_same<T, double>::value)
@@ -453,15 +454,16 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         const double* _d_fourier_basis_yz = pseudo->get_fourier_basis_yz();
         const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
+        // Discrete chains always use ds_index=1 (global ds)
         if (is_half_bond_length)
         {
             bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = pseudo->get_boltz_bond_half(monomer_type);
+            _d_boltz_bond = pseudo->get_boltz_bond_half(monomer_type, 1);
         }
         else
         {
             bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = pseudo->get_boltz_bond(monomer_type);
+            _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, 1);
         }
 
         const int M = this->cb->get_total_grid();

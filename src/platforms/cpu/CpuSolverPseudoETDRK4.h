@@ -149,7 +149,7 @@ public:
      *
      * @note ETDRK4 currently uses global ds for all blocks.
      */
-    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) override;
+    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index) override;
 
     /**
      * @brief Half-bond step (not used for ETDRK4/continuous chains).

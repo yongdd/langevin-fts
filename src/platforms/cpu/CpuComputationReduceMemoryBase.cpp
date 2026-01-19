@@ -51,12 +51,20 @@ void CpuComputationReduceMemoryBase<T>::compute_statistics(
 
 template <typename T>
 void CpuComputationReduceMemoryBase<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
+        // Get ds_index from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int ds_index = mapping.get_ds_index(block.contour_length);
+
         const double *q_mask = this->cb->get_mask();
-        propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
+        propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, ds_index);
     }
     catch(std::exception& exc)
     {

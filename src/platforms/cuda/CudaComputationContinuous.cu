@@ -276,7 +276,6 @@ void CudaComputationContinuous<T>::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_global_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -439,7 +438,6 @@ void CudaComputationContinuous<T>::compute_propagators(
 
                 // Get ds_index from the propagator key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
-                if (ds_index < 1) ds_index = 1;  // Default to global ds
 
                 // Reset solver internal state when starting a new propagator
                 // (needed for Global Richardson method)
@@ -497,19 +495,27 @@ void CudaComputationContinuous<T>::compute_propagators(
 }
 template <typename T>
 void CudaComputationContinuous<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
+        // Get ds_index from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int ds_index = mapping.get_ds_index(block.contour_length);
+
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
         gpu_error_check(cudaMemcpy(this->d_q_pair[STREAM][0], q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
 
         this->propagator_solver->advance_propagator(
                         STREAM, this->d_q_pair[STREAM][0], this->d_q_pair[STREAM][1],
-                        monomer_type, this->d_q_mask);
+                        monomer_type, this->d_q_mask, ds_index);
         gpu_error_check(cudaDeviceSynchronize());
-        
+
         gpu_error_check(cudaMemcpy(q_out, this->d_q_pair[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)

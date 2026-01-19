@@ -128,11 +128,13 @@ public:
     /**
      * @brief Advance single segment (utility for external use).
      *
-     * @param q_init       Input propagator (device)
-     * @param q_out        Output propagator (device)
-     * @param monomer_type Monomer type
+     * @param q_init Input propagator (device)
+     * @param q_out  Output propagator (device)
+     * @param p      Polymer index
+     * @param v      Starting vertex of the block
+     * @param u      Ending vertex of the block
      */
-    void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) override;
+    void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
     /** @brief Compute all concentrations from propagators. */
     void compute_concentrations() override;

@@ -78,60 +78,68 @@ CudaSolverCNADI::CudaSolverCNADI(
             this->streams[i][1] = streams[i][1];
         }
 
-        // CN-ADI uses only global ds (ds_index=1)
-        // Create exp_dw and exp_dw_half for ds_index=1 and each monomer type
-        const int ds_idx = 1;  // CN-ADI uses global ds only
-        for(const auto& item: molecules->get_bond_lengths())
+        // Ensure ContourLengthMapping is finalized
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create exp_dw, exp_dw_half, and tridiagonal coefficients for each ds_index
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            d_exp_dw     [ds_idx][monomer_type] = nullptr;
-            d_exp_dw_half[ds_idx][monomer_type] = nullptr;
+            for(const auto& item: molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                d_exp_dw     [ds_idx][monomer_type] = nullptr;
+                d_exp_dw_half[ds_idx][monomer_type] = nullptr;
 
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw     [ds_idx][monomer_type], sizeof(double)*M));
-            gpu_error_check(cudaMalloc((void**)&d_exp_dw_half[ds_idx][monomer_type], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_exp_dw     [ds_idx][monomer_type], sizeof(double)*M));
+                gpu_error_check(cudaMalloc((void**)&d_exp_dw_half[ds_idx][monomer_type], sizeof(double)*M));
 
-            d_xl[monomer_type] = nullptr;
-            d_xd[monomer_type] = nullptr;
-            d_xh[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_xl[monomer_type], sizeof(double)*nx[0]));
-            gpu_error_check(cudaMalloc((void**)&d_xd[monomer_type], sizeof(double)*nx[0]));
-            gpu_error_check(cudaMalloc((void**)&d_xh[monomer_type], sizeof(double)*nx[0]));
+                d_xl[ds_idx][monomer_type] = nullptr;
+                d_xd[ds_idx][monomer_type] = nullptr;
+                d_xh[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_xl[ds_idx][monomer_type], sizeof(double)*nx[0]));
+                gpu_error_check(cudaMalloc((void**)&d_xd[ds_idx][monomer_type], sizeof(double)*nx[0]));
+                gpu_error_check(cudaMalloc((void**)&d_xh[ds_idx][monomer_type], sizeof(double)*nx[0]));
 
-            d_yl[monomer_type] = nullptr;
-            d_yd[monomer_type] = nullptr;
-            d_yh[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_yl[monomer_type], sizeof(double)*nx[1]));
-            gpu_error_check(cudaMalloc((void**)&d_yd[monomer_type], sizeof(double)*nx[1]));
-            gpu_error_check(cudaMalloc((void**)&d_yh[monomer_type], sizeof(double)*nx[1]));
+                d_yl[ds_idx][monomer_type] = nullptr;
+                d_yd[ds_idx][monomer_type] = nullptr;
+                d_yh[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_yl[ds_idx][monomer_type], sizeof(double)*nx[1]));
+                gpu_error_check(cudaMalloc((void**)&d_yd[ds_idx][monomer_type], sizeof(double)*nx[1]));
+                gpu_error_check(cudaMalloc((void**)&d_yh[ds_idx][monomer_type], sizeof(double)*nx[1]));
 
-            d_zl[monomer_type] = nullptr;
-            d_zd[monomer_type] = nullptr;
-            d_zh[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_zl[monomer_type], sizeof(double)*nx[2]));
-            gpu_error_check(cudaMalloc((void**)&d_zd[monomer_type], sizeof(double)*nx[2]));
-            gpu_error_check(cudaMalloc((void**)&d_zh[monomer_type], sizeof(double)*nx[2]));
+                d_zl[ds_idx][monomer_type] = nullptr;
+                d_zd[ds_idx][monomer_type] = nullptr;
+                d_zh[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_zl[ds_idx][monomer_type], sizeof(double)*nx[2]));
+                gpu_error_check(cudaMalloc((void**)&d_zd[ds_idx][monomer_type], sizeof(double)*nx[2]));
+                gpu_error_check(cudaMalloc((void**)&d_zh[ds_idx][monomer_type], sizeof(double)*nx[2]));
 
-            // Half-step coefficients for CN-ADI4
-            d_xl_half[monomer_type] = nullptr;
-            d_xd_half[monomer_type] = nullptr;
-            d_xh_half[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_xl_half[monomer_type], sizeof(double)*nx[0]));
-            gpu_error_check(cudaMalloc((void**)&d_xd_half[monomer_type], sizeof(double)*nx[0]));
-            gpu_error_check(cudaMalloc((void**)&d_xh_half[monomer_type], sizeof(double)*nx[0]));
+                // Half-step coefficients for CN-ADI4
+                d_xl_half[ds_idx][monomer_type] = nullptr;
+                d_xd_half[ds_idx][monomer_type] = nullptr;
+                d_xh_half[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_xl_half[ds_idx][monomer_type], sizeof(double)*nx[0]));
+                gpu_error_check(cudaMalloc((void**)&d_xd_half[ds_idx][monomer_type], sizeof(double)*nx[0]));
+                gpu_error_check(cudaMalloc((void**)&d_xh_half[ds_idx][monomer_type], sizeof(double)*nx[0]));
 
-            d_yl_half[monomer_type] = nullptr;
-            d_yd_half[monomer_type] = nullptr;
-            d_yh_half[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_yl_half[monomer_type], sizeof(double)*nx[1]));
-            gpu_error_check(cudaMalloc((void**)&d_yd_half[monomer_type], sizeof(double)*nx[1]));
-            gpu_error_check(cudaMalloc((void**)&d_yh_half[monomer_type], sizeof(double)*nx[1]));
+                d_yl_half[ds_idx][monomer_type] = nullptr;
+                d_yd_half[ds_idx][monomer_type] = nullptr;
+                d_yh_half[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_yl_half[ds_idx][monomer_type], sizeof(double)*nx[1]));
+                gpu_error_check(cudaMalloc((void**)&d_yd_half[ds_idx][monomer_type], sizeof(double)*nx[1]));
+                gpu_error_check(cudaMalloc((void**)&d_yh_half[ds_idx][monomer_type], sizeof(double)*nx[1]));
 
-            d_zl_half[monomer_type] = nullptr;
-            d_zd_half[monomer_type] = nullptr;
-            d_zh_half[monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&d_zl_half[monomer_type], sizeof(double)*nx[2]));
-            gpu_error_check(cudaMalloc((void**)&d_zd_half[monomer_type], sizeof(double)*nx[2]));
-            gpu_error_check(cudaMalloc((void**)&d_zh_half[monomer_type], sizeof(double)*nx[2]));
+                d_zl_half[ds_idx][monomer_type] = nullptr;
+                d_zd_half[ds_idx][monomer_type] = nullptr;
+                d_zh_half[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&d_zl_half[ds_idx][monomer_type], sizeof(double)*nx[2]));
+                gpu_error_check(cudaMalloc((void**)&d_zd_half[ds_idx][monomer_type], sizeof(double)*nx[2]));
+                gpu_error_check(cudaMalloc((void**)&d_zh_half[ds_idx][monomer_type], sizeof(double)*nx[2]));
+            }
         }
 
         if(DIM == 3)
@@ -240,49 +248,68 @@ CudaSolverCNADI::~CudaSolverCNADI()
     for(const auto& ds_entry: d_exp_dw_half)
         for(const auto& item: ds_entry.second)
             cudaFree(item.second);
-    
-    for(const auto& item: d_xl)
-        cudaFree(item.second);
-    for(const auto& item: d_xd)
-        cudaFree(item.second);
-    for(const auto& item: d_xh)
-        cudaFree(item.second);
 
-    for(const auto& item: d_yl)
-        cudaFree(item.second);
-    for(const auto& item: d_yd)
-        cudaFree(item.second);
-    for(const auto& item: d_yh)
-        cudaFree(item.second);
+    // Free tridiagonal coefficients: d_xl[ds_index][monomer_type]
+    for(const auto& ds_entry: d_xl)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_xd)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_xh)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
-    for(const auto& item: d_zl)
-        cudaFree(item.second);
-    for(const auto& item: d_zd)
-        cudaFree(item.second);
-    for(const auto& item: d_zh)
-        cudaFree(item.second);
+    for(const auto& ds_entry: d_yl)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_yd)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_yh)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+
+    for(const auto& ds_entry: d_zl)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_zd)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_zh)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
     // Free half-step coefficients
-    for(const auto& item: d_xl_half)
-        cudaFree(item.second);
-    for(const auto& item: d_xd_half)
-        cudaFree(item.second);
-    for(const auto& item: d_xh_half)
-        cudaFree(item.second);
+    for(const auto& ds_entry: d_xl_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_xd_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_xh_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
-    for(const auto& item: d_yl_half)
-        cudaFree(item.second);
-    for(const auto& item: d_yd_half)
-        cudaFree(item.second);
-    for(const auto& item: d_yh_half)
-        cudaFree(item.second);
+    for(const auto& ds_entry: d_yl_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_yd_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_yh_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
-    for(const auto& item: d_zl_half)
-        cudaFree(item.second);
-    for(const auto& item: d_zd_half)
-        cudaFree(item.second);
-    for(const auto& item: d_zh_half)
-        cudaFree(item.second);
+    for(const auto& ds_entry: d_zl_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_zd_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: d_zh_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
     if(DIM == 3)
     {
@@ -349,53 +376,62 @@ void CudaSolverCNADI::update_laplacian_operator()
         double yl_half[nx[1]], yd_half[nx[1]], yh_half[nx[1]];
         double zl_half[nx[2]], zd_half[nx[2]], zh_half[nx[2]];
 
-        for(const auto& item: this->molecules->get_bond_lengths())
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Compute coefficients for each unique ds value
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            double bond_length_sq = item.second*item.second;
-            double ds = this->molecules->get_global_ds();
+            double local_ds = mapping.get_ds_from_index(ds_idx);
 
-            // Full-step coefficients
-            FiniteDifference::get_laplacian_matrix(
-                this->cb->get_boundary_conditions(),
-                this->cb->get_nx(), this->cb->get_dx(),
-                xl, xd, xh,
-                yl, yd, yh,
-                zl, zd, zh,
-                bond_length_sq, ds);
+            for(const auto& item: this->molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                double bond_length_sq = item.second*item.second;
 
-            gpu_error_check(cudaMemcpy(d_xl[monomer_type], xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_xd[monomer_type], xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_xh[monomer_type], xh, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                // Full-step coefficients (local_ds)
+                FiniteDifference::get_laplacian_matrix(
+                    this->cb->get_boundary_conditions(),
+                    this->cb->get_nx(), this->cb->get_dx(),
+                    xl, xd, xh,
+                    yl, yd, yh,
+                    zl, zd, zh,
+                    bond_length_sq, local_ds);
 
-            gpu_error_check(cudaMemcpy(d_yl[monomer_type], yl, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_yd[monomer_type], yd, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_yh[monomer_type], yh, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xl[ds_idx][monomer_type], xl, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xd[ds_idx][monomer_type], xd, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xh[ds_idx][monomer_type], xh, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
 
-            gpu_error_check(cudaMemcpy(d_zl[monomer_type], zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_zd[monomer_type], zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_zh[monomer_type], zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yl[ds_idx][monomer_type], yl, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yd[ds_idx][monomer_type], yd, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yh[ds_idx][monomer_type], yh, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
 
-            // Half-step coefficients for CN-ADI4
-            FiniteDifference::get_laplacian_matrix(
-                this->cb->get_boundary_conditions(),
-                this->cb->get_nx(), this->cb->get_dx(),
-                xl_half, xd_half, xh_half,
-                yl_half, yd_half, yh_half,
-                zl_half, zd_half, zh_half,
-                bond_length_sq, ds/2.0);
+                gpu_error_check(cudaMemcpy(d_zl[ds_idx][monomer_type], zl, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_zd[ds_idx][monomer_type], zd, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_zh[ds_idx][monomer_type], zh, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
 
-            gpu_error_check(cudaMemcpy(d_xl_half[monomer_type], xl_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_xd_half[monomer_type], xd_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_xh_half[monomer_type], xh_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                // Half-step coefficients for CN-ADI4 (local_ds/2)
+                FiniteDifference::get_laplacian_matrix(
+                    this->cb->get_boundary_conditions(),
+                    this->cb->get_nx(), this->cb->get_dx(),
+                    xl_half, xd_half, xh_half,
+                    yl_half, yd_half, yh_half,
+                    zl_half, zd_half, zh_half,
+                    bond_length_sq, local_ds/2.0);
 
-            gpu_error_check(cudaMemcpy(d_yl_half[monomer_type], yl_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_yd_half[monomer_type], yd_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_yh_half[monomer_type], yh_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xl_half[ds_idx][monomer_type], xl_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xd_half[ds_idx][monomer_type], xd_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_xh_half[ds_idx][monomer_type], xh_half, sizeof(double)*nx[0], cudaMemcpyHostToDevice));
 
-            gpu_error_check(cudaMemcpy(d_zl_half[monomer_type], zl_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_zd_half[monomer_type], zd_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_zh_half[monomer_type], zh_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yl_half[ds_idx][monomer_type], yl_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yd_half[ds_idx][monomer_type], yd_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_yh_half[ds_idx][monomer_type], yh_half, sizeof(double)*nx[1], cudaMemcpyHostToDevice));
+
+                gpu_error_check(cudaMemcpy(d_zl_half[ds_idx][monomer_type], zl_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_zd_half[ds_idx][monomer_type], zd_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_zh_half[ds_idx][monomer_type], zh_half, sizeof(double)*nx[2], cudaMemcpyHostToDevice));
+            }
         }
     }
     catch(std::exception& exc)
@@ -410,10 +446,6 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_global_ds();
-
-        // CN-ADI uses only global ds (ds_index=1)
-        const int ds_idx = 1;
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -425,30 +457,39 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        // Compute exp_dw and exp_dw_half
-        for(const auto& item: w_input)
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Compute exp_dw and exp_dw_half for each unique ds value
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string monomer_type = item.first;
-            const double *w = item.second;
+            double local_ds = mapping.get_ds_from_index(ds_idx);
 
-            if (d_exp_dw[ds_idx].find(monomer_type) == d_exp_dw[ds_idx].end())
-                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const double *w = item.second;
 
-            // Copy field configurations from host to device
-            gpu_error_check(cudaMemcpyAsync(
-                d_exp_dw     [ds_idx][monomer_type], w,
-                sizeof(double)*M, cudaMemcpyInputToDevice));
-            gpu_error_check(cudaMemcpyAsync(
-                d_exp_dw_half[ds_idx][monomer_type], w,
-                sizeof(double)*M, cudaMemcpyInputToDevice));
+                if (d_exp_dw[ds_idx].find(monomer_type) == d_exp_dw[ds_idx].end())
+                    throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
 
-            // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                ((double*) d_exp_dw[ds_idx][monomer_type],
-                 (double*) d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                ((double*) d_exp_dw_half[ds_idx][monomer_type],
-                 (double*) d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*ds, M);
+                // Copy field configurations from host to device
+                gpu_error_check(cudaMemcpyAsync(
+                    d_exp_dw     [ds_idx][monomer_type], w,
+                    sizeof(double)*M, cudaMemcpyInputToDevice));
+                gpu_error_check(cudaMemcpyAsync(
+                    d_exp_dw_half[ds_idx][monomer_type], w,
+                    sizeof(double)*M, cudaMemcpyInputToDevice));
+
+                // Compute d_exp_dw and d_exp_dw_half
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    ((double*) d_exp_dw[ds_idx][monomer_type],
+                     (double*) d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    ((double*) d_exp_dw_half[ds_idx][monomer_type],
+                     (double*) d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
+            }
         }
         gpu_error_check(cudaDeviceSynchronize());
     }
@@ -460,9 +501,8 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
 void CudaSolverCNADI::advance_propagator(
     const int STREAM,
     double *d_q_in, double *d_q_out,
-    std::string monomer_type, double *d_q_mask, [[maybe_unused]] int ds_index)
+    std::string monomer_type, double *d_q_mask, int ds_index)
 {
-    // Note: CN-ADI currently uses only global ds (ds_index=1)
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -471,41 +511,40 @@ void CudaSolverCNADI::advance_propagator(
         const int M = this->cb->get_total_grid();
         const int DIM = this->cb->get_dim();
 
-        // CN-ADI uses only global ds (ds_index=1)
-        const int ds_idx = 1;
-        double *_d_exp_dw = d_exp_dw[ds_idx][monomer_type];
+        // Use the provided ds_index for per-block local_ds
+        double *_d_exp_dw = d_exp_dw[ds_index][monomer_type];
 
         if (use_4th_order)
         {
             // CN-ADI4: 4th order accuracy via Richardson extrapolation
-            double *_d_exp_dw_half = d_exp_dw_half[ds_idx][monomer_type];
+            double *_d_exp_dw_half = d_exp_dw_half[ds_index][monomer_type];
 
             // ========================================
-            // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            // Full step: exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             // ========================================
-            // Apply exp(-w*ds/2) at start
+            // Apply exp(-w*local_ds/2) at start
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_in, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Diffusion with full-step coefficients
             if(DIM == 3)
                 advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type, ds_index);
             else if(DIM == 2)
                 advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type, ds_index);
             else if(DIM == 1)
                 advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_full[STREAM], d_q_full[STREAM], monomer_type);
+                    d_q_full[STREAM], d_q_full[STREAM], monomer_type, ds_index);
 
-            // Apply exp(-w*ds/2) at end
+            // Apply exp(-w*local_ds/2) at end
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_full[STREAM], d_q_full[STREAM], _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // ========================================
-            // Two half steps: exp(-w*ds/4) * Diffusion(ds/2) * exp(-w*ds/2) * Diffusion(ds/2) * exp(-w*ds/4)
+            // Two half steps: exp(-w*local_ds/4) * Diffusion(local_ds/2) * exp(-w*local_ds/2) * Diffusion(local_ds/2) * exp(-w*local_ds/4)
             // ========================================
-            // First half-step: exp(-w*ds/4) at start
+            // First half-step: exp(-w*local_ds/4) at start
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_in, _d_exp_dw_half, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
@@ -513,20 +552,20 @@ void CudaSolverCNADI::advance_propagator(
             if(DIM == 3)
                 advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
-                    d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type],
+                    d_yl_half[ds_index][monomer_type], d_yd_half[ds_index][monomer_type], d_yh_half[ds_index][monomer_type],
+                    d_zl_half[ds_index][monomer_type], d_zd_half[ds_index][monomer_type], d_zh_half[ds_index][monomer_type]);
             else if(DIM == 2)
                 advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type],
+                    d_yl_half[ds_index][monomer_type], d_yd_half[ds_index][monomer_type], d_yh_half[ds_index][monomer_type]);
             else if(DIM == 1)
                 advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type]);
 
-            // Apply exp(-w*ds/2) at junction
+            // Apply exp(-w*local_ds/2) at junction
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
@@ -534,20 +573,20 @@ void CudaSolverCNADI::advance_propagator(
             if(DIM == 3)
                 advance_propagator_3d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type],
-                    d_zl_half[monomer_type], d_zd_half[monomer_type], d_zh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type],
+                    d_yl_half[ds_index][monomer_type], d_yd_half[ds_index][monomer_type], d_yh_half[ds_index][monomer_type],
+                    d_zl_half[ds_index][monomer_type], d_zd_half[ds_index][monomer_type], d_zh_half[ds_index][monomer_type]);
             else if(DIM == 2)
                 advance_propagator_2d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type],
-                    d_yl_half[monomer_type], d_yd_half[monomer_type], d_yh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type],
+                    d_yl_half[ds_index][monomer_type], d_yd_half[ds_index][monomer_type], d_yh_half[ds_index][monomer_type]);
             else if(DIM == 1)
                 advance_propagator_1d_step(this->cb->get_boundary_conditions(), STREAM,
                     d_q_half[STREAM], d_q_half[STREAM],
-                    d_xl_half[monomer_type], d_xd_half[monomer_type], d_xh_half[monomer_type]);
+                    d_xl_half[ds_index][monomer_type], d_xd_half[ds_index][monomer_type], d_xh_half[ds_index][monomer_type]);
 
-            // Apply exp(-w*ds/4) at end
+            // Apply exp(-w*local_ds/4) at end
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_half[STREAM], d_q_half[STREAM], _d_exp_dw_half, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
@@ -563,24 +602,24 @@ void CudaSolverCNADI::advance_propagator(
         {
             // CN-ADI2: single full step only (2nd order accuracy)
             // ========================================
-            // Full step: exp(-w*ds/2) * Diffusion(ds) * exp(-w*ds/2)
+            // Full step: exp(-w*local_ds/2) * Diffusion(local_ds) * exp(-w*local_ds/2)
             // ========================================
-            // Apply exp(-w*ds/2) at start
+            // Apply exp(-w*local_ds/2) at start
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_in, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
 
             // Diffusion with full-step coefficients
             if(DIM == 3)
                 advance_propagator_3d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type);
+                    d_q_out, d_q_out, monomer_type, ds_index);
             else if(DIM == 2)
                 advance_propagator_2d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type);
+                    d_q_out, d_q_out, monomer_type, ds_index);
             else if(DIM == 1)
                 advance_propagator_1d(this->cb->get_boundary_conditions(), STREAM,
-                    d_q_out, d_q_out, monomer_type);
+                    d_q_out, d_q_out, monomer_type, ds_index);
 
-            // Apply exp(-w*ds/2) at end
+            // Apply exp(-w*local_ds/2) at end
             ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0, M);
             gpu_error_check(cudaPeekAtLastError());
         }
@@ -600,7 +639,7 @@ void CudaSolverCNADI::advance_propagator(
 void CudaSolverCNADI::advance_propagator_3d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
+    double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index)
 {
     try
     {
@@ -609,17 +648,17 @@ void CudaSolverCNADI::advance_propagator_3d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[monomer_type];
-        double *_d_xd = d_xd[monomer_type];
-        double *_d_xh = d_xh[monomer_type];
+        double *_d_xl = d_xl[ds_index][monomer_type];
+        double *_d_xd = d_xd[ds_index][monomer_type];
+        double *_d_xh = d_xh[ds_index][monomer_type];
 
-        double *_d_yl = d_yl[monomer_type];
-        double *_d_yd = d_yd[monomer_type];
-        double *_d_yh = d_yh[monomer_type];
+        double *_d_yl = d_yl[ds_index][monomer_type];
+        double *_d_yd = d_yd[ds_index][monomer_type];
+        double *_d_yh = d_yh[ds_index][monomer_type];
 
-        double *_d_zl = d_zl[monomer_type];
-        double *_d_zd = d_zd[monomer_type];
-        double *_d_zh = d_zh[monomer_type];
+        double *_d_zl = d_zl[ds_index][monomer_type];
+        double *_d_zd = d_zd[ds_index][monomer_type];
+        double *_d_zh = d_zh[ds_index][monomer_type];
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);
@@ -705,7 +744,7 @@ void CudaSolverCNADI::advance_propagator_3d(
 void CudaSolverCNADI::advance_propagator_2d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
+    double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index)
 {
     try
     {
@@ -714,13 +753,13 @@ void CudaSolverCNADI::advance_propagator_2d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[monomer_type];
-        double *_d_xd = d_xd[monomer_type];
-        double *_d_xh = d_xh[monomer_type];
+        double *_d_xl = d_xl[ds_index][monomer_type];
+        double *_d_xd = d_xd[ds_index][monomer_type];
+        double *_d_xh = d_xh[ds_index][monomer_type];
 
-        double *_d_yl = d_yl[monomer_type];
-        double *_d_yd = d_yd[monomer_type];
-        double *_d_yh = d_yh[monomer_type];
+        double *_d_yl = d_yl[ds_index][monomer_type];
+        double *_d_yd = d_yd[ds_index][monomer_type];
+        double *_d_yh = d_yh[ds_index][monomer_type];
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);
@@ -783,7 +822,7 @@ void CudaSolverCNADI::advance_propagator_2d(
 void CudaSolverCNADI::advance_propagator_1d(
     std::vector<BoundaryCondition> bc,
     const int STREAM,
-    double *d_q_in, double *d_q_out, std::string monomer_type, [[maybe_unused]] int ds_index)
+    double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index)
 {
     try
     {
@@ -792,9 +831,9 @@ void CudaSolverCNADI::advance_propagator_1d(
         const int M = this->cb->get_total_grid();
         const std::vector<int> nx = this->cb->get_nx();
 
-        double *_d_xl = d_xl[monomer_type];
-        double *_d_xd = d_xd[monomer_type];
-        double *_d_xh = d_xh[monomer_type];
+        double *_d_xl = d_xl[ds_index][monomer_type];
+        double *_d_xd = d_xd[ds_index][monomer_type];
+        double *_d_xh = d_xh[ds_index][monomer_type];
 
         // Shared memory size for 3 arrays of doubles
         size_t shmem_x = 3 * nx[0] * sizeof(double);

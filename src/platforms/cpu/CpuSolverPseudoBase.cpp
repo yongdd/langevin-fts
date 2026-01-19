@@ -86,7 +86,7 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
     pseudo = new Pseudo<T>(
         molecules->get_bond_lengths(),
         bc_per_dim,
-        cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
+        cb->get_nx(), cb->get_dx(),
         cb->get_recip_metric(),
         cb->get_recip_vec());
 }
@@ -122,7 +122,7 @@ void CpuSolverPseudoBase<T>::update_laplacian_operator()
         pseudo->update(
             bc_per_dim,
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_global_ds(),
+            this->cb->get_dx(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
     }

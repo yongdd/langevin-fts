@@ -25,7 +25,7 @@ template <typename T>
 Pseudo<T>::Pseudo(
     std::map<std::string, double> bond_lengths,
     std::vector<BoundaryCondition> bc,
-    std::vector<int> nx, std::vector<double> dx, double ds,
+    std::vector<int> nx, std::vector<double> dx,
     std::array<double, 6> recip_metric,
     std::array<double, 9> recip_vec)
 {
@@ -35,7 +35,7 @@ Pseudo<T>::Pseudo(
         this->bc = bc;
         this->nx = nx;
         this->dx = dx;
-        this->ds = ds;
+        this->ds = 0.0;  // Not used; ds values come from add_ds_value()
         this->recip_metric_ = recip_metric;
         this->recip_vec_ = recip_vec;
 
@@ -47,16 +47,7 @@ Pseudo<T>::Pseudo(
         update_total_complex_grid();
         const int M_COMPLEX = get_total_complex_grid();
 
-        // Store global ds as ds_index=1
-        ds_values[1] = ds;
-
-        // Allocate Boltzmann factors for ds_index=1 (global ds)
-        for (const auto& item : bond_lengths)
-        {
-            std::string monomer_type = item.first;
-            boltz_bond[1][monomer_type] = new double[M_COMPLEX];
-            boltz_bond_half[1][monomer_type] = new double[M_COMPLEX];
-        }
+        // Don't allocate Boltzmann factors here; use add_ds_value() instead
 
         // Allocate Fourier basis arrays (diagonal terms)
         fourier_basis_x = new double[M_COMPLEX];
@@ -76,7 +67,6 @@ Pseudo<T>::Pseudo(
                 negative_k_idx = nullptr;
         }
 
-        update_boltz_bond();
         update_weighted_fourier_basis();
         update_negative_frequency_mapping();
     }
@@ -562,7 +552,9 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
         tbc[3 - DIM + d] = bc[d];
     }
 
-    // Compute wavenumber factors
+    // Compute deformation vector factors v² = (π g⁻¹ m)²
+    // For orthogonal boxes: g⁻¹ = 1/L², so v = πm/L² and v² = (πm)²/L⁴
+    // This is consistent with the periodic BC formula where v = 2π g⁻¹ m
     double xfactor[3];
     for (int d = 0; d < 3; ++d)
     {
@@ -570,7 +562,8 @@ void Pseudo<T>::update_weighted_fourier_basis_mixed()
         if (tbc[d] == BoundaryCondition::PERIODIC)
             xfactor[d] = std::pow(2 * PI / L, 2);
         else
-            xfactor[d] = std::pow(PI / L, 2);
+            // Deformation vector: v² = k²/L² = (πm/L)²/L² = (πm)²/L⁴
+            xfactor[d] = PI * PI / (L * L * L * L);
     }
 
     for (int i = 0; i < tnx[0]; ++i)
@@ -665,21 +658,28 @@ template <typename T>
 void Pseudo<T>::update(
     std::vector<BoundaryCondition> bc,
     std::map<std::string, double> bond_lengths,
-    std::vector<double> dx, double ds,
+    std::vector<double> dx,
     std::array<double, 6> recip_metric,
     std::array<double, 9> recip_vec)
 {
     this->bond_lengths = bond_lengths;
     this->bc = bc;
     this->dx = dx;
-    this->ds = ds;
-    this->ds_values[1] = ds;  // Update global ds
     this->recip_metric_ = recip_metric;
     this->recip_vec_ = recip_vec;
 
     update_total_complex_grid();
-    update_boltz_bond();
     update_weighted_fourier_basis();
+
+    // Recompute Boltzmann factors for all registered ds values
+    for (const auto& ds_pair : ds_values)
+    {
+        int ds_idx = ds_pair.first;
+        if (is_all_periodic())
+            update_boltz_bond_periodic_for_ds_index(ds_idx);
+        else
+            update_boltz_bond_mixed_for_ds_index(ds_idx);
+    }
 }
 
 //------------------------------------------------------------------------------
