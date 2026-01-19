@@ -70,6 +70,9 @@ int main()
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Continuous", "Discrete"};
+        // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
+        std::vector<std::string> numerical_methods_discrete = {"rqm4"};
+        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2", "etdrk4"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
 
         for(std::string platform : avail_platforms)
@@ -79,7 +82,13 @@ int main()
 
             for(std::string chain_model : chain_models)
             {
-                std::cout << "Testing: " << chain_model << std::endl;
+                // Select numerical methods based on chain model
+                const std::vector<std::string>& numerical_methods =
+                    (chain_model == "Discrete") ? numerical_methods_discrete : numerical_methods_continuous;
+
+                for(std::string numerical_method : numerical_methods)
+                {
+                std::cout << "Testing: " << chain_model << ", " << numerical_method << std::endl;
                 std::vector<T> stress0_list{};
                 std::vector<T> stress1_list{};
 
@@ -95,7 +104,7 @@ int main()
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
                         new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
                     PropagatorComputation<T>* solver =
-                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
                     if (!aggregate_propagator_computation)
@@ -149,6 +158,7 @@ int main()
                         std::cout << "ERROR: Stress[1] values differ too much!" << std::endl;
                         return -1;
                     }
+                }
                 }
             }
         }

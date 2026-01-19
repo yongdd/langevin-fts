@@ -120,11 +120,21 @@ int main()
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
+        // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
+        std::vector<std::string> numerical_methods_discrete = {"rqm4"};
+        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2", "etdrk4"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
         for(std::string platform : avail_platforms)
         {
             for(std::string chain_model : chain_models)
             {
+                // Select numerical methods based on chain model
+                const std::vector<std::string>& numerical_methods =
+                    (chain_model == "Discrete") ? numerical_methods_discrete : numerical_methods_continuous;
+
+                for(std::string numerical_method : numerical_methods)
+                {
+                std::cout << "Testing: " << platform << ", " << chain_model << ", " << numerical_method << std::endl;
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
                 {
                     AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
@@ -135,7 +145,7 @@ int main()
                     Molecules* molecules        = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
                     molecules->add_polymer(1.0, blocks, {});
                     PropagatorComputationOptimizer* propagator_computation_optimizer= new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                    PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                    PropagatorComputation<double>* solver     = factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
                     AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
                                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
@@ -145,6 +155,7 @@ int main()
                     // std::cout<< "---------- Simulation Parameters ----------" << std::endl;
                     // std::cout << "Box Dimension: " << cb->get_dim() << std::endl;
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                    std::cout << "Numerical Method: " << numerical_method << std::endl;
                     std::cout << "Using Aggregation: " << aggregate_propagator_computation << std::endl;
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
@@ -285,6 +296,11 @@ int main()
                     //     }
                     // }
 
+                    // ============ NUMERICAL DERIVATIVE TESTS ============
+                    // Only run for rqm4 (high-precision reference method)
+                    // Lower-order methods have larger truncation errors
+                    if (numerical_method == "rqm4")
+                    {
                     double dL = 0.0000001;
                     double old_lx = lx[0];
                     double old_ly = lx[1];
@@ -482,6 +498,7 @@ int main()
                         if (!std::isfinite(relative_stress_error) || std::abs(relative_stress_error) > 1e-3)
                             return -1;
                     }
+                    }
 
                     // ============ ANGLE DERIVATIVE TESTS ============
                     // The off-diagonal stress components (stress[3], stress[4], stress[5]) are related to
@@ -654,6 +671,7 @@ int main()
                     delete solver;
                     delete am;
                     delete factory;
+                }
                 }
             }
         }
