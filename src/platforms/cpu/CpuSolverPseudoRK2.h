@@ -152,7 +152,7 @@ public:
      * @brief Update Laplacian operator and re-register local ds values.
      *
      * Overrides base class to ensure local_ds values are re-registered
-     * after the base implementation resets ds_values[1] to global_ds.
+     * when the grid changes (e.g., during box size optimization).
      */
     void update_laplacian_operator() override;
 };

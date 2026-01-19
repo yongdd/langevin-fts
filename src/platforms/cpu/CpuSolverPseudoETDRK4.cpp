@@ -298,7 +298,7 @@ void CpuSolverPseudoETDRK4<T>::update_laplacian_operator()
 {
     try
     {
-        // Call base class implementation (updates Pseudo with global_ds)
+        // Call base class implementation (updates Fourier basis and recomputes Boltzmann factors)
         CpuSolverPseudoBase<T>::update_laplacian_operator();
 
         // Re-create ETDRK4 coefficients for each ds_index
