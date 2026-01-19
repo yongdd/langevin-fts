@@ -121,7 +121,7 @@ When testing propagator solvers or numerical methods, always follow these requir
 
 2. **Call `check_total_partition()`**: Always verify the total partition function during tests. This validates that forward and backward propagators are consistent and the chain statistics are computed correctly.
 
-3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 10. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
+3. **Use field amplitudes with std ≈ 5**: When initializing test fields, choose random fields with standard deviation around 5. This provides sufficient field strength to expose numerical errors while remaining in a physically relevant regime. Weak fields (std < 1) may not reveal accuracy issues.
 
 4. **Final validation with Gyroid SCFT**: Run `examples/scft/GyroidNoBoxChange.py` with the **continuous chain model** as the final integration test. This complex 3D morphology with high symmetry is sensitive to numerical errors and validates the complete simulation pipeline.
 
@@ -415,7 +415,7 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
   If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
 
-- **Use SLURM for long-running jobs**: For any computation expected to take longer than 2 minutes, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
+- **Use SLURM for long-running jobs**: For any computation expected to take longer than 1 minute, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
   ```bash
   # Submit multiple jobs in parallel
   for param in 100 200 400 800; do

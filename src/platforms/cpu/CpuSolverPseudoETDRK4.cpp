@@ -40,26 +40,44 @@ CpuSolverPseudoETDRK4<T>::CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules
 
         const int M = cb->get_total_grid();
 
-        // Create field vectors for each monomer type
-        // ETDRK4 uses only global ds (ds_index=1)
-        const int ds_index = 1;
+        // Ensure ContourLengthMapping is finalized before using it
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create field vectors for each ds_index and monomer type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            for (const auto& item : molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                this->exp_dw[ds_idx][monomer_type].resize(M);
+                this->exp_dw_half[ds_idx][monomer_type].resize(M);
+            }
+        }
+
+        // Create w_field storage (independent of ds)
         for (const auto& item : molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->exp_dw[ds_index][monomer_type].resize(M);
-            this->exp_dw_half[ds_index][monomer_type].resize(M);
             this->w_field[monomer_type].resize(M);
         }
 
-        // Initialize ETDRK4 coefficients
-        this->etdrk4_coefficients_ = std::make_unique<ETDRK4Coefficients<T>>(
-            molecules->get_bond_lengths(),
-            cb->get_boundary_conditions(),
-            cb->get_nx(),
-            cb->get_dx(),
-            molecules->get_global_ds(),
-            cb->get_recip_metric()
-        );
+        // Initialize ETDRK4 coefficients for each ds_index
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            this->etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(
+                molecules->get_bond_lengths(),
+                cb->get_boundary_conditions(),
+                cb->get_nx(),
+                cb->get_dx(),
+                local_ds,
+                cb->get_recip_metric()
+            );
+        }
 
         this->update_laplacian_operator();
     }
@@ -99,28 +117,43 @@ template <typename T>
 void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_global_ds();
-    const int ds_index = 1;  // ETDRK4 uses only global ds
 
-    for (const auto& item : w_input)
-    {
-        if (!this->exp_dw[ds_index].contains(item.first))
-            throw_with_line_number("monomer_type \"" + item.first + "\" is not in exp_dw.");
-    }
+    // Get unique ds values from ContourLengthMapping
+    const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+    int n_unique_ds = mapping.get_n_unique_ds();
 
+    // Store raw w field (independent of ds)
     for (const auto& item : w_input)
     {
         const std::string& monomer_type = item.first;
         const T* w = item.second;
-        std::vector<T>& exp_dw_vec = this->exp_dw[ds_index][monomer_type];
-        std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_index][monomer_type];
         std::vector<T>& w_field_vec = this->w_field[monomer_type];
 
         for (int i = 0; i < M; ++i)
+            w_field_vec[i] = w[i];
+    }
+
+    // Compute exp_dw for each ds_index and monomer type
+    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+    {
+        double local_ds = mapping.get_ds_from_index(ds_idx);
+
+        for (const auto& item : w_input)
         {
-            w_field_vec[i] = w[i];  // Store raw w for ETDRK4
-            exp_dw_vec[i] = std::exp(-w[i] * ds * 0.5);
-            exp_dw_half_vec[i] = std::exp(-w[i] * ds * 0.25);
+            const std::string& monomer_type = item.first;
+            const T* w = item.second;
+
+            if (!this->exp_dw[ds_idx].contains(monomer_type))
+                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in exp_dw[" + std::to_string(ds_idx) + "].");
+
+            std::vector<T>& exp_dw_vec = this->exp_dw[ds_idx][monomer_type];
+            std::vector<T>& exp_dw_half_vec = this->exp_dw_half[ds_idx][monomer_type];
+
+            for (int i = 0; i < M; ++i)
+            {
+                exp_dw_vec[i] = std::exp(-w[i] * local_ds * 0.5);
+                exp_dw_half_vec[i] = std::exp(-w[i] * local_ds * 0.25);
+            }
         }
     }
 }
@@ -130,10 +163,8 @@ void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoETDRK4<T>::advance_propagator(
-    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int /*ds_index*/)
+    T* q_in, T* q_out, std::string monomer_type, const double* q_mask, int ds_index)
 {
-    // Note: ETDRK4 currently uses global ds for all blocks.
-    // Per-block ds support would require recomputing coefficients.
     try
     {
         const int M = this->cb->get_total_grid();
@@ -142,14 +173,15 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         // For periodic BC, coefficient array is actually complex (interleaved real/imag)
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
 
-        // Get ETDRK4 coefficients (Krogstad scheme)
-        const double* _E = this->etdrk4_coefficients_->get_E(monomer_type);
-        const double* _E2 = this->etdrk4_coefficients_->get_E2(monomer_type);
-        const double* _alpha = this->etdrk4_coefficients_->get_alpha(monomer_type);
-        const double* _phi2_half = this->etdrk4_coefficients_->get_phi2_half(monomer_type);
-        const double* _phi1 = this->etdrk4_coefficients_->get_phi1(monomer_type);
-        const double* _phi2 = this->etdrk4_coefficients_->get_phi2(monomer_type);
-        const double* _phi3 = this->etdrk4_coefficients_->get_phi3(monomer_type);
+        // Get ETDRK4 coefficients for the correct ds_index (Krogstad scheme)
+        const auto& coeffs = this->etdrk4_coefficients_[ds_index];
+        const double* _E = coeffs->get_E(monomer_type);
+        const double* _E2 = coeffs->get_E2(monomer_type);
+        const double* _alpha = coeffs->get_alpha(monomer_type);
+        const double* _phi2_half = coeffs->get_phi2_half(monomer_type);
+        const double* _phi1 = coeffs->get_phi1(monomer_type);
+        const double* _phi2 = coeffs->get_phi2(monomer_type);
+        const double* _phi3 = coeffs->get_phi3(monomer_type);
 
         // Get raw w field for nonlinear term
         const T* _w = this->w_field[monomer_type].data();
@@ -250,6 +282,40 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         {
             for (int i = 0; i < M; ++i)
                 q_out[i] *= q_mask[i];
+        }
+    }
+    catch (std::exception& exc)
+    {
+        throw_without_line_number(exc.what());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Update Laplacian operator and re-create ETDRK4 coefficients
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoETDRK4<T>::update_laplacian_operator()
+{
+    try
+    {
+        // Call base class implementation (updates Pseudo with global_ds)
+        CpuSolverPseudoBase<T>::update_laplacian_operator();
+
+        // Re-create ETDRK4 coefficients for each ds_index
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            this->etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(
+                this->molecules->get_bond_lengths(),
+                this->cb->get_boundary_conditions(),
+                this->cb->get_nx(),
+                this->cb->get_dx(),
+                local_ds,
+                this->cb->get_recip_metric()
+            );
         }
     }
     catch (std::exception& exc)

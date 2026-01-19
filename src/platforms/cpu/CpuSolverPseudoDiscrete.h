@@ -159,7 +159,7 @@ public:
      * @param q_out       Output propagator q(i+1)
      * @param monomer_type Monomer type for bond function and segment weight
      * @param q_mask      Optional mask (set q=0 in masked regions)
-     * @param ds_index    Ignored for discrete chains (always uses global ds)
+     * @param ds_index    Index for per-block local ds value
      */
     void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask, int ds_index = 1) override;
 
@@ -176,5 +176,13 @@ public:
      * @param monomer_type Monomer type for bond function
      */
     void advance_propagator_half_bond_step(T *q_in, T *q_out, std::string monomer_type) override;
+
+    /**
+     * @brief Update Laplacian operator and re-register local ds values.
+     *
+     * Overrides base class to register per-block local_ds values with Pseudo,
+     * ensuring correct bond functions for each block.
+     */
+    void update_laplacian_operator() override;
 };
 #endif

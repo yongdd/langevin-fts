@@ -88,18 +88,32 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
             this->streams[i][1] = streams[i][1];
         }
 
-        // ETDRK4 uses only global ds (ds_index=1)
-        // Create exp_dw, exp_dw_half, and w_field for ds_index=1 and each monomer type
-        const int ds_idx = 1;  // ETDRK4 uses global ds only
+        // Ensure ContourLengthMapping is finalized before using it
+        molecules->finalize_contour_length_mapping();
+
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
+
+        // Create exp_dw, exp_dw_half for each ds_index and monomer type
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            for(const auto& item: molecules->get_bond_lengths())
+            {
+                std::string monomer_type = item.first;
+                this->d_exp_dw     [ds_idx][monomer_type] = nullptr;
+                this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
+                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [ds_idx][monomer_type], sizeof(T)*M));
+                gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
+            }
+        }
+
+        // Create w_field storage (independent of ds)
         for(const auto& item: molecules->get_bond_lengths())
         {
             std::string monomer_type = item.first;
-            this->d_exp_dw     [ds_idx][monomer_type] = nullptr;
-            this->d_exp_dw_half[ds_idx][monomer_type] = nullptr;
-            this->d_w_field    [monomer_type] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw     [ds_idx][monomer_type], sizeof(T)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_exp_dw_half[ds_idx][monomer_type], sizeof(T)*M));
-            gpu_error_check(cudaMalloc((void**)&this->d_w_field    [monomer_type], sizeof(T)*M));
+            this->d_w_field[monomer_type] = nullptr;
+            gpu_error_check(cudaMalloc((void**)&this->d_w_field[monomer_type], sizeof(T)*M));
         }
 
         // Initialize cuFFT plans to 0
@@ -178,45 +192,49 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
             }
         }
 
-        // Initialize ETDRK4 coefficients
-        etdrk4_coefficients_ = std::make_unique<ETDRK4Coefficients<T>>(
-            molecules->get_bond_lengths(),
-            cb->get_boundary_conditions(),
-            cb->get_nx(),
-            cb->get_dx(),
-            molecules->get_global_ds(),
-            cb->get_recip_metric()
-        );
-
-        int coeff_size = etdrk4_coefficients_->get_total_complex_grid();
-
-        // Allocate and copy Krogstad coefficients to device
-        for (const auto& item : molecules->get_bond_lengths())
+        // Initialize ETDRK4 coefficients for each ds_index
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string type = item.first;
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(
+                molecules->get_bond_lengths(),
+                cb->get_boundary_conditions(),
+                cb->get_nx(),
+                cb->get_dx(),
+                local_ds,
+                cb->get_recip_metric()
+            );
 
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_E[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_E2[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_alpha[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2_half[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi1[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2[type], sizeof(double)*coeff_size));
-            gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi3[type], sizeof(double)*coeff_size));
+            int coeff_size = etdrk4_coefficients_[ds_idx]->get_total_complex_grid();
 
-            gpu_error_check(cudaMemcpy(d_etdrk4_E[type], etdrk4_coefficients_->get_E(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_E2[type], etdrk4_coefficients_->get_E2(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_alpha[type], etdrk4_coefficients_->get_alpha(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[type], etdrk4_coefficients_->get_phi2_half(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi1[type], etdrk4_coefficients_->get_phi1(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi2[type], etdrk4_coefficients_->get_phi2(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi3[type], etdrk4_coefficients_->get_phi3(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            // Allocate and copy Krogstad coefficients to device for each ds_index
+            for (const auto& item : molecules->get_bond_lengths())
+            {
+                std::string type = item.first;
+
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_E[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_E2[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_alpha[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2_half[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi1[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi2[ds_idx][type], sizeof(double)*coeff_size));
+                gpu_error_check(cudaMalloc((void**)&d_etdrk4_phi3[ds_idx][type], sizeof(double)*coeff_size));
+
+                gpu_error_check(cudaMemcpy(d_etdrk4_E[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_E(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_E2[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_E2(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_alpha[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_alpha(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi2_half(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi1[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi1(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi2[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi2(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi3[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi3(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            }
         }
 
         // Allocate ETDRK4 workspace arrays for each stream
@@ -315,21 +333,28 @@ CudaSolverPseudoETDRK4<T>::~CudaSolverPseudoETDRK4()
     for(const auto& item: this->d_w_field)
         cudaFree(item.second);
 
-    // Free ETDRK4 coefficient arrays (Krogstad scheme)
-    for(const auto& item: this->d_etdrk4_E)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_E2)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_alpha)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_phi2_half)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_phi1)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_phi2)
-        cudaFree(item.second);
-    for(const auto& item: this->d_etdrk4_phi3)
-        cudaFree(item.second);
+    // Free ETDRK4 coefficient arrays (Krogstad scheme) - nested maps: [ds_index][monomer_type]
+    for(const auto& ds_entry: this->d_etdrk4_E)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_E2)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_alpha)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_phi2_half)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_phi1)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_phi2)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
+    for(const auto& ds_entry: this->d_etdrk4_phi3)
+        for(const auto& item: ds_entry.second)
+            cudaFree(item.second);
 
     // Free ETDRK4 workspace arrays
     for(int i=0; i<n_streams; i++)
@@ -373,34 +398,41 @@ void CudaSolverPseudoETDRK4<T>::update_laplacian_operator()
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
 
-        // Update ETDRK4 coefficients for new box dimensions
-        etdrk4_coefficients_->update(
-            this->cb->get_boundary_conditions(),
-            this->molecules->get_bond_lengths(),
-            this->cb->get_dx(),
-            this->molecules->get_global_ds(),
-            this->cb->get_recip_metric()
-        );
+        // Update ETDRK4 coefficients for each ds_index
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
 
-        // Copy updated Krogstad coefficients to device
-        int coeff_size = etdrk4_coefficients_->get_total_complex_grid();
-        for (const auto& item : molecules->get_bond_lengths())
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
-            std::string type = item.first;
-            gpu_error_check(cudaMemcpy(d_etdrk4_E[type], etdrk4_coefficients_->get_E(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_E2[type], etdrk4_coefficients_->get_E2(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_alpha[type], etdrk4_coefficients_->get_alpha(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[type], etdrk4_coefficients_->get_phi2_half(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi1[type], etdrk4_coefficients_->get_phi1(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi2[type], etdrk4_coefficients_->get_phi2(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
-            gpu_error_check(cudaMemcpy(d_etdrk4_phi3[type], etdrk4_coefficients_->get_phi3(type),
-                sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            etdrk4_coefficients_[ds_idx]->update(
+                this->cb->get_boundary_conditions(),
+                this->molecules->get_bond_lengths(),
+                this->cb->get_dx(),
+                local_ds,
+                this->cb->get_recip_metric()
+            );
+
+            // Copy updated Krogstad coefficients to device
+            int coeff_size = etdrk4_coefficients_[ds_idx]->get_total_complex_grid();
+            for (const auto& item : molecules->get_bond_lengths())
+            {
+                std::string type = item.first;
+                gpu_error_check(cudaMemcpy(d_etdrk4_E[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_E(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_E2[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_E2(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_alpha[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_alpha(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi2_half[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi2_half(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi1[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi1(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi2[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi2(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+                gpu_error_check(cudaMemcpy(d_etdrk4_phi3[ds_idx][type], etdrk4_coefficients_[ds_idx]->get_phi3(type),
+                    sizeof(double)*coeff_size, cudaMemcpyHostToDevice));
+            }
         }
     }
     catch(std::exception& exc)
@@ -417,10 +449,10 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = cb->get_total_grid();
-        const double ds = this->molecules->get_global_ds();
 
-        // ETDRK4 uses only global ds (ds_index=1)
-        const int ds_idx = 1;
+        // Get unique ds values from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int n_unique_ds = mapping.get_n_unique_ds();
 
         cudaMemcpyKind cudaMemcpyInputToDevice;
         if (device == "gpu")
@@ -432,33 +464,44 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
             throw_with_line_number("Invalid device \"" + device + "\".");
         }
 
-        // Compute exp_dw and exp_dw_half, and copy raw w field
+        // Copy raw w field for ETDRK4 (independent of ds)
         for(const auto& item: w_input)
         {
             std::string monomer_type = item.first;
             const T *w = item.second;
 
-            if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
-                throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
-
-            // Copy raw w field for ETDRK4
             gpu_error_check(cudaMemcpyAsync(
                 this->d_w_field[monomer_type], w,
                 sizeof(T)*M, cudaMemcpyInputToDevice));
+        }
 
-            // Copy for exp computation
-            gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw     [ds_idx][monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice));
-            gpu_error_check(cudaMemcpyAsync(
-                this->d_exp_dw_half[ds_idx][monomer_type], w,
-                sizeof(T)*M, cudaMemcpyInputToDevice));
+        // Compute exp_dw and exp_dw_half for each ds_index
+        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
 
-            // Compute d_exp_dw and d_exp_dw_half
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw[ds_idx][monomer_type],      this->d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*ds, M);
-            ker_exp<<<N_BLOCKS, N_THREADS>>>
-                (this->d_exp_dw_half[ds_idx][monomer_type], this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*ds, M);
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T *w = item.second;
+
+                if (this->d_exp_dw[ds_idx].find(monomer_type) == this->d_exp_dw[ds_idx].end())
+                    throw_with_line_number("monomer_type \"" + monomer_type + "\" is not in d_exp_dw[" + std::to_string(ds_idx) + "].");
+
+                // Copy for exp computation
+                gpu_error_check(cudaMemcpyAsync(
+                    this->d_exp_dw     [ds_idx][monomer_type], w,
+                    sizeof(T)*M, cudaMemcpyInputToDevice));
+                gpu_error_check(cudaMemcpyAsync(
+                    this->d_exp_dw_half[ds_idx][monomer_type], w,
+                    sizeof(T)*M, cudaMemcpyInputToDevice));
+
+                // Compute d_exp_dw and d_exp_dw_half with local_ds
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    (this->d_exp_dw[ds_idx][monomer_type],      this->d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                ker_exp<<<N_BLOCKS, N_THREADS>>>
+                    (this->d_exp_dw_half[ds_idx][monomer_type], this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
+            }
         }
         gpu_error_check(cudaPeekAtLastError());
         gpu_error_check(cudaDeviceSynchronize());
@@ -474,10 +517,8 @@ template <typename T>
 void CudaSolverPseudoETDRK4<T>::advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask, [[maybe_unused]] int ds_index)
+        std::string monomer_type, double *d_q_mask, int ds_index)
 {
-    // Note: ETDRK4 currently uses only global ds (ds_index=1)
-    // Per-ds support would require computing ETDRK4 coefficients for each ds value
     try
     {
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
@@ -486,14 +527,14 @@ void CudaSolverPseudoETDRK4<T>::advance_propagator(
         const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
 
-        // Get Krogstad ETDRK4 coefficients for this monomer type
-        const double* _d_E = d_etdrk4_E[monomer_type];
-        const double* _d_E2 = d_etdrk4_E2[monomer_type];
-        const double* _d_alpha = d_etdrk4_alpha[monomer_type];
-        const double* _d_phi2_half = d_etdrk4_phi2_half[monomer_type];
-        const double* _d_phi1 = d_etdrk4_phi1[monomer_type];
-        const double* _d_phi2 = d_etdrk4_phi2[monomer_type];
-        const double* _d_phi3 = d_etdrk4_phi3[monomer_type];
+        // Get Krogstad ETDRK4 coefficients for this ds_index and monomer type
+        const double* _d_E = d_etdrk4_E[ds_index][monomer_type];
+        const double* _d_E2 = d_etdrk4_E2[ds_index][monomer_type];
+        const double* _d_alpha = d_etdrk4_alpha[ds_index][monomer_type];
+        const double* _d_phi2_half = d_etdrk4_phi2_half[ds_index][monomer_type];
+        const double* _d_phi1 = d_etdrk4_phi1[ds_index][monomer_type];
+        const double* _d_phi2 = d_etdrk4_phi2[ds_index][monomer_type];
+        const double* _d_phi3 = d_etdrk4_phi3[ds_index][monomer_type];
 
         // Get raw w field for nonlinear term
         CuDeviceData<T>* _d_w = d_w_field[monomer_type];
