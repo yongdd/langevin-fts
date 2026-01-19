@@ -26,7 +26,8 @@ Pseudo<T>::Pseudo(
     std::map<std::string, double> bond_lengths,
     std::vector<BoundaryCondition> bc,
     std::vector<int> nx, std::vector<double> dx, double ds,
-    std::array<double, 6> recip_metric)
+    std::array<double, 6> recip_metric,
+    std::array<double, 9> recip_vec)
 {
     try
     {
@@ -36,6 +37,7 @@ Pseudo<T>::Pseudo(
         this->dx = dx;
         this->ds = ds;
         this->recip_metric_ = recip_metric;
+        this->recip_vec_ = recip_vec;
 
         // Compute total grid
         total_grid = 1;
@@ -386,94 +388,91 @@ void Pseudo<T>::update_weighted_fourier_basis()
 }
 
 //------------------------------------------------------------------------------
-// Update Fourier basis for periodic BC (with cross-terms)
+// Update Fourier basis for periodic BC using k⊗k dyad product
 //------------------------------------------------------------------------------
+/**
+ * @brief Compute k⊗k dyad product components for stress calculation.
+ *
+ * Uses the formula: k = 2π h⁻ᵀ m = 2π (m₁·a* + m₂·b* + m₃·c*)
+ * where h⁻ᵀ = [a*|b*|c*] are reciprocal lattice vectors.
+ *
+ * Stores:
+ * - fourier_basis_x = k_x²  (kk_xx)
+ * - fourier_basis_y = k_y²  (kk_yy)
+ * - fourier_basis_z = k_z²  (kk_zz)
+ * - fourier_basis_xy = k_x × k_y  (kk_xy)
+ * - fourier_basis_xz = k_x × k_z  (kk_xz)
+ * - fourier_basis_yz = k_y × k_z  (kk_yz)
+ */
 template <typename T>
 void update_weighted_fourier_basis_periodic_impl(
     double* fourier_basis_x, double* fourier_basis_y, double* fourier_basis_z,
     double* fourier_basis_xy, double* fourier_basis_xz, double* fourier_basis_yz,
-    const std::vector<int>& nx, const std::vector<double>& dx,
-    const std::array<double, 6>& recip_metric_)
+    const std::vector<int>& nx,
+    const std::array<double, 9>& recip_vec_)
 {
     const double PI = std::numbers::pi;
+    const double TWO_PI = 2.0 * PI;
     const int DIM = nx.size();
 
     // Pad to 3D
     std::vector<int> tnx(3, 1);
-    std::vector<double> tdx(3, 1.0);
     if (DIM == 3) {
         tnx = {nx[0], nx[1], nx[2]};
-        tdx = {dx[0], dx[1], dx[2]};
     } else if (DIM == 2) {
         tnx = {1, nx[0], nx[1]};
-        tdx = {1.0, dx[0], dx[1]};
     } else {
         tnx = {1, 1, nx[0]};
-        tdx = {1.0, 1.0, dx[0]};
     }
 
-    // Calculate factors using reciprocal metric tensor
-    // For wavenumber magnitude: |k|² = (2π)² × g^{-1}_ij n_i n_j
-    // where g^{-1}_ij is the reciprocal metric tensor and n_i are integer Miller indices
-    // Storage layout: [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
-    const double FOUR_PI_SQ = 4.0 * PI * PI;
-    double xfactor[3] = {0.0, 0.0, 0.0};
-
-    // Diagonal elements: (2π)² × g^{-1}_ii
-    if (DIM == 3) {
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
-        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × g^{-1}_22
-        xfactor[2] = FOUR_PI_SQ * recip_metric_[5];  // (2π)² × g^{-1}_33
-    } else if (DIM == 2) {
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
-        xfactor[1] = FOUR_PI_SQ * recip_metric_[3];  // (2π)² × g^{-1}_22
-    } else { // DIM == 1
-        xfactor[0] = FOUR_PI_SQ * recip_metric_[0];  // (2π)² × g^{-1}_11
-    }
-
-    // Off-diagonal (cross) factors: 2 × (2π)² × g^{-1}_ij
-    double cross_factor_01 = (DIM >= 2) ? 2.0 * FOUR_PI_SQ * recip_metric_[1] : 0.0;  // 2(2π)² × g^{-1}_12
-    double cross_factor_02 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[2] : 0.0;  // 2(2π)² × g^{-1}_13
-    double cross_factor_12 = (DIM >= 3) ? 2.0 * FOUR_PI_SQ * recip_metric_[4] : 0.0;  // 2(2π)² × g^{-1}_23
+    // Extract reciprocal lattice vectors (without 2π factor)
+    // recip_vec_ stores [a*|b*|c*] in column-major order
+    // a* = (recip_vec_[0], recip_vec_[1], recip_vec_[2])
+    // b* = (recip_vec_[3], recip_vec_[4], recip_vec_[5])
+    // c* = (recip_vec_[6], recip_vec_[7], recip_vec_[8])
+    double a_star[3] = {recip_vec_[0], recip_vec_[1], recip_vec_[2]};
+    double b_star[3] = {recip_vec_[3], recip_vec_[4], recip_vec_[5]};
+    double c_star[3] = {recip_vec_[6], recip_vec_[7], recip_vec_[8]};
 
     for (int i = 0; i < tnx[0]; i++)
     {
-        int itemp = (i > tnx[0]/2) ? tnx[0] - i : i;
         int i_signed = (i > tnx[0]/2) ? i - tnx[0] : i;
 
         for (int j = 0; j < tnx[1]; j++)
         {
-            int jtemp = (j > tnx[1]/2) ? tnx[1] - j : j;
             int j_signed = (j > tnx[1]/2) ? j - tnx[1] : j;
 
             if constexpr (std::is_same<T, double>::value)
             {
                 for (int k = 0; k < tnx[2]/2+1; k++)
                 {
-                    int ktemp = k;
                     int k_signed = k;
                     int idx = i * tnx[1]*(tnx[2]/2+1) + j*(tnx[2]/2+1) + k;
 
-                    int n0, n1, n2, n0_s, n1_s, n2_s;
+                    // Get Miller indices based on dimension
+                    int m1, m2, m3;
                     if (DIM == 3) {
-                        n0 = itemp; n1 = jtemp; n2 = ktemp;
-                        n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
+                        m1 = i_signed; m2 = j_signed; m3 = k_signed;
                     } else if (DIM == 2) {
-                        n0 = jtemp; n1 = ktemp; n2 = 0;
-                        n0_s = j_signed; n1_s = k_signed; n2_s = 0;
+                        m1 = j_signed; m2 = k_signed; m3 = 0;
                     } else {
-                        n0 = ktemp; n1 = 0; n2 = 0;
-                        n0_s = k_signed; n1_s = 0; n2_s = 0;
+                        m1 = k_signed; m2 = 0; m3 = 0;
                     }
 
-                    fourier_basis_x[idx] = n0*n0*xfactor[0];
-                    fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
-                    fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
-                    fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
-                    fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
+                    // Compute k = 2π × (m₁·a* + m₂·b* + m₃·c*)
+                    double kx = TWO_PI * (m1 * a_star[0] + m2 * b_star[0] + m3 * c_star[0]);
+                    double ky = TWO_PI * (m1 * a_star[1] + m2 * b_star[1] + m3 * c_star[1]);
+                    double kz = TWO_PI * (m1 * a_star[2] + m2 * b_star[2] + m3 * c_star[2]);
 
-                    // Weight factor of 2 for interior k modes
+                    // Store k⊗k components
+                    fourier_basis_x[idx] = kx * kx;
+                    fourier_basis_y[idx] = ky * ky;
+                    fourier_basis_z[idx] = kz * kz;
+                    fourier_basis_xy[idx] = kx * ky;
+                    fourier_basis_xz[idx] = kx * kz;
+                    fourier_basis_yz[idx] = ky * kz;
+
+                    // Weight factor of 2 for interior k modes (r2c symmetry)
                     if (k != 0 && 2*k != tnx[2]) {
                         fourier_basis_x[idx] *= 2;
                         fourier_basis_y[idx] *= 2;
@@ -488,28 +487,31 @@ void update_weighted_fourier_basis_periodic_impl(
             {
                 for (int k = 0; k < tnx[2]; k++)
                 {
-                    int ktemp = (k > tnx[2]/2) ? tnx[2] - k : k;
                     int k_signed = (k > tnx[2]/2) ? k - tnx[2] : k;
                     int idx = i * tnx[1]*tnx[2] + j*tnx[2] + k;
 
-                    int n0, n1, n2, n0_s, n1_s, n2_s;
+                    // Get Miller indices based on dimension
+                    int m1, m2, m3;
                     if (DIM == 3) {
-                        n0 = itemp; n1 = jtemp; n2 = ktemp;
-                        n0_s = i_signed; n1_s = j_signed; n2_s = k_signed;
+                        m1 = i_signed; m2 = j_signed; m3 = k_signed;
                     } else if (DIM == 2) {
-                        n0 = jtemp; n1 = ktemp; n2 = 0;
-                        n0_s = j_signed; n1_s = k_signed; n2_s = 0;
+                        m1 = j_signed; m2 = k_signed; m3 = 0;
                     } else {
-                        n0 = ktemp; n1 = 0; n2 = 0;
-                        n0_s = k_signed; n1_s = 0; n2_s = 0;
+                        m1 = k_signed; m2 = 0; m3 = 0;
                     }
 
-                    fourier_basis_x[idx] = n0*n0*xfactor[0];
-                    fourier_basis_y[idx] = (DIM >= 2) ? n1*n1*xfactor[1] : 0.0;
-                    fourier_basis_z[idx] = (DIM >= 3) ? n2*n2*xfactor[2] : 0.0;
-                    fourier_basis_xy[idx] = (DIM >= 2) ? n0_s*n1_s*cross_factor_01 : 0.0;
-                    fourier_basis_xz[idx] = (DIM >= 3) ? n0_s*n2_s*cross_factor_02 : 0.0;
-                    fourier_basis_yz[idx] = (DIM >= 3) ? n1_s*n2_s*cross_factor_12 : 0.0;
+                    // Compute k = 2π × (m₁·a* + m₂·b* + m₃·c*)
+                    double kx = TWO_PI * (m1 * a_star[0] + m2 * b_star[0] + m3 * c_star[0]);
+                    double ky = TWO_PI * (m1 * a_star[1] + m2 * b_star[1] + m3 * c_star[1]);
+                    double kz = TWO_PI * (m1 * a_star[2] + m2 * b_star[2] + m3 * c_star[2]);
+
+                    // Store k⊗k components
+                    fourier_basis_x[idx] = kx * kx;
+                    fourier_basis_y[idx] = ky * ky;
+                    fourier_basis_z[idx] = kz * kz;
+                    fourier_basis_xy[idx] = kx * ky;
+                    fourier_basis_xz[idx] = kx * kz;
+                    fourier_basis_yz[idx] = ky * kz;
                 }
             }
         }
@@ -522,7 +524,7 @@ void Pseudo<T>::update_weighted_fourier_basis_periodic()
     update_weighted_fourier_basis_periodic_impl<T>(
         fourier_basis_x, fourier_basis_y, fourier_basis_z,
         fourier_basis_xy, fourier_basis_xz, fourier_basis_yz,
-        nx, dx, recip_metric_);
+        nx, recip_vec_);
 }
 
 //------------------------------------------------------------------------------
@@ -650,7 +652,8 @@ void Pseudo<T>::update(
     std::vector<BoundaryCondition> bc,
     std::map<std::string, double> bond_lengths,
     std::vector<double> dx, double ds,
-    std::array<double, 6> recip_metric)
+    std::array<double, 6> recip_metric,
+    std::array<double, 9> recip_vec)
 {
     this->bond_lengths = bond_lengths;
     this->bc = bc;
@@ -658,6 +661,7 @@ void Pseudo<T>::update(
     this->ds = ds;
     this->ds_values[1] = ds;  // Update global ds
     this->recip_metric_ = recip_metric;
+    this->recip_vec_ = recip_vec;
 
     update_total_complex_grid();
     update_boltz_bond();

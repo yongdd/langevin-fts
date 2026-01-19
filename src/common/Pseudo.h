@@ -98,6 +98,19 @@ protected:
      */
     std::array<double, 6> recip_metric_;
 
+    /**
+     * @brief Reciprocal lattice vectors for k⊗k computation.
+     *
+     * Stores [a*|b*|c*] in column-major order where:
+     * - a* = (b × c) / V  → recip_vec_[0..2]
+     * - b* = (c × a) / V  → recip_vec_[3..5]
+     * - c* = (a × b) / V  → recip_vec_[6..8]
+     *
+     * These are the "crystallographer's" reciprocal vectors (without 2π factor).
+     * The wavevector is: k = 2π × (m₁·a* + m₂·b* + m₃·c*)
+     */
+    std::array<double, 9> recip_vec_;
+
     int *negative_k_idx;  ///< Mapping from k to -k indices (for complex fields)
 
     /**
@@ -134,31 +147,32 @@ protected:
     std::map<int, double> ds_values;
 
     /**
-     * @brief Fourier basis for stress calculation (diagonal terms).
+     * @brief Dyad product k⊗k diagonal components for stress calculation.
      *
-     * Stores weighted wavenumber components for stress tensor computation.
-     * The (2π)² factor is included in the stored values:
-     * - fourier_basis_x[m] = (2π)² × g^{-1}_11 × m₁² = g^{-1}_11 × k₁²
-     * - fourier_basis_y[m] = (2π)² × g^{-1}_22 × m₂² = g^{-1}_22 × k₂²
-     * - fourier_basis_z[m] = (2π)² × g^{-1}_33 × m₃² = g^{-1}_33 × k₃²
+     * Stores Cartesian components of the dyad product k⊗k = kkᵀ where
+     * k = 2π h⁻ᵀ m is the wavevector for Miller index m.
      *
-     * For non-periodic BC, g^{-1}_ii = 1/L_i² and k = π*n/L.
+     * For periodic BC:
+     * - fourier_basis_x[m] = (k⊗k)_xx = k_x² where k_x = 2π(m₁a*_x + m₂b*_x + m₃c*_x)
+     * - fourier_basis_y[m] = (k⊗k)_yy = k_y²
+     * - fourier_basis_z[m] = (k⊗k)_zz = k_z²
+     *
+     * For non-periodic BC: uses k = π*n/L directly (orthogonal only).
      */
     double *fourier_basis_x;
     double *fourier_basis_y;
     double *fourier_basis_z;
 
     /**
-     * @brief Fourier basis for stress calculation (off-diagonal/cross terms).
+     * @brief Dyad product k⊗k off-diagonal components for stress calculation.
      *
-     * For non-orthogonal systems with periodic BC, cross-terms are needed
-     * for the full stress tensor. Includes factor of 2 for symmetric sum:
-     * - fourier_basis_xy[m] = 2 × (2π)² × g^{-1}_12 × m₁m₂ = 2 × g^{-1}_12 × k₁k₂
-     * - fourier_basis_xz[m] = 2 × (2π)² × g^{-1}_13 × m₁m₃ = 2 × g^{-1}_13 × k₁k₃
-     * - fourier_basis_yz[m] = 2 × (2π)² × g^{-1}_23 × m₂m₃ = 2 × g^{-1}_23 × k₂k₃
+     * For non-orthogonal systems with periodic BC:
+     * - fourier_basis_xy[m] = (k⊗k)_xy = k_x × k_y
+     * - fourier_basis_xz[m] = (k⊗k)_xz = k_x × k_z
+     * - fourier_basis_yz[m] = (k⊗k)_yz = k_y × k_z
      *
-     * These are zero for non-periodic BC or orthogonal systems.
-     * Used for angle stress (σ_ij) and cross-term corrections to length stress.
+     * These are zero for non-periodic BC (orthogonal grids only).
+     * Used for shear stress components in the Cartesian stress tensor.
      */
     double *fourier_basis_xy;
     double *fourier_basis_xz;
@@ -234,12 +248,15 @@ public:
      * @param recip_metric Reciprocal metric tensor (only for periodic BC)
      *                     [g^{-1}_11, g^{-1}_12, g^{-1}_13, g^{-1}_22, g^{-1}_23, g^{-1}_33]
      *                     Default is identity for orthogonal systems.
+     * @param recip_vec   Reciprocal lattice vectors [a*|b*|c*] in column-major order
+     *                     for k⊗k computation. Default is Cartesian basis.
      */
     Pseudo(
         std::map<std::string, double> bond_lengths,
         std::vector<BoundaryCondition> bc,
         std::vector<int> nx, std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0});
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
+        std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
     /**
      * @brief Virtual destructor.
@@ -340,12 +357,14 @@ public:
      * @param dx           New grid spacings
      * @param ds           New contour step (usually unchanged)
      * @param recip_metric New reciprocal metric tensor (for periodic BC)
+     * @param recip_vec    New reciprocal lattice vectors for k⊗k computation
      */
     virtual void update(
         std::vector<BoundaryCondition> bc,
         std::map<std::string, double> bond_lengths,
         std::vector<double> dx, double ds,
-        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0});
+        std::array<double, 6> recip_metric = {1.0, 0.0, 0.0, 1.0, 0.0, 1.0},
+        std::array<double, 9> recip_vec = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 };
 
 #endif

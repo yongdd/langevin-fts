@@ -44,8 +44,9 @@ CudaPseudo<T>::CudaPseudo(
     std::map<std::string, double> bond_lengths,
     std::vector<BoundaryCondition> bc,
     std::vector<int> nx, std::vector<double> dx, double ds,
-    std::array<double, 6> recip_metric)
-        : Pseudo<T>(bond_lengths, bc, nx, dx, ds, recip_metric)
+    std::array<double, 6> recip_metric,
+    std::array<double, 9> recip_vec)
+        : Pseudo<T>(bond_lengths, bc, nx, dx, ds, recip_metric, recip_vec)
 {
     try
     {
@@ -190,9 +191,10 @@ void CudaPseudo<T>::update(
     std::vector<BoundaryCondition> bc,
     std::map<std::string, double> bond_lengths,
     std::vector<double> dx, double ds,
-    std::array<double, 6> recip_metric)
+    std::array<double, 6> recip_metric,
+    std::array<double, 9> recip_vec)
 {
-    Pseudo<T>::update(bc, bond_lengths, dx, ds, recip_metric);
+    Pseudo<T>::update(bc, bond_lengths, dx, ds, recip_metric, recip_vec);
 
     // Upload updated data to GPU
     upload_boltz_bond();
