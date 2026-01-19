@@ -812,18 +812,13 @@ void CudaSolverPseudoETDRK4<T>::compute_single_segment_stress(
 
         if (is_periodic_)
         {
-            // Execute forward FFT for both propagators (batched)
-            // We need two FFTs for forward and backward propagator
+            // Execute forward FFT for both propagators
+            // Use out-of-place transforms to avoid cuFFT in-place D2Z issues
             if constexpr (std::is_same<T, double>::value)
             {
-                // Copy both propagators to stress buffer
-                gpu_error_check(cudaMemcpyAsync(&d_qk_stress[STREAM][0], d_q_pair,
-                    sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-                gpu_error_check(cudaMemcpyAsync(&d_qk_stress[STREAM][M_COMPLEX], &d_q_pair[M],
-                    sizeof(T)*M, cudaMemcpyDeviceToDevice, streams[STREAM][0]));
-
-                cufftExecD2Z(plan_for_one[STREAM], reinterpret_cast<double*>(&d_qk_stress[STREAM][0]), &d_qk_stress[STREAM][0]);
-                cufftExecD2Z(plan_for_one[STREAM], reinterpret_cast<double*>(&d_qk_stress[STREAM][M_COMPLEX]), &d_qk_stress[STREAM][M_COMPLEX]);
+                // Out-of-place D2Z: read from d_q_pair, write to d_qk_stress
+                cufftExecD2Z(plan_for_one[STREAM], d_q_pair, &d_qk_stress[STREAM][0]);
+                cufftExecD2Z(plan_for_one[STREAM], &d_q_pair[M], &d_qk_stress[STREAM][M_COMPLEX]);
             }
             else
             {

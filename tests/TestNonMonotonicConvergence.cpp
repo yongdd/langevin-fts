@@ -58,16 +58,28 @@ const double LY = 4.0;
 const double LZ = 4.0;
 
 /**
- * @brief Run propagator computation and return the partition function.
+ * @brief Result structure for propagator computation.
  */
-double run_propagator_computation(
+struct PropagatorResult {
+    double Q;                    // Partition function
+    std::vector<double> stress;  // Stress tensor (empty if not computed)
+    bool stress_computed;        // Whether stress was computed
+};
+
+/**
+ * @brief Run propagator computation and return the partition function and stress.
+ *
+ * @param compute_stress If true, compute stress tensor (skip for CN-ADI methods)
+ */
+PropagatorResult run_propagator_computation(
     AbstractFactory<double>* factory,
     int Ns,
     double f,
     const std::string& numerical_method,
     const std::string& chain_model,
     double* w_a,
-    double* w_b)
+    double* w_b,
+    bool compute_stress = true)
 {
     double ds = 1.0 / Ns;
 
@@ -97,7 +109,17 @@ double run_propagator_computation(
     solver->compute_propagators({{"A", w_a}, {"B", w_b}}, {});
 
     // Get partition function
-    double Q = solver->get_total_partition(0);
+    PropagatorResult result;
+    result.Q = solver->get_total_partition(0);
+    result.stress_computed = false;
+
+    // Compute stress if requested (skip for CN-ADI methods)
+    if (compute_stress)
+    {
+        solver->compute_stress();
+        result.stress = solver->get_stress();
+        result.stress_computed = true;
+    }
 
     // Cleanup
     delete solver;
@@ -105,7 +127,15 @@ double run_propagator_computation(
     delete molecules;
     delete cb;
 
-    return Q;
+    return result;
+}
+
+/**
+ * @brief Check if a numerical method is a CN-ADI variant.
+ */
+bool is_cn_adi_method(const std::string& method)
+{
+    return method.find("cn-adi") != std::string::npos;
 }
 
 /**
@@ -117,8 +147,13 @@ bool test_same_segment_pairs(
     const std::string& numerical_method,
     const std::string& chain_model)
 {
+    bool compute_stress = !is_cn_adi_method(numerical_method);
+
     std::cout << "  Testing " << platform_name << " / " << numerical_method
-              << " / " << chain_model << "..." << std::endl;
+              << " / " << chain_model;
+    if (!compute_stress)
+        std::cout << " (stress skipped)";
+    std::cout << "..." << std::endl;
 
     const int M = NX * NY * NZ;
 
@@ -153,22 +188,44 @@ bool test_same_segment_pairs(
         int Ns1 = pair.first;
         int Ns2 = pair.second;
 
-        double Q1 = run_propagator_computation(factory, Ns1, F_A, numerical_method, chain_model, w_a, w_b);
-        double Q2 = run_propagator_computation(factory, Ns2, F_A, numerical_method, chain_model, w_a, w_b);
+        PropagatorResult r1 = run_propagator_computation(factory, Ns1, F_A, numerical_method, chain_model, w_a, w_b, compute_stress);
+        PropagatorResult r2 = run_propagator_computation(factory, Ns2, F_A, numerical_method, chain_model, w_a, w_b, compute_stress);
 
-        double diff = std::abs(Q1 - Q2);
-        double rel_diff = diff / std::abs(Q1);
+        // Check partition function
+        double Q_diff = std::abs(r1.Q - r2.Q);
+        double Q_rel_diff = Q_diff / std::abs(r1.Q);
 
         std::cout << "    Ns=" << Ns1 << " vs Ns=" << Ns2
-                  << ": Q1=" << std::scientific << std::setprecision(10) << Q1
-                  << ", Q2=" << Q2
-                  << ", rel_diff=" << rel_diff << std::endl;
+                  << ": Q1=" << std::scientific << std::setprecision(10) << r1.Q
+                  << ", Q2=" << r2.Q
+                  << ", rel_diff=" << Q_rel_diff << std::endl;
 
-        if (rel_diff > TOLERANCE)
+        if (Q_rel_diff > TOLERANCE)
         {
-            std::cout << "    FAILED: relative difference " << rel_diff
+            std::cout << "    FAILED: Q relative difference " << Q_rel_diff
                       << " > " << TOLERANCE << std::endl;
             all_passed = false;
+        }
+
+        // Check stress (if computed)
+        if (r1.stress_computed && r2.stress_computed)
+        {
+            // Stress tensor has 6 components: xx, yy, zz, xy, xz, yz
+            for (size_t i = 0; i < r1.stress.size() && i < r2.stress.size(); i++)
+            {
+                double s_diff = std::abs(r1.stress[i] - r2.stress[i]);
+                double s_max = std::max(std::abs(r1.stress[i]), std::abs(r2.stress[i]));
+                double s_rel_diff = s_diff / (s_max + 1e-15);
+
+                if (s_rel_diff > TOLERANCE && s_diff > 1e-12)
+                {
+                    std::cout << "    FAILED: stress[" << i << "] relative difference " << s_rel_diff
+                              << " > " << TOLERANCE
+                              << " (s1=" << r1.stress[i] << ", s2=" << r2.stress[i] << ")" << std::endl;
+                    all_passed = false;
+                }
+            }
+            std::cout << "      stress: s1[0]=" << r1.stress[0] << ", s2[0]=" << r2.stress[0] << std::endl;
         }
     }
 
