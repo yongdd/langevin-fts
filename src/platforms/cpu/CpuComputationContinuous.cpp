@@ -372,7 +372,6 @@ void CpuComputationContinuous<T>::compute_propagators(
 
                 // Get ds_index from the key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
-                if (ds_index < 1) ds_index = 1;  // Default to global ds
 
                 // Reset solver internal state when starting a new propagator
                 // (needed for Global Richardson method)
@@ -451,13 +450,21 @@ void CpuComputationContinuous<T>::compute_propagators(
 }
 template <typename T>
 void CpuComputationContinuous<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
+        // Get ds_index from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int ds_index = mapping.get_ds_index(block.contour_length);
+
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
-        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, ds_index);
     }
     catch(std::exception& exc)
     {

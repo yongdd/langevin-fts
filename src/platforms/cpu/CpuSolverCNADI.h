@@ -107,40 +107,35 @@ private:
     Molecules *molecules;         ///< Molecules container
     bool use_4th_order;           ///< Use CN-ADI4 (4th order) instead of CN-ADI2 (2nd order)
 
-    /// @name Tridiagonal coefficients for x-direction
+    /// @name Tridiagonal coefficients per ds_index per monomer_type
+    /// Nested map structure: [ds_index][monomer_type] -> coefficient array
     /// @{
-    std::map<std::string, double*> xl;  ///< Lower diagonal
-    std::map<std::string, double*> xd;  ///< Main diagonal
-    std::map<std::string, double*> xh;  ///< Upper diagonal
-    /// @}
+    std::map<int, std::map<std::string, double*>> xl;  ///< x-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> xd;  ///< x-direction main diagonal
+    std::map<int, std::map<std::string, double*>> xh;  ///< x-direction upper diagonal
 
-    /// @name Tridiagonal coefficients for y-direction
-    /// @{
-    std::map<std::string, double*> yl;  ///< Lower diagonal
-    std::map<std::string, double*> yd;  ///< Main diagonal
-    std::map<std::string, double*> yh;  ///< Upper diagonal
-    /// @}
+    std::map<int, std::map<std::string, double*>> yl;  ///< y-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> yd;  ///< y-direction main diagonal
+    std::map<int, std::map<std::string, double*>> yh;  ///< y-direction upper diagonal
 
-    /// @name Tridiagonal coefficients for z-direction
-    /// @{
-    std::map<std::string, double*> zl;  ///< Lower diagonal
-    std::map<std::string, double*> zd;  ///< Main diagonal
-    std::map<std::string, double*> zh;  ///< Upper diagonal
+    std::map<int, std::map<std::string, double*>> zl;  ///< z-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> zd;  ///< z-direction main diagonal
+    std::map<int, std::map<std::string, double*>> zh;  ///< z-direction upper diagonal
     /// @}
 
     /// @name Half-step tridiagonal coefficients for CN-ADI4
     /// @{
-    std::map<std::string, double*> xl_half;  ///< x-direction lower (ds/2)
-    std::map<std::string, double*> xd_half;  ///< x-direction diagonal (ds/2)
-    std::map<std::string, double*> xh_half;  ///< x-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> xl_half;  ///< x-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> xd_half;  ///< x-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> xh_half;  ///< x-direction upper (ds/2)
 
-    std::map<std::string, double*> yl_half;  ///< y-direction lower (ds/2)
-    std::map<std::string, double*> yd_half;  ///< y-direction diagonal (ds/2)
-    std::map<std::string, double*> yh_half;  ///< y-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> yl_half;  ///< y-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> yd_half;  ///< y-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> yh_half;  ///< y-direction upper (ds/2)
 
-    std::map<std::string, double*> zl_half;  ///< z-direction lower (ds/2)
-    std::map<std::string, double*> zd_half;  ///< z-direction diagonal (ds/2)
-    std::map<std::string, double*> zh_half;  ///< z-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> zl_half;  ///< z-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> zd_half;  ///< z-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> zh_half;  ///< z-direction upper (ds/2)
     /// @}
 
     /**
@@ -160,24 +155,27 @@ private:
      * @param q_in        Input propagator
      * @param q_out       Output propagator
      * @param monomer_type Monomer type for coefficients
+     * @param ds_index    Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type);
+        double *q_in, double *q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief Advance propagator in 2D using ADI splitting.
+     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type);
+        double *q_in, double *q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief Advance propagator in 1D (direct solve).
+     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
-        double *q_in, double *q_out, std::string monomer_type);
+        double *q_in, double *q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief Single ADI step with specified coefficients.
@@ -313,12 +311,10 @@ public:
      * @param q_out       Output propagator
      * @param monomer_type Monomer type
      * @param q_mask      Optional mask (currently ignored for CN-ADI)
-     * @param ds_index    Index for the ds value (1-based, default: 1 for global ds)
-     *
-     * @note CN-ADI currently uses global ds for all blocks.
+     * @param ds_index    Index for the ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator(
-                double *q_in, double *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) override;
+                double *q_in, double *q_out, std::string monomer_type, const double *q_mask, int ds_index) override;
 
     /**
      * @brief Half-bond step (not used for continuous chains).

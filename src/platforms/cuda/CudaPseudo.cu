@@ -43,37 +43,17 @@ template <typename T>
 CudaPseudo<T>::CudaPseudo(
     std::map<std::string, double> bond_lengths,
     std::vector<BoundaryCondition> bc,
-    std::vector<int> nx, std::vector<double> dx, double ds,
+    std::vector<int> nx, std::vector<double> dx,
     std::array<double, 6> recip_metric,
     std::array<double, 9> recip_vec)
-        : Pseudo<T>(bond_lengths, bc, nx, dx, ds, recip_metric, recip_vec)
+        : Pseudo<T>(bond_lengths, bc, nx, dx, recip_metric, recip_vec)
 {
     try
     {
         const int M_COMPLEX = Pseudo<T>::get_total_complex_grid();
 
-        // Create boltz_bond, boltz_bond_half for each ds_index and monomer_type
-        // The base class Pseudo computes boltz_bond[ds_index][monomer_type]
-        for (const auto& ds_entry : this->boltz_bond)
-        {
-            int ds_index = ds_entry.first;
-            for (const auto& item : ds_entry.second)
-            {
-                std::string monomer_type = item.first;
-                d_boltz_bond[ds_index][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_boltz_bond[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
-            }
-        }
-        for (const auto& ds_entry : this->boltz_bond_half)
-        {
-            int ds_index = ds_entry.first;
-            for (const auto& item : ds_entry.second)
-            {
-                std::string monomer_type = item.first;
-                d_boltz_bond_half[ds_index][monomer_type] = nullptr;
-                gpu_error_check(cudaMalloc((void**)&d_boltz_bond_half[ds_index][monomer_type], sizeof(double)*M_COMPLEX));
-            }
-        }
+        // Boltzmann factors are allocated in finalize_ds_values()
+        // after add_ds_value() is called for each unique ds value
 
         // Allocate memory for stress calculation: compute_stress()
         // Diagonal terms
@@ -90,8 +70,7 @@ CudaPseudo<T>::CudaPseudo(
             gpu_error_check(cudaMalloc((void**)&d_negative_k_idx, sizeof(int)*M_COMPLEX));
         }
 
-        // Upload computed data to GPU
-        upload_boltz_bond();
+        // Upload Fourier basis to GPU
         upload_fourier_basis();
     }
     catch(std::exception& exc)
@@ -190,11 +169,11 @@ template <typename T>
 void CudaPseudo<T>::update(
     std::vector<BoundaryCondition> bc,
     std::map<std::string, double> bond_lengths,
-    std::vector<double> dx, double ds,
+    std::vector<double> dx,
     std::array<double, 6> recip_metric,
     std::array<double, 9> recip_vec)
 {
-    Pseudo<T>::update(bc, bond_lengths, dx, ds, recip_metric, recip_vec);
+    Pseudo<T>::update(bc, bond_lengths, dx, recip_metric, recip_vec);
 
     // Upload updated data to GPU
     upload_boltz_bond();

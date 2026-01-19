@@ -363,7 +363,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_global_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -557,11 +556,12 @@ void CudaComputationDiscrete<T>::compute_propagators(
                         }
                         else
                         {
+                            // Discrete chains always use ds_index=1 (global ds)
                             this->propagator_solver->advance_propagator(
                                 STREAM,
                                 _d_propagator[1],
                                 _d_propagator[1],
-                                monomer_type, this->d_q_mask);
+                                monomer_type, this->d_q_mask, 1);
                         }
 
                         #ifndef NDEBUG
@@ -688,17 +688,18 @@ void CudaComputationDiscrete<T>::compute_propagators(
                     //     (std::chrono::system_clock::now().time_since_epoch()).count() - start_time << std::endl;
                     // #endif
 
+                    // Discrete chains always use ds_index=1 (global ds)
                     this->propagator_solver->advance_propagator(
-                        STREAM, 
+                        STREAM,
                         _d_propagator[n],
                         _d_propagator[n+1],
-                        monomer_type, this->d_q_mask);
+                        monomer_type, this->d_q_mask, 1);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
                     #endif
                 }
-                
+
                 // q(r, n+1/2)
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
@@ -764,17 +765,22 @@ void CudaComputationDiscrete<T>::compute_propagators(
 }
 template <typename T>
 void CudaComputationDiscrete<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
         const int M = this->cb->get_total_grid();
         const int STREAM = 0;
         gpu_error_check(cudaMemcpy(this->d_q_pair[STREAM][0], q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
 
+        // Discrete chains always use ds_index=1 (global ds)
         this->propagator_solver->advance_propagator(
                         STREAM, this->d_q_pair[STREAM][0], this->d_q_pair[STREAM][1],
-                        monomer_type, this->d_q_mask);
+                        monomer_type, this->d_q_mask, 1);
         gpu_error_check(cudaDeviceSynchronize());
 
         gpu_error_check(cudaMemcpy(q_out, this->d_q_pair[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));

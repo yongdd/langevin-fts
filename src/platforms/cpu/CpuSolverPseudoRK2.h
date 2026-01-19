@@ -135,7 +135,7 @@ public:
      * @param q_mask      Optional mask (set q=0 in masked regions)
      * @param ds_index    Index for the ds value (1-based, default: 1 for global ds)
      */
-    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index = 1) override;
+    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double *q_mask, int ds_index) override;
 
     /**
      * @brief Half-bond step (not used for continuous chains).

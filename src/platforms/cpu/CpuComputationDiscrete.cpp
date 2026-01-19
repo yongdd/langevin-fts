@@ -419,11 +419,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         }
                         else
                         {
+                            // Discrete chains always use ds_index=1 (global ds)
                             this->propagator_solver->advance_propagator(
                                 _propagator[1],
                                 _propagator[1],
                                 monomer_type,
-                                q_mask);
+                                q_mask, 1);
                         }
 
                         #ifndef NDEBUG
@@ -560,9 +561,10 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     this->time_complexity++;
                     #endif
 
+                    // Discrete chains always use ds_index=1 (global ds)
                     this->propagator_solver->advance_propagator(
                         _propagator[n], _propagator[n+1],
-                        monomer_type, q_mask);
+                        monomer_type, q_mask, 1);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -637,13 +639,18 @@ void CpuComputationDiscrete<T>::compute_propagators(
 }
 template <typename T>
 void CpuComputationDiscrete<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
-        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask);
+        // Discrete chains always use ds_index=1 (global ds)
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, 1);
     }
     catch(std::exception& exc)
     {

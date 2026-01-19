@@ -286,40 +286,35 @@ private:
 
     cudaStream_t streams[MAX_STREAMS][2];  ///< CUDA streams [kernel, memcpy]
 
-    /// @name X-direction Tridiagonal Coefficients
+    /// @name Tridiagonal Coefficients per ds_index per monomer_type
+    /// Nested map structure: [ds_index][monomer_type] -> coefficient array (device)
     /// @{
-    std::map<std::string, double*> d_xl;  ///< Lower diagonal by monomer type
-    std::map<std::string, double*> d_xd;  ///< Main diagonal by monomer type
-    std::map<std::string, double*> d_xh;  ///< Upper diagonal by monomer type
-    /// @}
+    std::map<int, std::map<std::string, double*>> d_xl;  ///< X-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> d_xd;  ///< X-direction main diagonal
+    std::map<int, std::map<std::string, double*>> d_xh;  ///< X-direction upper diagonal
 
-    /// @name Y-direction Tridiagonal Coefficients
-    /// @{
-    std::map<std::string, double*> d_yl;  ///< Lower diagonal
-    std::map<std::string, double*> d_yd;  ///< Main diagonal
-    std::map<std::string, double*> d_yh;  ///< Upper diagonal
-    /// @}
+    std::map<int, std::map<std::string, double*>> d_yl;  ///< Y-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> d_yd;  ///< Y-direction main diagonal
+    std::map<int, std::map<std::string, double*>> d_yh;  ///< Y-direction upper diagonal
 
-    /// @name Z-direction Tridiagonal Coefficients
-    /// @{
-    std::map<std::string, double*> d_zl;  ///< Lower diagonal
-    std::map<std::string, double*> d_zd;  ///< Main diagonal
-    std::map<std::string, double*> d_zh;  ///< Upper diagonal
+    std::map<int, std::map<std::string, double*>> d_zl;  ///< Z-direction lower diagonal
+    std::map<int, std::map<std::string, double*>> d_zd;  ///< Z-direction main diagonal
+    std::map<int, std::map<std::string, double*>> d_zh;  ///< Z-direction upper diagonal
     /// @}
 
     /// @name Half-step Tridiagonal Coefficients for CN-ADI4
     /// @{
-    std::map<std::string, double*> d_xl_half;  ///< X-direction lower (ds/2)
-    std::map<std::string, double*> d_xd_half;  ///< X-direction diagonal (ds/2)
-    std::map<std::string, double*> d_xh_half;  ///< X-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> d_xl_half;  ///< X-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> d_xd_half;  ///< X-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> d_xh_half;  ///< X-direction upper (ds/2)
 
-    std::map<std::string, double*> d_yl_half;  ///< Y-direction lower (ds/2)
-    std::map<std::string, double*> d_yd_half;  ///< Y-direction diagonal (ds/2)
-    std::map<std::string, double*> d_yh_half;  ///< Y-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> d_yl_half;  ///< Y-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> d_yd_half;  ///< Y-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> d_yh_half;  ///< Y-direction upper (ds/2)
 
-    std::map<std::string, double*> d_zl_half;  ///< Z-direction lower (ds/2)
-    std::map<std::string, double*> d_zd_half;  ///< Z-direction diagonal (ds/2)
-    std::map<std::string, double*> d_zh_half;  ///< Z-direction upper (ds/2)
+    std::map<int, std::map<std::string, double*>> d_zl_half;  ///< Z-direction lower (ds/2)
+    std::map<int, std::map<std::string, double*>> d_zd_half;  ///< Z-direction diagonal (ds/2)
+    std::map<int, std::map<std::string, double*>> d_zh_half;  ///< Z-direction upper (ds/2)
     /// @}
 
     /// @name Tridiagonal Solver Workspace (per stream)
@@ -345,30 +340,30 @@ private:
 
     /**
      * @brief 3D ADI propagator advancement.
-     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
+     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_3d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief 2D ADI propagator advancement.
-     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
+     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_2d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief 1D Crank-Nicolson propagator advancement.
-     * @param ds_index Index for ds value (CN-ADI uses ds_index=1)
+     * @param ds_index Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator_1d(
         std::vector<BoundaryCondition> bc,
         const int STREAM,
-        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index = 1);
+        double *d_q_in, double *d_q_out, std::string monomer_type, int ds_index);
 
     /**
      * @brief 3D ADI step with explicit coefficient arrays.
@@ -436,12 +431,12 @@ public:
      * @param d_q_out      Output propagator (device)
      * @param monomer_type Monomer type
      * @param d_q_mask     Optional mask (device)
-     * @param ds_index     Index for ds value (CN-ADI uses ds_index=1)
+     * @param ds_index     Index for ds value (1-based) from ContourLengthMapping
      */
     void advance_propagator(
         const int STREAM,
         double *d_q_in, double *d_q_out,
-        std::string monomer_type, double *d_q_mask, int ds_index = 1) override;
+        std::string monomer_type, double *d_q_mask, int ds_index) override;
 
     /** @brief Half-bond step (not applicable for CN-ADI continuous). */
     void advance_propagator_half_bond_step(

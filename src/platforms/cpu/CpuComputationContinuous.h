@@ -144,11 +144,13 @@ public:
     /**
      * @brief Advance propagator by a single contour step.
      *
-     * @param q_init      Input propagator
-     * @param q_out       Output propagator
-     * @param monomer_type Monomer type for field
+     * @param q_init Input propagator
+     * @param q_out  Output propagator
+     * @param p      Polymer index
+     * @param v      Starting vertex of the block
+     * @param u      Ending vertex of the block
      */
-    void advance_propagator_single_segment(T* q_init, T *q_out, std::string monomer_type) override;
+    void advance_propagator_single_segment(T* q_init, T *q_out, int p, int v, int u) override;
 
     /**
      * @brief Calculate all concentration fields from propagators.

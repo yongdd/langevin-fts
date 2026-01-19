@@ -465,7 +465,6 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                 // Advance propagator successively
                 // Get ds_index from the key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
-                if (ds_index < 1) ds_index = 1;  // Default to global ds
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
@@ -635,7 +634,6 @@ std::vector<T*> CpuComputationReduceMemoryContinuous<T>::recalcaulte_propagator(
     {
         const double *q_mask = this->cb->get_mask();
         int ds_index = PropagatorCode::get_ds_index_from_key(key);
-        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // Output array of pointers (will contain mix of checkpoint pointers and q_recal pointers)
         std::vector<T*> q_out(N_RIGHT + 1, nullptr);
@@ -1264,7 +1262,6 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_propagator(dep).monomer_type;
             const double *q_mask = this->cb->get_mask();
             int ds_index = PropagatorCode::get_ds_index_from_key(dep);
-            if (ds_index < 1) ds_index = 1;
 
             // Load checkpoint
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(dep, check_pos)];

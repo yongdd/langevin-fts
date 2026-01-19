@@ -161,7 +161,7 @@ public:
      * @param q_mask      Optional mask (set q=0 in masked regions)
      * @param ds_index    Index for per-block local ds value
      */
-    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask, int ds_index = 1) override;
+    void advance_propagator(T *q_in, T *q_out, std::string monomer_type, const double* q_mask, int ds_index) override;
 
     /**
      * @brief Advance propagator by half bond step only.

@@ -361,7 +361,6 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_global_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -587,7 +586,6 @@ void CudaComputationReduceMemoryContinuous<T>::compute_propagators(
 
                 // Get ds_index from the propagator key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
-                if (ds_index < 1) ds_index = 1;  // Default to global ds
 
                 // Reset solver internal state when starting a new propagator
                 // (needed for Global Richardson method)
@@ -778,7 +776,6 @@ std::vector<T*> CudaComputationReduceMemoryContinuous<T>::recalcaulte_propagator
 
         // Get ds_index from the propagator key
         int ds_index = PropagatorCode::get_ds_index_from_key(key);
-        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // Reset solver internal state when starting propagator recalculation
         // (needed for Global Richardson method)
@@ -856,7 +853,6 @@ void CudaComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 
         // Get ds_index from the propagator key (use key_left, both should have same ds_index)
         int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
-        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         // Set up local workspace pointers (see memory layout in header)
         CuDeviceData<T> *d_q_left = this->d_workspace[0];                           // first M of this->d_workspace[0]
@@ -1031,8 +1027,7 @@ void CudaComputationReduceMemoryContinuous<T>::compute_stress()
 
             // Get ds_index from the propagator key
             int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
-            if (ds_index < 1) ds_index = 1;  // Default to global ds
-
+    
             // If there is no segment
             if(N_RIGHT == 0)
                 continue;
@@ -1324,8 +1319,7 @@ void CudaComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, in
 
             // Get ds_index from the propagator key
             int ds_index = PropagatorCode::get_ds_index_from_key(dep);
-            if (ds_index < 1) ds_index = 1;  // Default to global ds
-
+    
             int check_pos = -1;
             for(int cp = 0; cp <= n; cp++)
             {
@@ -1397,7 +1391,6 @@ bool CudaComputationReduceMemoryContinuous<T>::check_total_partition()
 
         // Get ds_index from the propagator key
         int ds_index = PropagatorCode::get_ds_index_from_key(key_left);
-        if (ds_index < 1) ds_index = 1;  // Default to global ds
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;

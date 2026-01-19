@@ -81,10 +81,18 @@ void CudaComputationReduceMemoryBase<T>::compute_statistics(
 
 template <typename T>
 void CudaComputationReduceMemoryBase<T>::advance_propagator_single_segment(
-    T* q_init, T *q_out, std::string monomer_type)
+    T* q_init, T *q_out, int p, int v, int u)
 {
     try
     {
+        // Get block info from polymer
+        const Block& block = this->molecules->get_polymer(p).get_block(v, u);
+        std::string monomer_type = block.monomer_type;
+
+        // Get ds_index from ContourLengthMapping
+        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
+        int ds_index = mapping.get_ds_index(block.contour_length);
+
         const int M = this->cb->get_total_grid();
 
         // Create device pointers
@@ -98,7 +106,7 @@ void CudaComputationReduceMemoryBase<T>::advance_propagator_single_segment(
         gpu_error_check(cudaMemcpy(d_q_in, q_init, sizeof(T)*M, cudaMemcpyHostToDevice));
 
         // Advance
-        propagator_solver->advance_propagator(0, d_q_in, d_q_out, monomer_type, d_q_mask);
+        propagator_solver->advance_propagator(0, d_q_in, d_q_out, monomer_type, d_q_mask, ds_index);
         gpu_error_check(cudaDeviceSynchronize());
 
         // Copy back

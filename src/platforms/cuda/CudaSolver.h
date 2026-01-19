@@ -114,7 +114,7 @@ public:
     virtual void advance_propagator(
         const int STREAM,
         CuDeviceData<T> *d_q_in, CuDeviceData<T> *d_q_out,
-        std::string monomer_type, double *d_q_mask, int ds_index = 1) = 0;
+        std::string monomer_type, double *d_q_mask, int ds_index) = 0;
 
     /**
      * @brief Advance propagator by half bond step (discrete chains).
