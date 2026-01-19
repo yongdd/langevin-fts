@@ -221,11 +221,10 @@ void CpuSolverPseudoRQM4<T>::update_laplacian_operator()
 {
     try
     {
-        // Call base class implementation (updates Pseudo with global_ds)
+        // Call base class implementation (updates Fourier basis and recomputes Boltzmann factors)
         CpuSolverPseudoBase<T>::update_laplacian_operator();
 
-        // Re-register local_ds values for each block
-        // (base class's pseudo->update() resets ds_values[1] to global_ds)
+        // Re-register local_ds values for each block in case grid changed
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
