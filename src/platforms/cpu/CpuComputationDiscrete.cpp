@@ -777,14 +777,14 @@ void CpuComputationDiscrete<T>::compute_stress()
         // if constexpr (std::is_same<T, std::complex<double>>::value)
         //     throw_with_line_number("Currently, stress computation is not suppoted for complex number type.");
 
-        // Check for absorbing BC - stress computation not supported yet
+        // Check for non-periodic BC - stress computation not supported
         auto bc_vec = this->cb->get_boundary_conditions();
         for (const auto& bc : bc_vec)
         {
-            if (bc == BoundaryCondition::ABSORBING)
+            if (bc != BoundaryCondition::PERIODIC)
             {
-                throw_with_line_number("Stress computation with absorbing boundary conditions "
-                    "is not supported yet. Use reflecting or periodic boundary conditions.");
+                throw_with_line_number("Stress computation with non-periodic boundary conditions "
+                    "is not supported yet. Use periodic boundary conditions.");
             }
         }
 

@@ -273,15 +273,17 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
             }
             else if (DIM == 2)
             {
+                // Note: 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
+                // so stress data is stored in fourier_basis_y and fourier_basis_z
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    // Cartesian stress tensor components for 2D
-                    stress[0] += coeff * kk_xx[i];  // σ_xx
-                    stress[1] += coeff * kk_yy[i];  // σ_yy
-                    stress[2] += coeff * kk_xy[i];  // σ_xy (stored in index 2 for 2D)
+                    // Cartesian stress tensor components for 2D (mapped to y-z internally)
+                    stress[0] += coeff * kk_yy[i];  // σ_xx (stored in y due to internal mapping)
+                    stress[1] += coeff * kk_zz[i];  // σ_yy (stored in z due to internal mapping)
+                    stress[2] += coeff * kk_yz[i];  // σ_xy (stored in yz due to internal mapping)
                 }
             }
             else if (DIM == 1)

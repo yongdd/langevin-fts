@@ -506,7 +506,8 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
                 fft_[STREAM]->forward(d_q2, rk_2);
 
                 // Multiply the two transforms element-wise (real coefficients)
-                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 1.0, M_COMPLEX);
+                // Factor of 2 for DCT/DST Parseval relation (no conjugate pairs like FFT)
+                ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_multi[STREAM], rk_1, rk_2, 2.0, M_COMPLEX);
             }
             gpu_error_check(cudaPeekAtLastError());
         }
@@ -577,8 +578,14 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         }
         if ( DIM == 2 )
         {
+            // For non-periodic BC, 2D grid is mapped to y-z axes internally (tnx = {1, nx[0], nx[1]})
+            // so stress data is stored in fourier_basis_y and fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_y;
+            const double* _d_basis_yy = is_periodic_ ? _d_fourier_basis_y : _d_fourier_basis_z;
+            const double* _d_basis_xy = is_periodic_ ? _d_fourier_basis_xy : _d_fourier_basis_yz;
+
             // σ_xx
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
@@ -587,7 +594,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             gpu_error_check(cudaPeekAtLastError());
 
             // σ_yy
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_y, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_yy, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[1], M_COMPLEX, streams[STREAM][0]);
@@ -596,7 +603,7 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
             gpu_error_check(cudaPeekAtLastError());
 
             // σ_xy (stored in index 2 for 2D)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_xy, 1.0, M_COMPLEX);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xy, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[2], M_COMPLEX, streams[STREAM][0]);
@@ -606,8 +613,11 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         }
         if ( DIM == 1 )
         {
-            // σ_xx (only x-direction in 1D)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_fourier_basis_x, 1.0, M_COMPLEX);
+            // For non-periodic BC, 1D grid is mapped to z-axis internally (tnx = {1, 1, nx[0]})
+            // so stress data is stored in fourier_basis_z
+            const double* _d_basis_xx = is_periodic_ ? _d_fourier_basis_x : _d_fourier_basis_z;
+
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_stress_sum[STREAM], d_q_multi[STREAM], _d_basis_xx, 1.0, M_COMPLEX);
             gpu_error_check(cudaPeekAtLastError());
             if constexpr (std::is_same<T, double>::value)
                 cub::DeviceReduce::Sum(d_temp_storage[STREAM], temp_storage_bytes[STREAM], d_stress_sum[STREAM], &d_segment_stress[0], M_COMPLEX, streams[STREAM][0]);
