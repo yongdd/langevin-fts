@@ -85,6 +85,9 @@ int main()
         // Choose platform (cpu-mkl only for 1D)
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
+        // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
+        std::vector<std::string> numerical_methods_discrete = {"rqm4"};
+        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2", "etdrk4"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
 
         for(std::string platform : avail_platforms)
@@ -94,7 +97,13 @@ int main()
 
             for(std::string chain_model : chain_models)
             {
-                std::cout << "Testing: " << platform << ", " << chain_model << std::endl;
+                // Select numerical methods based on chain model
+                const std::vector<std::string>& numerical_methods =
+                    (chain_model == "Discrete") ? numerical_methods_discrete : numerical_methods_continuous;
+
+                for(std::string numerical_method : numerical_methods)
+                {
+                std::cout << "Testing: " << platform << ", " << chain_model << ", " << numerical_method << std::endl;
                 std::vector<double> model_stress_list;
 
                 for(bool aggregate_propagator_computation : aggregate_propagator_computations)
@@ -109,11 +118,12 @@ int main()
                     PropagatorComputationOptimizer* propagator_computation_optimizer =
                         new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
                     PropagatorComputation<double>* solver =
-                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
+                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
                     AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
                         am_max_hist, am_start_error, am_mix_min, am_mix_init);
 
                     std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                    std::cout << "Numerical Method: " << numerical_method << std::endl;
                     std::cout << "Using Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
@@ -204,58 +214,63 @@ int main()
                     solver->compute_stress();
                     auto stress = solver->get_stress();
 
-                    // -------------- Numerical derivative test (dH/dL) ------------
-                    double dL = 0.0000001;
-                    double old_lx0 = lx[0];
-
-                    // Lambda to compute total energy
-                    auto compute_energy = [&]() -> double {
-                        for(int i=0; i<M; i++)
-                        {
-                            w_minus[i] = (w[i]-w[i+M])/2;
-                            w_plus[i]  = (w[i]+w[i+M])/2;
-                        }
-                        double energy = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
-                        energy -= cb->integral(w_plus)/cb->get_volume();
-                        for(int p=0; p<molecules->get_n_polymer_types(); p++){
-                            Polymer& pc = molecules->get_polymer(p);
-                            energy -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
-                        }
-                        return energy;
-                    };
-
-                    // Compute numerical derivative dH/dL
-                    lx[0] = old_lx0 + dL/2;
-                    cb->set_lx(lx);
-                    solver->update_laplacian_operator();
-                    solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                    double energy_total_1 = compute_energy();
-
-                    lx[0] = old_lx0 - dL/2;
-                    cb->set_lx(lx);
-                    solver->update_laplacian_operator();
-                    solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
-                    double energy_total_2 = compute_energy();
-
-                    // Reset to original
-                    lx[0] = old_lx0;
-                    cb->set_lx(lx);
-                    solver->update_laplacian_operator();
-
-                    double dh_dl = (energy_total_1 - energy_total_2) / dL;
-
                     std::cout << "  Aggregation=" << std::boolalpha << aggregate_propagator_computation;
                     std::cout << ", SCFT error=" << std::scientific << std::setprecision(2) << error_level;
-                    std::cout << ", Stress=" << std::setprecision(6) << stress[0];
-                    std::cout << ", dH/dL=" << std::setprecision(6) << dh_dl << std::endl;
+                    std::cout << ", Stress=" << std::setprecision(6) << stress[0] << std::endl;
 
-                    // Check numerical derivative matches analytical stress
-                    double relative_stress_error = std::abs(dh_dl - stress[0]) / std::abs(stress[0]);
-                    std::cout << "  Relative stress error (dH/dL vs stress): " << relative_stress_error << std::endl;
+                    // -------------- Numerical derivative test (dH/dL) ------------
+                    // Only run this for rqm4 (high-precision reference method)
+                    // Lower-order methods have larger truncation errors
+                    if (numerical_method == "rqm4")
+                    {
+                        double dL = 0.0000001;
+                        double old_lx0 = lx[0];
 
-                    if (!std::isfinite(relative_stress_error) || relative_stress_error > 1e-3) {
-                        std::cout << "ERROR: Numerical derivative does not match stress!" << std::endl;
-                        return -1;
+                        // Lambda to compute total energy
+                        auto compute_energy = [&]() -> double {
+                            for(int i=0; i<M; i++)
+                            {
+                                w_minus[i] = (w[i]-w[i+M])/2;
+                                w_plus[i]  = (w[i]+w[i+M])/2;
+                            }
+                            double energy = cb->inner_product(w_minus,w_minus)/chi_n/cb->get_volume();
+                            energy -= cb->integral(w_plus)/cb->get_volume();
+                            for(int p=0; p<molecules->get_n_polymer_types(); p++){
+                                Polymer& pc = molecules->get_polymer(p);
+                                energy -= pc.get_volume_fraction()/pc.get_alpha()*log(solver->get_total_partition(p));
+                            }
+                            return energy;
+                        };
+
+                        // Compute numerical derivative dH/dL
+                        lx[0] = old_lx0 + dL/2;
+                        cb->set_lx(lx);
+                        solver->update_laplacian_operator();
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+                        double energy_total_1 = compute_energy();
+
+                        lx[0] = old_lx0 - dL/2;
+                        cb->set_lx(lx);
+                        solver->update_laplacian_operator();
+                        solver->compute_propagators({{"A",&w[0]},{"B",&w[M]}},{});
+                        double energy_total_2 = compute_energy();
+
+                        // Reset to original
+                        lx[0] = old_lx0;
+                        cb->set_lx(lx);
+                        solver->update_laplacian_operator();
+
+                        double dh_dl = (energy_total_1 - energy_total_2) / dL;
+                        std::cout << "  dH/dL=" << std::setprecision(6) << dh_dl << std::endl;
+
+                        // Check numerical derivative matches analytical stress
+                        double relative_stress_error = std::abs(dh_dl - stress[0]) / std::abs(stress[0]);
+                        std::cout << "  Relative stress error (dH/dL vs stress): " << relative_stress_error << std::endl;
+
+                        if (!std::isfinite(relative_stress_error) || relative_stress_error > 1e-3) {
+                            std::cout << "ERROR: Numerical derivative does not match stress!" << std::endl;
+                            return -1;
+                        }
                     }
 
                     model_stress_list.push_back(stress[0]);
@@ -278,6 +293,7 @@ int main()
                         std::cout << "ERROR: Stress values differ too much between aggregated and non-aggregated!" << std::endl;
                         return -1;
                     }
+                }
                 }
             }
         }

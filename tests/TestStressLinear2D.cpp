@@ -86,34 +86,44 @@ int main()
         // Choose platform
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
+        // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
+        std::vector<std::string> numerical_methods_discrete = {"rqm4"};
+        std::vector<std::string> numerical_methods_continuous = {"rqm4", "rk2", "etdrk4"};
         std::vector<bool> aggregate_propagator_computations = {false, true};
 
         for(std::string platform : avail_platforms)
         {
             for(std::string chain_model : chain_models)
             {
-                std::cout << "Testing: " << platform << ", " << chain_model << std::endl;
-                std::vector<double> model_stress_list_0;
-                std::vector<double> model_stress_list_1;
+                // Select numerical methods based on chain model
+                const std::vector<std::string>& numerical_methods =
+                    (chain_model == "Discrete") ? numerical_methods_discrete : numerical_methods_continuous;
 
-                for(bool aggregate_propagator_computation : aggregate_propagator_computations)
+                for(std::string numerical_method : numerical_methods)
                 {
-                    AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
-                    factory->display_info();
+                    std::cout << "Testing: " << platform << ", " << chain_model << ", " << numerical_method << std::endl;
+                    std::vector<double> model_stress_list_0;
+                    std::vector<double> model_stress_list_1;
 
-                    // Create instances (use single gamma for 2D)
-                    ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, {gamma});
-                    Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
-                    molecules->add_polymer(1.0, blocks, {});
-                    PropagatorComputationOptimizer* propagator_computation_optimizer =
-                        new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
-                    PropagatorComputation<double>* solver =
-                        factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, "rqm4");
-                    AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
-                        am_max_hist, am_start_error, am_mix_min, am_mix_init);
+                    for(bool aggregate_propagator_computation : aggregate_propagator_computations)
+                    {
+                        AbstractFactory<double> *factory = PlatformSelector::create_factory_real(platform, reduce_memory);
+                        factory->display_info();
 
-                    std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
-                    std::cout << "Using Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
+                        // Create instances (use single gamma for 2D)
+                        ComputationBox<double>* cb = factory->create_computation_box(nx, lx, {}, {gamma});
+                        Molecules* molecules = factory->create_molecules_information(chain_model, ds, {{"A",1.0}, {"B",1.0}});
+                        molecules->add_polymer(1.0, blocks, {});
+                        PropagatorComputationOptimizer* propagator_computation_optimizer =
+                            new PropagatorComputationOptimizer(molecules, aggregate_propagator_computation);
+                        PropagatorComputation<double>* solver =
+                            factory->create_propagator_computation(cb, molecules, propagator_computation_optimizer, numerical_method);
+                        AndersonMixing<double> *am = factory->create_anderson_mixing(am_n_var,
+                            am_max_hist, am_start_error, am_mix_min, am_mix_init);
+
+                        std::cout << "Chain Model: " << molecules->get_model_name() << std::endl;
+                        std::cout << "Numerical Method: " << numerical_method << std::endl;
+                        std::cout << "Using Aggregation: " << std::boolalpha << aggregate_propagator_computation << std::endl;
 
                     // Display polymer architecture and propagator info (only on first aggregate iteration)
                     if (!aggregate_propagator_computation)
@@ -223,7 +233,8 @@ int main()
 
                     // ============ NUMERICAL DERIVATIVE TESTS ============
                     // Only run on first aggregation mode to avoid redundancy
-                    if (!aggregate_propagator_computation)
+                    // Only run for rqm4 (high-precision reference method)
+                    if (!aggregate_propagator_computation && numerical_method == "rqm4")
                     {
                         double dL = 0.00001;  // Larger step for non-orthogonal stability
                         double old_lx_val = lx[0];
@@ -407,6 +418,7 @@ int main()
                         std::cout << "ERROR: Stress[1] values differ too much between aggregated and non-aggregated!" << std::endl;
                         return -1;
                     }
+                }
                 }
             }
         }
