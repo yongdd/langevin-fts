@@ -564,8 +564,7 @@ void CudaComputationContinuous<T>::compute_concentrations()
 
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-
-            T _norm = (this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
+            T _norm = (pc.get_volume_fraction()/pc.get_n_segment_total()*n_repeated)/this->single_polymer_partitions[p];
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
                 norm = _norm;
@@ -761,6 +760,17 @@ void CudaComputationContinuous<T>::compute_stress()
             // std::cout << p << ", " << key_left << ", " << key_right << ", " << N << ", " << N_LEFT << std::endl;
             // std::cout << "STREAM, _block_dq_dl[0] " << STREAM  << ", " << _block_dq_dl[0] << std::endl;
 
+            // Multiply by local_ds for this block
+            Polymer& pc_stress = this->molecules->get_polymer(p);
+            const auto& v_u_stress = this->propagator_computation_optimizer->get_computation_block(key).v_u;
+            int v_stress = std::get<0>(v_u_stress[0]);
+            int u_stress = std::get<1>(v_u_stress[0]);
+            double contour_length = pc_stress.get_block(v_stress, u_stress).contour_length;
+            const ContourLengthMapping& mapping_stress = this->molecules->get_contour_length_mapping();
+            double local_ds = mapping_stress.get_local_ds(contour_length);
+            for(int d=0; d<N_STRESS_DIM; d++)
+                _block_dq_dl[d] *= local_ds;
+
             for(int d=0; d<N_STRESS_DIM; d++)
                 block_dq_dl[STREAM][key][d] += _block_dq_dl[d];
 
@@ -814,7 +824,8 @@ void CudaComputationContinuous<T>::compute_stress()
         double sin_g = std::sin(angles[2]);
 
         // Normalization factor (from Boltzmann factor derivative)
-        double norm = -3.0 * M * M / this->molecules->get_global_ds();
+        // Note: local_ds is already multiplied per-block in the stress loop above
+        double norm = -3.0 * M * M;
 
         for(int p=0; p<n_polymer_types; p++)
         {
