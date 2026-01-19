@@ -31,17 +31,22 @@
  * For non-orthogonal systems with periodic BC:
  * |k|² = g^{-1}_ij k_i k_j where g^{-1} is the reciprocal metric tensor.
  *
- * **Stress Calculation (Voigt Notation):**
+ * **Stress Calculation using Deformation Vector:**
  *
- * The stress is stored as a 6-component array following Voigt notation:
- * - Index 0: σ₁ → drives L₁ optimization
- * - Index 1: σ₂ → drives L₂ optimization
- * - Index 2: σ₃ → drives L₃ optimization
- * - Index 3: σ₁₂ → drives γ (angle between a₁ and a₂) optimization
- * - Index 4: σ₁₃ → drives β (angle between a₁ and a₃) optimization
- * - Index 5: σ₂₃ → drives α (angle between a₂ and a₃) optimization
+ * For stress calculation, we use the deformation vector v = 2π g⁻¹ m
+ * where g⁻¹ is the inverse metric tensor and m is the Miller index vector.
+ * The deformation vector components vᵢ have units of 1/L² (not 1/L like
+ * Cartesian wavevector components).
  *
- * For 2D: [σ₁, σ₂, σ₁₂, 0, 0, 0]. For 1D: only index 0 used.
+ * The stress arrays store v⊗v dyad product components in Voigt notation:
+ * - Index 0: V₁₁ = Σ(kernel × v₁²) → drives L₁ optimization
+ * - Index 1: V₂₂ = Σ(kernel × v₂²) → drives L₂ optimization
+ * - Index 2: V₃₃ = Σ(kernel × v₃²) → drives L₃ optimization
+ * - Index 3: V₁₂ = Σ(kernel × v₁v₂) → drives γ optimization
+ * - Index 4: V₁₃ = Σ(kernel × v₁v₃) → drives β optimization
+ * - Index 5: V₂₃ = Σ(kernel × v₂v₃) → drives α optimization
+ *
+ * For 2D: [V₁₁, V₂₂, V₁₂, 0, 0, 0]. For 1D: only index 0 used.
  *
  * @see CpuSolverPseudoRQM4 for continuous chain solver
  * @see CpuSolverPseudoDiscrete for discrete chain solver
@@ -147,32 +152,33 @@ protected:
     std::map<int, double> ds_values;
 
     /**
-     * @brief Dyad product k⊗k diagonal components for stress calculation.
+     * @brief Deformation vector v⊗v diagonal components for stress calculation.
      *
-     * Stores Cartesian components of the dyad product k⊗k = kkᵀ where
-     * k = 2π h⁻ᵀ m is the wavevector for Miller index m.
+     * The deformation vector is defined as v = 2π g⁻¹ m where g⁻¹ is the
+     * inverse metric tensor and m is the Miller index vector.
      *
      * For periodic BC:
-     * - fourier_basis_x[m] = (k⊗k)_xx = k_x² where k_x = 2π(m₁a*_x + m₂b*_x + m₃c*_x)
-     * - fourier_basis_y[m] = (k⊗k)_yy = k_y²
-     * - fourier_basis_z[m] = (k⊗k)_zz = k_z²
+     * - fourier_basis_x[m] = v₁² where v₁ = 2π(G₁₁m₁ + G₁₂m₂ + G₁₃m₃)
+     * - fourier_basis_y[m] = v₂² where v₂ = 2π(G₁₂m₁ + G₂₂m₂ + G₂₃m₃)
+     * - fourier_basis_z[m] = v₃² where v₃ = 2π(G₁₃m₁ + G₂₃m₂ + G₃₃m₃)
      *
-     * For non-periodic BC: uses k = π*n/L directly (orthogonal only).
+     * For non-periodic BC: uses k² = (π*n/L)² directly (orthogonal only).
+     * Note: vᵢ has units of 1/L², not 1/L like Cartesian wavevector.
      */
     double *fourier_basis_x;
     double *fourier_basis_y;
     double *fourier_basis_z;
 
     /**
-     * @brief Dyad product k⊗k off-diagonal components for stress calculation.
+     * @brief Deformation vector v⊗v off-diagonal components for stress calculation.
      *
      * For non-orthogonal systems with periodic BC:
-     * - fourier_basis_xy[m] = (k⊗k)_xy = k_x × k_y
-     * - fourier_basis_xz[m] = (k⊗k)_xz = k_x × k_z
-     * - fourier_basis_yz[m] = (k⊗k)_yz = k_y × k_z
+     * - fourier_basis_xy[m] = v₁ × v₂ (drives γ angle optimization)
+     * - fourier_basis_xz[m] = v₁ × v₃ (drives β angle optimization)
+     * - fourier_basis_yz[m] = v₂ × v₃ (drives α angle optimization)
      *
      * These are zero for non-periodic BC (orthogonal grids only).
-     * Used for shear stress components in the Cartesian stress tensor.
+     * Used for angle stress components in triclinic systems.
      */
     double *fourier_basis_xy;
     double *fourier_basis_xz;

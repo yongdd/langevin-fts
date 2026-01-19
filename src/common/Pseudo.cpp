@@ -388,28 +388,35 @@ void Pseudo<T>::update_weighted_fourier_basis()
 }
 
 //------------------------------------------------------------------------------
-// Update Fourier basis for periodic BC using k⊗k dyad product
+// Update Fourier basis for periodic BC using v⊗v dyad product
 //------------------------------------------------------------------------------
 /**
- * @brief Compute k⊗k dyad product components for stress calculation.
+ * @brief Compute v⊗v dyad product components for stress calculation.
  *
- * Uses the formula: k = 2π h⁻ᵀ m = 2π (m₁·a* + m₂·b* + m₃·c*)
- * where h⁻ᵀ = [a*|b*|c*] are reciprocal lattice vectors.
+ * Uses the deformation vector: v = 2π g⁻¹ m
+ * where g⁻¹ is the inverse metric tensor (recip_metric_) and m is Miller index.
+ *
+ * The deformation vector components are:
+ *   v₁ = 2π (G₁₁m₁ + G₁₂m₂ + G₁₃m₃)
+ *   v₂ = 2π (G₁₂m₁ + G₂₂m₂ + G₂₃m₃)
+ *   v₃ = 2π (G₁₃m₁ + G₂₃m₂ + G₃₃m₃)
  *
  * Stores:
- * - fourier_basis_x = k_x²  (kk_xx)
- * - fourier_basis_y = k_y²  (kk_yy)
- * - fourier_basis_z = k_z²  (kk_zz)
- * - fourier_basis_xy = k_x × k_y  (kk_xy)
- * - fourier_basis_xz = k_x × k_z  (kk_xz)
- * - fourier_basis_yz = k_y × k_z  (kk_yz)
+ * - fourier_basis_x = v₁²  (V₁₁)
+ * - fourier_basis_y = v₂²  (V₂₂)
+ * - fourier_basis_z = v₃²  (V₃₃)
+ * - fourier_basis_xy = v₁ × v₂  (V₁₂)
+ * - fourier_basis_xz = v₁ × v₃  (V₁₃)
+ * - fourier_basis_yz = v₂ × v₃  (V₂₃)
+ *
+ * @see docs/StressTensorCalculation.md for derivation
  */
 template <typename T>
 void update_weighted_fourier_basis_periodic_impl(
     double* fourier_basis_x, double* fourier_basis_y, double* fourier_basis_z,
     double* fourier_basis_xy, double* fourier_basis_xz, double* fourier_basis_yz,
     const std::vector<int>& nx,
-    const std::array<double, 9>& recip_vec_)
+    const std::array<double, 6>& recip_metric_)
 {
     const double PI = std::numbers::pi;
     const double TWO_PI = 2.0 * PI;
@@ -425,14 +432,21 @@ void update_weighted_fourier_basis_periodic_impl(
         tnx = {1, 1, nx[0]};
     }
 
-    // Extract reciprocal lattice vectors (without 2π factor)
-    // recip_vec_ stores [a*|b*|c*] in column-major order
-    // a* = (recip_vec_[0], recip_vec_[1], recip_vec_[2])
-    // b* = (recip_vec_[3], recip_vec_[4], recip_vec_[5])
-    // c* = (recip_vec_[6], recip_vec_[7], recip_vec_[8])
-    double a_star[3] = {recip_vec_[0], recip_vec_[1], recip_vec_[2]};
-    double b_star[3] = {recip_vec_[3], recip_vec_[4], recip_vec_[5]};
-    double c_star[3] = {recip_vec_[6], recip_vec_[7], recip_vec_[8]};
+    // Extract inverse metric tensor components g⁻¹
+    // recip_metric_ layout: [G₁₁, G₁₂, G₁₃, G₂₂, G₂₃, G₃₃]
+    double G11, G22, G33, G12, G13, G23;
+    if (DIM == 3) {
+        G11 = recip_metric_[0]; G12 = recip_metric_[1]; G13 = recip_metric_[2];
+        G22 = recip_metric_[3]; G23 = recip_metric_[4]; G33 = recip_metric_[5];
+    } else if (DIM == 2) {
+        // 2D: indices map to (1,2) plane
+        G11 = recip_metric_[0]; G12 = recip_metric_[1]; G13 = 0.0;
+        G22 = recip_metric_[3]; G23 = 0.0; G33 = 0.0;
+    } else {
+        // 1D: only G₁₁
+        G11 = recip_metric_[0]; G12 = 0.0; G13 = 0.0;
+        G22 = 0.0; G23 = 0.0; G33 = 0.0;
+    }
 
     for (int i = 0; i < tnx[0]; i++)
     {
@@ -459,18 +473,18 @@ void update_weighted_fourier_basis_periodic_impl(
                         m1 = k_signed; m2 = 0; m3 = 0;
                     }
 
-                    // Compute k = 2π × (m₁·a* + m₂·b* + m₃·c*)
-                    double kx = TWO_PI * (m1 * a_star[0] + m2 * b_star[0] + m3 * c_star[0]);
-                    double ky = TWO_PI * (m1 * a_star[1] + m2 * b_star[1] + m3 * c_star[1]);
-                    double kz = TWO_PI * (m1 * a_star[2] + m2 * b_star[2] + m3 * c_star[2]);
+                    // Compute deformation vector v = 2π g⁻¹ m
+                    double v1 = TWO_PI * (G11 * m1 + G12 * m2 + G13 * m3);
+                    double v2 = TWO_PI * (G12 * m1 + G22 * m2 + G23 * m3);
+                    double v3 = TWO_PI * (G13 * m1 + G23 * m2 + G33 * m3);
 
-                    // Store k⊗k components
-                    fourier_basis_x[idx] = kx * kx;
-                    fourier_basis_y[idx] = ky * ky;
-                    fourier_basis_z[idx] = kz * kz;
-                    fourier_basis_xy[idx] = kx * ky;
-                    fourier_basis_xz[idx] = kx * kz;
-                    fourier_basis_yz[idx] = ky * kz;
+                    // Store v⊗v components
+                    fourier_basis_x[idx] = v1 * v1;
+                    fourier_basis_y[idx] = v2 * v2;
+                    fourier_basis_z[idx] = v3 * v3;
+                    fourier_basis_xy[idx] = v1 * v2;
+                    fourier_basis_xz[idx] = v1 * v3;
+                    fourier_basis_yz[idx] = v2 * v3;
 
                     // Weight factor of 2 for interior k modes (r2c symmetry)
                     if (k != 0 && 2*k != tnx[2]) {
@@ -500,18 +514,18 @@ void update_weighted_fourier_basis_periodic_impl(
                         m1 = k_signed; m2 = 0; m3 = 0;
                     }
 
-                    // Compute k = 2π × (m₁·a* + m₂·b* + m₃·c*)
-                    double kx = TWO_PI * (m1 * a_star[0] + m2 * b_star[0] + m3 * c_star[0]);
-                    double ky = TWO_PI * (m1 * a_star[1] + m2 * b_star[1] + m3 * c_star[1]);
-                    double kz = TWO_PI * (m1 * a_star[2] + m2 * b_star[2] + m3 * c_star[2]);
+                    // Compute deformation vector v = 2π g⁻¹ m
+                    double v1 = TWO_PI * (G11 * m1 + G12 * m2 + G13 * m3);
+                    double v2 = TWO_PI * (G12 * m1 + G22 * m2 + G23 * m3);
+                    double v3 = TWO_PI * (G13 * m1 + G23 * m2 + G33 * m3);
 
-                    // Store k⊗k components
-                    fourier_basis_x[idx] = kx * kx;
-                    fourier_basis_y[idx] = ky * ky;
-                    fourier_basis_z[idx] = kz * kz;
-                    fourier_basis_xy[idx] = kx * ky;
-                    fourier_basis_xz[idx] = kx * kz;
-                    fourier_basis_yz[idx] = ky * kz;
+                    // Store v⊗v components
+                    fourier_basis_x[idx] = v1 * v1;
+                    fourier_basis_y[idx] = v2 * v2;
+                    fourier_basis_z[idx] = v3 * v3;
+                    fourier_basis_xy[idx] = v1 * v2;
+                    fourier_basis_xz[idx] = v1 * v3;
+                    fourier_basis_yz[idx] = v2 * v3;
                 }
             }
         }
@@ -524,7 +538,7 @@ void Pseudo<T>::update_weighted_fourier_basis_periodic()
     update_weighted_fourier_basis_periodic_impl<T>(
         fourier_basis_x, fourier_basis_y, fourier_basis_z,
         fourier_basis_xy, fourier_basis_xz, fourier_basis_yz,
-        nx, recip_vec_);
+        nx, recip_metric_);
 }
 
 //------------------------------------------------------------------------------
