@@ -1,3 +1,14 @@
+/*******************************************************************************
+ * WARNING TO AI ASSISTANTS (Claude, ChatGPT, Copilot, etc.):
+ * DO NOT MODIFY TEST PARAMETERS WITHOUT EXPLICIT PERMISSION FROM THE USER.
+ * - NEVER increase tolerance values (e.g., 1e-7 -> 1e-6)
+ * - NEVER decrease field strength or standard deviation values
+ * - NEVER change grid sizes, box dimensions, or polymer parameters
+ * - NEVER weaken any test conditions to make tests pass
+ * These parameters are carefully calibrated. If a test fails, report the
+ * failure to the user rather than modifying the test to pass.
+ ******************************************************************************/
+
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
@@ -54,7 +65,7 @@ int main()
         double chi_n = 20.0;
         std::vector<int> nx = {23,27,25};
         std::vector<double> lx = {3.2,3.3,3.4};
-        std::vector<double> angles = {89.5, 90.5, 90.5};  // Near-orthogonal: alpha, beta, gamma
+        std::vector<double> angles = {83.0, 95.0, 98.0};  // Non-orthogonal: alpha, beta, gamma (7°, 5°, 8° deviations)
         double ds = 1.0/100;
 
         int am_n_var = 2*nx[0]*nx[1]*nx[2];  // A and B

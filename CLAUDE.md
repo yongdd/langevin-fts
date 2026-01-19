@@ -407,6 +407,14 @@ All methods support periodic, reflecting, and absorbing boundary conditions.
 
 - **Never commit without permission**: Always wait for explicit user approval before running `git commit`. The user must explicitly say "commit" or "make a commit" - do NOT interpret "update", "add", "change", or "fix" as permission to commit. After making changes, ask "Should I commit this change?" and wait for confirmation.
 
+- **NEVER modify test parameters without explicit permission**: Test files in `tests/` contain carefully calibrated parameters. The following modifications are strictly forbidden unless the user explicitly requests them:
+  - NEVER increase tolerance values (e.g., changing 1e-7 to 1e-6 to make a test pass)
+  - NEVER decrease field strength or standard deviation values
+  - NEVER change grid sizes, box dimensions, or polymer parameters
+  - NEVER weaken any test conditions to make tests pass
+
+  If a test fails, **report the failure to the user** rather than modifying the test to pass. The test parameters are designed to catch real bugs - weakening them hides problems instead of fixing them.
+
 - **Use SLURM for long-running jobs**: For any computation expected to take longer than 2 minutes, submit it as a SLURM job instead of running directly. This includes benchmarks, SCFT convergence tests, and parameter sweeps. Use `sbatch` to submit jobs and launch multiple jobs simultaneously when running parameter studies or benchmarks with different configurations. Example:
   ```bash
   # Submit multiple jobs in parallel
