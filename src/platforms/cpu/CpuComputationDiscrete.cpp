@@ -703,7 +703,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             
             // Normalize concentration
             Polymer& pc = this->molecules->get_polymer(p);
-            T norm = (this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
+            T norm = (this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
             for(int i=0; i<M; i++)
                 block->second[i] *= norm;
         }
@@ -927,7 +927,7 @@ void CpuComputationDiscrete<T>::compute_stress()
         double sin_g = std::sin(angles[2]);
 
         // Normalization factor (from Boltzmann factor derivative)
-        double norm = -3.0 * M * M / this->molecules->get_ds();
+        double norm = -3.0 * M * M / this->molecules->get_global_ds();
 
         for(int p=0; p<n_polymer_types; p++)
         {

@@ -85,7 +85,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_ds(),
+            cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
 
@@ -260,7 +260,7 @@ void CudaSolverPseudoDiscrete<T>::update_laplacian_operator()
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_ds(),
+            this->cb->get_dx(), this->molecules->get_global_ds(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
     }
@@ -276,7 +276,7 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
         const int M = cb->get_total_grid();
-        const double ds = this->molecules->get_ds();
+        const double ds = this->molecules->get_global_ds();
 
         // Discrete chains use only global ds (ds_index=1)
         const int ds_idx = 1;

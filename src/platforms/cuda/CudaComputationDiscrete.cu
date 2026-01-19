@@ -363,7 +363,7 @@ void CudaComputationDiscrete<T>::compute_propagators(
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
         const int M = this->cb->get_total_grid();
-        const double ds = this->molecules->get_ds();
+        const double ds = this->molecules->get_global_ds();
 
         std::string device = "cpu";
         cudaMemcpyKind cudaMemcpyInputToDevice;
@@ -837,12 +837,12 @@ void CudaComputationDiscrete<T>::compute_concentrations()
             CuDeviceData<T> norm;
             if constexpr (std::is_same<T, double>::value)
             {
-                norm = this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated;
+                norm = this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated;
                 norm = norm/this->single_polymer_partitions[p];
             }
             else
             {
-                norm = make_cuDoubleComplex(this->molecules->get_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated, 0.0);
+                norm = make_cuDoubleComplex(this->molecules->get_global_ds()*pc.get_volume_fraction()/pc.get_alpha()*n_repeated, 0.0);
                 norm = cuCdiv(norm, stdToCuDoubleComplex(this->single_polymer_partitions[p]));
             }
             ker_lin_comb<<<N_BLOCKS, N_THREADS>>>(d_block.second, norm, d_block.second, 0.0, d_block.second, M);
@@ -1113,7 +1113,7 @@ void CudaComputationDiscrete<T>::compute_stress()
         double sin_g = std::sin(angles[2]);
 
         // Normalization factor (from Boltzmann factor derivative)
-        double norm = -3.0 * M * M / this->molecules->get_ds();
+        double norm = -3.0 * M * M / this->molecules->get_global_ds();
 
         for(int p=0; p<n_polymer_types; p++)
         {

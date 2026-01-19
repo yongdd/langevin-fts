@@ -95,7 +95,7 @@ template <typename T>
 void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_input)
 {
     const int M = this->cb->get_total_grid();
-    const double ds = this->molecules->get_ds();
+    const double ds = this->molecules->get_global_ds();
     const int ds_index = 1;  // Discrete chains always use ds_index=1
 
     for (const auto& item : w_input)

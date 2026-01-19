@@ -86,7 +86,7 @@ CudaSolverPseudoRQM4<T>::CudaSolverPseudoRQM4(
         pseudo = new CudaPseudo<T>(
             molecules->get_bond_lengths(),
             cb->get_boundary_conditions(),
-            cb->get_nx(), cb->get_dx(), molecules->get_ds(),
+            cb->get_nx(), cb->get_dx(), molecules->get_global_ds(),
             cb->get_recip_metric(),
             cb->get_recip_vec());
 
@@ -323,7 +323,7 @@ void CudaSolverPseudoRQM4<T>::update_laplacian_operator()
         pseudo->update(
             this->cb->get_boundary_conditions(),
             this->molecules->get_bond_lengths(),
-            this->cb->get_dx(), this->molecules->get_ds(),
+            this->cb->get_dx(), this->molecules->get_global_ds(),
             this->cb->get_recip_metric(),
             this->cb->get_recip_vec());
 

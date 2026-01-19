@@ -113,7 +113,7 @@ std::string Molecules::get_model_name() const
 {
     return model_name;
 }
-double Molecules::get_ds() const
+double Molecules::get_global_ds() const
 {
     return ds;
 }
