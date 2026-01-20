@@ -183,6 +183,20 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         const double* kk_xz = pseudo->get_fourier_basis_xz();
         const double* kk_yz = pseudo->get_fourier_basis_yz();
 
+        // ============================================================================
+        // PERFORMANCE-CRITICAL: Orthogonal box optimization
+        // ============================================================================
+        // For orthogonal boxes (all angles = 90°), the cross-terms (σ_xy, σ_xz, σ_yz)
+        // are mathematically zero and do not need to be computed. This optimization
+        // skips unnecessary calculations for the common case of orthogonal boxes.
+        //
+        // DO NOT REMOVE THIS OPTIMIZATION without benchmarking! We have experienced
+        // performance regressions before when this check was accidentally removed.
+        // See git history for commit 6d1dc54 which caused a regression by always
+        // computing all 6 components.
+        // ============================================================================
+        const bool is_orthogonal = this->cb->is_orthogonal();
+
         // Transform to Fourier space
         transform_forward(q_1, qk_1.data());
         transform_forward(q_2, qk_2.data());
@@ -195,6 +209,7 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
 
             if (DIM == 3)
             {
+                // Diagonal components (always computed)
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     T coeff;
@@ -204,13 +219,29 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
                     else
                         coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
 
-                    // Cartesian stress tensor components from k⊗k dyad
+                    // Cartesian stress tensor diagonal components from k⊗k dyad
                     stress[0] += coeff * kk_xx[i];  // σ_xx
                     stress[1] += coeff * kk_yy[i];  // σ_yy
                     stress[2] += coeff * kk_zz[i];  // σ_zz
-                    stress[3] += coeff * kk_xy[i];  // σ_xy
-                    stress[4] += coeff * kk_xz[i];  // σ_xz
-                    stress[5] += coeff * kk_yz[i];  // σ_yz
+                }
+
+                // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
+                // For orthogonal boxes, these are mathematically zero.
+                if (!is_orthogonal)
+                {
+                    for (int i = 0; i < M_COMPLEX; ++i)
+                    {
+                        T coeff;
+                        double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
+                        if constexpr (std::is_same<T, double>::value)
+                            coeff = bond_length_sq * boltz_factor * (qk_1_complex[i] * std::conj(qk_2_complex[i])).real();
+                        else
+                            coeff = bond_length_sq * boltz_factor * qk_1_complex[i] * qk_2_complex[_negative_k_idx[i]];
+
+                        stress[3] += coeff * kk_xy[i];  // σ_xy
+                        stress[4] += coeff * kk_xz[i];  // σ_xz
+                        stress[5] += coeff * kk_yz[i];  // σ_yz
+                    }
                 }
             }
             else if (DIM == 2)
@@ -257,18 +288,31 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
 
             if (DIM == 3)
             {
+                // Diagonal components (always computed)
                 for (int i = 0; i < M_COMPLEX; ++i)
                 {
                     double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
                     double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
 
-                    // Cartesian stress tensor components from k⊗k dyad
+                    // Cartesian stress tensor diagonal components from k⊗k dyad
                     stress[0] += coeff * kk_xx[i];  // σ_xx
                     stress[1] += coeff * kk_yy[i];  // σ_yy
                     stress[2] += coeff * kk_zz[i];  // σ_zz
-                    stress[3] += coeff * kk_xy[i];  // σ_xy
-                    stress[4] += coeff * kk_xz[i];  // σ_xz
-                    stress[5] += coeff * kk_yz[i];  // σ_yz
+                }
+
+                // Cross-terms: only compute for non-orthogonal boxes (triclinic lattices)
+                // For orthogonal boxes, these are mathematically zero.
+                if (!is_orthogonal)
+                {
+                    for (int i = 0; i < M_COMPLEX; ++i)
+                    {
+                        double boltz_factor = (_boltz_bond != nullptr) ? _boltz_bond[i] : 1.0;
+                        double coeff = FACTOR * bond_length_sq * boltz_factor * qk_1[i] * qk_2[i];
+
+                        stress[3] += coeff * kk_xy[i];  // σ_xy
+                        stress[4] += coeff * kk_xz[i];  // σ_xz
+                        stress[5] += coeff * kk_yz[i];  // σ_yz
+                    }
                 }
             }
             else if (DIM == 2)
