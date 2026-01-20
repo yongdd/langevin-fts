@@ -57,8 +57,12 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw vectors for each ds_index and monomer type
+        // Also register local_ds values with Pseudo for boltz_bond computation
         for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
         {
+            double local_ds = mapping.get_ds_from_index(ds_idx);
+            this->pseudo->add_ds_value(ds_idx, local_ds);
+
             for (const auto& item : molecules->get_bond_lengths())
             {
                 std::string monomer_type = item.first;
@@ -67,8 +71,9 @@ CpuSolverPseudoRQM4<T>::CpuSolverPseudoRQM4(ComputationBox<T>* cb, Molecules *mo
             }
         }
 
-        // update_laplacian_operator() handles registration of local_ds values
-        // and calls finalize_ds_values() to compute boltz_bond with correct local_ds
+        // Finalize ds values to allocate boltz_bond arrays
+        // (update_laplacian_operator will compute the actual values)
+        this->pseudo->finalize_ds_values();
         this->update_laplacian_operator();
     }
     catch (std::exception& exc)
@@ -214,7 +219,7 @@ void CpuSolverPseudoRQM4<T>::advance_propagator(
 }
 
 //------------------------------------------------------------------------------
-// Update Laplacian operator and re-register local ds values
+// Update Laplacian operator
 //------------------------------------------------------------------------------
 template <typename T>
 void CpuSolverPseudoRQM4<T>::update_laplacian_operator()
@@ -222,20 +227,9 @@ void CpuSolverPseudoRQM4<T>::update_laplacian_operator()
     try
     {
         // Call base class implementation (updates Fourier basis and recomputes Boltzmann factors)
+        // Note: local_ds values are registered once in constructor via add_ds_value()
+        // pseudo->update() recomputes boltz_bond for all registered ds values
         CpuSolverPseudoBase<T>::update_laplacian_operator();
-
-        // Re-register local_ds values for each block in case grid changed
-        const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-        int n_unique_ds = mapping.get_n_unique_ds();
-
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
-        {
-            double local_ds = mapping.get_ds_from_index(ds_idx);
-            this->pseudo->add_ds_value(ds_idx, local_ds);
-        }
-
-        // Finalize Pseudo to compute boltz_bond with correct local_ds
-        this->pseudo->finalize_ds_values();
     }
     catch (std::exception& exc)
     {
