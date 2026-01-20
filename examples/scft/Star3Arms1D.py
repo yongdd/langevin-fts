@@ -20,7 +20,8 @@ params = {
                         # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
     "reduce_memory":False,     # Reduce memory usage by storing only check points.
-    "box_is_altering":True,       # Find box size that minimizes the free energy during saddle point iteration.
+    "box_is_altering":True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)       # Find box size that minimizes the free energy during saddle point iteration.
     "chain_model":"continuous",   # "discrete" or "continuous" chain model
     "ds":1/200,                   # Contour step interval, which is equal to 1/N_Ref.
 
