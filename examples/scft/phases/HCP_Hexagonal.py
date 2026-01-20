@@ -40,8 +40,10 @@ params = {
     # HCP with Hexagonal crystal system and P6_3/mmc space group
     # Axis ordering: [a, b, c] - gamma=120 deg between a and b (axes 0,1)
     # Grid: nx[0] = nx[1] for hexagonal symmetry (a = b)
-    "nx": [64, 64, 64],             # Simulation grid numbers [a, b, c]
-    "lx": [1.4, 1.4, 2.5],          # Box size [a, b, c] with a=b
+    # IMPORTANT: Grid must be divisible by 6 (LCM of 2,3) for P6_3/mmc compatibility
+    # because symmetry operations include translations of 1/2, 1/3, 2/3
+    "nx": [48, 48, 48],             # Simulation grid numbers [a, b, c] - divisible by 6
+    "lx": [1.72, 1.72, 2.8],        # Box size [a, b, c] with a=b, close to equilibrium
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: gamma=120 (between a,b)
 
     "reduce_memory": False,         # Reduce memory usage by storing only check points
@@ -67,13 +69,11 @@ params = {
 
     "crystal_system": "Hexagonal",  # Enforces a = b and gamma = 120 deg
 
-    # Note: Space group P6_3/mmc (Hall 488) is not compatible with the current
-    # grid discretization for HCP. The symmetry constraints prevent convergence.
-    # Use Hexagonal crystal system without space group for HCP simulations.
-    # "space_group": {
-    #     "symbol": "P6_3/mmc",       # International symbol for HCP space group (No. 194)
-    #     "number": 488,              # Hall number
-    # },
+    # Space group P6_3/mmc requires grid divisible by 6 for compatibility
+    "space_group": {
+        "symbol": "P6_3/mmc",       # International symbol for HCP space group (No. 194)
+        "number": 488,              # Hall number
+    },
 
     "optimizer": {
         "name": "am",               # Anderson Mixing
@@ -83,23 +83,23 @@ params = {
         "mix_init": 0.1,            # Initial mixing rate of simple mixing
     },
 
-    "max_iter": 2000,               # Maximum relaxation iterations
+    "max_iter": 1000,               # Maximum relaxation iterations
     "tolerance": 1e-8               # Convergence tolerance
 }
 
 # Set initial fields for HCP structure
 # In [a, b, c] ordering with gamma=120 deg between a and b:
-# HCP has 2 spheres per unit cell
+# HCP has 2 spheres per unit cell at Wyckoff 2c position
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
 print("w_A and w_B are initialized to HCP phase (P6_3/mmc space group).")
 
 # HCP sphere positions in fractional coordinates [a, b, c]
-# Layer A at c=0: sphere at (0, 0, 0)
-# Layer B at c=1/2: sphere at (2/3, 1/3, 1/2) for gamma=120 deg
+# Classic HCP: Layer A at z=0, Layer B at z=1/2
+# These positions will be symmetrized by the space group
 sphere_positions = [
-    [0.0, 0.0, 0.0],      # Layer A
-    [2/3, 1/3, 0.5],      # Layer B (for gamma=120 deg)
+    [0.0, 0.0, 0.0],      # Layer A at z=0
+    [2/3, 1/3, 0.5],      # Layer B at z=1/2
 ]
 
 for a, b, c in sphere_positions:
@@ -107,9 +107,17 @@ for a, b, c in sphere_positions:
     ia = int(np.round(a * params["nx"][0])) % params["nx"][0]
     ib = int(np.round(b * params["nx"][1])) % params["nx"][1]
     ic = int(np.round(c * params["nx"][2])) % params["nx"][2]
-    w_A[ia, ib, ic] = -1/(np.prod(params["lx"])/np.prod(params["nx"]))
+    w_A[ia, ib, ic] = -1.0  # Strong negative value at sphere centers
 
-w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/10, mode='wrap')
+# Apply Gaussian filter with small sigma to create smooth spherical seeds
+# sigma=1.5 gives sphere radius of about 3-4 grid points
+w_A = gaussian_filter(w_A, sigma=1.5, mode='wrap')
+
+# Scale to have std ~ 5 (recommended for proper SCFT convergence)
+w_A = w_A / np.std(w_A) * 5.0
+w_B = -w_A  # Opposite field for B-block
+
+print(f"Initial field: w_A min={w_A.min():.2f}, max={w_A.max():.2f}, std={np.std(w_A):.2f}")
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
