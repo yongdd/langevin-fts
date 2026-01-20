@@ -251,6 +251,12 @@ class SCFT:
             - Monoclinic: [90, beta, 90] with beta != 90
             - Triclinic: all angles can vary
 
+        - axis_ordering : list of str, optional
+            Specifies the ordering of axes in lx and angles arrays.
+            Default: ["a", "b", "c"] (standard crystallographic convention).
+            Example: ["b", "a", "c"] means lx = [b, a, c] and angles are reordered
+            accordingly. The code internally converts to [a, b, c] ordering.
+
         - box_is_altering : bool
             If True, optimize box size along with fields to minimize stress.
 
@@ -656,6 +662,72 @@ class SCFT:
 
         # Get angles if provided
         angles = params.get("angles", None)
+
+        # Handle axis ordering (convert user ordering to standard [a, b, c])
+        axis_ordering = params.get("axis_ordering", None)
+        self.axis_ordering = axis_ordering  # Store for reference
+
+        if axis_ordering is not None:
+            dim = len(params["nx"])
+            if len(axis_ordering) != dim:
+                raise ValueError(f"axis_ordering length ({len(axis_ordering)}) must match dimension ({dim})")
+
+            # Validate axis labels
+            valid_labels = ["a", "b", "c"][:dim]
+            if sorted(axis_ordering) != valid_labels:
+                raise ValueError(f"axis_ordering must contain exactly {valid_labels}, got {axis_ordering}")
+
+            # Compute permutation from user ordering to standard [a, b, c]
+            # e.g., ["b", "a", "c"] -> permutation [1, 0, 2] means:
+            #   user[0] (b) goes to standard[1]
+            #   user[1] (a) goes to standard[0]
+            #   user[2] (c) goes to standard[2]
+            perm = [axis_ordering.index(label) for label in valid_labels]
+            self._axis_perm = perm  # perm[i] = index in user array for standard axis i
+
+            # Reorder nx and lx from user ordering to standard [a, b, c]
+            nx_reordered = [params["nx"][perm[i]] for i in range(dim)]
+            lx_reordered = [params["lx"][perm[i]] for i in range(dim)]
+
+            # Reorder angles if provided (3D only)
+            # angles = [alpha, beta, gamma] where:
+            #   alpha = angle between b,c (axes 1,2)
+            #   beta = angle between a,c (axes 0,2)
+            #   gamma = angle between a,b (axes 0,1)
+            # When axes are permuted, angles must be remapped
+            if angles is not None and dim == 3:
+                # Build mapping: which original angle corresponds to which new angle
+                # After permutation, the angle between new axes i,j is the angle
+                # that was between original axes perm[i], perm[j]
+                def angle_index(i, j):
+                    """Return angle array index for angle between axes i and j"""
+                    if (i, j) == (1, 2) or (i, j) == (2, 1):
+                        return 0  # alpha
+                    elif (i, j) == (0, 2) or (i, j) == (2, 0):
+                        return 1  # beta
+                    else:  # (0, 1) or (1, 0)
+                        return 2  # gamma
+
+                angles_reordered = [0.0, 0.0, 0.0]
+                # New alpha (angle between new b,c) = old angle between perm[1], perm[2]
+                angles_reordered[0] = angles[angle_index(perm[1], perm[2])]
+                # New beta (angle between new a,c) = old angle between perm[0], perm[2]
+                angles_reordered[1] = angles[angle_index(perm[0], perm[2])]
+                # New gamma (angle between new a,b) = old angle between perm[0], perm[1]
+                angles_reordered[2] = angles[angle_index(perm[0], perm[1])]
+                angles = angles_reordered
+
+            # Update params for PropagatorSolver creation
+            params = copy.deepcopy(params)
+            params["nx"] = nx_reordered
+            params["lx"] = lx_reordered
+
+            print(f"Axis ordering: {axis_ordering} -> reordered to [a, b, c]")
+            print(f"  nx: {params['nx']}, lx: {params['lx']}")
+            if angles is not None:
+                print(f"  angles: {angles}")
+        else:
+            self._axis_perm = None
 
         # Get numerical method
         numerical_method = params.get("numerical_method", "rqm4")
