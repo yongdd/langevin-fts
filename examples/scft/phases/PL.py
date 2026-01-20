@@ -31,8 +31,9 @@ print("Input nx:", input_data["nx"])
 print("Input lx:", input_data["lx"])
 
 # Grid dimensions for hexagonal system with P6_3/mmc space group
-# Use [c, a, b] order: [96, 64, 64] - this is compatible with P6_3/mmc
-nx = [96, 64, 64]
+# Use [c, a, b] order: dimensions must be divisible by 6 for P6_3/mmc compatibility
+# For hexagonal 6-fold operations, equal grid dimensions work best
+nx = [72, 72, 72]
 
 # Initial box dimensions [c, a, b] with a=b for hexagonal symmetry
 lx_init = [input_data["lx"][0], input_data["lx"][1], input_data["lx"][1]]  # [c, a, b] with a=b

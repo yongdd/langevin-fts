@@ -21,7 +21,7 @@ print(input_data["lx"])
 
 params = {
     "nx":[32,32,32],            # Simulation grid numbers
-    "lx":input_data["lx"],      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
+    "lx":list(input_data["lx"]),      # Simulation box size as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
