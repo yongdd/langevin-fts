@@ -825,10 +825,12 @@ class SCFT:
             self.angles_full_indices = []
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
+            # Using reduced basis from space group symmetry
+            n_reduced = len(self.sg.irreducible_mesh)
             if params["box_is_altering"]:
-                n_var = len(self.monomer_types)*len(self.sg.irreducible_mesh) + len(self.sg.lattice_parameters)
+                n_var = len(self.monomer_types)*n_reduced + len(self.sg.lattice_parameters)
             else :
-                n_var = len(self.monomer_types)*len(self.sg.irreducible_mesh)
+                n_var = len(self.monomer_types)*n_reduced
 
             # # Set symmetry operations to the solver
             # solver.set_symmetry_operations(sg.get_symmetry_operations())
@@ -1576,6 +1578,10 @@ class SCFT:
         for i in range(M):
             w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
+        # Symmetrize initial fields if space group is set
+        if self.sg is not None:
+            w = self.sg.symmetrize(w)
+
         # Keep the level of field value
         for i in range(M):
             w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
@@ -1716,13 +1722,20 @@ class SCFT:
             if error_level < self.tolerance:
                 break
 
-            # Convert the fields into the reduced basis functions for chosen space group
+            # Convert to reduced basis for space group (if set)
             if self.sg is None:
-                w_reduced_basis = w
-                w_diff_reduced_basis = w_diff
+                w_reduced = w
+                w_diff_reduced = w_diff
             else:
-                w_reduced_basis = self.sg.to_reduced_basis(w)
-                w_diff_reduced_basis = self.sg.to_reduced_basis(w_diff)
+                # Convert to reduced basis for Anderson mixing
+                w_reduced = self.sg.to_reduced_basis(w)
+                w_diff_reduced = self.sg.to_reduced_basis(w_diff)
+
+                # Verify recovery: check that from_reduced_basis(to_reduced_basis(w)) ~ w
+                w_recovered = self.sg.from_reduced_basis(w_reduced)
+                recovery_error = np.max(np.abs(w - w_recovered))
+                if recovery_error > 1e-10:
+                    print(f"WARNING: Reduced basis recovery error = {recovery_error:.2e}")
 
             # Calculate new fields using simple and Anderson mixing
             if self.box_is_altering:
@@ -1769,14 +1782,14 @@ class SCFT:
                 current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
 
                 # Build optimization vectors
-                am_current = np.concatenate((w_reduced_basis.flatten(), current_lx, current_angles))
-                am_diff = np.concatenate((w_diff_reduced_basis.flatten(),
+                am_current = np.concatenate((w_reduced.flatten(), current_lx, current_angles))
+                am_diff = np.concatenate((w_diff_reduced.flatten(),
                                          self.scale_stress*dlx_reduced,
                                          self.scale_stress*dangle))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
-                w_reduced_basis = np.reshape(am_new[0:len(w_reduced_basis.flatten())], (M, -1))
+                w_reduced = np.reshape(am_new[0:len(w_reduced.flatten())], (M, -1))
 
                 # Extract new box lengths
                 n_lx = len(self.lx_reduced_indices)
@@ -1810,14 +1823,14 @@ class SCFT:
                 # Update bond parameters using new lx
                 self.prop_solver.update_laplacian_operator()
             else:
-                w_reduced_basis = self.field_optimizer.calculate_new_fields(w_reduced_basis.flatten(), w_diff_reduced_basis.flatten(), old_error_level, error_level)
-                w_reduced_basis = np.reshape(w_reduced_basis, (M, -1))
-            
-            # Convert the reduced basis functions into full grids
+                w_reduced = self.field_optimizer.calculate_new_fields(w_reduced.flatten(), w_diff_reduced.flatten(), old_error_level, error_level)
+                w_reduced = np.reshape(w_reduced, (M, -1))
+
+            # Convert back from reduced basis to full grid
             if self.sg is None:
-                w = w_reduced_basis
+                w = w_reduced
             else:
-                w = self.sg.from_reduced_basis(w_reduced_basis)
+                w = self.sg.from_reduced_basis(w_reduced)
             
             # Keep the level of field value
             for i in range(M):
