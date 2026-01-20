@@ -838,14 +838,11 @@ void CudaComputationDiscrete<T>::compute_concentrations()
                 n_segment_right
             );
             
-            // Get local_ds for this block from ContourLengthMapping
+            // Get local_ds from ds_index encoded in key (DK+M format)
             Polymer& pc = this->molecules->get_polymer(p);
-            const auto& v_u = this->propagator_computation_optimizer->get_computation_block(key).v_u;
-            int v = std::get<0>(v_u[0]);
-            int u = std::get<1>(v_u[0]);
-            double contour_length = pc.get_block(v, u).contour_length;
+            int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
             const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-            double local_ds = mapping.get_local_ds(contour_length);
+            double local_ds = mapping.get_ds_from_index(ds_index);
 
             // Normalize concentration: local_ds * volume_fraction / alpha
             CuDeviceData<T> norm;
@@ -1083,14 +1080,10 @@ void CudaComputationDiscrete<T>::compute_stress()
             gpu_error_check(cudaEventDestroy(kernel_done));
             gpu_error_check(cudaEventDestroy(memcpy_done));
 
-            // Multiply by local_ds for this block
-            Polymer& pc_stress = this->molecules->get_polymer(p);
-            const auto& v_u_stress = this->propagator_computation_optimizer->get_computation_block(key).v_u;
-            int v_stress = std::get<0>(v_u_stress[0]);
-            int u_stress = std::get<1>(v_u_stress[0]);
-            double contour_length = pc_stress.get_block(v_stress, u_stress).contour_length;
+            // Multiply by local_ds for this block (get ds_index from key)
+            int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
             const ContourLengthMapping& mapping_stress = this->molecules->get_contour_length_mapping();
-            double local_ds = mapping_stress.get_local_ds(contour_length);
+            double local_ds = mapping_stress.get_ds_from_index(ds_index);
             for(int d=0; d<N_STRESS_DIM; d++)
                 _block_dq_dl[d] *= local_ds;
 

@@ -519,14 +519,11 @@ void CpuComputationContinuous<T>::compute_concentrations()
                 n_segment_right
             );
 
-            // Get local_ds for this block from ContourLengthMapping
+            // Get local_ds from ds_index encoded in key (DK+M format)
             Polymer& pc = this->molecules->get_polymer(p);
-            const auto& v_u = this->propagator_computation_optimizer->get_computation_block(key).v_u;
-            int v = std::get<0>(v_u[0]);
-            int u = std::get<1>(v_u[0]);
-            double contour_length = pc.get_block(v, u).contour_length;
+            int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
             const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-            double local_ds = mapping.get_local_ds(contour_length);
+            double local_ds = mapping.get_ds_from_index(ds_index);
 
             // Normalize concentration: local_ds * volume_fraction / alpha
             T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
@@ -539,7 +536,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            
+
             T *_phi = this->phi_solvent[s];
             T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
 
@@ -673,15 +670,10 @@ void CpuComputationContinuous<T>::compute_stress()
                     _block_dq_dl[d] += segment_stress[d]*(s_coeff[n]*n_repeated);
             }
 
-            // Multiply by local_ds for this block
-            int p = std::get<0>(key);
-            Polymer& pc = this->molecules->get_polymer(p);
-            const auto& v_u = this->propagator_computation_optimizer->get_computation_block(key).v_u;
-            int v = std::get<0>(v_u[0]);
-            int u = std::get<1>(v_u[0]);
-            double contour_length = pc.get_block(v, u).contour_length;
+            // Multiply by local_ds for this block (get ds_index from key)
+            int ds_index = PropagatorCode::get_ds_index_from_key(key_right);
             const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
-            double local_ds = mapping.get_local_ds(contour_length);
+            double local_ds = mapping.get_ds_from_index(ds_index);
             for(int d=0; d<N_STRESS; d++)
                 _block_dq_dl[d] *= local_ds;
 
@@ -697,8 +689,6 @@ void CpuComputationContinuous<T>::compute_stress()
         {
             const auto& key       = block.first;
             int p                 = std::get<0>(key);
-            std::string key_left  = std::get<1>(key);
-            std::string key_right = std::get<2>(key);
             for(int d=0; d<N_STRESS; d++)
                 this->dq_dl[p][d] += block_dq_dl[key][d];
         }
