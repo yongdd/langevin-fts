@@ -30,23 +30,21 @@ input_data = scipy.io.loadmat("PL.mat", squeeze_me=True)
 print("Input nx:", input_data["nx"])
 print("Input lx:", input_data["lx"])
 
-# Grid dimensions for hexagonal system
-# For P6_3/mmc, nx[0] (a-direction) and nx[1] (b-direction) should be equal
-# Input data has nx=[96, 64, 64] which is [c, a, b] order
-# After transpose to [a, b, c], we get [64, 64, 96]
-nx = [64, 64, 96]
+# Grid dimensions for hexagonal system with P6_3/mmc space group
+# Use [c, a, b] order: [96, 64, 64] - this is compatible with P6_3/mmc
+nx = [96, 64, 64]
 
-# Initial box dimensions - for hexagonal: a = b (will be enforced by space group)
-# lx[0] and lx[1] should be equal for hexagonal symmetry
-lx_init = [input_data["lx"][1], input_data["lx"][1], input_data["lx"][0]]  # [a, b, c] with a=b
+# Initial box dimensions [c, a, b] with a=b for hexagonal symmetry
+lx_init = [input_data["lx"][0], input_data["lx"][1], input_data["lx"][1]]  # [c, a, b] with a=b
 
 params = {
-    "nx": nx,                       # Simulation grid numbers
-    "lx": lx_init,                  # Box size [a, b, c] in units of a_Ref * N_Ref^(1/2)
-    "angles": [90.0, 90.0, 120.0],  # Hexagonal: alpha=beta=90, gamma=120 degrees
+    "nx": nx,                       # Simulation grid numbers [c, a, b]
+    "lx": lx_init,                  # Box size [c, a, b] in units of a_Ref * N_Ref^(1/2)
+    "angles": [120.0, 90.0, 90.0],  # Hexagonal: alpha=120 (between a,b), beta=gamma=90
 
     "reduce_memory": False,   # Reduce memory usage by storing only check points
-    "box_is_altering": True,        # Optimize box size during iteration
+    "box_is_altering": True,
+    "stress_interval":1,     # Compute stress every iteration (for reproducibility)        # Optimize box size during iteration
     "chain_model": "continuous",    # "discrete" or "continuous" chain model
     "ds": 1/100,                    # Contour step interval = 1/N_Ref
 
@@ -69,11 +67,10 @@ params = {
 
     "crystal_system": "Hexagonal",  # Enforces a = b and γ = 120° constraints
 
-    # Note: Space group symmetry (P6_3/mmc) could be used for computational speedup:
-    # "space_group": {
-    #     "symbol": "P6_3/mmc",     # International symbol for hexagonal space group
-    #     "number": 488,            # Hall number (optional, helps resolve ambiguity)
-    # },
+    "space_group": {
+        "symbol": "P6_3/mmc",     # International symbol for hexagonal space group
+        "number": 488,            # Hall number (optional, helps resolve ambiguity)
+    },
 
     "optimizer": {
         "name": "am",               # Anderson Mixing optimizer
@@ -88,22 +85,15 @@ params = {
 }
 
 # Load initial fields
-w_A = input_data["w_A"]
-w_B = input_data["w_B"]
+# Input data is already in [c, a, b] order matching our nx=[96, 64, 64]
+w_A_reshaped = np.reshape(input_data["w_A"], input_data["nx"])
+w_B_reshaped = np.reshape(input_data["w_B"], input_data["nx"])
 
-# Reshape and interpolate input data to match params["nx"]
-# Note: input may have different grid layout, need to handle axis permutation
-w_A_reshaped = np.reshape(w_A, input_data["nx"])
-w_B_reshaped = np.reshape(w_B, input_data["nx"])
-
-# Transpose if needed (input is [c, a, b] -> output is [a, b, c])
-w_A_transposed = np.transpose(w_A_reshaped, (1, 2, 0))
-w_B_transposed = np.transpose(w_B_reshaped, (1, 2, 0))
-
-# Interpolate to target grid size
-zoom_factors = np.array(params["nx"]) / np.array(w_A_transposed.shape)
-w_A = scipy.ndimage.zoom(w_A_transposed, zoom_factors)
-w_B = scipy.ndimage.zoom(w_B_transposed, zoom_factors)
+# No transpose needed - input [c, a, b] matches our grid order
+# Interpolate to target grid size if needed
+zoom_factors = np.array(params["nx"]) / np.array(w_A_reshaped.shape)
+w_A = scipy.ndimage.zoom(w_A_reshaped, zoom_factors)
+w_B = scipy.ndimage.zoom(w_B_reshaped, zoom_factors)
 
 # Initialize calculation
 calculation = scft.SCFT(params=params)
