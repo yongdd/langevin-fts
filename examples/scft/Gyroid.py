@@ -22,6 +22,7 @@ params = {
 
     "reduce_memory":False,     # Reduce memory usage by storing only check points.
     "box_is_altering":True,     # Find box size that minimizes the free energy during saddle point iteration.
+    "stress_interval":1,        # Compute stress every iteration (for reproducibility)
     "chain_model":"continuous", # "discrete" or "continuous" chain model
     "ds":1/100,                 # Contour step interval, which is equal to 1/N_Ref.
 
