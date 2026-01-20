@@ -111,7 +111,15 @@ class LFTS:
         - nx : list of int
             Number of grid points in each dimension, e.g., [32, 32, 32] for 3D.
         - lx : list of float
-            Box dimensions in each direction, units: a_Ref * N_Ref^(1/2).
+            Box dimensions [a, b, c] following crystallographic convention.
+            Units: a_Ref * N_Ref^(1/2).
+        - angles : list of float, optional
+            Unit cell angles [alpha, beta, gamma] in degrees (default: [90, 90, 90]).
+            Following crystallographic convention:
+
+            - alpha = angle between axes b and c (indices 1,2)
+            - beta = angle between axes a and c (indices 0,2)
+            - gamma = angle between axes a and b (indices 0,1)
 
         **Chain Model Parameters:**
 
@@ -530,7 +538,9 @@ class LFTS:
         print("Platform :", platform)
         print("Box Dimension: %d" % (self.prop_solver.dim))
         print("Nx:", self.prop_solver.nx)
-        print("Lx:", self.prop_solver.get_lx())
+        print("Lx [a, b, c]:", self.prop_solver.get_lx())
+        angles_deg = list(self.prop_solver.get_angles_degrees())
+        print("Angles [alpha, beta, gamma]:", angles_deg)
         print("dx:", self.prop_solver.get_dx())
         print("Volume: %f" % (self.prop_solver.get_volume()))
 

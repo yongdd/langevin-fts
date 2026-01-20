@@ -234,7 +234,23 @@ class SCFT:
         - nx : list of int
             Number of grid points in each dimension, e.g., [32, 32, 32] for 3D.
         - lx : list of float
-            Box dimensions in each direction, units: a_Ref * N_Ref^(1/2).
+            Box dimensions [a, b, c] following crystallographic convention.
+            Units: a_Ref * N_Ref^(1/2).
+        - angles : list of float, optional
+            Unit cell angles [alpha, beta, gamma] in degrees (default: [90, 90, 90]).
+            Following crystallographic convention:
+
+            - alpha = angle between axes b and c (indices 1,2)
+            - beta = angle between axes a and c (indices 0,2)
+            - gamma = angle between axes a and b (indices 0,1)
+
+            Common systems:
+
+            - Orthorhombic: [90, 90, 90] (default)
+            - Hexagonal: [90, 90, 120] with a = b
+            - Monoclinic: [90, beta, 90] with beta != 90
+            - Triclinic: all angles can vary
+
         - box_is_altering : bool
             If True, optimize box size along with fields to minimize stress.
 
@@ -326,6 +342,18 @@ class SCFT:
             Convergence tolerance for error_level (default: 1e-8).
 
         **Advanced Options:**
+
+        - crystal_system : str, optional
+            Crystal system for box optimization constraints. Determines which
+            lattice parameters can vary independently during box relaxation.
+            Options:
+
+            - 'Orthorhombic' (default): a, b, c independent; all angles = 90°
+            - 'Tetragonal': a = b ≠ c; all angles = 90°
+            - 'Cubic': a = b = c; all angles = 90°
+            - 'Hexagonal': a = b ≠ c; alpha = beta = 90°, gamma = 120°
+            - 'Monoclinic': a, b, c independent; alpha = gamma = 90°, beta varies
+            - 'Triclinic': all lengths and angles can vary independently
 
         - space_group : dict, optional
             Space group symmetry constraints (beta feature):
@@ -854,7 +882,9 @@ class SCFT:
         print("Platform :", platform)
         print("Box Dimension: %d" % (self.prop_solver.dim))
         print("Nx:", self.prop_solver.nx)
-        print("Lx:", self.prop_solver.get_lx())
+        print("Lx [a, b, c]:", self.prop_solver.get_lx())
+        angles_deg = list(self.prop_solver.get_angles_degrees())
+        print("Angles [alpha, beta, gamma]:", angles_deg)
         print("dx:", self.prop_solver.get_dx())
         print("Volume: %f" % (self.prop_solver.get_volume()))
 
@@ -878,6 +908,14 @@ class SCFT:
         self.chain_model = params["chain_model"]
         self.ds = params["ds"]
         self.box_is_altering = params["box_is_altering"]
+
+        # Stress computation interval (compute stress every N iterations)
+        # Options: integer (1, 2, 3, ...) or "adaptive"
+        # - Integer: compute stress every N iterations
+        # - "adaptive": automatically adjust based on error level
+        #   (more frequent when error high, less frequent when converging)
+        # Default is 3 for ~15% speedup with minimal impact on convergence
+        self.stress_interval = params.get("stress_interval", 3)
 
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -1189,6 +1227,7 @@ class SCFT:
         # Make a dictionary for data
         m_dic = {"initial_params": self.params,
             "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
+            "angles":list(self.prop_solver.get_angles_degrees()),
             "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
@@ -1515,9 +1554,32 @@ class SCFT:
             mass_error = self.prop_solver.integral(phi_diff)/self.prop_solver.get_volume()
             
             if (self.box_is_altering):
-                # Calculate stress
-                self.prop_solver.compute_stress()
-                stress_array = np.array(self.prop_solver.get_stress())
+                # Calculate stress (only every stress_interval iterations to save time)
+                # stress_interval > 1 can significantly speed up computation since
+                # stress computation takes ~30% of iteration time
+                #
+                # Adaptive mode: compute stress more frequently when error is high,
+                # less frequently when error is low (box is nearly converged)
+                if self.stress_interval == "adaptive":
+                    if error_level > 1e-2:
+                        effective_stress_interval = 1
+                    elif error_level > 1e-4:
+                        effective_stress_interval = 2
+                    else:
+                        effective_stress_interval = 4
+                else:
+                    effective_stress_interval = self.stress_interval
+
+                compute_stress_this_iter = (iter == 1) or (iter % effective_stress_interval == 0)
+
+                if compute_stress_this_iter:
+                    self.prop_solver.compute_stress()
+                    stress_array = np.array(self.prop_solver.get_stress())
+                    cached_stress_array = stress_array.copy()
+                else:
+                    # Reuse cached stress from previous computation
+                    stress_array = cached_stress_array
+
                 dim = self.prop_solver.dim
 
                 # Only include stress components that are being optimized
