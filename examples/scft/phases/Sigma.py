@@ -14,8 +14,9 @@ f = 0.25        # A-fraction of major BCP chain, f
 eps = 2.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    "nx":[32,64,64],            # Simulation grid numbers [c, a, a] for tetragonal
-    "lx":[4.0,7.0,7.0],         # Simulation box size [c, a, a] as a_Ref * N_Ref^(1/2) unit,
+    # P4_2/mnm space group requires equal grid dimensions due to axis-swapping operations
+    "nx":[64,64,64],            # Simulation grid numbers (equal for tetragonal space group)
+    "lx":[8.0,7.0,7.0],         # Simulation box size [c, a, a] as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
 
@@ -26,19 +27,15 @@ params = {
     "ds":1/100,                      # Contour step interval, which is equal to 1/N_Ref.
 
     "segment_lengths":{         # Relative statistical segment length compared to "a_Ref.
-        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))), 
+        "A":np.sqrt(eps*eps/(eps*eps*f + (1-f))),
         "B":np.sqrt(    1.0/(eps*eps*f + (1-f))), },
 
     "chi_n": {"A,B": 25},       # Interaction parameter, Flory-Huggins params * N_Ref
 
-    # Note: space_group currently requires compatible grid dimensions.
-    # For P4_2/mnm (tetragonal), all grid dimensions should be equal and even.
-    # The current grid [32, 64, 64] is incompatible due to axis-swapping operations.
-    # Use "nx": [64, 64, 64] with proportionally scaled "lx" to enable space_group.
-    # "space_group" :{
-    #     "symbol":"P4_2/mnm",   # IT symbol of the space group
-    #     "number": 419,         # (optional) Hall number of the space group
-    # },
+    "space_group":{
+        "symbol":"P4_2/mnm",   # IT symbol of the space group (No. 136)
+        "number": 419,         # Hall number of the space group
+    },
 
     "distinct_polymers":[{      # Distinct Polymers
         "volume_fraction":1.0,  # volume fraction of polymer chain
