@@ -1,24 +1,28 @@
 """
-HCP (Hexagonal Close-Packed) Phase SCFT Simulation - Hexagonal Crystal System
+Hexagonally Perforated Lamellar (HPL) Phase SCFT Simulation - Hexagonal Crystal System
 
-This uses the hexagonal crystal system with P6_3/mmc space group symmetry.
-The space group enforces correct hexagonal geometry (a = b, gamma = 120 deg).
+This uses the hexagonal crystal system for the perforated lamellar phase.
+The structure consists of lamellar layers with hexagonally arranged perforations.
 
 Crystal System: Hexagonal (a = b, alpha = beta = 90 deg, gamma = 120 deg)
-Space Group: P6_3/mmc (No. 194, Hall number 488)
-Ideal c/a ratio: sqrt(8/3) ~ 1.633
+Space Group: P6/mmm (No. 191, Hall number 485)
 
 Axis ordering: [a, b, c] - standard crystallographic convention
-- angles[0] = alpha = 90 deg (angle between axes 1,2 i.e. b,c)
-- angles[1] = beta = 90 deg (angle between axes 0,2 i.e. a,c)
-- angles[2] = gamma = 120 deg (angle between axes 0,1 i.e. a,b)
+- a, b axes: in-plane hexagonal directions (perforation arrangement)
+- c axis: lamellar stacking direction
 
-HCP sphere positions (Wyckoff 2c for P6_3/mmc):
-- (1/3, 2/3, 1/4) and (2/3, 1/3, 3/4)
+HPL structure initialization using Wyckoff positions for P6/mmm:
+- 1a: (0, 0, 0)
+- 1b: (0, 0, 1/2)
+- 2c: (1/3, 2/3, 0), (2/3, 1/3, 0)
+- 2d: (1/3, 2/3, 1/2), (2/3, 1/3, 1/2)
+
+Reference:
+- Loo et al., Macromolecules 2005, 38, 4947
 
 Results:
-- Free energy: F = -0.1345346
-- c/a ratio: ~ 1.628 (close to ideal HCP sqrt(8/3) ~ 1.633)
+- Free energy: F = -0.2119551
+- Box size: lx = [1.958, 1.958, 2.981] (a = b, hexagonal)
 """
 
 import os
@@ -32,21 +36,19 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 
 # Major Simulation params
-f = 0.25       # A-fraction of major BCP chain, f
+f = 0.4       # A-fraction of major BCP chain, f
 
 params = {
-    # HCP with Hexagonal crystal system and P6_3/mmc space group
+    # HPL with Hexagonal crystal system
     # Axis ordering: [a, b, c] - gamma=120 deg between a and b (axes 0,1)
-    # Grid: nx[0] = nx[1] for hexagonal symmetry (a = b)
-    # IMPORTANT: Grid must be divisible by 6 (LCM of 2,3) for P6_3/mmc compatibility
-    # because symmetry operations include translations of 1/2, 1/3, 2/3
-    "nx": [48, 48, 48],             # Simulation grid numbers [a, b, c] - divisible by 6
-    "lx": [1.72, 1.72, 2.8],        # Box size [a, b, c] with a=b (near equilibrium)
+    # IMPORTANT: Grid must be divisible by 6 for P6/mmm compatibility
+    "nx": [48, 48, 72],             # Simulation grid numbers [a, b, c] - divisible by 6
+    "lx": [2.0, 2.0, 3.0],          # Box size [a, b, c] with a=b (near equilibrium)
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: gamma=120 (between a,b)
 
     "reduce_memory": False,         # Reduce memory usage by storing only check points
     "box_is_altering": True,        # Find box size that minimizes the free energy
-    "stress_interval": 1,           # Compute stress every iteration (for reproducibility)
+    "stress_interval": 1,           # Compute stress every iteration
     "chain_model": "continuous",    # "discrete" or "continuous" chain model
     "ds": 1/100,                    # Contour step interval = 1/N_Ref
 
@@ -55,7 +57,7 @@ params = {
         "B": 1.0,
     },
 
-    "chi_n": {"A,B": 20},           # Flory-Huggins parameter * N_Ref
+    "chi_n": {"A,B": 15},           # Flory-Huggins parameter * N_Ref
 
     "distinct_polymers": [{         # Polymer species
         "volume_fraction": 1.0,     # Volume fraction
@@ -67,10 +69,9 @@ params = {
 
     "crystal_system": "Hexagonal",  # Enforces a = b and gamma = 120 deg
 
-    # Space group P6_3/mmc (HCP)
     "space_group": {
-        "symbol": "P6_3/mmc",       # International symbol for HCP space group (No. 194)
-        "number": 488,              # Hall number
+        "symbol": "P6/mmm",         # International symbol for HPL space group (No. 191)
+        "number": 485,              # Hall number
     },
 
     "optimizer": {
@@ -81,20 +82,26 @@ params = {
         "mix_init": 0.1,            # Initial mixing rate of simple mixing
     },
 
-    "max_iter": 1000,               # Maximum relaxation iterations
+    "max_iter": 2000,               # Maximum relaxation iterations
     "tolerance": 1e-8               # Convergence tolerance
 }
 
-# Set initial fields from HCP sphere positions (Wyckoff 2c for P6_3/mmc)
+# Set initial fields from HPL Wyckoff positions for P6/mmm
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to HCP phase.")
+print("w_A and w_B are initialized to HPL phase.")
 
-# Wyckoff 2c positions for P6_3/mmc space group
-# These positions have proper site symmetry for P6_3/mmc
+# Wyckoff positions for P6/mmm space group
+# 1a: (0,0,0), 1b: (0,0,1/2)
+# 2c: (1/3,2/3,0), (2/3,1/3,0)
+# 2d: (1/3,2/3,1/2), (2/3,1/3,1/2)
 sphere_positions = [
-    [1/3, 2/3, 1/4],
-    [2/3, 1/3, 3/4],
+    [0.0, 0.0, 0.0],        # 1a
+    [0.0, 0.0, 0.5],        # 1b
+    [1/3, 2/3, 0.0],        # 2c
+    [2/3, 1/3, 0.0],        # 2c
+    [1/3, 2/3, 0.5],        # 2d
+    [2/3, 1/3, 0.5],        # 2d
 ]
 
 for x, y, z in sphere_positions:
@@ -121,10 +128,9 @@ calculation.run(initial_fields={"A": w_A, "B": w_B})
 time_duration = time.time() - time_start
 print("total time: %f " % time_duration)
 
-# Save final results (.mat, .json or .yaml format)
-calculation.save_results("HCP_Hexagonal.json")
+# Save final results
+calculation.save_results("PL_Hexagonal.json")
 
 # Recording iteration results for debugging and refactoring
-# Equilibrium: F = -0.1345346, lx = [1.7186, 1.7186, 2.7982], gamma = 120 deg
-# c/a ratio = 1.628 (ideal HCP: sqrt(8/3) ~ 1.633)
-# (with f=0.25, chi_n=20)
+# Equilibrium: F = -0.2119551, lx = [1.958, 1.958, 2.981], gamma = 120 deg
+# (with f=0.4, chi_n=15)
