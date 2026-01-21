@@ -810,8 +810,9 @@ class SCFT:
                 self.lx_reduced_indices = [0, 1, 2]
                 self.lx_full_indices = [0, 1, 2]
             elif self.sg.crystal_system == "Tetragonal":
-                self.lx_reduced_indices = [0, 2]
-                self.lx_full_indices = [0, 1, 1]
+                # Standard tetragonal: a = b ≠ c (4-fold axis along z)
+                self.lx_reduced_indices = [0, 2]  # a and c as independent
+                self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
             elif self.sg.crystal_system == "Cubic":
                 self.lx_reduced_indices = [0]
                 self.lx_full_indices = [0, 0, 0]
