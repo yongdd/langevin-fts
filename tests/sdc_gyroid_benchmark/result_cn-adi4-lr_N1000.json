@@ -1,0 +1,17 @@
+{
+  "method": "cn-adi4-lr",
+  "ds": 0.001,
+  "N": 1000,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.47935135486272706,
+  "error_level": 8.721146685109799e-10,
+  "iterations": 145,
+  "converged": true,
+  "elapsed_time": 319.9827172756195
+}

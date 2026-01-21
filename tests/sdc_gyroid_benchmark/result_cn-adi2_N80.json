@@ -1,0 +1,17 @@
+{
+  "method": "cn-adi2",
+  "ds": 0.0125,
+  "N": 80,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.4789508127412576,
+  "error_level": 9.44414799643914e-10,
+  "iterations": 135,
+  "converged": true,
+  "elapsed_time": 15.287593364715576
+}

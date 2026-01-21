@@ -1,0 +1,13 @@
+{
+  "method": "sdc",
+  "ds": 0.00625,
+  "N": 160,
+  "chi_n": 20.0,
+  "f": 0.5,
+  "nx": 32,
+  "lx": 3.2,
+  "free_energy": -0.6959724316937397,
+  "error_level": 1.0463583617133351e-10,
+  "iterations": 147,
+  "converged": true
+}

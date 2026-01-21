@@ -1,0 +1,17 @@
+{
+  "method": "rqm4",
+  "ds": 0.003125,
+  "N": 320,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.47697413035087743,
+  "error_level": 9.929439354844598e-10,
+  "iterations": 177,
+  "converged": true,
+  "elapsed_time": 15.867657661437988
+}

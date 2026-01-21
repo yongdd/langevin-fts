@@ -1,0 +1,17 @@
+{
+  "method": "etdrk4",
+  "ds": 0.0125,
+  "N": 80,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.4769715160364325,
+  "error_level": 9.178184225252739e-10,
+  "iterations": 176,
+  "converged": true,
+  "elapsed_time": 10.97053861618042
+}

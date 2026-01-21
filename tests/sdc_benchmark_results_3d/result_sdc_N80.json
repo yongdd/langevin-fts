@@ -1,0 +1,15 @@
+{
+  "method": "sdc",
+  "ds": 0.0125,
+  "N": 80,
+  "chi_n": 20.0,
+  "f": 0.45,
+  "nx": 32,
+  "lx": 3.8,
+  "dim": 3,
+  "phase": "gyroid",
+  "free_energy": -0.9087611683880614,
+  "error_level": 8.954890797885035e-09,
+  "iterations": 308,
+  "converged": true
+}

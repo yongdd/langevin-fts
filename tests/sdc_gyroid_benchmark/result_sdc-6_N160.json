@@ -1,0 +1,17 @@
+{
+  "method": "sdc-6",
+  "ds": 0.00625,
+  "N": 160,
+  "chi_n": 18.0,
+  "f": 0.375,
+  "nx": 32,
+  "lx": 3.65,
+  "dim": 3,
+  "phase": "gyroid",
+  "platform": "cuda",
+  "free_energy": -0.4793513550952153,
+  "error_level": 8.363876656968212e-10,
+  "iterations": 382,
+  "converged": true,
+  "elapsed_time": 753.946615385823
+}
