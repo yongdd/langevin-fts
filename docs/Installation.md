@@ -152,6 +152,10 @@ export PATH=/usr/local/cuda/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 ```
 
+### TestStressLinear3D Takes Too Long
+
+**This is normal.** `TestStressLinear3D` takes about 80 seconds to complete because it tests multiple platforms, chain models, and numerical methods with a 3D grid.
+
 ## Uninstallation
 
 ```bash

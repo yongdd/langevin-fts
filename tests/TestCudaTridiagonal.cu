@@ -65,7 +65,8 @@ int main()
         cudaMemcpy(d_offset, offset, sizeof(double)*1, cudaMemcpyHostToDevice);
 
         // Tridiagonal
-        tridiagonal<<<256, 256>>>(d_a, d_b, d_c, d_temp, d_y, d_x, d_offset, 1, 1, M);
+        size_t shmem_size = 3 * M * sizeof(double);
+        tridiagonal<<<256, 256, shmem_size>>>(d_a, d_b, d_c, d_temp, d_y, d_x, d_offset, 1, 1, M);
         cudaMemcpy(x, d_x, sizeof(double)*M, cudaMemcpyDeviceToHost);
         std::cout << "Tridiagonal" << std::endl;
         std::cout << "i: x_answer[i], x[i]" << std::endl;
