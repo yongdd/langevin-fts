@@ -43,7 +43,7 @@ params = {
     # IMPORTANT: Grid must be divisible by 6 (LCM of 2,3) for P6_3/mmc compatibility
     # because symmetry operations include translations of 1/2, 1/3, 2/3
     "nx": [48, 48, 48],             # Simulation grid numbers [a, b, c] - divisible by 6
-    "lx": [1.72, 1.72, 2.8],        # Box size [a, b, c] with a=b, close to equilibrium
+    "lx": [1.72, 1.72, 2.8],        # Box size [a, b, c] with a=b (near equilibrium)
     "angles": [90.0, 90.0, 120.0],  # Hexagonal: gamma=120 (between a,b)
 
     "reduce_memory": False,         # Reduce memory usage by storing only check points
@@ -109,13 +109,8 @@ for a, b, c in sphere_positions:
     ic = int(np.round(c * params["nx"][2])) % params["nx"][2]
     w_A[ia, ib, ic] = -1.0  # Strong negative value at sphere centers
 
-# Apply Gaussian filter with small sigma to create smooth spherical seeds
-# sigma=1.5 gives sphere radius of about 3-4 grid points
-w_A = gaussian_filter(w_A, sigma=1.5, mode='wrap')
-
-# Scale to have std ~ 5 (recommended for proper SCFT convergence)
-w_A = w_A / np.std(w_A) * 5.0
-w_B = -w_A  # Opposite field for B-block
+# Apply Gaussian filter (consistent with other phase scripts like A15.py, BCC.py)
+w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 print(f"Initial field: w_A min={w_A.min():.2f}, max={w_A.max():.2f}, std={np.std(w_A):.2f}")
 
@@ -136,4 +131,5 @@ print("total time: %f " % time_duration)
 calculation.save_results("HCP_Hexagonal.json")
 
 # Recording iteration results for debugging and refactoring
-# Equilibrium: F = -0.1345346, lx = [1.718, 1.718, 2.798], gamma = 120 deg
+# Equilibrium: F = -0.1172238, lx = [1.72, 1.72, 2.8], gamma = 120 deg
+# (with f=0.25, chi_n=20)

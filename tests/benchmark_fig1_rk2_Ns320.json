@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "date": "2026-01-17T17:03:11.040688",
+    "test_type": "fig1",
+    "method": "rk2",
+    "platform": "cuda"
+  },
+  "results": [
+    {
+      "success": true,
+      "init_time_s": 1.6026463620364666,
+      "run_time_s": 11.319142521359026,
+      "total_time_s": 12.921788883395493,
+      "iterations": 2000,
+      "final_error": 9.41127734005895e-10,
+      "free_energy": -0.47695735708897713,
+      "converged": true,
+      "final_lx": [
+        3.65,
+        3.65,
+        3.65
+      ],
+      "Ns": 320,
+      "ds": 0.003125,
+      "method": "rk2",
+      "chi_n": 18.0,
+      "f": 0.375,
+      "nx": [
+        32,
+        32,
+        32
+      ]
+    }
+  ]
+}

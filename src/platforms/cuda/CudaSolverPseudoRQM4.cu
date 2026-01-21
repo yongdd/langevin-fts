@@ -378,17 +378,20 @@ void CudaSolverPseudoRQM4<T>::update_dw(std::string device, std::map<std::string
 
                 // Copy field configurations from host to device
                 gpu_error_check(cudaMemcpyAsync(
-                    this->d_exp_dw     [ds_idx][monomer_type], w,
+                    this->d_exp_dw[ds_idx][monomer_type], w,
                     sizeof(T)*M, cudaMemcpyInputToDevice));
                 gpu_error_check(cudaMemcpyAsync(
                     this->d_exp_dw_half[ds_idx][monomer_type], w,
                     sizeof(T)*M, cudaMemcpyInputToDevice));
 
-                // Compute d_exp_dw = exp(-w * local_ds * 0.5) and d_exp_dw_half = exp(-w * local_ds * 0.25)
+                // Compute d_exp_dw = exp(-w * local_ds * 0.5)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    (this->d_exp_dw[ds_idx][monomer_type],      this->d_exp_dw[ds_idx][monomer_type],      1.0, -0.50*local_ds, M);
+                    (this->d_exp_dw[ds_idx][monomer_type],
+                     this->d_exp_dw[ds_idx][monomer_type], 1.0, -0.50*local_ds, M);
+                // Compute d_exp_dw_half = exp(-w * local_ds * 0.25)
                 ker_exp<<<N_BLOCKS, N_THREADS>>>
-                    (this->d_exp_dw_half[ds_idx][monomer_type], this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
+                    (this->d_exp_dw_half[ds_idx][monomer_type],
+                     this->d_exp_dw_half[ds_idx][monomer_type], 1.0, -0.25*local_ds, M);
             }
         }
         gpu_error_check(cudaPeekAtLastError());
