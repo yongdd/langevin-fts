@@ -13,19 +13,17 @@ Axis ordering: [a, b, c] - standard crystallographic convention
 - angles[1] = beta = 90 deg (angle between axes 0,2 i.e. a,c)
 - angles[2] = gamma = 120 deg (angle between axes 0,1 i.e. a,b)
 
-HCP sphere positions in fractional coordinates [a, b, c]:
-- (0, 0, 0) - Layer A at z=0
-- (2/3, 1/3, 1/2) - Layer B at z=1/2 (for gamma=120 deg)
+HCP sphere positions (Wyckoff 2c for P6_3/mmc):
+- (1/3, 2/3, 1/4) and (2/3, 1/3, 3/4)
 
 Results:
-- Free energy: F = -0.1345346 (identical to orthorhombic representation)
+- Free energy: F = -0.1345346
 - c/a ratio: ~ 1.628 (close to ideal HCP sqrt(8/3) ~ 1.633)
 """
 
 import os
 import time
 import numpy as np
-from scipy.io import savemat
 from scipy.ndimage import gaussian_filter
 from polymerfts import scft
 
@@ -69,7 +67,7 @@ params = {
 
     "crystal_system": "Hexagonal",  # Enforces a = b and gamma = 120 deg
 
-    # Space group P6_3/mmc requires grid divisible by 6 for compatibility
+    # Space group P6_3/mmc (HCP)
     "space_group": {
         "symbol": "P6_3/mmc",       # International symbol for HCP space group (No. 194)
         "number": 488,              # Hall number
@@ -87,29 +85,25 @@ params = {
     "tolerance": 1e-8               # Convergence tolerance
 }
 
-# Set initial fields for HCP structure
-# In [a, b, c] ordering with gamma=120 deg between a and b:
-# HCP has 2 spheres per unit cell at Wyckoff 2c position
+# Set initial fields from HCP sphere positions (Wyckoff 2c for P6_3/mmc)
 w_A = np.zeros(list(params["nx"]), dtype=np.float64)
 w_B = np.zeros(list(params["nx"]), dtype=np.float64)
-print("w_A and w_B are initialized to HCP phase (P6_3/mmc space group).")
+print("w_A and w_B are initialized to HCP phase.")
 
-# HCP sphere positions in fractional coordinates [a, b, c]
-# Classic HCP: Layer A at z=0, Layer B at z=1/2
-# These positions will be symmetrized by the space group
+# Wyckoff 2c positions for P6_3/mmc space group
+# These positions have proper site symmetry for P6_3/mmc
 sphere_positions = [
-    [0.0, 0.0, 0.0],      # Layer A at z=0
-    [2/3, 1/3, 0.5],      # Layer B at z=1/2
+    [1/3, 2/3, 1/4],
+    [2/3, 1/3, 3/4],
 ]
 
-for a, b, c in sphere_positions:
-    # Convert fractional to grid indices
-    ia = int(np.round(a * params["nx"][0])) % params["nx"][0]
-    ib = int(np.round(b * params["nx"][1])) % params["nx"][1]
-    ic = int(np.round(c * params["nx"][2])) % params["nx"][2]
-    w_A[ia, ib, ic] = -1.0  # Strong negative value at sphere centers
+for x, y, z in sphere_positions:
+    mx, my, mz = np.round((np.array([x, y, z]) * params["nx"])).astype(np.int32)
+    mx = mx % params["nx"][0]
+    my = my % params["nx"][1]
+    mz = mz % params["nx"][2]
+    w_A[mx, my, mz] = -1 / (np.prod(params["lx"]) / np.prod(params["nx"]))
 
-# Apply Gaussian filter (consistent with other phase scripts like A15.py, BCC.py)
 w_A = gaussian_filter(w_A, sigma=np.min(params["nx"])/15, mode='wrap')
 
 print(f"Initial field: w_A min={w_A.min():.2f}, max={w_A.max():.2f}, std={np.std(w_A):.2f}")
@@ -131,5 +125,6 @@ print("total time: %f " % time_duration)
 calculation.save_results("HCP_Hexagonal.json")
 
 # Recording iteration results for debugging and refactoring
-# Equilibrium: F = -0.1172238, lx = [1.72, 1.72, 2.8], gamma = 120 deg
+# Equilibrium: F = -0.1345346, lx = [1.7186, 1.7186, 2.7982], gamma = 120 deg
+# c/a ratio = 1.628 (ideal HCP: sqrt(8/3) ~ 1.633)
 # (with f=0.25, chi_n=20)

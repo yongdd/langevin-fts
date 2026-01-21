@@ -14,9 +14,9 @@ f = 0.25        # A-fraction of major BCP chain, f
 eps = 2.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # P4_2/mnm space group requires equal grid dimensions due to axis-swapping operations
-    "nx":[64,64,64],            # Simulation grid numbers (equal for tetragonal space group)
-    "lx":[7.0,7.0,8.0],         # Simulation box size [a, a, c] as a_Ref * N_Ref^(1/2) unit,
+    # P4_2/mnm space group: tetragonal with 4-fold axis along z
+    "nx":[64,64,32],            # Simulation grid numbers [nx, ny, nz] for [a, a, c]
+    "lx":[7.0,7.0,4.0],         # Simulation box size [a, a, c] as a_Ref * N_Ref^(1/2) unit,
                                 # where "a_Ref" is reference statistical segment length
                                 # and "N_Ref" is the number of segments of reference linear homopolymer chain.
                                 # Standard tetragonal setting: a = b ≠ c (4-fold axis along z)
