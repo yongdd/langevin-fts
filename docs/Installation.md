@@ -35,13 +35,16 @@ docker build -f docker/Dockerfile.cuda -t polymerfts:cuda .
 ### Option 2: Conda Environment + Build from Source
 
 ```bash
+# Clone repository
+git clone https://github.com/yongdd/langevin-fts.git
+cd langevin-fts
+
 # Create and activate conda environment
 conda env create -f environment.yml
 conda activate polymerfts
 
-# Clone and build
-git clone https://github.com/yongdd/langevin-fts.git
-cd langevin-fts && mkdir build && cd build
+# Build and install
+mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j8
 make test
