@@ -24,7 +24,7 @@ conda activate polymerfts
 git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts && mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j8 && make test && make install
+make -j8 && ctest -L quick && make install
 ```
 
 ### Other Options
@@ -61,6 +61,7 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | Method | Type | Description |
 |--------|------|-------------|
 | `rqm4` | Pseudo-spectral | 4th-order Richardson extrapolation (default) |
+| `rk2` | Pseudo-spectral | 2nd-order Rasmussen-Kalosakas |
 | `etdrk4` | Pseudo-spectral | Exponential Time Differencing RK4 |
 | `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
 | `cn-adi4-lr` | Real-space | 4th-order CN-ADI (Local Richardson) |

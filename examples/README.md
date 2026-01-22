@@ -38,28 +38,17 @@ Explore multi-component systems and random copolymers.
 | `scft/MixtureBlockRandom.py` | Block + random copolymer mixture | Intermediate |
 | `scft/AdamRandomToGyroid.py` | Using ADAM optimizer for random to gyroid transition | Advanced |
 
-**4. Crystal Systems and Non-Orthogonal Boxes**
-
-For studying specific crystallographic symmetries.
-
-| Example | Description | Complexity |
-|---------|-------------|------------|
-| `scft/crystal_systems/HexagonalCylinder2D.py` | 2D hexagonal lattice | Intermediate |
-| `scft/crystal_systems/ObliqueCylinder2D.py` | 2D oblique lattice | Intermediate |
-| `scft/crystal_systems/MonoclinicLamella3D.py` | 3D monoclinic | Advanced |
-| `scft/crystal_systems/TriclinicCylinder3D.py` | 3D triclinic | Advanced |
-
-**5. SCFT Phase Library**
+**4. SCFT Phase Library**
 
 Reference implementations for various morphologies (in `scft/phases/`):
 
 - **Lamellar**: `Lamella1D.py`
 - **Cylindrical**: `Cylinder2D.py`
 - **Gyroid**: `SG.py` (single gyroid), `DG.py` (double gyroid)
-- **Spherical**: `BCC.py`, `FCC.py`, `HCP.py`, `SC.py`, `A15.py`, `Sigma.py`
-- **Other**: `DD.py` (double diamond), `PL.py` (perforated lamella), `Fddd.py`, `SD.py`, `SP.py`, `DP.py`
+- **Spherical**: `BCC.py`, `FCC.py`, `HCP_Hexagonal.py`, `SC.py`, `A15.py`, `Sigma.py`
+- **Other**: `DD.py` (double diamond), `PL_Hexagonal.py` (perforated lamella), `Fddd.py`, `SD.py`, `SP.py`, `DP.py`
 
-**6. L-FTS (Langevin Field-Theoretic Simulation)**
+**5. L-FTS (Langevin Field-Theoretic Simulation)**
 
 L-FTS includes thermal fluctuations via Langevin dynamics. Start after mastering SCFT.
 
@@ -70,7 +59,7 @@ L-FTS includes thermal fluctuations via Langevin dynamics. Start after mastering
 | `lfts/MixtureBlockRandom.py` | Mixture with fluctuations | Advanced |
 | `lfts/ABC_Triblock_Sphere3D.py` | ABC triblock with fluctuations | Advanced |
 
-**7. Complex Langevin FTS**
+**6. Complex Langevin FTS**
 
 For systems where standard L-FTS has convergence issues.
 
