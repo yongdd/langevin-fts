@@ -8,24 +8,16 @@
  *
  * **Scheduling Algorithm:**
  *
- * 1. **Hierarchy construction**: Group propagators by height (dependency depth)
- * 2. **Dependency resolution**: For each propagator, find when all dependencies
- *    complete (resolved_time)
- * 3. **Greedy assignment**: Assign each ready propagator to the stream with
- *    earliest available time
- * 4. **Time slicing**: Divide execution into time spans for interleaved progress
- *
- * **Schedule Format:**
- *
- * The schedule is a vector of time slices, where each slice contains:
- * - Vector of (key, n_segment_from, n_segment_to) tuples
- * - Each tuple specifies which segments to compute for that propagator
+ * 1. **Group by height**: Propagators grouped by dependency depth
+ * 2. **Resolve dependencies**: Find when each propagator can start
+ * 3. **Greedy assignment**: Assign to stream with earliest available time
+ * 4. **Time slicing**: Divide into intervals for interleaved progress
  *
  * **Example:**
  *
- * Time 0-10: [("A", 0, 10), ("B", 0, 10)]  // A and B in parallel
- * Time 10-15: [("A", 10, 15)]               // Only A continues
- * Time 15-20: [("(AB)C", 0, 5)]            // Dependent C starts
+ * Time 0-10:  [("A+0", 0, 10), ("B+0", 0, 10)]  // A and B in parallel
+ * Time 10-15: [("A+0", 10, 15)]                  // Only A continues
+ * Time 15-20: [("(AB)C+0", 0, 5)]               // Dependent C starts
  *
  * @see PropagatorComputationOptimizer for propagator dependency analysis
  */
@@ -34,318 +26,192 @@
 #include <algorithm>
 #include <string>
 #include <vector>
-#include <cassert>
 #include <map>
 #include <set>
 
 #include "Scheduler.h"
 
 /**
- * @brief Construct scheduler for given propagators and stream count.
- *
- * Builds the complete execution schedule using list scheduling with
- * greedy stream assignment. Respects dependency ordering.
- *
- * @param computation_propagators Map of propagator keys to metadata
- * @param N_STREAM               Number of parallel streams/threads
- *
- * @throws Exception if dependency resolution fails
+ * @brief Find stream with earliest available time.
  */
-Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators, const int N_STREAM)
+int Scheduler::find_earliest_stream(const std::vector<int>& stream_available_time)
 {
-    try
-    {
-        int min_stream, minimum_time;
-        std::vector<int> job_finish_time(N_STREAM, 0);
-
-        std::vector<std::string> job_queue[N_STREAM];
-        auto propagator_hierarchies = make_propagator_hierarchies(computation_propagators);
-
-        // For height of propagator
-        for(size_t current_height=0; current_height<propagator_hierarchies.size(); current_height++)
-        {
-            auto& same_height_propagators = propagator_hierarchies[current_height];
-            std::vector<std::tuple<std::string, int>> Key_resolved_time;
-            // Determine when propagator is ready to be computed, i.e., find dependencies resolved time.
-            for(size_t i=0; i<same_height_propagators.size(); i++)
-            {
-                const auto& key = same_height_propagators[i];
-                int max_resolved_time = 0;
-                for(size_t j=0; j<computation_propagators[key].deps.size(); j++)
-                {
-                    const auto& sub_key = std::get<0>(computation_propagators[key].deps[j]);
-                    int sub_n_segment = std::max(std::get<1>(computation_propagators[key].deps[j]),1); // add 1, if it is 0
-                    #ifndef NDEBUG
-                    if (stream_start_finish.find(sub_key) == stream_start_finish.end())
-                        throw_with_line_number("Could not find [" + sub_key + "] in stream_start_finish.");
-                    #endif
-                    int sub_resolved_time = std::get<1>(stream_start_finish[sub_key]) + sub_n_segment; 
-                    if (max_resolved_time == 0 || max_resolved_time < sub_resolved_time)
-                        max_resolved_time = sub_resolved_time;
-                }
-                resolved_time[key] = max_resolved_time;
-                Key_resolved_time.push_back(std::make_tuple(key, max_resolved_time));
-            }
-
-            // Sort propagators with time that they are ready
-            std::sort(Key_resolved_time.begin(), Key_resolved_time.end(),
-                [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
-            );
-
-            // for(int i=0; i<Key_resolved_time.size(); i++)
-            // {
-            //     const auto& key = std::get<0>(Key_resolved_time[i]);
-            //     std::cout << key << ":\n\t";
-            //     std::cout << "max_n_segment: " << computation_propagators[key].max_n_segment;
-            //     std::cout << ", max_resolved_time: " << resolved_time[key] << std::endl;
-            // }
-
-            // Add job to compute propagators 
-            for(size_t i=0; i<Key_resolved_time.size(); i++)
-            {
-                // Find index of stream that has minimum job_finish_time
-                min_stream = 0;
-                minimum_time = job_finish_time[0];
-                for(int j=1; j<N_STREAM; j++)
-                {
-                    if(job_finish_time[j] < minimum_time)
-                    {
-                        min_stream = j;
-                        minimum_time = job_finish_time[j];
-                    }
-                }
-                // Add job at stream[min_stream]
-                const auto& key = std::get<0>(Key_resolved_time[i]);
-                int max_n_segment = std::max(computation_propagators[key].max_n_segment, 1); // if max_n_segment is 0, add 1
-                int job_start_time = std::max(job_finish_time[min_stream], resolved_time[key]);
-                // std::cout << key << ", " << min_stream << ", " << job_start_time << ", " << job_start_time+max_n_segment << std::endl;
-                stream_start_finish[key] = std::make_tuple(min_stream, job_start_time, job_start_time + max_n_segment);
-                job_finish_time[min_stream] = job_start_time + max_n_segment;
-                job_queue[min_stream].push_back(key);
-
-                // for(int j=0; j<N_STREAM; j++)
-                // {
-                //     std::cout << "(" << j << ": " << job_finish_time[j] << "), ";
-                // }
-                // std::cout << std::endl;
-            }
-
-        }
-
-        // Sort propagators with starting time
-        for(const auto& item : stream_start_finish)
-            sorted_propagator_with_start_time.push_back(std::make_tuple(item.first, std::get<1>(item.second)));
-        std::sort(sorted_propagator_with_start_time.begin(), sorted_propagator_with_start_time.end(),
-            [](auto const &t1, auto const &t2) {return std::get<1>(t1) < std::get<1>(t2);}
-        );
-
-        // Collect time stamp
-        std::set<int, std::less<int>> time_stamp_set;
-        for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
-        {
-            auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
-            int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-            int finish_time = start_time + std::max(computation_propagators[key].max_n_segment, 1); // if max_n_segment is 0, add 1
-            // std::cout << key << ":\n\t";
-            // std::cout << "max_n_segment: " << computation_propagators[key].max_n_segment;
-            // std::cout << ", start_time: " << start_time;
-            // std::cout << ", finish_time: " << finish_time << std::endl;
-            time_stamp_set.insert(start_time);
-            time_stamp_set.insert(finish_time);
-        }
-        std::copy(time_stamp_set.begin(), time_stamp_set.end(), std::back_inserter(time_stamp));
-
-        // for(int i=0; i<time_stamp.size()-1; i++)
-        // {
-        //     std::cout << "time_stamp" << i << ", " << time_stamp[i] << std::endl;
-        // }
-
-        // // scheduling
-        // for(int s=0; s<N_STREAM; s++)
-        // {         
-        //     for(int i=0; i<job_queue[s].size()-1; i++)
-        //     {
-        //        std::cout << job_queue[s][i] << std::endl;
-        //     }
-        //     std::cout << std::endl;
-        // }
-
-        // For each stream, make iterator
-        std::vector<std::string>::iterator iters[N_STREAM];
-        for(int s=0; s<N_STREAM; s++)
-            iters[s] = job_queue[s].begin();
-
-        // For each time stamp
-        for(size_t i=0; i<time_stamp.size()-1; i++)
-        {
-            // std::cout << time_stamp[i]+1 << ", " << time_stamp[i+1] << std::endl;
-            std::vector<std::tuple<std::string, int, int>> parallel_job;
-
-            // For each stream
-            for(int s=0; s<N_STREAM; s++)
-            {
-                // If iters[s] (propagator iter) is not the end of job_queue
-                if(iters[s] != job_queue[s].end())
-                {
-                    // If the finishing time of current propagator is smaller than finishing time of current time span, move to the next propagator of iters[s]. 
-                    if(time_stamp[i+1] > std::get<2>(stream_start_finish[*iters[s]]))
-                        iters[s]++;
-                } 
-
-                // If iters[s] (propagator iter) is not the end of job_queue
-                if(iters[s] != job_queue[s].end())
-                {
-                    // std::cout << "\t*iters[s] " << *iters[s] << std::endl;
-                    // std::cout << "\ttime_stamp " << time_stamp[i] << ", " << time_stamp[i+1] << std::endl;
-                    // std::cout << "\tstream_start_finish " << std::get<1>(stream_start_finish[*iters[s]]) << ", " << std::get<2>(stream_start_finish[*iters[s]]) << std::endl;
-
-                    // If the time span is in between starting time to finishing time, add propagator job to the parallel_job
-                    if( time_stamp[i] >= std::get<1>(stream_start_finish[*iters[s]]) 
-                        && time_stamp[i+1] <= std::get<2>(stream_start_finish[*iters[s]]))
-                    {
-                        int n_segment_from, n_segment_to;
-
-                        // If max_n_segment is 0, skip propagator iterations 
-                        if(computation_propagators[*iters[s]].max_n_segment == 0)
-                        {
-                            n_segment_from = 0;
-                            n_segment_to = 0;
-                        }
-                        // Set range of n_segment to be computed
-                        else
-                        {
-                            n_segment_from = time_stamp[i]-std::get<1>(stream_start_finish[*iters[s]]);
-                            n_segment_to = time_stamp[i+1]-std::get<1>(stream_start_finish[*iters[s]]);
-                        }
-
-                        // std::cout << "\t\t" << *iters[s] << ": " << n_segment_from << ", " << n_segment_to << std::endl;
-                        parallel_job.push_back(std::make_tuple(*iters[s], n_segment_from, n_segment_to));
-                    }
-                }
-            }
-            schedule.push_back(parallel_job);
-        }
-    }
-    catch(std::exception& exc)
-    {
-        throw_without_line_number(exc.what());
-    }
+    return std::min_element(stream_available_time.begin(), stream_available_time.end())
+           - stream_available_time.begin();
 }
 
 /**
  * @brief Group propagators by dependency height.
  *
- * Creates layers where each layer's propagators only depend on
- * propagators in previous layers. Height 0 has no dependencies.
- *
- * @param computation_propagators Map of all propagators
- * @return Vector of layers, each containing propagator keys at that height
+ * Height 0 = no dependencies, Height 1 = depends only on height 0, etc.
  */
-std::vector<std::vector<std::string>> Scheduler::make_propagator_hierarchies(
-    std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators)
+std::vector<std::vector<std::string>> Scheduler::group_by_height(
+    const std::map<std::string, ComputationEdge, ComparePropagatorKey>& propagators)
+{
+    // Find maximum height
+    int max_height = 0;
+    for (const auto& [key, _] : propagators)
+    {
+        int height = PropagatorCode::get_height_from_key(key);
+        max_height = std::max(max_height, height);
+    }
+
+    // Group by height
+    std::vector<std::vector<std::string>> groups(max_height + 1);
+    for (const auto& [key, _] : propagators)
+    {
+        int height = PropagatorCode::get_height_from_key(key);
+        groups[height].push_back(key);
+    }
+
+    return groups;
+}
+
+/**
+ * @brief Construct scheduler and compute the execution schedule.
+ */
+Scheduler::Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> propagators, int n_streams)
 {
     try
     {
-        std::vector<std::vector<std::string>> propagator_hierarchies;
-        int current_height = 0;
-        std::vector<std::string> same_height_propagators; // key
-        std::vector<std::string> remaining_branches;
+        std::vector<int> stream_available_time(n_streams, 0);
+        std::vector<std::vector<std::string>> stream_jobs(n_streams);
 
-        for(const auto& item : computation_propagators)
-            remaining_branches.push_back(item.first);
+        auto height_groups = group_by_height(propagators);
 
-        while(!remaining_branches.empty())
+        // Process propagators level by level (lower height first)
+        for (const auto& same_height_keys : height_groups)
         {
-            same_height_propagators.clear();
-            for(size_t i=0; i<remaining_branches.size(); i++)
+            // Compute dependency resolved time for each propagator
+            std::vector<std::pair<std::string, int>> ready_propagators;
+            for (const auto& key : same_height_keys)
             {
-                if (current_height == PropagatorCode::get_height_from_key(remaining_branches[i]))
-                    same_height_propagators.push_back(remaining_branches[i]);
+                int resolved_time = 0;
+                for (const auto& [dep_key, dep_n_segment, dep_n_repeated] : propagators[key].deps)
+                {
+                    #ifndef NDEBUG
+                    if (job_assignment.find(dep_key) == job_assignment.end())
+                        throw_with_line_number("Could not find dependency [" + dep_key + "] in job_assignment.");
+                    #endif
+                    int dep_start = std::get<1>(job_assignment[dep_key]);
+                    int dep_duration = std::max(dep_n_segment, 1);
+                    resolved_time = std::max(resolved_time, dep_start + dep_duration);
+                }
+                dependency_resolved_time[key] = resolved_time;
+                ready_propagators.emplace_back(key, resolved_time);
             }
-            if (!same_height_propagators.empty())
+
+            // Sort by resolved time (earlier ready = scheduled first)
+            std::sort(ready_propagators.begin(), ready_propagators.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+
+            // Greedily assign each propagator to earliest available stream
+            for (const auto& [key, resolved_time] : ready_propagators)
             {
-                for(size_t i=0; i<same_height_propagators.size(); i++)
-                    remaining_branches.erase(std::remove(remaining_branches.begin(), remaining_branches.end(), same_height_propagators[i]), remaining_branches.end());
-                propagator_hierarchies.push_back(same_height_propagators);
+                int stream = find_earliest_stream(stream_available_time);
+                int start_time = std::max(stream_available_time[stream], resolved_time);
+                int duration = std::max(propagators[key].max_n_segment, 1);
+                int end_time = start_time + duration;
+
+                job_assignment[key] = {stream, start_time, end_time};
+                stream_available_time[stream] = end_time;
+                stream_jobs[stream].push_back(key);
             }
-            current_height++;
         }
 
-        // for(int i=0; i<propagator_hierarchies.size(); i++)
-        // {
-        //     std::cout << "Height:" << i << std::endl;
-        //     for(const auto &item: propagator_hierarchies[i])
-        //         std::cout << item << ": " << PropagatorCode::get_height_from_key(item) << std::endl;
-        // }
+        // Build sorted_jobs list
+        for (const auto& [key, assignment] : job_assignment)
+            sorted_jobs.emplace_back(key, std::get<1>(assignment));
+        std::sort(sorted_jobs.begin(), sorted_jobs.end(),
+            [](const auto& a, const auto& b) { return std::get<1>(a) < std::get<1>(b); });
 
-        // for(const auto& item: computation_propagators)
-        // {
-        //     auto& key = item.first;
+        // Collect unique time points (when jobs start or end)
+        std::set<int> time_point_set;
+        for (const auto& [key, start_time] : sorted_jobs)
+        {
+            int duration = std::max(propagators[key].max_n_segment, 1);
+            time_point_set.insert(start_time);
+            time_point_set.insert(start_time + duration);
+        }
+        time_points.assign(time_point_set.begin(), time_point_set.end());
 
-        //     int max_n_segment = item.second.max_n_segment;
-        //     //int monomer_type = item.second.monomer_type;
-        //     int height = item.second.height;
-        //     auto& deps = item.second.deps;
+        // Build schedule: for each time interval, list active jobs
+        std::vector<std::vector<std::string>::iterator> stream_iters(n_streams);
+        for (int s = 0; s < n_streams; s++)
+            stream_iters[s] = stream_jobs[s].begin();
 
-        //     if (current_height < height)
-        //     {
-        //         propagator_hierarchies.push_back(same_height_propagators);
-        //         same_height_propagators.clear();
-        //         current_height = height;
-        //     }
-        //     same_height_propagators.push_back(key);
-        // }
+        for (size_t t = 0; t + 1 < time_points.size(); t++)
+        {
+            int interval_start = time_points[t];
+            int interval_end = time_points[t + 1];
+            std::vector<std::tuple<std::string, int, int>> active_jobs;
 
-        // propagator_hierarchies.push_back(same_height_propagators);
-        // same_height_propagators.clear();
-        return propagator_hierarchies;
+            for (int s = 0; s < n_streams; s++)
+            {
+                // Advance iterator if current job has finished
+                if (stream_iters[s] != stream_jobs[s].end())
+                {
+                    int job_end = std::get<2>(job_assignment[*stream_iters[s]]);
+                    if (interval_end > job_end)
+                        stream_iters[s]++;
+                }
+
+                // Check if current job is active in this interval
+                if (stream_iters[s] != stream_jobs[s].end())
+                {
+                    const std::string& key = *stream_iters[s];
+                    int job_start = std::get<1>(job_assignment[key]);
+                    int job_end = std::get<2>(job_assignment[key]);
+
+                    if (interval_start >= job_start && interval_end <= job_end)
+                    {
+                        int segment_from, segment_to;
+                        if (propagators[key].max_n_segment == 0)
+                        {
+                            segment_from = 0;
+                            segment_to = 0;
+                        }
+                        else
+                        {
+                            segment_from = interval_start - job_start;
+                            segment_to = interval_end - job_start;
+                        }
+                        active_jobs.emplace_back(key, segment_from, segment_to);
+                    }
+                }
+            }
+            schedule.push_back(active_jobs);
+        }
     }
-    catch(std::exception& exc)
+    catch (std::exception& exc)
     {
         throw_without_line_number(exc.what());
     }
 }
 
-/**
- * @brief Get the computed execution schedule.
- *
- * Returns the schedule as time slices, where each slice contains
- * (key, start_segment, end_segment) for each active propagator.
- *
- * @return Reference to schedule vector
- */
 std::vector<std::vector<std::tuple<std::string, int, int>>>& Scheduler::get_schedule()
 {
     return schedule;
 }
 
-/**
- * @brief Print schedule for debugging.
- *
- * Displays each propagator's timing and the full schedule with
- * time slices and parallel job assignments.
- *
- * @param computation_propagators Map of propagator metadata for display
- */
-void Scheduler::display(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators)
+void Scheduler::display(std::map<std::string, ComputationEdge, ComparePropagatorKey> propagators)
 {
-    for(size_t i=0; i<sorted_propagator_with_start_time.size(); i++)
+    std::cout << "=== Propagator Schedule ===" << std::endl;
+
+    for (const auto& [key, start_time] : sorted_jobs)
     {
-        auto& key = std::get<0>(sorted_propagator_with_start_time[i]);
-        int start_time = std::get<1>(sorted_propagator_with_start_time[i]);
-        int finish_time = start_time + computation_propagators[key].max_n_segment;
-        std::cout << key << ":\n\t";
-        std::cout << "max_n_segment: " << computation_propagators[key].max_n_segment;
-        std::cout << ", start_time: " << start_time;
-        std::cout << ", finish_time: " << finish_time << std::endl;
+        int duration = propagators[key].max_n_segment;
+        std::cout << key << ":" << std::endl;
+        std::cout << "    n_segment=" << duration
+                  << ", start=" << start_time
+                  << ", end=" << start_time + duration << std::endl;
     }
 
-    for(size_t i=0; i<schedule.size(); i++)
+    std::cout << "\n=== Time Slices ===" << std::endl;
+    for (size_t t = 0; t < schedule.size(); t++)
     {
-        std::cout << "time: " << time_stamp[i]+1 << "-" << time_stamp[i+1] << std::endl;
-        auto& parallel_job = schedule[i];
-        for(size_t j=0; j<parallel_job.size(); j++)
-            std::cout << "\t" << std::get<0>(parallel_job[j]) << ": " <<  std::get<1>(parallel_job[j]) << ", " <<  std::get<2>(parallel_job[j]) << std::endl;
+        std::cout << "Time " << time_points[t] << "-" << time_points[t + 1] << ":" << std::endl;
+        for (const auto& [key, from, to] : schedule[t])
+            std::cout << "    " << key << ": segments " << from << "-" << to << std::endl;
     }
 }
-

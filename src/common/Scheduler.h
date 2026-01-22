@@ -20,35 +20,13 @@
  *
  * The schedule is organized by time intervals:
  * ```
- * Time 0-10: Stream 0 computes A10, Stream 1 computes B10
- * Time 10-20: Stream 0 computes C10(A10), Stream 1 continues B10
- * Time 20-30: Stream 0 computes D20(B10,C10)
+ * Time 0-10: Stream 0 computes A+0, Stream 1 computes B+0
+ * Time 10-20: Stream 0 computes (A)C+0, Stream 1 continues B+0
+ * Time 20-30: Stream 0 computes (BC)D+0
  * ```
  *
  * @see PropagatorComputationOptimizer for propagator dependency analysis
  * @see CudaComputationContinuous for multi-stream execution
- *
- * @example
- * @code
- * // Create scheduler for 4 CUDA streams
- * int N_STREAM = 4;
- * auto& propagators = optimizer.get_computation_propagators();
- * Scheduler scheduler(propagators, N_STREAM);
- *
- * // Get the schedule
- * auto& schedule = scheduler.get_schedule();
- *
- * // Each time interval contains jobs: (propagator_key, stream_id, contour_steps)
- * for (size_t t = 0; t < schedule.size(); t++) {
- *     for (auto& [key, stream, steps] : schedule[t]) {
- *         std::cout << "Time " << t << ": Stream " << stream
- *                   << " computes " << key << " for " << steps << " steps\n";
- *     }
- * }
- *
- * // Display human-readable schedule
- * scheduler.display(propagators);
- * @endcode
  */
 
 #ifndef SCHEDULER_H_
@@ -73,10 +51,10 @@
  *
  * **Algorithm:**
  *
- * 1. Build dependency hierarchy (propagators grouped by height in tree)
- * 2. For each time point, assign ready propagators to available streams
- * 3. Track when each propagator finishes to resolve dependencies
- * 4. Output: list of (propagator, stream, duration) for each time interval
+ * 1. Group propagators by dependency height (height 0 = no dependencies)
+ * 2. For each propagator, compute when dependencies are resolved
+ * 3. Greedily assign to stream with earliest available time
+ * 4. Slice execution into time intervals for interleaved progress
  *
  * **Multi-Stream Benefits:**
  *
@@ -91,61 +69,63 @@ class Scheduler
 {
 private:
     /**
-     * @brief Stream assignment for each propagator.
+     * @brief Job assignment for each propagator.
      *
-     * Maps propagator key to (stream_number, start_time, finish_time).
+     * Maps propagator key to (stream_id, start_time, end_time).
      */
-    std::map<std::string, std::tuple<int, int, int>, ComparePropagatorKey> stream_start_finish;
+    std::map<std::string, std::tuple<int, int, int>, ComparePropagatorKey> job_assignment;
 
     /**
      * @brief Time when each propagator's dependencies are resolved.
-     *
-     * A propagator can start computing at resolved_time[key].
      */
-    std::map<std::string, int> resolved_time;
+    std::map<std::string, int> dependency_resolved_time;
 
     /**
-     * @brief Propagators sorted by start time.
-     *
-     * List of (propagator_key, start_time) for scheduling order.
+     * @brief Propagators sorted by start time: (key, start_time).
      */
-    std::vector<std::tuple<std::string, int>> sorted_propagator_with_start_time;
+    std::vector<std::tuple<std::string, int>> sorted_jobs;
 
     /**
-     * @brief Discrete time points where schedule changes.
-     *
-     * Times when jobs start or finish.
+     * @brief Discrete time points where schedule changes (job starts or ends).
      */
-    std::vector<int> time_stamp;
+    std::vector<int> time_points;
 
     /**
      * @brief The computed schedule.
      *
      * schedule[t] contains jobs active during time interval t.
-     * Each job is (propagator_key, stream_id, n_contour_steps).
+     * Each job is (propagator_key, segment_from, segment_to).
      */
     std::vector<std::vector<std::tuple<std::string, int, int>>> schedule;
 
     /**
      * @brief Group propagators by dependency height.
      *
-     * @param computation_propagators Map of propagator keys to ComputationEdge
+     * @param propagators Map of propagator keys to ComputationEdge
      * @return Vector of propagator groups, index = height level
      */
-    std::vector<std::vector<std::string>> make_propagator_hierarchies(
-        std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators);
+    std::vector<std::vector<std::string>> group_by_height(
+        const std::map<std::string, ComputationEdge, ComparePropagatorKey>& propagators);
+
+    /**
+     * @brief Find stream with earliest available time.
+     *
+     * @param stream_available_time Vector of when each stream becomes free
+     * @return Index of the stream with minimum available time
+     */
+    int find_earliest_stream(const std::vector<int>& stream_available_time);
 
 public:
     /**
      * @brief Construct scheduler and compute the execution schedule.
      *
-     * @param computation_propagators Map of propagators with dependencies
-     * @param N_STREAM               Number of parallel streams available
+     * @param propagators Map of propagators with dependencies
+     * @param n_streams   Number of parallel streams available
      *
-     * @note On CPU, typically use N_STREAM=1 (OpenMP parallelizes within each propagator).
-     *       On GPU, use N_STREAM=4 for good performance.
+     * @note On CPU, typically use n_streams=1 (OpenMP parallelizes within each propagator).
+     *       On GPU, use n_streams=4 for good performance.
      */
-    Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators, const int N_STREAM);
+    Scheduler(std::map<std::string, ComputationEdge, ComparePropagatorKey> propagators, int n_streams);
 
     /**
      * @brief Destructor.
@@ -156,18 +136,15 @@ public:
      * @brief Get the computed schedule.
      *
      * @return Reference to schedule vector. Each element is a time interval
-     *         containing list of (key, stream_id, n_steps) tuples.
+     *         containing list of (key, segment_from, segment_to) tuples.
      */
     std::vector<std::vector<std::tuple<std::string, int, int>>>& get_schedule();
 
     /**
      * @brief Display schedule in human-readable format.
      *
-     * Prints the schedule showing which propagators run on which streams
-     * at each time point.
-     *
-     * @param computation_propagators Propagator information for display
+     * @param propagators Propagator information for display
      */
-    void display(std::map<std::string, ComputationEdge, ComparePropagatorKey> computation_propagators);
+    void display(std::map<std::string, ComputationEdge, ComparePropagatorKey> propagators);
 };
 #endif
