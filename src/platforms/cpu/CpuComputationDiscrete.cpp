@@ -69,7 +69,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
         std::string env_omp_num_threads(ENV_OMP_NUM_THREADS ? ENV_OMP_NUM_THREADS  : "");
         if (env_omp_num_threads.empty())
-            this->n_streams = 8;
+            this->n_streams = 4;
         else
             this->n_streams = std::stoi(env_omp_num_threads);
         #ifndef NDEBUG

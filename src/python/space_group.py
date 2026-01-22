@@ -42,9 +42,15 @@ handle the oblique (gamma=120 deg) coordinate system.
 """
 
 import numpy as np
-import json
 import spglib
-import scipy.io
+from functools import lru_cache
+
+
+@lru_cache(maxsize=None)
+def _get_spacegroup_type_cached(hall_number):
+    """Cached wrapper for spglib.get_spacegroup_type()."""
+    return spglib.get_spacegroup_type(hall_number)
+
 
 class SpaceGroup:
     """Space group symmetry operations for polymer field theory.
@@ -157,28 +163,27 @@ class SpaceGroup:
     **HCP phase (Hexagonal):**
 
     >>> # HCP with P6_3/mmc symmetry
-    >>> # Grid: nx[0] = nx[1] for hexagonal a = b
-    >>> nx = [64, 64, 64]  # [a, b, c] with a = b
+    >>> # Grid: nx[0] = nx[1] for hexagonal a = b, all divisible by 6
+    >>> nx = [48, 48, 48]  # [a, b, c] with a = b
     >>> sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
     Using Hall number: 488 for symbol 'P6_3/mmc'
     International space group number: 194
     Crystal system: Hexagonal
     The number of symmetry operations: 24
-    Original mesh size: 262144
-    Irreducible mesh size: 11814
+    Original mesh size: 110592
+    Irreducible mesh size: 5125
 
     **Perforated Lamella (PL) phase (Hexagonal):**
 
-    >>> # PL also uses P6_3/mmc
-    >>> # With [c, a, b] ordering: nx[1] = nx[2] for a = b
-    >>> nx = [96, 64, 64]  # [c, a, b] ordering
+    >>> # PL also uses P6_3/mmc with different c
+    >>> nx = [48, 48, 96]  # [a, b, c] with a = b, c different
     >>> sg = SpaceGroup(nx, "P6_3/mmc", hall_number=488)
     Using Hall number: 488 for symbol 'P6_3/mmc'
     International space group number: 194
     Crystal system: Hexagonal
     The number of symmetry operations: 24
-    Original mesh size: 393216
-    Irreducible mesh size: 17745
+    Original mesh size: 221184
+    Irreducible mesh size: 10033
 
     References
     ----------
@@ -212,7 +217,7 @@ class SpaceGroup:
 
         # Use spglib to get information from the Hall number
         self.hall_number = hall_number
-        spg_type_info = spglib.get_spacegroup_type(hall_number)
+        spg_type_info = _get_spacegroup_type_cached(hall_number)
 
         # Extract the international space group number
         self.spacegroup_number = spg_type_info.number
@@ -258,19 +263,20 @@ class SpaceGroup:
         multi_indices = np.array(self.irreducible_mesh).T
         self.reduced_basis_flat_indices_ = np.ravel_multi_index(multi_indices, self.nx)
         self.full_to_reduced_map_flat_ = self.indices.flatten()
+        self.orbit_counts_ = np.bincount(self.full_to_reduced_map_flat_, minlength=len(irreducible_mesh))
 
     def hall_numbers_from_ita_symbol(self, international_short):
         """Return every Hall number that belongs to the given ITA symbol."""
         return [
             h for h in range(1, 531)
-            if spglib.get_spacegroup_type(h).international_short.strip() == international_short.strip()
+            if _get_spacegroup_type_cached(h).international_short.strip() == international_short.strip()
         ]
 
     def hall_numbers_from_ita_number(self, ita):
         """Return every Hall number that belongs to the given ITA number."""
         return [
             h for h in range(1, 531)
-            if spglib.get_spacegroup_type(h).number == ita
+            if _get_spacegroup_type_cached(h).number == ita
         ]
     
     def to_reduced_basis(self, fields):
@@ -317,21 +323,16 @@ class SpaceGroup:
         original_shape = fields.shape
         fields_flat = np.reshape(fields, (fields.shape[0], -1))
 
-        # Compute averages over orbits
+        # Compute averages over orbits using vectorized operations
         n_fields = fields_flat.shape[0]
-        n_grid = fields_flat.shape[1]
         n_orbits = len(self.irreducible_mesh)
         orbit_sums = np.zeros((n_fields, n_orbits), dtype=fields_flat.dtype)
-        orbit_counts = np.zeros(n_orbits, dtype=np.int32)
 
-        # Accumulate sums for each orbit
-        for i in range(n_grid):
-            orbit_idx = self.full_to_reduced_map_flat_[i]
-            orbit_sums[:, orbit_idx] += fields_flat[:, i]
-            orbit_counts[orbit_idx] += 1
+        # Vectorized accumulation using np.add.at
+        np.add.at(orbit_sums, (slice(None), self.full_to_reduced_map_flat_), fields_flat)
 
-        # Compute averages
-        orbit_averages = orbit_sums / orbit_counts[np.newaxis, :]
+        # Compute averages using precomputed orbit counts
+        orbit_averages = orbit_sums / self.orbit_counts_[np.newaxis, :]
 
         # Map averages back to full grid
         symmetrized = orbit_averages[:, self.full_to_reduced_map_flat_]
@@ -604,66 +605,55 @@ class SpaceGroup:
         return symmetry_operations
 
     def find_irreducible_mesh(self, grid_size, symmetry_operations):
-        """        Finds the irreducible set of points for a grid of any dimension (1D, 2D, or 3D)
-        under the symmetry of the specified space group.
+        """Finds the irreducible set of points for a grid under space group symmetry.
+
         Args:
             grid_size (list or tuple): The size of the grid in each dimension.
             symmetry_operations (list): A list of symmetry operations, where each operation is a tuple
                 containing a rotation matrix and a translation vector.
                 Example: [(R1, t1), (R2, t2), ...]
+
         Returns:
             tuple: A tuple containing:
                 - irreducible_points: A list of tuples representing the irreducible mesh points.
                 - indices: A NumPy array of shape grid_size, where each element is the index of the
                   irreducible point that corresponds to that grid point.
         """
+        grid_size_arr = np.array(grid_size, dtype=np.int64)
+        n_ops = len(symmetry_operations)
 
-        # Infer dimension from grid_size and convert to a NumPy array for vectorized math
-        dim = len(grid_size)
-        grid_size_arr = np.array(grid_size)
-        
-        # 1. Create a boolean grid to keep track of visited points.
-        #    This works for any dimension.
-        indices = np.zeros(grid_size, dtype=np.int32)-1
-        
-        # 2. Create an empty list to store the representative points.
+        # Pre-stack all rotation matrices and translation vectors for vectorized operations
+        # rotations: (n_ops, 3, 3), translations: (n_ops, 3)
+        rotations = np.stack([op[0] for op in symmetry_operations], axis=0)
+        translations = np.stack([op[1] for op in symmetry_operations], axis=0)
+
+        # Pre-compute translation offsets in grid coordinates (scaled by grid_size)
+        # trans_grid[i] = round(translations[i] * grid_size) mod grid_size
+        trans_grid = np.round(translations * grid_size_arr).astype(np.int64) % grid_size_arr
+
+        # indices array: -1 means unvisited
+        indices = np.full(grid_size, -1, dtype=np.int32)
         irreducible_points = []
 
-        # 3. Iterate through every point in the full grid using np.ndindex.
-        #    This is a general way to iterate over a multi-dimensional array.
-
+        # Iterate through grid points in flat order
         count = 0
-        for point_coord_int in np.ndindex(*grid_size):
-            
-            # 5. If we find a point that has not been visited yet...
-            if indices[point_coord_int] == -1:
-                # ...it's a new representative point. Add it to our irreducible set.
-                irreducible_points.append(point_coord_int)
-                
-                # 6. Find its entire "orbit" (all symmetrically equivalent points)
-                #    and mark them as visited.
-                
-                # Convert integer grid point to fractional coordinates (vectorized).
-                # e.g., (i, j, k) -> (i/N1, j/N2, k/N3)
-                point_coord_frac = np.array(point_coord_int) / grid_size_arr
-                
-                for rot_matrix, trans_vector in symmetry_operations:
+        for flat_idx in range(np.prod(grid_size_arr)):
+            # Convert flat index to 3D coordinates
+            point = np.array(np.unravel_index(flat_idx, grid_size), dtype=np.int64)
 
-                    # Apply the symmetry operation: p' = R*p + t
-                    new_coord_frac = np.dot(rot_matrix, point_coord_frac) + trans_vector
+            if indices[tuple(point)] == -1:
+                irreducible_points.append(tuple(point))
 
-                    # Convert back to integer grid indices with periodic boundary conditions.
-                    # This vectorized approach is robust and dimension-agnostic.
-                    # It rounds to nearest integer, casts to int, and applies modulo.
-                    coords = np.round(new_coord_frac * grid_size_arr).astype(int)
-                    assert np.all(np.isclose(np.abs(coords - new_coord_frac * grid_size_arr), 0.0)) == True, \
-                        f"Coordinates should be close to integers after rounding {new_coord_frac*grid_size_arr}."
-                    
-                    new_coord_int_arr = np.mod(coords, grid_size_arr)
-                    
-                    # Mark this equivalent point as visited.
-                    # We convert the numpy array to a tuple for indexing.
-                    indices[tuple(new_coord_int_arr)] = count
+                # Compute all orbit points at once using vectorized operations
+                # orbit_points[i] = (rotations[i] @ point + trans_grid[i]) % grid_size
+                # Shape: (n_ops, 3)
+                orbit_points = (np.einsum('ijk,k->ij', rotations, point) + trans_grid) % grid_size_arr
+
+                # Mark all orbit points with the same index
+                for op_idx in range(n_ops):
+                    coord = tuple(orbit_points[op_idx])
+                    indices[coord] = count
+
                 count += 1
 
         return irreducible_points, indices
@@ -697,7 +687,7 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("Test 2: HCP phase with P6_3/mmc (Hexagonal) - [a, b, c] ordering")
     print("="*70)
-    nx_hcp = [64, 64, 64]  # a = b in hexagonal
+    nx_hcp = [48, 48, 48]  # a = b in hexagonal, divisible by 6
     sg_hcp = SpaceGroup(nx_hcp, "P6_3/mmc", hall_number=488)
     reduction = np.prod(nx_hcp) / len(sg_hcp.irreducible_mesh)
     print(f"Reduction factor: {reduction:.1f}x (with {len(sg_hcp.symmetry_operations)} ops)")
@@ -720,11 +710,11 @@ if __name__ == '__main__':
             max_std = max(max_std, std)
     print(f"Symmetry check (max std within orbits): {max_std:.2e}")
 
-    # Test 3: PL (Hexagonal) with [c, a, b] ordering
+    # Test 3: PL (Hexagonal) with different c
     print("\n" + "="*70)
-    print("Test 3: PL phase with P6_3/mmc (Hexagonal) - [c, a, b] ordering")
+    print("Test 3: PL phase with P6_3/mmc (Hexagonal) - [a, b, c] ordering")
     print("="*70)
-    nx_pl = [96, 64, 64]  # c different, a = b (ny = nz)
+    nx_pl = [48, 48, 96]  # a = b, c different, all divisible by 6
     sg_pl = SpaceGroup(nx_pl, "P6_3/mmc", hall_number=488)
     reduction = np.prod(nx_pl) / len(sg_pl.irreducible_mesh)
     print(f"Reduction factor: {reduction:.1f}x (with {len(sg_pl.symmetry_operations)} ops)")

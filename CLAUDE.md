@@ -15,8 +15,11 @@ mkdir build && cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release
 make -j8
 
-# Run all tests
-make test
+# Run quick tests (installation verification, ~5 sec)
+ctest -L quick
+
+# Run full tests (development validation, ~3 min)
+ctest
 
 # Install Python modules to conda environment
 make install
@@ -44,13 +47,25 @@ export OMP_STACKSIZE=1G
 
 ## Testing
 
-### C++ Tests
+### Quick vs Full Tests
+
+Two test modes are available:
+
+| Mode | Command | Tests | Time | Purpose |
+|------|---------|-------|------|---------|
+| **Quick** | `ctest -L quick` | 8 | ~5 sec | Installation verification |
+| **Full** | `ctest` | 75 | ~3 min | Development validation |
+
+### Running Tests
 ```bash
 # From build directory
 cd build
 
-# Run all tests
-make test
+# Quick tests (for users, installation verification)
+ctest -L quick
+
+# Full tests (for development)
+ctest
 
 # Run specific test (example)
 ./tests/TestPseudoBranchedContinuous3D
@@ -61,14 +76,6 @@ ctest -V
 
 # Run specific test pattern
 ctest -R Pseudo  # runs all tests matching "Pseudo"
-```
-
-### Python Tests
-```bash
-# From repository root
-python tests/TestNumPyFFT1D.py
-python tests/TestNumPyFFT2D.py
-python tests/TestNumPyFFT3D.py
 ```
 
 ### Performance and Accuracy Benchmarks
