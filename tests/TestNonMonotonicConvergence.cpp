@@ -251,11 +251,13 @@ int main()
 
         // Test configurations: (numerical_method, chain_model)
         // All methods now use per-block local_ds for the Boltzmann factor
+        // Note: Discrete chains are not tested here because f=0.375 is not an
+        // integer multiple of ds=1/Ns for the Ns values tested (12, 13, 20, 21).
+        // Discrete chains require block lengths to be integer multiples of ds.
         std::vector<std::pair<std::string, std::string>> configs = {
             {"rqm4", "Continuous"},
             {"rk2", "Continuous"},
             {"etdrk4", "Continuous"},
-            {"pseudospectral", "Discrete"},
         };
 
         // Get available platforms

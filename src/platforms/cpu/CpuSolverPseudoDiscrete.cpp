@@ -56,7 +56,7 @@ CpuSolverPseudoDiscrete<T>::CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molec
 
         // Create exp_dw vectors for each ds_index and monomer type
         // Also register local_ds values with Pseudo for boltz_bond computation
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->pseudo->add_ds_value(ds_idx, local_ds);
@@ -99,11 +99,11 @@ const double* CpuSolverPseudoDiscrete<T>::get_stress_boltz_bond(
     std::string monomer_type, bool is_half_bond_length) const
 {
     // Discrete chains include boltz_bond factor in stress computation
-    // Discrete chains always use ds_index=1 (global ds)
+    // Discrete chains always use ds_index=0 (global ds)
     if (is_half_bond_length)
-        return this->pseudo->get_boltz_bond_half(monomer_type, 1);
+        return this->pseudo->get_boltz_bond_half(monomer_type, 0);
     else
-        return this->pseudo->get_boltz_bond(monomer_type, 1);
+        return this->pseudo->get_boltz_bond(monomer_type, 0);
 }
 
 //------------------------------------------------------------------------------
@@ -119,7 +119,7 @@ void CpuSolverPseudoDiscrete<T>::update_dw(std::map<std::string, const T*> w_inp
     int n_unique_ds = mapping.get_n_unique_ds();
 
     // Compute exp_dw for each ds_index and monomer type
-    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+    for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
     {
         double local_ds = mapping.get_ds_from_index(ds_idx);
 
@@ -198,8 +198,8 @@ void CpuSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         int coeff_size = this->is_periodic_ ? M_COMPLEX * 2 : M_COMPLEX;
         std::vector<double> k_q_in(coeff_size);
 
-        // Discrete chains always use ds_index=1 (global ds)
-        const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, 1);
+        // Discrete chains always use ds_index=0 (global ds)
+        const double* _boltz_bond_half = this->pseudo->get_boltz_bond_half(monomer_type, 0);
 
         // Forward transform -> multiply by half-bond function ĝ^(1/2)(k) -> Backward transform
         this->transform_forward(q_in, k_q_in.data());

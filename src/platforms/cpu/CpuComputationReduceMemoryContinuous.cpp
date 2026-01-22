@@ -605,7 +605,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+            T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -724,9 +724,9 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
 
         // Get ds_index from keys (left and right should have the same ds_index for the same block)
         int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
-        if (ds_index_left < 1) ds_index_left = 1;
+        if (ds_index_left < 0) ds_index_left = 0;
         int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
-        if (ds_index_right < 1) ds_index_right = 1;
+        if (ds_index_right < 0) ds_index_right = 0;
 
         // Initialize phi to zero
         for(int i=0; i<M; i++)
@@ -950,9 +950,9 @@ void CpuComputationReduceMemoryContinuous<T>::compute_stress()
 
             // Get ds_index from keys
             int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
-            if (ds_index_left < 1) ds_index_left = 1;
+            if (ds_index_left < 0) ds_index_left = 0;
             int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
-            if (ds_index_right < 1) ds_index_right = 1;
+            if (ds_index_right < 0) ds_index_right = 0;
 
             // If there is no segment
             if(N_RIGHT == 0)
@@ -1325,9 +1325,9 @@ bool CpuComputationReduceMemoryContinuous<T>::check_total_partition()
 
         // Get ds_index from keys
         int ds_index_left = PropagatorCode::get_ds_index_from_key(key_left);
-        if (ds_index_left < 1) ds_index_left = 1;
+        if (ds_index_left < 0) ds_index_left = 0;
         int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
-        if (ds_index_right < 1) ds_index_right = 1;
+        if (ds_index_right < 0) ds_index_right = 0;
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << N_LEFT << ", " << N_RIGHT << ", " << n_propagators << ", " << n_repeated << std::endl;

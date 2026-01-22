@@ -362,7 +362,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 auto& junction_ends = this->propagator_computation_optimizer->get_computation_propagator(key).junction_ends;
                 auto monomer_type = this->propagator_computation_optimizer->get_computation_propagator(key).monomer_type;
 
-                CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
+                CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
                 // Calculate one block end
                 if(n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -434,11 +434,11 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                         }
                         else
                         {
-                            // Discrete chains always use ds_index=1 (global ds)
+                            // Discrete chains always use ds_index=0 (global ds)
                             this->propagator_solver->advance_propagator(
                                 STREAM,
                                 this->d_q_one[STREAM][0], this->d_q_one[STREAM][0],
-                                monomer_type, this->d_q_mask, 1);
+                                monomer_type, this->d_q_mask, 0);
                         }
 
                         #ifndef NDEBUG
@@ -535,12 +535,12 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
                 // q(r,s)
                 for(int n=n_segment_from; n<n_segment_to; n++)
                 {
-                    // Calculate propagators - discrete chains always use ds_index=1 (global ds)
+                    // Calculate propagators - discrete chains always use ds_index=0 (global ds)
                     this->propagator_solver->advance_propagator(
                         STREAM,
                         this->d_q_one[STREAM][prev],
                         this->d_q_one[STREAM][next],
-                        monomer_type, this->d_q_mask, 1);
+                        monomer_type, this->d_q_mask, 0);
 
                     std::swap(prev, next);
 
@@ -590,7 +590,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_propagators(
             T *propagator_right = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
+            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
             // Copy propagators from host to device
             gpu_error_check(cudaMemcpy(d_q_left, propagator_left,  sizeof(T)*M, cudaMemcpyHostToDevice));
@@ -641,12 +641,12 @@ std::vector<T*> CudaComputationReduceMemoryDiscrete<T>::recalculate_propagator(
             // Copy previous propagator to device
             gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_out[n-1], sizeof(T)*M, cudaMemcpyHostToDevice));
 
-            // Advance propagator - discrete chains always use ds_index=1 (global ds)
+            // Advance propagator - discrete chains always use ds_index=0 (global ds)
             this->propagator_solver->advance_propagator(
                 STREAM,
                 this->d_q_one[STREAM][0],
                 this->d_q_one[STREAM][1],
-                monomer_type, this->d_q_mask, 1);
+                monomer_type, this->d_q_mask, 0);
 
             // Copy result back to host
             gpu_error_check(cudaMemcpy(q_out[n], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
@@ -700,7 +700,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_concentrations()
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
+            CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
             this->single_solvent_partitions[s] = dynamic_cast<CudaComputationBox<T>*>(this->cb)->integral_device(_d_exp_dw)/this->cb->get_volume();
 
@@ -756,7 +756,7 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
 
         int p = std::get<0>(block_key);
         int n_repeated = this->propagator_computation_optimizer->get_computation_block(block_key).n_repeated;
-        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;
@@ -819,7 +819,7 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
             gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
             for (int i = check_pos; i < left_compute_start; i++)
             {
-                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
 
@@ -827,7 +827,7 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
             gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
             for (int i = 1; i <= left_end - left_compute_start; i++)
             {
-                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                 gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
@@ -846,7 +846,7 @@ void CudaComputationReduceMemoryDiscrete<T>::calculate_phi_one_block(
                 {
                     q_right_next = this->q_pair[prev_right];
                     gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_right_prev, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 1);
+                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 0);
                     gpu_error_check(cudaMemcpy(q_right_next, this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     std::swap(prev_right, next_right);
                 }
@@ -973,7 +973,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
                     for (int i = left_check; i < N_LEFT; i++)
                     {
-                        this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                        this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                         gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
                     }
                     gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
@@ -1028,7 +1028,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
                 for (int i = check_pos; i < left_compute_start; i++)
                 {
-                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                     gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
                 }
 
@@ -1036,7 +1036,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                 gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 for (int i = 1; i <= left_end - left_compute_start; i++)
                 {
-                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                     gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
                 }
@@ -1057,7 +1057,7 @@ void CudaComputationReduceMemoryDiscrete<T>::compute_stress()
                     {
                         q_right_next = this->q_pair[prev_right];
                         gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_right_prev, sizeof(T)*M, cudaMemcpyHostToDevice));
-                        this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 1);
+                        this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 0);
                         gpu_error_check(cudaMemcpy(q_right_next, this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                         std::swap(prev_right, next_right);
                     }
@@ -1247,7 +1247,7 @@ void CudaComputationReduceMemoryDiscrete<T>::get_chain_propagator(T *q_out, int 
             for (int step = check_pos; step < n; step++)
             {
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_prev, sizeof(T)*M, cudaMemcpyHostToDevice));
-                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type, this->d_q_mask, 1);
+                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type, this->d_q_mask, 0);
                 gpu_error_check(cudaMemcpy(q_next, this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
 
                 std::swap(q_prev, q_next);
@@ -1298,7 +1298,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
         int n_propagators = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[1][monomer_type];
+        CuDeviceData<T> *_d_exp_dw = this->propagator_solver->d_exp_dw[0][monomer_type];
 
         // Get monomer types for recalculation
         std::string monomer_type_left = this->propagator_computation_optimizer->get_computation_propagator(key_left).monomer_type;
@@ -1343,7 +1343,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
             gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], it->second, sizeof(T)*M, cudaMemcpyHostToDevice));
             for (int i = check_pos; i < left_compute_start; i++)
             {
-                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
 
@@ -1351,7 +1351,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
             gpu_error_check(cudaMemcpy(this->q_recal[0], this->d_q_one[STREAM][0], sizeof(T)*M, cudaMemcpyDeviceToHost));
             for (int i = 1; i <= left_end - left_compute_start; i++)
             {
-                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 1);
+                this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_left, this->d_q_mask, 0);
                 gpu_error_check(cudaMemcpy(this->q_recal[i], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                 gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToDevice));
             }
@@ -1370,7 +1370,7 @@ bool CudaComputationReduceMemoryDiscrete<T>::check_total_partition()
                 {
                     q_right_next = this->q_pair[prev_right];
                     gpu_error_check(cudaMemcpy(this->d_q_one[STREAM][0], q_right_prev, sizeof(T)*M, cudaMemcpyHostToDevice));
-                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 1);
+                    this->propagator_solver->advance_propagator(STREAM, this->d_q_one[STREAM][0], this->d_q_one[STREAM][1], monomer_type_right, this->d_q_mask, 0);
                     gpu_error_check(cudaMemcpy(q_right_next, this->d_q_one[STREAM][1], sizeof(T)*M, cudaMemcpyDeviceToHost));
                     std::swap(prev_right, next_right);
                 }

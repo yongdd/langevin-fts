@@ -48,7 +48,10 @@ public:
      * @brief Aggregate propagators for continuous chain model.
      *
      * Merges branches with the same segment count into aggregated computations.
-     * Creates new keys with bracket notation (e.g., "[A10:2,B10]C").
+     * Creates new keys with bracket notation (e.g., "[A0:2,B0]C+0").
+     *
+     * For continuous chains, sliced propagators always have n_segment=0,
+     * which corresponds to length_index=0. Numbers inside brackets are "0".
      *
      * **Algorithm:**
      *

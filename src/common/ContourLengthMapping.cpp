@@ -218,13 +218,20 @@ void ContourLengthMapping::finalize()
 /**
  * @brief Get integer index for a contour length.
  *
- * @return 1-based index
+ * @return 1-based index for actual blocks, 0 for contour_length=0 (aggregation slicing)
  */
 int ContourLengthMapping::get_length_index(double contour_length) const
 {
     if (!is_finalized)
     {
         throw_with_line_number("Must call finalize() before get_length_index().");
+    }
+
+    // Special case: contour_length=0 maps to length_index=0
+    // This is used for continuous chain aggregation slicing
+    if (is_equal(contour_length, 0.0))
+    {
+        return 0;
     }
 
     int idx = find_index(unique_lengths, contour_length);
@@ -256,7 +263,7 @@ int ContourLengthMapping::get_ds_index(double contour_length) const
                                " not found in mapping.");
     }
 
-    return length_to_ds_index[len_idx] + 1;  // 1-based index
+    return length_to_ds_index[len_idx];  // 0-based index
 }
 
 /**
@@ -267,6 +274,12 @@ int ContourLengthMapping::get_n_segment(double contour_length) const
     if (!is_finalized)
     {
         throw_with_line_number("Must call finalize() before get_n_segment().");
+    }
+
+    // Special case: contour_length=0 has n_segment=0 (aggregation slicing)
+    if (is_equal(contour_length, 0.0))
+    {
+        return 0;
     }
 
     int idx = find_index(unique_lengths, contour_length);
@@ -302,13 +315,19 @@ double ContourLengthMapping::get_local_ds(double contour_length) const
 /**
  * @brief Get contour length from its index.
  *
- * @param index 1-based index
+ * @param index 1-based index for actual blocks, 0 for aggregation slicing
  */
 double ContourLengthMapping::get_length_from_index(int index) const
 {
     if (!is_finalized)
     {
         throw_with_line_number("Must call finalize() before get_length_from_index().");
+    }
+
+    // Special case: index=0 corresponds to contour_length=0 (aggregation slicing)
+    if (index == 0)
+    {
+        return 0.0;
     }
 
     if (index < 1 || index > static_cast<int>(unique_lengths.size()))
@@ -323,7 +342,7 @@ double ContourLengthMapping::get_length_from_index(int index) const
 /**
  * @brief Get local Δs from its index.
  *
- * @param index 1-based index
+ * @param index 0-based index
  */
 double ContourLengthMapping::get_ds_from_index(int index) const
 {
@@ -332,13 +351,36 @@ double ContourLengthMapping::get_ds_from_index(int index) const
         throw_with_line_number("Must call finalize() before get_ds_from_index().");
     }
 
-    if (index < 1 || index > static_cast<int>(unique_ds_values.size()))
+    if (index < 0 || index >= static_cast<int>(unique_ds_values.size()))
     {
         throw_with_line_number("Ds index " + std::to_string(index) +
-                               " out of range [1, " + std::to_string(unique_ds_values.size()) + "].");
+                               " out of range [0, " + std::to_string(unique_ds_values.size() - 1) + "].");
     }
 
-    return unique_ds_values[index - 1];
+    return unique_ds_values[index];
+}
+
+/**
+ * @brief Get length_index from n_segment and ds_index.
+ *
+ * Computes contour_length = n_segment * local_ds, then returns length_index.
+ */
+int ContourLengthMapping::get_length_index_from_n_segment(int n_segment, int ds_index) const
+{
+    if (!is_finalized)
+    {
+        throw_with_line_number("Must call finalize() before get_length_index_from_n_segment().");
+    }
+
+    // Special case: n_segment=0 → length_index=0
+    if (n_segment == 0)
+    {
+        return 0;
+    }
+
+    double local_ds = get_ds_from_index(ds_index);
+    double contour_length = n_segment * local_ds;
+    return get_length_index(contour_length);
 }
 
 /**
@@ -396,14 +438,14 @@ void ContourLengthMapping::print_mapping() const
         std::cout << "  Index " << (i + 1) << ": length = " << unique_lengths[i]
                   << ", n_segment = " << length_to_n_segment[i]
                   << ", local_ds = " << local_ds
-                  << ", ds_index = " << (length_to_ds_index[i] + 1) << std::endl;
+                  << ", ds_index = " << length_to_ds_index[i] << std::endl;
     }
     std::cout << std::endl;
 
     std::cout << "Unique local ds values (" << unique_ds_values.size() << "):" << std::endl;
     for (size_t i = 0; i < unique_ds_values.size(); ++i)
     {
-        std::cout << "  Index " << (i + 1) << ": ds = " << unique_ds_values[i] << std::endl;
+        std::cout << "  Index " << i << ": ds = " << unique_ds_values[i] << std::endl;
     }
     std::cout << "===========================" << std::endl;
 }

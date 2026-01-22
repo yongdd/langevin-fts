@@ -108,7 +108,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
 
         // Create d_exp_dw for each ds_index and monomer type
         // Also register local_ds values with Pseudo for boltz_bond computation
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             pseudo->add_ds_value(ds_idx, local_ds);
@@ -311,7 +311,7 @@ void CudaSolverPseudoDiscrete<T>::update_dw(std::string device, std::map<std::st
         }
 
         // Compute exp_dw for each ds_index and monomer type
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 
@@ -399,8 +399,8 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
 
         const int M = cb->get_total_grid();;
         const int M_COMPLEX = pseudo->get_total_complex_grid();
-        // Discrete chains always use ds_index=1 (global ds)
-        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, 1);
+        // Discrete chains always use ds_index=0 (global ds)
+        const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, 0);
 
         // 3D fourier discrete transform, forward and inplace
         if constexpr (std::is_same<T, double>::value)
@@ -451,16 +451,16 @@ void CudaSolverPseudoDiscrete<T>::compute_single_segment_stress(
         const double* _d_fourier_basis_yz = pseudo->get_fourier_basis_yz();
         const int* _d_negative_k_idx = pseudo->get_negative_frequency_mapping();
 
-        // Discrete chains always use ds_index=1 (global ds)
+        // Discrete chains always use ds_index=0 (global ds)
         if (is_half_bond_length)
         {
             bond_length_sq = 0.5*bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = pseudo->get_boltz_bond_half(monomer_type, 1);
+            _d_boltz_bond = pseudo->get_boltz_bond_half(monomer_type, 0);
         }
         else
         {
             bond_length_sq = bond_lengths[monomer_type]*bond_lengths[monomer_type];
-            _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, 1);
+            _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, 0);
         }
 
         const int M = this->cb->get_total_grid();

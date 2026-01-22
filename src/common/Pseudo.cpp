@@ -351,7 +351,7 @@ void update_boltz_bond_periodic_impl(
 template <typename T>
 void Pseudo<T>::update_boltz_bond_periodic()
 {
-    // Update for ds_index=1 (global ds)
+    // Update for ds_index=0 (global ds)
     update_boltz_bond_periodic_for_ds_index(1);
 }
 
@@ -361,7 +361,7 @@ void Pseudo<T>::update_boltz_bond_periodic()
 template <typename T>
 void Pseudo<T>::update_boltz_bond_mixed()
 {
-    // Update for ds_index=1 (global ds)
+    // Update for ds_index=0 (global ds)
     update_boltz_bond_mixed_for_ds_index(1);
 }
 
@@ -688,8 +688,8 @@ void Pseudo<T>::update(
 template <typename T>
 void Pseudo<T>::add_ds_value(int ds_index, double ds_value)
 {
-    if (ds_index < 1)
-        throw_with_line_number("ds_index must be >= 1, got " + std::to_string(ds_index));
+    if (ds_index < 0)
+        throw_with_line_number("ds_index must be >= 0, got " + std::to_string(ds_index));
 
     // Store the ds value
     ds_values[ds_index] = ds_value;

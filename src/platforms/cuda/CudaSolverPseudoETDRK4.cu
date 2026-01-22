@@ -96,7 +96,7 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw, exp_dw_half for each ds_index and monomer type
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
             {
@@ -193,7 +193,7 @@ CudaSolverPseudoETDRK4<T>::CudaSolverPseudoETDRK4(
         }
 
         // Initialize ETDRK4 coefficients for each ds_index
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(
@@ -403,7 +403,7 @@ void CudaSolverPseudoETDRK4<T>::update_laplacian_operator()
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             etdrk4_coefficients_[ds_idx]->update(
@@ -477,7 +477,7 @@ void CudaSolverPseudoETDRK4<T>::update_dw(std::string device, std::map<std::stri
         }
 
         // Compute exp_dw and exp_dw_half for each ds_index
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 

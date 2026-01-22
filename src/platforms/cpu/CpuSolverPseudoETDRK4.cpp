@@ -48,7 +48,7 @@ CpuSolverPseudoETDRK4<T>::CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create field vectors for each ds_index and monomer type
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for (const auto& item : molecules->get_bond_lengths())
             {
@@ -66,7 +66,7 @@ CpuSolverPseudoETDRK4<T>::CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules
         }
 
         // Initialize ETDRK4 coefficients for each ds_index
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(
@@ -134,7 +134,7 @@ void CpuSolverPseudoETDRK4<T>::update_dw(std::map<std::string, const T*> w_input
     }
 
     // Compute exp_dw for each ds_index and monomer type
-    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+    for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
     {
         double local_ds = mapping.get_ds_from_index(ds_idx);
 
@@ -305,7 +305,7 @@ void CpuSolverPseudoETDRK4<T>::update_laplacian_operator()
         const ContourLengthMapping& mapping = this->molecules->get_contour_length_mapping();
         int n_unique_ds = mapping.get_n_unique_ds();
 
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->etdrk4_coefficients_[ds_idx] = std::make_unique<ETDRK4Coefficients<T>>(

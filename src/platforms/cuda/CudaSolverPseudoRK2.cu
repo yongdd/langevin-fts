@@ -102,7 +102,7 @@ CudaSolverPseudoRK2<T>::CudaSolverPseudoRK2(
         // Create exp_dw for each ds_index and monomer_type
         // Note: RK2 doesn't need exp_dw_half (no Richardson extrapolation)
         // Also register local_ds values with Pseudo for boltz_bond computation
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             pseudo->add_ds_value(ds_idx, local_ds);
@@ -346,7 +346,7 @@ void CudaSolverPseudoRK2<T>::update_dw(std::string device, std::map<std::string,
         }
 
         // Compute exp_dw for each ds_index and monomer type
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 

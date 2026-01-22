@@ -297,12 +297,23 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 std::string dep_j = pc.get_propagator_key(j, v);
                 // std::cout << dep_j << ", " << pc.get_block(j,v).n_segment << std::endl;
 
-                // Make new key using DKN format for dep_codes (no semicolons)
-                // Convert aggregated_key (DK+M format) to code format (DKN)
-                // Strip +ds_index from aggregated_key and add n_segment_right
+                // Make new key using code format for dep_codes
+                // Convert aggregated_key (DK+M format) to code format
+                // For continuous chains: convert n_segment_right to length_index
+                // For discrete chains: use n_segment_right directly
                 size_t plus_pos = aggregated_key.rfind('+');
                 std::string agg_dk_part = (plus_pos != std::string::npos) ? aggregated_key.substr(0, plus_pos) : aggregated_key;
-                std::string agg_code = agg_dk_part + std::to_string(computation_block.n_segment_right);
+                int agg_code_suffix;
+                if (this->model_name == "continuous")
+                {
+                    int ds_idx = PropagatorCode::get_ds_index_from_key(aggregated_key);
+                    agg_code_suffix = contour_length_mapping->get_length_index_from_n_segment(computation_block.n_segment_right, ds_idx);
+                }
+                else
+                {
+                    agg_code_suffix = computation_block.n_segment_right;
+                }
+                std::string agg_code = agg_dk_part + std::to_string(agg_code_suffix);
 
                 std::string new_u_key = "(" + agg_code;
                 std::vector<std::string> sub_codes;
@@ -311,11 +322,22 @@ void PropagatorComputationOptimizer::substitute_right_keys(
                 {
                     if (k != j)
                     {
-                        // Convert propagator key (DK+M) to code format (DKN)
+                        // Convert propagator key (DK+M) to code format
+                        // For continuous chains: use length_index
+                        // For discrete chains: use n_segment
                         std::string prop_key = pc.get_propagator_key(k,v);
                         size_t prop_plus_pos = prop_key.rfind('+');
                         std::string prop_dk_part = (prop_plus_pos != std::string::npos) ? prop_key.substr(0, prop_plus_pos) : prop_key;
-                        std::string prop_code = prop_dk_part + std::to_string(pc.get_block(k,v).n_segment);
+                        int code_suffix;
+                        if (this->model_name == "continuous")
+                        {
+                            code_suffix = contour_length_mapping->get_length_index(pc.get_block(k,v).contour_length);
+                        }
+                        else
+                        {
+                            code_suffix = pc.get_block(k,v).n_segment;
+                        }
+                        std::string prop_code = prop_dk_part + std::to_string(code_suffix);
                         sub_codes.push_back(prop_code);
                     }
                 }
@@ -381,23 +403,48 @@ void PropagatorComputationOptimizer::update_computation_propagator_map(
 
         // For non-aggregated keys, the segment values in deps are length_index
         // and need to be converted to n_segment.
-        // For aggregated keys (containing '[' anywhere), the segment values are already
-        // n_segment from the slicing process, so no conversion is needed.
+        // For aggregated keys (containing '[' anywhere), the handling depends on chain model:
+        // - Continuous chains: segment values are length_index (0 for slicing), need conversion
+        // - Discrete chains: segment values are n_segment, no conversion needed
         // Keys containing '[' include:
-        // - Direct aggregated keys like "[A3,B2]C+1"
-        // - Mixed keys from substitute_right_keys like "([A3,B2]C5)D+1"
+        // - Direct aggregated keys like "[A0,B0]C+1" (continuous) or "[A1,B1]C+1" (discrete)
+        // - Mixed keys from substitute_right_keys like "([A0,B0]C5)D+1"
         if (new_key.find('[') != std::string::npos)
         {
-            // Aggregated key or key containing aggregated sub-keys:
-            // deps already contain n_segment values, but sub_keys need ds_index appended
+            // Aggregated key or key containing aggregated sub-keys
             // All deps in an aggregated key share the same ds_index as the outer key
             int ds_index = PropagatorCode::get_ds_index_from_key(new_key);
             std::vector<std::tuple<std::string, int, int>> deps_with_ds_index;
             deps_with_ds_index.reserve(parsed_deps.size());
-            for (const auto& dep : parsed_deps)
+
+            if (this->model_name == "continuous")
             {
-                std::string sub_key = std::get<0>(dep) + "+" + std::to_string(ds_index);
-                deps_with_ds_index.push_back(std::make_tuple(sub_key, std::get<1>(dep), std::get<2>(dep)));
+                // Continuous chains: all numbers are length_index, convert to n_segment
+                // - Aggregated deps (contain '['): outer number is length_index
+                // - Non-aggregated deps: number is length_index
+                // - Sliced deps inside brackets: length_index=0
+                for (const auto& dep : parsed_deps)
+                {
+                    std::string dep_code = std::get<0>(dep);
+                    int length_index = std::get<1>(dep);
+                    int n_repeated = std::get<2>(dep);
+                    std::string sub_key = dep_code + "+" + std::to_string(ds_index);
+
+                    // Convert length_index to n_segment (handles length_index=0 for slicing)
+                    double contour_length = contour_length_mapping->get_length_from_index(length_index);
+                    int n_segment = contour_length_mapping->get_n_segment(contour_length);
+
+                    deps_with_ds_index.push_back(std::make_tuple(sub_key, n_segment, n_repeated));
+                }
+            }
+            else
+            {
+                // Discrete chains: segment values are already n_segment
+                for (const auto& dep : parsed_deps)
+                {
+                    std::string sub_key = std::get<0>(dep) + "+" + std::to_string(ds_index);
+                    deps_with_ds_index.push_back(std::make_tuple(sub_key, std::get<1>(dep), std::get<2>(dep)));
+                }
             }
             computation_propagators[new_key].deps = deps_with_ds_index;
         }

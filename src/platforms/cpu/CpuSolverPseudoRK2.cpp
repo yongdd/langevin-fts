@@ -57,7 +57,7 @@ CpuSolverPseudoRK2<T>::CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *mole
         // Create exp_dw vectors for each ds_index and monomer type
         // Note: RK2 only needs exp_dw, not exp_dw_half (no Richardson extrapolation)
         // Also register local_ds values with Pseudo for boltz_bond computation
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
             this->pseudo->add_ds_value(ds_idx, local_ds);
@@ -116,7 +116,7 @@ void CpuSolverPseudoRK2<T>::update_dw(std::map<std::string, const T*> w_input)
     int n_unique_ds = mapping.get_n_unique_ds();
 
     // Compute exp_dw for each ds_index and monomer type
-    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+    for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
     {
         double local_ds = mapping.get_ds_from_index(ds_idx);
 
