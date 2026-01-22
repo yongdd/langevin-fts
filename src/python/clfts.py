@@ -444,9 +444,7 @@ class CLFTS:
         w = self.mpt.to_monomer_fields(w_aux)
 
         # Make a dictionary for input fields
-        w_input = {}
-        for i in range(M):
-            w_input[self.monomer_types[i]] = w[i]
+        w_input = {self.monomer_types[i]: w[i] for i in range(M)}
         for random_polymer_name, random_fraction in self.random_fraction.items():
             w_input[random_polymer_name] = np.zeros(self.cb.get_total_grid(), dtype=np.complex128)
             for monomer_type, fraction in random_fraction.items():
@@ -494,11 +492,6 @@ class CLFTS:
         normal_noise_prev : numpy.ndarray
             Previous noise array for Leimkuhler-Matthews integration.
         """
-        # Make a dictionary for chi_n
-        chi_n_mat = {}
-        for key in self.chi_n:
-            chi_n_mat[key] = self.chi_n[key]
-
         # Make dictionary for data
         mdic = {
             "initial_params": self.params,
@@ -506,7 +499,7 @@ class CLFTS:
             "nx": self.cb.get_nx(),
             "lx": self.cb.get_lx(),
             "monomer_types": self.monomer_types,
-            "chi_n": chi_n_mat,
+            "chi_n": self.chi_n,
             "chain_model": self.chain_model,
             "ds": self.ds,
             "dt": self.langevin["dt"],
@@ -622,10 +615,8 @@ class CLFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields (convert to complex if needed)
-        w = np.zeros([M, self.cb.get_total_grid()], dtype=np.complex128)
-        for i in range(M):
-            field = initial_fields[self.monomer_types[i]]
-            w[i] = np.reshape(field, self.cb.get_total_grid()).astype(np.complex128)
+        w = np.array([np.reshape(initial_fields[m], self.cb.get_total_grid()).astype(np.complex128)
+                      for m in self.monomer_types])
 
         # Convert monomer chemical potential fields into auxiliary fields
         w_aux = self.mpt.to_aux_fields(w)

@@ -1,18 +1,14 @@
 import os
 import time
-import re
 import logging
 import numpy as np
 import sys
-import math
 import json
 import yaml
 import copy
 import itertools
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Union
-import networkx as nx
-import matplotlib.pyplot as plt
 import scipy.io
 
 from . import _core
@@ -1355,7 +1351,7 @@ class SCFT:
             with open(path, "w") as f:
                 f.write(yaml.dump(m_dic, default_flow_style=None, width=90, sort_keys=False))
         else:
-            raise("Invalid output file extension.")
+            raise ValueError("Invalid output file extension. Use .mat, .json, or .yaml.")
 
     def run(
         self,
@@ -1605,16 +1601,13 @@ class SCFT:
             energy_total = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, include_const_term=False)
 
             # Calculate difference between current total density and target density
-            phi_total = np.zeros(self.prop_solver.n_grid)
-            for i in range(M):
-                phi_total += phi[self.monomer_types[i]]
-            phi_diff = phi_total-1.0
+            phi_total = sum(phi[m] for m in self.monomer_types)
+            phi_diff = phi_total - 1.0
 
-            # Calculate self-consistency error
-            w_diff = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64) # array for output fields
-            for i in range(M):
-                for j in range(M):
-                    w_diff[i,:] += self.matrix_chi[i,j]*phi[self.monomer_types[j]] - self.matrix_p[i,j]*w[j,:]
+            # Calculate self-consistency error (vectorized)
+            # phi_array[i] = phi[monomer_types[i]], shape (M, n_grid)
+            phi_array = np.array([phi[m] for m in self.monomer_types])
+            w_diff = self.matrix_chi @ phi_array - self.matrix_p @ w
 
             # Keep the level of functional derivatives
             for i in range(M):

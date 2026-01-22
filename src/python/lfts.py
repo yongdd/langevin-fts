@@ -1,13 +1,10 @@
 import os
 import time
-import re
 import logging
 import pathlib
 import copy
 import numpy as np
 import itertools
-import networkx as nx
-import matplotlib.pyplot as plt
 from scipy.io import savemat, loadmat
 
 from . import _core
@@ -629,9 +626,7 @@ class LFTS:
         w = self.mpt.to_monomer_fields(w_aux)
 
         # Make a dictionary for input fields
-        w_input = {}
-        for i in range(M):
-            w_input[self.monomer_types[i]] = w[i]
+        w_input = {self.monomer_types[i]: w[i] for i in range(M)}
         for random_polymer_name, random_fraction in self.random_fraction.items():
             w_input[random_polymer_name] = np.zeros(self.prop_solver.n_grid, dtype=np.float64)
             for monomer_type, fraction in random_fraction.items():
@@ -728,16 +723,11 @@ class LFTS:
         >>> sim.continue_run("checkpoint_step_1000.mat")
         """
 
-        # Make a dictionary for chi_n
-        chi_n_mat = {}
-        for key in self.chi_n:
-            chi_n_mat[key] = self.chi_n[key]
-
         # Make dictionary for data
         mdic = {
             "initial_params": self.params,
             "dim":self.prop_solver.dim, "nx":self.prop_solver.nx, "lx":self.prop_solver.get_lx(),
-            "monomer_types":self.monomer_types, "chi_n":chi_n_mat, "chain_model":self.chain_model, "ds":self.ds,
+            "monomer_types":self.monomer_types, "chi_n":self.chi_n, "chain_model":self.chain_model, "ds":self.ds,
             "dt":self.langevin["dt"], "nbar":self.langevin["nbar"],
             "eigenvalues": self.mpt.eigenvalues,
             "aux_fields_real": self.mpt.aux_fields_real_idx,
@@ -1015,9 +1005,8 @@ class LFTS:
         pathlib.Path(self.recording["dir"]).mkdir(parents=True, exist_ok=True)
 
         # Reshape initial fields
-        w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
-        for i in range(M):
-            w[i] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
+        w = np.array([np.reshape(initial_fields[m], self.prop_solver.n_grid)
+                      for m in self.monomer_types])
             
         # Convert monomer potential fields into auxiliary potential fields
         w_aux = self.mpt.to_aux_fields(w)
@@ -1040,12 +1029,10 @@ class LFTS:
             sf_average[type_pair] = np.zeros_like(np.fft.rfftn(np.reshape(w[0], self.prop_solver.nx)), np.complex128)
 
         # Create an empty array for field update algorithm
-        if normal_noise_prev is None :
+        if normal_noise_prev is None:
             normal_noise_prev = np.zeros([R, self.prop_solver.n_grid], dtype=np.float64)
-        else:
-            normal_noise_prev = normal_noise_prev
 
-        if start_langevin_step is None :
+        if start_langevin_step is None:
             start_langevin_step = 1
 
         # The number of times that 'find_saddle_point' has failed to find a saddle point
