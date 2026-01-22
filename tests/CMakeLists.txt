@@ -4,11 +4,38 @@ ENABLE_TESTING()
 file(GLOB TEST_DATA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Stress*.txt")
 file(COPY ${TEST_DATA_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
+# Quick tests for installation verification (< 1 second each)
+# Run with: ctest -L quick
+SET(QUICK_TESTS
+    # Python FFT tests
+    TestNumPyFFT3D
+    # CPU FFT tests
+    TestCpuFFT3D
+    # Basic propagator tests
+    TestPseudoLinearContinuous3D
+    TestPseudoLinearDiscrete3D
+    # SCFT test
+    TestScft1D
+    # Platform verification
+    TestDisplayArchitecture
+    # CUDA tests (if available)
+    TestCudaFFT
+    TestCudaSimulationBox
+)
+
+# Helper function to set test labels
+FUNCTION(SET_TEST_LABELS TEST_NAME)
+    IF(${TEST_NAME} IN_LIST QUICK_TESTS)
+        SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES LABELS "quick")
+    ENDIF()
+ENDFUNCTION()
+
 # Add Python Files
 FILE(GLOB FILE_LIST "Test*.py")
 FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     ADD_TEST(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${FILE_NAME})
+    SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 
 # Generate files named "Test*.cpp"
@@ -37,7 +64,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
         $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
         common
         )
-    
+
     IF(${TEST_NAME} MATCHES "ParamParser" OR ${TEST_NAME} MATCHES "Scft" OR ${TEST_NAME} MATCHES "Stress" OR ${TEST_NAME} MATCHES "Hexagonal")
         ADD_TEST(NAME ${TEST_NAME}
             COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}
@@ -46,6 +73,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
     ELSE()
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
     ENDIF()
+    SET_TEST_LABELS(${TEST_NAME})
 ENDFOREACH()
 
 IF(CUDAToolkit_FOUND)
@@ -68,5 +96,6 @@ IF(CUDAToolkit_FOUND)
 
         SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)
         ADD_TEST(${TEST_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME})
+        SET_TEST_LABELS(${TEST_NAME})
     ENDFOREACH()
 ENDIF()

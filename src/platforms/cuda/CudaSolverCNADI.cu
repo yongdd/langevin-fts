@@ -86,7 +86,7 @@ CudaSolverCNADI::CudaSolverCNADI(
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw, exp_dw_half, and tridiagonal coefficients for each ds_index
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
             {
@@ -381,7 +381,7 @@ void CudaSolverCNADI::update_laplacian_operator()
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Compute coefficients for each unique ds value
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 
@@ -462,7 +462,7 @@ void CudaSolverCNADI::update_dw(std::string device, std::map<std::string, const 
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Compute exp_dw and exp_dw_half for each unique ds value
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 

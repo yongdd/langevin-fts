@@ -538,7 +538,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+            T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)

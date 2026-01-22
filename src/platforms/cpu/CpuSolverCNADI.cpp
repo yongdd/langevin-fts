@@ -82,7 +82,7 @@ CpuSolverCNADI::CpuSolverCNADI(ComputationBox<double>* cb, Molecules *molecules,
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Create exp_dw vectors and tridiagonal matrix coefficient arrays for each ds_index
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             for(const auto& item: molecules->get_bond_lengths())
             {
@@ -208,7 +208,7 @@ void CpuSolverCNADI::update_laplacian_operator()
         int n_unique_ds = mapping.get_n_unique_ds();
 
         // Compute coefficients for each unique ds value
-        for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+        for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
         {
             double local_ds = mapping.get_ds_from_index(ds_idx);
 
@@ -251,7 +251,7 @@ void CpuSolverCNADI::update_dw(std::map<std::string, const double*> w_input)
     int n_unique_ds = mapping.get_n_unique_ds();
 
     // Compute exp_dw for each unique ds value
-    for (int ds_idx = 1; ds_idx <= n_unique_ds; ++ds_idx)
+    for (int ds_idx = 0; ds_idx < n_unique_ds; ++ds_idx)
     {
         double local_ds = mapping.get_ds_from_index(ds_idx);
 

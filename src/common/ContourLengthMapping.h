@@ -25,8 +25,8 @@
  * - local_ds = 0.505 / 51 ≈ 0.00990196
  *
  * The mapping assigns integer indices to unique values:
- * - contour_length: {1 → 0.3, 2 → 0.505, 3 → 0.7, ...}
- * - local_ds: {1 → 0.01, 2 → 0.00990196, ...}
+ * - contour_length: {1 → 0.3, 2 → 0.505, 3 → 0.7, ...} (1-based)
+ * - local_ds: {0 → 0.01, 1 → 0.00990196, ...} (0-based)
  *
  * **Reference:**
  *
@@ -193,9 +193,10 @@ public:
      * @brief Get integer index for a contour length.
      *
      * @param contour_length Block's contour length
-     * @return Integer index (1-based), or throws if not found
+     * @return Integer index (1-based for actual blocks, 0 for contour_length=0)
      *
-     * @throws Exception if contour_length not in mapping
+     * @note contour_length=0 returns 0 (used for continuous chain aggregation slicing)
+     * @throws Exception if contour_length not in mapping and not zero
      */
     int get_length_index(double contour_length) const;
 
@@ -203,7 +204,7 @@ public:
      * @brief Get integer index for local Δs corresponding to a contour length.
      *
      * @param contour_length Block's contour length
-     * @return Integer index (1-based) for the local Δs value
+     * @return Integer index (0-based) for the local Δs value
      *
      * @throws Exception if contour_length not in mapping
      */
@@ -213,9 +214,10 @@ public:
      * @brief Get n_segment for a contour length.
      *
      * @param contour_length Block's contour length
-     * @return Number of segments for this block
+     * @return Number of segments for this block (0 for contour_length=0)
      *
-     * @throws Exception if contour_length not in mapping
+     * @note contour_length=0 returns 0 (used for continuous chain aggregation slicing)
+     * @throws Exception if contour_length not in mapping and not zero
      */
     int get_n_segment(double contour_length) const;
 
@@ -232,22 +234,38 @@ public:
     /**
      * @brief Get contour length from its index.
      *
-     * @param index Integer index (1-based)
-     * @return Contour length value
+     * @param index Integer index (1-based for actual blocks, 0 for aggregation slicing)
+     * @return Contour length value (0.0 for index=0)
      *
-     * @throws Exception if index out of range
+     * @note index=0 returns 0.0 (used for continuous chain aggregation slicing)
+     * @throws Exception if index out of range and not zero
      */
     double get_length_from_index(int index) const;
 
     /**
      * @brief Get local Δs from its index.
      *
-     * @param index Integer index (1-based)
+     * @param index Integer index (0-based)
      * @return Local Δs value
      *
      * @throws Exception if index out of range
      */
     double get_ds_from_index(int index) const;
+
+    /**
+     * @brief Get length_index from n_segment and ds_index.
+     *
+     * Computes contour_length = n_segment * local_ds, then returns the
+     * corresponding length_index. Used for continuous chain aggregation
+     * where we need to convert (n_segment, ds_index) to length_index.
+     *
+     * @param n_segment Number of segments
+     * @param ds_index Index of local Δs value
+     * @return Integer length_index (0 for n_segment=0)
+     *
+     * @throws Exception if resulting contour_length not in mapping
+     */
+    int get_length_index_from_n_segment(int n_segment, int ds_index) const;
 
     /**
      * @brief Get number of unique contour lengths.

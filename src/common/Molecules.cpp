@@ -83,6 +83,27 @@ void Molecules::add_polymer(
     std::vector<BlockInput> block_inputs,
     std::map<int, std::string> chain_end_to_q_init)
 {
+    // For discrete chains, validate that contour_length is an integer multiple of ds
+    if (model_name == "discrete")
+    {
+        for (const auto& block : block_inputs)
+        {
+            double ratio = block.contour_length / ds;
+            int n_segment = static_cast<int>(std::round(ratio));
+            double expected_length = n_segment * ds;
+
+            if (std::abs(block.contour_length - expected_length) > 1e-9)
+            {
+                throw_with_line_number(
+                    "For discrete chain model, block contour_length (" +
+                    std::to_string(block.contour_length) +
+                    ") must be an integer multiple of ds (" +
+                    std::to_string(ds) + "). " +
+                    "Closest valid value: " + std::to_string(expected_length));
+            }
+        }
+    }
+
     // Register block contour lengths in the mapping
     for (const auto& block : block_inputs)
     {

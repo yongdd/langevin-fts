@@ -130,13 +130,14 @@ int main()
         // =====================================================
         std::cout << "=== Test 2: Integration with Molecules ===" << std::endl;
 
+        // Use continuous model since we test non-integer block lengths (0.505)
         std::map<std::string, double> bond_lengths = {{"A", 1.0}, {"B", 1.0}};
-        Molecules molecules("discrete", 0.01, bond_lengths);
+        Molecules molecules("continuous", 0.01, bond_lengths);
 
         // Add a polymer with various block lengths
         std::vector<BlockInput> blocks1 = {
             {"A", 0.25, 0, 1},  // 25 segments
-            {"B", 0.505, 1, 2}  // 51 segments (non-integer ratio with ds)
+            {"B", 0.505, 1, 2}  // 51 segments (non-integer ratio with ds, allowed for continuous)
         };
         molecules.add_polymer(0.5, blocks1);
 
@@ -225,7 +226,7 @@ int main()
         int n_unique_ds = mapping4.get_n_unique_ds();
         std::cout << "Number of unique ds values: " << n_unique_ds << std::endl;
 
-        for (int i = 1; i <= n_unique_ds; ++i)
+        for (int i = 0; i < n_unique_ds; ++i)
         {
             double ds_val = mapping4.get_ds_from_index(i);
             std::cout << "DS Index " << i << " -> ds: " << ds_val << std::endl;

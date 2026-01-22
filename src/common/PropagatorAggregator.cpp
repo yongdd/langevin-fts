@@ -19,140 +19,87 @@
 std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuous_chain(
     std::map<std::string, ComputationBlock> set_I)
 {
-    // Example)
-    // 0, B:
-    //   N_offset, N_compute, R, C_R,
-    //   6, 6, 1, (C)B,
-    //   4, 4, 3, (D)B,
-    //   4, 4, 2, (E)B,
-    //   2, 2, 1, (F)B,
+    // Example) Continuous chain aggregation
     //
-    //      ↓   Aggregation
+    // Input (key format: DK+ds_index):
+    //   n_segment_right, key,       n_segment_left, n_repeated
+    //   6,               (C)B+0,    6,              1
+    //   4,               (D)B+0,    4,              3
+    //   4,               (E)B+0,    4,              2
+    //   2,               (F)B+0,    2,              1
     //
-    //   6, 6, 1, (C)B,
-    //   4, 0, 3, (D)B,
-    //   4, 0, 2, (E)B,
-    //   4, 4, 1, [(D)B0:3,(E)B0:2]B,
-    //   2, 2, 1, (F)B,
+    //      ↓   Aggregation (sliced propagators: n_segment=0 → length_index=0)
+    //
+    // Output:
+    //   6,               (C)B+0,              6,  1
+    //   4 → 0,           (D)B+0,              4,  3  (sliced)
+    //   4 → 0,           (E)B+0,              4,  2  (sliced)
+    //   4,               [(D)B0:3,(E)B0:2]B+0, 4,  1  (aggregated)
+    //   2,               (F)B+0,              2,  1
 
-    const int minimum_n_segment = 0;
-
-    #ifndef NDEBUG
-    std::cout << "--------- PropagatorAggregator::aggregate_continuous_chain (before) -----------" << std::endl;
-    std::cout << "--------- map ------------" << std::endl;
-    for(const auto& item : set_I)
-    {
-        std::cout << item.second.n_segment_right << ", " <<
-                     item.first << ", " <<
-                     item.second.n_segment_left << ", ";
-        for(const auto& v_u : item.second.v_u)
-        {
-            std::cout << "("
-            + std::to_string(std::get<0>(v_u)) + ","
-            + std::to_string(std::get<1>(v_u)) + ")" + ", ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "-----------------------" << std::endl;
-    #endif
-
-    // Make a set of n_compute
+    // Collect unique n_segment values
     std::set<int> set_n_compute;
-    for(const auto& item: set_I)
+    for (const auto& item : set_I)
         set_n_compute.insert(item.second.n_segment_right);
 
-    // Aggregate right keys
-    for(const int n_segment_current: set_n_compute)
+    // Aggregate propagators with same n_segment
+    for (const int n_segment_current : set_n_compute)
     {
-        // Add elements into set_S
+        // Collect propagators with this n_segment
         std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
-        for(const auto& item: set_I)
+        for (const auto& item : set_I)
         {
             if (item.second.n_segment_right == n_segment_current)
                 set_S[item.first] = item.second;
         }
-        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
 
         // Skip if nothing to aggregate
-        if (set_S.size() == 1 || n_segment_current < 2*minimum_n_segment)
+        if (set_S.size() == 1)
             continue;
 
-        // Update 'n_segment_right'
-        for(const auto& item: set_S)
-            set_I[item.first].n_segment_right = minimum_n_segment;
+        // Set sliced propagators to n_segment=0
+        for (const auto& item : set_S)
+            set_I[item.first].n_segment_right = 0;
 
-        // New 'n_segment_right' and 'n_segment_left'
-        int n_segment_right = n_segment_current - minimum_n_segment;
-        int n_segment_left  = n_segment_current - minimum_n_segment;
+        // Build aggregated key: [dep1,dep2,...]monomer+ds_index
+        std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
+        std::string aggregated_key = "[";
+        std::vector<std::tuple<int, int>> all_v_u;
+        int ds_index = -1;
+        bool first = true;
 
-        // New 'v_u' and propagator key
-        // Aggregated key format: [dep_code1,dep_code2]monomer+ds_index
-        // where dep_code is DKN format (with n_segment as length_index)
-        std::vector<std::tuple<int ,int>> v_u;
-        std::string propagator_code = "[";
-        bool is_first_sub_propagator = true;
-        std::string dep_key;
-        int ds_index = -1;  // Will extract ds_index from dep_keys
-        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        for (auto it = set_S.rbegin(); it != set_S.rend(); it++)
         {
-            dep_key = it->first;
+            const std::string& key = it->first;
 
-            // Extract ds_index from dep_key for outer level
-            int dep_ds_index = PropagatorCode::get_ds_index_from_key(dep_key);
-            if (ds_index == -1)
-                ds_index = dep_ds_index;
+            // Extract ds_index (same for all in set_S)
+            if (ds_index < 0)
+                ds_index = PropagatorCode::get_ds_index_from_key(key);
 
-            // Convert dep_key (DK+M) to dep_code (DKN) by stripping +ds_index and adding n_segment
-            // Strip +ds_index from dep_key to get DK part
-            size_t plus_pos = dep_key.rfind('+');
-            std::string dk_part = (plus_pos != std::string::npos) ? dep_key.substr(0, plus_pos) : dep_key;
-            // Build dep_code as DK + n_segment
-            std::string dep_code = dk_part + std::to_string(set_I[dep_key].n_segment_right);
+            // Strip +ds_index to get DK part
+            size_t plus_pos = key.rfind('+');
+            std::string dk_part = (plus_pos != std::string::npos) ? key.substr(0, plus_pos) : key;
 
-            if(!is_first_sub_propagator)
-                propagator_code += ",";
-            else
-                is_first_sub_propagator = false;
-            propagator_code += dep_code;
+            if (!first) aggregated_key += ",";
+            first = false;
 
-            // The number of repeats (use : as before)
-            if (set_I[dep_key].n_repeated > 1)
-                propagator_code += ":" + std::to_string(set_I[dep_key].n_repeated);
+            // Append "0" (length_index=0 for sliced propagators with n_segment=0)
+            aggregated_key += dk_part + "0";
 
-            // Compute the union of v_u
-            std::vector<std::tuple<int ,int>> dep_v_u = set_I[dep_key].v_u;
-            v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
+            if (set_I[key].n_repeated > 1)
+                aggregated_key += ":" + std::to_string(set_I[key].n_repeated);
+
+            // Collect v_u
+            all_v_u.insert(all_v_u.end(), set_I[key].v_u.begin(), set_I[key].v_u.end());
         }
-        propagator_code += "]" + monomer_type;
-        // Append ds_index to aggregated key (format: DK+M)
-        if (ds_index >= 0)
-            propagator_code += "+" + std::to_string(ds_index);
+        aggregated_key += "]" + monomer_type + "+" + std::to_string(ds_index);
 
-        // Add new aggregated key to set_I
-        set_I[propagator_code].monomer_type = monomer_type;
-        set_I[propagator_code].n_segment_right = n_segment_right;
-        set_I[propagator_code].n_segment_left = n_segment_left;
-        set_I[propagator_code].v_u = v_u;
-        set_I[propagator_code].n_repeated = 1;
-
-        #ifndef NDEBUG
-        std::cout << "---------- PropagatorAggregator::aggregate_continuous_chain (in progress) -----------" << std::endl;
-        std::cout << "--------- map (" + std::to_string(set_I.size()) + ") -----------" << std::endl;
-        for(const auto& item : set_I)
-        {
-            std::cout << item.second.n_segment_right << ", " <<
-                        item.first << ", " <<
-                        item.second.n_segment_left << ", ";
-            for(const auto& v_u : item.second.v_u)
-            {
-                std::cout << "("
-                + std::to_string(std::get<0>(v_u)) + ","
-                + std::to_string(std::get<1>(v_u)) + ")" + ", ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "-----------------------" << std::endl;
-        #endif
+        // Add aggregated block
+        set_I[aggregated_key].monomer_type = monomer_type;
+        set_I[aggregated_key].n_segment_right = n_segment_current;
+        set_I[aggregated_key].n_segment_left = n_segment_current;
+        set_I[aggregated_key].v_u = all_v_u;
+        set_I[aggregated_key].n_repeated = 1;
     }
     return set_I;
 }
@@ -160,156 +107,103 @@ std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_continuo
 std::map<std::string, ComputationBlock> PropagatorAggregator::aggregate_discrete_chain(
     std::map<std::string, ComputationBlock> set_I)
 {
-    // Example)
-    // 0, B:
-    //   N_offset, N_compute, R, C_R,
-    //   6, 6, 1, (C)B,
-    //   4, 4, 3, (D)B,
-    //   4, 4, 2, (E)B,
-    //   2, 2, 1, (F)B,
+    // Example) Discrete chain aggregation (hierarchical merging)
     //
-    //      ↓   Aggregation
+    // Input (key format: DK+ds_index, uses n_segment directly):
+    //   n_segment_right, key,       n_segment_left, n_repeated
+    //   6,               (C)B+0,    6,              1
+    //   4,               (D)B+0,    4,              3
+    //   4,               (E)B+0,    4,              2
+    //   2,               (F)B+0,    2,              1
     //
-    //   6, 6, 1, (C)B,
-    //   4, 1, 3, (D)B,
-    //   4, 1, 2, (E)B,
-    //   3, 3, 1, [(D)B1:3,(E)B1:2]B,
-    //   2, 2, 1, (F)B,
+    //      ↓   Aggregation (minimum_n_segment=1 for discrete chains)
+    //
+    // Output:
+    //   6,               (C)B+0,              6,  1
+    //   4 → 1,           (D)B+0,              4,  3  (sliced to n_segment=1)
+    //   4 → 1,           (E)B+0,              4,  2  (sliced to n_segment=1)
+    //   3,               [(D)B1:3,(E)B1:2]B+0, 3,  1  (aggregated, n_segment=4-1=3)
+    //   2,               (F)B+0,              2,  1
 
-    #ifndef NDEBUG
-    std::cout << "--------- PropagatorAggregator::aggregate_discrete_chain (before) -----------" << std::endl;
-    std::cout << "--------- map ------------" << std::endl;
-    for(const auto& item : set_I)
-    {
-        std::cout << item.second.n_segment_right << ", " <<
-                     item.first << ", " <<
-                     item.second.n_segment_left << ", ";
-        for(const auto& v_u : item.second.v_u)
-        {
-            std::cout << "("
-            + std::to_string(std::get<0>(v_u)) + ","
-            + std::to_string(std::get<1>(v_u)) + ")" + ", ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "-----------------------" << std::endl;
-    #endif
+    constexpr int MIN_N_SEGMENT = 1;  // Discrete chains require at least 1 segment
 
-    // Copy
+    // set_F: final result, set_I: working set for hierarchical merging
     std::map<std::string, ComputationBlock> set_F = set_I;
 
-    // Minimum 'n_segment_2nd_largest' is 2 because of discrete chain
-    for(const auto& item: set_F)
+    // Remove propagators with n_segment <= 1 from working set (can't be aggregated further)
+    for (const auto& item : set_F)
     {
-        if (item.second.n_segment_right <= 1)
+        if (item.second.n_segment_right <= MIN_N_SEGMENT)
             set_I.erase(item.first);
     }
 
-    while(set_I.size() > 1)
+    // Hierarchical merging: repeatedly merge propagators with largest n_segment values
+    while (set_I.size() > 1)
     {
-        int minimum_n_segment = 1;
+        // Find 2nd largest n_segment
+        std::vector<int> n_segments;
+        for (const auto& item : set_I)
+            n_segments.push_back(item.second.n_segment_right);
+        std::sort(n_segments.rbegin(), n_segments.rend());
+        int n_segment_threshold = n_segments[1];
 
-        // Make a list of 'n_segment_right'
-        std::vector<int> vector_n_segment_right;
-        for(const auto& item: set_I)
-            vector_n_segment_right.push_back(item.second.n_segment_right);
-
-        // Sort the list in ascending order
-        std::sort(vector_n_segment_right.rbegin(), vector_n_segment_right.rend());
-
-        // Find the 2nd largest n_segment
-        int n_segment_2nd_largest = vector_n_segment_right[1]; // The second largest element.
-
-        // Add elements into set_S
+        // Collect propagators with n_segment >= threshold
         std::map<std::string, ComputationBlock, ComparePropagatorKey> set_S;
-        for(const auto& item: set_I)
+        for (const auto& item : set_I)
         {
-            if (item.second.n_segment_right >= n_segment_2nd_largest)
+            if (item.second.n_segment_right >= n_segment_threshold)
                 set_S[item.first] = item.second;
         }
+
+        // Slice: reduce n_segment_right by (threshold - 1)
+        int slice_amount = n_segment_threshold - MIN_N_SEGMENT;
+        for (const auto& item : set_S)
+            set_F[item.first].n_segment_right -= slice_amount;
+
+        // Build aggregated key: [dep1,dep2,...]monomer+ds_index
         std::string monomer_type = PropagatorCode::get_monomer_type_from_key(set_S.begin()->second.monomer_type);
+        std::string aggregated_key = "[";
+        std::vector<std::tuple<int, int>> all_v_u;
+        int ds_index = -1;
+        bool first = true;
 
-        // Update 'n_segment_right'
-        for(const auto& item: set_S)
-            set_F[item.first].n_segment_right -= n_segment_2nd_largest - minimum_n_segment;
-
-        // New 'n_segment_right' and 'n_segment_left'
-        int n_segment_right = n_segment_2nd_largest - minimum_n_segment;
-        int n_segment_left  = n_segment_2nd_largest - minimum_n_segment;
-
-        // New 'v_u' and propagator key
-        std::vector<std::tuple<int ,int>> v_u;
-        std::string propagator_code = "[";
-        bool is_first_sub_propagator = true;
-        std::string dep_key;
-        int ds_index = -1;  // Will extract ds_index from dep_keys
-        for(auto it = set_S.rbegin(); it != set_S.rend(); it++)
+        for (auto it = set_S.rbegin(); it != set_S.rend(); it++)
         {
-            dep_key = it->first;
+            const std::string& key = it->first;
 
-            // Extract ds_index from dep_key for outer level
-            int dep_ds_index = PropagatorCode::get_ds_index_from_key(dep_key);
-            if (ds_index == -1)
-                ds_index = dep_ds_index;
+            if (ds_index < 0)
+                ds_index = PropagatorCode::get_ds_index_from_key(key);
 
-            // Convert dep_key (DK+M) to dep_code (DKN) by stripping +ds_index and adding n_segment
-            // Strip +ds_index from dep_key to get DK part
-            size_t plus_pos = dep_key.rfind('+');
-            std::string dk_part = (plus_pos != std::string::npos) ? dep_key.substr(0, plus_pos) : dep_key;
-            // Build dep_code as DK + n_segment
-            std::string dep_code = dk_part + std::to_string(set_F[dep_key].n_segment_right);
+            // Strip +ds_index to get DK part
+            size_t plus_pos = key.rfind('+');
+            std::string dk_part = (plus_pos != std::string::npos) ? key.substr(0, plus_pos) : key;
 
-            if(!is_first_sub_propagator)
-                propagator_code += ",";
-            else
-                is_first_sub_propagator = false;
-            propagator_code += dep_code;
+            if (!first) aggregated_key += ",";
+            first = false;
 
-            // The number of repeats (use : as before)
-            if (set_F[dep_key].n_repeated > 1)
-                propagator_code += ":" + std::to_string(set_F[dep_key].n_repeated);
+            // Append sliced n_segment (discrete chains use n_segment directly)
+            aggregated_key += dk_part + std::to_string(set_F[key].n_segment_right);
 
-            // Compute the union of v_u
-            std::vector<std::tuple<int ,int>> dep_v_u = set_F[dep_key].v_u;
-            v_u.insert(v_u.end(), dep_v_u.begin(), dep_v_u.end());
+            if (set_F[key].n_repeated > 1)
+                aggregated_key += ":" + std::to_string(set_F[key].n_repeated);
+
+            all_v_u.insert(all_v_u.end(), set_F[key].v_u.begin(), set_F[key].v_u.end());
         }
-        propagator_code += "]" + monomer_type;
-        // Append ds_index to aggregated key (format: DK+M)
-        if (ds_index >= 0)
-            propagator_code += "+" + std::to_string(ds_index);
+        aggregated_key += "]" + monomer_type + "+" + std::to_string(ds_index);
 
-        // Add new aggregated key to set_F
-        set_F[propagator_code].monomer_type = monomer_type;
-        set_F[propagator_code].n_segment_right = n_segment_right;
-        set_F[propagator_code].n_segment_left = n_segment_left;
-        set_F[propagator_code].v_u = v_u;
-        set_F[propagator_code].n_repeated = 1;
+        // Add aggregated block to both sets
+        int n_segment_agg = n_segment_threshold - MIN_N_SEGMENT;
+        set_F[aggregated_key].monomer_type = monomer_type;
+        set_F[aggregated_key].n_segment_right = n_segment_agg;
+        set_F[aggregated_key].n_segment_left = n_segment_agg;
+        set_F[aggregated_key].v_u = all_v_u;
+        set_F[aggregated_key].n_repeated = 1;
 
-        // Add new aggregated key to set_I
-        set_I[propagator_code] = set_F[propagator_code];
+        set_I[aggregated_key] = set_F[aggregated_key];
 
-        // set_I = set_I - set_S
-        for(const auto& item: set_S)
+        // Remove merged propagators from working set
+        for (const auto& item : set_S)
             set_I.erase(item.first);
-
-        #ifndef NDEBUG
-        std::cout << "---------- PropagatorAggregator::aggregate_discrete_chain (in progress) -----------" << std::endl;
-        std::cout << "--------- map (" + std::to_string(set_I.size()) + ") -----------" << std::endl;
-        for(const auto& item : set_I)
-        {
-            std::cout << item.second.n_segment_right << ", " <<
-                        item.first << ", " <<
-                        item.second.n_segment_left << ", ";
-            for(const auto& v_u : item.second.v_u)
-            {
-                std::cout << "("
-                + std::to_string(std::get<0>(v_u)) + ","
-                + std::to_string(std::get<1>(v_u)) + ")" + ", ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "-----------------------" << std::endl;
-        #endif
     }
 
     return set_F;

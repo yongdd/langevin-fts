@@ -312,7 +312,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 #endif
 
                 T **_propagator = this->propagator[key];
-                const T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+                const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
                 // Calculate one block end
                 if (n_segment_from == 0 && deps.size() == 0) // if it is leaf node
@@ -419,12 +419,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
                         }
                         else
                         {
-                            // Discrete chains always use ds_index=1 (global ds)
+                            // Discrete chains always use ds_index=0 (global ds)
                             this->propagator_solver->advance_propagator(
                                 _propagator[1],
                                 _propagator[1],
                                 monomer_type,
-                                q_mask, 1);
+                                q_mask, 0);
                         }
 
                         #ifndef NDEBUG
@@ -561,10 +561,10 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     this->time_complexity++;
                     #endif
 
-                    // Discrete chains always use ds_index=1 (global ds)
+                    // Discrete chains always use ds_index=0 (global ds)
                     this->propagator_solver->advance_propagator(
                         _propagator[n], _propagator[n+1],
-                        monomer_type, q_mask, 1);
+                        monomer_type, q_mask, 0);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -625,7 +625,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
             T *propagator_right      = std::get<2>(segment_info);
             std::string monomer_type = std::get<3>(segment_info);
             int n_aggregated         = std::get<4>(segment_info);
-            const T *_exp_dw    = this->propagator_solver->exp_dw[1][monomer_type].data();
+            const T *_exp_dw    = this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_polymer_partitions[p]= this->cb->inner_product_inverse_weight(
                 propagator_left, propagator_right, _exp_dw)/(n_aggregated*this->cb->get_volume());
@@ -649,8 +649,8 @@ void CpuComputationDiscrete<T>::advance_propagator_single_segment(
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
-        // Discrete chains always use ds_index=1 (global ds)
-        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, 1);
+        // Discrete chains always use ds_index=0 (global ds)
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, 0);
     }
     catch(std::exception& exc)
     {
@@ -680,7 +680,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             int n_segment_left  = this->propagator_computation_optimizer->get_computation_block(key).n_segment_left;
             std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
             int n_repeated = this->propagator_computation_optimizer->get_computation_block(key).n_repeated;
-            const T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+            const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
             // If there is no segment
             if(n_segment_right == 0)
@@ -726,7 +726,7 @@ void CpuComputationDiscrete<T>::compute_concentrations()
             T *_phi = this->phi_solvent[s];
             double volume_fraction = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
-            const T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+            const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
             this->single_solvent_partitions[s] = this->cb->integral(_exp_dw)/this->cb->get_volume();
             for(int i=0; i<M; i++)
@@ -1064,7 +1064,7 @@ bool CpuComputationDiscrete<T>::check_total_partition()
         int n_propagators   = this->propagator_computation_optimizer->get_computation_block(key).v_u.size();
 
         std::string monomer_type = this->propagator_computation_optimizer->get_computation_block(key).monomer_type;
-        const T *_exp_dw = this->propagator_solver->exp_dw[1][monomer_type].data();
+        const T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
 
         #ifndef NDEBUG
         std::cout<< p << ", " << key_left << ", " << key_right << ": " << n_segment_left << ", " << n_segment_right << ", " << n_propagators << ", " << this->propagator_computation_optimizer->get_computation_block(key).n_repeated << std::endl;
