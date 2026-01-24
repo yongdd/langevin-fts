@@ -1,8 +1,8 @@
 /**
- * @file TestCudaDCT.cu
- * @brief Test CUDA DCT Types 1-4 against FFTW reference.
+ * @file TestCudaDST.cu
+ * @brief Test CUDA DST Types 1-4 against FFTW reference.
  *
- * Compares CudaDCT output with FFTW REDFT00/10/01/11 for all DCT types.
+ * Compares CudaDST output with FFTW RODFT00/10/01/11 for all DST types.
  */
 
 #include <iostream>
@@ -20,44 +20,42 @@
 #endif
 
 //==============================================================================
-// Test 1D DCT-1 (FFTW_REDFT00)
+// Test 1D DST-1 (FFTW_RODFT00)
 //==============================================================================
-bool test_dct1_1d(int N)
+bool test_dst1_1d(int N)
 {
-    printf("Testing 1D DCT-1: N=%d (N+1=%d points)\n", N, N + 1);
-
-    int size = N + 1;  // DCT-1 has N+1 points
+    printf("Testing 1D DST-1: N=%d points\n", N);
 
     // Allocate host memory
-    std::vector<double> h_input(size);
-    std::vector<double> h_fftw(size);
-    std::vector<double> h_cuda(size);
+    std::vector<double> h_input(N);
+    std::vector<double> h_fftw(N);
+    std::vector<double> h_cuda(N);
 
-    // Initialize with test data
-    for (int i = 0; i < size; ++i) {
-        h_input[i] = sin(M_PI * i / N) + 0.5 * cos(2 * M_PI * i / N);
+    // Initialize with test data (sine functions work well with DST)
+    for (int i = 0; i < N; ++i) {
+        h_input[i] = sin(M_PI * (i + 1) / (N + 1)) + 0.5 * sin(2 * M_PI * (i + 1) / (N + 1));
     }
 
-    // === FFTW DCT-1 (REDFT00) ===
+    // === FFTW DST-1 (RODFT00) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_1d(size, h_fftw.data(), h_fftw.data(), FFTW_REDFT00, FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_RODFT00, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA DCT-1 ===
+    // === CUDA DST-1 ===
     double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * size);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * size, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_data, sizeof(double) * N);
+    cudaMemcpy(d_data, h_input.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    CudaDCT dct(size, CUDA_DCT_1);
-    dct.execute(d_data);
+    CudaDST dst(N, CUDA_DST_1);
+    dst.execute(d_data);
 
-    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
 
     // Compare results
     double max_err = 0;
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < N; ++i) {
         double err = std::abs(h_fftw[i] - h_cuda[i]);
         max_err = std::max(max_err, err);
     }
@@ -76,11 +74,11 @@ bool test_dct1_1d(int N)
 }
 
 //==============================================================================
-// Test 1D DCT-2 (FFTW_REDFT10)
+// Test 1D DST-2 (FFTW_RODFT10)
 //==============================================================================
-bool test_dct2_1d(int N)
+bool test_dst2_1d(int N)
 {
-    printf("Testing 1D DCT-2: N=%d points\n", N);
+    printf("Testing 1D DST-2: N=%d points\n", N);
 
     // Allocate host memory
     std::vector<double> h_input(N);
@@ -89,22 +87,22 @@ bool test_dct2_1d(int N)
 
     // Initialize with test data
     for (int i = 0; i < N; ++i) {
-        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * cos(2 * M_PI * (i + 0.5) / N);
+        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * sin(2 * M_PI * (i + 0.5) / N);
     }
 
-    // === FFTW DCT-2 (REDFT10) ===
+    // === FFTW DST-2 (RODFT10) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_REDFT10, FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_RODFT10, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA DCT-2 ===
+    // === CUDA DST-2 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * N);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    CudaDCT dct(N, CUDA_DCT_2);
-    dct.execute(d_data);
+    CudaDST dst(N, CUDA_DST_2);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -129,11 +127,11 @@ bool test_dct2_1d(int N)
 }
 
 //==============================================================================
-// Test 1D DCT-3 (FFTW_REDFT01)
+// Test 1D DST-3 (FFTW_RODFT01)
 //==============================================================================
-bool test_dct3_1d(int N)
+bool test_dst3_1d(int N)
 {
-    printf("Testing 1D DCT-3: N=%d points\n", N);
+    printf("Testing 1D DST-3: N=%d points\n", N);
 
     // Allocate host memory
     std::vector<double> h_input(N);
@@ -142,22 +140,22 @@ bool test_dct3_1d(int N)
 
     // Initialize with test data
     for (int i = 0; i < N; ++i) {
-        h_input[i] = sin(M_PI * i / N) + 0.5 * cos(2 * M_PI * i / N);
+        h_input[i] = sin(M_PI * (i + 1) / (N + 1)) + 0.5 * sin(2 * M_PI * (i + 1) / (N + 1));
     }
 
-    // === FFTW DCT-3 (REDFT01) ===
+    // === FFTW DST-3 (RODFT01) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_REDFT01, FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_RODFT01, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA DCT-3 ===
+    // === CUDA DST-3 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * N);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    CudaDCT dct(N, CUDA_DCT_3);
-    dct.execute(d_data);
+    CudaDST dst(N, CUDA_DST_3);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -182,11 +180,11 @@ bool test_dct3_1d(int N)
 }
 
 //==============================================================================
-// Test 1D DCT-4 (FFTW_REDFT11)
+// Test 1D DST-4 (FFTW_RODFT11)
 //==============================================================================
-bool test_dct4_1d(int N)
+bool test_dst4_1d(int N)
 {
-    printf("Testing 1D DCT-4: N=%d points\n", N);
+    printf("Testing 1D DST-4: N=%d points\n", N);
 
     // Allocate host memory
     std::vector<double> h_input(N);
@@ -195,22 +193,22 @@ bool test_dct4_1d(int N)
 
     // Initialize with test data
     for (int i = 0; i < N; ++i) {
-        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * cos(2 * M_PI * (i + 0.5) / N);
+        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * sin(2 * M_PI * (i + 0.5) / N);
     }
 
-    // === FFTW DCT-4 (REDFT11) ===
+    // === FFTW DST-4 (RODFT11) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_REDFT11, FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_1d(N, h_fftw.data(), h_fftw.data(), FFTW_RODFT11, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA DCT-4 ===
+    // === CUDA DST-4 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * N);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    CudaDCT dct(N, CUDA_DCT_4);
-    dct.execute(d_data);
+    CudaDST dst(N, CUDA_DST_4);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -235,72 +233,11 @@ bool test_dct4_1d(int N)
 }
 
 //==============================================================================
-// Test 2D DCT-1
+// Test 2D DST-1
 //==============================================================================
-bool test_dct1_2d(int Nx, int Ny)
+bool test_dst1_2d(int Nx, int Ny)
 {
-    printf("Testing 2D DCT-1: %d x %d (data size: %d x %d)\n",
-           Nx, Ny, Nx + 1, Ny + 1);
-
-    int Nx1 = Nx + 1, Ny1 = Ny + 1;
-    int M = Nx1 * Ny1;
-
-    std::vector<double> h_input(M);
-    std::vector<double> h_fftw(M);
-    std::vector<double> h_cuda(M);
-
-    // Initialize with test data
-    for (int ix = 0; ix < Nx1; ++ix) {
-        for (int iy = 0; iy < Ny1; ++iy) {
-            int idx = ix * Ny1 + iy;
-            double r2 = ix * ix + iy * iy;
-            h_input[idx] = exp(-r2 / 50.0);
-        }
-    }
-
-    // === FFTW 2D DCT-1 (REDFT00) ===
-    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_2d(Nx1, Ny1, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT00, FFTW_REDFT00, FFTW_ESTIMATE);
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
-
-    // === CUDA 2D DCT-1 ===
-    double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * M);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
-
-    CudaDCT2D dct(Nx, Ny, CUDA_DCT_1);
-    dct.execute(d_data);
-
-    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
-    cudaFree(d_data);
-
-    // Compare results
-    double max_err = 0;
-    for (int i = 0; i < M; ++i) {
-        double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
-    }
-
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
-    double rel_err = max_err / std::abs(max_val);
-
-    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
-
-    bool passed = rel_err < 1e-10;
-    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
-
-    return passed;
-}
-
-//==============================================================================
-// Test 2D DCT-2
-//==============================================================================
-bool test_dct2_2d(int Nx, int Ny)
-{
-    printf("Testing 2D DCT-2: %d x %d\n", Nx, Ny);
+    printf("Testing 2D DST-1: %d x %d\n", Nx, Ny);
 
     int M = Nx * Ny;
 
@@ -312,25 +249,26 @@ bool test_dct2_2d(int Nx, int Ny)
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
             int idx = ix * Ny + iy;
-            double r2 = (ix + 0.5) * (ix + 0.5) + (iy + 0.5) * (iy + 0.5);
-            h_input[idx] = exp(-r2 / 50.0);
+            double x = (ix + 1.0) / (Nx + 1);
+            double y = (iy + 1.0) / (Ny + 1);
+            h_input[idx] = sin(M_PI * x) * sin(M_PI * y);
         }
     }
 
-    // === FFTW 2D DCT-2 (REDFT10) ===
+    // === FFTW 2D DST-1 (RODFT00) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
     fftw_plan plan = fftw_plan_r2r_2d(Nx, Ny, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT10, FFTW_REDFT10, FFTW_ESTIMATE);
+                                       FFTW_RODFT00, FFTW_RODFT00, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA 2D DCT-2 ===
+    // === CUDA 2D DST-1 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT2D dct(Nx, Ny, CUDA_DCT_2);
-    dct.execute(d_data);
+    CudaDST2D dst(Nx, Ny, CUDA_DST_1);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -355,11 +293,11 @@ bool test_dct2_2d(int Nx, int Ny)
 }
 
 //==============================================================================
-// Test 2D DCT-3
+// Test 2D DST-2
 //==============================================================================
-bool test_dct3_2d(int Nx, int Ny)
+bool test_dst2_2d(int Nx, int Ny)
 {
-    printf("Testing 2D DCT-3: %d x %d\n", Nx, Ny);
+    printf("Testing 2D DST-2: %d x %d\n", Nx, Ny);
 
     int M = Nx * Ny;
 
@@ -371,25 +309,26 @@ bool test_dct3_2d(int Nx, int Ny)
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
             int idx = ix * Ny + iy;
-            double r2 = ix * ix + iy * iy;
-            h_input[idx] = exp(-r2 / 50.0);
+            double x = (ix + 0.5) / Nx;
+            double y = (iy + 0.5) / Ny;
+            h_input[idx] = sin(M_PI * x) * sin(M_PI * y);
         }
     }
 
-    // === FFTW 2D DCT-3 (REDFT01) ===
+    // === FFTW 2D DST-2 (RODFT10) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
     fftw_plan plan = fftw_plan_r2r_2d(Nx, Ny, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE);
+                                       FFTW_RODFT10, FFTW_RODFT10, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA 2D DCT-3 ===
+    // === CUDA 2D DST-2 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT2D dct(Nx, Ny, CUDA_DCT_3);
-    dct.execute(d_data);
+    CudaDST2D dst(Nx, Ny, CUDA_DST_2);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -414,11 +353,11 @@ bool test_dct3_2d(int Nx, int Ny)
 }
 
 //==============================================================================
-// Test 2D DCT-4
+// Test 2D DST-3
 //==============================================================================
-bool test_dct4_2d(int Nx, int Ny)
+bool test_dst3_2d(int Nx, int Ny)
 {
-    printf("Testing 2D DCT-4: %d x %d\n", Nx, Ny);
+    printf("Testing 2D DST-3: %d x %d\n", Nx, Ny);
 
     int M = Nx * Ny;
 
@@ -430,25 +369,26 @@ bool test_dct4_2d(int Nx, int Ny)
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
             int idx = ix * Ny + iy;
-            double r2 = (ix + 0.5) * (ix + 0.5) + (iy + 0.5) * (iy + 0.5);
-            h_input[idx] = exp(-r2 / 50.0);
+            double x = (ix + 1.0) / (Nx + 1);
+            double y = (iy + 1.0) / (Ny + 1);
+            h_input[idx] = sin(M_PI * x) * sin(M_PI * y);
         }
     }
 
-    // === FFTW 2D DCT-4 (REDFT11) ===
+    // === FFTW 2D DST-3 (RODFT01) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
     fftw_plan plan = fftw_plan_r2r_2d(Nx, Ny, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT11, FFTW_REDFT11, FFTW_ESTIMATE);
+                                       FFTW_RODFT01, FFTW_RODFT01, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA 2D DCT-4 ===
+    // === CUDA 2D DST-3 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT2D dct(Nx, Ny, CUDA_DCT_4);
-    dct.execute(d_data);
+    CudaDST2D dst(Nx, Ny, CUDA_DST_3);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -473,78 +413,13 @@ bool test_dct4_2d(int Nx, int Ny)
 }
 
 //==============================================================================
-// Test 3D DCT-1
+// Test 2D DST-4
 //==============================================================================
-bool test_dct1_3d(int Nx, int Ny, int Nz)
+bool test_dst4_2d(int Nx, int Ny)
 {
-    printf("Testing 3D DCT-1: %d x %d x %d (data size: %d x %d x %d)\n",
-           Nx, Ny, Nz, Nx + 1, Ny + 1, Nz + 1);
+    printf("Testing 2D DST-4: %d x %d\n", Nx, Ny);
 
-    int Nx1 = Nx + 1, Ny1 = Ny + 1, Nz1 = Nz + 1;
-    int M = Nx1 * Ny1 * Nz1;
-
-    // Allocate host memory
-    std::vector<double> h_input(M);
-    std::vector<double> h_fftw(M);
-    std::vector<double> h_cuda(M);
-
-    // Initialize with test data (symmetric Gaussian)
-    for (int ix = 0; ix < Nx1; ++ix) {
-        for (int iy = 0; iy < Ny1; ++iy) {
-            for (int iz = 0; iz < Nz1; ++iz) {
-                int idx = (ix * Ny1 + iy) * Nz1 + iz;
-                double r2 = ix * ix + iy * iy + iz * iz;
-                h_input[idx] = exp(-r2 / 50.0);
-            }
-        }
-    }
-
-    // === FFTW 3D DCT-1 (REDFT00) ===
-    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_3d(Nx1, Ny1, Nz1, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT00, FFTW_REDFT00, FFTW_REDFT00,
-                                       FFTW_ESTIMATE);
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
-
-    // === CUDA 3D DCT-1 ===
-    double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * M);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
-
-    CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_1);
-    dct.execute(d_data);
-
-    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
-    cudaFree(d_data);
-
-    // Compare results
-    double max_err = 0;
-    for (int i = 0; i < M; ++i) {
-        double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
-    }
-
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
-    double rel_err = max_err / std::abs(max_val);
-
-    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
-
-    bool passed = rel_err < 1e-10;
-    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
-
-    return passed;
-}
-
-//==============================================================================
-// Test 3D DCT-2
-//==============================================================================
-bool test_dct2_3d(int Nx, int Ny, int Nz)
-{
-    printf("Testing 3D DCT-2: %d x %d x %d\n", Nx, Ny, Nz);
-
-    int M = Nx * Ny * Nz;
+    int M = Nx * Ny;
 
     std::vector<double> h_input(M);
     std::vector<double> h_fftw(M);
@@ -553,29 +428,27 @@ bool test_dct2_3d(int Nx, int Ny, int Nz)
     // Initialize with test data
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
-            for (int iz = 0; iz < Nz; ++iz) {
-                int idx = (ix * Ny + iy) * Nz + iz;
-                double r2 = (ix + 0.5) * (ix + 0.5) + (iy + 0.5) * (iy + 0.5) + (iz + 0.5) * (iz + 0.5);
-                h_input[idx] = exp(-r2 / 50.0);
-            }
+            int idx = ix * Ny + iy;
+            double x = (ix + 0.5) / Nx;
+            double y = (iy + 0.5) / Ny;
+            h_input[idx] = sin(M_PI * x) * sin(M_PI * y);
         }
     }
 
-    // === FFTW 3D DCT-2 (REDFT10) ===
+    // === FFTW 2D DST-4 (RODFT11) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10,
-                                       FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_2d(Nx, Ny, h_fftw.data(), h_fftw.data(),
+                                       FFTW_RODFT11, FFTW_RODFT11, FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA 3D DCT-2 ===
+    // === CUDA 2D DST-4 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_2);
-    dct.execute(d_data);
+    CudaDST2D dst(Nx, Ny, CUDA_DST_4);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -600,73 +473,11 @@ bool test_dct2_3d(int Nx, int Ny, int Nz)
 }
 
 //==============================================================================
-// Test 3D DCT-3
+// Test 3D DST-1
 //==============================================================================
-bool test_dct3_3d(int Nx, int Ny, int Nz)
+bool test_dst1_3d(int Nx, int Ny, int Nz)
 {
-    printf("Testing 3D DCT-3: %d x %d x %d\n", Nx, Ny, Nz);
-
-    int M = Nx * Ny * Nz;
-
-    std::vector<double> h_input(M);
-    std::vector<double> h_fftw(M);
-    std::vector<double> h_cuda(M);
-
-    // Initialize with test data
-    for (int ix = 0; ix < Nx; ++ix) {
-        for (int iy = 0; iy < Ny; ++iy) {
-            for (int iz = 0; iz < Nz; ++iz) {
-                int idx = (ix * Ny + iy) * Nz + iz;
-                double r2 = ix * ix + iy * iy + iz * iz;
-                h_input[idx] = exp(-r2 / 50.0);
-            }
-        }
-    }
-
-    // === FFTW 3D DCT-3 (REDFT01) ===
-    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
-    fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01,
-                                       FFTW_ESTIMATE);
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
-
-    // === CUDA 3D DCT-3 ===
-    double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * M);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
-
-    CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_3);
-    dct.execute(d_data);
-
-    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
-    cudaFree(d_data);
-
-    // Compare results
-    double max_err = 0;
-    for (int i = 0; i < M; ++i) {
-        double err = std::abs(h_fftw[i] - h_cuda[i]);
-        max_err = std::max(max_err, err);
-    }
-
-    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
-    double rel_err = max_err / std::abs(max_val);
-
-    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
-
-    bool passed = rel_err < 1e-10;
-    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
-
-    return passed;
-}
-
-//==============================================================================
-// Test 3D DCT-4
-//==============================================================================
-bool test_dct4_3d(int Nx, int Ny, int Nz)
-{
-    printf("Testing 3D DCT-4: %d x %d x %d\n", Nx, Ny, Nz);
+    printf("Testing 3D DST-1: %d x %d x %d\n", Nx, Ny, Nz);
 
     int M = Nx * Ny * Nz;
 
@@ -680,27 +491,29 @@ bool test_dct4_3d(int Nx, int Ny, int Nz)
         for (int iy = 0; iy < Ny; ++iy) {
             for (int iz = 0; iz < Nz; ++iz) {
                 int idx = (ix * Ny + iy) * Nz + iz;
-                double r2 = (ix + 0.5) * (ix + 0.5) + (iy + 0.5) * (iy + 0.5) + (iz + 0.5) * (iz + 0.5);
-                h_input[idx] = exp(-r2 / 50.0);
+                double x = (ix + 1.0) / (Nx + 1);
+                double y = (iy + 1.0) / (Ny + 1);
+                double z = (iz + 1.0) / (Nz + 1);
+                h_input[idx] = sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
             }
         }
     }
 
-    // === FFTW 3D DCT-4 (REDFT11) ===
+    // === FFTW 3D DST-1 (RODFT00) ===
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
     fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
-                                       FFTW_REDFT11, FFTW_REDFT11, FFTW_REDFT11,
+                                       FFTW_RODFT00, FFTW_RODFT00, FFTW_RODFT00,
                                        FFTW_ESTIMATE);
     fftw_execute(plan);
     fftw_destroy_plan(plan);
 
-    // === CUDA 3D DCT-4 ===
+    // === CUDA 3D DST-1 ===
     double* d_data;
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_4);
-    dct.execute(d_data);
+    CudaDST3D dst(Nx, Ny, Nz, CUDA_DST_1);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -725,43 +538,234 @@ bool test_dct4_3d(int Nx, int Ny, int Nz)
 }
 
 //==============================================================================
-// Test round-trip (forward + backward should recover input)
+// Test 3D DST-2
 //==============================================================================
-bool test_dct1_roundtrip(int N)
+bool test_dst2_3d(int Nx, int Ny, int Nz)
 {
-    printf("Testing DCT-1 round-trip: N=%d (size=%d)\n", N, N + 1);
+    printf("Testing 3D DST-2: %d x %d x %d\n", Nx, Ny, Nz);
 
-    int size = N + 1;
+    int M = Nx * Ny * Nz;
 
-    std::vector<double> h_input(size);
-    std::vector<double> h_result(size);
+    std::vector<double> h_input(M);
+    std::vector<double> h_fftw(M);
+    std::vector<double> h_cuda(M);
+
+    // Initialize with test data
+    for (int ix = 0; ix < Nx; ++ix) {
+        for (int iy = 0; iy < Ny; ++iy) {
+            for (int iz = 0; iz < Nz; ++iz) {
+                int idx = (ix * Ny + iy) * Nz + iz;
+                double x = (ix + 0.5) / Nx;
+                double y = (iy + 0.5) / Ny;
+                double z = (iz + 0.5) / Nz;
+                h_input[idx] = sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+            }
+        }
+    }
+
+    // === FFTW 3D DST-2 (RODFT10) ===
+    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
+    fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
+                                       FFTW_RODFT10, FFTW_RODFT10, FFTW_RODFT10,
+                                       FFTW_ESTIMATE);
+    fftw_execute(plan);
+    fftw_destroy_plan(plan);
+
+    // === CUDA 3D DST-2 ===
+    double* d_data;
+    cudaMalloc(&d_data, sizeof(double) * M);
+    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
+
+    CudaDST3D dst(Nx, Ny, Nz, CUDA_DST_2);
+    dst.execute(d_data);
+
+    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
+    cudaFree(d_data);
+
+    // Compare results
+    double max_err = 0;
+    for (int i = 0; i < M; ++i) {
+        double err = std::abs(h_fftw[i] - h_cuda[i]);
+        max_err = std::max(max_err, err);
+    }
+
+    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
+        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double rel_err = max_err / std::abs(max_val);
+
+    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
+
+    bool passed = rel_err < 1e-10;
+    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
+
+    return passed;
+}
+
+//==============================================================================
+// Test 3D DST-3
+//==============================================================================
+bool test_dst3_3d(int Nx, int Ny, int Nz)
+{
+    printf("Testing 3D DST-3: %d x %d x %d\n", Nx, Ny, Nz);
+
+    int M = Nx * Ny * Nz;
+
+    std::vector<double> h_input(M);
+    std::vector<double> h_fftw(M);
+    std::vector<double> h_cuda(M);
+
+    // Initialize with test data
+    for (int ix = 0; ix < Nx; ++ix) {
+        for (int iy = 0; iy < Ny; ++iy) {
+            for (int iz = 0; iz < Nz; ++iz) {
+                int idx = (ix * Ny + iy) * Nz + iz;
+                double x = (ix + 1.0) / (Nx + 1);
+                double y = (iy + 1.0) / (Ny + 1);
+                double z = (iz + 1.0) / (Nz + 1);
+                h_input[idx] = sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+            }
+        }
+    }
+
+    // === FFTW 3D DST-3 (RODFT01) ===
+    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
+    fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
+                                       FFTW_RODFT01, FFTW_RODFT01, FFTW_RODFT01,
+                                       FFTW_ESTIMATE);
+    fftw_execute(plan);
+    fftw_destroy_plan(plan);
+
+    // === CUDA 3D DST-3 ===
+    double* d_data;
+    cudaMalloc(&d_data, sizeof(double) * M);
+    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
+
+    CudaDST3D dst(Nx, Ny, Nz, CUDA_DST_3);
+    dst.execute(d_data);
+
+    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
+    cudaFree(d_data);
+
+    // Compare results
+    double max_err = 0;
+    for (int i = 0; i < M; ++i) {
+        double err = std::abs(h_fftw[i] - h_cuda[i]);
+        max_err = std::max(max_err, err);
+    }
+
+    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
+        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double rel_err = max_err / std::abs(max_val);
+
+    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
+
+    bool passed = rel_err < 1e-10;
+    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
+
+    return passed;
+}
+
+//==============================================================================
+// Test 3D DST-4
+//==============================================================================
+bool test_dst4_3d(int Nx, int Ny, int Nz)
+{
+    printf("Testing 3D DST-4: %d x %d x %d\n", Nx, Ny, Nz);
+
+    int M = Nx * Ny * Nz;
+
+    // Allocate host memory
+    std::vector<double> h_input(M);
+    std::vector<double> h_fftw(M);
+    std::vector<double> h_cuda(M);
+
+    // Initialize with test data
+    for (int ix = 0; ix < Nx; ++ix) {
+        for (int iy = 0; iy < Ny; ++iy) {
+            for (int iz = 0; iz < Nz; ++iz) {
+                int idx = (ix * Ny + iy) * Nz + iz;
+                double x = (ix + 0.5) / Nx;
+                double y = (iy + 0.5) / Ny;
+                double z = (iz + 0.5) / Nz;
+                h_input[idx] = sin(M_PI * x) * sin(M_PI * y) * sin(M_PI * z);
+            }
+        }
+    }
+
+    // === FFTW 3D DST-4 (RODFT11) ===
+    std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
+    fftw_plan plan = fftw_plan_r2r_3d(Nx, Ny, Nz, h_fftw.data(), h_fftw.data(),
+                                       FFTW_RODFT11, FFTW_RODFT11, FFTW_RODFT11,
+                                       FFTW_ESTIMATE);
+    fftw_execute(plan);
+    fftw_destroy_plan(plan);
+
+    // === CUDA 3D DST-4 ===
+    double* d_data;
+    cudaMalloc(&d_data, sizeof(double) * M);
+    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
+
+    CudaDST3D dst(Nx, Ny, Nz, CUDA_DST_4);
+    dst.execute(d_data);
+
+    cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
+    cudaFree(d_data);
+
+    // Compare results
+    double max_err = 0;
+    for (int i = 0; i < M; ++i) {
+        double err = std::abs(h_fftw[i] - h_cuda[i]);
+        max_err = std::max(max_err, err);
+    }
+
+    double max_val = *std::max_element(h_fftw.begin(), h_fftw.end(),
+        [](double a, double b) { return std::abs(a) < std::abs(b); });
+    double rel_err = max_err / std::abs(max_val);
+
+    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
+
+    bool passed = rel_err < 1e-10;
+    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
+
+    return passed;
+}
+
+//==============================================================================
+// Test round-trip (DST-1 is self-inverse)
+//==============================================================================
+bool test_dst1_roundtrip(int N)
+{
+    printf("Testing DST-1 round-trip: N=%d\n", N);
+
+    std::vector<double> h_input(N);
+    std::vector<double> h_result(N);
 
     // Initialize
-    for (int i = 0; i < size; ++i) {
-        h_input[i] = sin(M_PI * i / N) + 0.5 * cos(2 * M_PI * i / N);
+    for (int i = 0; i < N; ++i) {
+        h_input[i] = sin(M_PI * (i + 1) / (N + 1)) + 0.5 * sin(2 * M_PI * (i + 1) / (N + 1));
     }
 
     // FFTW: forward + backward
     std::copy(h_input.begin(), h_input.end(), h_result.begin());
 
-    fftw_plan plan = fftw_plan_r2r_1d(size, h_result.data(), h_result.data(), FFTW_REDFT00, FFTW_ESTIMATE);
+    fftw_plan plan = fftw_plan_r2r_1d(N, h_result.data(), h_result.data(), FFTW_RODFT00, FFTW_ESTIMATE);
     fftw_execute(plan);  // Forward
-    fftw_execute(plan);  // Backward (DCT-1 is self-inverse)
+    fftw_execute(plan);  // Backward (DST-1 is self-inverse)
     fftw_destroy_plan(plan);
 
     // Compute actual scaling factor
-    double scale = h_result[1] / h_input[1];  // Use a middle element
-    printf("  Actual scaling factor: %.4f (expected 2*N=%.4f)\n", scale, 2.0 * N);
+    double scale = h_result[0] / h_input[0];
+    printf("  Actual scaling factor: %.4f (expected 2*(N+1)=%.4f)\n", scale, 2.0 * (N + 1));
 
-    // FFTW DCT-1: round-trip multiplies by 2*(n-1) = 2*N for size=N+1
-    double norm = 1.0 / (2.0 * N);
-    for (int i = 0; i < size; ++i) {
+    // FFTW DST-1: round-trip multiplies by 2*(N+1)
+    double norm = 1.0 / (2.0 * (N + 1));
+    for (int i = 0; i < N; ++i) {
         h_result[i] *= norm;
     }
 
     // Check recovery
     double max_err = 0;
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < N; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
         max_err = std::max(max_err, err);
     }
@@ -779,28 +783,28 @@ bool test_dct1_roundtrip(int N)
 }
 
 //==============================================================================
-// Test DCT-2/DCT-3 inverse pair
+// Test DST-2/DST-3 inverse pair
 //==============================================================================
-bool test_dct23_inverse(int N)
+bool test_dst23_inverse(int N)
 {
-    printf("Testing DCT-2/DCT-3 inverse pair: N=%d\n", N);
+    printf("Testing DST-2/DST-3 inverse pair: N=%d\n", N);
 
     std::vector<double> h_input(N);
     std::vector<double> h_result(N);
 
     // Initialize
     for (int i = 0; i < N; ++i) {
-        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * cos(2 * M_PI * (i + 0.5) / N);
+        h_input[i] = sin(M_PI * (i + 0.5) / N) + 0.5 * sin(2 * M_PI * (i + 0.5) / N);
     }
 
-    // FFTW: DCT-2 then DCT-3 should recover input (up to scale)
+    // FFTW: DST-2 then DST-3 should recover input (up to scale)
     std::copy(h_input.begin(), h_input.end(), h_result.begin());
 
-    fftw_plan plan2 = fftw_plan_r2r_1d(N, h_result.data(), h_result.data(), FFTW_REDFT10, FFTW_ESTIMATE);
+    fftw_plan plan2 = fftw_plan_r2r_1d(N, h_result.data(), h_result.data(), FFTW_RODFT10, FFTW_ESTIMATE);
     fftw_execute(plan2);
     fftw_destroy_plan(plan2);
 
-    fftw_plan plan3 = fftw_plan_r2r_1d(N, h_result.data(), h_result.data(), FFTW_REDFT01, FFTW_ESTIMATE);
+    fftw_plan plan3 = fftw_plan_r2r_1d(N, h_result.data(), h_result.data(), FFTW_RODFT01, FFTW_ESTIMATE);
     fftw_execute(plan3);
     fftw_destroy_plan(plan3);
 
@@ -821,7 +825,7 @@ bool test_dct23_inverse(int N)
         [](double a, double b) { return std::abs(a) < std::abs(b); });
     double rel_err = max_err / std::abs(max_val);
 
-    printf("  FFTW DCT-2 + DCT-3 round-trip: rel_err = %.6e\n", rel_err);
+    printf("  FFTW DST-2 + DST-3 round-trip: rel_err = %.6e\n", rel_err);
 
     bool passed = rel_err < 1e-12;
     printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
@@ -830,47 +834,45 @@ bool test_dct23_inverse(int N)
 }
 
 //==============================================================================
-// Test CUDA DCT-1 round-trip
+// Test CUDA DST-1 round-trip
 //==============================================================================
-bool test_cuda_dct1_roundtrip(int N)
+bool test_cuda_dst1_roundtrip(int N)
 {
-    printf("Testing CUDA DCT-1 round-trip: N=%d (size=%d)\n", N, N + 1);
+    printf("Testing CUDA DST-1 round-trip: N=%d\n", N);
 
-    int size = N + 1;
-
-    std::vector<double> h_input(size);
-    std::vector<double> h_result(size);
+    std::vector<double> h_input(N);
+    std::vector<double> h_result(N);
 
     // Initialize
-    for (int i = 0; i < size; ++i) {
-        h_input[i] = sin(M_PI * i / N) + 0.5 * cos(2 * M_PI * i / N);
+    for (int i = 0; i < N; ++i) {
+        h_input[i] = sin(M_PI * (i + 1) / (N + 1)) + 0.5 * sin(2 * M_PI * (i + 1) / (N + 1));
     }
 
     // CUDA: forward + backward
     double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * size);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * size, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_data, sizeof(double) * N);
+    cudaMemcpy(d_data, h_input.data(), sizeof(double) * N, cudaMemcpyHostToDevice);
 
-    CudaDCT dct(size, CUDA_DCT_1);
-    dct.execute(d_data);  // Forward
-    dct.execute(d_data);  // Backward (DCT-1 is self-inverse)
+    CudaDST dst(N, CUDA_DST_1);
+    dst.execute(d_data);  // Forward
+    dst.execute(d_data);  // Backward (DST-1 is self-inverse)
 
-    cudaMemcpy(h_result.data(), d_data, sizeof(double) * size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_result.data(), d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
 
     // Compute actual scaling factor
-    double scale = h_result[1] / h_input[1];
-    printf("  Actual scaling factor: %.4f (expected 2*N=%.4f)\n", scale, 2.0 * N);
+    double scale = h_result[0] / h_input[0];
+    printf("  Actual scaling factor: %.4f (expected 2*(N+1)=%.4f)\n", scale, 2.0 * (N + 1));
 
-    // Apply normalization: 1/(2*N)
-    double norm = 1.0 / (2.0 * N);
-    for (int i = 0; i < size; ++i) {
+    // Apply normalization: 1/(2*(N+1))
+    double norm = 1.0 / (2.0 * (N + 1));
+    for (int i = 0; i < N; ++i) {
         h_result[i] *= norm;
     }
 
     // Check recovery
     double max_err = 0;
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < N; ++i) {
         double err = std::abs(h_input[i] - h_result[i]);
         max_err = std::max(max_err, err);
     }
@@ -888,77 +890,11 @@ bool test_cuda_dct1_roundtrip(int N)
 }
 
 //==============================================================================
-// Test 3D CUDA DCT-1 round-trip
+// Test 2D Mixed DST (vs FFTW)
 //==============================================================================
-bool test_cuda_dct1_3d_roundtrip(int Nx, int Ny, int Nz)
+bool test_mixed_2d(int Nx, int Ny, CudaDSTType type_x, CudaDSTType type_y)
 {
-    printf("Testing CUDA 3D DCT-1 round-trip: %d x %d x %d\n", Nx, Ny, Nz);
-
-    int Nx1 = Nx + 1, Ny1 = Ny + 1, Nz1 = Nz + 1;
-    int M = Nx1 * Ny1 * Nz1;
-
-    std::vector<double> h_input(M);
-    std::vector<double> h_result(M);
-
-    // Initialize - use non-zero values at interior point
-    for (int ix = 0; ix < Nx1; ++ix) {
-        for (int iy = 0; iy < Ny1; ++iy) {
-            for (int iz = 0; iz < Nz1; ++iz) {
-                int idx = (ix * Ny1 + iy) * Nz1 + iz;
-                double r2 = ix * ix + iy * iy + iz * iz;
-                h_input[idx] = exp(-r2 / 50.0);
-            }
-        }
-    }
-
-    // CUDA: forward + backward
-    double* d_data;
-    cudaMalloc(&d_data, sizeof(double) * M);
-    cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
-
-    CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_1);
-    dct.execute(d_data);  // Forward
-    dct.execute(d_data);  // Backward
-
-    cudaMemcpy(h_result.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
-    cudaFree(d_data);
-
-    // Compute actual scaling at interior point
-    int test_idx = (1 * Ny1 + 1) * Nz1 + 1;  // Point (1,1,1)
-    double scale = h_result[test_idx] / h_input[test_idx];
-    printf("  Actual scaling factor: %.4f (expected 8*Nx*Ny*Nz=%.4f)\n", scale, 8.0 * Nx * Ny * Nz);
-
-    // Normalization: 1/(8*Nx*Ny*Nz) for round-trip
-    double norm = 1.0 / (8.0 * Nx * Ny * Nz);
-    for (int i = 0; i < M; ++i) {
-        h_result[i] *= norm;
-    }
-
-    // Check recovery
-    double max_err = 0;
-    for (int i = 0; i < M; ++i) {
-        double err = std::abs(h_input[i] - h_result[i]);
-        max_err = std::max(max_err, err);
-    }
-
-    double max_val = *std::max_element(h_input.begin(), h_input.end(),
-        [](double a, double b) { return std::abs(a) < std::abs(b); });
-    double rel_err = max_err / std::abs(max_val);
-
-    printf("  Max abs error: %.6e, Relative error: %.6e\n", max_err, rel_err);
-
-    bool passed = rel_err < 1e-10;
-    printf("  %s\n\n", passed ? "PASSED!" : "FAILED!");
-
-    return passed;
-}
-
-//==============================================================================
-// Test 2D Mixed DCT (vs FFTW)
-//==============================================================================
-bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
-{
-    const char* type_names[] = {"DCT-1", "DCT-2", "DCT-3", "DCT-4"};
+    const char* type_names[] = {"DST-1", "DST-2", "DST-3", "DST-4"};
     printf("Testing 2D Mixed (%s, %s): %d x %d\n",
            type_names[type_x], type_names[type_y], Nx, Ny);
 
@@ -972,8 +908,8 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
             int idx = ix * Ny + iy;
-            h_input[idx] = sin(M_PI * (ix + 0.5) / Nx) * cos(M_PI * (iy + 0.5) / Ny)
-                         + 0.5 * cos(2 * M_PI * (ix + 0.5) / Nx) * sin(2 * M_PI * (iy + 0.5) / Ny);
+            h_input[idx] = sin(M_PI * (ix + 0.5) / Nx) * sin(M_PI * (iy + 0.5) / Ny)
+                         + 0.5 * sin(2 * M_PI * (ix + 0.5) / Nx) * sin(2 * M_PI * (iy + 0.5) / Ny);
         }
     }
 
@@ -981,8 +917,8 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
 
     // Y dimension first (contiguous)
-    fftw_r2r_kind kind_y = (type_y == CUDA_DCT_2) ? FFTW_REDFT10 :
-                           (type_y == CUDA_DCT_3) ? FFTW_REDFT01 : FFTW_REDFT11;
+    fftw_r2r_kind kind_y = (type_y == CUDA_DST_2) ? FFTW_RODFT10 :
+                           (type_y == CUDA_DST_3) ? FFTW_RODFT01 : FFTW_RODFT11;
     for (int ix = 0; ix < Nx; ++ix) {
         fftw_plan plan = fftw_plan_r2r_1d(Ny, &h_fftw[ix * Ny], &h_fftw[ix * Ny], kind_y, FFTW_ESTIMATE);
         fftw_execute(plan);
@@ -991,8 +927,8 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
 
     // X dimension (need transpose for FFTW or do row-by-row)
     std::vector<double> h_col(Nx);
-    fftw_r2r_kind kind_x = (type_x == CUDA_DCT_2) ? FFTW_REDFT10 :
-                           (type_x == CUDA_DCT_3) ? FFTW_REDFT01 : FFTW_REDFT11;
+    fftw_r2r_kind kind_x = (type_x == CUDA_DST_2) ? FFTW_RODFT10 :
+                           (type_x == CUDA_DST_3) ? FFTW_RODFT01 : FFTW_RODFT11;
     for (int iy = 0; iy < Ny; ++iy) {
         // Extract column
         for (int ix = 0; ix < Nx; ++ix) {
@@ -1012,8 +948,8 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT2D dct(Nx, Ny, type_x, type_y);
-    dct.execute(d_data);
+    CudaDST2D dst(Nx, Ny, type_x, type_y);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -1038,11 +974,11 @@ bool test_mixed_2d(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y)
 }
 
 //==============================================================================
-// Test 3D Mixed DCT (vs FFTW)
+// Test 3D Mixed DST (vs FFTW)
 //==============================================================================
-bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_y, CudaDCTType type_z)
+bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDSTType type_x, CudaDSTType type_y, CudaDSTType type_z)
 {
-    const char* type_names[] = {"DCT-1", "DCT-2", "DCT-3", "DCT-4"};
+    const char* type_names[] = {"DST-1", "DST-2", "DST-3", "DST-4"};
     printf("Testing 3D Mixed (%s, %s, %s): %d x %d x %d\n",
            type_names[type_x], type_names[type_y], type_names[type_z], Nx, Ny, Nz);
 
@@ -1058,7 +994,7 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
             for (int iz = 0; iz < Nz; ++iz) {
                 int idx = (ix * Ny + iy) * Nz + iz;
                 h_input[idx] = sin(M_PI * (ix + 0.5) / Nx)
-                             * cos(M_PI * (iy + 0.5) / Ny)
+                             * sin(M_PI * (iy + 0.5) / Ny)
                              * sin(M_PI * (iz + 0.5) / Nz);
             }
         }
@@ -1068,8 +1004,8 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
     std::copy(h_input.begin(), h_input.end(), h_fftw.begin());
 
     // Z dimension (contiguous)
-    fftw_r2r_kind kind_z = (type_z == CUDA_DCT_2) ? FFTW_REDFT10 :
-                           (type_z == CUDA_DCT_3) ? FFTW_REDFT01 : FFTW_REDFT11;
+    fftw_r2r_kind kind_z = (type_z == CUDA_DST_2) ? FFTW_RODFT10 :
+                           (type_z == CUDA_DST_3) ? FFTW_RODFT01 : FFTW_RODFT11;
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iy = 0; iy < Ny; ++iy) {
             int offset = (ix * Ny + iy) * Nz;
@@ -1080,8 +1016,8 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
     }
 
     // Y dimension
-    fftw_r2r_kind kind_y = (type_y == CUDA_DCT_2) ? FFTW_REDFT10 :
-                           (type_y == CUDA_DCT_3) ? FFTW_REDFT01 : FFTW_REDFT11;
+    fftw_r2r_kind kind_y = (type_y == CUDA_DST_2) ? FFTW_RODFT10 :
+                           (type_y == CUDA_DST_3) ? FFTW_RODFT01 : FFTW_RODFT11;
     std::vector<double> h_tmp_y(Ny);
     for (int ix = 0; ix < Nx; ++ix) {
         for (int iz = 0; iz < Nz; ++iz) {
@@ -1098,8 +1034,8 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
     }
 
     // X dimension
-    fftw_r2r_kind kind_x = (type_x == CUDA_DCT_2) ? FFTW_REDFT10 :
-                           (type_x == CUDA_DCT_3) ? FFTW_REDFT01 : FFTW_REDFT11;
+    fftw_r2r_kind kind_x = (type_x == CUDA_DST_2) ? FFTW_RODFT10 :
+                           (type_x == CUDA_DST_3) ? FFTW_RODFT01 : FFTW_RODFT11;
     std::vector<double> h_tmp_x(Nx);
     for (int iy = 0; iy < Ny; ++iy) {
         for (int iz = 0; iz < Nz; ++iz) {
@@ -1120,8 +1056,8 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
     cudaMalloc(&d_data, sizeof(double) * M);
     cudaMemcpy(d_data, h_input.data(), sizeof(double) * M, cudaMemcpyHostToDevice);
 
-    CudaDCT3D dct(Nx, Ny, Nz, type_x, type_y, type_z);
-    dct.execute(d_data);
+    CudaDST3D dst(Nx, Ny, Nz, type_x, type_y, type_z);
+    dst.execute(d_data);
 
     cudaMemcpy(h_cuda.data(), d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
     cudaFree(d_data);
@@ -1150,101 +1086,100 @@ bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_
 //==============================================================================
 int main()
 {
-    std::cout << "========== CUDA DCT vs FFTW Test ==========\n\n";
+    std::cout << "========== CUDA DST vs FFTW Test ==========\n\n";
 
     bool all_passed = true;
 
-    // Test 1D DCT-1
-    std::cout << "--- 1D DCT-1 Tests (vs FFTW REDFT00) ---\n\n";
-    all_passed &= test_dct1_1d(16);
-    all_passed &= test_dct1_1d(32);
-    all_passed &= test_dct1_1d(64);
+    // Test 1D DST-1
+    std::cout << "--- 1D DST-1 Tests (vs FFTW RODFT00) ---\n\n";
+    all_passed &= test_dst1_1d(16);
+    all_passed &= test_dst1_1d(32);
+    all_passed &= test_dst1_1d(64);
 
-    // Test 1D DCT-2
-    std::cout << "--- 1D DCT-2 Tests (vs FFTW REDFT10) ---\n\n";
-    all_passed &= test_dct2_1d(16);
-    all_passed &= test_dct2_1d(32);
-    all_passed &= test_dct2_1d(64);
+    // Test 1D DST-2
+    std::cout << "--- 1D DST-2 Tests (vs FFTW RODFT10) ---\n\n";
+    all_passed &= test_dst2_1d(16);
+    all_passed &= test_dst2_1d(32);
+    all_passed &= test_dst2_1d(64);
 
-    // Test 1D DCT-3
-    std::cout << "--- 1D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
-    all_passed &= test_dct3_1d(16);
-    all_passed &= test_dct3_1d(32);
-    all_passed &= test_dct3_1d(64);
+    // Test 1D DST-3
+    std::cout << "--- 1D DST-3 Tests (vs FFTW RODFT01) ---\n\n";
+    all_passed &= test_dst3_1d(16);
+    all_passed &= test_dst3_1d(32);
+    all_passed &= test_dst3_1d(64);
 
-    // Test 1D DCT-4
-    std::cout << "--- 1D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
-    all_passed &= test_dct4_1d(16);
-    all_passed &= test_dct4_1d(32);
-    all_passed &= test_dct4_1d(64);
+    // Test 1D DST-4
+    std::cout << "--- 1D DST-4 Tests (vs FFTW RODFT11) ---\n\n";
+    all_passed &= test_dst4_1d(16);
+    all_passed &= test_dst4_1d(32);
+    all_passed &= test_dst4_1d(64);
 
-    // Test 2D DCT-1
-    std::cout << "--- 2D DCT-1 Tests (vs FFTW REDFT00) ---\n\n";
-    all_passed &= test_dct1_2d(8, 8);
-    all_passed &= test_dct1_2d(16, 16);
-    all_passed &= test_dct1_2d(32, 32);
+    // Test 2D DST-1
+    std::cout << "--- 2D DST-1 Tests (vs FFTW RODFT00) ---\n\n";
+    all_passed &= test_dst1_2d(8, 8);
+    all_passed &= test_dst1_2d(16, 16);
+    all_passed &= test_dst1_2d(32, 32);
 
-    // Test 2D DCT-2
-    std::cout << "--- 2D DCT-2 Tests (vs FFTW REDFT10) ---\n\n";
-    all_passed &= test_dct2_2d(8, 8);
-    all_passed &= test_dct2_2d(16, 16);
-    all_passed &= test_dct2_2d(32, 32);
+    // Test 2D DST-2
+    std::cout << "--- 2D DST-2 Tests (vs FFTW RODFT10) ---\n\n";
+    all_passed &= test_dst2_2d(8, 8);
+    all_passed &= test_dst2_2d(16, 16);
+    all_passed &= test_dst2_2d(32, 32);
 
-    // Test 2D DCT-3
-    std::cout << "--- 2D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
-    all_passed &= test_dct3_2d(8, 8);
-    all_passed &= test_dct3_2d(16, 16);
-    all_passed &= test_dct3_2d(32, 32);
+    // Test 2D DST-3
+    std::cout << "--- 2D DST-3 Tests (vs FFTW RODFT01) ---\n\n";
+    all_passed &= test_dst3_2d(8, 8);
+    all_passed &= test_dst3_2d(16, 16);
+    all_passed &= test_dst3_2d(32, 32);
 
-    // Test 2D DCT-4
-    std::cout << "--- 2D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
-    all_passed &= test_dct4_2d(8, 8);
-    all_passed &= test_dct4_2d(16, 16);
-    all_passed &= test_dct4_2d(32, 32);
+    // Test 2D DST-4
+    std::cout << "--- 2D DST-4 Tests (vs FFTW RODFT11) ---\n\n";
+    all_passed &= test_dst4_2d(8, 8);
+    all_passed &= test_dst4_2d(16, 16);
+    all_passed &= test_dst4_2d(32, 32);
 
-    // Test 3D DCT-1
-    std::cout << "--- 3D DCT-1 Tests (vs FFTW REDFT00) ---\n\n";
-    all_passed &= test_dct1_3d(8, 8, 8);
-    all_passed &= test_dct1_3d(16, 16, 16);
-    all_passed &= test_dct1_3d(32, 32, 32);
+    // Test 3D DST-1
+    std::cout << "--- 3D DST-1 Tests (vs FFTW RODFT00) ---\n\n";
+    all_passed &= test_dst1_3d(8, 8, 8);
+    all_passed &= test_dst1_3d(16, 16, 16);
+    all_passed &= test_dst1_3d(32, 32, 32);
 
-    // Test 3D DCT-2
-    std::cout << "--- 3D DCT-2 Tests (vs FFTW REDFT10) ---\n\n";
-    all_passed &= test_dct2_3d(8, 8, 8);
-    all_passed &= test_dct2_3d(16, 16, 16);
-    all_passed &= test_dct2_3d(32, 32, 32);
+    // Test 3D DST-2
+    std::cout << "--- 3D DST-2 Tests (vs FFTW RODFT10) ---\n\n";
+    all_passed &= test_dst2_3d(8, 8, 8);
+    all_passed &= test_dst2_3d(16, 16, 16);
+    all_passed &= test_dst2_3d(32, 32, 32);
 
-    // Test 3D DCT-3
-    std::cout << "--- 3D DCT-3 Tests (vs FFTW REDFT01) ---\n\n";
-    all_passed &= test_dct3_3d(8, 8, 8);
-    all_passed &= test_dct3_3d(16, 16, 16);
-    all_passed &= test_dct3_3d(32, 32, 32);
+    // Test 3D DST-3
+    std::cout << "--- 3D DST-3 Tests (vs FFTW RODFT01) ---\n\n";
+    all_passed &= test_dst3_3d(8, 8, 8);
+    all_passed &= test_dst3_3d(16, 16, 16);
+    all_passed &= test_dst3_3d(32, 32, 32);
 
-    // Test 3D DCT-4
-    std::cout << "--- 3D DCT-4 Tests (vs FFTW REDFT11) ---\n\n";
-    all_passed &= test_dct4_3d(8, 8, 8);
-    all_passed &= test_dct4_3d(16, 16, 16);
-    all_passed &= test_dct4_3d(32, 32, 32);
+    // Test 3D DST-4
+    std::cout << "--- 3D DST-4 Tests (vs FFTW RODFT11) ---\n\n";
+    all_passed &= test_dst4_3d(8, 8, 8);
+    all_passed &= test_dst4_3d(16, 16, 16);
+    all_passed &= test_dst4_3d(32, 32, 32);
 
     // Test round-trip
     std::cout << "--- Round-trip Tests ---\n\n";
-    all_passed &= test_dct1_roundtrip(32);
-    all_passed &= test_cuda_dct1_roundtrip(32);
-    all_passed &= test_cuda_dct1_3d_roundtrip(16, 16, 16);
-    all_passed &= test_dct23_inverse(32);
+    all_passed &= test_dst1_roundtrip(32);
+    all_passed &= test_cuda_dst1_roundtrip(32);
+    all_passed &= test_dst23_inverse(32);
 
-    // Test 2D Mixed DCT
-    std::cout << "--- 2D Mixed DCT Tests ---\n\n";
-    all_passed &= test_mixed_2d(16, 16, CUDA_DCT_2, CUDA_DCT_3);
-    all_passed &= test_mixed_2d(16, 16, CUDA_DCT_3, CUDA_DCT_2);
-    all_passed &= test_mixed_2d(16, 16, CUDA_DCT_2, CUDA_DCT_4);
-    all_passed &= test_mixed_2d(16, 16, CUDA_DCT_4, CUDA_DCT_3);
+    // Test 2D Mixed DST
+    std::cout << "--- 2D Mixed DST Tests ---\n\n";
+    all_passed &= test_mixed_2d(16, 16, CUDA_DST_2, CUDA_DST_3);
+    all_passed &= test_mixed_2d(16, 16, CUDA_DST_3, CUDA_DST_2);
+    all_passed &= test_mixed_2d(16, 16, CUDA_DST_2, CUDA_DST_4);
+    all_passed &= test_mixed_2d(16, 16, CUDA_DST_4, CUDA_DST_3);
 
-    // Test 3D Mixed DCT
-    std::cout << "--- 3D Mixed DCT Tests ---\n\n";
-    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DCT_2, CUDA_DCT_3, CUDA_DCT_4);
-    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DCT_4, CUDA_DCT_2, CUDA_DCT_3);
-    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DCT_3, CUDA_DCT_4, CUDA_DCT_2);
+    // Test 3D Mixed DST
+    std::cout << "--- 3D Mixed DST Tests ---\n\n";
+    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DST_2, CUDA_DST_3, CUDA_DST_4);
+    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DST_4, CUDA_DST_2, CUDA_DST_3);
+    all_passed &= test_mixed_3d(8, 8, 8, CUDA_DST_3, CUDA_DST_4, CUDA_DST_2);
 
     if (all_passed)
         std::cout << "=== All tests PASSED! ===\n";
