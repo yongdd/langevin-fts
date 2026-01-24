@@ -10,7 +10,7 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 - Continuous and discrete chain models
 - Pseudo-spectral and real-space solvers (RQM4, ETDRK4, CN-ADI)
 - Periodic, reflecting, and absorbing boundary conditions
-- CPU (Intel MKL, FFTW) and GPU (NVIDIA CUDA) platforms
+- CPU (FFTW) and GPU (NVIDIA CUDA) platforms
 
 For details, see [docs/Features.md](docs/Features.md).
 
@@ -30,7 +30,7 @@ make -j8 && ctest -L quick && make install
 ### Other Options
 
 - **Docker**: Pre-built images available for CPU and GPU
-- **pip**: `pip install .` (requires Intel MKL)
+- **pip**: `pip install .` (requires FFTW3)
 
 For detailed instructions, troubleshooting, and dependencies, see [docs/Installation.md](docs/Installation.md).
 

@@ -23,7 +23,7 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
 #include "CpuComputationReduceMemoryDiscrete.h"
@@ -139,7 +139,7 @@ int main()
         std::vector<ComputationBox<T>*> cb_2_list;
         std::vector<std::string> solver_name;
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         solver_name.push_back("CpuComputationDiscrete, Aggregation=false");
         solver_name.push_back("CpuComputationReduceMemoryDiscrete, Aggregation=false");
         #endif
@@ -148,7 +148,7 @@ int main()
         solver_name.push_back("CudaComputationReduceMemoryDiscrete, Aggregation=false");
         #endif
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         cb_1_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_1_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_1_list.push_back(new CpuComputationDiscrete<T>(cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1));
@@ -161,7 +161,7 @@ int main()
         solver_1_list.push_back(new CudaComputationReduceMemoryDiscrete<T>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1));
         #endif
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         cb_2_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_2_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_2_list.push_back(new CpuComputationDiscrete<T>(cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2));

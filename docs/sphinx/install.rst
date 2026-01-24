@@ -30,7 +30,7 @@ It supports the following features:
 
 * Can set impenetrable region using a mask (**beta**)
 * Anderson mixing
-* Platforms: MKL (CPU) and CUDA (GPU)
+* Platforms: FFTW (CPU) and CUDA (GPU)
 * Parallel computations of propagators with multi-core CPUs (up to 8), or multi CUDA streams (up to 4) to maximize GPU usage
 * Memory saving option
 * Common interfaces regardless of chain model, simulation box dimension, and platform

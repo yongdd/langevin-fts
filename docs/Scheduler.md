@@ -179,7 +179,7 @@ Both CPU and GPU use multiple streams/threads to execute independent propagators
 | Platform | Default n_streams | Configuration |
 |----------|------------------|---------------|
 | GPU (CUDA) | 4 | Hardcoded in `CudaComputationContinuous` |
-| CPU (MKL) | 4 | `OMP_NUM_THREADS` environment variable |
+| CPU (FFTW) | 4 | `OMP_NUM_THREADS` environment variable |
 
 ### How Parallelization Works
 

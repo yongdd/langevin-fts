@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-FFT Backend Performance Comparison: MKL vs FFTW
+FFT Backend Performance Benchmark
 
-This script compares the performance of MKL and FFTW backends for
-FFT operations in polymer field theory simulations.
+This script benchmarks FFT performance for polymer field theory simulations
+on available platforms (cpu-fftw, cuda).
 
 Usage:
     python fft_benchmark.py [--nx 64] [--iterations 100]
@@ -61,7 +61,6 @@ def run_benchmark(platform, nx, n_iterations, chain_model="continuous", bc_type=
     n_grid = solver.n_grid
 
     # Create potential fields
-    w = {}
     w_A = np.zeros(n_grid, dtype=np.float64)
     w_B = np.zeros(n_grid, dtype=np.float64)
 
@@ -98,7 +97,7 @@ def run_benchmark(platform, nx, n_iterations, chain_model="continuous", bc_type=
     return mean_time, std_time
 
 def main():
-    parser = argparse.ArgumentParser(description="FFT Backend Performance Comparison")
+    parser = argparse.ArgumentParser(description="FFT Backend Performance Benchmark")
     parser.add_argument("--nx", type=int, nargs='+', default=[64, 64, 64],
                         help="Grid dimensions (default: 64 64 64)")
     parser.add_argument("--iterations", type=int, default=50,
@@ -115,7 +114,7 @@ def main():
     bc_type = args.bc
 
     print("=" * 60)
-    print("FFT Backend Performance Comparison")
+    print("FFT Backend Performance Benchmark")
     print("=" * 60)
     print(f"Grid: {nx}")
     print(f"Chain model: {chain_model}")
@@ -130,40 +129,31 @@ def main():
 
     results = {}
 
-    # Test cpu-mkl
-    if "cpu-mkl" in available:
-        print("Testing cpu-mkl...")
-        result = run_benchmark("cpu-mkl", nx, n_iterations, chain_model, bc_type)
+    # Test all available platforms
+    for platform in available:
+        print(f"Testing {platform}...")
+        result = run_benchmark(platform, nx, n_iterations, chain_model, bc_type)
         if result:
-            results["cpu-mkl"] = result
-            print(f"  cpu-mkl: {result[0]*1000:.2f} +/- {result[1]*1000:.2f} ms per iteration")
-
-    # Test cpu-fftw
-    if "cpu-fftw" in available:
-        print("Testing cpu-fftw...")
-        result = run_benchmark("cpu-fftw", nx, n_iterations, chain_model, bc_type)
-        if result:
-            results["cpu-fftw"] = result
-            print(f"  cpu-fftw: {result[0]*1000:.2f} +/- {result[1]*1000:.2f} ms per iteration")
+            results[platform] = result
+            print(f"  {platform}: {result[0]*1000:.2f} +/- {result[1]*1000:.2f} ms per iteration")
 
     print()
     print("=" * 60)
     print("Summary")
     print("=" * 60)
 
-    if len(results) >= 2:
-        mkl_time = results.get("cpu-mkl", (None, None))[0]
-        fftw_time = results.get("cpu-fftw", (None, None))[0]
-
-        if mkl_time and fftw_time:
-            speedup = fftw_time / mkl_time
-            if speedup > 1:
-                print(f"MKL is {speedup:.2f}x faster than FFTW")
-            else:
-                print(f"FFTW is {1/speedup:.2f}x faster than MKL")
-
+    # Print sorted by performance
     for name, (mean, std) in sorted(results.items(), key=lambda x: x[1][0]):
         print(f"  {name}: {mean*1000:.2f} +/- {std*1000:.2f} ms")
+
+    # Compare if multiple platforms available
+    if len(results) >= 2:
+        sorted_results = sorted(results.items(), key=lambda x: x[1][0])
+        fastest = sorted_results[0]
+        slowest = sorted_results[-1]
+        speedup = slowest[1][0] / fastest[1][0]
+        print()
+        print(f"{fastest[0]} is {speedup:.2f}x faster than {slowest[0]}")
 
 if __name__ == "__main__":
     main()

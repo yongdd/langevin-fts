@@ -238,7 +238,7 @@ def main():
 
     # Detect platform from command line or default
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] in ["cuda", "cpu-mkl"]:
+    if len(sys.argv) > 1 and sys.argv[1] in ["cuda", "cpu-fftw"]:
         platform = sys.argv[1]
     else:
         # Default to CUDA if available
@@ -246,7 +246,7 @@ def main():
             test_factory = _core.PlatformSelector.create_factory("cuda", False)
             platform = "cuda"
         except Exception:
-            platform = "cpu-mkl"
+            platform = "cpu-fftw"
     print(f"\nUsing platform: {platform}")
 
     all_results = {}

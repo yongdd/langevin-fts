@@ -19,7 +19,7 @@
  * in a single FFT<T>* pointer without void* casts and if-else dispatch.
  * Since all simulations run in fixed dimensions, a single pointer suffices.
  *
- * @see MklFFT for Intel MKL implementation
+ * @see FftwFFT for FFTW implementation
  * @see CudaFFT for CUDA implementation
  */
 
@@ -33,13 +33,12 @@
  * @enum FFTBackend
  * @brief Available FFT backend implementations.
  *
- * Used to select between different FFT libraries at runtime.
- * Both backends provide identical functionality through the FFT interface.
+ * Currently only FFTW is supported for CPU. FFTW provides O(N log N)
+ * algorithms for all transform types (FFT, DCT, DST).
  */
 enum class FFTBackend
 {
-    MKL,   ///< Intel Math Kernel Library (requires Intel MKL)
-    FFTW   ///< FFTW3 library (GPL, O(N log N) for all transform types)
+    FFTW   ///< FFTW3 library (O(N log N) for all transform types)
 };
 
 /**

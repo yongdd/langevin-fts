@@ -150,11 +150,11 @@ solver.check_total_partition()  # Should pass without error
 
 ### Platform Abstraction (Abstract Factory Pattern)
 
-The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with Intel MKL, CUDA GPUs). This is a key architectural feature:
+The codebase uses the **abstract factory pattern** to support multiple computational platforms (CPU with FFTW, CUDA GPUs). This is a key architectural feature:
 
 - **Factory Selection**: `src/common/PlatformSelector.cpp` determines available platforms and creates appropriate factory instances
 - **Platform Implementations**:
-  - `src/platforms/cpu/`: MKL-based CPU implementations using Intel Math Kernel Library for FFT and linear algebra
+  - `src/platforms/cpu/`: FFTW-based CPU implementations using Intel Math Kernel Library for FFT and linear algebra
   - `src/platforms/cuda/`: CUDA GPU implementations using cuFFT and custom CUDA kernels
 - **Common Interfaces**: `src/common/AbstractFactory.h` defines abstract interfaces that all platform implementations must satisfy
 
@@ -250,7 +250,7 @@ Simulations are configured via Python dictionaries with keys:
 - `segment_lengths`: Relative statistical segment lengths
 - `chi_n`: Flory-Huggins interaction parameters × N_Ref
 - `distinct_polymers`: Polymer architectures and volume fractions
-- `platform`: "cuda" or "cpu-mkl" (auto-selected by default: cuda for 2D/3D, cpu-mkl for 1D)
+- `platform`: "cuda" or "cpu-fftw" (auto-selected by default: cuda for 2D/3D, cpu-fftw for 1D)
 - `numerical_method`: Algorithm for propagator computation
   - `"rqm4"`: RQM4 - Pseudo-spectral with 4th-order Richardson extrapolation (default)
   - `"rk2"`: RK2 - Pseudo-spectral with 2nd-order operator splitting
@@ -464,12 +464,12 @@ Derived classes implement chain-model-specific behavior:
 ```
       FFT<T>              (abstract base - double* and complex* interfaces)
         ↑
-   MklFFT<T, DIM>         (CPU: Intel MKL for FFT, DCT, DST)
+   FftwFFT<T, DIM>         (CPU: FFTW for FFT, DCT, DST)
    FftwFFT<T, DIM>        (CPU: FFTW3 for FFT, DCT, DST - GPL license)
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
 
-**FFT-Level Threading Policy**: Always disable multi-threading at the FFT level (both MKL and FFTW). Parallelism is exploited at the propagator level instead, where multiple independent propagators are computed in parallel using OpenMP threads. This design choice avoids thread contention and provides better scaling for branched polymer systems with many independent propagator computations.
+**FFT-Level Threading Policy**: Always disable multi-threading at the FFT level (both FFTW and FFTW). Parallelism is exploited at the propagator level instead, where multiple independent propagators are computed in parallel using OpenMP threads. This design choice avoids thread contention and provides better scaling for branched polymer systems with many independent propagator computations.
 `FFT<T>` provides both interfaces:
 - `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
 - `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only
@@ -497,7 +497,7 @@ Modify only the parameter dictionary - the code supports arbitrary numbers of mo
 Results must match:
 - **PSCF** (https://github.com/dmorse/pscfpp) for continuous chains with even contour steps
 - **Previous FTS studies** for discrete AB diblock (*Polymers* **2021**, 13, 2437)
-- Results should be **identical across platforms** (CUDA vs MKL) within machine precision - verify by running same parameters on both platforms
+- Results should be **identical across platforms** (CUDA vs FFTW) within machine precision - verify by running same parameters on both platforms
 
 ## Documentation and Learning
 

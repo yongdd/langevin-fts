@@ -133,11 +133,11 @@ solver = PropagatorSolver(
 ### Platform selection
 
 ```python
-# Auto-select platform: cuda for 2D/3D, cpu-mkl for 1D
+# Auto-select platform: cuda for 2D/3D, cpu-fftw for 1D
 solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="auto")
 
 # Force CPU
-solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cpu-mkl")
+solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cpu-fftw")
 
 # Force CUDA (note: non-periodic BC requires realspace method on CUDA)
 solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cuda")
@@ -146,7 +146,7 @@ solver = PropagatorSolver(nx=[32, 24], lx=[4.0, 3.0], platform="cuda")
 ## Notes
 
 - The high-level `PropagatorSolver` class automatically handles platform selection and method fallback
-- Both CUDA and CPU-MKL support pseudo-spectral methods with DCT (reflecting BC) and DST (absorbing BC)
+- Both CUDA and CPU-FFTW support pseudo-spectral methods with DCT (reflecting BC) and DST (absorbing BC)
 - Real-space methods (CN-ADI) are available on both platforms for all BC types
 - Full SCFT iterations with non-periodic BC require additional considerations for field normalization and incompressibility
 - The DCT-II/III and DST-II/III conventions follow scipy.fft
@@ -159,7 +159,7 @@ Two methods are available for non-periodic boundary conditions:
    - Uses DCT for reflecting BC, DST for absorbing BC
    - High accuracy for smooth solutions (spectral convergence)
    - Efficient for large grids
-   - CPU-MKL only for non-periodic BC
+   - CPU-FFTW only for non-periodic BC
 
 2. **Real-space (Crank-Nicolson)**
    - Uses finite differences with ADI splitting

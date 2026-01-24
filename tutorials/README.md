@@ -71,7 +71,7 @@ solver = PropagatorSolver(
     bc=["periodic"]*4,
     chain_model="continuous",
     method="pseudospectral",
-    platform="cpu-mkl",
+    platform="cpu-fftw",
     reduce_memory=False
 )
 
@@ -137,7 +137,7 @@ For optimal performance, set these environment variables at the start of each no
 ```python
 import os
 os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
-os.environ["MKL_NUM_THREADS"] = "1"      # Single-threaded MKL
+os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded FFTW
 ```
 
 This prevents thread oversubscription when running multiple calculations.

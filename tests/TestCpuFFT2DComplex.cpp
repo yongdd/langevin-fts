@@ -18,8 +18,8 @@
 
 #include "Exception.h"
 #include "FFT.h"
-#ifdef USE_CPU_MKL
-#include "MklFFT.h"
+#ifdef USE_CPU_FFTW
+#include "FftwFFT.h"
 #endif
 
 int main()
@@ -65,8 +65,8 @@ int main()
         //-------------- initialize ------------
         std::cout<< "Initializing" << std::endl;
         std::vector<FFT<std::complex<double>>*> fft_list;
-#ifdef USE_CPU_MKL
-        fft_list.push_back(new MklFFT<std::complex<double>, 2>({II,JJ}));
+#ifdef USE_CPU_FFTW
+        fft_list.push_back(new FftwFFT<std::complex<double>, 2>({II,JJ}));
 #endif
         // For each platform    
         for(auto fft : fft_list){

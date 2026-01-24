@@ -7,7 +7,7 @@ Find equilibrium polymer morphologies by solving saddle-point equations.
 ```python
 import os
 os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
-os.environ["MKL_NUM_THREADS"] = "1"      # Single-threaded MKL
+os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded FFTW
 ```
 
 ## Tutorials

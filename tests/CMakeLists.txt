@@ -44,7 +44,7 @@ FOREACH(FILE_NAME ${FILE_LIST})
     GET_FILENAME_COMPONENT(TEST_NAME ${FILE_NAME} NAME_WE)
     IF ((${TEST_NAME} MATCHES "Cuda") AND NOT CUDAToolkit_FOUND)
         CONTINUE()
-    ELSEIF((${TEST_NAME} MATCHES "Cpu") AND NOT BUILD_CPU_MKL_LIB)
+    ELSEIF((${TEST_NAME} MATCHES "Cpu") AND NOT BUILD_CPU_FFTW_LIB)
         CONTINUE()
     ENDIF()
 
@@ -55,13 +55,8 @@ FOREACH(FILE_NAME ${FILE_LIST})
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cufft,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusparse,>
         $<IF:$<BOOL:${CUDAToolkit_FOUND}>,CUDA::cusolver,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
-        $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
+        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
+        $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
         common
         )
 
@@ -85,13 +80,8 @@ IF(CUDAToolkit_FOUND)
         ADD_EXECUTABLE(${TEST_NAME} ${FILE_NAME})
         TARGET_LINK_LIBRARIES(${TEST_NAME} PRIVATE
             factory cuda CUDA::cufft CUDA::cusparse CUDA::cusolver
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,cpu-mkl,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_intel_lp64,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_sequential,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lmkl_core,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
-            $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
+            $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
+            $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
             common)
 
         SET_PROPERTY(TARGET ${TEST_NAME} PROPERTY CUDA_ARCHITECTURES OFF)

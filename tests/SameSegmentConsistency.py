@@ -126,7 +126,7 @@ def main():
     all_passed = True
 
     # Test configurations
-    platforms = ["cpu-mkl", "cuda"]
+    platforms = ["cpu-fftw", "cuda"]
     reduce_memory_modes = [False, True]
 
     # Store results for cross-platform comparison

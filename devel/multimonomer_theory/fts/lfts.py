@@ -18,7 +18,7 @@ from models.symmetric_traditional import *
 from models.symmetric_orthonormal import *
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
@@ -33,12 +33,12 @@ class LFTS:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
-        # Choose platform among [cuda, cpu-mkl]
+        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
         avail_platforms = PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
+        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-fftw"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:

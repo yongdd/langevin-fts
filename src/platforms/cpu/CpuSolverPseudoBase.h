@@ -16,7 +16,7 @@
  * **Design Decision:**
  *
  * All simulations are conducted in fixed dimensions (1D, 2D, or 3D).
- * The FFT object is stored as `FFT<T>* fft_` which points to MklFFT<T, DIM>
+ * The FFT object is stored as `FFT<T>* fft_` which points to FftwFFT<T, DIM>
  * based on the dimensionality. This avoids maintaining separate fft_1d,
  * fft_2d, fft_3d pointers when only one is ever used per solver.
  *
@@ -80,7 +80,7 @@ protected:
     /**
      * @brief Spectral transform object for FFT/DCT/DST (handles all BCs).
      *
-     * Points to MklFFT<T, DIM> or FftwFFT<T, DIM> based on the selected
+     * Points to FftwFFT<T, DIM> or FftwFFT<T, DIM> based on the selected
      * backend, where DIM is 1, 2, or 3 based on the simulation dimension.
      * All simulations are conducted in fixed dimensions, so only one
      * transform object is needed per solver instance.
@@ -90,7 +90,7 @@ protected:
      */
     FFT<T>* fft_;
 
-    FFTBackend fft_backend_;  ///< Selected FFT backend (MKL or FFTW)
+    FFTBackend fft_backend_;  ///< Selected FFT backend (FFTW)
 
     Pseudo<T>* pseudo;           ///< Pseudo-spectral operator helper
 
@@ -226,7 +226,7 @@ protected:
      *
      * @param cb Computation box
      * @param molecules Molecules container
-     * @param backend FFT backend to use (MKL or FFTW)
+     * @param backend FFT backend to use (FFTW)
      */
     void init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend);
 

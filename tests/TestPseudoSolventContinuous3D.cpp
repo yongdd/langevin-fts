@@ -21,7 +21,7 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
@@ -117,7 +117,7 @@ int main()
         std::vector<ComputationBox<T>*> cb_2_list;
         std::vector<std::string> solver_name_list;
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         solver_name_list.push_back("CpuComputationContinuous, Aggregation=false");
         solver_name_list.push_back("CpuComputationReduceMemoryContinuous, Aggregation=false");
         #endif
@@ -126,7 +126,7 @@ int main()
         solver_name_list.push_back("CudaComputationReduceMemoryContinuous, Aggregation=false");
         #endif
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         cb_1_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_1_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_1_list.push_back(new CpuComputationContinuous<T>(cb_1_list.end()[-2], molecules_1, propagator_computation_optimizer_1, "pseudospectral"));
@@ -139,7 +139,7 @@ int main()
         solver_1_list.push_back(new CudaComputationReduceMemoryContinuous<T>(cb_1_list.end()[-1], molecules_1, propagator_computation_optimizer_1, "pseudospectral"));
         #endif
 
-        #ifdef USE_CPU_MKL
+        #ifdef USE_CPU_FFTW
         cb_2_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_2_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_2_list.push_back(new CpuComputationContinuous<T>(cb_2_list.end()[-2], molecules_2, propagator_computation_optimizer_2, "pseudospectral"));

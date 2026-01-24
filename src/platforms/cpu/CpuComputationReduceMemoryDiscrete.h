@@ -87,7 +87,7 @@
  * @example
  * @code
  * // Enable via reduce_memory parameter in factory
- * MklFactory<double> factory(true);  // reduce_memory = true
+ * FftwFactory<double> factory(true);  // reduce_memory = true
  *
  * // Usage is identical to standard version
  * auto* comp = factory.create_discrete_solver(cb, molecules, optimizer);
@@ -160,9 +160,9 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer
-     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
+     * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::MKL);
+    CpuComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::FFTW);
 
     /**
      * @brief Destructor. Frees checkpoints and workspace.

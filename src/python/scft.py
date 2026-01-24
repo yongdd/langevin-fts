@@ -34,7 +34,7 @@ from .smearing import Smearing
 logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
@@ -217,7 +217,7 @@ class SCFT:
     saddle points of the field-theoretic Hamiltonian.
 
     The implementation uses a platform-independent interface to computational backends
-    (CUDA GPU or CPU with Intel MKL), automatic propagator computation optimization
+    (CUDA GPU or CPU with FFTW), automatic propagator computation optimization
     for complex polymer architectures, and optional space group symmetry constraints.
 
     Parameters
@@ -294,9 +294,9 @@ class SCFT:
 
         **Platform Selection:**
 
-        - platform : {'cuda', 'cpu-mkl'}, optional
+        - platform : {'cuda', 'cpu-fftw', 'cpu-fftw'}, optional
             Computational backend. Auto-selected if not specified:
-            1D → cpu-mkl, 2D/3D → cuda (if available).
+            1D → cpu-fftw, 2D/3D → cuda (if available).
         - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
@@ -455,8 +455,8 @@ class SCFT:
 
     **Performance:**
 
-    - 1D simulations: cpu-mkl is recommended
-    - 2D/3D simulations: cuda provides 10-20x speedup over cpu-mkl
+    - 1D simulations: cpu-fftw or cpu-fftw is recommended
+    - 2D/3D simulations: cuda provides 10-20x speedup over cpu-fftw/cpu-fftw
     - Memory usage: ~500MB for 64³ grid (standard), ~50MB (reduce_memory)
 
     References
@@ -566,12 +566,12 @@ class SCFT:
         if len(self.monomer_types) != len(set(self.monomer_types)):
             raise ValidationError("There are duplicated monomer_types")
 
-        # Choose platform among [cuda, cpu-mkl]
+        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
+        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-fftw"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:
@@ -1146,7 +1146,7 @@ class SCFT:
 
         - Propagator computation dominates runtime (~95% of total).
         - CUDA: ~0.5s for 32³ grid, 100 segments.
-        - CPU-MKL: ~5s for 32³ grid, 100 segments.
+        - CPU-FFTW: ~5s for 32³ grid, 100 segments.
 
         See Also
         --------

@@ -372,12 +372,12 @@ Both methods produce nearly identical results, confirming equivalent 4th-order a
 ### 7.6 Implementation
 
 ETDRK4 is implemented in:
-- `CpuSolverPseudoETDRK4` (CPU/MKL)
+- `CpuSolverPseudoETDRK4` (CPU/FFTW)
 - `CudaSolverPseudoETDRK4` (CUDA)
 - `ETDRK4Coefficients` (shared coefficient computation)
 
 For the RQM4 method, see:
-- `CpuSolverPseudoRQM4` (CPU/MKL)
+- `CpuSolverPseudoRQM4` (CPU/FFTW)
 - `CudaSolverPseudoRQM4` (CUDA)
 
 The coefficients are precomputed once during initialization and reused for all propagator steps.

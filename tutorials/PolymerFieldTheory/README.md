@@ -7,7 +7,7 @@ Understand the mathematical framework behind SCFT and L-FTS.
 ```python
 import os
 os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded OpenMP
-os.environ["MKL_NUM_THREADS"] = "1"      # Single-threaded MKL
+os.environ["OMP_NUM_THREADS"] = "1"      # Single-threaded FFTW
 ```
 
 ## Tutorials

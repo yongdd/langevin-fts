@@ -309,4 +309,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"CUDA failed: {e}")
         print("Falling back to CPU...")
-        results = run_benchmark("cpu-mkl")
+        results = run_benchmark("cpu-fftw")

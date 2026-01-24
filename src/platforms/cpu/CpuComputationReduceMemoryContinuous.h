@@ -81,7 +81,7 @@
  * @example
  * @code
  * // Enable via reduce_memory parameter in factory
- * MklFactory<double> factory(true);  // reduce_memory = true
+ * FftwFactory<double> factory(true);  // reduce_memory = true
  *
  * // Usage is identical to standard version
  * auto* comp = factory.create_propagator_computation(cb, molecules, optimizer, "rqm4");
@@ -139,9 +139,9 @@ public:
      * @param numerical_method                Numerical algorithm:
      *                                        - For pseudospectral: "rqm4" or "etdrk4"
      *                                        - For realspace: "cn-adi2" or "cn-adi4-lr"
-     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
+     * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::MKL);
+    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW);
 
     /**
      * @brief Destructor. Frees checkpoints and workspace.

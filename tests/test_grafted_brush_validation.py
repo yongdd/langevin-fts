@@ -133,7 +133,7 @@ def test_grafted_brush_realspace():
                 bc=["absorbing", "absorbing"],
                 chain_model="continuous",
                 method="realspace",
-                platform="cpu-mkl",
+                platform="cpu-fftw",
                 reduce_memory=False
             )
 
@@ -247,7 +247,7 @@ def test_grafted_brush_pseudospectral():
                 bc=["absorbing", "absorbing"],
                 chain_model="continuous",
                 method="pseudospectral",
-                platform="cpu-mkl",
+                platform="cpu-fftw",
                 reduce_memory=False
             )
 
@@ -317,7 +317,7 @@ def compare_methods():
             bc=["absorbing", "absorbing"],
             chain_model="continuous",
             method="realspace",
-            platform="cpu-mkl",
+            platform="cpu-fftw",
             reduce_memory=False
         )
         solver_rs.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})
@@ -339,7 +339,7 @@ def compare_methods():
             bc=["absorbing", "absorbing"],
             chain_model="continuous",
             method="pseudospectral",
-            platform="cpu-mkl",
+            platform="cpu-fftw",
             reduce_memory=False
         )
         solver_ps.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})

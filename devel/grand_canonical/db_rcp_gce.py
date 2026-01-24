@@ -14,7 +14,7 @@ alpha = 0.2
 mu_rcp = 1.0
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
     
     "nx":[100],          # Simulation grid numbers
     "lx":[1.67],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,

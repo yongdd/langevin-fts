@@ -102,7 +102,7 @@ test-requires = ["pytest", "numpy", "scipy"]
 test-command = "python -c \"import polymerfts; print(polymerfts.PlatformSelector().avail_platforms())\""
 
 [tool.cibuildwheel.linux]
-environment = { MKL_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
+environment = { OMP_NUM_THREADS = "1", OMP_STACKSIZE = "1G" }
 
 [tool.flake8]
 max-line-length = 120

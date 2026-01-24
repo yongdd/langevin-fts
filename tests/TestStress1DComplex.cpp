@@ -80,7 +80,7 @@ int main()
 
         for(std::string platform : avail_platforms)
         {
-            if(platform != "cpu-mkl")
+            if(platform != "cpu-fftw")
                 continue;
 
             for(std::string chain_model : chain_models)

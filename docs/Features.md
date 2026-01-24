@@ -57,7 +57,7 @@ For detailed performance benchmarks and method comparisons, see [NumericalMethod
 - **Space group symmetries**: Constrain field symmetries during SCFT iterations (**beta**)
 
 ### Platforms and Performance
-- **CPU**: Intel MKL backend with OpenMP parallelization
+- **CPU**: FFTW backend with OpenMP parallelization
 - **GPU**: NVIDIA CUDA backend with multi-stream execution
 - **Parallel propagator computation**:
   - CPU: Up to 8 cores

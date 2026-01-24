@@ -9,7 +9,7 @@
  * **Design Philosophy:**
  *
  * This library uses high-performance computing patterns that require raw
- * pointer access for FFT libraries (MKL, cuFFT) and CUDA kernels. The utilities
+ * pointer access for FFT libraries (FFTW, cuFFT) and CUDA kernels. The utilities
  * here provide:
  *
  * 1. RAII wrappers that own memory and automatically deallocate

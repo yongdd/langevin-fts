@@ -124,9 +124,9 @@ public:
      * @param numerical_method                Numerical algorithm:
      *                                        - For pseudospectral: "rqm4" or "etdrk4"
      *                                        - For realspace: "cn-adi2" or "cn-adi4-lr"
-     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
+     * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::MKL);
+    CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW);
 
     /**
      * @brief Destructor. Frees all propagator and concentration arrays.

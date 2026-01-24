@@ -86,7 +86,7 @@ If your SCFT calculation does not converge, adjust the Anderson Mixing parameter
 
 The default platform is:
 - `cuda` for 2D and 3D simulations
-- `cpu-mkl` for 1D simulations
+- `cpu-fftw` for 1D simulations
 
 ### L-FTS Notes
 
@@ -112,7 +112,7 @@ For AB diblock copolymers adopting the `Discrete` model, the results must be ide
 
 ### Cross-Platform Consistency
 Results must be identical within machine precision regardless of:
-- Platform (CUDA or MKL)
+- Platform (CUDA or FFTW)
 - Use of superposition (`aggregate_propagator_computation`)
 - Use of the memory saving option (`reduce_memory`)
 
@@ -135,6 +135,6 @@ Simulations are configured via Python dictionaries with keys:
 | `segment_lengths` | Relative statistical segment lengths |
 | `chi_n` | Flory-Huggins interaction parameters × N_Ref |
 | `distinct_polymers` | Polymer architectures and volume fractions |
-| `platform` | `"cuda"` or `"cpu-mkl"` (auto-selected by default) |
+| `platform` | `"cuda"` or `"cpu-fftw"` (auto-selected by default) |
 | `numerical_method` | `"rqm4"`, `"rk2"`, `"etdrk4"`, `"cn-adi2"`, or `"cn-adi4-lr"` |
 | `reduce_memory` | `True` to enable memory saving mode |

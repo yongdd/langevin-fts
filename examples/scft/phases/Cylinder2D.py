@@ -13,7 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 f = 1.0/3.0     # A-fraction of major BCP chain, f
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
     
     "nx":[48,32],                  # Simulation grid numbers
     "lx":[2.7,1.6],                # Simulation box size as a_Ref * N_Ref^(1/2) unit,

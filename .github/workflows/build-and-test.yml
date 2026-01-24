@@ -8,11 +8,11 @@ on:
 
 env:
   OMP_STACKSIZE: 1G
-  MKL_NUM_THREADS: 1
+  OMP_NUM_THREADS: 1
 
 jobs:
   build-cpu:
-    name: Build (CPU-MKL, ${{ matrix.build_type }})
+    name: Build (CPU-FFTW, ${{ matrix.build_type }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -38,29 +38,29 @@ jobs:
           numpy scipy pandas matplotlib spglib \
           make git pip pyyaml \
           jupyter networkx pygments plotly nbformat \
-          mkl mkl-devel mkl-include
+          fftw
 
-    - name: Debug MKL installation
+    - name: Debug FFTW installation
       shell: bash -l {0}
       run: |
         echo "=== CONDA_PREFIX: $CONDA_PREFIX ==="
-        echo "=== MKL files in conda environment ==="
-        ls -la $CONDA_PREFIX/lib/libmkl* 2>/dev/null | head -20 || echo "No libmkl files found"
-        echo "=== MKL include files ==="
-        ls -la $CONDA_PREFIX/include/mkl*.h 2>/dev/null | head -10 || echo "No mkl headers found"
-        echo "=== CMake MKL config ==="
-        find $CONDA_PREFIX -name "*MKL*.cmake" -o -name "*mkl*.cmake" 2>/dev/null | head -10 || echo "No MKL cmake files"
+        echo "=== FFTW files in conda environment ==="
+        ls -la $CONDA_PREFIX/lib/libfftw* 2>/dev/null | head -20 || echo "No libfftw files found"
+        echo "=== FFTW include files ==="
+        ls -la $CONDA_PREFIX/include/fftw*.h 2>/dev/null | head -10 || echo "No fftw headers found"
+        echo "=== CMake FFTW config ==="
+        find $CONDA_PREFIX -name "*FFTW*.cmake" -o -name "*fftw*.cmake" 2>/dev/null | head -10 || echo "No FFTW cmake files"
 
     - name: Configure CMake
       shell: bash -l {0}
       run: |
         mkdir -p build
         cd build
-        # Set MKL environment for conda-forge MKL
-        export MKLROOT=$CONDA_PREFIX
+        # Set FFTW environment for conda-forge FFTW
+        export FFTWROOT=$CONDA_PREFIX
         export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
         cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DMKL_ROOT=$CONDA_PREFIX \
+          -DFFTW_ROOT=$CONDA_PREFIX \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           --debug-find 2>&1 | tee cmake_output.txt | tail -100
 
@@ -68,7 +68,7 @@ jobs:
       shell: bash -l {0}
       run: |
         cd build
-        # Add conda MKL library path for linking
+        # Add conda FFTW library path for linking
         export LIBRARY_PATH=$CONDA_PREFIX/lib:$LIBRARY_PATH
         export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
         make -j$(nproc)

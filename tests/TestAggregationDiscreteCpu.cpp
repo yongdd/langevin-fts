@@ -41,7 +41,7 @@ int main()
         double sum_total_partition;
 
         // -------------- initialize ------------
-        // Platform type, [cuda, cpu-mkl]
+        // Platform type, [cuda, cpu-fftw]
         std::vector<int> nx = {64,64};
         std::vector<double> lx = {6.0,5.0};
         double ds = 1.0/10;
@@ -72,7 +72,7 @@ int main()
         std::vector<double> total_partition_list;
         for(std::string platform : avail_platforms)
         {
-            if(platform != "cpu-mkl")
+            if(platform != "cpu-fftw")
                 continue;
 
             for(bool reduce_memory : reduce_memorys)

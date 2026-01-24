@@ -8,7 +8,7 @@
  *
  * **Boundary Conditions:**
  *
- * Supports all boundary conditions via the unified MklFFT class:
+ * Supports all boundary conditions via the unified FftwFFT class:
  * - PERIODIC: Standard FFT (complex coefficients)
  * - REFLECTING: DCT-II/III (Neumann BC, zero flux)
  * - ABSORBING: DST-II/III (Dirichlet BC, zero value)
@@ -132,9 +132,9 @@ public:
      *
      * @param cb        Computation box defining the grid and BCs
      * @param molecules Molecules container with monomer types
-     * @param backend   FFT backend to use (MKL or FFTW, default: MKL)
+     * @param backend   FFT backend to use (FFTW, default: FFTW)
      */
-    CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::MKL);
+    CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::FFTW);
 
     /**
      * @brief Destructor. Frees exp_dw arrays.

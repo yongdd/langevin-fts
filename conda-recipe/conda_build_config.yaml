@@ -22,7 +22,5 @@ channel_sources:
 # target_platform:
 #   - linux-64
 
-# MKL variant
-# Future: could add openblas variant
-# blas_impl:
-#   - mkl
+# FFTW is the only CPU FFT backend
+# No additional FFT variants needed

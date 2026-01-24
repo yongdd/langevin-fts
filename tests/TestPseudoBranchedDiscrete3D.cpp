@@ -21,7 +21,7 @@
 #include "Exception.h"
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
 #include "CpuComputationReduceMemoryDiscrete.h"
@@ -221,11 +221,11 @@ int main()
         std::vector<ComputationBox<double>*> cb_list;
         std::vector<std::string> solver_name_list;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list.push_back("pseudo, cpu-mkl");
-        solver_name_list.push_back("pseudo, cpu-mkl, aggregated");
-        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory");
-        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory, aggregated");
+        #ifdef USE_CPU_FFTW
+        solver_name_list.push_back("pseudo, cpu-fftw");
+        solver_name_list.push_back("pseudo, cpu-fftw, aggregated");
+        solver_name_list.push_back("pseudo, cpu-fftw, reduce_memory");
+        solver_name_list.push_back("pseudo, cpu-fftw, reduce_memory, aggregated");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));

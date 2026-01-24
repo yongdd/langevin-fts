@@ -99,7 +99,7 @@ def main():
     parser.add_argument("--ds", type=float, required=True,
                         help="Contour step size")
     parser.add_argument("--platform", type=str, default="cuda",
-                        help="Platform (cuda or cpu-mkl)")
+                        help="Platform (cuda or cpu-fftw)")
     parser.add_argument("--output", type=str, default=None,
                         help="Output JSON file")
     args = parser.parse_args()

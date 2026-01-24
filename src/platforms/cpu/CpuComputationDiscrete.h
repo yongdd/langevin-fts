@@ -125,9 +125,9 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer
-     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
+     * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::MKL);
+    CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::FFTW);
 
     /**
      * @brief Destructor. Frees propagators and concentrations.

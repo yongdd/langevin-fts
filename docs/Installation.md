@@ -1,6 +1,6 @@
 # Installation Guide
 
-> **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
+> **Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
 This document provides detailed instructions for installing the polymer field theory simulation library.
 
@@ -11,11 +11,11 @@ This document provides detailed instructions for installing the polymer field th
 The easiest way to get started is using Docker:
 
 ```bash
-# CPU-only (MKL backend)
+# CPU-only (FFTW backend)
 docker pull polymerfts:cpu
 docker run -it --rm -v $(pwd):/home/polymerfts/workspace polymerfts:cpu bash
 
-# GPU (CUDA + MKL)
+# GPU (CUDA + FFTW)
 docker pull polymerfts:cuda
 docker run -it --rm --gpus all -v $(pwd):/home/polymerfts/workspace polymerfts:cuda bash
 ```
@@ -51,9 +51,9 @@ ctest -L quick  # Quick installation verification (~5 seconds)
 make install
 ```
 
-### Option 3: pip Install (Requires MKL)
+### Option 3: pip Install (Requires FFTW3)
 
-If you have Intel MKL installed:
+If you have FFTW3 installed:
 ```bash
 pip install .
 ```
@@ -62,7 +62,7 @@ pip install .
 
 ### Required
 * **C++ Compiler**: Any compiler supporting C++20 standard
-* **Intel MKL**: For CPU computations (install via Intel oneAPI toolkit or conda-forge)
+* **FFTW3**: For CPU computations (install via conda-forge)
 * **Python 3.11+**: With NumPy, SciPy, matplotlib, networkx, pyyaml
 * **CMake 3.17+**: Build system
 * **pybind11**: Python-C++ binding
@@ -70,8 +70,6 @@ pip install .
 ### Optional
 * **CUDA Toolkit 11.8+**: For GPU computation (https://developer.nvidia.com/cuda-toolkit)
   * Set `CUDA_ARCHITECTURES` in `CMakeLists.txt` for your GPU: https://developer.nvidia.com/cuda-gpus
-* **FFTW3**: Alternative CPU backend (GPL license)
-  * Install via conda: `conda install -c conda-forge fftw`
 
 ### Development Tools (Optional)
 * **Anaconda/Miniconda**: https://www.anaconda.com/
@@ -84,7 +82,7 @@ pip install .
 # Create virtual environment
 conda create -n polymerfts python=3.12 cmake=3.31 pybind11=2.13 \
     numpy=2.2 scipy=1.14 pandas=2.3 matplotlib=3.10 spglib=2.5 \
-    make git pip pyyaml mkl mkl-devel mkl-include \
+    make git pip pyyaml fftw \
     jupyter networkx pygraphviz pygments plotly nbformat \
     -c conda-forge
 
@@ -110,8 +108,7 @@ make install
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `POLYMERFTS_USE_MKL` | ON | Enable Intel MKL CPU backend |
-| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
+| `POLYMERFTS_USE_FFTW` | ON | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
@@ -121,26 +118,9 @@ Example with options:
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_CUDA=OFF
 ```
 
-## FFTW Backend (Optional)
+## GPL License Warning
 
-FFTW3 provides an alternative CPU backend. Both MKL and FFTW backends support periodic, reflecting, and absorbing boundary conditions.
-
-### Installing FFTW
-
-Install FFTW3 via conda:
-```bash
-conda install -c conda-forge fftw
-```
-
-Then build with FFTW enabled:
-```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
-make -j8
-```
-
-### GPL License Warning
-
-> **⚠️ Important**: FFTW3 is licensed under the **GNU General Public License (GPL)**.
+> **Important**: FFTW3 is licensed under the **GNU General Public License (GPL)**.
 >
 > If you distribute binaries compiled with `POLYMERFTS_USE_FFTW=ON`, you **must** comply with GPL terms:
 > 1. Distribute the complete source code of your application
@@ -169,12 +149,17 @@ ulimit -s unlimited       # Add to ~/.bashrc
 export OMP_STACKSIZE=1G   # Stack size for OpenMP
 ```
 
-### MKL Not Found
+### FFTW Not Found
 
-**Solution**: Set the MKL root directory:
+**Solution**: Install FFTW3 via conda:
 ```bash
-export MKLROOT=/path/to/mkl  # or $CONDA_PREFIX for conda-forge MKL
-cmake .. -DMKL_ROOT=$MKLROOT
+conda install -c conda-forge fftw
+```
+
+Or set the FFTW root directory:
+```bash
+export FFTW_ROOT=/path/to/fftw
+cmake .. -DFFTW_ROOT=$FFTW_ROOT
 ```
 
 ### CUDA Not Detected

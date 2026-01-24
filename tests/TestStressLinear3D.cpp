@@ -56,7 +56,7 @@ int main()
         int idx;
 
         // -------------- Initialize ------------
-        // Platform type, [cuda, cpu-mkl]
+        // Platform type, [cuda, cpu-fftw]
         
         int max_scft_iter = 500;
         double tolerance = 1e-9;

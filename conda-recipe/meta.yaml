@@ -32,9 +32,7 @@ requirements:
     - pybind11 >=2.13
     - pybind11-abi
     - numpy
-    - mkl-devel
-    - mkl-include
-    - libblas =*=*mkl
+    - fftw
   run:
     - python
     - {{ pin_compatible('numpy') }}
@@ -42,8 +40,7 @@ requirements:
     - matplotlib-base >=3.10
     - networkx >=3.0
     - pyyaml >=6.0
-    - libblas =*=*mkl
-    - mkl
+    - fftw
 
 test:
   imports:
@@ -67,7 +64,7 @@ about:
     - Multi-monomer systems with arbitrary interaction parameters
     - Both continuous and discrete Gaussian chain models
     - Pseudo-spectral and real-space solvers
-    - CPU (Intel MKL) and GPU (NVIDIA CUDA) backends
+    - CPU (FFTW) and GPU (NVIDIA CUDA) backends
     - Python interface with NumPy integration
 
   license: Apache-2.0

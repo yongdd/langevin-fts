@@ -29,9 +29,9 @@ COPY . .
 
 # Build the project
 RUN mkdir -p build && cd build && \
-    export MKLROOT=/opt/conda/envs/polymerfts && \
+    export FFTWROOT=/opt/conda/envs/polymerfts && \
     cmake .. -DCMAKE_BUILD_TYPE=Release \
-             -DMKL_ROOT=/opt/conda/envs/polymerfts \
+             -DFFTW_ROOT=/opt/conda/envs/polymerfts \
              -DCMAKE_PREFIX_PATH=/opt/conda/envs/polymerfts \
              -DPOLYMERFTS_USE_CUDA=OFF \
              -DPOLYMERFTS_BUILD_TESTS=OFF && \
@@ -55,7 +55,7 @@ COPY --from=builder /opt/conda/envs/polymerfts /opt/conda/envs/polymerfts
 ENV PATH="/opt/conda/envs/polymerfts/bin:$PATH"
 ENV LD_LIBRARY_PATH="/opt/conda/envs/polymerfts/lib:$LD_LIBRARY_PATH"
 ENV OMP_STACKSIZE=1G
-ENV MKL_NUM_THREADS=1
+ENV OMP_NUM_THREADS=1
 ENV OMP_NUM_THREADS=4
 
 # Create non-root user for security

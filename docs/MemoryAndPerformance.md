@@ -2,7 +2,7 @@
 
 > **⚠️ Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
-This document describes the memory management strategies and performance characteristics of the polymer field theory simulation library for both CUDA (GPU) and CPU-MKL platforms.
+This document describes the memory management strategies and performance characteristics of the polymer field theory simulation library for both CUDA (GPU) and CPU-FFTW platforms.
 
 For numerical method benchmarks (RQM4 vs CN-ADI2, convergence analysis), see [NumericalMethodsPerformance.md](NumericalMethodsPerformance.md).
 
@@ -17,7 +17,7 @@ The library provides two memory modes controlled by the `reduce_memory` paramete
 
 ```python
 params = {
-    "platform": "cuda",  # or "cpu-mkl"
+    "platform": "cuda",  # or "cpu-fftw"
     "reduce_memory": True,  # Enable memory-saving mode
     # ... other parameters
 }
@@ -73,7 +73,7 @@ Pinned Host Memory (Checkpoints):
 
 **Memory usage**: GPU memory is nearly constant; checkpoints stored in host RAM.
 
-## CPU-MKL Platform
+## CPU-FFTW Platform
 
 ### Standard Mode
 
@@ -108,7 +108,7 @@ System RAM (Reduced):
 - **Chain model**: Discrete
 - **N = 500** contour steps (ds = 1/500)
 - **Checkpoint interval**: $\lceil 2\sqrt{500} \rceil = 45$
-- **Hardware**: NVIDIA A10 GPU (23 GB), Intel MKL CPU (8 threads)
+- **Hardware**: NVIDIA A10 GPU (23 GB), FFTW CPU (8 threads)
 
 ### CUDA (GPU) Results
 
@@ -128,7 +128,7 @@ System RAM (Reduced):
 - Computation **3.8x slower** due to recomputation from checkpoints
 - Standard mode for $200^3$ would require ~60 GB GPU memory (infeasible)
 
-### CPU-MKL Results
+### CPU-FFTW Results
 
 | Mode | Grid | CPU Memory | Time/iter | Total (5 iter) |
 |------|------|------------|-----------|----------------|
@@ -164,7 +164,7 @@ At $96^3$ grid (common grid sizes for comparison):
 | Platform | Standard | Reduce Memory | Savings | Time Overhead |
 |----------|----------|---------------|---------|---------------|
 | **CUDA** | 6.8 GB GPU | 0.5 GB GPU + 0.9 GB host | **93%** | 3.8x |
-| **CPU-MKL** | 7.3 GB | 0.5 GB | **93%** | 3.8x |
+| **CPU-FFTW** | 7.3 GB | 0.5 GB | **93%** | 3.8x |
 
 ## Memory Estimation
 
@@ -271,12 +271,12 @@ This reduces the workspace from $O(N)$ to $O(\sqrt{N})$ arrays while minimizing 
 - **Dual streams**: Overlap kernel execution with memory transfers
 - **Minimal device allocation**: Fixed workspace regardless of chain length
 
-### CPU-MKL-Specific Details
+### CPU-FFTW-Specific Details
 
 - **Block-based computation**: Processes concentration in blocks of $2\sqrt{N}$ for efficient checkpoint reuse
 - **$2\sqrt{N}$ checkpoints**: Stores checkpoints at optimal intervals
 - **Single-threaded recomputation**: Minimizes memory during checkpoint reconstruction
-- **MKL FFT**: Intel-optimized FFT for spectral operations
+- **FFTW FFT**: Intel-optimized FFT for spectral operations
 
 ## Troubleshooting
 

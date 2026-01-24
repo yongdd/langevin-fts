@@ -16,7 +16,7 @@ from . import _core
 from .polymer_field_theory import *
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 # For ADAM optimizer, see https://pytorch.org/docs/stable/generated/torch.optim.Adam.html
@@ -69,12 +69,12 @@ class SCFT:
         assert(len(self.monomer_types) == len(set(self.monomer_types))), \
             "There are duplicated monomer_types"
 
-        # Choose platform among [cuda, cpu-mkl]
+        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
+        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-fftw"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:

@@ -21,7 +21,7 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationDiscrete.h"
 #include "CpuComputationReduceMemoryDiscrete.h"
@@ -197,9 +197,9 @@ int main()
         std::vector<ComputationBox<double>*> cb_list;
         std::vector<std::string> solver_name_list;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list.push_back("cpu-mkl");
-        solver_name_list.push_back("cpu-mkl, reduce_memory");
+        #ifdef USE_CPU_FFTW
+        solver_name_list.push_back("cpu-fftw");
+        solver_name_list.push_back("cpu-fftw, reduce_memory");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationDiscrete<double>(cb_list.end()[-2], molecules, propagator_computation_optimizer));

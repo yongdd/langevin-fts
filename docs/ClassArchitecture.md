@@ -21,7 +21,7 @@ This document describes the class hierarchies, inheritance patterns, and design 
 
 ## Overview
 
-The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU with Intel MKL, GPU with CUDA) through a unified interface. All major computational classes are templates parameterized on:
+The library uses the **Abstract Factory Pattern** to support multiple computational platforms (CPU with FFTW, GPU with CUDA) through a unified interface. All major computational classes are templates parameterized on:
 
 - `T` = `double` or `std::complex<double>` for real or complex field theories
 - `DIM` = 1, 2, or 3 for spatial dimension (FFT classes only)
@@ -32,7 +32,7 @@ The library uses the **Abstract Factory Pattern** to support multiple computatio
 src/
 ├── common/           # Platform-independent interfaces and utilities
 ├── platforms/
-│   ├── cpu/          # Intel MKL implementations
+│   ├── cpu/          # FFTW implementations
 │   └── cuda/         # NVIDIA CUDA implementations
 ├── python/           # Python interface modules
 └── pybind11/         # C++/Python bindings
@@ -56,7 +56,7 @@ AbstractFactory<T>                    [Abstract Base]
 ├── create_anderson_mixing()          [pure virtual]
 └── display_info()                    [pure virtual]
         │
-        ├── MklFactory<T>             [CPU Implementation]
+        ├── FftwFactory<T>             [CPU Implementation]
         │   └── Creates: CpuComputationBox, CpuComputation*,
         │                CpuAndersonMixing, CpuSolver*
         │
@@ -73,7 +73,7 @@ AbstractFactory<T>                    [Abstract Base]
 // Create factory for specific platform
 auto factory = PlatformSelector::create_factory("cuda", reduce_memory);
 
-// Or use automatic selection (CUDA for 2D/3D, MKL for 1D)
+// Or use automatic selection (CUDA for 2D/3D, FFTW for 1D)
 auto factory = PlatformSelector::create_factory("auto", reduce_memory);
 ```
 
@@ -296,7 +296,7 @@ CpuSolver<T>                                  [Abstract Base]
 
 ## FFT Hierarchy
 
-**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/MklFFT.h`
+**Location**: `src/platforms/cpu/FFT.h`, `src/platforms/cpu/FftwFFT.h`
 
 Provides spectral transforms supporting all boundary condition types.
 
@@ -309,7 +309,7 @@ FFT<T>                                        [Abstract Base]
 ├── forward(T* real, complex* spectral)       [pure virtual, periodic only]
 └── backward(complex* spectral, T* real)      [pure virtual, periodic only]
         │
-        ├── MklFFT<T, DIM>                    [CPU/Intel MKL]
+        ├── FftwFFT<T, DIM>                    [CPU/FFTW]
         │   └── DIM = 1, 2, or 3 (compile-time)
         │
         └── CudaFFT<T, DIM>                   [GPU/cuFFT + custom kernels]
@@ -462,14 +462,14 @@ INSTANTIATE_CLASS(CpuComputationContinuous);
 //   template class CpuComputationContinuous<std::complex<double>>;
 
 // For FFT classes with dimension parameter
-INSTANTIATE_FFT_CLASS(MklFFT);
+INSTANTIATE_FFT_CLASS(FftwFFT);
 // Expands to:
-//   template class MklFFT<double, 1>;
-//   template class MklFFT<double, 2>;
-//   template class MklFFT<double, 3>;
-//   template class MklFFT<std::complex<double>, 1>;
-//   template class MklFFT<std::complex<double>, 2>;
-//   template class MklFFT<std::complex<double>, 3>;
+//   template class FftwFFT<double, 1>;
+//   template class FftwFFT<double, 2>;
+//   template class FftwFFT<double, 3>;
+//   template class FftwFFT<std::complex<double>, 1>;
+//   template class FftwFFT<std::complex<double>, 2>;
+//   template class FftwFFT<std::complex<double>, 3>;
 ```
 
 ---
@@ -512,7 +512,7 @@ scft.run()
 ```cpp
 #include "PlatformSelector.h"
 
-// Create factory (use "cuda" or "cpu-mkl")
+// Create factory (use "cuda" or "cpu-fftw")
 AbstractFactory<double>* factory = PlatformSelector::create_factory_real("cuda", false);
 
 // Create computation box
@@ -561,7 +561,7 @@ solver = PropagatorSolver(
     bc=["reflecting", "reflecting"],
     chain_model="continuous",
     numerical_method="rqm4",  # or "rk2", "etdrk4", "cn-adi2", "cn-adi4-lr"
-    platform="cpu-mkl",
+    platform="cpu-fftw",
     reduce_memory=False
 )
 

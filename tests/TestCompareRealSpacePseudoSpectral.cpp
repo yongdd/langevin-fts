@@ -29,7 +29,7 @@
  * - 3D reflecting, absorbing, and mixed BCs
  *
  * Platform support:
- * - CPU (MKL): Both pseudo-spectral (DCT/DST) and real-space
+ * - CPU (FFTW): Both pseudo-spectral (DCT/DST) and real-space
  * - CUDA: Real-space only for non-periodic BCs (pseudo-spectral uses FFT only)
  *
  * The test compares:
@@ -50,7 +50,7 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #endif
@@ -175,13 +175,13 @@ bool run_comparison_test(
     // Both methods support non-periodic BCs on CPU (DCT/DST for pseudo-spectral)
     // For mixed BCs, only test real-space (pseudo-spectral not supported)
     // ====================================================================
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
     std::vector<double> q_cpu_ref(M);  // Reference for CUDA comparison
 
     if (mixed_bc)
     {
         // Mixed BCs: only test real-space
-        std::cout << "  [CPU-MKL RS only] " << std::flush;
+        std::cout << "  [CPU-FFTW RS only] " << std::flush;
         CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
         CpuComputationContinuous<T>* solver_rs = new CpuComputationContinuous<T>(cb_rs, &molecules, &prop_opt, "realspace");
 
@@ -214,7 +214,7 @@ bool run_comparison_test(
     else
     {
         // Matching BCs: compare pseudo-spectral vs real-space
-        std::cout << "  [CPU-MKL PS vs RS] " << std::flush;
+        std::cout << "  [CPU-FFTW PS vs RS] " << std::flush;
         CpuComputationBox<T>* cb_ps = new CpuComputationBox<T>(nx, lx, bc);
         CpuComputationBox<T>* cb_rs = new CpuComputationBox<T>(nx, lx, bc);
 

@@ -40,7 +40,7 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #endif
@@ -112,7 +112,7 @@ bool run_test(const std::string& platform_name,
 
 int main()
 {
-#if !defined(USE_CPU_MKL) && !defined(USE_CUDA)
+#if !defined(USE_CPU_FFTW) && !defined(USE_CUDA)
     std::cout << "Neither CPU nor CUDA available, skipping ETDRK4 test" << std::endl;
     return 0;
 #else
@@ -146,9 +146,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -168,9 +168,9 @@ int main()
             std::vector<double> lx = {4.0, 4.0};
             std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -190,9 +190,9 @@ int main()
             std::vector<double> lx = {4.0, 4.0, 4.0};
             std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic", "periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -217,9 +217,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -239,9 +239,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"reflecting", "reflecting", "reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -261,9 +261,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"reflecting", "reflecting", "reflecting", "reflecting", "reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -288,9 +288,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -310,9 +310,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -332,9 +332,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "pseudospectral", "rqm4",
+                    "  CPU-FFTW", nx, lx, bc, "pseudospectral", "rqm4",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
@@ -362,9 +362,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "realspace", "cn-adi2",
+                    "  CPU-FFTW", nx, lx, bc, "realspace", "cn-adi2",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance_cross))
                 all_passed = false;
             #endif
@@ -384,9 +384,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, "realspace", "cn-adi2",
+                    "  CPU-FFTW", nx, lx, bc, "realspace", "cn-adi2",
                     "pseudospectral", "etdrk4", &molecules, &prop_opt, tolerance_cross))
                 all_passed = false;
             #endif
@@ -413,8 +413,8 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"absorbing", "absorbing", "reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
-            std::cout << "  CPU-MKL SKIPPED (known issue with mixed BC)" << std::endl;
+            #ifdef USE_CPU_FFTW
+            std::cout << "  CPU-FFTW SKIPPED (known issue with mixed BC)" << std::endl;
             #endif
 
             #ifdef USE_CUDA
@@ -432,8 +432,8 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"reflecting", "reflecting", "reflecting", "reflecting", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
-            std::cout << "  CPU-MKL SKIPPED (known issue with mixed BC)" << std::endl;
+            #ifdef USE_CPU_FFTW
+            std::cout << "  CPU-FFTW SKIPPED (known issue with mixed BC)" << std::endl;
             #endif
 
             #ifdef USE_CUDA
@@ -463,7 +463,7 @@ int main()
 
             double Q_reflecting = 0.0, Q_absorbing = 0.0;
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             {
                 // Reflecting BC
                 CpuComputationBox<double>* cb_ref = new CpuComputationBox<double>(
@@ -493,7 +493,7 @@ int main()
 
                 if (!ref_conserved || !abs_less)
                 {
-                    std::cout << "  CPU-MKL FAILED (Q_ref=" << std::scientific << Q_reflecting
+                    std::cout << "  CPU-FFTW FAILED (Q_ref=" << std::scientific << Q_reflecting
                               << ", Q_abs=" << Q_absorbing << ")" << std::fixed << std::endl;
                     if (!ref_conserved)
                         std::cout << "    Expected Q_reflecting = 1.0 for w=0" << std::endl;
@@ -501,7 +501,7 @@ int main()
                 }
                 else
                 {
-                    std::cout << "  CPU-MKL PASSED (Q_ref=" << std::fixed << std::setprecision(4) << Q_reflecting
+                    std::cout << "  CPU-FFTW PASSED (Q_ref=" << std::fixed << std::setprecision(4) << Q_reflecting
                               << " [conserved], Q_abs=" << Q_absorbing << " [absorbed])" << std::endl;
                 }
             }

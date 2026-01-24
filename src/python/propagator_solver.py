@@ -18,7 +18,7 @@ Example usage:
         bc=["reflecting", "reflecting"],
         chain_model="continuous",
         numerical_method="rqm4",  # optional, defaults to "rqm4"
-        platform="cpu-mkl"
+        platform="cpu-fftw"
     )
 
     # For discrete chain model, numerical_method is not needed
@@ -93,7 +93,7 @@ class PropagatorSolver:
         - "cn-adi4-lr": Real-space with 4th-order CN-ADI
         Note: Discrete chain model has its own solver; this parameter is ignored.
     platform : str
-        Computational platform: "cpu-mkl" or "cuda".
+        Computational platform: "cpu-fftw", "cpu-fftw", or "cuda".
     reduce_memory : bool
         If True, store only propagator checkpoints instead of full histories,
         recomputing propagators as needed. Reduces memory usage but increases
@@ -125,7 +125,7 @@ class PropagatorSolver:
     ...     bc=["reflecting", "reflecting"],
     ...     chain_model="continuous",
     ...     numerical_method="rqm4",
-    ...     platform="cpu-mkl"
+    ...     platform="cpu-fftw"
     ... )
     >>> solver.add_polymer(1.0, [["A", 1.0, 0, 1]])
     >>> solver.compute_propagators({"A": np.zeros(64)})
@@ -230,7 +230,7 @@ class PropagatorSolver:
             if self.dim >= 2:
                 platform = "cuda"
             else:
-                platform = "cpu-mkl"
+                platform = "cpu-fftw"
         self.platform = platform
 
         # Check if non-periodic BC is used with CUDA pseudospectral
