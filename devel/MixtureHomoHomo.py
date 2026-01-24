@@ -12,7 +12,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 eps = 3.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
     
     "nx":[32,32,32],          # Simulation grid numbers
     "lx":[4.36,4.36,4.36],    # Simulation box size as a_Ref * N_Ref^(1/2) unit,

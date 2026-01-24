@@ -22,7 +22,7 @@
 #include "Molecules.h"
 #include "Polymer.h"
 #include "FiniteDifference.h"  // For REALSPACE_RICHARDSON_EXTRAPOLATION
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
@@ -301,9 +301,9 @@ int main()
         std::vector<std::string> solver_name_list;
 
         // Real space method
-        #ifdef USE_CPU_MKL
-        solver_name_list.push_back("real space, cpu-mkl");
-        solver_name_list.push_back("real space, cpu-mkl, reduce_memory");
+        #ifdef USE_CPU_FFTW
+        solver_name_list.push_back("real space, cpu-fftw");
+        solver_name_list.push_back("real space, cpu-fftw, reduce_memory");
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<T>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous            <T>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "realspace"));

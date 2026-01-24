@@ -6,7 +6,7 @@ from polymerfts import *
 # -------------- initialize ------------
 
 # OpenMP environment variables 
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "2"  # 0, 1 or 2
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
@@ -24,7 +24,7 @@ chain_model = "Continuous" # choose among [Continuous, Discrete]
 dict_a_n = {"A":np.sqrt(epsilon*epsilon/(f*epsilon*epsilon + (1.0-f))),
             "B":np.sqrt(1.0/(f*epsilon*epsilon + (1.0-f)))}
 
-# choose platform among [cuda, cpu-mkl]
+# choose platform among [cuda, cpu-fftw, cpu-fftw]
 if "cuda" in PlatformSelector.avail_platforms():
     platform = "cuda"
 else:

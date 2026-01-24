@@ -1,6 +1,6 @@
 {
   "initial_params": {
-    "platform": "cpu-mkl",
+    "platform": "cpu-fftw",
     "nx": [
       32
     ],

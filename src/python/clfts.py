@@ -79,7 +79,7 @@ from .polymer_field_theory import SymmetricPolymerTheory
 from .smearing import Smearing
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 
@@ -146,7 +146,7 @@ class CLFTS:
             Universality requires k_int ≳ 20/R₀. Default dk_int = 5.0.
 
           Reference: Matsen et al., J. Chem. Phys. 164, 014905 (2026)
-        - platform : str, optional - "cuda" or "cpu-mkl"
+        - platform : str, optional - "cuda" or "cpu-fftw"
         - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
             recomputing propagators as needed (default: False).
@@ -195,12 +195,12 @@ class CLFTS:
         assert len(self.monomer_types) == len(set(self.monomer_types)), \
             "There are duplicated monomer_types"
 
-        # Choose platform among [cuda, cpu-mkl]
+        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1:
-            platform = "cpu-mkl"
+        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1:
+            platform = "cpu-fftw"
         elif "cuda" in avail_platforms:
             platform = "cuda"
         else:

@@ -12,16 +12,18 @@ find_dependency(OpenMP REQUIRED)
 
 # Report what was found during the original build
 set(POLYMERFTS_VERSION "@PROJECT_VERSION@")
-set(POLYMERFTS_HAS_MKL @BUILD_CPU_MKL_LIB@)
+set(POLYMERFTS_HAS_FFTW @BUILD_CPU_FFTW_LIB@)
 set(POLYMERFTS_HAS_CUDA @CUDAToolkit_FOUND@)
 
 # Optional dependencies based on build configuration
-if(POLYMERFTS_HAS_MKL)
-    # Try to find MKL - use CONFIG mode first, then fallback
-    find_package(MKL CONFIG QUIET)
-    if(NOT MKL_FOUND)
-        list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
-        find_dependency(MKL)
+if(POLYMERFTS_HAS_FFTW)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FFTW3 QUIET fftw3)
+    endif()
+    if(NOT FFTW3_FOUND)
+        find_library(FFTW3_LIBRARIES NAMES fftw3)
+        find_path(FFTW3_INCLUDE_DIRS fftw3.h)
     endif()
 endif()
 
@@ -39,5 +41,5 @@ set(POLYMERFTS_INCLUDE_DIRS ${_POLYMERFTS_INCLUDE_DIRS})
 check_required_components(polymerfts)
 
 message(STATUS "Found polymerfts ${POLYMERFTS_VERSION}")
-message(STATUS "  MKL backend: ${POLYMERFTS_HAS_MKL}")
+message(STATUS "  FFTW backend: ${POLYMERFTS_HAS_FFTW}")
 message(STATUS "  CUDA backend: ${POLYMERFTS_HAS_CUDA}")

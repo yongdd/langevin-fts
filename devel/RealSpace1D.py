@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from polymerfts import *
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"  # 0, 1
 os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
@@ -32,8 +32,8 @@ boundary_conditions = ["periodic", "periodic"]
 aggregate_propagator_computation = False
 reduce_memory = False
 
-# Select platform ("cuda" or "cpu-mkl")
-factory = PlatformSelector.create_factory("cpu-mkl", reduce_memory)
+# Select platform ("cuda" or "cpu-fftw")
+factory = PlatformSelector.create_factory("cpu-fftw", reduce_memory)
 factory.display_info()
 
 # Create an instance for computation box

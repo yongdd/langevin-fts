@@ -84,7 +84,7 @@ def main():
         bc=["periodic", "periodic", "periodic", "periodic", "periodic", "periodic"],
         chain_model="continuous",
         method="realspace",
-        platform="cpu-mkl",
+        platform="cpu-fftw",
         reduce_memory=False
     )
 

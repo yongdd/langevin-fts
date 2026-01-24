@@ -59,7 +59,7 @@ def test_sigma(sigma, ds=0.005):
             bc=["absorbing", "absorbing"],
             chain_model="continuous",
             method="realspace",
-            platform="cpu-mkl",
+            platform="cpu-fftw",
             reduce_memory=False
         )
         solver_rs.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})
@@ -77,7 +77,7 @@ def test_sigma(sigma, ds=0.005):
             bc=["absorbing", "absorbing"],
             chain_model="continuous",
             method="pseudospectral",
-            platform="cpu-mkl",
+            platform="cpu-fftw",
             reduce_memory=False
         )
         solver_ps.add_polymer(1.0, [["A", s_final, 0, 1]], grafting_points={0: "G"})

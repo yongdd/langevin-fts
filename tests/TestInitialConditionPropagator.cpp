@@ -36,7 +36,7 @@ int main()
         std::streamsize default_precision = std::cout.precision();
 
         // -------------- initialize ------------
-        // Platform type, [cuda, cpu-mkl]
+        // Platform type, [cuda, cpu-fftw]
 
         std::vector<int> nx = {16,16,16};
         std::vector<double> lx = {4.0, 4.0, 4.0};

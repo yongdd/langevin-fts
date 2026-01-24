@@ -24,7 +24,7 @@
  * - FFTW_RODFT01: DST-III (backward)
  *
  * @see FFT for the abstract interface
- * @see MklFFT for Intel MKL implementation
+ * @see FftwFFT for FFTW implementation
  * @see CudaFFT for GPU implementation
  */
 
@@ -43,7 +43,7 @@
  * @brief FFTW3-based FFT with support for all boundary conditions.
  *
  * Uses FFTW3 for both periodic FFT and non-periodic DCT/DST transforms.
- * Unlike MKL implementation which uses O(N^2) matrix multiplication for DCT/DST,
+ * This uses FFTW which provides O(N^2) matrix multiplication for DCT/DST,
  * FFTW provides O(N log N) algorithms for all transform types.
  *
  * @tparam T   Input type for forward transform (typically double)

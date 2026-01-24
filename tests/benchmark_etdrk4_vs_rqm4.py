@@ -97,7 +97,7 @@ def benchmark_pseudospectral(platform, nx, lx, ds_values, n_warmup=2, n_runs=5):
     return results
 
 
-def test_convergence(platform="cpu-mkl"):
+def test_convergence(platform="cpu-fftw"):
     """Test convergence order of pseudo-spectral method."""
 
     print(f"\n{'='*60}")
@@ -166,8 +166,8 @@ def compare_cpu_cuda():
     w_a = create_lamellar_field(nx, lx)
 
     # CPU
-    print("\nCPU (MKL):")
-    factory_cpu = _core.PlatformSelector.create_factory("cpu-mkl", False)
+    print("\nCPU (FFTW):")
+    factory_cpu = _core.PlatformSelector.create_factory("cpu-fftw", False)
     molecules_cpu = factory_cpu.create_molecules_information("Continuous", ds, {"A": 1.0})
     molecules_cpu.add_polymer(1.0, [["A", 1.0, 0, 1]])
     cb_cpu = factory_cpu.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
@@ -221,9 +221,9 @@ def main():
     lx_3d = [4.0, 4.0, 4.0]
 
     # CPU benchmark
-    print("\n--- CPU (MKL) ---")
+    print("\n--- CPU (FFTW) ---")
     try:
-        cpu_results = benchmark_pseudospectral("cpu-mkl", nx_3d, lx_3d, ds_values)
+        cpu_results = benchmark_pseudospectral("cpu-fftw", nx_3d, lx_3d, ds_values)
     except Exception as e:
         print(f"CPU benchmark failed: {e}")
         cpu_results = None
@@ -237,7 +237,7 @@ def main():
         cuda_results = None
 
     # Convergence test
-    test_convergence("cpu-mkl")
+    test_convergence("cpu-fftw")
 
     try:
         test_convergence("cuda")

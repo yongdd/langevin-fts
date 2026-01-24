@@ -42,7 +42,7 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #endif
@@ -247,7 +247,7 @@ bool run_method_tests(const std::string& platform_name,
 
 int main()
 {
-#if !defined(USE_CPU_MKL) && !defined(USE_CUDA)
+#if !defined(USE_CPU_FFTW) && !defined(USE_CUDA)
     std::cout << "Neither CPU nor CUDA available, skipping CN-ADI4 mixed BC test" << std::endl;
     return 0;
 #else
@@ -274,10 +274,10 @@ int main()
         //=======================================================================
         std::cout << "\n--- CN-ADI4-LR (Local Richardson) ---" << std::endl;
 
-        #ifdef USE_CPU_MKL
-        std::cout << "  CPU-MKL:" << std::endl;
+        #ifdef USE_CPU_FFTW
+        std::cout << "  CPU-FFTW:" << std::endl;
         if (!run_method_tests<CpuComputationBox, CpuComputationContinuous>(
-                "CPU-MKL", "cn-adi4-lr", &molecules, &prop_opt, tolerance))
+                "CPU-FFTW", "cn-adi4-lr", &molecules, &prop_opt, tolerance))
             all_passed = false;
         #endif
 
@@ -293,10 +293,10 @@ int main()
         //=======================================================================
         std::cout << "\n--- CN-ADI4-GR (Global Richardson) ---" << std::endl;
 
-        #ifdef USE_CPU_MKL
-        std::cout << "  CPU-MKL:" << std::endl;
+        #ifdef USE_CPU_FFTW
+        std::cout << "  CPU-FFTW:" << std::endl;
         if (!run_method_tests<CpuComputationBox, CpuComputationContinuous>(
-                "CPU-MKL", "cn-adi4-gr", &molecules, &prop_opt, tolerance))
+                "CPU-FFTW", "cn-adi4-gr", &molecules, &prop_opt, tolerance))
             all_passed = false;
         #endif
 

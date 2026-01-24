@@ -44,7 +44,7 @@ int main()
         double sum_total_partition;
 
         // -------------- initialize ------------
-        // Platform type, [cuda, cpu-mkl]
+        // Platform type, [cuda, cpu-fftw]
         double f = 0.2;
         std::vector<int> nx = {64,64};
         std::vector<double> lx = {6.0,5.0};

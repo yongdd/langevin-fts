@@ -44,7 +44,7 @@ def main():
     print()
 
     # Create factory
-    factory = _core.PlatformSelector.create_factory("cpu-mkl", False)
+    factory = _core.PlatformSelector.create_factory("cpu-fftw", False)
 
     # Create molecules
     bond_lengths = {"A": 1.0}

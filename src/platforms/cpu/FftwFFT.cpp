@@ -13,7 +13,7 @@
  *
  * **Performance Advantage:**
  *
- * Unlike MKL implementation which uses O(N^2) matrix multiplication for DCT/DST,
+ * This uses FFTW which provides O(N^2) matrix multiplication for DCT/DST,
  * FFTW provides O(N log N) algorithms for all transform types.
  *
  * **Normalization:**

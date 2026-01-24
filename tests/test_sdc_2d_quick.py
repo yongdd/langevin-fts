@@ -33,7 +33,7 @@ def run_sdc_test(N_steps, chi_n=20.0, f=0.5, nx=32, lx=3.2):
         },
         "max_iter": 500,
         "tolerance": 1e-7,
-        "platform": "cpu-mkl",
+        "platform": "cpu-fftw",
         "numerical_method": "sdc",
         "verbose": False,
         "box_is_altering": False,
@@ -52,7 +52,7 @@ def run_sdc_test(N_steps, chi_n=20.0, f=0.5, nx=32, lx=3.2):
     return scft.free_energy
 
 # Test with different N values
-print("Testing SDC convergence on CPU-MKL (2D, nx=32, direct sparse solver)...")
+print("Testing SDC convergence on CPU-FFTW (2D, nx=32, direct sparse solver)...")
 print("=" * 60)
 
 N_values = [20, 40, 80]

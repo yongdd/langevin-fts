@@ -3,7 +3,7 @@
  * @brief Abstract Factory pattern for platform-independent object creation.
  *
  * This header defines the AbstractFactory class, which implements the Abstract
- * Factory design pattern to create platform-specific objects (CPU/MKL or CUDA)
+ * Factory design pattern to create platform-specific objects (CPU/FFTW or CUDA)
  * without exposing the concrete implementations to client code.
  *
  * **Design Pattern:**
@@ -16,10 +16,10 @@
  *
  * **Supported Platforms:**
  *
- * - **cpu-mkl**: Intel MKL-based CPU implementation using OpenMP
+ * - **cpu-fftw**: FFTW-based CPU implementation using OpenMP
  * - **cuda**: NVIDIA CUDA GPU implementation using cuFFT
  *
- * @see MklFactory for CPU implementation
+ * @see FftwFactory for CPU implementation
  * @see CudaFactory for GPU implementation
  * @see PlatformSelector for factory creation
  *
@@ -69,7 +69,7 @@
  *
  * This template class defines the interface for creating all major objects
  * needed for polymer field theory simulations. Concrete implementations
- * (MklFactory, CudaFactory) provide platform-optimized versions of each object.
+ * (FftwFactory, CudaFactory) provide platform-optimized versions of each object.
  *
  * @tparam T Numeric type (double or std::complex<double>)
  *

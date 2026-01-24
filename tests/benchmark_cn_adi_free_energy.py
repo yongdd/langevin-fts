@@ -41,7 +41,7 @@ def run_scft(method, ds, chi_n=20.0, f=0.5, nx=32, lx=3.2):
         },
         "max_iter": 2000,
         "tolerance": 1e-9,
-        "platform": "cpu-mkl",
+        "platform": "cpu-fftw",
         "numerical_method": method,
         "verbose": False,
         "box_is_altering": False,

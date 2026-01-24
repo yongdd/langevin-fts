@@ -13,7 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "2"  # 1 ~ 4
 f = 0.2       # A-fraction of major BCP chain, f
 
 params = {
-    # "platform":"cpu-mkl",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cpu-fftw",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
 
     # 1.8613020, 1.8613020, 1.8613020
 

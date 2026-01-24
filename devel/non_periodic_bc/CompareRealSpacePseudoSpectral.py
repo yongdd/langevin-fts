@@ -22,7 +22,7 @@ import numpy as np
 
 # OpenMP environment variables
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 from polymerfts import PropagatorSolver
 
@@ -57,14 +57,14 @@ def run_comparison_1d(bc_type, n_grids=[32, 64, 128]):
         # Create pseudo-spectral solver
         solver_ps = PropagatorSolver(
             nx=[N], lx=[L], bc=bc, ds=ds,
-            method="pseudospectral", platform="cpu-mkl"
+            method="pseudospectral", platform="cpu-fftw"
         )
         solver_ps.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
         # Create real-space solver
         solver_rs = PropagatorSolver(
             nx=[N], lx=[L], bc=bc, ds=ds,
-            method="realspace", platform="cpu-mkl"
+            method="realspace", platform="cpu-fftw"
         )
         solver_rs.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
@@ -142,14 +142,14 @@ def run_comparison_2d(bc_x, bc_y, n_grids=[(16, 12), (32, 24), (64, 48)]):
         # Create pseudo-spectral solver
         solver_ps = PropagatorSolver(
             nx=[NX, NY], lx=[LX, LY], bc=bc, ds=ds,
-            method="pseudospectral", platform="cpu-mkl"
+            method="pseudospectral", platform="cpu-fftw"
         )
         solver_ps.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
         # Create real-space solver
         solver_rs = PropagatorSolver(
             nx=[NX, NY], lx=[LX, LY], bc=bc, ds=ds,
-            method="realspace", platform="cpu-mkl"
+            method="realspace", platform="cpu-fftw"
         )
         solver_rs.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
@@ -218,14 +218,14 @@ def run_comparison_3d(bc_type, n_grids=[(8, 8, 8), (16, 16, 16)]):
         # Create pseudo-spectral solver
         solver_ps = PropagatorSolver(
             nx=[NX, NY, NZ], lx=[LX, LY, LZ], bc=bc, ds=ds,
-            method="pseudospectral", platform="cpu-mkl"
+            method="pseudospectral", platform="cpu-fftw"
         )
         solver_ps.add_polymer(1.0, [["A", 1.0, 0, 1]])
 
         # Create real-space solver
         solver_rs = PropagatorSolver(
             nx=[NX, NY, NZ], lx=[LX, LY, LZ], bc=bc, ds=ds,
-            method="realspace", platform="cpu-mkl"
+            method="realspace", platform="cpu-fftw"
         )
         solver_rs.add_polymer(1.0, [["A", 1.0, 0, 1]])
 

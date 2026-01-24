@@ -27,7 +27,7 @@ from .smearing import Smearing
 logger = logging.getLogger(__name__)
 
 # OpenMP environment variables
-os.environ["MKL_NUM_THREADS"] = "1"  # always 1
+os.environ["OMP_NUM_THREADS"] = "1"  # always 1
 os.environ["OMP_STACKSIZE"] = "1G"
 
 def calculate_sigma(langevin_nbar, langevin_dt, n_grids, volume):
@@ -183,7 +183,7 @@ class LFTS:
 
         **Platform Selection:**
 
-        - platform : {'cuda', 'cpu-mkl'}, optional
+        - platform : {'cuda', 'cpu-fftw'}, optional
             Computational backend (auto-selected if not specified).
         - reduce_memory : bool, optional
             If True, store only propagator checkpoints instead of full histories,
@@ -366,12 +366,12 @@ class LFTS:
         self.segment_lengths = copy.deepcopy(params["segment_lengths"])
         self.distinct_polymers = copy.deepcopy(params["distinct_polymers"])
 
-        # Choose platform among [cuda, cpu-mkl]
+        # Choose platform among [cuda, cpu-fftw, cpu-fftw]
         avail_platforms = _core.PlatformSelector.avail_platforms()
         if "platform" in params:
             platform = params["platform"]
-        elif "cpu-mkl" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
-            platform = "cpu-mkl"
+        elif "cpu-fftw" in avail_platforms and len(params["nx"]) == 1: # for 1D simulation, use CPU
+            platform = "cpu-fftw"
         elif "cuda" in avail_platforms: # If cuda is available, use GPU
             platform = "cuda"
         else:

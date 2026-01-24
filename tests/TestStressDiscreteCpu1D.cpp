@@ -47,7 +47,7 @@ int main()
         std::string print_file_name;
 
         // -------------- Initialize ------------
-        // Platform type, [cuda, cpu-mkl]
+        // Platform type, [cuda, cpu-fftw]
         std::vector<int> nx = {10};
         std::vector<double> lx = {1.0};
         double ds = 1.0/10.0;
@@ -93,7 +93,7 @@ int main()
         std::vector<bool> reduce_memorys = {false, true};
         for(std::string platform : avail_platforms)
         {
-            if(platform != "cpu-mkl")
+            if(platform != "cpu-fftw")
                 continue;
 
             for(bool reduce_memory : reduce_memorys)

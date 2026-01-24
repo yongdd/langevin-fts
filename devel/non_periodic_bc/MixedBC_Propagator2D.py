@@ -48,7 +48,7 @@ def main():
         bc=["reflecting", "reflecting", "absorbing", "absorbing"],
         ds=ds,
         bond_lengths={"A": 1.0},
-        platform="cpu-mkl"  # Use CPU for 2D non-periodic BC
+        platform="cpu-fftw"  # Use CPU for 2D non-periodic BC
     )
 
     # Add a simple homopolymer

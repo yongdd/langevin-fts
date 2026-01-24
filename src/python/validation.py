@@ -231,9 +231,9 @@ def validate_scft_params(params: Dict[str, Any]) -> None:
 
     if "platform" in params:
         platform = params["platform"]
-        if platform not in ("cuda", "cpu-mkl"):
+        if platform not in ("cuda", "cpu-fftw"):
             raise ValidationError(
-                f"'platform' must be 'cuda' or 'cpu-mkl', got '{platform}'"
+                f"'platform' must be 'cuda' or 'cpu-fftw', got '{platform}'"
             )
 
 

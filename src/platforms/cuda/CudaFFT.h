@@ -17,7 +17,7 @@
  * For periodic BCs, uses cuFFT for GPU-accelerated FFT.
  * For non-periodic BCs, uses custom CUDA kernels with precomputed trig tables.
  *
- * @see MklFFT for CPU version
+ * @see FftwFFT for CPU version
  * @see FFT for abstract interface
  */
 

@@ -23,7 +23,7 @@
  * - Single homopolymer block
  * - Gaussian initial condition centered at L/2
  *
- * Tests are run on all available platforms (CPU-MKL, CUDA) with both
+ * Tests are run on all available platforms (CPU-FFTW, CUDA) with both
  * standard and memory-saving modes.
  *
  * The DCT-2 pseudo-spectral method for the diffusion equation:
@@ -86,7 +86,7 @@ const std::vector<double> expected_q_out = {
 /**
  * Run DCT-2 propagator tests for a specific platform and memory mode.
  *
- * @param platform Platform name ("cuda" or "cpu-mkl")
+ * @param platform Platform name ("cuda" or "cpu-fftw")
  * @param reduce_memory Enable memory-saving mode
  * @return 0 on success, -1 on failure
  */

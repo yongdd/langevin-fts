@@ -497,7 +497,7 @@ void bind_anderson_mixing(py::module &m, const std::string &type_name) {
  * - display_info(): Print platform information
  *
  * The factory pattern ensures all created objects are compatible with
- * the selected platform (CPU-MKL or CUDA).
+ * the selected platform (CPU-FFTW or CUDA).
  *
  * @tparam T Field type (double or std::complex<double>)
  * @param m Python module
@@ -595,7 +595,7 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
  * Use PlatformSelector.create_factory() to get the appropriate factory:
  * @code{.py}
  * factory = _core.PlatformSelector.create_factory("cuda", type="real")
- * factory = _core.PlatformSelector.create_factory("cpu-mkl", type="complex")
+ * factory = _core.PlatformSelector.create_factory("cpu-fftw", type="complex")
  * @endcode
  *
  * The factory then creates all necessary platform-specific objects.

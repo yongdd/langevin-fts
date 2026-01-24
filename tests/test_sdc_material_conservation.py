@@ -97,7 +97,7 @@ def main():
     methods = ["sdc-3", "sdc-5", "cn-adi2"]
 
     # Platforms to test
-    platforms = ["cpu-mkl"]
+    platforms = ["cpu-fftw"]  # Use FFTW for non-periodic BC support
     try:
         # Check if CUDA is available
         import subprocess

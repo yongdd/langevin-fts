@@ -51,7 +51,7 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #endif
@@ -300,7 +300,7 @@ bool run_physical_test(const std::string& platform_name,
 
 int main()
 {
-#if !defined(USE_CPU_MKL) && !defined(USE_CUDA)
+#if !defined(USE_CPU_FFTW) && !defined(USE_CUDA)
     std::cout << "Neither CPU nor CUDA available, skipping test" << std::endl;
     return 0;
 #else
@@ -337,9 +337,9 @@ int main()
             std::vector<int> nx = {64};
             std::vector<double> lx = {4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
                 all_passed = false;
             #endif
 
@@ -356,9 +356,9 @@ int main()
             std::vector<int> nx = {32, 32};
             std::vector<double> lx = {4.0, 4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
                 all_passed = false;
             #endif
 
@@ -375,9 +375,9 @@ int main()
             std::vector<int> nx = {16, 16, 16};
             std::vector<double> lx = {4.0, 4.0, 4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_physical_test<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt))
                 all_passed = false;
             #endif
 
@@ -405,9 +405,9 @@ int main()
             std::vector<int> nx = {64};
             std::vector<double> lx = {4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -424,9 +424,9 @@ int main()
             std::vector<int> nx = {32, 32};
             std::vector<double> lx = {4.0, 4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -443,9 +443,9 @@ int main()
             std::vector<int> nx = {16, 16, 16};
             std::vector<double> lx = {4.0, 4.0, 4.0};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_comparison<CpuComputationBox, CpuComputationContinuous>(
-                    "CPU-MKL", nx, lx, &molecules, &prop_opt, tolerance))
+                    "CPU-FFTW", nx, lx, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 

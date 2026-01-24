@@ -186,7 +186,7 @@ def compute_convergence_order(ds_values, Q_values, Q_ref):
     return np.mean(orders) if orders else None
 
 
-def run_convergence_study(platform="cpu-mkl"):
+def run_convergence_study(platform="cpu-fftw"):
     """
     Run convergence study similar to Stasiak & Matsen (2011).
 
@@ -327,9 +327,9 @@ def run_method_comparison():
     results = {}
 
     # CPU RQM4
-    print("\n--- CPU (MKL) Pseudo-Spectral (RQM4) ---")
+    print("\n--- CPU (FFTW) Pseudo-Spectral (RQM4) ---")
     try:
-        factory = _core.PlatformSelector.create_factory("cpu-mkl", False)
+        factory = _core.PlatformSelector.create_factory("cpu-fftw", False)
         molecules = factory.create_molecules_information("Continuous", ds, {"A": 1.0})
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         cb = factory.create_computation_box(nx=list(nx), lx=list(lx), bc=[])
@@ -383,9 +383,9 @@ def run_method_comparison():
         print(f"  Failed: {e}")
 
     # CPU Real-Space (CN-ADI2)
-    print("\n--- CPU (MKL) Real-Space (CN-ADI2) ---")
+    print("\n--- CPU (FFTW) Real-Space (CN-ADI2) ---")
     try:
-        factory = _core.PlatformSelector.create_factory("cpu-mkl", False)
+        factory = _core.PlatformSelector.create_factory("cpu-fftw", False)
         molecules = factory.create_molecules_information("Continuous", ds, {"A": 1.0})
         molecules.add_polymer(1.0, [["A", 1.0, 0, 1]])
         bc = ["periodic"] * 6
@@ -473,7 +473,7 @@ def main():
     all_results = {}
 
     # Convergence study (CPU)
-    ps_conv, rs_conv = run_convergence_study("cpu-mkl")
+    ps_conv, rs_conv = run_convergence_study("cpu-fftw")
     all_results['convergence_cpu'] = {
         'pseudospectral': ps_conv,
         'realspace': rs_conv
@@ -489,7 +489,7 @@ def main():
     except Exception as e:
         print(f"\nCUDA benchmark failed: {e}")
         print("Running CPU benchmark instead...")
-        ps_perf, rs_perf = run_performance_benchmark("cpu-mkl")
+        ps_perf, rs_perf = run_performance_benchmark("cpu-fftw")
         all_results['performance_cpu'] = {
             'pseudospectral': ps_perf,
             'realspace': rs_perf

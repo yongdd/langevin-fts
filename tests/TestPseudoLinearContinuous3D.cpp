@@ -21,7 +21,7 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
@@ -198,9 +198,9 @@ int main()
         std::vector<std::string> solver_name_list;
 
         // Pseudo-spectral method
-        #ifdef USE_CPU_MKL
-        solver_name_list.push_back("pseudo, cpu-mkl");
-        solver_name_list.push_back("pseudo, cpu-mkl, reduce_memory");
+        #ifdef USE_CPU_FFTW
+        solver_name_list.push_back("pseudo, cpu-fftw");
+        solver_name_list.push_back("pseudo, cpu-fftw, reduce_memory");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous            <double>(cb_list.end()[-2], molecules, propagator_computation_optimizer, "pseudospectral"));

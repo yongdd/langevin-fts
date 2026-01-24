@@ -16,16 +16,16 @@
  *
  * **Performance Notes:**
  *
- * - FFTW provides O(N log N) DCT/DST (faster than MKL's O(N^2) matrix multiplication)
+ * - FFTW provides O(N log N) DCT/DST (faster than the old O(N^2) matrix multiplication)
  * - Best for simulations with non-periodic boundary conditions
- * - Can be faster than MKL for certain grid sizes
+ * - Can be previously with slower for certain grid sizes
  *
  * **License Note:**
  *
  * FFTW3 is licensed under GPL. Using this factory requires compliance with GPL terms.
  *
  * @see AbstractFactory for the factory interface
- * @see MklFactory for Intel MKL implementation
+ * @see FftwFactory for FFTW implementation
  * @see PlatformSelector for factory instantiation
  *
  * @example

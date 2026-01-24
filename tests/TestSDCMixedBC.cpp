@@ -40,7 +40,7 @@
 #include "Polymer.h"
 #include "PropagatorComputationOptimizer.h"
 
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #endif
@@ -130,7 +130,7 @@ bool run_test(const std::string& platform_name,
 
 int main()
 {
-#if !defined(USE_CPU_MKL) && !defined(USE_CUDA)
+#if !defined(USE_CPU_FFTW) && !defined(USE_CUDA)
     std::cout << "Neither CPU nor CUDA available, skipping SDC mixed BC test" << std::endl;
     return 0;
 #else
@@ -161,9 +161,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -183,9 +183,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -205,9 +205,9 @@ int main()
             std::vector<double> lx = {4.0};
             std::vector<std::string> bc = {"absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -227,9 +227,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -249,9 +249,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -271,9 +271,9 @@ int main()
             std::vector<double> lx = {3.0, 3.0};
             std::vector<std::string> bc = {"absorbing", "absorbing", "reflecting", "reflecting"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -293,9 +293,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"periodic", "periodic", "periodic", "periodic", "periodic", "periodic"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -315,9 +315,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"absorbing", "absorbing", "absorbing", "absorbing", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 
@@ -337,9 +337,9 @@ int main()
             std::vector<double> lx = {2.4, 2.4, 2.4};
             std::vector<std::string> bc = {"reflecting", "reflecting", "reflecting", "reflecting", "absorbing", "absorbing"};
 
-            #ifdef USE_CPU_MKL
+            #ifdef USE_CPU_FFTW
             if (!run_test<CpuComputationBox, CpuComputationContinuous>(
-                    "  CPU-MKL", nx, lx, bc, &molecules, &prop_opt, tolerance))
+                    "  CPU-FFTW", nx, lx, bc, &molecules, &prop_opt, tolerance))
                 all_passed = false;
             #endif
 

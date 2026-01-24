@@ -16,7 +16,7 @@ f = 0.5         # A-fraction of major BCP chain, f
 eps = 1.0       # a_A/a_B, conformational asymmetry
 
 params = {
-    # "platform":"cuda",           # choose platform among [cuda, cpu-mkl]
+    # "platform":"cuda",           # choose platform among [cuda, cpu-fftw, cpu-fftw]
 
     "nx":[32, 32, 32],          # Simulation grid numbers
     "lx":[8.0, 8.0, 8.0],       # Simulation box size as a_Ref * N_Ref^(1/2) unit,

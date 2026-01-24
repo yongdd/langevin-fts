@@ -82,7 +82,7 @@ int main()
 
         bool reduce_memory = false;
 
-        // Choose platform (cpu-mkl only for 1D)
+        // Choose platform (cpu-fftw only for 1D)
         std::vector<std::string> avail_platforms = PlatformSelector::avail_platforms();
         std::vector<std::string> chain_models = {"Discrete", "Continuous"};
         // Test all pseudo-spectral methods (CN-ADI methods don't support stress yet)
@@ -92,7 +92,7 @@ int main()
 
         for(std::string platform : avail_platforms)
         {
-            if(platform != "cpu-mkl")
+            if(platform != "cpu-fftw")
                 continue;
 
             for(std::string chain_model : chain_models)

@@ -33,7 +33,7 @@ def run_sdc_test(N_steps, chi_n=20.0, f=0.45, nx=32, lx=3.8):
         },
         "max_iter": 2000,
         "tolerance": 1e-8,
-        "platform": "cpu-mkl",
+        "platform": "cpu-fftw",
         "numerical_method": "sdc",
         "verbose": False,
         "box_is_altering": False,
@@ -55,7 +55,7 @@ def run_sdc_test(N_steps, chi_n=20.0, f=0.45, nx=32, lx=3.8):
     return scft.free_energy
 
 # Test with different N values
-print("Testing SDC convergence on CPU-MKL (3D gyroid)...")
+print("Testing SDC convergence on CPU-FFTW (3D gyroid)...")
 print("=" * 50)
 
 N_values = [40, 80, 160]

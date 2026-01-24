@@ -50,7 +50,7 @@
  * @brief Abstract base class for platform-independent array operations.
  *
  * This class defines a common interface for array operations that can be
- * implemented efficiently on different platforms (CPU with MKL, CUDA GPU).
+ * implemented efficiently on different platforms (CPU with FFTW, CUDA GPU).
  * All operations are element-wise.
  *
  * **Memory Model:**

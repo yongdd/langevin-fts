@@ -20,7 +20,7 @@
  *
  * For classes with multiple template parameters (e.g., FFT with dimension):
  * @code
- * INSTANTIATE_FFT_CLASS(MklFFT);
+ * INSTANTIATE_FFT_CLASS(FftwFFT);
  * @endcode
  *
  * **Maintenance:**
@@ -72,8 +72,8 @@
  *
  * Example:
  * @code
- * // At end of MklFFT.cpp
- * INSTANTIATE_FFT_CLASS(MklFFT);
+ * // At end of FftwFFT.cpp
+ * INSTANTIATE_FFT_CLASS(FftwFFT);
  * @endcode
  */
 #define INSTANTIATE_FFT_CLASS(ClassName) \

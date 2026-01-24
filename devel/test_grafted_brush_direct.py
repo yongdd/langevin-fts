@@ -31,7 +31,7 @@ spec.loader.exec_module(_core)
 
 def run_test(nx, Lx, ds, x0, sigma0, N_steps):
     # Create factory
-    factory = _core.PlatformSelector.create_factory("cpu-mkl", False)
+    factory = _core.PlatformSelector.create_factory("cpu-fftw", False)
 
     # Create molecules
     bond_lengths = {"A": 1.0}

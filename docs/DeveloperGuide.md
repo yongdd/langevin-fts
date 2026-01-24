@@ -28,7 +28,7 @@ ctest -R Pseudo     # Run tests matching "Pseudo"
 ## Platform Implementation
 
 When adding new computational features, you must implement them for both platforms unless explicitly platform-specific:
-- `src/platforms/cpu/` - MKL-based CPU implementations
+- `src/platforms/cpu/` - FFTW-based CPU implementations
 - `src/platforms/cuda/` - CUDA GPU implementations
 
 ### Memory Management
@@ -97,7 +97,7 @@ export OMP_STACKSIZE=1G
 - Use `nvprof` or Nsight for profiling
 
 ### Platform Consistency Issues
-If CUDA and MKL give different results:
+If CUDA and FFTW give different results:
 1. Check floating-point operation order
 2. Verify FFT normalization
 3. Check memory alignment

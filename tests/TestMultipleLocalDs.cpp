@@ -52,7 +52,7 @@
 #include "PropagatorComputationOptimizer.h"
 #include "Molecules.h"
 #include "Polymer.h"
-#ifdef USE_CPU_MKL
+#ifdef USE_CPU_FFTW
 #include "CpuComputationBox.h"
 #include "CpuComputationContinuous.h"
 #include "CpuComputationReduceMemoryContinuous.h"
@@ -159,8 +159,8 @@ int main()
         std::vector<ComputationBox<double>*> cb_list;
         std::vector<std::string> solver_name_list;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list.push_back("cpu-mkl");
+        #ifdef USE_CPU_FFTW
+        solver_name_list.push_back("cpu-fftw");
         cb_list.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list.push_back(new CpuComputationContinuous<double>(
             cb_list.back(), molecules, propagator_computation_optimizer, "pseudospectral"));
@@ -329,8 +329,8 @@ int main()
         std::vector<ComputationBox<double>*> cb_list_star;
         std::vector<std::string> solver_name_list_star;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list_star.push_back("cpu-mkl");
+        #ifdef USE_CPU_FFTW
+        solver_name_list_star.push_back("cpu-fftw");
         cb_list_star.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list_star.push_back(new CpuComputationContinuous<double>(
             cb_list_star.back(), molecules_star, optimizer_star, "pseudospectral"));
@@ -508,8 +508,8 @@ int main()
         std::vector<ComputationBox<double>*> cb_list_homo;
         std::vector<std::string> solver_name_list_homo;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list_homo.push_back("cpu-mkl");
+        #ifdef USE_CPU_FFTW
+        solver_name_list_homo.push_back("cpu-fftw");
         cb_list_homo.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         solver_list_homo.push_back(new CpuComputationContinuous<double>(
             cb_list_homo.back(), molecules_homo, optimizer_homo, "pseudospectral"));
@@ -701,11 +701,11 @@ int main()
         std::vector<ComputationBox<double>*> cb_list_brush;
         std::vector<std::string> solver_name_list_brush;
 
-        #ifdef USE_CPU_MKL
-        solver_name_list_brush.push_back("cpu-mkl");
-        solver_name_list_brush.push_back("cpu-mkl, aggregated");
-        solver_name_list_brush.push_back("cpu-mkl, reduce_memory");
-        solver_name_list_brush.push_back("cpu-mkl, reduce_memory, aggregated");
+        #ifdef USE_CPU_FFTW
+        solver_name_list_brush.push_back("cpu-fftw");
+        solver_name_list_brush.push_back("cpu-fftw, aggregated");
+        solver_name_list_brush.push_back("cpu-fftw, reduce_memory");
+        solver_name_list_brush.push_back("cpu-fftw, reduce_memory, aggregated");
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));
         cb_list_brush.push_back(new CpuComputationBox<double>({II,JJ,KK}, {Lx,Ly,Lz}, {}));

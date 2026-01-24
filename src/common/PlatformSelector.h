@@ -9,9 +9,9 @@
  *
  * **Supported Platforms:**
  *
- * - **cpu-mkl**: Intel MKL-based CPU implementation
+ * - **cpu-fftw**: FFTW-based CPU implementation
  *   - Uses OpenMP for parallelization
- *   - Available when compiled with MKL support
+ *   - Available when compiled with FFTW support
  *
  * - **cuda**: NVIDIA CUDA GPU implementation
  *   - Uses cuFFT for FFT operations
@@ -19,7 +19,7 @@
  *   - Available when compiled with CUDA support
  *
  * @see AbstractFactory for the factory interface
- * @see MklFactory for CPU implementation details
+ * @see FftwFactory for CPU implementation details
  * @see CudaFactory for GPU implementation details
  *
  * @example
@@ -29,13 +29,13 @@
  * for (const auto& p : platforms) {
  *     std::cout << "Available: " << p << std::endl;
  * }
- * // Output: "cuda", "cpu-mkl"
+ * // Output: "cuda", "cpu-fftw"
  *
  * // Create factory for CUDA platform
  * auto* factory = PlatformSelector::create_factory_real("cuda", false);
  *
  * // Create factory for CPU with memory reduction (ignored for CPU)
- * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-mkl", false);
+ * auto* factory_cpu = PlatformSelector::create_factory_real("cpu-fftw", false);
  *
  * // Create factory for complex fields (for certain advanced applications)
  * auto* factory_complex = PlatformSelector::create_factory_complex("cuda", false);
@@ -60,14 +60,14 @@
  * **Platform Selection Strategy:**
  *
  * The Python interface typically auto-selects the platform:
- * - 2D/3D simulations: Prefer "cuda" if available, fall back to "cpu-mkl"
- * - 1D simulations: Use "cpu-mkl" (GPU overhead not worthwhile)
+ * - 2D/3D simulations: Prefer "cuda" if available, fall back to "cpu-fftw"
+ * - 1D simulations: Use "cpu-fftw" (GPU overhead not worthwhile)
  *
  * **Build Configuration:**
  *
  * Available platforms depend on CMake build configuration:
  * - CUDA support: Requires CUDA Toolkit and compatible GPU
- * - MKL support: Requires Intel MKL library
+ * - FFTW support: Requires FFTW library
  *
  * @note This class has only static methods; do not instantiate it.
  */
@@ -80,7 +80,7 @@ public:
      * Returns a vector of platform name strings that can be passed to
      * create_factory_real() or create_factory_complex().
      *
-     * @return Vector of available platform names, e.g., {"cuda", "cpu-mkl"}
+     * @return Vector of available platform names, e.g., {"cuda", "cpu-fftw"}
      *
      * @note The order indicates preference (first = fastest/recommended).
      *
@@ -100,7 +100,7 @@ public:
      * Creates a platform-specific factory for simulations using real-valued
      * fields (standard SCFT and L-FTS calculations).
      *
-     * @param platform          Platform name: "cuda" or "cpu-mkl"
+     * @param platform          Platform name: "cuda" or "cpu-fftw"
      * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *                          Reduces memory usage but increases computation time.
@@ -131,7 +131,7 @@ public:
      * Creates a platform-specific factory for simulations using complex-valued
      * fields (certain advanced applications with complex order parameters).
      *
-     * @param platform          Platform name: "cuda" or "cpu-mkl"
+     * @param platform          Platform name: "cuda" or "cpu-fftw"
      * @param reduce_memory If true, store only propagator checkpoints instead
      *                          of full histories, recomputing as needed.
      *

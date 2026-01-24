@@ -24,7 +24,7 @@
  * pairs with the same segment counts produce identical partition functions.
  *
  * Currently tests RQM4 and RK2 methods which correctly use per-block local_ds.
- * Tests all platforms (CPU-MKL, CUDA).
+ * Tests all platforms (CPU-FFTW, CUDA).
  */
 
 #include <cstdlib>
