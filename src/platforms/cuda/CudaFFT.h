@@ -72,6 +72,7 @@ private:
     // Device work buffers
     double* d_work_buffer_;                      ///< Main work buffer
     double* d_temp_buffer_;                      ///< Temporary buffer for transforms
+    double* d_fft_buffer_;                       ///< Separate buffer for FFT output (cuFFT requires separate allocations)
 
     /**
      * @brief Initialize cuFFT plans for periodic BC.
