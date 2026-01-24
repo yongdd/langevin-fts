@@ -63,7 +63,8 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method,
-    std::string numerical_method)
+    std::string numerical_method,
+    FFTBackend backend)
     : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -78,11 +79,11 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         if(method == "pseudospectral")
         {
             if (numerical_method == "" || numerical_method == "rqm4")
-                this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverPseudoRQM4<T>(cb, molecules, backend);
             else if (numerical_method == "rk2")
-                this->propagator_solver = new CpuSolverPseudoRK2<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverPseudoRK2<T>(cb, molecules, backend);
             else if (numerical_method == "etdrk4")
-                this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules);
+                this->propagator_solver = new CpuSolverPseudoETDRK4<T>(cb, molecules, backend);
             else
                 throw_with_line_number("Unknown pseudo-spectral method: '" + numerical_method + "'. Use 'rqm4', 'rk2', or 'etdrk4'.");
         }

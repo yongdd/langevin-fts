@@ -43,6 +43,7 @@
 #include "CpuComputationReduceMemoryDiscrete.h"
 #include "CpuAndersonMixing.h"
 #include "MklFactory.h"
+#include "FFT.h"  // For FFTBackend enum
 
 /**
  * @brief Construct MKL factory with optional checkpointing.
@@ -98,9 +99,9 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
         if (chain_model == "discrete")
         {
             if (!this->reduce_memory)
-                return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+                return new CpuComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::MKL);
             else
-                return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+                return new CpuComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, FFTBackend::MKL);
         }
 
         // Continuous chain model: validate and use numerical_method
@@ -113,9 +114,9 @@ PropagatorComputation<T>* MklFactory<T>::create_propagator_computation(Computati
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
         if (!this->reduce_memory)
-            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+            return new CpuComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::MKL);
         else
-            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+            return new CpuComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, FFTBackend::MKL);
     }
     catch(std::exception& exc)
     {

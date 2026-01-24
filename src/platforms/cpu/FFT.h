@@ -30,6 +30,19 @@
 #include "Exception.h"
 
 /**
+ * @enum FFTBackend
+ * @brief Available FFT backend implementations.
+ *
+ * Used to select between different FFT libraries at runtime.
+ * Both backends provide identical functionality through the FFT interface.
+ */
+enum class FFTBackend
+{
+    MKL,   ///< Intel Math Kernel Library (requires Intel MKL)
+    FFTW   ///< FFTW3 library (GPL, O(N log N) for all transform types)
+};
+
+/**
  * @class FFT
  * @brief Abstract base class for spectral transforms.
  *

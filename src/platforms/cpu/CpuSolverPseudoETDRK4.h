@@ -116,10 +116,11 @@ public:
      *
      * @param cb        Computation box defining the grid and BCs
      * @param molecules Molecules container with monomer types
+     * @param backend   FFT backend to use (MKL or FFTW, default: MKL)
      *
      * @note ETDRK4 coefficients are computed during construction.
      */
-    CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules *molecules);
+    CpuSolverPseudoETDRK4(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::MKL);
 
     /**
      * @brief Destructor. Frees allocated arrays.

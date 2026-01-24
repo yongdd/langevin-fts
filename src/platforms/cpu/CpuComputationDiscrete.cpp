@@ -53,7 +53,8 @@ template <typename T>
 CpuComputationDiscrete<T>::CpuComputationDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer)
+    PropagatorComputationOptimizer *propagator_computation_optimizer,
+    FFTBackend backend)
     : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -63,7 +64,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
         #endif
 
         const int M = this->cb->get_total_grid();
-        this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules);
+        this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, backend);
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");

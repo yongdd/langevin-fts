@@ -43,7 +43,7 @@
 #include "ComputationBox.h"
 #include "CpuSolver.h"
 #include "Pseudo.h"
-#include "MklFFT.h"
+#include "FFTFactory.h"
 
 /**
  * @class CpuSolverPseudoBase
@@ -80,14 +80,17 @@ protected:
     /**
      * @brief Spectral transform object for FFT/DCT/DST (handles all BCs).
      *
-     * Points to MklFFT<T, 1>, MklFFT<T, 2>, or MklFFT<T, 3> based on dim_.
+     * Points to MklFFT<T, DIM> or FftwFFT<T, DIM> based on the selected
+     * backend, where DIM is 1, 2, or 3 based on the simulation dimension.
      * All simulations are conducted in fixed dimensions, so only one
      * transform object is needed per solver instance.
      *
      * Uses FFT<T>* base class pointer to enable polymorphic calls without
-     * dimension-specific casting or if-else dispatch.
+     * dimension-specific casting or backend-specific dispatch.
      */
     FFT<T>* fft_;
+
+    FFTBackend fft_backend_;  ///< Selected FFT backend (MKL or FFTW)
 
     Pseudo<T>* pseudo;           ///< Pseudo-spectral operator helper
 
@@ -218,13 +221,14 @@ protected:
      *
      * Sets up:
      * - Boundary condition checking (is_periodic_)
-     * - FFT object creation (fft_)
+     * - FFT object creation (fft_) using specified backend
      * - Pseudo-spectral operator (pseudo)
      *
      * @param cb Computation box
      * @param molecules Molecules container
+     * @param backend FFT backend to use (MKL or FFTW)
      */
-    void init_shared(ComputationBox<T>* cb, Molecules* molecules);
+    void init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend);
 
     /**
      * @brief Clean up shared components in destructor.

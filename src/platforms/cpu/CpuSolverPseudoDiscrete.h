@@ -132,8 +132,9 @@ public:
      *
      * @param cb        Computation box defining the grid and BCs
      * @param molecules Molecules container with monomer types
+     * @param backend   FFT backend to use (MKL or FFTW, default: MKL)
      */
-    CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules);
+    CpuSolverPseudoDiscrete(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::MKL);
 
     /**
      * @brief Destructor. Frees exp_dw arrays.

@@ -18,6 +18,7 @@ LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Build options
 OPTION(POLYMERFTS_USE_MKL "Enable Intel MKL backend" ON)
+OPTION(POLYMERFTS_USE_FFTW "Enable FFTW3 backend (GPL license)" OFF)
 OPTION(POLYMERFTS_USE_CUDA "Enable CUDA backend" ON)
 OPTION(POLYMERFTS_BUILD_TESTS "Build test executables" ON)
 OPTION(POLYMERFTS_INSTALL_PYTHON "Install Python module" ON)
@@ -113,8 +114,72 @@ IF(POLYMERFTS_USE_MKL AND MKL_FOUND)
         src/platforms/cpu/CpuAndersonMixing.cpp
         src/platforms/cpu/MklFactory.cpp
     )
+    TARGET_COMPILE_DEFINITIONS(cpu-mkl PRIVATE USE_CPU_MKL)
 ELSE()
     SET(BUILD_CPU_MKL_LIB FALSE)
+ENDIF()
+
+# FFTW3
+IF(POLYMERFTS_USE_FFTW)
+    FIND_PACKAGE(PkgConfig QUIET)
+    IF(PkgConfig_FOUND)
+        PKG_CHECK_MODULES(FFTW3 QUIET fftw3)
+    ENDIF()
+    IF(NOT FFTW3_FOUND)
+        FIND_LIBRARY(FFTW3_LIBRARIES NAMES fftw3 HINTS ENV FFTW_ROOT PATH_SUFFIXES lib lib64)
+        FIND_PATH(FFTW3_INCLUDE_DIRS fftw3.h HINTS ENV FFTW_ROOT PATH_SUFFIXES include)
+        IF(FFTW3_LIBRARIES AND FFTW3_INCLUDE_DIRS)
+            SET(FFTW3_FOUND TRUE)
+        ENDIF()
+    ENDIF()
+ENDIF()
+
+IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
+    SET(BUILD_CPU_FFTW_LIB TRUE)
+    ADD_DEFINITIONS(-DUSE_CPU_FFTW)
+    INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
+    ADD_LIBRARY(cpu-fftw
+        src/platforms/cpu/FftwFFT.cpp
+        src/platforms/cpu/CpuArray.cpp
+        src/platforms/cpu/CpuComputationBox.cpp
+        src/platforms/cpu/CpuSolverPseudoBase.cpp
+        src/platforms/cpu/CpuSolverPseudoRQM4.cpp
+        src/platforms/cpu/CpuSolverPseudoRK2.cpp
+        src/platforms/cpu/CpuSolverPseudoETDRK4.cpp
+        src/platforms/cpu/CpuSolverPseudoDiscrete.cpp
+        src/platforms/cpu/CpuSolverCNADI.cpp
+        src/platforms/cpu/CpuComputationBase.cpp
+        src/platforms/cpu/CpuComputationContinuous.cpp
+        src/platforms/cpu/CpuComputationDiscrete.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryBase.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryContinuous.cpp
+        src/platforms/cpu/CpuComputationReduceMemoryDiscrete.cpp
+        src/platforms/cpu/CpuAndersonMixing.cpp
+        src/platforms/cpu/FftwFactory.cpp
+    )
+    TARGET_COMPILE_DEFINITIONS(cpu-fftw PRIVATE USE_CPU_FFTW)
+    TARGET_LINK_LIBRARIES(cpu-fftw ${FFTW3_LIBRARIES})
+
+    # GPL License Warning
+    MESSAGE(WARNING
+        "================================================================================\n"
+        "  GPL LICENSE WARNING\n"
+        "================================================================================\n"
+        "  FFTW3 is licensed under the GNU General Public License (GPL).\n"
+        "\n"
+        "  If you distribute binaries compiled with POLYMERFTS_USE_FFTW=ON,\n"
+        "  you MUST comply with the GPL license terms, which include:\n"
+        "\n"
+        "    1. Distribute the complete source code of your application\n"
+        "    2. License your application under GPL or a GPL-compatible license\n"
+        "    3. Include the full GPL license text with your distribution\n"
+        "\n"
+        "  For internal/personal use only, no action is required.\n"
+        "  For more information, see: https://www.fftw.org/faq/section1.html\n"
+        "================================================================================\n"
+    )
+ELSE()
+    SET(BUILD_CPU_FFTW_LIB FALSE)
 ENDIF()
 
 # NVIDIA CUDA
@@ -158,8 +223,9 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
 ENDIF()
 
 IF( (NOT BUILD_CPU_MKL_LIB) AND
+    (NOT BUILD_CPU_FFTW_LIB) AND
     (NOT CUDAToolkit_FOUND) )
-    MESSAGE( FATAL_ERROR "Could not find any FFT library, CMake will exit." )
+    MESSAGE( FATAL_ERROR "Could not find any FFT library (MKL, FFTW, or CUDA), CMake will exit." )
 ENDIF()
 
 #  Factory
@@ -212,6 +278,8 @@ TARGET_LINK_LIBRARIES(_core PUBLIC pybind11::module PRIVATE
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-ldl,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lpthread,>
     $<IF:$<BOOL:${BUILD_CPU_MKL_LIB}>,-lm,>
+    $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,cpu-fftw,>
+    $<IF:$<BOOL:${BUILD_CPU_FFTW_LIB}>,-lfftw3,>
     common
 )
 

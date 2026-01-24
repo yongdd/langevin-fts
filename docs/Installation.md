@@ -70,6 +70,8 @@ pip install .
 ### Optional
 * **CUDA Toolkit 11.8+**: For GPU computation (https://developer.nvidia.com/cuda-toolkit)
   * Set `CUDA_ARCHITECTURES` in `CMakeLists.txt` for your GPU: https://developer.nvidia.com/cuda-gpus
+* **FFTW3**: Alternative CPU backend (GPL license)
+  * Install via conda: `conda install -c conda-forge fftw`
 
 ### Development Tools (Optional)
 * **Anaconda/Miniconda**: https://www.anaconda.com/
@@ -109,6 +111,7 @@ make install
 | Option | Default | Description |
 |--------|---------|-------------|
 | `POLYMERFTS_USE_MKL` | ON | Enable Intel MKL CPU backend |
+| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
@@ -117,6 +120,36 @@ Example with options:
 ```bash
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_CUDA=OFF
 ```
+
+## FFTW Backend (Optional)
+
+FFTW3 provides an alternative CPU backend. Both MKL and FFTW backends support periodic, reflecting, and absorbing boundary conditions.
+
+### Installing FFTW
+
+Install FFTW3 via conda:
+```bash
+conda install -c conda-forge fftw
+```
+
+Then build with FFTW enabled:
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
+make -j8
+```
+
+### GPL License Warning
+
+> **⚠️ Important**: FFTW3 is licensed under the **GNU General Public License (GPL)**.
+>
+> If you distribute binaries compiled with `POLYMERFTS_USE_FFTW=ON`, you **must** comply with GPL terms:
+> 1. Distribute the complete source code of your application
+> 2. License your application under GPL or a GPL-compatible license
+> 3. Include the full GPL license text with your distribution
+>
+> For internal/personal use, no action is required.
+>
+> See: https://www.fftw.org/faq/section1.html
 
 ## Troubleshooting
 
