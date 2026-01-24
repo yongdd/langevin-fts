@@ -58,7 +58,8 @@ template <typename T>
 CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer)
+    PropagatorComputationOptimizer *propagator_computation_optimizer,
+    FFTBackend backend)
     : CpuComputationReduceMemoryBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -69,7 +70,7 @@ CpuComputationReduceMemoryDiscrete<T>::CpuComputationReduceMemoryDiscrete(
 
         const int M = this->cb->get_total_grid();
 
-        this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules);
+        this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, backend);
 
         // The number of parallel streams is always 1 to reduce the memory usage
         this->n_streams = 1;

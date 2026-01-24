@@ -105,10 +105,11 @@ public:
      *
      * @param cb        Computation box defining the grid and BCs
      * @param molecules Molecules container with monomer types
+     * @param backend   FFT backend to use (MKL or FFTW, default: MKL)
      *
-     * @note Uses MklFFT for the FFT implementation with BC support.
+     * @note Supports both MKL and FFTW FFT implementations.
      */
-    CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *molecules);
+    CpuSolverPseudoRK2(ComputationBox<T>* cb, Molecules *molecules, FFTBackend backend = FFTBackend::MKL);
 
     /**
      * @brief Destructor. Frees exp_dw arrays.

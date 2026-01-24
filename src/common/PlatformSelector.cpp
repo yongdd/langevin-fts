@@ -30,6 +30,9 @@
 #ifdef USE_CPU_MKL
 #include "MklFactory.h"
 #endif
+#ifdef USE_CPU_FFTW
+#include "FftwFactory.h"
+#endif
 #ifdef USE_CUDA
 #include "CudaFactory.h"
 #include "CudaCommon.h"
@@ -50,6 +53,9 @@ std::vector<std::string> PlatformSelector::avail_platforms()
     std::vector<std::string> names;
 #ifdef USE_CPU_MKL
     names.push_back("cpu-mkl");
+#endif
+#ifdef USE_CPU_FFTW
+    names.push_back("cpu-fftw");
 #endif
 #ifdef USE_CUDA
     names.push_back("cuda");
@@ -78,6 +84,10 @@ AbstractFactory<double>* PlatformSelector::create_factory_real(
     if (platform == "cpu-mkl")
         return new MklFactory<double>(reduce_memory);
 #endif
+#ifdef USE_CPU_FFTW
+    if (platform == "cpu-fftw")
+        return new FftwFactory<double>(reduce_memory);
+#endif
 #ifdef USE_CUDA
     if (platform == "cuda")
         return new CudaFactory<double>(reduce_memory);
@@ -105,6 +115,10 @@ AbstractFactory<std::complex<double>>* PlatformSelector::create_factory_complex(
 #ifdef USE_CPU_MKL
     if (platform == "cpu-mkl")
         return new MklFactory<std::complex<double>>(reduce_memory);
+#endif
+#ifdef USE_CPU_FFTW
+    if (platform == "cpu-fftw")
+        return new FftwFactory<std::complex<double>>(reduce_memory);
 #endif
 #ifdef USE_CUDA
     if (platform == "cuda")

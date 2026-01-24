@@ -52,6 +52,7 @@
 #include "CpuComputationReduceMemoryBase.h"
 #include "CpuSolver.h"
 #include "Scheduler.h"
+#include "FFT.h"  // For FFTBackend enum
 
 /**
  * @class CpuComputationReduceMemoryDiscrete
@@ -159,8 +160,9 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer
+     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
      */
-    CpuComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
+    CpuComputationReduceMemoryDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::MKL);
 
     /**
      * @brief Destructor. Frees checkpoints and workspace.

@@ -465,8 +465,11 @@ Derived classes implement chain-model-specific behavior:
       FFT<T>              (abstract base - double* and complex* interfaces)
         ↑
    MklFFT<T, DIM>         (CPU: Intel MKL for FFT, DCT, DST)
+   FftwFFT<T, DIM>        (CPU: FFTW3 for FFT, DCT, DST - GPL license)
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
+
+**FFT-Level Threading Policy**: Always disable multi-threading at the FFT level (both MKL and FFTW). Parallelism is exploited at the propagator level instead, where multiple independent propagators are computed in parallel using OpenMP threads. This design choice avoids thread contention and provides better scaling for branched polymer systems with many independent propagator computations.
 `FFT<T>` provides both interfaces:
 - `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
 - `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only

@@ -10,7 +10,7 @@ A high-performance library for polymer field theory simulations: Self-Consistent
 - Continuous and discrete chain models
 - Pseudo-spectral and real-space solvers (RQM4, ETDRK4, CN-ADI)
 - Periodic, reflecting, and absorbing boundary conditions
-- CPU (Intel MKL) and GPU (NVIDIA CUDA) platforms
+- CPU (Intel MKL, FFTW) and GPU (NVIDIA CUDA) platforms
 
 For details, see [docs/Features.md](docs/Features.md).
 
@@ -66,7 +66,9 @@ Tutorials are in the `tutorials/` folder. Examples are in `examples/scft/`, `exa
 | `cn-adi2` | Real-space | 2nd-order Crank-Nicolson ADI |
 | `cn-adi4-lr` | Real-space | 4th-order CN-ADI (Local Richardson) |
 
-**Note**: `rqm4` is the default. For non-periodic boundaries, use real-space methods (CN-ADI). See [benchmarks](docs/NumericalMethodsPerformance.md) and [real-space method](docs/RealSpaceMethod.md) for details.
+**Note**: `rqm4` is the default. See [benchmarks](docs/NumericalMethodsPerformance.md) for details.
+
+> **FFTW License**: FFTW backend (`-DPOLYMERFTS_USE_FFTW=ON`) is GPL-licensed. Distributing binaries with FFTW requires GPL compliance. See [Installation.md](docs/Installation.md) for details.
 
 ## Citation
 

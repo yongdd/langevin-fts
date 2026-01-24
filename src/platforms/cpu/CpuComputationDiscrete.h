@@ -44,6 +44,7 @@
 #include "CpuComputationBase.h"
 #include "CpuSolverPseudoDiscrete.h"
 #include "Scheduler.h"
+#include "FFT.h"  // For FFTBackend enum
 
 /**
  * @class CpuComputationDiscrete
@@ -124,8 +125,9 @@ public:
      * @param cb                              Computation box
      * @param molecules                       Molecules container
      * @param propagator_computation_optimizer Propagator optimizer
+     * @param backend                         FFT backend to use (MKL or FFTW, default: MKL)
      */
-    CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer);
+    CpuComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, FFTBackend backend = FFTBackend::MKL);
 
     /**
      * @brief Destructor. Frees propagators and concentrations.

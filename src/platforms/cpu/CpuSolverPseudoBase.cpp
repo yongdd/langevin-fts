@@ -24,11 +24,12 @@
 // Initialize shared components
 //------------------------------------------------------------------------------
 template <typename T>
-void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molecules)
+void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molecules, FFTBackend backend)
 {
     this->cb = cb;
     this->molecules = molecules;
     this->chain_model = molecules->get_model_name();
+    this->fft_backend_ = backend;
 
     // Check if all BCs are periodic
     auto bc_vec = cb->get_boundary_conditions();
@@ -54,7 +55,7 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
         }
     }
 
-    // Create unified FFT object (handles all BCs)
+    // Create FFT object using factory (handles all BCs and backends)
     // All simulations are conducted in fixed dimensions
     dim_ = cb->get_dim();
 
@@ -63,19 +64,19 @@ void CpuSolverPseudoBase<T>::init_shared(ComputationBox<T>* cb, Molecules* molec
     {
         std::array<int, 3> nx_arr = {cb->get_nx(0), cb->get_nx(1), cb->get_nx(2)};
         std::array<BoundaryCondition, 3> bc_arr = {bc_vec[0], bc_vec[2], bc_vec[4]};
-        fft_ = new MklFFT<T, 3>(nx_arr, bc_arr);
+        fft_ = createFFT<T, 3>(nx_arr, bc_arr, backend);
     }
     else if (dim_ == 2)
     {
         std::array<int, 2> nx_arr = {cb->get_nx(0), cb->get_nx(1)};
         std::array<BoundaryCondition, 2> bc_arr = {bc_vec[0], bc_vec[2]};
-        fft_ = new MklFFT<T, 2>(nx_arr, bc_arr);
+        fft_ = createFFT<T, 2>(nx_arr, bc_arr, backend);
     }
     else if (dim_ == 1)
     {
         std::array<int, 1> nx_arr = {cb->get_nx(0)};
         std::array<BoundaryCondition, 1> bc_arr = {bc_vec[0]};
-        fft_ = new MklFFT<T, 1>(nx_arr, bc_arr);
+        fft_ = createFFT<T, 1>(nx_arr, bc_arr, backend);
     }
 
     // Create Pseudo object
