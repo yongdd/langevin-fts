@@ -60,6 +60,7 @@ jobs:
         export FFTWROOT=$CONDA_PREFIX
         export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
         cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DPOLYMERFTS_USE_FFTW=ON \
           -DFFTW_ROOT=$CONDA_PREFIX \
           -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           --debug-find 2>&1 | tee cmake_output.txt | tail -100

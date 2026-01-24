@@ -23,7 +23,7 @@ conda env create -f environment.yml
 conda activate polymerfts
 git clone https://github.com/yongdd/langevin-fts.git
 cd langevin-fts && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8 && ctest -L quick && make install
 ```
 
