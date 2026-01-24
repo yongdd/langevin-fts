@@ -96,6 +96,7 @@ IF(POLYMERFTS_USE_FFTW AND FFTW3_FOUND)
     INCLUDE_DIRECTORIES(${FFTW3_INCLUDE_DIRS})
     ADD_LIBRARY(cpu-fftw
         src/platforms/cpu/FftwFFT.cpp
+        src/platforms/cpu/FftwCrysFFT.cpp
         src/platforms/cpu/CpuArray.cpp
         src/platforms/cpu/CpuComputationBox.cpp
         src/platforms/cpu/CpuSolverPseudoBase.cpp
@@ -153,6 +154,8 @@ IF(POLYMERFTS_USE_CUDA AND CUDAToolkit_FOUND)
         src/platforms/cuda/CudaComputationBox.cu
         src/platforms/cuda/CudaPseudo.cu
         src/platforms/cuda/CudaFFT.cu
+        src/platforms/cuda/CudaCrysFFT.cu
+        src/platforms/cuda/CudaDCT.cu
         src/platforms/cuda/CudaSolverPseudoRQM4.cu
         src/platforms/cuda/CudaSolverPseudoRK2.cu
         src/platforms/cuda/CudaSolverPseudoETDRK4.cu
