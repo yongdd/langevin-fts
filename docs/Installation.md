@@ -45,7 +45,7 @@ conda activate polymerfts
 
 # Build and install
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 ctest -L quick  # Quick installation verification (~5 seconds)
 make install
@@ -94,7 +94,7 @@ git clone https://github.com/yongdd/langevin-fts.git
 
 # Build
 cd langevin-fts && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 
 # Run quick tests (installation verification)
@@ -108,14 +108,14 @@ make install
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `POLYMERFTS_USE_FFTW` | ON | Enable FFTW3 CPU backend (**GPL license**) |
+| `POLYMERFTS_USE_FFTW` | OFF | Enable FFTW3 CPU backend (**GPL license**) |
 | `POLYMERFTS_USE_CUDA` | ON | Enable NVIDIA CUDA GPU backend |
 | `POLYMERFTS_BUILD_TESTS` | ON | Build test executables |
 | `POLYMERFTS_INSTALL_PYTHON` | ON | Install Python module |
 
 Example with options:
 ```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_CUDA=OFF
+cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON -DPOLYMERFTS_USE_CUDA=OFF
 ```
 
 ## GPL License Warning
