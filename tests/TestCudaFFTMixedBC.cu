@@ -46,9 +46,50 @@ int main()
         gpu_error_check(cudaMalloc((void**)&d_data_k, sizeof(double) * N));
 
         //=======================================================================
+        // Test 0: 1D Odd N DCT Round-trip
+        //=======================================================================
+        {
+            std::cout << "Test 0: 1D Odd N=11 DCT Round-trip" << std::endl;
+            const int N_ODD = 11;
+            std::vector<double> data_odd(N_ODD), data_odd_r(N_ODD);
+            for (int i = 0; i < N_ODD; ++i) data_odd[i] = i + 1;
+
+            double* d_odd_r;
+            double* d_odd_k;
+            cudaMalloc(&d_odd_r, sizeof(double) * N_ODD);
+            cudaMalloc(&d_odd_k, sizeof(double) * N_ODD);
+            cudaMemcpy(d_odd_r, data_odd.data(), sizeof(double) * N_ODD, cudaMemcpyHostToDevice);
+
+            std::array<int, 1> nx_odd = {N_ODD};
+            std::array<BoundaryCondition, 1> bc_odd = {BoundaryCondition::REFLECTING};
+            CudaFFT<double, 1> fft_odd(nx_odd, bc_odd);
+
+            fft_odd.forward(d_odd_r, d_odd_k);
+            fft_odd.backward(d_odd_k, d_odd_r);
+
+            cudaMemcpy(data_odd_r.data(), d_odd_r, sizeof(double) * N_ODD, cudaMemcpyDeviceToHost);
+
+            double max_err = 0;
+            for (int i = 0; i < N_ODD; ++i) {
+                double err = std::abs(data_odd_r[i] - data_odd[i]);
+                if (err > max_err) max_err = err;
+            }
+            std::cout << "  Round-trip Error: " << max_err << std::endl;
+            if (max_err > 1e-7) {
+                std::cout << "  FAILED!" << std::endl;
+                cudaFree(d_odd_r);
+                cudaFree(d_odd_k);
+                return -1;
+            }
+            std::cout << "  PASSED!" << std::endl;
+            cudaFree(d_odd_r);
+            cudaFree(d_odd_k);
+        }
+
+        //=======================================================================
         // Test 1: DCT-II / DCT-III (Reflecting BC) Round-trip
         //=======================================================================
-        std::cout << "Test 1: DCT-II/III (Reflecting BC) Round-trip" << std::endl;
+        std::cout << "\nTest 1: DCT-II/III (Reflecting BC) Round-trip" << std::endl;
 
         std::array<int, 1> nx_1d = {N};
         std::array<BoundaryCondition, 1> bc_reflect = {BoundaryCondition::REFLECTING};
@@ -234,7 +275,7 @@ int main()
         //=======================================================================
         std::cout << "\nTest 5: 3D Mixed BC Round-trip" << std::endl;
 
-        const int NX3 = 5, NY3 = 4, NZ3 = 3;
+        const int NX3 = 6, NY3 = 4, NZ3 = 3;  // Only dim 2 is odd
         const int M3 = NX3 * NY3 * NZ3;
         std::vector<double> data3d_init(M3), data3d_r(M3), data3d_k(M3);
 
