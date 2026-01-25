@@ -36,6 +36,7 @@
 #include <numbers>
 
 #include "ComputationBox.h"
+#include "SpaceGroup.h"
 #include "ValidationUtils.h"
 
 namespace {
@@ -220,6 +221,10 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
         compute_lattice_vectors();
         compute_reciprocal_lattice();
         compute_recip_metric();
+
+        // Initialize space group (disabled by default)
+        space_group_ = nullptr;
+        n_irreducible_ = total_grid;
     }
     catch(std::exception& exc)
     {
@@ -377,6 +382,10 @@ ComputationBox<T>::ComputationBox(std::vector<int> new_nx, std::vector<double> n
                 }
             }
         }
+
+        // Initialize space group (disabled by default)
+        space_group_ = nullptr;
+        n_irreducible_ = total_grid;
     }
     catch(std::exception& exc)
     {
@@ -738,56 +747,194 @@ void ComputationBox<T>::set_lattice_parameters(std::vector<double> new_lx, std::
         for(int i=0; i<total_grid; i++)
             dv[i] *= this->mask[i];
 }
-//-----------------------------------------------------------
-// This method calculates integral of g
+// ==================== Space Group Methods ====================
+
+template <typename T>
+void ComputationBox<T>::set_space_group(SpaceGroup* sg)
+{
+    space_group_ = sg;
+
+    if (sg != nullptr)
+    {
+        // Cache orbit counts and n_irreducible for fast access
+        orbit_counts_ = sg->get_orbit_counts();
+        n_irreducible_ = sg->get_n_irreducible();
+    }
+    else
+    {
+        // Clear cached values
+        orbit_counts_.clear();
+        n_irreducible_ = total_grid;
+    }
+}
+
+template <typename T>
+SpaceGroup* ComputationBox<T>::get_space_group() const
+{
+    return space_group_;
+}
+
+template <typename T>
+int ComputationBox<T>::get_n_grid() const
+{
+    return n_irreducible_;
+}
+
+template <typename T>
+const std::vector<int>& ComputationBox<T>::get_orbit_counts() const
+{
+    return orbit_counts_;
+}
+
+// ==================== Field Operations ====================
+
+/**
+ * @brief Compute volume integral of a field.
+ *
+ * When space_group_ is set, operates on reduced basis (size n_irreducible).
+ * Otherwise, operates on full grid (size total_grid).
+ */
 template <typename T>
 T ComputationBox<T>::integral(const T *g)
 {
     T sum{0.0};
-    for(int i=0; i<total_grid; i++)
-        sum += dv[i]*g[i];
-    return sum;
+
+    if (space_group_ != nullptr)
+    {
+        // Reduced basis mode
+        double dv_base = volume / total_grid;
+        for (int i = 0; i < n_irreducible_; i++)
+            sum += static_cast<T>(orbit_counts_[i]) * g[i];
+        return sum * static_cast<T>(dv_base);
+    }
+    else
+    {
+        // Full grid mode
+        for (int i = 0; i < total_grid; i++)
+            sum += dv[i] * g[i];
+        return sum;
+    }
 }
-// This method calculates inner product g and h
+
+/**
+ * @brief Compute inner product of two fields.
+ *
+ * When space_group_ is set, operates on reduced basis.
+ */
 template <typename T>
 T ComputationBox<T>::inner_product(const T *g, const T *h)
 {
     T sum{0.0};
-    for(int i=0; i<total_grid; i++)
-        sum += dv[i]*g[i]*h[i];
-    return sum;
+
+    if (space_group_ != nullptr)
+    {
+        // Reduced basis mode
+        double dv_base = volume / total_grid;
+        for (int i = 0; i < n_irreducible_; i++)
+            sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i];
+        return sum * static_cast<T>(dv_base);
+    }
+    else
+    {
+        // Full grid mode
+        for (int i = 0; i < total_grid; i++)
+            sum += dv[i] * g[i] * h[i];
+        return sum;
+    }
 }
-// This method calculates inner product g and h with weight 1/w
+
+/**
+ * @brief Compute weighted inner product with inverse weight.
+ *
+ * When space_group_ is set, operates on reduced basis.
+ */
 template <typename T>
 T ComputationBox<T>::inner_product_inverse_weight(const T *g, const T *h, const T *w)
 {
     T sum{0.0};
-    for(int i=0; i<total_grid; i++)
-        sum += dv[i]*g[i]*h[i]/w[i];
-    return sum;
+
+    if (space_group_ != nullptr)
+    {
+        // Reduced basis mode
+        double dv_base = volume / total_grid;
+        for (int i = 0; i < n_irreducible_; i++)
+            sum += static_cast<T>(orbit_counts_[i]) * g[i] * h[i] / w[i];
+        return sum * static_cast<T>(dv_base);
+    }
+    else
+    {
+        // Full grid mode
+        for (int i = 0; i < total_grid; i++)
+            sum += dv[i] * g[i] * h[i] / w[i];
+        return sum;
+    }
 }
-//-----------------------------------------------------------
+
+/**
+ * @brief Compute inner product for multiple field components.
+ *
+ * When space_group_ is set, operates on reduced basis.
+ */
 template <typename T>
 T ComputationBox<T>::multi_inner_product(int n_comp, const T *g, const T *h)
 {
     T sum{0.0};
-    for(int n=0; n < n_comp; n++)
+
+    if (space_group_ != nullptr)
     {
-        for(int i=0; i<total_grid; i++)
-            sum += dv[i]*g[i+n*total_grid]*h[i+n*total_grid];
+        // Reduced basis mode
+        double dv_base = volume / total_grid;
+        for (int n = 0; n < n_comp; n++)
+        {
+            for (int i = 0; i < n_irreducible_; i++)
+                sum += static_cast<T>(orbit_counts_[i]) * g[i + n * n_irreducible_] * h[i + n * n_irreducible_];
+        }
+        return sum * static_cast<T>(dv_base);
     }
-    return sum;
+    else
+    {
+        // Full grid mode
+        for (int n = 0; n < n_comp; n++)
+        {
+            for (int i = 0; i < total_grid; i++)
+                sum += dv[i] * g[i + n * total_grid] * h[i + n * total_grid];
+        }
+        return sum;
+    }
 }
-//-----------------------------------------------------------
-// This method makes the input a zero-meaned matrix
+
+/**
+ * @brief Remove the spatial mean from a field (make it zero-mean).
+ *
+ * When space_group_ is set, operates on reduced basis using weighted mean.
+ */
 template <typename T>
 void ComputationBox<T>::zero_mean(T *g)
 {
     T sum{0.0};
-    for(int i=0; i<total_grid; i++)
-        sum += dv[i]*g[i];
-    for(int i=0; i<total_grid; i++)
-        g[i] -= sum/volume;
+
+    if (space_group_ != nullptr)
+    {
+        // Reduced basis mode: compute weighted mean
+        int total_count = 0;
+        for (int i = 0; i < n_irreducible_; i++)
+        {
+            sum += static_cast<T>(orbit_counts_[i]) * g[i];
+            total_count += orbit_counts_[i];
+        }
+        T mean = sum / static_cast<T>(total_count);
+
+        for (int i = 0; i < n_irreducible_; i++)
+            g[i] -= mean;
+    }
+    else
+    {
+        // Full grid mode
+        for (int i = 0; i < total_grid; i++)
+            sum += dv[i] * g[i];
+        for (int i = 0; i < total_grid; i++)
+            g[i] -= sum / volume;
+    }
 }
 
 // Explicit template instantiation

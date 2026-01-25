@@ -73,6 +73,7 @@
 #include "Polymer.h"
 #include "PropagatorCode.h"
 #include "PropagatorComputationOptimizer.h"
+#include "SpaceGroup.h"
 #include "Exception.h"
 
 /// Tolerance for partition function consistency check in check_total_partition()
@@ -130,6 +131,24 @@ protected:
      */
     std::vector<std::array<T,6>> dq_dl;
 
+    /**
+     * @brief Space group for reduced basis representation (optional).
+     *
+     * When set, fields and concentrations can be represented using only
+     * irreducible mesh points. Set to nullptr when not using symmetry.
+     */
+    SpaceGroup* space_group_;
+
+    /**
+     * @brief Temporary buffer for full grid fields when using reduced basis.
+     */
+    std::vector<T> w_full_buffer_;
+
+    /**
+     * @brief Temporary buffer for full grid concentrations when using reduced basis.
+     */
+    std::vector<T> phi_full_buffer_;
+
 public:
     /**
      * @brief Construct a PropagatorComputation solver.
@@ -146,10 +165,10 @@ public:
     virtual ~PropagatorComputation();
 
     /**
-     * @brief Get total number of grid points.
-     * @return M = Nx * Ny * Nz
+     * @brief Get the computation box.
+     * @return Pointer to ComputationBox
      */
-    int get_total_grid() const {return this->cb->get_total_grid();};
+    ComputationBox<T>* get_cb() const { return this->cb; }
 
     /**
      * @brief Get number of blocks in a polymer.
@@ -351,6 +370,51 @@ public:
      *       due to numerical discretization.
      */
     virtual bool check_total_partition() = 0;
+
+    // ==================== Space Group / Reduced Basis Methods ====================
+
+    /**
+     * @brief Set space group for reduced basis representation.
+     *
+     * When a space group is set, fields can be represented using only irreducible
+     * mesh points, reducing memory usage and speeding up field operations.
+     * The propagator computation still uses the full grid internally (FFT requires it).
+     *
+     * @param sg Pointer to SpaceGroup object (nullptr to disable)
+     */
+    virtual void set_space_group(SpaceGroup* sg);
+
+    /**
+     * @brief Get the current space group.
+     * @return Pointer to SpaceGroup, or nullptr if not set
+     */
+    SpaceGroup* get_space_group() const { return space_group_; }
+
+    /**
+     * @brief Compute propagators using reduced basis input fields.
+     *
+     * Expands reduced basis fields to full grid, computes propagators,
+     * and stores results. Concentrations can then be retrieved in reduced basis.
+     *
+     * @param w_reduced Map from monomer type to reduced basis field
+     *                  (size: n_irreducible per field)
+     * @param q_init    Optional: initial conditions for grafted chains
+     */
+    virtual void compute_propagators_reduced(
+        std::map<std::string, const T*> w_reduced,
+        std::map<std::string, const T*> q_init = {});
+
+    /**
+     * @brief Get total concentration in reduced basis.
+     *
+     * @param monomer_type Monomer type label
+     * @param phi_reduced  Output array (size: n_irreducible)
+     *
+     * @pre compute_propagators() or compute_propagators_reduced() and
+     *      compute_concentrations() must be called first.
+     * @pre Space group must be set via set_space_group().
+     */
+    virtual void get_total_concentration_reduced(std::string monomer_type, T* phi_reduced);
 
 };
 #endif

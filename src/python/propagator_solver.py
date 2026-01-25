@@ -178,7 +178,7 @@ class PropagatorSolver:
         self.nx = list(nx)
         self.lx = list(lx)
         self.dim = len(nx)
-        self.n_grid = int(np.prod(nx))
+        self._total_grid = int(np.prod(nx))
 
         # Validate dimensions
         if len(lx) != self.dim:
@@ -277,6 +277,7 @@ class PropagatorSolver:
         self._computation_box = None
         self._propagator_optimizer = None
         self._fields_set = False
+        self._space_group = None
 
     def add_polymer(
         self,
@@ -628,6 +629,35 @@ class PropagatorSolver:
         return dv
 
     @property
+    def n_grid(self):
+        """
+        Number of grid points for field operations.
+
+        Returns n_irreducible when space group is set on the propagator
+        computation, otherwise returns total_grid.
+
+        Returns
+        -------
+        int
+            Number of grid points (n_irreducible or total_grid).
+        """
+        if self._propagator_computation is not None:
+            return self._propagator_computation.get_cb().get_n_grid()
+        return self._total_grid
+
+    @property
+    def total_grid(self):
+        """
+        Total number of grid points (always full grid, ignoring space group).
+
+        Returns
+        -------
+        int
+            Total number of grid points.
+        """
+        return self._total_grid
+
+    @property
     def info(self):
         """
         Get a summary of the solver configuration.
@@ -831,6 +861,66 @@ class PropagatorSolver:
         """
         self._initialize_solver()
         self._propagator_computation.update_laplacian_operator()
+
+    # -------------------- Space Group / Reduced Basis --------------------
+
+    def set_space_group(self, space_group) -> None:
+        """
+        Set space group for reduced basis representation.
+
+        When a space group is set, fields can be represented using only
+        irreducible mesh points, reducing memory usage.
+
+        Parameters
+        ----------
+        space_group : SpaceGroup
+            SpaceGroup object from polymerfts.space_group module.
+        """
+        self._initialize_solver()
+        self._space_group = space_group
+        self._propagator_computation.set_space_group(space_group._cpp_sg)
+
+    def to_reduced_basis(self, field: NDArray[np.floating]) -> NDArray[np.floating]:
+        """
+        Convert full grid field to reduced basis.
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Field on full grid (n_grid,).
+
+        Returns
+        -------
+        numpy.ndarray
+            Field on reduced basis (n_irreducible,).
+        """
+        if self._space_group is None:
+            raise RuntimeError(
+                "Space group not set. Call set_space_group() first."
+            )
+        field_2d = np.reshape(field, (1, -1))
+        return self._space_group.to_reduced_basis(field_2d)[0]
+
+    def from_reduced_basis(self, field_reduced: NDArray[np.floating]) -> NDArray[np.floating]:
+        """
+        Convert reduced basis field to full grid.
+
+        Parameters
+        ----------
+        field_reduced : numpy.ndarray
+            Field on reduced basis (n_irreducible,).
+
+        Returns
+        -------
+        numpy.ndarray
+            Field on full grid (n_grid,).
+        """
+        if self._space_group is None:
+            raise RuntimeError(
+                "Space group not set. Call set_space_group() first."
+            )
+        field_2d = np.reshape(field_reduced, (1, -1))
+        return self._space_group.from_reduced_basis(field_2d)[0]
 
     # -------------------- Molecule information --------------------
 

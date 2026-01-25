@@ -56,6 +56,25 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/common/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cpu/)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/platforms/cuda/)
 
+# spglib (required for space group symmetry)
+FIND_PACKAGE(PkgConfig QUIET)
+IF(PkgConfig_FOUND)
+    PKG_CHECK_MODULES(SPGLIB QUIET spglib)
+ENDIF()
+IF(NOT SPGLIB_FOUND)
+    FIND_LIBRARY(SPGLIB_LIBRARIES NAMES symspg spglib HINTS ENV SPGLIB_ROOT PATH_SUFFIXES lib lib64)
+    FIND_PATH(SPGLIB_INCLUDE_DIRS spglib.h HINTS ENV SPGLIB_ROOT PATH_SUFFIXES include)
+    IF(SPGLIB_LIBRARIES AND SPGLIB_INCLUDE_DIRS)
+        SET(SPGLIB_FOUND TRUE)
+    ENDIF()
+ENDIF()
+IF(SPGLIB_FOUND)
+    INCLUDE_DIRECTORIES(${SPGLIB_INCLUDE_DIRS})
+    MESSAGE(STATUS "spglib found: ${SPGLIB_LIBRARIES}")
+ELSE()
+    MESSAGE(WARNING "spglib not found. SpaceGroup functionality will not be available.")
+ENDIF()
+
 # Common Files
 ADD_LIBRARY(common
     src/common/Array.cpp
@@ -73,7 +92,11 @@ ADD_LIBRARY(common
     src/common/PropagatorComputation.cpp
     src/common/AndersonMixing.cpp
     src/common/Scheduler.cpp
+    src/common/SpaceGroup.cpp
 )
+IF(SPGLIB_FOUND)
+    TARGET_LINK_LIBRARIES(common ${SPGLIB_LIBRARIES})
+ENDIF()
 
 # FFTW3
 IF(POLYMERFTS_USE_FFTW)

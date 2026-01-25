@@ -72,6 +72,9 @@ SET(BASIC_TESTS
     TestStress1DComplex
     TestStressDiscreteCpu1D
     TestStressDiscreteCuda1D
+
+    # Space Group
+    TestSpaceGroupReducedBasis
 )
 
 # Helper function to set test labels

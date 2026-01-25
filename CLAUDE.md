@@ -15,17 +15,17 @@ mkdir build && cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release
 make -j8
 
+# Install Python modules to conda environment (required before testing)
+make install
+
 # Run basic tests (installation verification, ~40 sec)
 ctest -L basic
 
 # Run full tests (development validation, ~3 min)
 ctest
 
-# Install Python modules to conda environment
-make install
-
 # Clean build (if needed)
-cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8
+cd build && rm -rf * && cmake ../ -DCMAKE_BUILD_TYPE=Release && make -j8 && make install
 ```
 
 ### Important Build Notes
@@ -68,9 +68,15 @@ Two test modes are available:
 | **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
 ### Running Tests
+
+**Important:** Run `make install` before testing. Python tests import from the installed package.
+
 ```bash
 # From build directory
 cd build
+
+# Install first (required for Python tests)
+make install
 
 # Basic tests (for users, installation verification)
 ctest -L basic
@@ -238,13 +244,31 @@ Located in `examples/scft/`:
 - `Lamella3D.py`: Lamellar phase of AB diblock
 - `Gyroid.py`: Gyroid phase with box relaxation
 - `ABC_Triblock_Sphere3D.py`: Spherical phase of ABC triblock
-- `phases/`: Various morphologies (cylinder, perforated lamella, double diamond, etc.)
+- `phases/`: **Space group symmetry examples** - BCC, FCC, Gyroid, Double Diamond, Sigma, A15, and other complex phases with space group constraints for reduced memory usage and faster field operations
 
 Run from repository root:
 ```bash
 cd examples/scft
 python Lamella3D.py
 ```
+
+### Space Group Symmetry (Beta Feature)
+
+The `examples/scft/phases/` directory contains examples using space group symmetry to exploit crystallographic periodicity. Key features:
+
+- **Reduced basis representation**: Fields stored only at irreducible mesh points (e.g., 48-192x reduction for cubic space groups)
+- **Memory savings**: Proportional to grid reduction ratio
+- **Speedup**: ~5-10% from smaller field operations (propagator computation still uses full grid FFT)
+
+Example usage in params:
+```python
+"space_group": {
+    "symbol": "Im-3m",   # Hermann-Mauguin symbol (BCC)
+    "number": 529,       # Hall number (optional)
+}
+```
+
+See `examples/scft/phases/README.md` for available space groups and reduction factors.
 
 ### L-FTS Examples
 Located in `examples/fts/`:
