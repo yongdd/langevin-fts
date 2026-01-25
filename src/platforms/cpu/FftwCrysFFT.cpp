@@ -1,0 +1,238 @@
+/**
+ * @file FftwCrysFFT.cpp
+ * @brief CPU implementation of crystallographic FFT using DCT-II/III.
+ *
+ * DCT-II (forward) and DCT-III (backward) for Pmmm symmetry.
+ *
+ * Reference: Qiang & Li, Macromolecules (2020)
+ */
+
+#include <cmath>
+#include <stdexcept>
+#include <cstring>
+
+#include "FftwCrysFFT.h"
+#include "Exception.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+//------------------------------------------------------------------------------
+// Constructor
+//------------------------------------------------------------------------------
+FftwCrysFFT::FftwCrysFFT(
+    std::array<int, 3> nx_logical,
+    std::array<double, 6> cell_para,
+    std::array<double, 9> /* trans_part - ignored for DCT-II/III */)
+    : nx_logical_(nx_logical),
+      cell_para_(cell_para),
+      boltz_current_(nullptr),
+      ds_current_(0.0),
+      plan_forward_(nullptr),
+      plan_backward_(nullptr),
+      io_buffer_(nullptr),
+      temp_buffer_(nullptr)
+{
+    // Validate even grid sizes
+    for (int d = 0; d < 3; ++d)
+    {
+        if (nx_logical_[d] % 2 != 0)
+        {
+            throw_with_line_number("FftwCrysFFT requires even grid dimensions. "
+                "Dimension " + std::to_string(d) + " has size " + std::to_string(nx_logical_[d]));
+        }
+        if (nx_logical_[d] <= 0)
+        {
+            throw_with_line_number("FftwCrysFFT requires positive grid dimensions.");
+        }
+    }
+
+    // Physical grid: (N/2) in each dimension (excluding boundary)
+    nx_physical_ = {
+        nx_logical_[0] / 2,
+        nx_logical_[1] / 2,
+        nx_logical_[2] / 2
+    };
+
+    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+
+    // DCT-II/III normalization: 1 / M_logical for round-trip
+    // DCT-II output is scaled by 2^3 = 8 relative to "orthogonal" normalization
+    // DCT-III reverses this, so round-trip scales by 8 * M_physical = M_logical
+    norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+
+    // Initialize FFTW plans
+    initFFTPlans();
+}
+
+//------------------------------------------------------------------------------
+// Destructor
+//------------------------------------------------------------------------------
+FftwCrysFFT::~FftwCrysFFT()
+{
+    // Free Boltzmann factors
+    freeBoltzmann();
+
+    // Destroy FFTW plans
+    if (plan_forward_) fftw_destroy_plan(plan_forward_);
+    if (plan_backward_) fftw_destroy_plan(plan_backward_);
+
+    // Free work buffers
+    if (io_buffer_) fftw_free(io_buffer_);
+    if (temp_buffer_) fftw_free(temp_buffer_);
+}
+
+//------------------------------------------------------------------------------
+// Initialize FFTW DCT-II/III plans
+//------------------------------------------------------------------------------
+void FftwCrysFFT::initFFTPlans()
+{
+    // Allocate work buffers
+    io_buffer_ = (double*)fftw_malloc(sizeof(double) * M_physical_);
+    temp_buffer_ = (double*)fftw_malloc(sizeof(double) * M_physical_);
+
+    if (!io_buffer_ || !temp_buffer_)
+    {
+        throw_with_line_number("Failed to allocate work buffer memory");
+    }
+
+    // DCT-II (REDFT10) forward, DCT-III (REDFT01) backward
+    plan_forward_ = fftw_plan_r2r_3d(
+        nx_physical_[0], nx_physical_[1], nx_physical_[2],
+        io_buffer_, temp_buffer_,
+        FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10,
+        FFTW_MEASURE);
+
+    plan_backward_ = fftw_plan_r2r_3d(
+        nx_physical_[0], nx_physical_[1], nx_physical_[2],
+        temp_buffer_, io_buffer_,
+        FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01,
+        FFTW_MEASURE);
+
+    if (!plan_forward_ || !plan_backward_)
+    {
+        throw_with_line_number("Failed to create FFTW DCT-II/III plans");
+    }
+}
+
+//------------------------------------------------------------------------------
+// Free Boltzmann factors
+//------------------------------------------------------------------------------
+void FftwCrysFFT::freeBoltzmann()
+{
+    for (auto& kv : boltzmann_)
+    {
+        if (kv.second) delete[] kv.second;
+    }
+    boltzmann_.clear();
+    boltz_current_ = nullptr;
+}
+
+//------------------------------------------------------------------------------
+// Set cell parameters
+//------------------------------------------------------------------------------
+void FftwCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
+{
+    // Only check Lx, Ly, Lz (first 3 parameters)
+    if (cell_para[0] == cell_para_[0] &&
+        cell_para[1] == cell_para_[1] &&
+        cell_para[2] == cell_para_[2])
+    {
+        return;
+    }
+
+    cell_para_ = cell_para;
+
+    // Invalidate all Boltzmann factors
+    freeBoltzmann();
+    ds_current_ = 0.0;
+}
+
+//------------------------------------------------------------------------------
+// Set contour step and prepare Boltzmann factors
+//------------------------------------------------------------------------------
+void FftwCrysFFT::set_contour_step(double ds)
+{
+    if (ds == ds_current_ && boltzmann_.count(ds) > 0) return;
+
+    ds_current_ = ds;
+
+    if (boltzmann_.count(ds) == 0)
+    {
+        generateBoltzmann(ds);
+    }
+
+    boltz_current_ = boltzmann_[ds];
+}
+
+//------------------------------------------------------------------------------
+// Generate Boltzmann factors for a specific ds value
+//------------------------------------------------------------------------------
+void FftwCrysFFT::generateBoltzmann(double ds)
+{
+    double* boltz = new double[M_physical_];
+
+    double Lx = cell_para_[0];
+    double Ly = cell_para_[1];
+    double Lz = cell_para_[2];
+
+    int Nx2 = nx_physical_[0];
+    int Ny2 = nx_physical_[1];
+    int Nz2 = nx_physical_[2];
+
+    // For DCT-II/III, frequencies are k_n = n * 2π / L for n = 0, 1, ..., N/2-1
+    // This corresponds to the physical grid indices
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        double kx = ix * 2.0 * M_PI / Lx;
+        double kx2 = kx * kx;
+
+        for (int iy = 0; iy < Ny2; ++iy)
+        {
+            double ky = iy * 2.0 * M_PI / Ly;
+            double ky2 = ky * ky;
+
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                double kz = iz * 2.0 * M_PI / Lz;
+                double kz2 = kz * kz;
+
+                boltz[idx++] = std::exp(-(kx2 + ky2 + kz2) * ds);
+            }
+        }
+    }
+
+    boltzmann_[ds] = boltz;
+}
+
+//------------------------------------------------------------------------------
+// Apply diffusion operator
+//------------------------------------------------------------------------------
+void FftwCrysFFT::diffusion(double* q_in, double* q_out)
+{
+    // Step 1: Copy input to io_buffer
+    std::memcpy(io_buffer_, q_in, sizeof(double) * M_physical_);
+
+    // Step 2: Forward DCT-II
+    fftw_execute(plan_forward_);
+
+    // Step 3: Apply Boltzmann factor
+    #pragma omp parallel for
+    for (int i = 0; i < M_physical_; ++i)
+    {
+        temp_buffer_[i] *= boltz_current_[i];
+    }
+
+    // Step 4: Backward DCT-III
+    fftw_execute(plan_backward_);
+
+    // Step 5: Apply normalization and copy result to output
+    #pragma omp parallel for
+    for (int i = 0; i < M_physical_; ++i)
+    {
+        q_out[i] = io_buffer_[i] * norm_factor_;
+    }
+}

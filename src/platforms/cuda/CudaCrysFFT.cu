@@ -1,0 +1,228 @@
+/**
+ * @file CudaCrysFFT.cu
+ * @brief CUDA implementation of crystallographic FFT using DCT-II/III.
+ *
+ * Uses CudaRealTransform for DCT-II (forward) and DCT-III (backward).
+ *
+ * Reference: Qiang & Li, Macromolecules (2020)
+ */
+
+#include "CudaCrysFFT.h"
+#include "CudaRealTransform.h"
+#include "CudaCommon.h"
+#include <cmath>
+#include <stdexcept>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+//------------------------------------------------------------------------------
+// CUDA Kernels
+//------------------------------------------------------------------------------
+
+/**
+ * @brief Apply Boltzmann factor element-wise.
+ */
+__global__ void kernel_apply_boltzmann_crys(
+    double* __restrict__ d_data,
+    const double* __restrict__ d_boltz,
+    int M)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= M) return;
+    d_data[idx] *= d_boltz[idx];
+}
+
+/**
+ * @brief Apply normalization factor element-wise.
+ */
+__global__ void kernel_normalize_crys(
+    double* __restrict__ d_data,
+    double norm,
+    int M)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= M) return;
+    d_data[idx] *= norm;
+}
+
+//------------------------------------------------------------------------------
+// Constructor
+//------------------------------------------------------------------------------
+CudaCrysFFT::CudaCrysFFT(
+    std::array<int, 3> nx_logical,
+    std::array<double, 6> cell_para,
+    std::array<double, 9> /* trans_part - ignored for DCT-II/III */)
+    : nx_logical_(nx_logical),
+      cell_para_(cell_para),
+      d_boltz_current_(nullptr),
+      ds_current_(0.0),
+      dct_forward_(nullptr),
+      dct_backward_(nullptr),
+      d_work_(nullptr)
+{
+    // Validate even grid sizes
+    for (int d = 0; d < 3; ++d)
+    {
+        if (nx_logical_[d] % 2 != 0)
+        {
+            throw std::invalid_argument("CudaCrysFFT requires even grid dimensions");
+        }
+    }
+
+    // Physical grid: (N/2) in each dimension
+    nx_physical_ = {
+        nx_logical_[0] / 2,
+        nx_logical_[1] / 2,
+        nx_logical_[2] / 2
+    };
+
+    M_logical_ = nx_logical_[0] * nx_logical_[1] * nx_logical_[2];
+    M_physical_ = nx_physical_[0] * nx_physical_[1] * nx_physical_[2];
+
+    // Normalization: 1/M_logical for round-trip
+    norm_factor_ = 1.0 / static_cast<double>(M_logical_);
+
+    // Create CudaRealTransform objects for DCT-II and DCT-III
+    dct_forward_ = new CudaRealTransform3D(
+        nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_2);
+    dct_backward_ = new CudaRealTransform3D(
+        nx_physical_[0], nx_physical_[1], nx_physical_[2], CUDA_DCT_3);
+
+    // Allocate device work buffer
+    gpu_error_check(cudaMalloc(&d_work_, sizeof(double) * M_physical_));
+}
+
+//------------------------------------------------------------------------------
+// Destructor
+//------------------------------------------------------------------------------
+CudaCrysFFT::~CudaCrysFFT()
+{
+    freeBoltzmann();
+
+    if (dct_forward_) delete dct_forward_;
+    if (dct_backward_) delete dct_backward_;
+    if (d_work_) cudaFree(d_work_);
+}
+
+//------------------------------------------------------------------------------
+// Free Boltzmann factors
+//------------------------------------------------------------------------------
+void CudaCrysFFT::freeBoltzmann()
+{
+    for (auto& kv : d_boltzmann_)
+    {
+        if (kv.second) cudaFree(kv.second);
+    }
+    d_boltzmann_.clear();
+    d_boltz_current_ = nullptr;
+}
+
+//------------------------------------------------------------------------------
+// Set cell parameters
+//------------------------------------------------------------------------------
+void CudaCrysFFT::set_cell_para(const std::array<double, 6>& cell_para)
+{
+    if (cell_para[0] == cell_para_[0] &&
+        cell_para[1] == cell_para_[1] &&
+        cell_para[2] == cell_para_[2])
+    {
+        return;
+    }
+
+    cell_para_ = cell_para;
+    freeBoltzmann();
+    ds_current_ = 0.0;
+}
+
+//------------------------------------------------------------------------------
+// Set contour step
+//------------------------------------------------------------------------------
+void CudaCrysFFT::set_contour_step(double ds)
+{
+    if (ds == ds_current_ && d_boltzmann_.count(ds) > 0) return;
+
+    ds_current_ = ds;
+
+    if (d_boltzmann_.count(ds) == 0)
+    {
+        generateBoltzmann(ds);
+    }
+
+    d_boltz_current_ = d_boltzmann_[ds];
+}
+
+//------------------------------------------------------------------------------
+// Generate Boltzmann factors
+//------------------------------------------------------------------------------
+void CudaCrysFFT::generateBoltzmann(double ds)
+{
+    // Compute on host, then copy to device
+    double* h_boltz = new double[M_physical_];
+
+    double Lx = cell_para_[0];
+    double Ly = cell_para_[1];
+    double Lz = cell_para_[2];
+
+    int Nx2 = nx_physical_[0];
+    int Ny2 = nx_physical_[1];
+    int Nz2 = nx_physical_[2];
+
+    int idx = 0;
+    for (int ix = 0; ix < Nx2; ++ix)
+    {
+        double kx = ix * 2.0 * M_PI / Lx;
+        double kx2 = kx * kx;
+
+        for (int iy = 0; iy < Ny2; ++iy)
+        {
+            double ky = iy * 2.0 * M_PI / Ly;
+            double ky2 = ky * ky;
+
+            for (int iz = 0; iz < Nz2; ++iz)
+            {
+                double kz = iz * 2.0 * M_PI / Lz;
+                double kz2 = kz * kz;
+
+                h_boltz[idx++] = std::exp(-(kx2 + ky2 + kz2) * ds);
+            }
+        }
+    }
+
+    double* d_boltz;
+    gpu_error_check(cudaMalloc(&d_boltz, sizeof(double) * M_physical_));
+    gpu_error_check(cudaMemcpy(d_boltz, h_boltz, sizeof(double) * M_physical_, cudaMemcpyHostToDevice));
+
+    d_boltzmann_[ds] = d_boltz;
+    delete[] h_boltz;
+}
+
+//------------------------------------------------------------------------------
+// Apply diffusion operator
+//------------------------------------------------------------------------------
+void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
+{
+    int threads = 256;
+    int blocks = (M_physical_ + threads - 1) / threads;
+
+    // Step 1: Copy input to work buffer
+    gpu_error_check(cudaMemcpy(d_work_, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+
+    // Step 2: Forward DCT-II
+    dct_forward_->execute(d_work_);
+
+    // Step 3: Apply Boltzmann factor
+    kernel_apply_boltzmann_crys<<<blocks, threads>>>(d_work_, d_boltz_current_, M_physical_);
+
+    // Step 4: Backward DCT-III
+    dct_backward_->execute(d_work_);
+
+    // Step 5: Normalize and copy to output
+    // CudaRealTransform does NOT apply normalization automatically.
+    // DCT-2 -> DCT-3 roundtrip normalization: 2N per dimension
+    // Total: (2*Nx2)*(2*Ny2)*(2*Nz2) = 8*M_physical = M_logical
+    // So we need to apply 1/M_logical
+    kernel_normalize_crys<<<blocks, threads>>>(d_work_, norm_factor_, M_physical_);
+    gpu_error_check(cudaMemcpy(d_q_out, d_work_, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+}
