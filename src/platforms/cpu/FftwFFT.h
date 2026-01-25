@@ -43,8 +43,8 @@
  * @brief FFTW3-based FFT with support for all boundary conditions.
  *
  * Uses FFTW3 for both periodic FFT and non-periodic DCT/DST transforms.
- * This uses FFTW which provides O(N^2) matrix multiplication for DCT/DST,
- * FFTW provides O(N log N) algorithms for all transform types.
+ * Unlike naive O(N²) matrix implementations, FFTW provides O(N log N)
+ * algorithms for all transform types including DCT/DST.
  *
  * @tparam T   Input type for forward transform (typically double)
  * @tparam DIM Dimensionality of the transform (1, 2, or 3)
@@ -106,6 +106,11 @@ private:
      * @brief Apply backward transform for one dimension (non-periodic).
      */
     void applyBackward1D(double* data, double* temp, int dim);
+
+    /**
+     * @brief Compute complex grid size based on dimensions and input type.
+     */
+    void computeComplexGridSize();
 
 public:
     /**
