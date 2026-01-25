@@ -93,8 +93,11 @@ jobs:
       run: |
         ulimit -s unlimited
         python tests/TestNumPyFFT1D.py
+        python tests/TestNumPyFFT1DComplex.py
         python tests/TestNumPyFFT2D.py
+        python tests/TestNumPyFFT2DComplex.py
         python tests/TestNumPyFFT3D.py
+        python tests/TestNumPyFFT3DComplex.py
 
   # CUDA build job - disabled by default as it requires self-hosted GPU runner
   # Uncomment and configure when GPU runners are available
