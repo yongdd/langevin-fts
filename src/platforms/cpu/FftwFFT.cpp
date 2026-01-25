@@ -13,8 +13,8 @@
  *
  * **Performance Advantage:**
  *
- * This uses FFTW which provides O(N^2) matrix multiplication for DCT/DST,
- * FFTW provides O(N log N) algorithms for all transform types.
+ * Unlike naive O(N²) matrix implementations, FFTW provides O(N log N)
+ * algorithms for all transform types including DCT/DST.
  *
  * **Normalization:**
  *
@@ -30,13 +30,44 @@
 #include "FftwFFT.h"
 
 //------------------------------------------------------------------------------
+// Compute complex grid size based on periodicity and input type
+//------------------------------------------------------------------------------
+template <typename T, int DIM>
+void FftwFFT<T, DIM>::computeComplexGridSize()
+{
+    if (is_all_periodic_)
+    {
+        if constexpr (std::is_same<T, double>::value)
+        {
+            // r2c FFT: exploit Hermitian symmetry
+            if constexpr (DIM == 3)
+                total_complex_grid_ = nx_[0] * nx_[1] * (nx_[2] / 2 + 1);
+            else if constexpr (DIM == 2)
+                total_complex_grid_ = nx_[0] * (nx_[1] / 2 + 1);
+            else
+                total_complex_grid_ = nx_[0] / 2 + 1;
+        }
+        else
+        {
+            // c2c FFT: full complex grid
+            total_complex_grid_ = total_grid_;
+        }
+    }
+    else
+    {
+        // DCT/DST: real-to-real, same size
+        total_complex_grid_ = total_grid_;
+    }
+}
+
+//------------------------------------------------------------------------------
 // Constructor (periodic BC, backward compatible)
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx)
     : nx_(nx), is_all_periodic_(true)
 {
-    // Initialize all BCs to periodic
+    // Initialize all BCs to periodic and plans to nullptr
     for (int d = 0; d < DIM; ++d)
     {
         bc_[d] = BoundaryCondition::PERIODIC;
@@ -51,21 +82,7 @@ FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx)
     for (int d = 0; d < DIM; ++d)
         total_grid_ *= nx_[d];
 
-    // Compute complex grid size for r2c FFT
-    if constexpr (std::is_same<T, double>::value)
-    {
-        if (DIM == 3)
-            total_complex_grid_ = nx_[0] * nx_[1] * (nx_[2] / 2 + 1);
-        else if (DIM == 2)
-            total_complex_grid_ = nx_[0] * (nx_[1] / 2 + 1);
-        else
-            total_complex_grid_ = nx_[0] / 2 + 1;
-    }
-    else
-    {
-        total_complex_grid_ = total_grid_;
-    }
-
+    computeComplexGridSize();
     initPeriodicFFT();
 }
 
@@ -76,75 +93,50 @@ template <typename T, int DIM>
 FftwFFT<T, DIM>::FftwFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, DIM> bc)
     : nx_(nx), bc_(bc)
 {
-    try
+    // Initialize plan pointers to nullptr
+    for (int d = 0; d < DIM; ++d)
     {
-        // Initialize plan pointers to nullptr
-        for (int d = 0; d < DIM; ++d)
-        {
-            plan_dct_forward_[d] = nullptr;
-            plan_dct_backward_[d] = nullptr;
-            plan_dst_forward_[d] = nullptr;
-            plan_dst_backward_[d] = nullptr;
-        }
+        plan_dct_forward_[d] = nullptr;
+        plan_dct_backward_[d] = nullptr;
+        plan_dst_forward_[d] = nullptr;
+        plan_dst_backward_[d] = nullptr;
+    }
 
-        // Compute total grid size
-        total_grid_ = 1;
-        for (int d = 0; d < DIM; ++d)
-            total_grid_ *= nx_[d];
+    // Compute total grid size
+    total_grid_ = 1;
+    for (int d = 0; d < DIM; ++d)
+        total_grid_ *= nx_[d];
 
-        // Check if all periodic
-        is_all_periodic_ = true;
-        for (int d = 0; d < DIM; ++d)
+    // Check if all periodic
+    is_all_periodic_ = true;
+    for (int d = 0; d < DIM; ++d)
+    {
+        if (bc_[d] != BoundaryCondition::PERIODIC)
         {
-            if (bc_[d] != BoundaryCondition::PERIODIC)
-            {
-                is_all_periodic_ = false;
-                break;
-            }
-        }
-
-        // For simplicity, require either all periodic or all non-periodic
-        if (!is_all_periodic_)
-        {
-            for (int d = 0; d < DIM; ++d)
-            {
-                if (bc_[d] == BoundaryCondition::PERIODIC)
-                {
-                    throw_with_line_number("Mixed periodic and non-periodic BCs not yet supported. "
-                                          "Use all periodic or all non-periodic (reflecting/absorbing).");
-                }
-            }
-        }
-
-        // Compute complex grid size
-        if (is_all_periodic_)
-        {
-            if constexpr (std::is_same<T, double>::value)
-            {
-                if (DIM == 3)
-                    total_complex_grid_ = nx_[0] * nx_[1] * (nx_[2] / 2 + 1);
-                else if (DIM == 2)
-                    total_complex_grid_ = nx_[0] * (nx_[1] / 2 + 1);
-                else
-                    total_complex_grid_ = nx_[0] / 2 + 1;
-            }
-            else
-            {
-                total_complex_grid_ = total_grid_;
-            }
-            initPeriodicFFT();
-        }
-        else
-        {
-            // DCT/DST: real-to-real, same size
-            total_complex_grid_ = total_grid_;
-            initNonPeriodicFFT();
+            is_all_periodic_ = false;
+            break;
         }
     }
-    catch (std::exception& exc)
+
+    // Require either all periodic or all non-periodic (no mixed)
+    if (!is_all_periodic_)
     {
-        throw_without_line_number(exc.what());
+        for (int d = 0; d < DIM; ++d)
+        {
+            if (bc_[d] == BoundaryCondition::PERIODIC)
+            {
+                throw_with_line_number("Mixed periodic and non-periodic BCs not yet supported. "
+                                      "Use all periodic or all non-periodic (reflecting/absorbing).");
+            }
+        }
     }
+
+    computeComplexGridSize();
+
+    if (is_all_periodic_)
+        initPeriodicFFT();
+    else
+        initNonPeriodicFFT();
 }
 
 //------------------------------------------------------------------------------
@@ -185,7 +177,12 @@ void FftwFFT<T, DIM>::initPeriodicFFT()
     try
     {
         // Allocate aligned buffers
-        work_buffer_ = fftw_alloc_real(total_grid_);
+        // For complex input (T = std::complex<double>), work_buffer_ needs
+        // to hold complex values for c2c transform, so allocate 2x the size
+        if constexpr (std::is_same<T, double>::value)
+            work_buffer_ = fftw_alloc_real(total_grid_);
+        else
+            work_buffer_ = fftw_alloc_real(total_grid_ * 2);  // For complex c2c FFT
         complex_buffer_ = fftw_alloc_complex(total_complex_grid_);
 
         if (work_buffer_ == nullptr || complex_buffer_ == nullptr)
@@ -328,8 +325,10 @@ void FftwFFT<T, DIM>::applyForward1D(double* data, double* temp, int dim)
                      ? plan_dct_forward_[dim]
                      : plan_dst_forward_[dim];
 
-    // Thread-local buffer for 1D slice
-    std::vector<double> slice(n);
+    // Thread-local buffer to avoid reallocation in OpenMP parallel regions
+    thread_local std::vector<double> slice;
+    if (static_cast<int>(slice.size()) < n)
+        slice.resize(n);
 
     for (int batch = 0; batch < num_transforms; ++batch)
     {
@@ -344,9 +343,11 @@ void FftwFFT<T, DIM>::applyForward1D(double* data, double* temp, int dim)
             // Execute FFTW plan (in-place)
             fftw_execute_r2r(plan, slice.data(), slice.data());
 
-            // Store result back
+            // Store result back with scaling
+            // FFTW's DCT-II/DST-II output is 2x the textbook definition
+            // Scale by 0.5 to match standard mathematical definition
             for (int j = 0; j < n; ++j)
-                temp[offset + j * stride] = slice[j];
+                temp[offset + j * stride] = slice[j] * 0.5;
         }
     }
 
@@ -369,12 +370,14 @@ void FftwFFT<T, DIM>::applyBackward1D(double* data, double* temp, int dim)
                      : plan_dst_backward_[dim];
 
     // Normalization factor for FFTW DCT/DST
-    // FFTW's DCT-II/III and DST-II/III are unnormalized
-    // For orthonormal: scale by 1/(2*n) for backward
-    double scale = 1.0 / (2.0 * n);
+    // Forward scaled by 0.5, so backward scales by 1/n for round-trip = identity
+    // (FFTW_DCT3(FFTW_DCT2(x)*0.5) = 0.5*2n*x = n*x, so divide by n)
+    double scale = 1.0 / n;
 
-    // Thread-local buffer for 1D slice
-    std::vector<double> slice(n);
+    // Thread-local buffer to avoid reallocation in OpenMP parallel regions
+    thread_local std::vector<double> slice;
+    if (static_cast<int>(slice.size()) < n)
+        slice.resize(n);
 
     for (int batch = 0; batch < num_transforms; ++batch)
     {
@@ -411,21 +414,29 @@ void FftwFFT<T, DIM>::forward(T *rdata, std::complex<double> *cdata)
                               "Use forward(T*, double*) for non-periodic BC.");
     }
 
-    // Copy input to work buffer
+    // Thread-safe FFT using thread-local buffers
+    thread_local std::vector<double> work_local;
+    thread_local std::vector<std::complex<double>> complex_local;
+
     if constexpr (std::is_same<T, double>::value)
     {
-        std::memcpy(work_buffer_, rdata, total_grid_ * sizeof(double));
+        if (static_cast<int>(work_local.size()) < total_grid_)
+            work_local.resize(total_grid_);
+
+        std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(double));
+        fftw_execute_dft_r2c(plan_forward_, work_local.data(),
+                             reinterpret_cast<fftw_complex*>(cdata));
     }
     else
     {
-        std::memcpy(work_buffer_, rdata, total_grid_ * sizeof(std::complex<double>));
+        if (static_cast<int>(work_local.size()) < total_grid_ * 2)
+            work_local.resize(total_grid_ * 2);
+
+        std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(std::complex<double>));
+        fftw_execute_dft(plan_forward_,
+                         reinterpret_cast<fftw_complex*>(work_local.data()),
+                         reinterpret_cast<fftw_complex*>(cdata));
     }
-
-    // Execute forward FFT
-    fftw_execute(plan_forward_);
-
-    // Copy result to output
-    std::memcpy(cdata, complex_buffer_, total_complex_grid_ * sizeof(std::complex<double>));
 }
 
 //------------------------------------------------------------------------------
@@ -440,22 +451,39 @@ void FftwFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
                               "Use backward(double*, T*) for non-periodic BC.");
     }
 
-    // Copy input to complex buffer
-    std::memcpy(complex_buffer_, cdata, total_complex_grid_ * sizeof(std::complex<double>));
+    // Thread-safe IFFT using thread-local buffers
+    // CRITICAL: fftw_execute_dft_c2r destroys its input
+    thread_local std::vector<double> work_local;
+    thread_local std::vector<std::complex<double>> complex_local;
 
-    // Execute backward FFT
-    fftw_execute(plan_backward_);
-
-    // Copy result to output with normalization
     double scale = 1.0 / static_cast<double>(total_grid_);
+
     if constexpr (std::is_same<T, double>::value)
     {
+        if (static_cast<int>(work_local.size()) < total_grid_)
+            work_local.resize(total_grid_);
+        if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+            complex_local.resize(total_complex_grid_);
+
+        std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+        fftw_execute_dft_c2r(plan_backward_,
+                             reinterpret_cast<fftw_complex*>(complex_local.data()),
+                             work_local.data());
         for (int i = 0; i < total_grid_; ++i)
-            rdata[i] = work_buffer_[i] * scale;
+            rdata[i] = work_local[i] * scale;
     }
     else
     {
-        std::complex<double>* work_complex = reinterpret_cast<std::complex<double>*>(work_buffer_);
+        if (static_cast<int>(work_local.size()) < total_grid_ * 2)
+            work_local.resize(total_grid_ * 2);
+        if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+            complex_local.resize(total_complex_grid_);
+
+        std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+        fftw_execute_dft(plan_backward_,
+                         reinterpret_cast<fftw_complex*>(complex_local.data()),
+                         reinterpret_cast<fftw_complex*>(work_local.data()));
+        std::complex<double>* work_complex = reinterpret_cast<std::complex<double>*>(work_local.data());
         for (int i = 0; i < total_grid_; ++i)
             rdata[i] = work_complex[i] * scale;
     }
@@ -467,58 +495,75 @@ void FftwFFT<T, DIM>::backward(std::complex<double> *cdata, T *rdata)
 template <typename T, int DIM>
 void FftwFFT<T, DIM>::forward(T *rdata, double *cdata)
 {
-    try
+    if (is_all_periodic_)
     {
-        if (is_all_periodic_)
+        // Thread-safe FFT using thread-local aligned buffers
+        // Each thread gets its own work and complex buffers to avoid race conditions
+        // when multiple threads call FFT simultaneously
+        thread_local std::vector<double> work_local;
+        thread_local std::vector<std::complex<double>> complex_local;
+
+        if constexpr (std::is_same<T, double>::value)
         {
-            // Copy input to work buffer
-            if constexpr (std::is_same<T, double>::value)
-            {
-                std::memcpy(work_buffer_, rdata, total_grid_ * sizeof(double));
-            }
-            else
-            {
-                for (int i = 0; i < total_grid_; ++i)
-                    work_buffer_[i] = std::real(rdata[i]);
-            }
+            if (static_cast<int>(work_local.size()) < total_grid_)
+                work_local.resize(total_grid_);
+            if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+                complex_local.resize(total_complex_grid_);
 
-            // Execute forward FFT
-            fftw_execute(plan_forward_);
-
-            // Copy result (complex_buffer_ is fftw_complex*, cdata is double*)
-            // Treat double* as interleaved real/imag
-            std::memcpy(cdata, complex_buffer_, total_complex_grid_ * sizeof(std::complex<double>));
+            // r2c: copy to local buffer, execute with new-array interface, copy output
+            std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(double));
+            fftw_execute_dft_r2c(plan_forward_, work_local.data(),
+                                 reinterpret_cast<fftw_complex*>(complex_local.data()));
+            std::memcpy(cdata, complex_local.data(), total_complex_grid_ * sizeof(std::complex<double>));
         }
         else
         {
-            // DCT/DST: dimension-by-dimension transform
-            double* work = work_buffer_;
-            double* temp = work_buffer_ + total_grid_;
+            // c2c case - both work and complex are full grid size
+            if (static_cast<int>(work_local.size()) < total_grid_ * 2)
+                work_local.resize(total_grid_ * 2);
+            if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+                complex_local.resize(total_complex_grid_);
 
-            // Copy input to work buffer
-            if constexpr (std::is_same<T, double>::value)
-            {
-                std::memcpy(work, rdata, total_grid_ * sizeof(double));
-            }
-            else
-            {
-                for (int i = 0; i < total_grid_; ++i)
-                    work[i] = std::real(rdata[i]);
-            }
-
-            // Apply transforms dimension by dimension
-            for (int dim = 0; dim < DIM; ++dim)
-            {
-                applyForward1D(work, temp, dim);
-            }
-
-            // Copy to output
-            std::memcpy(cdata, work, total_complex_grid_ * sizeof(double));
+            // c2c: copy to local buffer, execute with new-array interface, copy output
+            std::memcpy(work_local.data(), rdata, total_grid_ * sizeof(std::complex<double>));
+            fftw_execute_dft(plan_forward_,
+                             reinterpret_cast<fftw_complex*>(work_local.data()),
+                             reinterpret_cast<fftw_complex*>(complex_local.data()));
+            std::memcpy(cdata, complex_local.data(), total_complex_grid_ * sizeof(std::complex<double>));
         }
     }
-    catch (std::exception& exc)
+    else
     {
-        throw_without_line_number(exc.what());
+        // DCT/DST: dimension-by-dimension transform
+        // Use thread-local buffers for thread safety in OpenMP parallel regions
+        thread_local std::vector<double> work;
+        thread_local std::vector<double> temp;
+
+        if (static_cast<int>(work.size()) < total_grid_)
+        {
+            work.resize(total_grid_);
+            temp.resize(total_grid_);
+        }
+
+        // Copy input to work buffer
+        if constexpr (std::is_same<T, double>::value)
+        {
+            std::memcpy(work.data(), rdata, total_grid_ * sizeof(double));
+        }
+        else
+        {
+            for (int i = 0; i < total_grid_; ++i)
+                work[i] = std::real(rdata[i]);
+        }
+
+        // Apply transforms dimension by dimension
+        for (int dim = 0; dim < DIM; ++dim)
+        {
+            applyForward1D(work.data(), temp.data(), dim);
+        }
+
+        // Copy to output
+        std::memcpy(cdata, work.data(), total_complex_grid_ * sizeof(double));
     }
 }
 
@@ -528,59 +573,80 @@ void FftwFFT<T, DIM>::forward(T *rdata, double *cdata)
 template <typename T, int DIM>
 void FftwFFT<T, DIM>::backward(double *cdata, T *rdata)
 {
-    try
+    if (is_all_periodic_)
     {
-        if (is_all_periodic_)
+        // Thread-safe IFFT using thread-local aligned buffers
+        // CRITICAL: fftw_execute_dft_c2r destroys its input, so we must copy first
+        thread_local std::vector<double> work_local;
+        thread_local std::vector<std::complex<double>> complex_local;
+
+        double scale = 1.0 / static_cast<double>(total_grid_);
+
+        if constexpr (std::is_same<T, double>::value)
         {
-            // Copy input to complex buffer
-            std::memcpy(complex_buffer_, cdata, total_complex_grid_ * sizeof(std::complex<double>));
+            if (static_cast<int>(work_local.size()) < total_grid_)
+                work_local.resize(total_grid_);
+            if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+                complex_local.resize(total_complex_grid_);
 
-            // Execute backward FFT
-            fftw_execute(plan_backward_);
-
-            // Copy result to output with normalization
-            double scale = 1.0 / static_cast<double>(total_grid_);
-            if constexpr (std::is_same<T, double>::value)
-            {
-                for (int i = 0; i < total_grid_; ++i)
-                    rdata[i] = work_buffer_[i] * scale;
-            }
-            else
-            {
-                for (int i = 0; i < total_grid_; ++i)
-                    rdata[i] = T(work_buffer_[i] * scale, 0.0);
-            }
+            // c2r: copy input to local buffer (preserving original), execute, copy with scaling
+            std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+            fftw_execute_dft_c2r(plan_backward_,
+                                 reinterpret_cast<fftw_complex*>(complex_local.data()),
+                                 work_local.data());
+            for (int i = 0; i < total_grid_; ++i)
+                rdata[i] = work_local[i] * scale;
         }
         else
         {
-            // DCT/DST: dimension-by-dimension inverse transform
-            double* work = work_buffer_;
-            double* temp = work_buffer_ + total_grid_;
+            // c2c case
+            if (static_cast<int>(work_local.size()) < total_grid_ * 2)
+                work_local.resize(total_grid_ * 2);
+            if (static_cast<int>(complex_local.size()) < total_complex_grid_)
+                complex_local.resize(total_complex_grid_);
 
-            // Copy input to work buffer
-            std::memcpy(work, cdata, total_complex_grid_ * sizeof(double));
-
-            // Apply inverse transforms dimension by dimension (reverse order)
-            for (int dim = DIM - 1; dim >= 0; --dim)
-            {
-                applyBackward1D(work, temp, dim);
-            }
-
-            // Copy to output
-            if constexpr (std::is_same<T, double>::value)
-            {
-                std::memcpy(rdata, work, total_grid_ * sizeof(double));
-            }
-            else
-            {
-                for (int i = 0; i < total_grid_; ++i)
-                    rdata[i] = T(work[i], 0.0);
-            }
+            // c2c: copy input to local buffer, execute, copy with scaling
+            std::memcpy(complex_local.data(), cdata, total_complex_grid_ * sizeof(std::complex<double>));
+            fftw_execute_dft(plan_backward_,
+                             reinterpret_cast<fftw_complex*>(complex_local.data()),
+                             reinterpret_cast<fftw_complex*>(work_local.data()));
+            std::complex<double>* work_complex = reinterpret_cast<std::complex<double>*>(work_local.data());
+            for (int i = 0; i < total_grid_; ++i)
+                rdata[i] = work_complex[i] * scale;
         }
     }
-    catch (std::exception& exc)
+    else
     {
-        throw_without_line_number(exc.what());
+        // DCT/DST: dimension-by-dimension inverse transform
+        // Use thread-local buffers for thread safety in OpenMP parallel regions
+        thread_local std::vector<double> work;
+        thread_local std::vector<double> temp;
+
+        if (static_cast<int>(work.size()) < total_grid_)
+        {
+            work.resize(total_grid_);
+            temp.resize(total_grid_);
+        }
+
+        // Copy input to work buffer
+        std::memcpy(work.data(), cdata, total_complex_grid_ * sizeof(double));
+
+        // Apply inverse transforms dimension by dimension (reverse order)
+        for (int dim = DIM - 1; dim >= 0; --dim)
+        {
+            applyBackward1D(work.data(), temp.data(), dim);
+        }
+
+        // Copy to output
+        if constexpr (std::is_same<T, double>::value)
+        {
+            std::memcpy(rdata, work.data(), total_grid_ * sizeof(double));
+        }
+        else
+        {
+            for (int i = 0; i < total_grid_; ++i)
+                rdata[i] = T(work[i], 0.0);
+        }
     }
 }
 

@@ -47,7 +47,7 @@ conda activate polymerfts
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
-ctest -L quick  # Quick installation verification (~5 seconds)
+ctest -L basic  # Basic installation verification (~40 seconds)
 make install
 ```
 
@@ -97,8 +97,8 @@ cd langevin-fts && mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release -DPOLYMERFTS_USE_FFTW=ON
 make -j8
 
-# Run quick tests (installation verification)
-ctest -L quick
+# Run basic tests (installation verification)
+ctest -L basic
 
 # Install to conda environment
 make install
@@ -191,10 +191,10 @@ Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Quick** | `ctest -L quick` | 8 | ~5 sec | Installation verification |
-| **Full** | `ctest` | 75 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
-**Quick tests** verify core functionality:
+**Basic tests** verify core functionality:
 - FFT operations (CPU and CUDA)
 - Propagator computation (continuous and discrete chains)
 - SCFT solver
@@ -215,9 +215,9 @@ After installation, verify everything works:
 # Activate environment
 conda activate polymerfts
 
-# Quick test (recommended for users)
+# Basic test (recommended for users)
 cd build
-ctest -L quick
+ctest -L basic
 
 # Full test (for development)
 ctest

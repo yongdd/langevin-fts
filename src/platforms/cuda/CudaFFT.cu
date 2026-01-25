@@ -158,6 +158,19 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
         }
         else
         {
+            // Check for odd dimensions - DCT-2/DCT-3 only supports even N
+            // The FCT algorithm (Makhoul 1980) requires even N for interleaved decomposition
+            for (int d = 0; d < DIM; ++d)
+            {
+                if (nx_[d] % 2 != 0)
+                {
+                    throw_with_line_number("CudaFFT with non-periodic BC requires even grid sizes. "
+                                          "Dimension " + std::to_string(d) + " has odd size " +
+                                          std::to_string(nx_[d]) + ". DCT-2/DCT-3 implementation "
+                                          "uses FCT algorithm which only supports even N.");
+                }
+            }
+
             total_complex_grid_ = total_grid_;
 
             // Allocate work buffer for non-periodic transforms

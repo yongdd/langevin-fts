@@ -4,29 +4,80 @@ ENABLE_TESTING()
 file(GLOB TEST_DATA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Stress*.txt")
 file(COPY ${TEST_DATA_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
-# Quick tests for installation verification (< 1 second each)
-# Run with: ctest -L quick
-SET(QUICK_TESTS
-    # Python FFT tests
-    TestNumPyFFT3D
-    # CPU FFT tests
+# Basic tests for verification (~50 tests, ~40 sec total)
+# Run with: ctest -L basic
+SET(BASIC_TESTS
+    # Platform & utilities
+    TestDisplayArchitecture
+    TestArray
+    TestCircularBuffer
+    TestScheduler
+    TestPropagatorCode
+    TestPropagatorCodeReduction
+    TestCompareBranchKey
+    TestContourLengthMapping
+
+    # CPU FFT (all types)
+    TestCpuFFT1D
+    TestCpuFFT1DComplex
+    TestCpuFFT2D
+    TestCpuFFT2DComplex
     TestCpuFFT3D
-    # Basic propagator tests
+    TestCpuFFT3DComplex
+    TestCpuFFTMixedBC
+    TestCpuSimulationBox
+    TestCpuTridiagonal
+
+    # CUDA FFT & utilities
+    TestCudaFFT
+    TestCudaFFTMixedBC
+    TestCudaDCT
+    TestCudaDST
+    TestCudaSimulationBox
+    TestCudaSimulationBoxComplex
+    TestCudaTridiagonal
+    TestCudaPinnedMemory
+    TestCudaCubReduceSum
+    TestCudaCubReduceSumClass
+    TestCrysFFT
+
+    # Propagator solvers
+    TestCrankNicolson1D
+    TestCrankNicolson2D
+    TestCrankNicolson3D
+    TestDCT2Propagator
+    TestDST2Propagator
     TestPseudoLinearContinuous3D
     TestPseudoLinearDiscrete3D
-    # SCFT test
+    TestRealSpaceLinearContinuous3D
+    TestMultipleLocalDs
+    TestInitialConditionPropagator
+
+    # Aggregation tests
+    TestAggregation3D
+    TestAggregationDendritic
+    TestAggregationDiscreteCpu
+    TestAggregationSideChains
+
+    # Branched polymer tests
+    TestPseudoBranchedContinuous3D
+    TestPseudoBranchedDiscrete3D
+    TestPseudoBranchedMixtureContinuous3D
+    TestPseudoBranchedMixtureDiscrete3D
+
+    # SCFT & Stress
     TestScft1D
-    # Platform verification
-    TestDisplayArchitecture
-    # CUDA tests (if available)
-    TestCudaFFT
-    TestCudaSimulationBox
+    TestScft2D
+    TestStress1D
+    TestStress1DComplex
+    TestStressDiscreteCpu1D
+    TestStressDiscreteCuda1D
 )
 
 # Helper function to set test labels
 FUNCTION(SET_TEST_LABELS TEST_NAME)
-    IF(${TEST_NAME} IN_LIST QUICK_TESTS)
-        SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES LABELS "quick")
+    IF(${TEST_NAME} IN_LIST BASIC_TESTS)
+        SET_TESTS_PROPERTIES(${TEST_NAME} PROPERTIES LABELS "basic")
     ENDIF()
 ENDFUNCTION()
 

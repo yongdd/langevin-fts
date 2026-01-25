@@ -15,8 +15,8 @@ mkdir build && cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release
 make -j8
 
-# Run quick tests (installation verification, ~5 sec)
-ctest -L quick
+# Run basic tests (installation verification, ~40 sec)
+ctest -L basic
 
 # Run full tests (development validation, ~3 min)
 ctest
@@ -45,24 +45,35 @@ ulimit -s unlimited
 export OMP_STACKSIZE=1G
 ```
 
+### GPU Selection (Important!)
+**At the start of each session**, run `nvidia-smi` to check GPU utilization and select an idle GPU:
+```bash
+# Check GPU status
+nvidia-smi
+
+# Set CUDA_VISIBLE_DEVICES to an idle GPU before running tests
+export CUDA_VISIBLE_DEVICES=0  # or 1, 2, etc. based on which GPU is idle
+```
+This prevents conflicts with other users and ensures consistent test results.
+
 ## Testing
 
-### Quick vs Full Tests
+### Basic vs Full Tests
 
 Two test modes are available:
 
 | Mode | Command | Tests | Time | Purpose |
 |------|---------|-------|------|---------|
-| **Quick** | `ctest -L quick` | 8 | ~5 sec | Installation verification |
-| **Full** | `ctest` | 75 | ~3 min | Development validation |
+| **Basic** | `ctest -L basic` | ~50 | ~40 sec | Installation verification |
+| **Full** | `ctest` | ~65 | ~3 min | Development validation |
 
 ### Running Tests
 ```bash
 # From build directory
 cd build
 
-# Quick tests (for users, installation verification)
-ctest -L quick
+# Basic tests (for users, installation verification)
+ctest -L basic
 
 # Full tests (for development)
 ctest
@@ -469,7 +480,26 @@ Derived classes implement chain-model-specific behavior:
    CudaFFT<T, DIM>        (GPU: cuFFT for FFT, custom kernels for DCT/DST)
 ```
 
-**FFT-Level Threading Policy**: Always disable multi-threading at the FFT level (both FFTW and FFTW). Parallelism is exploited at the propagator level instead, where multiple independent propagators are computed in parallel using OpenMP threads. This design choice avoids thread contention and provides better scaling for branched polymer systems with many independent propagator computations.
+**FFT Implementation Rules** (CRITICAL - frequently violated, causes subtle bugs):
+
+FFT functions are called from multiple OpenMP threads simultaneously (propagator-level parallelism). This requires careful implementation to avoid race conditions and data corruption.
+
+1. **DO NOT multi-thread inside FFT**: Disable internal threading in FFTW and cuFFT. Parallelism happens at the propagator level, not inside FFT calls.
+
+2. **DO NOT share buffers between threads**: Internal work buffers MUST be `thread_local`. The class member `work_buffer_` and `complex_buffer_` can only be used for plan creation, not execution. Example pattern:
+   ```cpp
+   void forward(T* rdata, double* cdata) {
+       thread_local std::vector<double> work_local;  // Thread-safe
+       // NOT: std::memcpy(work_buffer_, rdata, ...);  // Race condition!
+   }
+   ```
+
+3. **ALWAYS preserve input arrays after transforms**: FFTW c2r and cuFFT c2r/z2d **destroy the input array** even for "out-of-place" transforms. Always copy input to a local buffer before executing. This is critical for multi-stage algorithms like ETDRK4 that reuse k-space arrays.
+
+4. **Use new-array execute functions**: In FFTW, use `fftw_execute_dft_r2c`, `fftw_execute_dft_c2r`, `fftw_execute_dft` (not plain `fftw_execute`) when operating on thread-local buffers.
+
+Violating these rules causes tests to fail with garbage values (e.g., partition function = -10^7 instead of ~1) or intermittent failures that are hard to debug.
+
 `FFT<T>` provides both interfaces:
 - `forward(T*, double*)` / `backward(double*, T*)`: Universal interface for all BCs (FFT, DCT, DST)
 - `forward(T*, complex<double>*)` / `backward(complex<double>*, T*)`: Periodic BC only
