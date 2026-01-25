@@ -1292,7 +1292,7 @@ class LFTS:
 
                 # Calculate Hamiltonian
                 total_partitions = [self.prop_solver.get_partition_function(p) for p in range(self.prop_solver.get_n_polymer_types())]
-                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, include_const_term=True)
+                hamiltonian = self.mpt.compute_hamiltonian(self.prop_solver._molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
                 # Check the mass conservation
                 mass_error = np.mean(h_deriv[I-1])

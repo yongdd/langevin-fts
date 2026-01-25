@@ -147,7 +147,7 @@ class SymmetricPolymerTheory:
     >>> w_aux = mpt.to_aux_fields(w_dict)  # Returns ndarray shape (M, grid)
     >>>
     >>> # Compute Hamiltonian from auxiliary fields
-    >>> H = mpt.compute_hamiltonian(molecules, w_aux, total_partitions)
+    >>> H = mpt.compute_hamiltonian(molecules, w_aux, total_partitions, cb)
     """
     def __init__(self, monomer_types, chi_n, zeta_n):
         self.monomer_types = monomer_types
@@ -443,7 +443,7 @@ class SymmetricPolymerTheory:
 
         return h_const, h_coef_mu1, h_coef_mu2
 
-    def compute_hamiltonian(self, molecules, w_aux, total_partitions, include_const_term=False):
+    def compute_hamiltonian(self, molecules, w_aux, total_partitions, cb, include_const_term=False):
         """Compute the field-theoretic Hamiltonian.
 
         Calculates the Hamiltonian from auxiliary fields and partition functions.
@@ -454,9 +454,13 @@ class SymmetricPolymerTheory:
         molecules : Molecules
             C++ Molecules object containing polymer specifications.
         w_aux : ndarray
-            Auxiliary potential fields, shape (M, total_grid).
+            Auxiliary potential fields, shape (M, n_grid) where n_grid is
+            total_grid (without space group) or n_irreducible (with space group).
         total_partitions : list of float
             Single-chain partition functions Q_p for each polymer type p.
+        cb : ComputationBox
+            C++ ComputationBox object for computing volume integrals.
+            Correctly handles space group symmetry via orbit_counts.
         include_const_term : bool, optional
             If True, include reference energy h_const in result (default: False).
             Set to True for L-FTS absolute energy, False for SCFT relative energy.
@@ -490,14 +494,16 @@ class SymmetricPolymerTheory:
         compute_h_deriv_chin : Compute dH/dχN for parameter sweeps.
         """
         M = len(self.monomer_types)
+        volume = cb.get_volume()
 
         # Compute Hamiltonian part that is related to fields
+        # Use cb.integral() for correct handling of space group symmetry
         hamiltonian_fields = 0.0
         for i in range(M):
-            if not np.isclose(self.h_coef_mu2[i], 0.0): 
-                hamiltonian_fields += self.h_coef_mu2[i]*np.mean(w_aux[i]**2)
-            if not np.isclose(self.h_coef_mu1[i], 0.0): 
-                hamiltonian_fields += self.h_coef_mu1[i]*np.mean(w_aux[i])
+            if not np.isclose(self.h_coef_mu2[i], 0.0):
+                hamiltonian_fields += self.h_coef_mu2[i]*cb.integral(w_aux[i]**2)/volume
+            if not np.isclose(self.h_coef_mu1[i], 0.0):
+                hamiltonian_fields += self.h_coef_mu1[i]*cb.integral(w_aux[i])/volume
         
         # Compute Hamiltonian part that total partition functions
         hamiltonian_partition = 0.0
