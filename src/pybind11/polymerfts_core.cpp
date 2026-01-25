@@ -45,6 +45,7 @@
 
 #include <tuple>
 #include <map>
+#include <cstring>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -59,6 +60,7 @@
 #include "AndersonMixing.h"
 #include "AbstractFactory.h"
 #include "PlatformSelector.h"
+#include "SpaceGroup.h"
 #include "Exception.h"
 
 namespace py = pybind11;
@@ -114,46 +116,67 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         .def("get_recip_metric", &ComputationBox<T>::get_recip_metric)
         .def("set_lx", &ComputationBox<T>::set_lx)
         .def("set_lattice_parameters", overload_cast_<std::vector<double>, std::vector<double>>()(&ComputationBox<T>::set_lattice_parameters))
+        // Space group methods
+        .def("set_space_group", &ComputationBox<T>::set_space_group)
+        .def("get_space_group", &ComputationBox<T>::get_space_group, py::return_value_policy::reference)
+        .def("get_n_grid", &ComputationBox<T>::get_n_grid)
+        .def("get_orbit_counts", &ComputationBox<T>::get_orbit_counts)
+        // Field operations: use get_n_grid() for size (n_irreducible if space group set, else total_grid)
         .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
         {
-            const int M = obj.get_total_grid();
+            const int N = obj.get_n_grid();
             py::buffer_info buf_g = g.request();
-            if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+            if (buf_g.size != N) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
             }
             return obj.integral(static_cast<T*>(buf_g.ptr));
         })
         .def("inner_product", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h)
         {
-            const int M = obj.get_total_grid();
+            const int N = obj.get_n_grid();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
-            if (buf_g.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+            if (buf_g.size != N) {
+                throw_with_line_number("Size of input g (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
             }
-            if (buf_h.size != M) {
-                throw_with_line_number("Size of input (" + std::to_string(buf_h.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+            if (buf_h.size != N) {
+                throw_with_line_number("Size of input h (" + std::to_string(buf_h.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
             }
             return obj.inner_product(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
+        })
+        .def("inner_product_inverse_weight", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h, py::array_t<T> w)
+        {
+            const int N = obj.get_n_grid();
+            py::buffer_info buf_g = g.request();
+            py::buffer_info buf_h = h.request();
+            py::buffer_info buf_w = w.request();
+            if (buf_g.size != N || buf_h.size != N || buf_w.size != N) {
+                throw_with_line_number("All input arrays must have size " + std::to_string(N));
+            }
+            return obj.inner_product_inverse_weight(static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr), static_cast<T*>(buf_w.ptr));
+        })
+        .def("multi_inner_product", [](ComputationBox<T>& obj, int n_comp, py::array_t<T> g, py::array_t<T> h)
+        {
+            const int N = obj.get_n_grid();
+            py::buffer_info buf_g = g.request();
+            py::buffer_info buf_h = h.request();
+            if (buf_g.size != n_comp * N) {
+                throw_with_line_number("Size of g (" + std::to_string(buf_g.size) + ") and n_comp * n_grid (" + std::to_string(n_comp * N) + ") must match.");
+            }
+            if (buf_h.size != n_comp * N) {
+                throw_with_line_number("Size of h (" + std::to_string(buf_h.size) + ") and n_comp * n_grid (" + std::to_string(n_comp * N) + ") must match.");
+            }
+            return obj.multi_inner_product(n_comp, static_cast<T*>(buf_g.ptr), static_cast<T*>(buf_h.ptr));
+        })
+        .def("zero_mean", [](ComputationBox<T>& obj, py::array_t<T> g)
+        {
+            const int N = obj.get_n_grid();
+            py::buffer_info buf_g = g.request();
+            if (buf_g.size != N) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
+            }
+            obj.zero_mean(static_cast<T*>(buf_g.ptr));
         });
-        // .def("multi_inner_product", &ComputationBox<T>::multi_inner_product);
-        // .def("zero_mean", overload_cast_<py::array_t<double>>()(&ComputationBox<T>::zero_mean));
-        // double multi_inner_product(int n_comp, py::array_t<double> g, py::array_t<double> h) {
-        //     py::buffer_info buf1 = g.request();
-        //     py::buffer_info buf2 = h.request();
-        //     if (buf1.size != n_comp*total_grid) 
-        //         throw_with_line_number("Size of input g (" + std::to_string(buf1.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match.");
-        //     if (buf2.size != n_comp*total_grid)
-        //         throw_with_line_number("Size of input h (" + std::to_string(buf2.size) + ") and 'n_comp x total_grid' (" + std::to_string(n_comp*total_grid) + ") must match.");
-        //     return multi_inner_product(n_comp, (double*) buf1.ptr, (double*) buf2.ptr);
-        // };
-        // Void zero_mean(py::array_t<double> g) {
-        //     py::buffer_info buf = g.request();
-        //     if (buf.size != total_grid) {
-        //         throw_with_line_number("Size of input (" + std::to_string(buf.size) + ") and 'total_grid' (" + std::to_string(total_grid) + ") must match.");
-        //     }
-        //     zero_mean((double*) buf.ptr);
-        // };
 }
 
 /**
@@ -161,10 +184,10 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  *
  * Creates Python class "PropagatorComputation_{Real|Complex}" with methods:
  * - update_laplacian_operator(): Refresh operators after box change
+ * - get_cb(): Get ComputationBox (use cb.get_n_grid(), cb.get_total_grid(), etc.)
  * - compute_propagators(w_input, q_init=None): Solve propagator equations
  * - advance_propagator_single_segment(q_in, p, v, u): Single step for block (v,u) of polymer p
  * - compute_concentrations(): Calculate segment densities
- * - compute_statistics(w_input, q_init=None): Full SCFT computation
  * - get_total_concentration(monomer_type): Total density by monomer
  * - get_total_concentration(polymer, monomer_type): Per-polymer density
  * - get_total_concentration_gce(fugacity, polymer, monomer_type): Grand canonical
@@ -177,8 +200,11 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  * - get_stress(): Retrieve computed stress
  * - get_stress_gce(): Grand canonical stress
  * - check_total_partition(): Validate partition function
+ * - set_space_group(sg): Set space group for reduced basis mode
  *
- * All array inputs/outputs use NumPy arrays with automatic size validation.
+ * When space group is set:
+ * - compute_propagators() accepts reduced basis w (size: n_irreducible)
+ * - get_total_concentration() returns reduced basis phi (size: n_irreducible)
  *
  * @tparam T Field type (double or std::complex<double>)
  * @param m Python module
@@ -190,27 +216,30 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
     
     py::class_<PropagatorComputation<T>>(m, class_name.c_str())
         .def("update_laplacian_operator", &PropagatorComputation<T>::update_laplacian_operator)
+        .def("get_cb", &PropagatorComputation<T>::get_cb, py::return_value_policy::reference)
+        // compute_propagators: accepts reduced basis w (n_grid) when space group is set,
+        // otherwise accepts full grid w (total_grid)
         .def("compute_propagators", [](PropagatorComputation<T>& obj, std::map<std::string,py::array_t<const T>> w_input, py::object q_init)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int N = obj.get_cb()->get_n_grid();
+                const int M = obj.get_cb()->get_total_grid();
+                const bool use_reduced = (obj.get_space_group() != nullptr);
+
                 std::map<std::string, const T*> map_buf_w_input;
                 std::map<std::string, const T*> map_buf_q_init;
 
-                //buf_w_input
+                // Validate and collect w_input
                 for (auto it = w_input.begin(); it != w_input.end(); ++it)
                 {
                     py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
+                    if (buf_w_input.size != N) {
+                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
                     }
-                    else
-                    {
-                        map_buf_w_input.insert(std::pair<std::string, const T*>(it->first, (const T*)buf_w_input.ptr));
-                    }
+                    map_buf_w_input[it->first] = (const T*)buf_w_input.ptr;
                 }
 
-                //buf_q_init
+                // Handle q_init if provided (always full grid)
                 if (!q_init.is_none()) {
                     std::map<std::string, py::array_t<const T>> q_init_map = q_init.cast<std::map<std::string, py::array_t<const T>>>();
 
@@ -220,14 +249,15 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                         if (buf_q_init.size != M) {
                             throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
                         }
-                        else
-                        {
-                            map_buf_q_init.insert(std::pair<std::string, const T*>(it->first, (const T*)buf_q_init.ptr));
-                        }
+                        map_buf_q_init[it->first] = (const T*)buf_q_init.ptr;
                     }
                 }
 
-                obj.compute_propagators(map_buf_w_input, map_buf_q_init);
+                if (use_reduced) {
+                    obj.compute_propagators_reduced(map_buf_w_input, map_buf_q_init);
+                } else {
+                    obj.compute_propagators(map_buf_w_input, map_buf_q_init);
+                }
             }
             catch(std::exception& exc)
             {
@@ -242,7 +272,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
                 T* q_in_ptr = static_cast<T*>(buf_q_in.ptr);
 
                 // Allocate output buffer
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
                 py::array_t<T> q_out(M);
                 py::buffer_info buf_q_out = q_out.request();
                 T* q_out_ptr = static_cast<T*>(buf_q_out.ptr);
@@ -265,84 +295,25 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
             }
         })
         .def("compute_concentrations", &PropagatorComputation<T>::compute_concentrations)
-        .def("compute_statistics", [](PropagatorComputation<T>& obj, std::map<std::string,py::array_t<const T>> w_input, py::object q_init)
-        {
-            try{
-                const int M = obj.get_total_grid();
-                std::map<std::string, const T*> map_buf_w_input;
-                std::map<std::string, const T*> map_buf_q_init;
-
-                //buf_w_input
-                for (auto it = w_input.begin(); it != w_input.end(); ++it)
-                {
-                    py::buffer_info buf_w_input = it->second.request();
-                    if (buf_w_input.size != M) {
-                        throw_with_line_number("Size of input w[" + it->first + "] (" + std::to_string(buf_w_input.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
-                    }
-                    else
-                    {
-                        map_buf_w_input.insert(std::pair<std::string, const T*>(it->first, (const T*)buf_w_input.ptr));
-                    }
-                }
-
-                //buf_q_init
-                if (!q_init.is_none()) {
-                    std::map<std::string, py::array_t<const T>> q_init_map = q_init.cast<std::map<std::string, py::array_t<const T>>>();
-
-                    for (auto it = q_init_map.begin(); it != q_init_map.end(); ++it)
-                    {
-                        py::buffer_info buf_q_init = it->second.request();
-                        if (buf_q_init.size != M) {
-                            throw_with_line_number("Size of input q[" + it->first + "] (" + std::to_string(buf_q_init.size) + ") and 'total_grid' (" + std::to_string(M) + ") must match.");
-                        }
-                        else
-                        {
-                            map_buf_q_init.insert(std::pair<std::string, const T*>(it->first, (const T*)buf_q_init.ptr));
-                        }
-                    }
-                }
-
-                obj.compute_statistics(map_buf_w_input, map_buf_q_init);
-            }
-            catch(std::exception& exc)
-            {
-                throw_without_line_number(exc.what());
-            }
-        }, py::arg("w_input"), py::arg("q_init") = py::none())
-        // .def("compute_statistics_device", [](PropagatorComputation<T>& obj, std::map<std::string, const long int> d_w_input, std::map<std::string, const long int> d_q_init)
-        // {
-        //     try{
-        //         std::map<std::string, const T*> map_buf_w_input;
-        //         std::map<std::string, const T*> map_buf_q_init;
-
-        //         for (auto it=d_w_input.begin(); it!=d_w_input.end(); ++it)
-        //         {
-        //             //buf_w_input
-        //             const T* w_input_ptr = reinterpret_cast<const T*>(it->second);
-        //             map_buf_w_input.insert(std::pair<std::string, const T*>(it->first,(const T *) w_input_ptr));
-        //         }
-
-        //         for (auto it=d_q_init.begin(); it!=d_q_init.end(); ++it)
-        //         {
-        //             //buf_q_init
-        //             const T* q_init_ptr = reinterpret_cast<const T*>(it->second);
-        //             map_buf_q_init.insert(std::pair<std::string, const T*>(it->first,(const T *) q_init_ptr));
-        //         }
-        //         obj.compute_statistics_device(map_buf_w_input, map_buf_q_init);
-        //     }
-        //     catch(std::exception& exc)
-        //     {
-        //         throw_without_line_number(exc.what());
-        //     }
-        // })
+        // get_total_concentration: returns reduced basis (n_ir) when space group is set,
+        // otherwise returns full grid (n_full).
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, std::string monomer_type)
         {
             try{
-                const int M = obj.get_total_grid();
-                py::array_t<T> phi = py::array_t<T>(M);
-                py::buffer_info buf_phi = phi.request();
-                obj.get_total_concentration(monomer_type, static_cast<T*>(buf_phi.ptr));
-                return phi;
+                if (obj.get_space_group() != nullptr) {
+                    // Space group set: return reduced basis
+                    const int N_IR = obj.get_cb()->get_n_grid();
+                    py::array_t<T> phi(N_IR);
+                    obj.get_total_concentration_reduced(monomer_type, phi.mutable_data());
+                    return phi;
+                } else {
+                    // No space group: return full grid
+                    const int M = obj.get_cb()->get_total_grid();
+                    py::array_t<T> phi(M);
+                    py::buffer_info buf_phi = phi.request();
+                    obj.get_total_concentration(monomer_type, static_cast<T*>(buf_phi.ptr));
+                    return phi;
+                }
             }
             catch(std::exception& exc)
             {
@@ -352,7 +323,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
                 py::array_t<T> phi = py::array_t<T>(M);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
@@ -366,7 +337,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration_gce", [](PropagatorComputation<T>& obj, double fugacity, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
                 py::array_t<T> phi = py::array_t<T>(M);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration_gce(fugacity, polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
@@ -380,7 +351,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_block_concentration", [](PropagatorComputation<T>& obj, int polymer)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
                 const int N_B = obj.get_n_blocks(polymer);
 
                 py::array_t<T> phi = py::array_t<T>({N_B,M});
@@ -398,7 +369,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_solvent_concentration", [](PropagatorComputation<T>& obj, int s)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
 
                 py::array_t<T> phi = py::array_t<T>({M});
                 py::buffer_info buf_phi = phi.request();
@@ -413,7 +384,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_chain_propagator", [](PropagatorComputation<T>& obj, int polymer, int v, int u, int n)
         {
             try{
-                const int M = obj.get_total_grid();
+                const int M = obj.get_cb()->get_total_grid();
                 py::array_t<T> q1 = py::array_t<T>(M);
                 py::buffer_info buf_q1 = q1.request();
                 obj.get_chain_propagator(static_cast<T*>(buf_q1.ptr), polymer, v, u, n);
@@ -427,7 +398,12 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("compute_stress", &PropagatorComputation<T>::compute_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
+        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition)
+        // Space group / reduced basis methods
+        .def("set_space_group", [](PropagatorComputation<T>& obj, SpaceGroup* sg)
+        {
+            obj.set_space_group(sg);
+        });
 }
 
 /**
@@ -692,6 +668,114 @@ PYBIND11_MODULE(_core, m)
         .def("display_blocks", &PropagatorComputationOptimizer::display_blocks)
         .def("get_deps_from_key", &PropagatorCode::get_deps_from_key)
         .def("get_monomer_type_from_key", &PropagatorCode::get_monomer_type_from_key);
+
+    // Bind SpaceGroup
+    py::class_<SpaceGroup>(m, "SpaceGroup",
+        R"doc(Space group symmetry for reduced basis representation.
+
+Reduces computational cost by exploiting crystallographic symmetry.
+Fields can be represented using only irreducible mesh points.
+
+Common space groups:
+  - Im-3m (229, hall=529): BCC
+  - Ia-3d (230, hall=530): Gyroid
+  - Fm-3m (225, hall=523): FCC
+  - P6_3/mmc (194, hall=488): HCP, PL
+
+Example:
+    >>> sg = SpaceGroup([32, 32, 32], "Im-3m", 529)
+    >>> print(f"Reduction: {sg.get_total_grid() / sg.get_n_irreducible():.1f}x")
+)doc")
+        .def(py::init<std::vector<int>, int>(), py::arg("nx"), py::arg("hall_number"),
+             "Create SpaceGroup from grid dimensions and Hall number.")
+        .def(py::init<std::vector<int>, const std::string&, int>(),
+             py::arg("nx"), py::arg("symbol"), py::arg("hall_number") = -1,
+             "Create SpaceGroup from grid dimensions and ITA symbol.")
+        .def_static("hall_numbers_from_symbol", &SpaceGroup::hall_numbers_from_symbol,
+             "Return all Hall numbers for an ITA symbol.")
+        .def("get_hall_number", &SpaceGroup::get_hall_number,
+             "Hall number (1-530).")
+        .def("get_spacegroup_number", &SpaceGroup::get_spacegroup_number,
+             "International space group number (1-230).")
+        .def("get_spacegroup_symbol", &SpaceGroup::get_spacegroup_symbol,
+             "ITA short symbol.")
+        .def("get_crystal_system", &SpaceGroup::get_crystal_system,
+             "Crystal system name.")
+        .def("get_nx", &SpaceGroup::get_nx,
+             "Grid dimensions [nx, ny, nz].")
+        .def("get_total_grid", &SpaceGroup::get_total_grid,
+             "Total number of grid points.")
+        .def("get_n_irreducible", &SpaceGroup::get_n_irreducible,
+             "Number of irreducible mesh points.")
+        .def("get_n_symmetry_ops", &SpaceGroup::get_n_symmetry_ops,
+             "Number of symmetry operations.")
+        .def("get_reduced_basis_indices", &SpaceGroup::get_reduced_basis_indices,
+             "Flat indices of irreducible points in full grid.")
+        .def("get_full_to_reduced_map", &SpaceGroup::get_full_to_reduced_map,
+             "Map from full grid index to irreducible index.")
+        .def("get_orbit_counts", &SpaceGroup::get_orbit_counts,
+             "Number of equivalent points for each irreducible point.")
+        .def("to_reduced_basis", [](SpaceGroup& obj, py::array_t<double> full_field)
+        {
+            py::buffer_info buf = full_field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_total_grid();
+            if (total_size != n_fields * obj.get_total_grid())
+                throw_with_line_number("Field size must be multiple of total_grid");
+
+            py::array_t<double> reduced_field({n_fields, obj.get_n_irreducible()});
+            obj.to_reduced_basis(static_cast<double*>(buf.ptr),
+                                 static_cast<double*>(reduced_field.request().ptr),
+                                 n_fields);
+            return reduced_field;
+        }, "Convert full grid field to reduced basis. Returns (n_fields, n_irreducible) array.")
+        .def("from_reduced_basis", [](SpaceGroup& obj, py::array_t<double> reduced_field)
+        {
+            py::buffer_info buf = reduced_field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_n_irreducible();
+            if (total_size != n_fields * obj.get_n_irreducible())
+                throw_with_line_number("Reduced field size must be multiple of n_irreducible");
+
+            py::array_t<double> full_field({n_fields, obj.get_total_grid()});
+            obj.from_reduced_basis(static_cast<double*>(buf.ptr),
+                                   static_cast<double*>(full_field.request().ptr),
+                                   n_fields);
+            return full_field;
+        }, "Convert reduced basis field to full grid. Returns (n_fields, total_grid) array.")
+        .def("symmetrize", [](SpaceGroup& obj, py::array_t<double> field)
+        {
+            py::buffer_info buf = field.request();
+            if (buf.ndim < 1)
+                throw_with_line_number("Input must be at least 1D array");
+
+            int total_size = 1;
+            for (int i = 0; i < buf.ndim; ++i)
+                total_size *= buf.shape[i];
+
+            int n_fields = total_size / obj.get_total_grid();
+            if (total_size != n_fields * obj.get_total_grid())
+                throw_with_line_number("Field size must be multiple of total_grid");
+
+            // Create output array with same shape
+            py::array_t<double> result(buf.shape);
+            obj.symmetrize(static_cast<double*>(buf.ptr),
+                          static_cast<double*>(result.request().ptr),
+                          n_fields);
+            return result;
+        }, "Symmetrize field by averaging over orbits. Returns array with same shape.");
 
     // Bind ComputationBox
     bind_computation_box<double>(m, "Real");

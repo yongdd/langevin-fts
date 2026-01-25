@@ -60,6 +60,9 @@
 
 #include "Exception.h"
 
+// Forward declaration
+class SpaceGroup;
+
 /**
  * @enum BoundaryCondition
  * @brief Types of boundary conditions supported by the simulation.
@@ -183,6 +186,30 @@ protected:
      * - For 3D: all 6 indices are used
      */
     std::vector<BoundaryCondition> bc;
+
+    // ==================== Space Group Support ====================
+
+    /**
+     * @brief Pointer to space group for reduced basis operations.
+     *
+     * When set, integral(), inner_product(), etc. operate on reduced basis
+     * arrays of size n_irreducible instead of full grid arrays.
+     */
+    SpaceGroup* space_group_;
+
+    /**
+     * @brief Cached orbit counts from space group.
+     *
+     * orbit_counts[i] is the multiplicity of the i-th irreducible point.
+     */
+    std::vector<int> orbit_counts_;
+
+    /**
+     * @brief Number of irreducible mesh points.
+     *
+     * When space_group_ is nullptr, this equals total_grid.
+     */
+    int n_irreducible_;
 
     /**
      * @brief Compute lattice vectors from box lengths and angles.
@@ -393,36 +420,73 @@ public:
      */
     bool is_orthogonal() const;
 
+    // ==================== Space Group Methods ====================
+
+    /**
+     * @brief Set space group for reduced basis operations.
+     *
+     * When a space group is set, integral(), inner_product(), multi_inner_product(),
+     * and zero_mean() operate on reduced basis arrays (size n_irreducible) instead
+     * of full grid arrays (size total_grid).
+     *
+     * @param sg Pointer to SpaceGroup, or nullptr to disable reduced basis mode
+     */
+    void set_space_group(SpaceGroup* sg);
+
+    /**
+     * @brief Get the current space group.
+     * @return Pointer to SpaceGroup, or nullptr if not set
+     */
+    SpaceGroup* get_space_group() const;
+
+    /**
+     * @brief Get the number of grid points for field operations.
+     *
+     * Returns n_irreducible if space group is set, otherwise total_grid.
+     * Use this to determine the expected array size for integral(), inner_product(), etc.
+     *
+     * @return Number of grid points (n_irreducible or total_grid)
+     */
+    int get_n_grid() const;
+
+    /**
+     * @brief Get the orbit counts for reduced basis weighting.
+     * @return Const reference to orbit_counts vector (empty if no space group)
+     */
+    const std::vector<int>& get_orbit_counts() const;
+
+    // ==================== Field Operations ====================
+
     /**
      * @brief Compute volume integral of a field.
      *
-     * Computes: integral(g) = sum_i g[i] * dV[i]
+     * When space group is NOT set:
+     *   Computes: integral(g) = sum_i g[i] * dV[i]
+     *   Array size: total_grid
      *
-     * @param g Field array of length total_grid
+     * When space group IS set (reduced basis mode):
+     *   Computes: integral(g) = (V/M) * sum_i orbit_counts[i] * g[i]
+     *   Array size: n_irreducible
+     *
+     * @param g Field array (length: get_n_grid())
      * @return Volume integral of g
-     *
-     * @example
-     * @code
-     * // Verify normalization: integral(phi) should equal volume fraction
-     * double avg_phi = cb->integral(phi) / cb->get_volume();
-     * @endcode
      */
     T integral(const T *g);
 
     /**
      * @brief Compute inner product of two fields.
      *
-     * Computes: <g|h> = integral(g * h) = sum_i g[i] * h[i] * dV[i]
+     * When space group is NOT set:
+     *   Computes: <g|h> = sum_i g[i] * h[i] * dV[i]
+     *   Array size: total_grid
      *
-     * @param g First field array of length total_grid
-     * @param h Second field array of length total_grid
+     * When space group IS set (reduced basis mode):
+     *   Computes: <g|h> = (V/M) * sum_i orbit_counts[i] * g[i] * h[i]
+     *   Array size: n_irreducible
+     *
+     * @param g First field array (length: get_n_grid())
+     * @param h Second field array (length: get_n_grid())
      * @return Inner product <g|h>
-     *
-     * @example
-     * @code
-     * // Compute Hamiltonian term: <w|phi>
-     * double H_wp = cb->inner_product(w, phi);
-     * @endcode
      */
     T inner_product(const T *g, const T *h);
 
@@ -431,10 +495,10 @@ public:
      *
      * Computes: sum_i g[i] * h[i] / w[i] * dV[i]
      *
-     * Useful for computing averages with non-uniform weights.
+     * When space group is set, operates on reduced basis arrays.
      *
-     * @param g First field array
-     * @param h Second field array
+     * @param g First field array (length: get_n_grid())
+     * @param h Second field array (length: get_n_grid())
      * @param w Weight field array (must be non-zero everywhere)
      * @return Weighted inner product
      */
@@ -443,12 +507,15 @@ public:
     /**
      * @brief Compute inner product for multiple field components.
      *
-     * For multi-component fields g = [g1, g2, ...] and h = [h1, h2, ...],
-     * computes: sum_i sum_c g[c*M+i] * h[c*M+i] * dV[i]
+     * When space group is NOT set:
+     *   Array size per component: total_grid
+     *
+     * When space group IS set:
+     *   Array size per component: n_irreducible
      *
      * @param n_comp Number of field components
-     * @param g First multi-component field (length n_comp * total_grid)
-     * @param h Second multi-component field (length n_comp * total_grid)
+     * @param g First multi-component field (length: n_comp * get_n_grid())
+     * @param h Second multi-component field (length: n_comp * get_n_grid())
      * @return Sum of inner products over all components
      */
     T multi_inner_product(int n_comp, const T *g, const T *h);
@@ -458,13 +525,9 @@ public:
      *
      * Modifies g in-place: g[i] -= mean(g)
      *
-     * @param g Field array (modified in-place)
+     * When space group is set, uses weighted mean with orbit_counts.
      *
-     * @example
-     * @code
-     * // Ensure pressure field has zero mean (gauge fixing)
-     * cb->zero_mean(pressure);
-     * @endcode
+     * @param g Field array (length: get_n_grid(), modified in-place)
      */
     void zero_mean(T *g);
 

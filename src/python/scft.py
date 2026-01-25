@@ -13,7 +13,6 @@ import scipy.io
 
 from . import _core
 from .polymer_field_theory import SymmetricPolymerTheory
-from .space_group import SpaceGroup
 from .propagator_solver import PropagatorSolver
 from .validation import validate_scft_params, ValidationError
 from .config import load_config
@@ -794,25 +793,26 @@ class SCFT:
         if "space_group" in params:
             # Create a space group object
             if "number" in params["space_group"]:
-                self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"], params["space_group"]["number"])
             else:
-                self.sg = SpaceGroup(params["nx"], params["space_group"]["symbol"])
-                
-            if not self.sg.crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
-                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
-                    "The current crystal system is " + self.sg.crystal_system + ".")
+                self.sg = _core.SpaceGroup(params["nx"], params["space_group"]["symbol"])
 
-            if self.sg.crystal_system == "Orthorhombic":
+            crystal_system = self.sg.get_crystal_system()
+            if not crystal_system in ["Orthorhombic", "Tetragonal", "Cubic", "Hexagonal", "Trigonal"]:
+                raise ValueError("The crystal system of the space group must be Orthorhombic, Tetragonal, Cubic, Hexagonal, or Trigonal. " +
+                    "The current crystal system is " + crystal_system + ".")
+
+            if crystal_system == "Orthorhombic":
                 self.lx_reduced_indices = [0, 1, 2]
                 self.lx_full_indices = [0, 1, 2]
-            elif self.sg.crystal_system == "Tetragonal":
+            elif crystal_system == "Tetragonal":
                 # Standard tetragonal: a = b ≠ c (4-fold axis along z)
                 self.lx_reduced_indices = [0, 2]  # a and c as independent
                 self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
-            elif self.sg.crystal_system == "Cubic":
+            elif crystal_system == "Cubic":
                 self.lx_reduced_indices = [0]
                 self.lx_full_indices = [0, 0, 0]
-            elif self.sg.crystal_system == "Hexagonal" or self.sg.crystal_system == "Trigonal":
+            elif crystal_system == "Hexagonal" or crystal_system == "Trigonal":
                 # Hexagonal: a = b ≠ c, α = β = 90°, γ = 120°
                 self.lx_reduced_indices = [0, 2]  # Only a and c can vary independently
                 self.lx_full_indices = [0, 0, 1]  # Map: reduced[0]->a, reduced[0]->b, reduced[1]->c
@@ -823,9 +823,9 @@ class SCFT:
 
             # Total number of variables to be adjusted to minimize the Hamiltonian
             # Using reduced basis from space group symmetry
-            n_reduced = len(self.sg.irreducible_mesh)
+            n_reduced = self.sg.get_n_irreducible()
             if params["box_is_altering"]:
-                n_var = len(self.monomer_types)*n_reduced + len(self.sg.lattice_parameters)
+                n_var = len(self.monomer_types)*n_reduced + len(self.lx_reduced_indices)
             else :
                 n_var = len(self.monomer_types)*n_reduced
 
@@ -919,7 +919,11 @@ class SCFT:
                 n_var = len(self.monomer_types)*np.prod(params["nx"]) + len(self.lx_reduced_indices) + n_angles
             else :
                 n_var = len(self.monomer_types)*np.prod(params["nx"])
-            
+
+        # Set space group on PropagatorComputation for reduced basis operations
+        if self.sg is not None:
+            self.prop_solver._propagator_computation.set_space_group(self.sg)
+
         # Select an optimizer among 'Anderson Mixing' and 'ADAM' for finding saddle point
         # (C++ class) Anderson Mixing method for finding saddle point
         if params["optimizer"]["name"] == "am":
@@ -1303,16 +1307,22 @@ class SCFT:
             "eigenvalues": self.mpt.eigenvalues, "matrix_a": self.mpt.matrix_a, "matrix_a_inverse": self.mpt.matrix_a_inv}
 
         if self.sg is not None:
-            m_dic["space_group_symbol"] = self.sg.spacegroup_symbol
-            m_dic["space_group_hall_number"] = self.sg.hall_number
+            m_dic["space_group_symbol"] = self.sg.get_spacegroup_symbol()
+            m_dic["space_group_hall_number"] = self.sg.get_hall_number()
 
-        # Add w fields to the dictionary
+        # Add w fields to the dictionary (expand to full grid if space group is set)
         for i, name in enumerate(self.monomer_types):
-            m_dic["w_" + name] = self.w[i]
+            if self.sg is not None:
+                m_dic["w_" + name] = self.sg.from_reduced_basis(self.w[i])
+            else:
+                m_dic["w_" + name] = self.w[i]
 
-        # Add concentrations to the dictionary
+        # Add concentrations to the dictionary (expand to full grid if space group is set)
         for name in self.monomer_types:
-            m_dic["phi_" + name] = self.phi[name]
+            if self.sg is not None:
+                m_dic["phi_" + name] = self.sg.from_reduced_basis(self.phi[name])
+            else:
+                m_dic["phi_" + name] = self.phi[name]
 
         # if self.mask is not None:
         #     m_dic["mask"] = self.mask
@@ -1570,20 +1580,28 @@ class SCFT:
             print("")
 
         # Reshape initial fields
+        # When space group is set, n_grid = n_irreducible; otherwise n_grid = total_grid
         w = np.zeros([M, self.prop_solver.n_grid], dtype=np.float64)
 
-        for i in range(M):
-            w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
-
-        # Symmetrize initial fields if space group is set
         if self.sg is not None:
-            w = self.sg.symmetrize(w)
+            # User provides full grid initial_fields, convert to reduced basis
+            w_full = np.zeros([M, self.prop_solver.total_grid], dtype=np.float64)
+            for i in range(M):
+                w_full[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.total_grid)
+            # Symmetrize full grid fields, then convert to reduced basis
+            w_full = self.sg.symmetrize(w_full)
+            w = self.sg.to_reduced_basis(w_full)
+        else:
+            for i in range(M):
+                w[i,:] = np.reshape(initial_fields[self.monomer_types[i]], self.prop_solver.n_grid)
 
         # Keep the level of field value
+        # integral() and get_volume() work correctly with reduced basis when space group is set
         for i in range(M):
             w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
-            
+
         # Iteration begins here
+        # w is in reduced basis when space group is set, full grid otherwise
         for iter in range(1, self.max_iter+1):
 
             # Compute total concentration for each monomer type
@@ -1716,22 +1734,8 @@ class SCFT:
             if error_level < self.tolerance:
                 break
 
-            # Convert to reduced basis for space group (if set)
-            if self.sg is None:
-                w_reduced = w
-                w_diff_reduced = w_diff
-            else:
-                # Convert to reduced basis for Anderson mixing
-                w_reduced = self.sg.to_reduced_basis(w)
-                w_diff_reduced = self.sg.to_reduced_basis(w_diff)
-
-                # Verify recovery: check that from_reduced_basis(to_reduced_basis(w)) ~ w
-                w_recovered = self.sg.from_reduced_basis(w_reduced)
-                recovery_error = np.max(np.abs(w - w_recovered))
-                if recovery_error > 1e-10:
-                    print(f"WARNING: Reduced basis recovery error = {recovery_error:.2e}")
-
             # Calculate new fields using simple and Anderson mixing
+            # Note: w and w_diff are in reduced basis when space group is set
             if self.box_is_altering:
                 # Stress components:
                 # [0,1,2] = σ_xx, σ_yy, σ_zz (diagonal) - for box lengths
@@ -1776,14 +1780,14 @@ class SCFT:
                 current_angles = np.array(self.prop_solver.get_angles_degrees())[self.angles_reduced_indices] if len(self.angles_reduced_indices) > 0 else np.array([])
 
                 # Build optimization vectors
-                am_current = np.concatenate((w_reduced.flatten(), current_lx, current_angles))
-                am_diff = np.concatenate((w_diff_reduced.flatten(),
+                am_current = np.concatenate((w.flatten(), current_lx, current_angles))
+                am_diff = np.concatenate((w_diff.flatten(),
                                          self.scale_stress*dlx_reduced,
                                          self.scale_stress*dangle))
                 am_new = self.field_optimizer.calculate_new_fields(am_current, am_diff, old_error_level, error_level)
 
                 # Copy fields
-                w_reduced = np.reshape(am_new[0:len(w_reduced.flatten())], (M, -1))
+                w = np.reshape(am_new[0:len(w.flatten())], (M, -1))
 
                 # Extract new box lengths
                 n_lx = len(self.lx_reduced_indices)
@@ -1817,16 +1821,11 @@ class SCFT:
                 # Update bond parameters using new lx
                 self.prop_solver.update_laplacian_operator()
             else:
-                w_reduced = self.field_optimizer.calculate_new_fields(w_reduced.flatten(), w_diff_reduced.flatten(), old_error_level, error_level)
-                w_reduced = np.reshape(w_reduced, (M, -1))
+                w = self.field_optimizer.calculate_new_fields(w.flatten(), w_diff.flatten(), old_error_level, error_level)
+                w = np.reshape(w, (M, -1))
 
-            # Convert back from reduced basis to full grid
-            if self.sg is None:
-                w = w_reduced
-            else:
-                w = self.sg.from_reduced_basis(w_reduced)
-            
-            # Keep the level of field value
+            # Normalize field values
+            # integral() works correctly with reduced basis when space group is set
             for i in range(M):
                 w[i] -= self.prop_solver.integral(w[i])/self.prop_solver.get_volume()
 

@@ -64,6 +64,7 @@ PropagatorComputation<T>::PropagatorComputation(
     this->cb = cb;
     this->molecules = molecules;
     this->propagator_computation_optimizer = propagator_computation_optimizer;
+    this->space_group_ = nullptr;  // No space group by default
 
     // Total partition functions for each polymer
     single_polymer_partitions.resize(molecules->get_n_polymer_types());
@@ -140,6 +141,95 @@ std::vector<T> PropagatorComputation<T>::get_stress_gce(std::vector<double> fuga
         }
     }
     return stress;
+}
+
+// ==================== Space Group / Reduced Basis Methods ====================
+
+/**
+ * @brief Set space group for reduced basis representation.
+ *
+ * Allocates internal buffers for full grid field storage when working
+ * with reduced basis fields. Also sets space group on ComputationBox
+ * so that integral(), inner_product() etc. work with reduced basis.
+ *
+ * @param sg Pointer to SpaceGroup, or nullptr to disable reduced basis mode
+ */
+template <typename T>
+void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
+{
+    space_group_ = sg;
+
+    // Also set space group on ComputationBox for unified field operations
+    this->cb->set_space_group(sg);
+
+    if (sg != nullptr) {
+        // Allocate buffers for full grid operations
+        int total_grid = this->cb->get_total_grid();
+        int n_monomer_types = this->molecules->get_bond_lengths().size();
+
+        // Buffer for all monomer type fields
+        w_full_buffer_.resize(n_monomer_types * total_grid);
+        phi_full_buffer_.resize(total_grid);
+    } else {
+        // Release buffers
+        w_full_buffer_.clear();
+        w_full_buffer_.shrink_to_fit();
+        phi_full_buffer_.clear();
+        phi_full_buffer_.shrink_to_fit();
+    }
+}
+
+/**
+ * @brief Compute propagators using reduced basis input fields.
+ *
+ * Expands reduced basis fields to full grid before calling compute_propagators().
+ */
+template <typename T>
+void PropagatorComputation<T>::compute_propagators_reduced(
+    std::map<std::string, const T*> w_reduced,
+    std::map<std::string, const T*> q_init)
+{
+    if (space_group_ == nullptr) {
+        throw_with_line_number("Space group not set. Call set_space_group() first.");
+    }
+
+    int total_grid = this->cb->get_total_grid();
+    int n_irreducible = space_group_->get_n_irreducible();
+
+    // Expand each reduced basis field to full grid
+    std::map<std::string, const T*> w_full;
+    int field_idx = 0;
+
+    for (auto& pair : w_reduced) {
+        T* full_ptr = w_full_buffer_.data() + field_idx * total_grid;
+        if constexpr (std::is_same_v<T, double>) {
+            space_group_->from_reduced_basis(pair.second, full_ptr, 1);
+        }
+        w_full[pair.first] = full_ptr;
+        field_idx++;
+    }
+
+    // Call the standard compute_propagators with full grid fields
+    compute_propagators(w_full, q_init);
+}
+
+/**
+ * @brief Get concentration in reduced basis.
+ */
+template <typename T>
+void PropagatorComputation<T>::get_total_concentration_reduced(std::string monomer_type, T* phi_reduced)
+{
+    if (space_group_ == nullptr) {
+        throw_with_line_number("Space group not set. Call set_space_group() first.");
+    }
+
+    // Get full grid concentration
+    get_total_concentration(monomer_type, phi_full_buffer_.data());
+
+    // Convert to reduced basis
+    if constexpr (std::is_same_v<T, double>) {
+        space_group_->to_reduced_basis(phi_full_buffer_.data(), phi_reduced, 1);
+    }
 }
 
 // Explicit template instantiation
