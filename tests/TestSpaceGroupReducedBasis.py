@@ -19,6 +19,14 @@ from polymerfts import SCFT
 from polymerfts import _core
 
 
+def get_platform():
+    """Get available platform (cuda if available, otherwise cpu-fftw)."""
+    available = _core.PlatformSelector.avail_platforms()
+    if "cuda" in available:
+        return "cuda"
+    return "cpu-fftw"
+
+
 def test_propagator_computation_reduced_basis():
     """Test PropagatorComputation with space group reduced basis."""
     print("Test 1: PropagatorComputation with space group")
@@ -34,7 +42,8 @@ def test_propagator_computation_reduced_basis():
     total_grid = int(np.prod(nx))
 
     # Create platform factory
-    factory = _core.PlatformSelector.create_factory("cuda", False)
+    platform = get_platform()
+    factory = _core.PlatformSelector.create_factory(platform, False)
 
     # Create molecules
     molecules = factory.create_molecules_information("continuous", ds, bond_lengths)
@@ -103,7 +112,8 @@ def test_computation_box_reduced_basis():
     total_grid = int(np.prod(nx))
     volume = float(np.prod(lx))
 
-    factory = _core.PlatformSelector.create_factory("cuda", False)
+    platform = get_platform()
+    factory = _core.PlatformSelector.create_factory(platform, False)
     cb = factory.create_computation_box(nx, lx, None, bc)
 
     # Create space group
@@ -143,6 +153,7 @@ def test_scft_with_space_group():
     print("-" * 50)
 
     params = {
+        "platform": get_platform(),
         "nx": [32, 32, 32],
         "lx": [4.68, 4.68, 4.68],
         "chain_model": "continuous",
@@ -209,6 +220,7 @@ def test_save_results_full_grid():
     print("-" * 50)
 
     params = {
+        "platform": get_platform(),
         "nx": [32, 32, 32],
         "lx": [4.68, 4.68, 4.68],
         "chain_model": "continuous",
