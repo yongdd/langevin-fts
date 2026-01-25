@@ -15,10 +15,11 @@
  * **Implementation:**
  *
  * For periodic BCs, uses cuFFT for GPU-accelerated FFT.
- * For non-periodic BCs, uses FCT/FST algorithm (Makhoul 1980) with O(N log N) complexity.
+ * For non-periodic BCs, delegates to CudaRealTransform (FCT/FST algorithm).
  *
  * @see FftwFFT for CPU version
  * @see FFT for abstract interface
+ * @see CudaRealTransform for DCT/DST implementation
  */
 
 #ifndef CUDA_FFT_H_
@@ -33,6 +34,11 @@
 #include "CudaCommon.h"
 #include "FFT.h"
 
+// Forward declarations
+class CudaRealTransform1D;
+class CudaRealTransform2D;
+class CudaRealTransform3D;
+
 /**
  * @class CudaFFT
  * @brief GPU spectral transform implementation for all boundary conditions.
@@ -46,7 +52,7 @@
  * **GPU Memory:**
  *
  * - For periodic: cuFFT plans
- * - For non-periodic: Work buffers for FCT/FST transforms
+ * - For non-periodic: Delegates to CudaRealTransform
  * - Stream-aware for concurrent execution
  */
 template <typename T, int DIM>
@@ -66,8 +72,10 @@ private:
 
     // Device work buffers
     double* d_work_buffer_;                      ///< Main work buffer
-    double* d_temp_buffer_;                      ///< Temporary buffer for transforms
-    double* d_fft_buffer_;                       ///< Separate buffer for FFT output (cuFFT requires separate allocations)
+
+    // CudaRealTransform objects for non-periodic BC (forward: DCT-2/DST-2, backward: DCT-3/DST-3)
+    void* rt_forward_;                           ///< Forward transform (DCT-2/DST-2)
+    void* rt_backward_;                          ///< Backward transform (DCT-3/DST-3)
 
     /**
      * @brief Initialize cuFFT plans for periodic BC.
@@ -75,29 +83,9 @@ private:
     void initPeriodicFFT();
 
     /**
-     * @brief Get strides for dimension-by-dimension processing.
+     * @brief Initialize CudaRealTransform for non-periodic BC.
      */
-    void getStrides(int dim, int& stride, int& num_transforms) const;
-
-    /**
-     * @brief Apply DCT-II forward transform for one dimension.
-     */
-    void applyDCT2Forward(double* d_data, int dim, cudaStream_t stream);
-
-    /**
-     * @brief Apply DCT-III backward transform for one dimension.
-     */
-    void applyDCT3Backward(double* d_data, int dim, cudaStream_t stream);
-
-    /**
-     * @brief Apply DST-II forward transform for one dimension.
-     */
-    void applyDST2Forward(double* d_data, int dim, cudaStream_t stream);
-
-    /**
-     * @brief Apply DST-III backward transform for one dimension.
-     */
-    void applyDST3Backward(double* d_data, int dim, cudaStream_t stream);
+    void initNonPeriodicFFT();
 
 public:
     /**

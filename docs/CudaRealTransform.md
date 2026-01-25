@@ -1,8 +1,10 @@
-# CudaDCT / CudaDST - CUDA Discrete Cosine and Sine Transform Library
+# CudaRealTransform - CUDA Discrete Cosine and Sine Transform Library
 
 > **Warning:** This document was generated with assistance from a large language model (LLM). While it is based on the referenced literature and the codebase, it may contain errors, misinterpretations, or inaccuracies. Please verify the equations and descriptions against the original references before relying on this document for research or implementation.
 
-CUDA implementation of Discrete Cosine Transform (DCT) and Discrete Sine Transform (DST) Types 1-4, matching FFTW's REDFT/RODFT conventions. These libraries provide GPU-accelerated transforms using cuFFT as the underlying FFT engine, with efficient algorithms that minimize FFT size while maintaining machine precision accuracy.
+CUDA implementation of Discrete Cosine Transform (DCT) and Discrete Sine Transform (DST) Types 1-4, matching FFTW's REDFT/RODFT conventions. This library provides GPU-accelerated transforms using cuFFT as the underlying FFT engine, with efficient algorithms that minimize FFT size while maintaining machine precision accuracy.
+
+The implementation uses unified `CudaRealTransform1D`, `CudaRealTransform2D`, and `CudaRealTransform3D` classes that support both DCT and DST with any combination of transform types across dimensions. Legacy class names (`CudaDCT`, `CudaDST`, etc.) are provided as type aliases for backward compatibility.
 
 ## Table of Contents
 
@@ -586,141 +588,121 @@ Use `get_normalization()` method to obtain the normalization factor programmatic
 
 ## 6. API Reference
 
-### 6.1 CudaDCT (1D)
+### 6.1 Transform Type Enumeration
 
 ```cpp
-class CudaDCT {
-public:
-    // Constructor: N = transform size, type = DCT type (1-4)
-    CudaDCT(int N, CudaDCTType type);
-    ~CudaDCT();
+enum CudaTransformType {
+    // DCT Types (Neumann boundary conditions)
+    CUDA_DCT_1 = 0,   // FFTW_REDFT00: DCT-I
+    CUDA_DCT_2 = 1,   // FFTW_REDFT10: DCT-II
+    CUDA_DCT_3 = 2,   // FFTW_REDFT01: DCT-III
+    CUDA_DCT_4 = 3,   // FFTW_REDFT11: DCT-IV
+    // DST Types (Dirichlet boundary conditions)
+    CUDA_DST_1 = 4,   // FFTW_RODFT00: DST-I
+    CUDA_DST_2 = 5,   // FFTW_RODFT10: DST-II
+    CUDA_DST_3 = 6,   // FFTW_RODFT01: DST-III
+    CUDA_DST_4 = 7    // FFTW_RODFT11: DST-IV
+};
 
-    // Execute DCT in-place on device array
+// Helper functions
+bool isDCT(CudaTransformType type);  // Returns true for DCT types
+bool isDST(CudaTransformType type);  // Returns true for DST types
+bool isType1(CudaTransformType type); // Returns true for Type-1 transforms
+const char* getTransformName(CudaTransformType type); // Returns "DCT-1", "DST-2", etc.
+```
+
+### 6.2 CudaRealTransform1D
+
+```cpp
+class CudaRealTransform1D {
+public:
+    // Constructor: N = transform size, type = transform type (DCT/DST 1-4)
+    CudaRealTransform1D(int N, CudaTransformType type);
+    ~CudaRealTransform1D();
+
+    // Execute transform in-place on device array
     void execute(double* d_data);
 
-    // Get input/output size (N for DCT-2,3,4; N+1 for DCT-1)
+    // Get input/output size (N for types 2,3,4; N+1 for DCT-1; N-1 for DST-1)
     int get_size() const;
+
+    // Get transform type
+    CudaTransformType get_type() const;
 
     // Get normalization factor for round-trip
     double get_normalization() const;
 };
 ```
 
-**DCT Type Enumeration:**
-```cpp
-enum CudaDCTType {
-    CUDA_DCT_1 = 0,  // FFTW_REDFT00
-    CUDA_DCT_2 = 1,  // FFTW_REDFT10
-    CUDA_DCT_3 = 2,  // FFTW_REDFT01
-    CUDA_DCT_4 = 3   // FFTW_REDFT11
-};
-```
-
-### 6.2 CudaDST (1D)
+### 6.3 CudaRealTransform2D
 
 ```cpp
-class CudaDST {
-public:
-    // Constructor: N = transform size, type = DST type (1-4)
-    CudaDST(int N, CudaDSTType type);
-    ~CudaDST();
-
-    // Execute DST in-place on device array
-    void execute(double* d_data);
-
-    // Get input/output size
-    int get_size() const;
-
-    // Get normalization factor for round-trip
-    double get_normalization() const;
-};
-```
-
-**DST Type Enumeration:**
-```cpp
-enum CudaDSTType {
-    CUDA_DST_1 = 0,  // FFTW_RODFT00
-    CUDA_DST_2 = 1,  // FFTW_RODFT10
-    CUDA_DST_3 = 2,  // FFTW_RODFT01
-    CUDA_DST_4 = 3   // FFTW_RODFT11
-};
-```
-
-### 6.3 CudaDCT2D / CudaDST2D
-
-```cpp
-class CudaDCT2D {
+class CudaRealTransform2D {
 public:
     // Constructor: same type for both dimensions
-    CudaDCT2D(int Nx, int Ny, CudaDCTType type);
+    CudaRealTransform2D(int Nx, int Ny, CudaTransformType type);
 
-    // Constructor: different types per dimension (types 2,3,4 only)
-    CudaDCT2D(int Nx, int Ny, CudaDCTType type_x, CudaDCTType type_y);
-    ~CudaDCT2D();
+    // Constructor: different types per dimension
+    // Note: Type-1 transforms cannot be mixed with other types
+    CudaRealTransform2D(int Nx, int Ny, CudaTransformType type_x, CudaTransformType type_y);
+    ~CudaRealTransform2D();
 
     void execute(double* d_data);
     int get_size() const;
     void get_dims(int& nx, int& ny) const;
-    void get_types(CudaDCTType& type_x, CudaDCTType& type_y) const;
-    double get_normalization() const;
-};
-
-class CudaDST2D {
-public:
-    // Constructor: same type for both dimensions
-    CudaDST2D(int Nx, int Ny, CudaDSTType type);
-
-    // Constructor: different types per dimension (types 2,3,4 only)
-    CudaDST2D(int Nx, int Ny, CudaDSTType type_x, CudaDSTType type_y);
-    ~CudaDST2D();
-
-    void execute(double* d_data);
-    int get_size() const;
-    void get_dims(int& nx, int& ny) const;
-    void get_types(CudaDSTType& type_x, CudaDSTType& type_y) const;
+    void get_types(CudaTransformType& type_x, CudaTransformType& type_y) const;
     double get_normalization() const;
 };
 ```
 
-### 6.4 CudaDCT3D / CudaDST3D
+### 6.4 CudaRealTransform3D
 
 ```cpp
-class CudaDCT3D {
+class CudaRealTransform3D {
 public:
     // Constructor: same type for all dimensions
-    CudaDCT3D(int Nx, int Ny, int Nz, CudaDCTType type);
+    CudaRealTransform3D(int Nx, int Ny, int Nz, CudaTransformType type);
 
-    // Constructor: different types per dimension (types 2,3,4 only)
-    CudaDCT3D(int Nx, int Ny, int Nz, CudaDCTType type_x, CudaDCTType type_y, CudaDCTType type_z);
-    ~CudaDCT3D();
+    // Constructor: different types per dimension
+    // Note: Type-1 transforms cannot be mixed with other types
+    CudaRealTransform3D(int Nx, int Ny, int Nz,
+                        CudaTransformType type_x, CudaTransformType type_y, CudaTransformType type_z);
+    ~CudaRealTransform3D();
 
     void execute(double* d_data);
     int get_size() const;
     void get_dims(int& nx, int& ny, int& nz) const;
-    void get_types(CudaDCTType& type_x, CudaDCTType& type_y, CudaDCTType& type_z) const;
+    void get_types(CudaTransformType& type_x, CudaTransformType& type_y, CudaTransformType& type_z) const;
     double get_normalization() const;
 };
+```
 
-class CudaDST3D {
-public:
-    // Constructor: same type for all dimensions
-    CudaDST3D(int Nx, int Ny, int Nz, CudaDSTType type);
+### 6.5 Backward Compatibility Aliases
 
-    // Constructor: different types per dimension (types 2,3,4 only)
-    CudaDST3D(int Nx, int Ny, int Nz, CudaDSTType type_x, CudaDSTType type_y, CudaDSTType type_z);
-    ~CudaDST3D();
+For backward compatibility, the following type aliases are provided:
 
-    void execute(double* d_data);
-    int get_size() const;
-    void get_dims(int& nx, int& ny, int& nz) const;
-    void get_types(CudaDSTType& type_x, CudaDSTType& type_y, CudaDSTType& type_z) const;
-    double get_normalization() const;
-};
+```cpp
+// Type aliases for old class names
+typedef CudaRealTransform1D CudaDCT;
+typedef CudaRealTransform1D CudaDST;
+typedef CudaRealTransform2D CudaDCT2D;
+typedef CudaRealTransform2D CudaDST2D;
+typedef CudaRealTransform2D CudaMixedTransform2D;
+typedef CudaRealTransform3D CudaDCT3D;
+typedef CudaRealTransform3D CudaDST3D;
+typedef CudaRealTransform3D CudaMixedTransform3D;
+
+// Type aliases for old enum names
+typedef CudaTransformType CudaDCTType;
+typedef CudaTransformType CudaDSTType;
 ```
 
 ---
 
 ## 7. Usage Examples
+
+> **Note:** These examples use the new unified class names (`CudaRealTransform1D/2D/3D`).
+> Legacy class names (`CudaDCT`, `CudaDST`, etc.) are still supported for backward compatibility.
 
 ### 7.1 1D DCT-4
 
@@ -733,7 +715,7 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * N);
 cudaMemcpy(d_data, h_input, sizeof(double) * N, cudaMemcpyHostToDevice);
 
-CudaDCT dct(N, CUDA_DCT_4);
+CudaRealTransform1D dct(N, CUDA_DCT_4);
 dct.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
@@ -751,7 +733,7 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * N);
 cudaMemcpy(d_data, h_input, sizeof(double) * N, cudaMemcpyHostToDevice);
 
-CudaDST dst(N, CUDA_DST_4);
+CudaRealTransform1D dst(N, CUDA_DST_4);
 dst.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * N, cudaMemcpyDeviceToHost);
@@ -768,7 +750,7 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * M);
 cudaMemcpy(d_data, h_input, sizeof(double) * M, cudaMemcpyHostToDevice);
 
-CudaDST2D dst(Nx, Ny, CUDA_DST_1);
+CudaRealTransform2D dst(Nx, Ny, CUDA_DST_1);
 dst.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
@@ -785,14 +767,14 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * M);
 cudaMemcpy(d_data, h_input, sizeof(double) * M, cudaMemcpyHostToDevice);
 
-CudaDST3D dst(Nx, Ny, Nz, CUDA_DST_4);
+CudaRealTransform3D dst(Nx, Ny, Nz, CUDA_DST_4);
 dst.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
 cudaFree(d_data);
 ```
 
-### 7.5 2D Mixed DST (DST-2 in X, DST-3 in Y)
+### 7.5 2D Mixed Transform (DST-2 in X, DST-3 in Y)
 
 ```cpp
 int Nx = 32, Ny = 64;
@@ -802,15 +784,15 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * M);
 cudaMemcpy(d_data, h_input, sizeof(double) * M, cudaMemcpyHostToDevice);
 
-// Different DST types per dimension
-CudaDST2D dst(Nx, Ny, CUDA_DST_2, CUDA_DST_3);
-dst.execute(d_data);
+// Different transform types per dimension
+CudaRealTransform2D transform(Nx, Ny, CUDA_DST_2, CUDA_DST_3);
+transform.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
 cudaFree(d_data);
 ```
 
-### 7.6 3D Mixed DCT
+### 7.6 3D Mixed Transform (DCT in X/Y, DST in Z)
 
 ```cpp
 int Nx = 32, Ny = 32, Nz = 32;
@@ -820,9 +802,9 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * M);
 cudaMemcpy(d_data, h_input, sizeof(double) * M, cudaMemcpyHostToDevice);
 
-// DCT-2 in X, DCT-3 in Y, DCT-4 in Z
-CudaDCT3D dct(Nx, Ny, Nz, CUDA_DCT_2, CUDA_DCT_3, CUDA_DCT_4);
-dct.execute(d_data);
+// DCT-2 in X, DCT-2 in Y, DST-2 in Z (Neumann in XY, Dirichlet in Z)
+CudaRealTransform3D transform(Nx, Ny, Nz, CUDA_DCT_2, CUDA_DCT_2, CUDA_DST_2);
+transform.execute(d_data);
 
 cudaMemcpy(h_output, d_data, sizeof(double) * M, cudaMemcpyDeviceToHost);
 cudaFree(d_data);
@@ -836,7 +818,7 @@ double* d_data;
 cudaMalloc(&d_data, sizeof(double) * N);
 cudaMemcpy(d_data, h_input, sizeof(double) * N, cudaMemcpyHostToDevice);
 
-CudaDST dst(N, CUDA_DST_4);
+CudaRealTransform1D dst(N, CUDA_DST_4);
 
 // Forward transform
 dst.execute(d_data);
