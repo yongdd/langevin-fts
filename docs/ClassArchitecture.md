@@ -312,9 +312,10 @@ FFT<T>                                        [Abstract Base]
         ├── FftwFFT<T, DIM>                    [CPU/FFTW]
         │   └── DIM = 1, 2, or 3 (compile-time)
         │
-        └── CudaFFT<T, DIM>                   [GPU/cuFFT + custom kernels]
+        └── CudaFFT<T, DIM>                   [GPU/cuFFT + CudaRealTransform]
             ├── forward_stream(..., cudaStream_t)
-            └── backward_stream(..., cudaStream_t)
+            ├── backward_stream(..., cudaStream_t)
+            └── Uses CudaRealTransform for non-periodic BC (DCT/DST)
 ```
 
 ### Transform Types
