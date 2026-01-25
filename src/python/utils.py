@@ -288,7 +288,11 @@ def draw_polymer_architecture(
             color_map.append('gray')
 
     labels = nx.get_edge_attributes(G, 'weight')
-    pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='twopi')
+    try:
+        pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='twopi')
+    except ImportError:
+        # pygraphviz not available, use spring_layout as fallback
+        pos = nx.spring_layout(G)
     edge_colors = [dict_color[G[u][v]['monomer_type']] for u, v in G.edges()]
 
     plt.figure(figsize=figsize)
