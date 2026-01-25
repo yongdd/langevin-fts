@@ -23,6 +23,9 @@
 
 /**
  * @brief Apply Boltzmann factor element-wise.
+ *
+ * Note: Boltzmann factor includes pre-multiplied normalization (1/M_logical)
+ * to eliminate a separate normalize kernel.
  */
 __global__ void kernel_apply_boltzmann_crys(
     double* __restrict__ d_data,
@@ -32,19 +35,6 @@ __global__ void kernel_apply_boltzmann_crys(
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= M) return;
     d_data[idx] *= d_boltz[idx];
-}
-
-/**
- * @brief Apply normalization factor element-wise.
- */
-__global__ void kernel_normalize_crys(
-    double* __restrict__ d_data,
-    double norm,
-    int M)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= M) return;
-    d_data[idx] *= norm;
 }
 
 //------------------------------------------------------------------------------
@@ -185,7 +175,9 @@ void CudaCrysFFT::generateBoltzmann(double ds)
                 double kz = iz * 2.0 * M_PI / Lz;
                 double kz2 = kz * kz;
 
-                h_boltz[idx++] = std::exp(-(kx2 + ky2 + kz2) * ds);
+                // Pre-multiply normalization factor (1/M_logical) into Boltzmann
+                // This eliminates a separate normalize kernel in diffusion()
+                h_boltz[idx++] = std::exp(-(kx2 + ky2 + kz2) * ds) * norm_factor_;
             }
         }
     }
@@ -206,23 +198,24 @@ void CudaCrysFFT::diffusion(double* d_q_in, double* d_q_out)
     int threads = 256;
     int blocks = (M_physical_ + threads - 1) / threads;
 
-    // Step 1: Copy input to work buffer
-    gpu_error_check(cudaMemcpy(d_work_, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+    // Determine working buffer to minimize memory copies
+    // - If in-place (d_q_in == d_q_out): work directly on input
+    // - If out-of-place: copy to output once, then work on output
+    double* d_work = (d_q_in == d_q_out) ? d_q_in : d_q_out;
 
-    // Step 2: Forward DCT-II
-    dct_forward_->execute(d_work_);
+    if (d_q_in != d_q_out)
+    {
+        // Single copy at start (instead of two copies before/after)
+        gpu_error_check(cudaMemcpy(d_q_out, d_q_in, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+    }
 
-    // Step 3: Apply Boltzmann factor
-    kernel_apply_boltzmann_crys<<<blocks, threads>>>(d_work_, d_boltz_current_, M_physical_);
+    // Step 1: Forward DCT-II (in-place)
+    dct_forward_->execute(d_work);
 
-    // Step 4: Backward DCT-III
-    dct_backward_->execute(d_work_);
+    // Step 2: Apply Boltzmann factor (in-place)
+    kernel_apply_boltzmann_crys<<<blocks, threads>>>(d_work, d_boltz_current_, M_physical_);
 
-    // Step 5: Normalize and copy to output
-    // CudaRealTransform does NOT apply normalization automatically.
-    // DCT-2 -> DCT-3 roundtrip normalization: 2N per dimension
-    // Total: (2*Nx2)*(2*Ny2)*(2*Nz2) = 8*M_physical = M_logical
-    // So we need to apply 1/M_logical
-    kernel_normalize_crys<<<blocks, threads>>>(d_work_, norm_factor_, M_physical_);
-    gpu_error_check(cudaMemcpy(d_q_out, d_work_, sizeof(double) * M_physical_, cudaMemcpyDeviceToDevice));
+    // Step 3: Backward DCT-III (in-place)
+    // Normalization is already included in Boltzmann factor (pre-multiplied in generateBoltzmann)
+    dct_backward_->execute(d_work);
 }
