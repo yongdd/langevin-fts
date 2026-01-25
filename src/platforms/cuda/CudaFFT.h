@@ -15,7 +15,7 @@
  * **Implementation:**
  *
  * For periodic BCs, uses cuFFT for GPU-accelerated FFT.
- * For non-periodic BCs, uses custom CUDA kernels with precomputed trig tables.
+ * For non-periodic BCs, uses FCT/FST algorithm (Makhoul 1980) with O(N log N) complexity.
  *
  * @see FftwFFT for CPU version
  * @see FFT for abstract interface
@@ -46,8 +46,7 @@
  * **GPU Memory:**
  *
  * - For periodic: cuFFT plans
- * - For non-periodic: Precomputed sin/cos tables on device
- * - Work buffers for intermediate results
+ * - For non-periodic: Work buffers for FCT/FST transforms
  * - Stream-aware for concurrent execution
  */
 template <typename T, int DIM>
@@ -65,10 +64,6 @@ private:
     cufftHandle plan_forward_;                   ///< Forward FFT plan
     cufftHandle plan_backward_;                  ///< Backward FFT plan
 
-    // Device memory for trigonometric tables (non-periodic)
-    std::vector<double*> d_sin_tables_;          ///< Device sin tables per dimension
-    std::vector<double*> d_cos_tables_;          ///< Device cos tables per dimension
-
     // Device work buffers
     double* d_work_buffer_;                      ///< Main work buffer
     double* d_temp_buffer_;                      ///< Temporary buffer for transforms
@@ -78,11 +73,6 @@ private:
      * @brief Initialize cuFFT plans for periodic BC.
      */
     void initPeriodicFFT();
-
-    /**
-     * @brief Precompute and upload trigonometric tables to GPU.
-     */
-    void precomputeTrigTables();
 
     /**
      * @brief Get strides for dimension-by-dimension processing.
