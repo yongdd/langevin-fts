@@ -9,12 +9,13 @@
  *
  * **DCT/DST via FFT Algorithm:**
  *
- * Based on cuHelmholtz library:
+ * Based on FCT/FST algorithm (Makhoul 1980, Martucci 1994)
+ * CUDA implementation reference (cuHelmholtz library):
  * M. Ren, Y. Gao, G. Wang, and X. Liu, "Discrete Sine and Cosine Transform
  * and Helmholtz Equation Solver on GPU," 2020 IEEE Intl. Conf. on Parallel &
  * Distributed Processing with Applications (ISPA), pp. 57-66, 2020.
  * DOI: 10.1109/ISPA-BDCloud-SocialCom-SustainCom51426.2020.00034
- * GitHub: https://github.com/rmingming/cuHelmholtz
+ * GitHub: https://github.com/rmingming/cuHelmholtz (CUDA implementation of FCT/FST)
  *
  * DCT-II: preprocess → cuFFT Z2D (inverse) → postprocess (twiddle multiply)
  * DCT-III: preprocess (twiddle multiply) → cuFFT D2Z (forward) → postprocess
@@ -33,6 +34,9 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// Thread count for DCT/DST kernels
+static constexpr int DCT_DST_THREADS = 256;
 
 //------------------------------------------------------------------------------
 // CUDA Kernels for copy and scale operations
@@ -90,7 +94,7 @@ __global__ void ker_scale_fft(double* data, double scale, int M)
 }
 
 //------------------------------------------------------------------------------
-// DCT-II via FFT: O(N log N) implementation (cuHelmholtz algorithm)
+// DCT-II via FFT: O(N log N) implementation (FCT algorithm, Makhoul 1980)
 // Each block handles one 1D transform using shared memory
 //------------------------------------------------------------------------------
 
@@ -98,7 +102,7 @@ __global__ void ker_scale_fft(double* data, double scale, int M)
  * @brief DCT-II preprocessing kernel.
  *
  * Converts N real values to (N/2+1) complex values for inverse FFT.
- * Based on cuHelmholtz dct2funcinplace.cu preOp_dct2_inplace.
+ * Based on FCT algorithm (Makhoul 1980), ref: dct2funcinplace.cu preOp_dct2_inplace.
  *
  * Memory layout:
  * - Input src: N real values per transform (with stride between elements)
@@ -160,7 +164,7 @@ __global__ void ker_dct2_preprocess(
  * @brief DCT-II postprocessing kernel.
  *
  * Applies twiddle factors after inverse FFT.
- * Based on cuHelmholtz dct2funcinplace.cu postOp_dct2_inplace.
+ * Based on FCT algorithm (Makhoul 1980), ref: dct2funcinplace.cu postOp_dct2_inplace.
  */
 __global__ void ker_dct2_postprocess(
     double* dst, const double* src, int N, int stride, int num_batches)
@@ -211,14 +215,14 @@ __global__ void ker_dct2_postprocess(
 }
 
 //------------------------------------------------------------------------------
-// DCT-III via FFT: O(N log N) implementation (cuHelmholtz algorithm)
+// DCT-III via FFT: O(N log N) implementation (FCT algorithm, Makhoul 1980)
 //------------------------------------------------------------------------------
 
 /**
  * @brief DCT-III preprocessing kernel.
  *
  * Applies twiddle factors before forward FFT.
- * Based on cuHelmholtz dct3funcinplace.cu preOp_dct3_inplace.
+ * Based on FCT algorithm (Makhoul 1980), ref: dct3funcinplace.cu preOp_dct3_inplace.
  */
 __global__ void ker_dct3_preprocess(
     double* dst, const double* src, int N, int stride, int num_batches)
@@ -274,7 +278,7 @@ __global__ void ker_dct3_preprocess(
  * @brief DCT-III postprocessing kernel.
  *
  * Rearranges output after forward FFT.
- * Based on cuHelmholtz dct3funcinplace.cu postOp_dct3_inplace.
+ * Based on FCT algorithm (Makhoul 1980), ref: dct3funcinplace.cu postOp_dct3_inplace.
  */
 __global__ void ker_dct3_postprocess(
     double* dst, const double* src,
@@ -306,7 +310,7 @@ __global__ void ker_dct3_postprocess(
     }
     __syncthreads();
 
-    // Rearrange to strided real output (cuHelmholtz formula)
+    // Rearrange to strided real output (FCT formula)
     for (int k = tid; k <= N / 2; k += num_threads)
     {
         if (k == 0)
@@ -484,9 +488,6 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx)
         gpu_error_check(cudaMalloc((void**)&d_work_buffer_, sizeof(cuDoubleComplex) * total_complex_grid_));
         gpu_error_check(cudaMalloc((void**)&d_temp_buffer_, sizeof(double) * total_grid_ * 2));
 
-        d_sin_tables_.resize(DIM, nullptr);
-        d_cos_tables_.resize(DIM, nullptr);
-
         initPeriodicFFT();
     }
     catch (std::exception& exc)
@@ -553,21 +554,13 @@ CudaFFT<T, DIM>::CudaFFT(std::array<int, DIM> nx, std::array<BoundaryCondition, 
             : sizeof(double) * total_grid_ * 2;  // Extra space for FFT
 
         gpu_error_check(cudaMalloc((void**)&d_work_buffer_, work_size));
-        // For DST via DCT, we need extra buffer space for intermediate results
         gpu_error_check(cudaMalloc((void**)&d_temp_buffer_, sizeof(double) * total_grid_ * 4));
-        // cuFFT requires input and output to be in SEPARATE allocations (not just different offsets)
-        // d_fft_buffer_ is used for FFT output, separate from d_temp_buffer_
         gpu_error_check(cudaMalloc((void**)&d_fft_buffer_, sizeof(double) * total_grid_ * 2));
-
-        d_sin_tables_.resize(DIM, nullptr);
-        d_cos_tables_.resize(DIM, nullptr);
 
         if (is_all_periodic_)
         {
             initPeriodicFFT();
         }
-        // For non-periodic, we don't need precomputed tables anymore
-        // since we use FFT-based O(N log N) algorithm
     }
     catch (std::exception& exc)
     {
@@ -587,14 +580,6 @@ CudaFFT<T, DIM>::~CudaFFT()
         cudaFree(d_temp_buffer_);
     if (d_fft_buffer_ != nullptr)
         cudaFree(d_fft_buffer_);
-
-    for (int d = 0; d < DIM; ++d)
-    {
-        if (d_sin_tables_[d] != nullptr)
-            cudaFree(d_sin_tables_[d]);
-        if (d_cos_tables_[d] != nullptr)
-            cudaFree(d_cos_tables_[d]);
-    }
 
     if (plan_forward_ != 0)
         cufftDestroy(plan_forward_);
@@ -631,16 +616,6 @@ void CudaFFT<T, DIM>::initPeriodicFFT()
 }
 
 //------------------------------------------------------------------------------
-// Precompute trig tables (kept for backward compatibility, not used in new impl)
-//------------------------------------------------------------------------------
-template <typename T, int DIM>
-void CudaFFT<T, DIM>::precomputeTrigTables()
-{
-    // This function is kept for backward compatibility
-    // The new O(N log N) implementation computes twiddle factors on-the-fly
-}
-
-//------------------------------------------------------------------------------
 // Get strides for dimension-by-dimension transform
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
@@ -657,8 +632,7 @@ void CudaFFT<T, DIM>::getStrides(int dim, int& stride, int& num_transforms) cons
 
 //------------------------------------------------------------------------------
 // Apply DCT-II forward transform for one dimension (O(N log N))
-// Uses cuHelmholtz algorithm: preprocess → Z2D → postprocess
-// Data flow: strided input → contiguous complex → FFT → contiguous real → strided output
+// Uses FCT algorithm (Makhoul 1980): preprocess → Z2D → postprocess
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::applyDCT2Forward(double* d_data, int dim, cudaStream_t stream)
@@ -667,8 +641,7 @@ void CudaFFT<T, DIM>::applyDCT2Forward(double* d_data, int dim, cudaStream_t str
     int stride, num_outer;
     getStrides(dim, stride, num_outer);
 
-    int num_batches = num_outer * stride;  // Total number of 1D transforms
-    int threads = 256;  // Fixed thread count, kernel loops handle larger N
+    int num_batches = num_outer * stride;
     size_t shmem = sizeof(double) * N;
 
     // Number of complex values per batch (floor(N/2)+1)
@@ -678,7 +651,7 @@ void CudaFFT<T, DIM>::applyDCT2Forward(double* d_data, int dim, cudaStream_t str
     double* d_fft_out = d_fft_buffer_;
 
     // Step 1: Preprocess - strided input → contiguous complex
-    ker_dct2_preprocess<<<num_batches, threads, shmem, stream>>>(
+    ker_dct2_preprocess<<<num_batches, DCT_DST_THREADS, shmem, stream>>>(
         d_temp_buffer_, d_data, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
@@ -699,15 +672,14 @@ void CudaFFT<T, DIM>::applyDCT2Forward(double* d_data, int dim, cudaStream_t str
     gpu_error_check(cudaPeekAtLastError());
 
     // Step 3: Postprocess - contiguous real → strided output with twiddles
-    ker_dct2_postprocess<<<num_batches, threads, shmem, stream>>>(
+    ker_dct2_postprocess<<<num_batches, DCT_DST_THREADS, shmem, stream>>>(
         d_data, d_fft_out, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 }
 
 //------------------------------------------------------------------------------
 // Apply DCT-III backward transform for one dimension (O(N log N))
-// Uses cuHelmholtz algorithm: preprocess → D2Z → postprocess
-// Data flow: strided input → contiguous real (with twiddles) → FFT → contiguous complex → strided output
+// Uses FCT algorithm (Makhoul 1980): preprocess → D2Z → postprocess
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::applyDCT3Backward(double* d_data, int dim, cudaStream_t stream)
@@ -717,8 +689,6 @@ void CudaFFT<T, DIM>::applyDCT3Backward(double* d_data, int dim, cudaStream_t st
     getStrides(dim, stride, num_outer);
 
     int num_batches = num_outer * stride;
-    int threads_pre = 256;  // Fixed thread count
-    int threads_post = 256;
     int complex_per_batch = N / 2 + 1;
     size_t shmem_pre = sizeof(double) * N;
     size_t shmem_post = sizeof(double) * (2 * complex_per_batch);
@@ -727,7 +697,7 @@ void CudaFFT<T, DIM>::applyDCT3Backward(double* d_data, int dim, cudaStream_t st
     double* d_fft_out = d_fft_buffer_;
 
     // Step 1: Preprocess - strided input → contiguous real with twiddles
-    ker_dct3_preprocess<<<num_batches, threads_pre, shmem_pre, stream>>>(
+    ker_dct3_preprocess<<<num_batches, DCT_DST_THREADS, shmem_pre, stream>>>(
         d_temp_buffer_, d_data, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
@@ -748,17 +718,14 @@ void CudaFFT<T, DIM>::applyDCT3Backward(double* d_data, int dim, cudaStream_t st
     gpu_error_check(cudaPeekAtLastError());
 
     // Step 3: Postprocess - contiguous complex → strided output
-    ker_dct3_postprocess<<<num_batches, threads_post, shmem_post, stream>>>(
+    ker_dct3_postprocess<<<num_batches, DCT_DST_THREADS, shmem_post, stream>>>(
         d_data, d_fft_out, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 }
 
 //------------------------------------------------------------------------------
 // Apply DST-II forward transform for one dimension (O(N log N))
-// Uses DST via DCT transformation:
-//   1. Transform input: y[n] = (-1)^n * x[N-1-n]
-//   2. Apply DCT-II
-//   3. Transform output: reverse the result
+// Uses DST via DCT: y[n] = (-1)^n * x[N-1-n] → DCT-II → reverse
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::applyDST2Forward(double* d_data, int dim, cudaStream_t stream)
@@ -768,7 +735,6 @@ void CudaFFT<T, DIM>::applyDST2Forward(double* d_data, int dim, cudaStream_t str
     getStrides(dim, stride, num_outer);
 
     int num_batches = num_outer * stride;
-    int threads = 256;  // Fixed thread count, kernel loops handle larger N
     size_t shmem = sizeof(double) * N;
 
     // Number of complex values per batch (consistent with DCT kernels)
@@ -781,16 +747,12 @@ void CudaFFT<T, DIM>::applyDST2Forward(double* d_data, int dim, cudaStream_t str
     double* d_fft_out = d_fft_buffer_;  // Use separate buffer for FFT output
 
     // Step 1: Transform input for DST-II: y[n] = (-1)^n * x[N-1-n]
-    // This also copies from strided to contiguous layout
-    ker_dst2_input_transform<<<num_batches, threads, 0, stream>>>(
+    ker_dst2_input_transform<<<num_batches, DCT_DST_THREADS, 0, stream>>>(
         d_temp_buffer_, d_data, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
-    // Step 2: Apply DCT-II to transformed input
-    // DCT-II preprocess: contiguous input → contiguous complex
-    // Note: ker_dct2_preprocess expects strided input, but after DST input transform
-    // our data is contiguous per batch. We use stride=1 for the contiguous layout.
-    ker_dct2_preprocess<<<num_batches, threads, shmem, stream>>>(
+    // Step 2: Apply DCT-II to transformed input (stride=1 for contiguous layout)
+    ker_dct2_preprocess<<<num_batches, DCT_DST_THREADS, shmem, stream>>>(
         d_complex_buffer, d_temp_buffer_, N, 1, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
@@ -808,25 +770,20 @@ void CudaFFT<T, DIM>::applyDST2Forward(double* d_data, int dim, cudaStream_t str
     cufftDestroy(plan);
     gpu_error_check(cudaPeekAtLastError());
 
-    // DCT-II postprocess: contiguous FFT output → contiguous result with twiddles
-    // Using stride=1 for contiguous layout
-    ker_dct2_postprocess<<<num_batches, threads, shmem, stream>>>(
+    // DCT-II postprocess
+    ker_dct2_postprocess<<<num_batches, DCT_DST_THREADS, shmem, stream>>>(
         d_temp_buffer_, d_fft_out, N, 1, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
     // Step 3: Transform output: reverse to get DST-II result
-    // This also copies from contiguous to strided layout
-    ker_dst2_output_transform<<<num_batches, threads, 0, stream>>>(
+    ker_dst2_output_transform<<<num_batches, DCT_DST_THREADS, 0, stream>>>(
         d_data, d_temp_buffer_, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 }
 
 //------------------------------------------------------------------------------
 // Apply DST-III backward transform for one dimension (O(N log N))
-// Uses DST via DCT transformation:
-//   1. Transform input: reverse the input
-//   2. Apply DCT-III
-//   3. Transform output: y[n] = -(-1)^n * dct_out[N-1-n]
+// Uses DST via DCT: reverse → DCT-III → y[n] = -(-1)^n * dct_out[N-1-n]
 //------------------------------------------------------------------------------
 template <typename T, int DIM>
 void CudaFFT<T, DIM>::applyDST3Backward(double* d_data, int dim, cudaStream_t stream)
@@ -836,9 +793,6 @@ void CudaFFT<T, DIM>::applyDST3Backward(double* d_data, int dim, cudaStream_t st
     getStrides(dim, stride, num_outer);
 
     int num_batches = num_outer * stride;
-    int threads_transform = 256;  // Fixed thread count, kernel loops handle larger N
-    int threads_dct_pre = 256;
-    int threads_dct_post = 256;
     int complex_per_batch = N / 2 + 1;
     size_t shmem_pre = sizeof(double) * N;
     size_t shmem_post = sizeof(double) * (2 * complex_per_batch);
@@ -850,15 +804,12 @@ void CudaFFT<T, DIM>::applyDST3Backward(double* d_data, int dim, cudaStream_t st
     double* d_fft_out = d_fft_buffer_;  // Use separate buffer for FFT output
 
     // Step 1: Transform input for DST-III: reverse
-    // This also copies from strided to contiguous layout
-    ker_dst3_input_transform<<<num_batches, threads_transform, 0, stream>>>(
+    ker_dst3_input_transform<<<num_batches, DCT_DST_THREADS, 0, stream>>>(
         d_temp_buffer_, d_data, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
-    // Step 2: Apply DCT-III to transformed input
-    // DCT-III preprocess: contiguous input → contiguous output with twiddles
-    // Use stride=1 for contiguous layout
-    ker_dct3_preprocess<<<num_batches, threads_dct_pre, shmem_pre, stream>>>(
+    // Step 2: Apply DCT-III to transformed input (stride=1 for contiguous layout)
+    ker_dct3_preprocess<<<num_batches, DCT_DST_THREADS, shmem_pre, stream>>>(
         d_dct_buffer, d_temp_buffer_, N, 1, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
@@ -876,15 +827,13 @@ void CudaFFT<T, DIM>::applyDST3Backward(double* d_data, int dim, cudaStream_t st
     cufftDestroy(plan);
     gpu_error_check(cudaPeekAtLastError());
 
-    // DCT-III postprocess: contiguous FFT output → contiguous result
-    // Use stride=1 for contiguous layout
-    ker_dct3_postprocess<<<num_batches, threads_dct_post, shmem_post, stream>>>(
+    // DCT-III postprocess
+    ker_dct3_postprocess<<<num_batches, DCT_DST_THREADS, shmem_post, stream>>>(
         d_temp_buffer_, d_fft_out, N, 1, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 
     // Step 3: Transform output: y[n] = -(-1)^n * dct_out[N-1-n]
-    // This also copies from contiguous to strided layout
-    ker_dst3_output_transform<<<num_batches, threads_transform, 0, stream>>>(
+    ker_dst3_output_transform<<<num_batches, DCT_DST_THREADS, 0, stream>>>(
         d_data, d_temp_buffer_, N, stride, num_batches);
     gpu_error_check(cudaPeekAtLastError());
 }

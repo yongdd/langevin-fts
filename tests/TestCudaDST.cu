@@ -894,7 +894,7 @@ bool test_cuda_dst1_roundtrip(int N)
 //==============================================================================
 bool test_mixed_2d(int Nx, int Ny, CudaDSTType type_x, CudaDSTType type_y)
 {
-    const char* type_names[] = {"DST-1", "DST-2", "DST-3", "DST-4"};
+    const char* type_names[] = {"DCT-1", "DCT-2", "DCT-3", "DCT-4", "DST-1", "DST-2", "DST-3", "DST-4"};
     printf("Testing 2D Mixed (%s, %s): %d x %d\n",
            type_names[type_x], type_names[type_y], Nx, Ny);
 
@@ -978,7 +978,7 @@ bool test_mixed_2d(int Nx, int Ny, CudaDSTType type_x, CudaDSTType type_y)
 //==============================================================================
 bool test_mixed_3d(int Nx, int Ny, int Nz, CudaDSTType type_x, CudaDSTType type_y, CudaDSTType type_z)
 {
-    const char* type_names[] = {"DST-1", "DST-2", "DST-3", "DST-4"};
+    const char* type_names[] = {"DCT-1", "DCT-2", "DCT-3", "DCT-4", "DST-1", "DST-2", "DST-3", "DST-4"};
     printf("Testing 3D Mixed (%s, %s, %s): %d x %d x %d\n",
            type_names[type_x], type_names[type_y], type_names[type_z], Nx, Ny, Nz);
 

@@ -15,7 +15,8 @@
  *   - DCT-3: FFTW_REDFT01   - DST-3: FFTW_RODFT01
  *   - DCT-4: FFTW_REDFT11   - DST-4: FFTW_RODFT11
  *
- * Reference: https://github.com/rmingming/cuHelmholtz
+ * Reference: FCT/FST algorithm (Makhoul 1980, Martucci 1994)
+ *            CUDA implementation: https://github.com/rmingming/cuHelmholtz
  */
 
 #ifndef CUDA_REAL_TRANSFORM_H_
