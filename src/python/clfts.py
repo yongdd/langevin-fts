@@ -699,7 +699,7 @@ class CLFTS:
 
             # Calculate Hamiltonian
             total_partitions = [self.solver.get_total_partition(p) for p in range(self.molecules.get_n_polymer_types())]
-            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, include_const_term=True)
+            hamiltonian = self.mpt.compute_hamiltonian(self.molecules, w_aux, total_partitions, self.cb, include_const_term=True)
 
             # Print progress
             if self.verbose_level >= 1:
