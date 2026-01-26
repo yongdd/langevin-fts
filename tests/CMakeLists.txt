@@ -4,6 +4,11 @@ ENABLE_TESTING()
 file(GLOB TEST_DATA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/Stress*.txt")
 file(COPY ${TEST_DATA_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
+# Copy test data directory (for space group tests)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/data" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
 # Basic tests for verification (~50 tests, ~40 sec total)
 # Run with: ctest -L basic
 SET(BASIC_TESTS

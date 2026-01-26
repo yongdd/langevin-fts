@@ -127,7 +127,7 @@ private:
      *
      * @return Vector of propagator pointers for requested range
      */
-    std::vector<T*> recalcaulte_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
+    std::vector<T*> recalculate_propagator(std::string key, const int N_START, const int N_RIGHT, std::string monomer_type);
 
 public:
     /**

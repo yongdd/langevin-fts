@@ -16,11 +16,11 @@ Initial configurations of network phases are obtained from the Kevin Dorfman's p
 | SC | SC.py | Pm-3m | 517 | -0.1218046 |
 | SD | SD.py | Fd-3m | 526 | -0.1927212 |
 | SG | SG.py | I4_132 | 510 | -0.1973548 |
-| SP | SP.py | Pm-3n | 520 | -0.1735695 |
+| SP | SP.py | Pm-3m | 517 | -0.1735695 |
 | DD | DD.py | Pn-3m | 522 | -0.1997210 |
 | DG | DG.py | Ia-3d | 530 | -0.2131824 |
-| DP | DP.py | Fd-3m | 525 | -0.1445778 |
-| Fddd | Fddd.py | Fddd | 544 | -0.1606698 |
+| DP | DP.py | Im-3m | 529 | -0.1445778 |
+| Fddd | Fddd.py | Fddd | 336 | -0.1606698 |
 | PL | PL_Hexagonal.py | P6/mmm | 485 | -0.2119551 |
 
 ---
@@ -68,4 +68,4 @@ Space group symmetry reduces the computational mesh significantly:
 
 ---
 
-Last updated: 2026-01-21
+Last updated: 2026-01-27

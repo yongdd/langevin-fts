@@ -99,13 +99,6 @@ jobs:
         python tests/TestNumPyFFT3D.py
         python tests/TestNumPyFFT3DComplex.py
 
-    # - name: Run Space Group Phases Test
-    #   shell: bash -l {0}
-    #   timeout-minutes: 60
-    #   run: |
-    #     ulimit -s unlimited
-    #     python tests/SpaceGroupPhasesTest.py
-
   # CUDA build job - disabled by default as it requires self-hosted GPU runner
   # Uncomment and configure when GPU runners are available
   # build-cuda:
@@ -119,10 +112,7 @@ jobs:
   #         cmake .. -DCMAKE_BUILD_TYPE=Release
   #         make -j$(nproc)
   #         make install
-  #     - name: Run Space Group Phases Test
-  #       run: |
-  #         ulimit -s unlimited
-  #         python tests/SpaceGroupPhasesTest.py
+  #         ctest --output-on-failure
 
   lint:
     name: Code Quality Checks
