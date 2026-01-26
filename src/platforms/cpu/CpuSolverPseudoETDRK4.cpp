@@ -193,12 +193,27 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
         std::vector<double> k_N_n(coeff_size), k_N_a(coeff_size), k_N_b(coeff_size), k_N_c(coeff_size);
         std::vector<double> k_a(coeff_size), k_work(coeff_size);
 
+        // Determine input pointer (expand reduced basis if space_group is set)
+        T* fft_in = q_in;
+
+        // Thread-local buffer for expand (called from OpenMP parallel regions)
+        thread_local std::vector<T> q_full_in_local;
+
+        if (this->space_group_ != nullptr)
+        {
+            q_full_in_local.resize(M);
+            // Expand reduced basis → full grid
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->from_reduced_basis(q_in, q_full_in_local.data(), 1);
+            fft_in = q_full_in_local.data();
+        }
+
         // Step 1: Compute N_n = -w*q_in (nonlinear term at initial point)
         for (int i = 0; i < M; ++i)
-            N_n[i] = -_w[i] * q_in[i];
+            N_n[i] = -_w[i] * fft_in[i];
 
         // Step 2: FFT of q_in and N_n
-        this->transform_forward(q_in, k_q.data());
+        this->transform_forward(fft_in, k_q.data());
         this->transform_forward(N_n.data(), k_N_n.data());
 
         // Krogstad ETDRK4 stages (Song et al. 2018)
@@ -274,14 +289,26 @@ void CpuSolverPseudoETDRK4<T>::advance_propagator(
             }
         }
 
-        // IFFT to get final result
-        this->transform_backward(k_work.data(), q_out);
+        // IFFT to get final result (use buffer c as output for full grid)
+        this->transform_backward(k_work.data(), c.data());
 
         // Apply mask if provided
         if (q_mask != nullptr)
         {
             for (int i = 0; i < M; ++i)
-                q_out[i] *= q_mask[i];
+                c[i] *= q_mask[i];
+        }
+
+        // Reduce output to reduced basis if space_group is set
+        if (this->space_group_ != nullptr)
+        {
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->to_reduced_basis(c.data(), q_out, 1);
+        }
+        else
+        {
+            // No space group - copy result to output
+            std::copy(c.begin(), c.end(), q_out);
         }
     }
     catch (std::exception& exc)

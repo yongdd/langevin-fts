@@ -161,25 +161,52 @@ void CpuSolverPseudoRK2<T>::advance_propagator(
         const T* _exp_dw = this->exp_dw[ds_index][monomer_type].data();
         const double* _boltz_bond = this->pseudo->get_boltz_bond(monomer_type, ds_index);
 
+        // Determine input/output pointers based on space group
+        T* fft_in = q_in;
+        T* fft_out = q_out;
+
+        // Thread-local buffers for expand/reduce (called from OpenMP parallel regions)
+        thread_local std::vector<T> q_full_in_local, q_full_out_local;
+
+        if (this->space_group_ != nullptr)
+        {
+            q_full_in_local.resize(M);
+            q_full_out_local.resize(M);
+
+            // Expand reduced basis → full grid
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->from_reduced_basis(q_in, q_full_in_local.data(), 1);
+
+            fft_in = q_full_in_local.data();
+            fft_out = q_full_out_local.data();
+        }
+
         // ===== RK2: Single full step =====
         // Step 1: exp(-w·ds/2) * q_in
         for (int i = 0; i < M; ++i)
-            q_out[i] = _exp_dw[i] * q_in[i];
+            fft_out[i] = _exp_dw[i] * fft_in[i];
 
         // Step 2-4: Forward FFT -> multiply by Boltzmann factor -> Backward FFT
-        this->transform_forward(q_out, k_q_in.data());
+        this->transform_forward(fft_out, k_q_in.data());
         this->multiply_fourier_coeffs(k_q_in.data(), _boltz_bond, M_COMPLEX);
-        this->transform_backward(k_q_in.data(), q_out);
+        this->transform_backward(k_q_in.data(), fft_out);
 
         // Step 5: exp(-w·ds/2) * result
         for (int i = 0; i < M; ++i)
-            q_out[i] *= _exp_dw[i];
+            fft_out[i] *= _exp_dw[i];
 
         // Apply mask if provided
         if (q_mask != nullptr)
         {
             for (int i = 0; i < M; ++i)
-                q_out[i] *= q_mask[i];
+                fft_out[i] *= q_mask[i];
+        }
+
+        // Reduce full grid → reduced basis
+        if (this->space_group_ != nullptr)
+        {
+            if constexpr (std::is_same_v<T, double>)
+                this->space_group_->to_reduced_basis(fft_out, q_out, 1);
         }
     }
     catch (std::exception& exc)

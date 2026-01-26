@@ -217,7 +217,7 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
 
         // Allocate memory for cub reduction sum
         for(int i=0; i<n_streams; i++)
-        {  
+        {
             d_temp_storage[i] = nullptr;
             temp_storage_bytes[i] = 0;
             if constexpr (std::is_same<T, double>::value)
@@ -226,6 +226,18 @@ CudaSolverPseudoDiscrete<T>::CudaSolverPseudoDiscrete(
                 cub::DeviceReduce::Reduce(d_temp_storage[i], temp_storage_bytes[i], d_stress_sum[i], d_stress_sum_out[i], M_COMPLEX, ComplexSumOp(), CuDeviceData<T>{0.0,0.0}, streams[i][0]);
             gpu_error_check(cudaMalloc(&d_temp_storage[i], temp_storage_bytes[i]));
         }
+
+        // Initialize space group support
+        space_group_ = nullptr;
+        d_reduced_basis_indices_ = nullptr;
+        d_full_to_reduced_map_ = nullptr;
+        n_basis_ = 0;
+        for(int i=0; i<MAX_STREAMS; i++)
+        {
+            d_q_full_in_[i] = nullptr;
+            d_q_full_out_[i] = nullptr;
+        }
+
         update_laplacian_operator();
     }
     catch(std::exception& exc)
@@ -267,6 +279,54 @@ CudaSolverPseudoDiscrete<T>::~CudaSolverPseudoDiscrete()
         cudaFree(d_stress_sum_out[i]);
         cudaFree(d_q_multi[i]);
         cudaFree(d_temp_storage[i]);
+    }
+
+    // Free space group work buffers
+    for(int i=0; i<n_streams; i++)
+    {
+        if (d_q_full_in_[i] != nullptr) cudaFree(d_q_full_in_[i]);
+        if (d_q_full_out_[i] != nullptr) cudaFree(d_q_full_out_[i]);
+    }
+}
+template <typename T>
+void CudaSolverPseudoDiscrete<T>::set_space_group(
+    SpaceGroup* sg,
+    int* d_reduced_basis_indices,
+    int* d_full_to_reduced_map,
+    int n_basis)
+{
+    space_group_ = sg;
+    d_reduced_basis_indices_ = d_reduced_basis_indices;
+    d_full_to_reduced_map_ = d_full_to_reduced_map;
+    n_basis_ = n_basis;
+
+    if (sg != nullptr)
+    {
+        const int M = cb->get_total_grid();
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_in_[i], sizeof(T)*M));
+            if (d_q_full_out_[i] == nullptr)
+                gpu_error_check(cudaMalloc((void**)&d_q_full_out_[i], sizeof(T)*M));
+        }
+    }
+    else
+    {
+        // Free work buffers if space group is disabled
+        for(int i=0; i<n_streams; i++)
+        {
+            if (d_q_full_in_[i] != nullptr)
+            {
+                cudaFree(d_q_full_in_[i]);
+                d_q_full_in_[i] = nullptr;
+            }
+            if (d_q_full_out_[i] != nullptr)
+            {
+                cudaFree(d_q_full_out_[i]);
+                d_q_full_out_[i] = nullptr;
+            }
+        }
     }
 }
 template <typename T>
@@ -360,27 +420,49 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator(
         CuDeviceData<T> *_d_exp_dw = this->d_exp_dw[ds_index][monomer_type];
         const double* _d_boltz_bond = pseudo->get_boltz_bond(monomer_type, ds_index);
 
+        // Determine input/output pointers based on space group
+        CuDeviceData<T> *fft_in = d_q_in;
+        CuDeviceData<T> *fft_out = d_q_out;
+
+        if (space_group_ != nullptr)
+        {
+            // Expand reduced basis → full grid
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            fft_in = d_q_full_in_[STREAM];
+            fft_out = d_q_full_out_[STREAM];
+        }
+
         // Execute a forward FFT
         if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM]);
+            cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
         else
-            cufftExecZ2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+            cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
 
         // Multiply exp(-k^2 ds/6) in fourier space
         ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond, 1.0, M_COMPLEX);
 
         // Execute a backward FFT
         if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out);
+            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
         else
-            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out, CUFFT_INVERSE);
+            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
 
         // Evaluate exp(-w*ds) in real space
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
+        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, _d_exp_dw, 1.0/static_cast<double>(M), M);
 
-        // Multiply mask
+        // Multiply mask (on full grid)
         if (d_q_mask != nullptr)
-            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_q_out, d_q_out, d_q_mask, 1.0, M);
+            ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(fft_out, fft_out, d_q_mask, 1.0, M);
+
+        // Reduce full grid → reduced basis
+        if (space_group_ != nullptr)
+        {
+            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
+            gpu_error_check(cudaPeekAtLastError());
+        }
     }
     catch(std::exception& exc)
     {
@@ -397,28 +479,50 @@ void CudaSolverPseudoDiscrete<T>::advance_propagator_half_bond_step(
         const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
         const int N_THREADS = CudaCommon::get_instance().get_n_threads();
 
-        const int M = cb->get_total_grid();;
+        const int M = cb->get_total_grid();
         const int M_COMPLEX = pseudo->get_total_complex_grid();
         // Discrete chains always use ds_index=0 (global ds)
         const double* _d_boltz_bond_half = pseudo->get_boltz_bond_half(monomer_type, 0);
 
-        // 3D fourier discrete transform, forward and inplace
+        // Determine input/output pointers based on space group
+        CuDeviceData<T> *fft_in = d_q_in;
+        CuDeviceData<T> *fft_out = d_q_out;
+
+        if (space_group_ != nullptr)
+        {
+            // Expand reduced basis → full grid
+            ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_full_in_[STREAM], d_q_in, d_full_to_reduced_map_, M);
+            gpu_error_check(cudaPeekAtLastError());
+            fft_in = d_q_full_in_[STREAM];
+            fft_out = d_q_full_out_[STREAM];
+        }
+
+        // 3D fourier discrete transform, forward
         if constexpr (std::is_same<T, double>::value)
-            cufftExecD2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM]);
+            cufftExecD2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM]);
         else
-            cufftExecZ2Z(plan_for_one[STREAM], d_q_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
+            cufftExecZ2Z(plan_for_one[STREAM], fft_in, d_qk_in_1_one[STREAM], CUFFT_FORWARD);
         gpu_error_check(cudaPeekAtLastError());
 
         // Multiply exp(-k^2 ds/12) in fourier space, in all 3 directions
         ker_multi_complex_real<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(d_qk_in_1_one[STREAM], _d_boltz_bond_half, 1.0/static_cast<double>(M), M_COMPLEX);
         gpu_error_check(cudaPeekAtLastError());
 
-        // 3D fourier discrete transform, backward and inplace
+        // 3D fourier discrete transform, backward
         if constexpr (std::is_same<T, double>::value)
-            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out);
+            cufftExecZ2D(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out);
         else
-            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], d_q_out, CUFFT_INVERSE);
+            cufftExecZ2Z(plan_bak_one[STREAM], d_qk_in_1_one[STREAM], fft_out, CUFFT_INVERSE);
         gpu_error_check(cudaPeekAtLastError());
+
+        // Reduce full grid → reduced basis
+        if (space_group_ != nullptr)
+        {
+            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
+                d_q_out, fft_out, d_reduced_basis_indices_, n_basis_);
+            gpu_error_check(cudaPeekAtLastError());
+        }
     }
     catch(std::exception& exc)
     {

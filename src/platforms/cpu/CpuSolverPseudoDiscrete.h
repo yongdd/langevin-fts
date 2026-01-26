@@ -156,6 +156,9 @@ public:
      * Computes: q(i+1) = exp(-w*ds) * FFT^-1[ ĝ(k) * FFT[q(i)] ]
      * where ĝ(k) = exp(-b²|k|²ds/6) is the full bond function.
      *
+     * When space_group is set, input/output are in reduced basis and the solver
+     * handles expand/reduce around FFT operations internally.
+     *
      * @param q_in        Input propagator q(i)
      * @param q_out       Output propagator q(i+1)
      * @param monomer_type Monomer type for bond function and segment weight
@@ -171,6 +174,9 @@ public:
      * where ĝ^(1/2)(k) = exp(-b²|k|²ds/12) is the half-bond function.
      *
      * Used at chain ends and junction points.
+     *
+     * When space_group is set, input/output are in reduced basis and the solver
+     * handles expand/reduce around FFT operations internally.
      *
      * @param q_in        Input propagator
      * @param q_out       Output propagator after half-bond convolution

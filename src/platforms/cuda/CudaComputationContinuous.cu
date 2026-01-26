@@ -246,6 +246,15 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
         }
 
         this->propagator_solver->update_laplacian_operator();
+
+        // Set space group on solver for reduced basis expand/reduce
+        if (space_group != nullptr) {
+            this->propagator_solver->set_space_group(
+                space_group,
+                d_reduced_basis_indices_,
+                d_full_to_reduced_map_,
+                space_group->get_n_irreducible());
+        }
     }
     catch(std::exception& exc)
     {
@@ -430,42 +439,20 @@ void CudaComputationContinuous<T>::compute_propagators(
                 // If it is leaf node
                 if(n_segment_from == 0 && deps.size() == 0)
                 {
-                     // q_init
+                    // q_init is in reduced basis when space_group is set, otherwise full grid
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             std::cout << "Could not find q_init[\"" + g + "\"]." << std::endl;
-
-                        if (use_reduced_basis)
-                        {
-                            // Copy to full grid buffer, then reduce to reduced basis
-                            gpu_error_check(cudaMemcpyAsync(d_q_full_[STREAM][0], q_init[g],
-                                sizeof(T)*M, cudaMemcpyInputToDevice, this->streams[STREAM][0]));
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                                _d_propagator[0], d_q_full_[STREAM][0], d_reduced_basis_indices_, N);
-                            gpu_error_check(cudaPeekAtLastError());
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpyAsync(_d_propagator[0], q_init[g],
-                                sizeof(T)*M, cudaMemcpyInputToDevice, this->streams[STREAM][0]));
-                        }
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], q_init[g],
+                            sizeof(T)*N, cudaMemcpyInputToDevice, this->streams[STREAM][0]));
                     }
                     else
                     {
-                        if (use_reduced_basis)
-                        {
-                            // Reduce unity to reduced basis (all ones)
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                                _d_propagator[0], this->d_q_unity, d_reduced_basis_indices_, N);
-                            gpu_error_check(cudaPeekAtLastError());
-                        }
-                        else
-                        {
-                            gpu_error_check(cudaMemcpyAsync(_d_propagator[0], this->d_q_unity,
-                                sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][0]));
-                        }
+                        // d_q_unity has all 1.0, copy first N elements (works for both full grid and reduced basis)
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], this->d_q_unity,
+                            sizeof(T)*N, cudaMemcpyDeviceToDevice, this->streams[STREAM][0]));
                     }
 
                     #ifndef NDEBUG
@@ -508,21 +495,11 @@ void CudaComputationContinuous<T>::compute_propagators(
                     }
                     else if(key[0] == '(')
                     {
-                        if (use_reduced_basis)
-                        {
-                            // Initialize to one (reduced basis)
-                            ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                                _d_propagator[0], this->d_q_unity, d_reduced_basis_indices_, N);
-                            gpu_error_check(cudaPeekAtLastError());
-                        }
-                        else
-                        {
-                            // Initialize to one
-                            gpu_error_check(cudaMemcpyAsync(_d_propagator[0], this->d_q_unity,
-                                sizeof(T)*M, cudaMemcpyDeviceToDevice, this->streams[STREAM][0]));
-                        }
+                        // Initialize to one (d_q_unity is all 1.0, copy first N elements for both cases)
+                        gpu_error_check(cudaMemcpyAsync(_d_propagator[0], this->d_q_unity,
+                            sizeof(T)*N, cudaMemcpyDeviceToDevice, this->streams[STREAM][0]));
 
-                        // Multiply all propagators at junction if necessary
+                        // Multiply all propagators at junction (in reduced basis or full grid)
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -552,27 +529,9 @@ void CudaComputationContinuous<T>::compute_propagators(
                     }
                 }
 
-                // Multiply mask (need to expand for mask operation, then reduce back)
-                if (n_segment_from == 0 && this->d_q_mask != nullptr)
-                {
-                    if (use_reduced_basis)
-                    {
-                        // Expand to full grid, apply mask, reduce back
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            d_q_full_[STREAM][0], _d_propagator[0], d_full_to_reduced_map_, M);
-                        ker_multi<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            d_q_full_[STREAM][0], d_q_full_[STREAM][0], this->d_q_mask, 1.0, M);
-                        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            _d_propagator[0], d_q_full_[STREAM][0], d_reduced_basis_indices_, N);
-                        gpu_error_check(cudaPeekAtLastError());
-                    }
-                    else
-                    {
-                        ker_multi<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            _d_propagator[0], _d_propagator[0], this->d_q_mask, 1.0, M);
-                        gpu_error_check(cudaPeekAtLastError());
-                    }
-                }
+                // Apply mask (solver handles expand/reduce internally)
+                if (n_segment_from == 0)
+                    this->propagator_solver->apply_mask(STREAM, _d_propagator[0], this->d_q_mask);
 
                 // Get ds_index from the propagator key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
@@ -591,34 +550,12 @@ void CudaComputationContinuous<T>::compute_propagators(
                         std::cout << "already finished: " + key + ", " + std::to_string(n+1) << std::endl;
                     #endif
 
-                    if (use_reduced_basis)
-                    {
-                        // Expand from reduced basis to full grid
-                        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            d_q_full_[STREAM][0], _d_propagator[n], d_full_to_reduced_map_, M);
-                        gpu_error_check(cudaPeekAtLastError());
-
-                        // Advance propagator on full grid (FFT operations)
-                        this->propagator_solver->advance_propagator(
-                            STREAM,
-                            d_q_full_[STREAM][0],
-                            d_q_full_[STREAM][1],
-                            monomer_type, this->d_q_mask, ds_index);
-
-                        // Reduce back to reduced basis
-                        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
-                            _d_propagator[n+1], d_q_full_[STREAM][1], d_reduced_basis_indices_, N);
-                        gpu_error_check(cudaPeekAtLastError());
-                    }
-                    else
-                    {
-                        // STREAM 0
-                        this->propagator_solver->advance_propagator(
-                            STREAM,
-                            _d_propagator[n],
-                            _d_propagator[n+1],
-                            monomer_type, this->d_q_mask, ds_index);
-                    }
+                    // Solver handles expand/reduce internally when space_group is set
+                    this->propagator_solver->advance_propagator(
+                        STREAM,
+                        _d_propagator[n],
+                        _d_propagator[n+1],
+                        monomer_type, this->d_q_mask, ds_index);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;

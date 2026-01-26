@@ -100,18 +100,6 @@ private:
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
     /**
-     * @brief Temporary buffer for full grid propagator (FFT input).
-     * Only allocated when space group is set.
-     */
-    std::vector<T> q_full_in_;
-
-    /**
-     * @brief Temporary buffer for full grid propagator (FFT output).
-     * Only allocated when space group is set.
-     */
-    std::vector<T> q_full_out_;
-
-    /**
      * @brief Storage for reduced basis w fields (for solvent computation).
      * Only used when space group is set. Allows direct exp(-w*ds) computation
      * without gathering from full grid.

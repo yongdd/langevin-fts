@@ -107,6 +107,31 @@ void CpuSolverPseudoBase<T>::cleanup_shared()
 }
 
 //------------------------------------------------------------------------------
+// Set space group for reduced basis
+//------------------------------------------------------------------------------
+template <typename T>
+void CpuSolverPseudoBase<T>::set_space_group(SpaceGroup* sg)
+{
+    space_group_ = sg;
+
+    if (sg != nullptr)
+    {
+        // Allocate full grid buffers for expand/reduce around FFT
+        const int M = cb->get_total_grid();
+        q_full_in_.resize(M);
+        q_full_out_.resize(M);
+    }
+    else
+    {
+        // Free buffers when space group is disabled
+        q_full_in_.clear();
+        q_full_in_.shrink_to_fit();
+        q_full_out_.clear();
+        q_full_out_.shrink_to_fit();
+    }
+}
+
+//------------------------------------------------------------------------------
 // Update Laplacian operator
 //------------------------------------------------------------------------------
 template <typename T>
@@ -198,9 +223,34 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
         // ============================================================================
         const bool is_orthogonal = this->cb->is_orthogonal();
 
+        // Determine pointers based on space group
+        T* q_1_full = q_1;
+        T* q_2_full = q_2;
+
+        if (space_group_ != nullptr)
+        {
+            // Expand reduced basis → full grid
+            if constexpr (std::is_same<T, double>::value)
+            {
+                space_group_->from_reduced_basis(q_1, q_full_in_.data(), 1);
+                space_group_->from_reduced_basis(q_2, q_full_out_.data(), 1);
+            }
+            else // complex<double>: expand as 2 interleaved real fields
+            {
+                space_group_->from_reduced_basis(
+                    reinterpret_cast<const double*>(q_1),
+                    reinterpret_cast<double*>(q_full_in_.data()), 2);
+                space_group_->from_reduced_basis(
+                    reinterpret_cast<const double*>(q_2),
+                    reinterpret_cast<double*>(q_full_out_.data()), 2);
+            }
+            q_1_full = q_full_in_.data();
+            q_2_full = q_full_out_.data();
+        }
+
         // Transform to Fourier space
-        transform_forward(q_1, qk_1.data());
-        transform_forward(q_2, qk_2.data());
+        transform_forward(q_1_full, qk_1.data());
+        transform_forward(q_2_full, qk_2.data());
 
         if (is_periodic_)
         {
@@ -350,6 +400,34 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     catch (std::exception& exc)
     {
         throw_without_line_number(exc.what());
+    }
+}
+
+template <typename T>
+void CpuSolverPseudoBase<T>::apply_mask(T* q, const double* mask)
+{
+    if (mask == nullptr)
+        return;
+
+    const int M = cb->get_total_grid();
+    const int N = cb->get_n_basis();
+
+    if (space_group_ != nullptr)
+    {
+        // Expand to full grid, multiply by mask, reduce back
+        if constexpr (std::is_same_v<T, double>)
+        {
+            space_group_->from_reduced_basis(q, q_full_in_.data(), 1);
+            for (int i = 0; i < M; ++i)
+                q_full_in_[i] *= mask[i];
+            space_group_->to_reduced_basis(q_full_in_.data(), q, 1);
+        }
+    }
+    else
+    {
+        // Direct multiplication on full grid
+        for (int i = 0; i < N; ++i)
+            q[i] *= mask[i];
     }
 }
 
