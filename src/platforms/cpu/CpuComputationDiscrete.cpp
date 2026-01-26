@@ -182,7 +182,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             this->phi_solvent.push_back(new T[N]);
 
         // Create scheduler for computation of propagator
-        this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams); 
+        this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams);
 
         this->update_laplacian_operator();
     }
@@ -268,19 +268,6 @@ void CpuComputationDiscrete<T>::compute_propagators(
                 if constexpr (std::is_same_v<T, double>)
                     this->space_group_->to_reduced_basis(exp_dw_full.data(), exp_dw_reduced_[monomer_type].data(), 1);
             }
-        }
-
-        // Convert mask to reduced basis if space_group is set
-        const double *q_mask_full = this->cb->get_mask();
-        const double *q_mask = nullptr;
-        if (q_mask_full != nullptr)
-        {
-            q_mask_.resize(N);
-            if (this->space_group_ != nullptr)
-                this->space_group_->to_reduced_basis(q_mask_full, q_mask_.data(), 1);
-            else
-                std::copy(q_mask_full, q_mask_full + N, q_mask_.data());
-            q_mask = q_mask_.data();
         }
 
         // For each time span
@@ -470,7 +457,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                                 _propagator[1],
                                 _propagator[1],
                                 monomer_type,
-                                q_mask, 0);
+                                this->cb->get_mask(), 0);
                         }
 
                         #ifndef NDEBUG
@@ -562,9 +549,10 @@ void CpuComputationDiscrete<T>::compute_propagators(
 
                 if (n_segment_from == 0)
                 {
-                    // Apply mask (already in reduced basis)
-                    if (q_mask != nullptr)
+                    // Apply mask
+                    if (this->cb->get_mask() != nullptr)
                     {
+                        const double* q_mask = this->cb->get_mask();
                         for(int i=0; i<N; i++)
                             _propagator[1][i] *= q_mask[i];
                     }
@@ -621,7 +609,7 @@ void CpuComputationDiscrete<T>::compute_propagators(
                     // Discrete chains always use ds_index=0 (global ds)
                     this->propagator_solver->advance_propagator(
                         _propagator[n], _propagator[n+1],
-                        monomer_type, q_mask, 0);
+                        monomer_type, this->cb->get_mask(), 0);
 
                     #ifndef NDEBUG
                     this->propagator_finished[key][n+1] = true;
@@ -709,10 +697,8 @@ void CpuComputationDiscrete<T>::advance_propagator_single_segment(
         const Block& block = this->molecules->get_polymer(p).get_block(v, u);
         std::string monomer_type = block.monomer_type;
 
-        // Assign a pointer for mask
-        const double *q_mask = this->cb->get_mask();
         // Discrete chains always use ds_index=0 (global ds)
-        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, q_mask, 0);
+        this->propagator_solver->advance_propagator(q_init, q_out, monomer_type, this->cb->get_mask(), 0);
     }
     catch(std::exception& exc)
     {

@@ -759,6 +759,14 @@ void ComputationBox<T>::set_space_group(SpaceGroup* sg)
         // Cache orbit counts and n_irreducible for fast access
         orbit_counts_ = sg->get_orbit_counts();
         n_irreducible_ = sg->get_n_irreducible();
+
+        // Convert mask to reduced basis
+        if (!mask.empty())
+        {
+            std::vector<double> mask_reduced(n_irreducible_);
+            sg->to_reduced_basis(mask.data(), mask_reduced.data(), 1);
+            mask = std::move(mask_reduced);
+        }
     }
     else
     {

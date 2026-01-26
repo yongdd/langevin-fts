@@ -177,15 +177,15 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
         // - this->q_recal[0..this->checkpoint_interval-1]: workspace for storage (size = this->checkpoint_interval)
         // - this->q_pair[0-1]: ping-pong for q_right advancement
         // - this->q_skip[0-1]: ping-pong for skip phase (used in both compute_concentrations and compute_stress)
-        // NOTE: These must be full grid size (M) because propagator advancement uses FFT on full grid
+        // NOTE: Solver handles expand/reduce internally, so workspace uses reduced basis size (N)
         const int workspace_size = this->checkpoint_interval;
         this->q_recal.resize(workspace_size);
         for(int n=0; n<workspace_size; n++)
-            this->q_recal[n] = new T[M];
-        this->q_pair[0] = new T[M];
-        this->q_pair[1] = new T[M];
-        this->q_skip[0] = new T[M];
-        this->q_skip[1] = new T[M];
+            this->q_recal[n] = new T[N];
+        this->q_pair[0] = new T[N];
+        this->q_pair[1] = new T[N];
+        this->q_skip[0] = new T[N];
+        this->q_skip[1] = new T[N];
 
         // Allocate checkpoints at sqrt(N) intervals for each propagator
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
@@ -253,9 +253,13 @@ CpuComputationReduceMemoryContinuous<T>::CpuComputationReduceMemoryContinuous(
             this->phi_solvent.push_back(new T[N]);
 
         // Create scheduler for computation of propagator
-        this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), 1); 
+        this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), 1);
 
         this->propagator_solver->update_laplacian_operator();
+
+        // Set space group on solver for reduced basis expand/reduce
+        if (space_group != nullptr)
+            this->propagator_solver->set_space_group(space_group);
     }
     catch(std::exception& exc)
     {
@@ -296,21 +300,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
 {
     try
     {
-        const int M = this->cb->get_total_grid();
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_cp = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
-
-        // Get expand/reduce maps for reduced basis
-        const std::vector<int>* full_to_reduced = nullptr;
-        const std::vector<int>* reduced_basis_indices = nullptr;
-        if (use_reduced_basis)
-        {
-            full_to_reduced = &this->space_group_->get_full_to_reduced_map();
-            reduced_basis_indices = &this->space_group_->get_reduced_basis_indices();
-        }
-
-        // Temporary full-grid buffer for expand/reduce operations
-        std::vector<T> q_full_buffer(M);
+        const int N = this->cb->get_n_basis();
 
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
@@ -376,19 +366,19 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                 // If it is leaf node
                 if(n_segment_from == 0 && deps.size() == 0)
                 {
-                     // q_init
+                    // q_init
                     if (key[0] == '{')
                     {
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (q_init.find(g) == q_init.end())
                             throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
-                        for(int i=0; i<M; i++)
-                            q_full_buffer[i] = q_init[g][i];
+                        for(int i=0; i<N; i++)
+                            this->q_pair[0][i] = q_init[g][i];
                     }
                     else
                     {
-                        for(int i=0; i<M; i++)
-                            q_full_buffer[i] = 1.0;
+                        for(int i=0; i<N; i++)
+                            this->q_pair[0][i] = 1.0;
                     }
 
                     #ifndef NDEBUG
@@ -401,17 +391,16 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                     // If it is aggregated
                     if (key[0] == '[')
                     {
-                        for(int i=0; i<M; i++)
-                            q_full_buffer[i] = 0.0;
+                        for(int i=0; i<N; i++)
+                            this->q_pair[0][i] = 0.0;
 
-                        // Add all propagators at junction if necessary
+                        // Add all propagators at junction
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
-                            // Check sub key
                             #ifndef NDEBUG
                             if (this->propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == this->propagator_at_check_point.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "[" + std::to_string(sub_n_segment) + "]. " << std::endl;
@@ -420,37 +409,25 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                             #endif
 
                             T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
-                            if (use_reduced_basis)
-                            {
-                                // Expand from reduced basis to full grid then add
-                                for(int i=0; i<M; i++)
-                                    q_full_buffer[i] += _q_sub[(*full_to_reduced)[i]]*static_cast<double>(sub_n_repeated);
-                            }
-                            else
-                            {
-                                for(int i=0; i<M; i++)
-                                    q_full_buffer[i] += _q_sub[i]*static_cast<double>(sub_n_repeated);
-                            }
+                            for(int i=0; i<N; i++)
+                                this->q_pair[0][i] += _q_sub[i]*static_cast<double>(sub_n_repeated);
                         }
                         #ifndef NDEBUG
                         this->propagator_finished[key][0] = true;
                         #endif
-
-                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                     else if(key[0] == '(')
                     {
-                        for(int i=0; i<M; i++)
-                            q_full_buffer[i] = 1.0;
+                        for(int i=0; i<N; i++)
+                            this->q_pair[0][i] = 1.0;
 
-                        // Multiply all propagators at junction if necessary
+                        // Multiply all propagators at junction
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
                             int sub_n_segment   = std::get<1>(deps[d]);
                             int sub_n_repeated  = std::get<2>(deps[d]);
 
-                            // Check sub key
                             #ifndef NDEBUG
                             if (this->propagator_at_check_point.find(std::make_tuple(sub_dep, sub_n_segment)) == this->propagator_at_check_point.end())
                                 std::cout << "Could not find sub key '" + sub_dep + "[" + std::to_string(sub_n_segment) + "]. " << std::endl;
@@ -461,75 +438,40 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                             T* _q_sub = this->propagator_at_check_point[std::make_tuple(sub_dep, sub_n_segment)];
                             if (_q_sub == nullptr)
                                 std::cout <<"_q_sub is a null pointer: " + sub_dep + "[" + std::to_string(sub_n_segment) + "]." << std::endl;
-                            if (use_reduced_basis)
-                            {
-                                // Expand from reduced basis to full grid then multiply
-                                for(int i=0; i<M; i++)
-                                    q_full_buffer[i] *= pow(_q_sub[(*full_to_reduced)[i]], sub_n_repeated);
-                            }
-                            else
-                            {
-                                for(int i=0; i<M; i++)
-                                    q_full_buffer[i] *= pow(_q_sub[i], sub_n_repeated);
-                            }
+                            for(int i=0; i<N; i++)
+                                this->q_pair[0][i] *= pow(_q_sub[i], sub_n_repeated);
                         }
 
                         #ifndef NDEBUG
                         this->propagator_finished[key][0] = true;
                         #endif
-
-                        // std::cout << "finished, key, n: " + key + ", 0" << std::endl;
                     }
                 }
 
                 // Multiply mask
                 if (n_segment_from == 0 && q_mask != nullptr)
                 {
-                    for(int i=0; i<M; i++)
-                        q_full_buffer[i] *= q_mask[i];
+                    for(int i=0; i<N; i++)
+                        this->q_pair[0][i] *= q_mask[i];
                 }
 
-                // Copy q_full_buffer to this->q_pair[0] for propagator advancement (full grid)
-                // and store reduced version in checkpoint
+                // Store checkpoint and prepare q_pair[0] for advancement
                 if(n_segment_from == 0)
                 {
-                    // Copy to q_pair for advancement
-                    for(int i=0; i<M; i++)
-                        this->q_pair[0][i] = q_full_buffer[i];
-
-                    // Store checkpoint (reduced or full)
+                    // Store to checkpoint
                     T* _q_target = this->propagator_at_check_point[std::make_tuple(key, 0)];
-                    if (use_reduced_basis)
-                    {
-                        // Reduce to basis
-                        for(int i=0; i<N_cp; i++)
-                            _q_target[i] = q_full_buffer[(*reduced_basis_indices)[i]];
-                    }
-                    else
-                    {
-                        for(int i=0; i<M; i++)
-                            _q_target[i] = q_full_buffer[i];
-                    }
+                    for(int i=0; i<N; i++)
+                        _q_target[i] = this->q_pair[0][i];
                 }
                 else
                 {
-                    // Load checkpoint and expand to full grid for advancement
+                    // Load from checkpoint
                     T* _q_from = this->propagator_at_check_point[std::make_tuple(key, n_segment_from)];
-                    if (use_reduced_basis)
-                    {
-                        // Expand from reduced basis to full grid
-                        for(int i=0; i<M; i++)
-                            this->q_pair[0][i] = _q_from[(*full_to_reduced)[i]];
-                    }
-                    else
-                    {
-                        for(int i=0; i<M; i++)
-                            this->q_pair[0][i] = _q_from[i];
-                    }
+                    for(int i=0; i<N; i++)
+                        this->q_pair[0][i] = _q_from[i];
                 }
 
-                // Advance propagator successively (in full grid)
-                // Get ds_index from the key
+                // Advance propagator successively (solver handles expand/reduce internally)
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
 
                 for(int n=n_segment_from; n<n_segment_to; n++)
@@ -550,21 +492,12 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
                     this->propagator_finished[key][n+1] = true;
                     #endif
 
-                    // Copy this->q_pair[next] to the this->propagator_at_check_point (reduced or full)
+                    // Store to checkpoint if needed
                     if (this->propagator_at_check_point.find(std::make_tuple(key, n+1)) != this->propagator_at_check_point.end())
                     {
                         T* _q_target = this->propagator_at_check_point[std::make_tuple(key, n+1)];
-                        if (use_reduced_basis)
-                        {
-                            // Reduce to basis
-                            for(int i=0; i<N_cp; i++)
-                                _q_target[i] = this->q_pair[next][(*reduced_basis_indices)[i]];
-                        }
-                        else
-                        {
-                            for(int i=0; i<M; i++)
-                                _q_target[i] = this->q_pair[next][i];
-                        }
+                        for(int i=0; i<N; i++)
+                            _q_target[i] = this->q_pair[next][i];
                     }
                     std::swap(prev, next);
                 }
@@ -588,23 +521,8 @@ void CpuComputationReduceMemoryContinuous<T>::compute_propagators(
             T *q_right = std::get<2>(segment_info);
             int n_aggregated = std::get<3>(segment_info);
 
-            if (use_reduced_basis)
-            {
-                // Compute inner product manually using orbit_counts for weighting
-                // dv_base = volume / total_grid
-                const auto& orbit_counts = this->space_group_->get_orbit_counts();
-                double dv_base = this->cb->get_volume() / M;
-                T sum = 0.0;
-                for(int i=0; i<N_cp; i++)
-                    sum += q_left[i] * q_right[i] * static_cast<double>(orbit_counts[i]);
-                sum *= static_cast<T>(dv_base);
-                this->single_polymer_partitions[p] = sum/(n_aggregated*this->cb->get_volume());
-            }
-            else
-            {
-                this->single_polymer_partitions[p]= this->cb->inner_product(
-                    q_left, q_right)/(n_aggregated*this->cb->get_volume());
-            }
+            this->single_polymer_partitions[p] = this->cb->inner_product(
+                q_left, q_right)/(n_aggregated*this->cb->get_volume());
         }
 
         #ifndef NDEBUG
@@ -626,8 +544,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
         #endif
 
         const int M = this->cb->get_total_grid();
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_phi = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
+        const int N = this->cb->get_n_basis();
 
         // Calculate segment concentrations
         for(size_t b=0; b<this->phi_block.size();b++)
@@ -648,7 +565,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
             // If there is no segment
             if(n_segment_right == 0)
             {
-                for(int i=0; i<N_phi;i++)
+                for(int i=0; i<N; i++)
                     block->second[i] = 0.0;
                 continue;
             }
@@ -683,7 +600,7 @@ void CpuComputationReduceMemoryContinuous<T>::compute_concentrations()
 
             // Normalize concentration: local_ds * volume_fraction / alpha
             T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
-            for(int i=0; i<N_phi; i++)
+            for(int i=0; i<N; i++)
                 block->second[i] *= norm;
         }
 
@@ -815,24 +732,13 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         // Block-based computation to minimize memory usage.
         // For n in [n_start, n_end], q_left positions [N_LEFT - n_end, N_LEFT - n_start] form a forward range.
         // We process in blocks of size this->checkpoint_interval, recomputing q_left from nearest checkpoint.
-        //
-        // q_recal layout: [0-1] ping-pong buffers for intermediate steps, [2..] storage for needed positions
-        //
-        // With reduced basis: checkpoints are in reduced basis, propagator advancement uses full grid,
-        // final phi is stored in reduced basis.
+        // Solver handles expand/reduce internally, so all operations use reduced basis (N).
 
-        const int M = this->cb->get_total_grid();
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-        const int N_phi = use_reduced_basis ? this->space_group_->get_n_irreducible() : M;
+        const int N = this->cb->get_n_basis();
 
-        // Get expand/reduce maps for reduced basis
-        const std::vector<int>* full_to_reduced = nullptr;
-        const std::vector<int>* reduced_basis_indices = nullptr;
-        if (use_reduced_basis)
-        {
-            full_to_reduced = &this->space_group_->get_full_to_reduced_map();
-            reduced_basis_indices = &this->space_group_->get_reduced_basis_indices();
-        }
+        // Initialize phi to zero before accumulation
+        for(int i=0; i<N; i++)
+            phi[i] = 0.0;
 
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
@@ -845,9 +751,6 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         int ds_index_right = PropagatorCode::get_ds_index_from_key(key_right);
         if (ds_index_right < 0) ds_index_right = 0;
 
-        // Temporary full-grid buffer for accumulating phi
-        std::vector<T> phi_full(M, 0.0);
-
         // Number of blocks
         const int k = this->checkpoint_interval;
         const int num_blocks = (N_RIGHT + k) / k;
@@ -857,10 +760,6 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
         T *q_right_curr = nullptr;
         int right_prev_idx = 0;
         int right_next_idx = 1;
-
-        // Temporary buffer for q_right when expanding from checkpoint
-        std::vector<T> q_right_expanded(M);
-        bool q_right_is_expanded = false;
 
         // Current position of q_right
         int current_n_right = -1;
@@ -893,41 +792,23 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
             const int steps_before = left_start - check_pos;  // Steps before we start storing
             const int storage_count = left_end - left_start + 1;  // Number of values to store
 
-            // Load checkpoint and expand to full grid if using reduced basis
+            // Load checkpoint (already in reduced basis, solver handles expand/reduce)
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(key_left, check_pos)];
             T* q_prev;
             T* q_curr;
 
             if(steps_before == 0)
             {
-                // Checkpoint is exactly at left_start, store directly in this->q_recal[0]
-                if (use_reduced_basis)
-                {
-                    // Expand from reduced basis to full grid
-                    for(int i=0; i<M; i++)
-                        this->q_recal[0][i] = q_checkpoint[(*full_to_reduced)[i]];
-                }
-                else
-                {
-                    for(int i=0; i<M; i++)
-                        this->q_recal[0][i] = q_checkpoint[i];
-                }
+                // Checkpoint is exactly at left_start, copy to this->q_recal[0]
+                for(int i=0; i<N; i++)
+                    this->q_recal[0][i] = q_checkpoint[i];
                 q_prev = this->q_recal[0];
             }
             else
             {
                 // Start ping-pong from checkpoint using this->q_skip[0-1]
-                if (use_reduced_basis)
-                {
-                    // Expand from reduced basis to full grid
-                    for(int i=0; i<M; i++)
-                        this->q_skip[0][i] = q_checkpoint[(*full_to_reduced)[i]];
-                }
-                else
-                {
-                    for(int i=0; i<M; i++)
-                        this->q_skip[0][i] = q_checkpoint[i];
-                }
+                for(int i=0; i<N; i++)
+                    this->q_skip[0][i] = q_checkpoint[i];
                 q_prev = this->q_skip[0];
                 int ping_pong = 1;
 
@@ -940,17 +821,8 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                     auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                     if(it != this->propagator_at_check_point.end())
                     {
-                        if (use_reduced_basis)
-                        {
-                            // Expand from reduced basis to full grid
-                            for(int i=0; i<M; i++)
-                                q_curr[i] = it->second[(*full_to_reduced)[i]];
-                        }
-                        else
-                        {
-                            for(int i=0; i<M; i++)
-                                q_curr[i] = it->second[i];
-                        }
+                        for(int i=0; i<N; i++)
+                            q_curr[i] = it->second[i];
                     }
                     else
                     {
@@ -965,17 +837,8 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    if (use_reduced_basis)
-                    {
-                        // Expand from reduced basis to full grid
-                        for(int i=0; i<M; i++)
-                            this->q_recal[0][i] = it->second[(*full_to_reduced)[i]];
-                    }
-                    else
-                    {
-                        for(int i=0; i<M; i++)
-                            this->q_recal[0][i] = it->second[i];
-                    }
+                    for(int i=0; i<N; i++)
+                        this->q_recal[0][i] = it->second[i];
                 }
                 else
                 {
@@ -993,17 +856,8 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 auto it = this->propagator_at_check_point.find(std::make_tuple(key_left, actual_pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    if (use_reduced_basis)
-                    {
-                        // Expand from reduced basis to full grid
-                        for(int i=0; i<M; i++)
-                            q_curr[i] = it->second[(*full_to_reduced)[i]];
-                    }
-                    else
-                    {
-                        for(int i=0; i<M; i++)
-                            q_curr[i] = it->second[i];
-                    }
+                    for(int i=0; i<N; i++)
+                        q_curr[i] = it->second[i];
                 }
                 else
                 {
@@ -1021,35 +875,16 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 auto it_right = this->propagator_at_check_point.find(std::make_tuple(key_right, n));
                 if(it_right != this->propagator_at_check_point.end())
                 {
-                    if (use_reduced_basis)
-                    {
-                        // Expand from reduced basis to full grid
-                        for(int i=0; i<M; i++)
-                            q_right_expanded[i] = it_right->second[(*full_to_reduced)[i]];
-                        q_right_curr = q_right_expanded.data();
-                        q_right_prev = q_right_curr;
-                        q_right_is_expanded = true;
-                    }
-                    else
-                    {
-                        q_right_curr = it_right->second;
-                        q_right_prev = q_right_curr;
-                    }
+                    // Copy checkpoint to q_pair for potential advancement
+                    for(int i=0; i<N; i++)
+                        this->q_pair[right_prev_idx][i] = it_right->second[i];
+                    q_right_curr = this->q_pair[right_prev_idx];
+                    q_right_prev = q_right_curr;
                     current_n_right = n;
                 }
                 else
                 {
                     // Advance from current position to n
-                    // First, make sure q_right_prev is in q_pair for advancement
-                    if (q_right_is_expanded)
-                    {
-                        // Copy expanded data to q_pair for ping-pong
-                        for(int i=0; i<M; i++)
-                            this->q_pair[right_prev_idx][i] = q_right_expanded[i];
-                        q_right_prev = this->q_pair[right_prev_idx];
-                        q_right_is_expanded = false;
-                    }
-
                     while(current_n_right < n)
                     {
                         T* q_out = this->q_pair[right_next_idx];
@@ -1066,23 +901,10 @@ void CpuComputationReduceMemoryContinuous<T>::calculate_phi_one_block(
                 int storage_idx = left_pos - left_start;
                 T* q_left_n = this->q_recal[storage_idx];
 
-                // Accumulate phi in full grid
-                for(int i=0; i<M; i++)
-                    phi_full[i] += simpson_rule_coeff[n] * q_left_n[i] * q_right_curr[i];
+                // Accumulate phi (in reduced basis)
+                for(int i=0; i<N; i++)
+                    phi[i] += simpson_rule_coeff[n] * q_left_n[i] * q_right_curr[i];
             }
-        }
-
-        // Store result: reduce to basis if using reduced basis, otherwise copy directly
-        if (use_reduced_basis)
-        {
-            // Reduce to basis (sample at irreducible points)
-            for(int i=0; i<N_phi; i++)
-                phi[i] = phi_full[(*reduced_basis_indices)[i]];
-        }
-        else
-        {
-            for(int i=0; i<M; i++)
-                phi[i] = phi_full[i];
         }
     }
     catch(std::exception& exc)
@@ -1418,20 +1240,10 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
 
     // Get chain propagator for a selected polymer, block and direction.
     // Uses O(sqrt(N)) workspace by computing from nearest checkpoint.
+    // Solver handles expand/reduce internally, so all operations use reduced basis.
     try
     {
-        const int M = this->cb->get_total_grid();
-        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
-
-        // Get expand/reduce maps for reduced basis
-        const std::vector<int>* full_to_reduced = nullptr;
-        const std::vector<int>* reduced_basis_indices = nullptr;
-        if (use_reduced_basis)
-        {
-            full_to_reduced = &this->space_group_->get_full_to_reduced_map();
-            reduced_basis_indices = &this->space_group_->get_reduced_basis_indices();
-        }
+        const int N = this->cb->get_n_basis();
 
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
@@ -1447,7 +1259,7 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
         auto checkpoint_key = std::make_tuple(dep, n);
         if (this->propagator_at_check_point.find(checkpoint_key) != this->propagator_at_check_point.end())
         {
-            // Directly copy from checkpoint (already in reduced basis if using space group)
+            // Directly copy from checkpoint
             T *_q_from = this->propagator_at_check_point[checkpoint_key];
             for(int i=0; i<N; i++)
                 q_out[i] = _q_from[i];
@@ -1467,20 +1279,10 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
             const double *q_mask = this->cb->get_mask();
             int ds_index = PropagatorCode::get_ds_index_from_key(dep);
 
-            // Load checkpoint and expand to full grid if using reduced basis
+            // Load checkpoint
             T* q_checkpoint = this->propagator_at_check_point[std::make_tuple(dep, check_pos)];
-
-            if (use_reduced_basis)
-            {
-                // Expand from reduced basis to full grid
-                for(int i=0; i<M; i++)
-                    this->q_recal[0][i] = q_checkpoint[(*full_to_reduced)[i]];
-            }
-            else
-            {
-                for(int i=0; i<M; i++)
-                    this->q_recal[0][i] = q_checkpoint[i];
-            }
+            for(int i=0; i<N; i++)
+                this->q_recal[0][i] = q_checkpoint[i];
 
             T* q_prev = this->q_recal[0];
             int ping_pong = 1;
@@ -1491,21 +1293,11 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
                 auto it = this->propagator_at_check_point.find(std::make_tuple(dep, pos));
                 if(it != this->propagator_at_check_point.end())
                 {
-                    // Load checkpoint and expand to full grid
-                    if (use_reduced_basis)
-                    {
-                        for(int i=0; i<M; i++)
-                            this->q_recal[ping_pong][i] = it->second[(*full_to_reduced)[i]];
-                        q_prev = this->q_recal[ping_pong];
-                        ping_pong = 1 - ping_pong;
-                    }
-                    else
-                    {
-                        for(int i=0; i<M; i++)
-                            this->q_recal[ping_pong][i] = it->second[i];
-                        q_prev = this->q_recal[ping_pong];
-                        ping_pong = 1 - ping_pong;
-                    }
+                    // Load checkpoint
+                    for(int i=0; i<N; i++)
+                        this->q_recal[ping_pong][i] = it->second[i];
+                    q_prev = this->q_recal[ping_pong];
+                    ping_pong = 1 - ping_pong;
                 }
                 else
                 {
@@ -1516,17 +1308,9 @@ void CpuComputationReduceMemoryContinuous<T>::get_chain_propagator(T *q_out, int
                 }
             }
 
-            // Copy result to output (reduce to basis if using space group)
-            if (use_reduced_basis)
-            {
-                for(int i=0; i<N; i++)
-                    q_out[i] = q_prev[(*reduced_basis_indices)[i]];
-            }
-            else
-            {
-                for(int i=0; i<N; i++)
-                    q_out[i] = q_prev[i];
-            }
+            // Copy result to output
+            for(int i=0; i<N; i++)
+                q_out[i] = q_prev[i];
         }
     }
     catch(std::exception& exc)

@@ -392,8 +392,6 @@ void CudaComputationDiscrete<T>::compute_propagators(
         }
 
         // Update dw or d_exp_dw
-        // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
-        const bool use_reduced_basis = (this->space_group_ != nullptr);
         this->propagator_solver->update_dw(device, w_input);
 
         // For each time span
