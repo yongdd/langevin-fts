@@ -119,7 +119,7 @@ public:
      * @param propagator_computation_optimizer Optimization strategy
      */
     CudaComputationDiscrete(ComputationBox<T>* cb, Molecules *molecules,
-        PropagatorComputationOptimizer *propagator_computation_optimizer);
+        PropagatorComputationOptimizer *propagator_computation_optimizer, SpaceGroup* space_group = nullptr);
 
     /** @brief Destructor. Frees GPU resources. */
     ~CudaComputationDiscrete();

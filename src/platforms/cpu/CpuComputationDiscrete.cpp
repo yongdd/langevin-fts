@@ -54,7 +54,8 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
     PropagatorComputationOptimizer *propagator_computation_optimizer,
-    FFTBackend backend)
+    FFTBackend backend,
+    SpaceGroup* space_group)
     : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -63,7 +64,12 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
         std::cout << "--------- Discrete Chain Solver, CPU Version ---------" << std::endl;
         #endif
 
-        const int M = this->cb->get_total_grid();
+        // Set space group first so that get_n_basis() returns the correct size
+        if (space_group != nullptr) {
+            PropagatorComputation<T>::set_space_group(space_group);
+        }
+
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         this->propagator_solver = new CpuSolverPseudoDiscrete<T>(cb, molecules, backend);
 
         // The number of parallel streams for propagator computation
@@ -98,7 +104,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             // Allocate memory for q(r,1/2)
             propagator_half_steps[key] = new T*[max_n_segment];
             if (item.second.deps.size() > 0)
-                propagator_half_steps[key][0] = new T[M];
+                propagator_half_steps[key][0] = new T[N];
             else
                 propagator_half_steps[key][0] = nullptr;
 
@@ -108,7 +114,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
                 if (!item.second.junction_ends.contains(i))
                     propagator_half_steps[key][i] = nullptr;
                 else
-                    propagator_half_steps[key][i] = new T[M];
+                    propagator_half_steps[key][i] = new T[N];
             }
 
             // Allocate memory for q(r,s)
@@ -116,7 +122,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             this->propagator[key] = new T*[max_n_segment];
             this->propagator[key][0] = nullptr;
             for(int i=1; i<this->propagator_size[key]; i++)
-                this->propagator[key][i] = new T[M];
+                this->propagator[key][i] = new T[N];
 
             #ifndef NDEBUG
             this->propagator_finished[key] = new bool[max_n_segment];
@@ -133,7 +139,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            this->phi_block[item.first] = new T[M]();  // Zero-initialize
+            this->phi_block[item.first] = new T[N]();  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -170,7 +176,7 @@ CpuComputationDiscrete<T>::CpuComputationDiscrete(
 
         // Concentrations for each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
-            this->phi_solvent.push_back(new T[M]);
+            this->phi_solvent.push_back(new T[N]);
 
         // Create scheduler for computation of propagator
         this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams); 
@@ -245,7 +251,32 @@ void CpuComputationDiscrete<T>::compute_propagators(
         #endif
 
         // Update dw or exp_dw
-        this->propagator_solver->update_dw(w_input);
+        // If space group is set, w_input is in reduced basis and needs to be expanded
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
+        if (use_reduced_basis)
+        {
+            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
+            std::map<std::string, std::vector<T>> w_expanded_storage;
+            std::map<std::string, const T*> w_full;
+
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T* w_reduced = item.second;
+
+                // Expand to full grid
+                w_expanded_storage[monomer_type].resize(M);
+                for(int i=0; i<M; i++)
+                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
+
+                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
+            }
+            this->propagator_solver->update_dw(w_full);
+        }
+        else
+        {
+            this->propagator_solver->update_dw(w_input);
+        }
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -1013,26 +1044,26 @@ void CpuComputationDiscrete<T>::compute_stress()
 }
 template <typename T>
 void CpuComputationDiscrete<T>::get_chain_propagator(T *q_out, int polymer, int v, int u, int n)
-{ 
+{
     // This method should be invoked after invoking compute_statistics()
 
     // Get chain propagator for a selected polymer, block and direction.
     // This is made for debugging and testing.
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
         if (!this->propagator_computation_optimizer->get_computation_propagators().contains(dep))
             throw_with_line_number("Could not find the propagator code '" + dep + "'. Disable 'aggregation' option to obtain propagator_computation_optimizer.");
-            
+
         const int N_RIGHT = this->propagator_computation_optimizer->get_computation_propagator(dep).max_n_segment;
         if (n < 1 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 
         T **partition = this->propagator[dep];
-        for(int i=0; i<M; i++)
+        for(int i=0; i<N; i++)
             q_out[i] = partition[n][i];
     }
     catch(std::exception& exc)

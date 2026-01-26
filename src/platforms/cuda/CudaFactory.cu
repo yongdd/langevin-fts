@@ -91,7 +91,7 @@ Molecules* CudaFactory<T>::create_molecules_information(
     return new Molecules(chain_model, ds, bond_lengths);
 }
 template <typename T>
-PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method)
+PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group)
 {
     try
     {
@@ -101,9 +101,9 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
         if (chain_model == "discrete")
         {
             if (!this->reduce_memory)
-                return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+                return new CudaComputationDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group);
             else
-                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer);
+                return new CudaComputationReduceMemoryDiscrete<T>(cb, molecules, propagator_computation_optimizer, space_group);
         }
 
         // Continuous chain model: validate and use numerical_method
@@ -116,9 +116,9 @@ PropagatorComputation<T>* CudaFactory<T>::create_propagator_computation(Computat
             throw_with_line_number("Unknown numerical method: " + numerical_method);
 
         if (!this->reduce_memory)
-            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+            return new CudaComputationContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, space_group);
         else
-            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method);
+            return new CudaComputationReduceMemoryContinuous<T>(cb, molecules, propagator_computation_optimizer, solver_type, numerical_method, space_group);
     }
     catch(std::exception& exc)
     {

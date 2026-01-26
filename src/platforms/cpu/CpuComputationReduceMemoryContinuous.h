@@ -51,6 +51,7 @@
 #include "CpuComputationReduceMemoryBase.h"
 #include "CpuSolver.h"
 #include "Scheduler.h"
+#include "SpaceGroup.h"
 #include "FFT.h"  // For FFTBackend enum
 
 /**
@@ -141,7 +142,7 @@ public:
      *                                        - For realspace: "cn-adi2" or "cn-adi4-lr"
      * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW);
+    CpuComputationReduceMemoryContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW, SpaceGroup* space_group = nullptr);
 
     /**
      * @brief Destructor. Frees checkpoints and workspace.
@@ -186,6 +187,5 @@ public:
      * @brief Validate partition function.
      */
     bool check_total_partition() override;
-
 };
 #endif

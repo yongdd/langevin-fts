@@ -100,6 +100,25 @@ private:
     std::vector<std::tuple<int, T *, T *, int>> single_partition_segment;
 
     /**
+     * @brief Temporary buffer for full grid propagator (FFT input).
+     * Only allocated when space group is set.
+     */
+    std::vector<T> q_full_in_;
+
+    /**
+     * @brief Temporary buffer for full grid propagator (FFT output).
+     * Only allocated when space group is set.
+     */
+    std::vector<T> q_full_out_;
+
+    /**
+     * @brief Storage for reduced basis w fields (for solvent computation).
+     * Only used when space group is set. Allows direct exp(-w*ds) computation
+     * without gathering from full grid.
+     */
+    std::map<std::string, std::vector<T>> w;
+
+    /**
      * @brief Calculate concentration for one polymer block.
      *
      * Integrates product of forward and backward propagators:
@@ -126,7 +145,7 @@ public:
      *                                        - For realspace: "cn-adi2" or "cn-adi4-lr"
      * @param backend                         FFT backend to use (FFTW, default: FFTW)
      */
-    CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW);
+    CpuComputationContinuous(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string method, std::string numerical_method = "", FFTBackend backend = FFTBackend::FFTW, SpaceGroup* space_group = nullptr);
 
     /**
      * @brief Destructor. Frees all propagator and concentration arrays.

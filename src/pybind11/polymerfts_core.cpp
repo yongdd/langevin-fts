@@ -119,21 +119,30 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         // Space group methods
         .def("set_space_group", &ComputationBox<T>::set_space_group)
         .def("get_space_group", &ComputationBox<T>::get_space_group, py::return_value_policy::reference)
-        .def("get_n_grid", &ComputationBox<T>::get_n_grid)
+        .def("get_n_basis", &ComputationBox<T>::get_n_basis)
         .def("get_orbit_counts", &ComputationBox<T>::get_orbit_counts)
-        // Field operations: use get_n_grid() for size (n_irreducible if space group set, else total_grid)
+        // Field operations: use get_n_basis() for size (n_irreducible if space group set, else total_grid)
         .def("integral", [](ComputationBox<T>& obj, py::array_t<T> g)
         {
-            const int N = obj.get_n_grid();
+            const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != N) {
                 throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
             }
             return obj.integral(static_cast<T*>(buf_g.ptr));
         })
+        .def("mean", [](ComputationBox<T>& obj, py::array_t<T> g)
+        {
+            const int N = obj.get_n_basis();
+            py::buffer_info buf_g = g.request();
+            if (buf_g.size != N) {
+                throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_basis' (" + std::to_string(N) + ") must match.");
+            }
+            return obj.mean(static_cast<T*>(buf_g.ptr));
+        })
         .def("inner_product", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h)
         {
-            const int N = obj.get_n_grid();
+            const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
             if (buf_g.size != N) {
@@ -146,7 +155,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("inner_product_inverse_weight", [](ComputationBox<T>& obj, py::array_t<T> g, py::array_t<T> h, py::array_t<T> w)
         {
-            const int N = obj.get_n_grid();
+            const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
             py::buffer_info buf_w = w.request();
@@ -157,7 +166,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("multi_inner_product", [](ComputationBox<T>& obj, int n_comp, py::array_t<T> g, py::array_t<T> h)
         {
-            const int N = obj.get_n_grid();
+            const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             py::buffer_info buf_h = h.request();
             if (buf_g.size != n_comp * N) {
@@ -170,7 +179,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
         })
         .def("zero_mean", [](ComputationBox<T>& obj, py::array_t<T> g)
         {
-            const int N = obj.get_n_grid();
+            const int N = obj.get_n_basis();
             py::buffer_info buf_g = g.request();
             if (buf_g.size != N) {
                 throw_with_line_number("Size of input (" + std::to_string(buf_g.size) + ") and 'n_grid' (" + std::to_string(N) + ") must match.");
@@ -184,7 +193,7 @@ void bind_computation_box(py::module &m, const std::string &type_name) {
  *
  * Creates Python class "PropagatorComputation_{Real|Complex}" with methods:
  * - update_laplacian_operator(): Refresh operators after box change
- * - get_cb(): Get ComputationBox (use cb.get_n_grid(), cb.get_total_grid(), etc.)
+ * - get_cb(): Get ComputationBox (use cb.get_n_basis(), cb.get_total_grid(), etc.)
  * - compute_propagators(w_input, q_init=None): Solve propagator equations
  * - advance_propagator_single_segment(q_in, p, v, u): Single step for block (v,u) of polymer p
  * - compute_concentrations(): Calculate segment densities
@@ -222,7 +231,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("compute_propagators", [](PropagatorComputation<T>& obj, std::map<std::string,py::array_t<const T>> w_input, py::object q_init)
         {
             try{
-                const int N = obj.get_cb()->get_n_grid();
+                const int N = obj.get_cb()->get_n_basis();
                 const int M = obj.get_cb()->get_total_grid();
                 const bool use_reduced = (obj.get_space_group() != nullptr);
 
@@ -295,25 +304,14 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
             }
         })
         .def("compute_concentrations", &PropagatorComputation<T>::compute_concentrations)
-        // get_total_concentration: returns reduced basis (n_ir) when space group is set,
-        // otherwise returns full grid (n_full).
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, std::string monomer_type)
         {
             try{
-                if (obj.get_space_group() != nullptr) {
-                    // Space group set: return reduced basis
-                    const int N_IR = obj.get_cb()->get_n_grid();
-                    py::array_t<T> phi(N_IR);
-                    obj.get_total_concentration_reduced(monomer_type, phi.mutable_data());
-                    return phi;
-                } else {
-                    // No space group: return full grid
-                    const int M = obj.get_cb()->get_total_grid();
-                    py::array_t<T> phi(M);
-                    py::buffer_info buf_phi = phi.request();
-                    obj.get_total_concentration(monomer_type, static_cast<T*>(buf_phi.ptr));
-                    return phi;
-                }
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                py::array_t<T> phi(N);
+                py::buffer_info buf_phi = phi.request();
+                obj.get_total_concentration(monomer_type, static_cast<T*>(buf_phi.ptr));
+                return phi;
             }
             catch(std::exception& exc)
             {
@@ -323,8 +321,8 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration", [](PropagatorComputation<T>& obj, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_cb()->get_total_grid();
-                py::array_t<T> phi = py::array_t<T>(M);
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                py::array_t<T> phi = py::array_t<T>(N);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration(polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
                 return phi;
@@ -337,8 +335,8 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_total_concentration_gce", [](PropagatorComputation<T>& obj, double fugacity, int polymer, std::string monomer_type)
         {
             try{
-                const int M = obj.get_cb()->get_total_grid();
-                py::array_t<T> phi = py::array_t<T>(M);
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                py::array_t<T> phi = py::array_t<T>(N);
                 py::buffer_info buf_phi = phi.request();
                 obj.get_total_concentration_gce(fugacity, polymer, monomer_type, static_cast<T*>(buf_phi.ptr));
                 return phi;
@@ -351,10 +349,10 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_block_concentration", [](PropagatorComputation<T>& obj, int polymer)
         {
             try{
-                const int M = obj.get_cb()->get_total_grid();
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
                 const int N_B = obj.get_n_blocks(polymer);
 
-                py::array_t<T> phi = py::array_t<T>({N_B,M});
+                py::array_t<T> phi = py::array_t<T>({N_B,N});
                 py::buffer_info buf_phi = phi.request();
                 obj.get_block_concentration(polymer, static_cast<T*>(buf_phi.ptr));
                 return phi;
@@ -369,9 +367,9 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_solvent_concentration", [](PropagatorComputation<T>& obj, int s)
         {
             try{
-                const int M = obj.get_cb()->get_total_grid();
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
 
-                py::array_t<T> phi = py::array_t<T>({M});
+                py::array_t<T> phi = py::array_t<T>({N});
                 py::buffer_info buf_phi = phi.request();
                 obj.get_solvent_concentration(s, static_cast<T*>(buf_phi.ptr));
                 return phi;
@@ -384,8 +382,8 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("get_chain_propagator", [](PropagatorComputation<T>& obj, int polymer, int v, int u, int n)
         {
             try{
-                const int M = obj.get_cb()->get_total_grid();
-                py::array_t<T> q1 = py::array_t<T>(M);
+                const int N = obj.get_cb()->get_n_basis();  // n_irreducible (with space group) or total_grid
+                py::array_t<T> q1 = py::array_t<T>(N);
                 py::buffer_info buf_q1 = q1.request();
                 obj.get_chain_propagator(static_cast<T*>(buf_q1.ptr), polymer, v, u, n);
                 return q1;
@@ -398,12 +396,7 @@ void bind_propagator_computation(py::module &m, const std::string &type_name) {
         .def("compute_stress", &PropagatorComputation<T>::compute_stress)
         .def("get_stress", &PropagatorComputation<T>::get_stress)
         .def("get_stress_gce", &PropagatorComputation<T>::get_stress_gce)
-        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition)
-        // Space group / reduced basis methods
-        .def("set_space_group", [](PropagatorComputation<T>& obj, SpaceGroup* sg)
-        {
-            obj.set_space_group(sg);
-        });
+        .def("check_total_partition", &PropagatorComputation<T>::check_total_partition);
 }
 
 /**
@@ -542,7 +535,9 @@ void bind_abstract_factory(py::module &m, const std::string &type_name)
         }, py::arg("nx"), py::arg("lx"), py::arg("angles") = py::none(), py::arg("bc") = py::none(), py::arg("mask") = py::none())
         .def("create_molecules_information", &AbstractFactory<T>::create_molecules_information)
         .def("create_propagator_computation_optimizer", &AbstractFactory<T>::create_propagator_computation_optimizer)
-        .def("create_propagator_computation", &AbstractFactory<T>::create_propagator_computation)
+        .def("create_propagator_computation", &AbstractFactory<T>::create_propagator_computation,
+            py::arg("cb"), py::arg("molecules"), py::arg("propagator_computation_optimizer"),
+            py::arg("numerical_method"), py::arg("space_group") = nullptr)
         .def("create_anderson_mixing", &AbstractFactory<T>::create_anderson_mixing)
         .def("display_info", &AbstractFactory<T>::display_info);
 }

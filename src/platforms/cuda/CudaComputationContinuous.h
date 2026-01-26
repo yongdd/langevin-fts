@@ -82,6 +82,33 @@ private:
      */
     std::vector<std::tuple<int, CuDeviceData<T> *, CuDeviceData<T> *, int>> single_partition_segment;
 
+    // ============== Reduced basis support ==============
+    /**
+     * @brief Device array for full_to_reduced_map.
+     * Maps each full grid point to its irreducible index.
+     */
+    int* d_full_to_reduced_map_;
+
+    /**
+     * @brief Device array for reduced_basis_indices.
+     * Flat indices of irreducible mesh points.
+     */
+    int* d_reduced_basis_indices_;
+
+    /**
+     * @brief Per-stream temporary buffers for full grid propagator.
+     * d_q_full_[STREAM][0] = input, d_q_full_[STREAM][1] = output
+     * Only allocated when space group is set.
+     */
+    CuDeviceData<T>* d_q_full_[MAX_STREAMS][2];
+
+    /**
+     * @brief Device storage for reduced basis w fields (for solvent computation).
+     * Only used when space group is set. Allows direct exp(-w*ds) computation
+     * without gathering from full grid.
+     */
+    std::map<std::string, CuDeviceData<T>*> d_w;
+
     /**
      * @brief Compute concentration for one polymer block.
      *
@@ -110,7 +137,7 @@ public:
      *                         - For realspace: "cn-adi2" or "cn-adi4-lr"
      */
     CudaComputationContinuous(ComputationBox<T>* cb, Molecules *pc,
-        PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method, std::string numerical_method = "");
+        PropagatorComputationOptimizer *propagator_computation_optimizer, std::string method, std::string numerical_method = "", SpaceGroup* space_group = nullptr);
 
     /** @brief Destructor. Frees GPU resources. */
     ~CudaComputationContinuous();

@@ -50,7 +50,8 @@ template <typename T>
 CudaComputationDiscrete<T>::CudaComputationDiscrete(
     ComputationBox<T>* cb,
     Molecules *molecules,
-    PropagatorComputationOptimizer *propagator_computation_optimizer)
+    PropagatorComputationOptimizer *propagator_computation_optimizer,
+    SpaceGroup* space_group)
     : CudaComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -59,7 +60,12 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         std::cout << "--------- Discrete Chain Solver, GPU Version ---------" << std::endl;
         #endif
 
-        const int M = this->cb->get_total_grid();
+        // Set space group first so that get_n_basis() returns the correct size
+        if (space_group != nullptr) {
+            PropagatorComputation<T>::set_space_group(space_group);
+        }
+
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
 
         // The number of parallel streams for propagator computation
         const char *ENV_OMP_NUM_THREADS = getenv("OMP_NUM_THREADS");
@@ -103,14 +109,14 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
             d_propagator_half_steps[key] = new CuDeviceData<T>*[max_n_segment];
             d_propagator_half_steps[key][0] = nullptr;
             if (item.second.deps.size() > 0)
-                gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][0], sizeof(T)*M));
+                gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][0], sizeof(T)*N));
 
             // Allocate memory for q(r,s+1/2)
             for(int i=1; i<this->propagator_size[key]; i++)
             {
                 d_propagator_half_steps[key][i] = nullptr;
                 if (item.second.junction_ends.find(i) != item.second.junction_ends.end())
-                    gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][i], sizeof(T)*M));
+                    gpu_error_check(cudaMalloc((void**)&d_propagator_half_steps[key][i], sizeof(T)*N));
             }
 
             // Allocate memory for q(r,s)
@@ -118,7 +124,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
             this->d_propagator[key] = new CuDeviceData<T>*[max_n_segment];
             this->d_propagator[key][0] = nullptr;
             for(int i=1; i<this->propagator_size[key]; i++)
-                gpu_error_check(cudaMalloc((void**)&this->d_propagator[key][i], sizeof(T)*M));
+                gpu_error_check(cudaMalloc((void**)&this->d_propagator[key][i], sizeof(T)*N));
 
             #ifndef NDEBUG
             this->propagator_finished[key] = new bool[max_n_segment];
@@ -136,8 +142,8 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
             this->d_phi_block[item.first] = nullptr;
-            gpu_error_check(cudaMalloc((void**)&this->d_phi_block[item.first], sizeof(T)*M));
-            gpu_error_check(cudaMemset(this->d_phi_block[item.first], 0, sizeof(T)*M));  // Zero-initialize
+            gpu_error_check(cudaMalloc((void**)&this->d_phi_block[item.first], sizeof(T)*N));
+            gpu_error_check(cudaMemset(this->d_phi_block[item.first], 0, sizeof(T)*N));  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -245,7 +251,7 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
         {
             CuDeviceData<T> *d_phi_;
-            gpu_error_check(cudaMalloc((void**)&d_phi_, sizeof(T)*M));
+            gpu_error_check(cudaMalloc((void**)&d_phi_, sizeof(T)*N));
             this->d_phi_solvent.push_back(d_phi_);
         }
 
@@ -253,6 +259,8 @@ CudaComputationDiscrete<T>::CudaComputationDiscrete(
         this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams); 
 
         // Allocate memory for pseudo-spectral: advance_propagator()
+        // These need full grid (M) for FFT operations
+        const int M = this->cb->get_total_grid();
         gpu_error_check(cudaMalloc((void**)&this->d_q_unity, sizeof(T)*M));
         for(int i=0; i<M; i++)
         {
@@ -382,7 +390,32 @@ void CudaComputationDiscrete<T>::compute_propagators(
         }
 
         // Update dw or d_exp_dw
-        this->propagator_solver->update_dw(device, w_input);
+        // If space group is set, w_input is in reduced basis and needs to be expanded
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
+        if (use_reduced_basis)
+        {
+            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
+            std::map<std::string, std::vector<T>> w_expanded_storage;
+            std::map<std::string, const T*> w_full;
+
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T* w_reduced = item.second;
+
+                // Expand to full grid
+                w_expanded_storage[monomer_type].resize(M);
+                for(int i=0; i<M; i++)
+                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
+
+                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
+            }
+            this->propagator_solver->update_dw(device, w_full);
+        }
+        else
+        {
+            this->propagator_solver->update_dw(device, w_input);
+        }
 
         // For each time span
         #ifndef NDEBUG
@@ -1196,14 +1229,14 @@ void CudaComputationDiscrete<T>::compute_stress()
 }
 template <typename T>
 void CudaComputationDiscrete<T>::get_chain_propagator(T *q_out, int polymer, int v, int u, int n)
-{ 
+{
     // This method should be invoked after invoking compute_statistics()
 
     // Get chain propagator for a selected polymer, block and direction.
     // This is made for debugging and testing.
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
@@ -1214,7 +1247,7 @@ void CudaComputationDiscrete<T>::get_chain_propagator(T *q_out, int polymer, int
         if (n < 1 || n > N_RIGHT)
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [1, " + std::to_string(N_RIGHT) + "]");
 
-        gpu_error_check(cudaMemcpy(q_out, this->d_propagator[dep][n], sizeof(T)*M,cudaMemcpyDeviceToHost));
+        gpu_error_check(cudaMemcpy(q_out, this->d_propagator[dep][n], sizeof(T)*N, cudaMemcpyDeviceToHost));
     }
     catch(std::exception& exc)
     {

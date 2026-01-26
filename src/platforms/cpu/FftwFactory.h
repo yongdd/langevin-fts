@@ -135,7 +135,7 @@ public :
      *                                        "cn-adi2", "cn-adi4-lr" (real-space)
      * @return CPU propagator solver (using FFTW)
      */
-    PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method) override;
+    PropagatorComputation<T>* create_propagator_computation(ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer, std::string numerical_method, SpaceGroup* space_group=nullptr) override;
 
     /**
      * @brief Create CPU Anderson mixing optimizer.

@@ -38,6 +38,7 @@
 #include <omp.h>
 
 #include "CpuComputationContinuous.h"
+#include "SpaceGroup.h"
 #include "CpuSolverPseudoRQM4.h"
 #include "CpuSolverPseudoRK2.h"
 #include "CpuSolverPseudoETDRK4.h"
@@ -64,7 +65,8 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
     PropagatorComputationOptimizer *propagator_computation_optimizer,
     std::string method,
     std::string numerical_method,
-    FFTBackend backend)
+    FFTBackend backend,
+    SpaceGroup* space_group)
     : CpuComputationBase<T>(cb, molecules, propagator_computation_optimizer)
 {
     try
@@ -73,7 +75,16 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         std::cout << "--------- Continuous Chain Solver, CPU Version ---------" << std::endl;
         #endif
 
-        const int M = this->cb->get_total_grid();
+        // Set space group first so that get_n_basis() returns the correct size
+        if (space_group != nullptr) {
+            PropagatorComputation<T>::set_space_group(space_group);
+            // Allocate temporary full grid buffers for FFT operations
+            int total_grid = this->cb->get_total_grid();
+            q_full_in_.resize(total_grid);
+            q_full_out_.resize(total_grid);
+        }
+
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
 
         this->method = method;
         if(method == "pseudospectral")
@@ -120,7 +131,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
             this->propagator_size[key] = max_n_segment;
             this->propagator[key] = new T*[max_n_segment];
             for(int i=0; i<this->propagator_size[key]; i++)
-                this->propagator[key][i] = new T[M];
+                this->propagator[key][i] = new T[N];
 
             #ifndef NDEBUG
             this->propagator_finished[key] = new bool[max_n_segment];
@@ -134,7 +145,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
             throw_with_line_number("There is no block. Add polymers first.");
         for(const auto& item: this->propagator_computation_optimizer->get_computation_blocks())
         {
-            this->phi_block[item.first] = new T[M]();  // Zero-initialize
+            this->phi_block[item.first] = new T[N]();  // Zero-initialize
         }
 
         // Remember one segment for each polymer chain to compute total partition function
@@ -164,7 +175,7 @@ CpuComputationContinuous<T>::CpuComputationContinuous(
         }
         // Concentrations for each solvent
         for(int s=0;s<this->molecules->get_n_solvent_types();s++)
-            this->phi_solvent.push_back(new T[M]);
+            this->phi_solvent.push_back(new T[N]);
 
         // Create scheduler for computation of propagator
         this->sc = new Scheduler(this->propagator_computation_optimizer->get_computation_propagators(), this->n_streams); 
@@ -215,6 +226,8 @@ void CpuComputationContinuous<T>::compute_propagators(
     try
     {
         const int M = this->cb->get_total_grid();
+        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_irreducible() : M;
+        const bool use_reduced_basis = (this->space_group_ != nullptr);
 
         for(const auto& item: this->propagator_computation_optimizer->get_computation_propagators())
         {
@@ -222,8 +235,42 @@ void CpuComputationContinuous<T>::compute_propagators(
                 throw_with_line_number("monomer_type \"" + item.second.monomer_type + "\" is not in w_input.");
         }
 
+        // Store w for solvent computation
+        for(const auto& item: w_input)
+        {
+            std::string monomer_type = item.first;
+            const T* _w = item.second;
+            this->w[monomer_type].resize(N);
+            for(int i=0; i<N; i++)
+                this->w[monomer_type][i] = _w[i];
+        }
+
         // Update dw or exp_dw
-        this->propagator_solver->update_dw(w_input);
+        // If space group is set, w_input is in reduced basis and needs to be expanded
+        if (use_reduced_basis)
+        {
+            const auto& full_to_reduced = this->space_group_->get_full_to_reduced_map();
+            std::map<std::string, std::vector<T>> w_expanded_storage;
+            std::map<std::string, const T*> w_full;
+
+            for(const auto& item: w_input)
+            {
+                std::string monomer_type = item.first;
+                const T* w_reduced = item.second;
+
+                // Expand to full grid
+                w_expanded_storage[monomer_type].resize(M);
+                for(int i=0; i<M; i++)
+                    w_expanded_storage[monomer_type][i] = w_reduced[full_to_reduced[i]];
+
+                w_full[monomer_type] = w_expanded_storage[monomer_type].data();
+            }
+            this->propagator_solver->update_dw(w_full);
+        }
+        else
+        {
+            this->propagator_solver->update_dw(w_input);
+        }
 
         // Assign a pointer for mask
         const double *q_mask = this->cb->get_mask();
@@ -278,7 +325,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                 T **_propagator = this->propagator[key];
 
                 // If it is leaf node
-                if(n_segment_from == 0 && deps.size() == 0) 
+                if(n_segment_from == 0 && deps.size() == 0)
                 {
                      // q_init
                     if (key[0] == '{')
@@ -286,12 +333,22 @@ void CpuComputationContinuous<T>::compute_propagators(
                         std::string g = PropagatorCode::get_q_input_idx_from_key(key);
                         if (!q_init.contains(g))
                             throw_with_line_number("Could not find q_init[\"" + g + "\"]. Pass q_init to run() for grafted polymers.");
-                        for(int i=0; i<M; i++)
-                            _propagator[0][i] = q_init[g][i];
+                        if (use_reduced_basis)
+                        {
+                            // q_init is on full grid, convert to reduced basis
+                            if constexpr (std::is_same_v<T, double>)
+                                this->space_group_->to_reduced_basis(q_init[g], _propagator[0], 1);
+                        }
+                        else
+                        {
+                            for(int i=0; i<M; i++)
+                                _propagator[0][i] = q_init[g][i];
+                        }
                     }
                     else
                     {
-                        for(int i=0; i<M; i++)
+                        // Initial condition q=1 is the same in reduced and full basis
+                        for(int i=0; i<N; i++)
                             _propagator[0][i] = 1.0;
                     }
 
@@ -300,15 +357,15 @@ void CpuComputationContinuous<T>::compute_propagators(
                     #endif
                 }
                 // If it is not leaf node
-                else if (n_segment_from == 0 && deps.size() > 0) 
+                else if (n_segment_from == 0 && deps.size() > 0)
                 {
                     // If it is aggregated
                     if (key[0] == '[')
                     {
-                        for(int i=0; i<M; i++)
+                        for(int i=0; i<N; i++)
                             _propagator[0][i] = 0.0;
-                        
-                        // Add all propagators at junction if necessary 
+
+                        // Add all propagators at junction if necessary
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -324,7 +381,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                             #endif
 
                             T **_propagator_sub_dep = this->propagator[sub_dep];
-                            for(int i=0; i<M; i++)
+                            for(int i=0; i<N; i++)
                                 _propagator[0][i] += _propagator_sub_dep[sub_n_segment][i]*static_cast<double>(sub_n_repeated);
                         }
                         #ifndef NDEBUG
@@ -334,10 +391,10 @@ void CpuComputationContinuous<T>::compute_propagators(
                     }
                     else if(key[0] == '(')
                     {
-                        for(int i=0; i<M; i++)
+                        for(int i=0; i<N; i++)
                             _propagator[0][i] = 1.0;
-                        
-                        // Multiply all propagators at junction if necessary 
+
+                        // Multiply all propagators at junction if necessary
                         for(size_t d=0; d<deps.size(); d++)
                         {
                             std::string sub_dep = std::get<0>(deps[d]);
@@ -353,7 +410,7 @@ void CpuComputationContinuous<T>::compute_propagators(
                             #endif
 
                             T **_propagator_sub_dep = this->propagator[sub_dep];
-                            for(int i=0; i<M; i++)
+                            for(int i=0; i<N; i++)
                                 _propagator[0][i] *= pow(_propagator_sub_dep[sub_n_segment][i], sub_n_repeated);
                         }
 
@@ -364,10 +421,10 @@ void CpuComputationContinuous<T>::compute_propagators(
                     }
                 }
         
-                // Multiply mask
+                // Multiply mask (mask should also be in reduced basis if using space group)
                 if (n_segment_from == 0 && q_mask != nullptr)
                 {
-                    for(int i=0; i<M; i++)
+                    for(int i=0; i<N; i++)
                         _propagator[0][i] *= q_mask[i];
                 }
 
@@ -380,23 +437,64 @@ void CpuComputationContinuous<T>::compute_propagators(
                     this->propagator_solver->reset_internal_state();
 
                 // Advance propagator successively
-                for(int n=n_segment_from; n<n_segment_to; n++)
+                if (use_reduced_basis)
                 {
-                    #ifndef NDEBUG
-                    if (!this->propagator_finished[key][n])
-                        std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
-                    if (this->propagator_finished[key][n+1])
-                        std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
-                    #endif
+                    // Thread-local buffers for expand/reduce operations
+                    thread_local std::vector<T> q_full_in_local;
+                    thread_local std::vector<T> q_full_out_local;
+                    if (q_full_in_local.size() < static_cast<size_t>(M)) {
+                        q_full_in_local.resize(M);
+                        q_full_out_local.resize(M);
+                    }
 
-                    this->propagator_solver->advance_propagator(
-                            _propagator[n],
-                            _propagator[n+1],
-                            monomer_type, q_mask, ds_index);
+                    for(int n=n_segment_from; n<n_segment_to; n++)
+                    {
+                        #ifndef NDEBUG
+                        if (!this->propagator_finished[key][n])
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (this->propagator_finished[key][n+1])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
+                        #endif
 
-                    #ifndef NDEBUG
-                    this->propagator_finished[key][n+1] = true;
-                    #endif
+                        // Expand reduced → full grid
+                        if constexpr (std::is_same_v<T, double>)
+                            this->space_group_->from_reduced_basis(_propagator[n], q_full_in_local.data(), 1);
+
+                        // Advance propagator on full grid (FFT operations)
+                        this->propagator_solver->advance_propagator(
+                                q_full_in_local.data(),
+                                q_full_out_local.data(),
+                                monomer_type, q_mask, ds_index);
+
+                        // Reduce full grid → reduced
+                        if constexpr (std::is_same_v<T, double>)
+                            this->space_group_->to_reduced_basis(q_full_out_local.data(), _propagator[n+1], 1);
+
+                        #ifndef NDEBUG
+                        this->propagator_finished[key][n+1] = true;
+                        #endif
+                    }
+                }
+                else
+                {
+                    for(int n=n_segment_from; n<n_segment_to; n++)
+                    {
+                        #ifndef NDEBUG
+                        if (!this->propagator_finished[key][n])
+                            std::cout << "unfinished, key: " + key + ", " + std::to_string(n) << std::endl;
+                        if (this->propagator_finished[key][n+1])
+                            std::cout << "already finished: " + key + ", " + std::to_string(n) << std::endl;
+                        #endif
+
+                        this->propagator_solver->advance_propagator(
+                                _propagator[n],
+                                _propagator[n+1],
+                                monomer_type, q_mask, ds_index);
+
+                        #ifndef NDEBUG
+                        this->propagator_finished[key][n+1] = true;
+                        #endif
+                    }
                 }
                 // // Display job info
                 // #ifndef NDEBUG
@@ -478,6 +576,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
     try
     {
         const int M = this->cb->get_total_grid();
+        const int N = (this->space_group_ != nullptr) ? this->space_group_->get_n_irreducible() : M;
 
         // Calculate segment concentrations
         #pragma omp parallel for num_threads(this->n_streams)
@@ -498,7 +597,7 @@ void CpuComputationContinuous<T>::compute_concentrations()
             // If there is no segment
             if(n_segment_right == 0)
             {
-                for(int i=0; i<M;i++)
+                for(int i=0; i<N;i++)
                     block->second[i] = 0.0;
                 continue;
             }
@@ -528,22 +627,29 @@ void CpuComputationContinuous<T>::compute_concentrations()
 
             // Normalize concentration: local_ds * volume_fraction / alpha
             T norm = (local_ds*pc.get_volume_fraction()/pc.get_alpha()*n_repeated)/this->single_polymer_partitions[p];
-            for(int i=0; i<M; i++)
+            for(int i=0; i<N; i++)
                 block->second[i] *= norm;
         }
 
         // Calculate partition functions and concentrations of solvents
+        double ds = this->molecules->get_contour_length_mapping().get_global_ds();
         for(int s=0; s<this->molecules->get_n_solvent_types(); s++)
         {
             double volume_fraction   = std::get<0>(this->molecules->get_solvent(s));
             std::string monomer_type = std::get<1>(this->molecules->get_solvent(s));
 
             T *_phi = this->phi_solvent[s];
-            T *_exp_dw = this->propagator_solver->exp_dw[0][monomer_type].data();
+            const T* _w = w[monomer_type].data();
 
-            this->single_solvent_partitions[s] = this->cb->inner_product(_exp_dw, _exp_dw)/this->cb->get_volume();
-            for(int i=0; i<M; i++)
-                _phi[i] = _exp_dw[i]*_exp_dw[i]*volume_fraction/this->single_solvent_partitions[s];
+            // Compute phi = exp(-w*ds)
+            for(int i=0; i<N; i++)
+                _phi[i] = exp(-_w[i] * ds);
+
+            // Partition function and normalization
+            this->single_solvent_partitions[s] = this->cb->integral(_phi) / this->cb->get_volume();
+            T norm = volume_fraction / this->single_solvent_partitions[s];
+            for(int i=0; i<N; i++)
+                _phi[i] *= norm;
         }
 
     }
@@ -558,15 +664,15 @@ void CpuComputationContinuous<T>::calculate_phi_one_block(
 {
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         std::vector<double> simpson_rule_coeff = SimpsonRule::get_coeff(N_RIGHT);
 
         // Compute segment concentration
-        for(int i=0; i<M; i++)
+        for(int i=0; i<N; i++)
             phi[i] = simpson_rule_coeff[0]*q_1[N_LEFT][i]*q_2[0][i];
         for(int n=1; n<=N_RIGHT; n++)
         {
-            for(int i=0; i<M; i++)
+            for(int i=0; i<N; i++)
                 phi[i] += simpson_rule_coeff[n]*q_1[N_LEFT-n][i]*q_2[n][i];
         }
     }
@@ -781,7 +887,7 @@ void CpuComputationContinuous<T>::get_chain_propagator(T *q_out, int polymer, in
     // This is made for debugging and testing.
     try
     {
-        const int M = this->cb->get_total_grid();
+        const int N = this->cb->get_n_basis();  // n_irreducible (with space group) or total_grid
         Polymer& pc = this->molecules->get_polymer(polymer);
         std::string dep = pc.get_propagator_key(v,u);
 
@@ -793,7 +899,8 @@ void CpuComputationContinuous<T>::get_chain_propagator(T *q_out, int polymer, in
             throw_with_line_number("n (" + std::to_string(n) + ") must be in range [0, " + std::to_string(N_RIGHT) + "]");
 
         T **_partition = this->propagator[dep];
-        for(int i=0; i<M; i++)
+
+        for(int i=0; i<N; i++)
             q_out[i] = _partition[n][i];
     }
     catch(std::exception& exc)

@@ -775,7 +775,7 @@ SpaceGroup* ComputationBox<T>::get_space_group() const
 }
 
 template <typename T>
-int ComputationBox<T>::get_n_grid() const
+int ComputationBox<T>::get_n_basis() const
 {
     return n_irreducible_;
 }
@@ -814,6 +814,15 @@ T ComputationBox<T>::integral(const T *g)
             sum += dv[i] * g[i];
         return sum;
     }
+}
+
+/**
+ * @brief Compute mean (spatial average) of a field.
+ */
+template <typename T>
+T ComputationBox<T>::mean(const T *g)
+{
+    return integral(g) / static_cast<T>(volume);
 }
 
 /**

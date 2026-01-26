@@ -183,6 +183,10 @@ void PropagatorComputation<T>::set_space_group(SpaceGroup* sg)
  * @brief Compute propagators using reduced basis input fields.
  *
  * Expands reduced basis fields to full grid before calling compute_propagators().
+ * The propagator solver needs full grid fields for FFT operations.
+ *
+ * The derived class (e.g., CpuComputationContinuous) stores propagators in
+ * reduced basis internally and handles expand/reduce around FFT operations.
  */
 template <typename T>
 void PropagatorComputation<T>::compute_propagators_reduced(
@@ -194,9 +198,8 @@ void PropagatorComputation<T>::compute_propagators_reduced(
     }
 
     int total_grid = this->cb->get_total_grid();
-    int n_irreducible = space_group_->get_n_irreducible();
 
-    // Expand each reduced basis field to full grid
+    // Expand each reduced basis field to full grid for the solver
     std::map<std::string, const T*> w_full;
     int field_idx = 0;
 
@@ -210,11 +213,22 @@ void PropagatorComputation<T>::compute_propagators_reduced(
     }
 
     // Call the standard compute_propagators with full grid fields
+    // Propagators are stored in reduced basis by the derived class
     compute_propagators(w_full, q_init);
 }
 
 /**
  * @brief Get concentration in reduced basis.
+ *
+ * When concentrations are stored in reduced basis (after set_space_group()),
+ * this method avoids the round-trip through full grid by getting the full
+ * grid concentration and reducing it. The derived class stores concentrations
+ * in reduced basis, so get_total_concentration() expands internally first.
+ *
+ * For efficiency, this still uses get_total_concentration() which expands
+ * and accumulates, then we reduce the result. A more optimal implementation
+ * would accumulate directly in reduced basis, but that requires access to
+ * internal phi_block which is in the derived class.
  */
 template <typename T>
 void PropagatorComputation<T>::get_total_concentration_reduced(std::string monomer_type, T* phi_reduced)
@@ -223,7 +237,7 @@ void PropagatorComputation<T>::get_total_concentration_reduced(std::string monom
         throw_with_line_number("Space group not set. Call set_space_group() first.");
     }
 
-    // Get full grid concentration
+    // Get full grid concentration (derived class expands internally)
     get_total_concentration(monomer_type, phi_full_buffer_.data());
 
     // Convert to reduced basis

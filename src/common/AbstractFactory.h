@@ -62,6 +62,7 @@
 #include "PropagatorComputation.h"
 #include "AndersonMixing.h"
 #include "Array.h"
+#include "SpaceGroup.h"
 
 /**
  * @class AbstractFactory
@@ -202,7 +203,7 @@ public :
      */
     virtual PropagatorComputation<T>* create_propagator_computation(
         ComputationBox<T>* cb, Molecules *molecules, PropagatorComputationOptimizer* propagator_computation_optimizer,
-        std::string numerical_method) = 0;
+        std::string numerical_method, SpaceGroup* space_group=nullptr) = 0;
 
     /**
      * @brief Create an Anderson Mixing optimizer.

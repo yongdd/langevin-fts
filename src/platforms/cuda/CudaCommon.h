@@ -371,4 +371,75 @@ __global__ void ker_etdrk4_krogstad_final_real(
     const double* N_b_hat, const double* N_c_hat,
     const double* phi2, const double* phi3, const int M);
 
+// ============================================================
+// Space group reduced basis kernels
+// ============================================================
+
+/**
+ * @brief Expand reduced basis to full grid.
+ *
+ * Broadcasts values from n_irreducible points to total_grid points
+ * using the full_to_reduced_map lookup table.
+ *
+ * @param dst Output full grid array (size: total_grid)
+ * @param src Input reduced basis array (size: n_irreducible)
+ * @param full_to_reduced_map Map from full grid index to reduced basis index
+ * @param total_grid Number of full grid points
+ */
+__global__ void ker_expand_reduced_basis(
+    double* dst, const double* src, const int* full_to_reduced_map, const int total_grid);
+
+__global__ void ker_expand_reduced_basis(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* full_to_reduced_map, const int total_grid);
+
+/**
+ * @brief Reduce full grid to reduced basis.
+ *
+ * Extracts values at irreducible mesh points from full grid.
+ *
+ * @param dst Output reduced basis array (size: n_irreducible)
+ * @param src Input full grid array (size: total_grid)
+ * @param reduced_basis_indices Flat indices of irreducible points
+ * @param n_irreducible Number of irreducible points
+ */
+__global__ void ker_reduce_to_basis(
+    double* dst, const double* src, const int* reduced_basis_indices, const int n_irreducible);
+
+__global__ void ker_reduce_to_basis(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, const int n_irreducible);
+
+/**
+ * @brief Gather from full grid and compute product: dst[i] = src[indices[i]]^2 * norm
+ *
+ * Used for solvent concentration computation in reduced basis.
+ * More efficient than computing on full grid then reducing (O(N) vs O(M+N)).
+ *
+ * @param dst Output reduced basis array (size: n_irreducible)
+ * @param src Input full grid array (size: total_grid)
+ * @param reduced_basis_indices Flat indices of irreducible points
+ * @param norm Normalization factor
+ * @param n_irreducible Number of irreducible points
+ */
+__global__ void ker_multi_gather(
+    double* dst, const double* src, const int* reduced_basis_indices, double norm, const int n_irreducible);
+
+__global__ void ker_multi_gather(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* reduced_basis_indices, cuDoubleComplex norm, const int n_irreducible);
+
+/**
+ * @brief Multiply array by integer weights: dst[i] = src[i] * weights[i]
+ *
+ * Used for orbit-weighted integration in reduced basis.
+ *
+ * @param dst Output array
+ * @param src Input array
+ * @param weights Integer weight array (e.g., orbit_counts)
+ * @param n Number of elements
+ */
+__global__ void ker_multi_weight(
+    double* dst, const double* src, const int* weights, const int n);
+
+__global__ void ker_multi_weight(
+    cuDoubleComplex* dst, const cuDoubleComplex* src, const int* weights, const int n);
+
 #endif
