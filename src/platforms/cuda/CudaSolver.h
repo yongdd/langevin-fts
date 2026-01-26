@@ -161,19 +161,5 @@ public:
         CuDeviceData<T> *d_q_pair, CuDeviceData<T> *d_segment_stress,
         std::string monomer_type, bool is_half_bond_length) = 0;
 
-    /**
-     * @brief Apply mask to propagator.
-     *
-     * When space_group is set, expands propagator to full grid, multiplies
-     * by mask, and reduces back to reduced basis. Otherwise multiplies directly.
-     *
-     * @param STREAM  CUDA stream index
-     * @param d_q     Propagator array (device, modified in place)
-     * @param d_mask  Mask array (device, always full grid)
-     */
-    virtual void apply_mask(
-        [[maybe_unused]] const int STREAM,
-        [[maybe_unused]] CuDeviceData<T> *d_q,
-        [[maybe_unused]] double *d_mask) {}
 };
 #endif

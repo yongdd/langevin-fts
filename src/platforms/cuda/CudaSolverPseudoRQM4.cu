@@ -853,41 +853,6 @@ void CudaSolverPseudoRQM4<T>::compute_single_segment_stress(
     }
 }
 
-template <typename T>
-void CudaSolverPseudoRQM4<T>::apply_mask(const int STREAM, CuDeviceData<T> *d_q, double *d_mask)
-{
-    if (d_mask == nullptr)
-        return;
-
-    const int N_BLOCKS  = CudaCommon::get_instance().get_n_blocks();
-    const int N_THREADS = CudaCommon::get_instance().get_n_threads();
-    const int M = cb->get_total_grid();
-    const int N = cb->get_n_basis();
-
-    if (space_group_ != nullptr)
-    {
-        // Expand to full grid, apply mask, reduce back
-        ker_expand_reduced_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q_full_in_[STREAM], d_q, d_full_to_reduced_map_, M);
-        gpu_error_check(cudaPeekAtLastError());
-
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q_full_in_[STREAM], d_q_full_in_[STREAM], d_mask, 1.0, M);
-        gpu_error_check(cudaPeekAtLastError());
-
-        ker_reduce_to_basis<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q, d_q_full_in_[STREAM], d_reduced_basis_indices_, N);
-        gpu_error_check(cudaPeekAtLastError());
-    }
-    else
-    {
-        // Direct multiplication on full grid
-        ker_multi<<<N_BLOCKS, N_THREADS, 0, streams[STREAM][0]>>>(
-            d_q, d_q, d_mask, 1.0, N);
-        gpu_error_check(cudaPeekAtLastError());
-    }
-}
-
 // Explicit template instantiation
 template class CudaSolverPseudoRQM4<double>;
 template class CudaSolverPseudoRQM4<std::complex<double>>;

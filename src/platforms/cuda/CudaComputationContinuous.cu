@@ -228,11 +228,21 @@ CudaComputationContinuous<T>::CudaComputationContinuous(
             gpu_error_check(cudaMemcpy(&this->d_q_unity[i], &q_unity, sizeof(T), cudaMemcpyHostToDevice));
         }
 
-        // Copy mask to this->d_q_mask
+        // Copy mask to this->d_q_mask (in reduced basis if space_group is set)
         if (this->cb->get_mask() != nullptr)
         {
-            gpu_error_check(cudaMalloc((void**)&this->d_q_mask, sizeof(double)*M));
-            gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*M, cudaMemcpyHostToDevice));
+            gpu_error_check(cudaMalloc((void**)&this->d_q_mask, sizeof(double)*N));
+            if (this->space_group_ != nullptr)
+            {
+                // Convert mask to reduced basis on host, then copy to device
+                std::vector<double> mask_reduced(N);
+                this->space_group_->to_reduced_basis(this->cb->get_mask(), mask_reduced.data(), 1);
+                gpu_error_check(cudaMemcpy(this->d_q_mask, mask_reduced.data(), sizeof(double)*N, cudaMemcpyHostToDevice));
+            }
+            else
+            {
+                gpu_error_check(cudaMemcpy(this->d_q_mask, this->cb->get_mask(), sizeof(double)*N, cudaMemcpyHostToDevice));
+            }
         }
         else
             this->d_q_mask = nullptr;
@@ -529,9 +539,13 @@ void CudaComputationContinuous<T>::compute_propagators(
                     }
                 }
 
-                // Apply mask (solver handles expand/reduce internally)
-                if (n_segment_from == 0)
-                    this->propagator_solver->apply_mask(STREAM, _d_propagator[0], this->d_q_mask);
+                // Apply mask (already in reduced basis)
+                if (n_segment_from == 0 && this->d_q_mask != nullptr)
+                {
+                    ker_multi<<<N_BLOCKS, N_THREADS, 0, this->streams[STREAM][0]>>>(
+                        _d_propagator[0], _d_propagator[0], this->d_q_mask, 1.0, N);
+                    gpu_error_check(cudaPeekAtLastError());
+                }
 
                 // Get ds_index from the propagator key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
