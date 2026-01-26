@@ -270,8 +270,18 @@ void CpuComputationDiscrete<T>::compute_propagators(
             }
         }
 
-        // Assign a pointer for mask
-        const double *q_mask = this->cb->get_mask();
+        // Convert mask to reduced basis if space_group is set
+        const double *q_mask_full = this->cb->get_mask();
+        const double *q_mask = nullptr;
+        if (q_mask_full != nullptr)
+        {
+            q_mask_.resize(N);
+            if (this->space_group_ != nullptr)
+                this->space_group_->to_reduced_basis(q_mask_full, q_mask_.data(), 1);
+            else
+                std::copy(q_mask_full, q_mask_full + N, q_mask_.data());
+            q_mask = q_mask_.data();
+        }
 
         // For each time span
         #ifndef NDEBUG
@@ -552,9 +562,12 @@ void CpuComputationDiscrete<T>::compute_propagators(
 
                 if (n_segment_from == 0)
                 {
-                    // Apply mask (solver handles expand/reduce internally)
+                    // Apply mask (already in reduced basis)
                     if (q_mask != nullptr)
-                        this->propagator_solver->apply_mask(_propagator[1], q_mask);
+                    {
+                        for(int i=0; i<N; i++)
+                            _propagator[1][i] *= q_mask[i];
+                    }
 
                     // q(r, 1+1/2)
                     if (propagator_half_steps[key][1] != nullptr)

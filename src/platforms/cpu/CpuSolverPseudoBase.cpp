@@ -403,34 +403,6 @@ std::vector<T> CpuSolverPseudoBase<T>::compute_single_segment_stress(
     }
 }
 
-template <typename T>
-void CpuSolverPseudoBase<T>::apply_mask(T* q, const double* mask)
-{
-    if (mask == nullptr)
-        return;
-
-    const int M = cb->get_total_grid();
-    const int N = cb->get_n_basis();
-
-    if (space_group_ != nullptr)
-    {
-        // Expand to full grid, multiply by mask, reduce back
-        if constexpr (std::is_same_v<T, double>)
-        {
-            space_group_->from_reduced_basis(q, q_full_in_.data(), 1);
-            for (int i = 0; i < M; ++i)
-                q_full_in_[i] *= mask[i];
-            space_group_->to_reduced_basis(q_full_in_.data(), q, 1);
-        }
-    }
-    else
-    {
-        // Direct multiplication on full grid
-        for (int i = 0; i < N; ++i)
-            q[i] *= mask[i];
-    }
-}
-
 // Explicit template instantiation
 #include "TemplateInstantiations.h"
 INSTANTIATE_CLASS(CpuSolverPseudoBase);

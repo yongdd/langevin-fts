@@ -241,17 +241,5 @@ public:
     virtual std::vector<T> compute_single_segment_stress(
         T *q_1, T *q_2, std::string monomer_type, bool is_half_bond_length) = 0;
 
-    /**
-     * @brief Apply mask to propagator.
-     *
-     * When space_group is set, expands propagator to full grid, multiplies
-     * by mask, and reduces back to reduced basis. Otherwise multiplies directly.
-     *
-     * Default implementation does nothing (for solvers that don't support masks).
-     *
-     * @param q      Propagator array (modified in place)
-     * @param mask   Mask array (always full grid, double type)
-     */
-    virtual void apply_mask([[maybe_unused]] T* q, [[maybe_unused]] const double* mask) {}
 };
 #endif

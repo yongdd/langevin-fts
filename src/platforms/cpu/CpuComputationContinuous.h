@@ -107,6 +107,12 @@ private:
     std::map<std::string, std::vector<T>> w;
 
     /**
+     * @brief Mask in reduced basis (or full grid if no space group).
+     * Converted once at the start of compute_propagators.
+     */
+    std::vector<double> q_mask_;
+
+    /**
      * @brief Calculate concentration for one polymer block.
      *
      * Integrates product of forward and backward propagators:

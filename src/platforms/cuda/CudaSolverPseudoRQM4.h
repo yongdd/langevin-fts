@@ -201,13 +201,6 @@ public:
         const int, CuDeviceData<T> *, CuDeviceData<T> *, std::string) override {};
 
     /**
-     * @brief Apply mask to propagator.
-     *
-     * When space_group is set, expands to full grid, applies mask, reduces back.
-     */
-    void apply_mask(const int STREAM, CuDeviceData<T> *d_q, double *d_mask) override;
-
-    /**
      * @brief Compute stress contribution from one segment.
      *
      * Computes ∂ln(Q)/∂θ in Fourier space by multiplying forward and backward

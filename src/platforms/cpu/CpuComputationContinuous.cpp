@@ -266,8 +266,18 @@ void CpuComputationContinuous<T>::compute_propagators(
         // Note: w_input is always on full grid (base class expands it in compute_propagators_reduced())
         this->propagator_solver->update_dw(w_input);
 
-        // Assign a pointer for mask
-        const double *q_mask = this->cb->get_mask();
+        // Convert mask to reduced basis if space_group is set
+        const double *q_mask_full = this->cb->get_mask();
+        const double *q_mask = nullptr;
+        if (q_mask_full != nullptr)
+        {
+            q_mask_.resize(N);
+            if (this->space_group_ != nullptr)
+                this->space_group_->to_reduced_basis(q_mask_full, q_mask_.data(), 1);
+            else
+                std::copy(q_mask_full, q_mask_full + N, q_mask_.data());
+            q_mask = q_mask_.data();
+        }
 
         // For each time span
         #ifndef NDEBUG
@@ -405,9 +415,12 @@ void CpuComputationContinuous<T>::compute_propagators(
                     }
                 }
         
-                // Apply mask (solver handles expand/reduce internally)
+                // Apply mask (already in reduced basis)
                 if (n_segment_from == 0 && q_mask != nullptr)
-                    this->propagator_solver->apply_mask(_propagator[0], q_mask);
+                {
+                    for(int i=0; i<N; i++)
+                        _propagator[0][i] *= q_mask[i];
+                }
 
                 // Get ds_index from the key
                 int ds_index = PropagatorCode::get_ds_index_from_key(key);
